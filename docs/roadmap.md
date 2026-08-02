@@ -29,7 +29,8 @@ documentation, ledger updates, and benchmark evidence.
   - [x] Candidate-only integer four-neighbour reference with exact revision binding, deterministic
     identity, rectangular keepouts, bounded search, and cancellation.
   - [x] Reproducible synthetic A*/Dijkstra completion and optimal-cost oracle baseline.
-  - [ ] KiCad patch export, authoritative DRC, preview, and integration evidence.
+  - [x] Replay-bound, read-only disposable KiCad patch serialization with Board IR round-trip checks.
+  - [ ] Durable candidate-bound authoritative DRC evidence, preview, and service integration.
 - [ ] Multilayer vias and keepouts.
 - [ ] Negotiated-congestion multi-net routing.
 - [ ] Incremental spatial index and bounded rip-up/reroute.
