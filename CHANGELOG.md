@@ -13,6 +13,10 @@ All notable changes are documented here. The format follows
   deterministic tie-breaking, preparation/search cancellation, independent grid/expansion/obstacle
   work ceilings, typed diagnostics with deterministic counters, and fail-closed geometry and API
   handling. KiCad export, authoritative candidate DRC, MCP exposure, preview, and apply are deferred.
+- A bounded benchmark-only Dijkstra oracle plus a reproducible synthetic harness that verifies A*
+  completion and exact optimal-cost agreement while retaining the expected no-path fixture and raw
+  deterministic, runtime, and incremental-memory evidence. This is not a KiCad DRC or throughput
+  claim.
 - Canonical Board IR `0.1.0` with integer nanometre/microdegree geometry, typed routing constraints,
   strict canonical JSON, semantic and snapshot digests, bounded decoding, and a versioned JSON Schema.
 - A bounded, read-only, fail-closed KiCad converter for the documented rectangular-outline subset,

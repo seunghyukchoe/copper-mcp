@@ -35,6 +35,7 @@ from copper_mcp.routing import (
     canonical_candidate_bytes,
     verify_candidate_id,
 )
+from copper_mcp.routing.oracle import DijkstraResult, run_dijkstra_oracle
 
 SOURCE_REVISION = f"sha256:{'a' * 64}"
 OTHER_REVISION = f"sha256:{'b' * 64}"
@@ -239,6 +240,75 @@ def test_obstacle_detour_has_a_stable_global_tie_break() -> None:
     assert candidate.cost.bend_count == 2
     assert candidate.metrics.hard_internal_violations == 0
     assert candidate.metrics.obstacle_checks > 0
+
+
+@pytest.mark.parametrize(
+    ("keepouts", "expected_ok"),
+    [
+        ((), True),
+        (((4_000, 4_000, 6_000, 6_000),), True),
+        (
+            (
+                (4_000, 1_000, 6_000, 4_800),
+                (4_000, 5_200, 6_000, 9_000),
+            ),
+            True,
+        ),
+        (((4_500, -1_000, 5_500, 11_000),), False),
+    ],
+)
+def test_dijkstra_oracle_matches_astar_optimal_cost_and_completion(
+    keepouts: tuple[tuple[int, int, int, int], ...],
+    expected_ok: bool,
+) -> None:
+    snapshot = _snapshot(keepouts=keepouts)
+    request = _request(snapshot)
+
+    astar = AStarRouter().propose(snapshot, request)
+    first = run_dijkstra_oracle(snapshot, request)
+    second = run_dijkstra_oracle(snapshot, request)
+
+    assert first == second
+    assert astar.ok is expected_ok
+    assert first.ok is expected_ok
+    if expected_ok:
+        assert astar.candidate is not None
+        assert first.total_cost_nm == astar.candidate.cost.total_cost_nm
+        assert first.bend_count == astar.candidate.cost.bend_count
+        assert first.proximity_steps == astar.candidate.cost.proximity_steps
+        assert first.expanded_states >= astar.candidate.metrics.expanded_states
+    else:
+        assert astar.diagnostic is not None
+        assert first.diagnostic is not None
+        assert astar.diagnostic.code is RouteFailureCode.NO_PATH
+        assert first.diagnostic.code is RouteFailureCode.NO_PATH
+
+
+def test_dijkstra_oracle_is_bounded_and_rejects_malformed_public_inputs() -> None:
+    snapshot = _snapshot()
+    request = _request(snapshot)
+
+    invalid_snapshot = run_dijkstra_oracle(object(), request)
+    assert invalid_snapshot.diagnostic is not None
+    assert invalid_snapshot.diagnostic.code is RouteFailureCode.INVALID_SNAPSHOT
+
+    invalid_request = run_dijkstra_oracle(snapshot, object())
+    assert invalid_request.diagnostic is not None
+    assert invalid_request.diagnostic.code is RouteFailureCode.INVALID_REQUEST
+
+    cancelled = run_dijkstra_oracle(snapshot, request, cancelled=lambda: True)
+    assert cancelled.diagnostic is not None
+    assert cancelled.diagnostic.code is RouteFailureCode.CANCELLED
+
+    limited = run_dijkstra_oracle(
+        snapshot,
+        _request(snapshot, settings=_settings(max_expansions=1)),
+    )
+    assert limited.diagnostic is not None
+    assert limited.diagnostic.code is RouteFailureCode.SEARCH_BUDGET_EXCEEDED
+
+    with pytest.raises(ValueError, match="exactly one"):
+        DijkstraResult()
 
 
 def test_exact_keepout_clearance_is_legal_and_one_nanometre_inside_is_not() -> None:

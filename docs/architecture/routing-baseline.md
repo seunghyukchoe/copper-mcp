@@ -61,6 +61,19 @@ search-budget, cancellation, unsupported constraint, unsupported geometry, stale
 snapshot/request, off-grid endpoint, and no-path outcomes remain distinct. Failure diagnostics carry
 deterministic expanded-state and obstacle-check counts.
 
+## Benchmark oracle
+
+`routing/oracle.py` provides a benchmark-only Dijkstra oracle that sets the heuristic to zero while
+reusing the exact bounded preparation, edge-legality, proximity, and additive-cost evaluators. It
+returns only an optimal cost or typed diagnostic—never a route patch—and is intentionally excluded
+from the supported routing API. Tests compare A* and Dijkstra completion, total cost, bends, and
+proximity steps on straight, detour, exact-clearance, and no-path cases.
+
+`scripts/benchmark_routing.py` repeats those generated fixtures, verifies deterministic outcomes,
+and emits content-addressed JSON with raw timing and incremental-memory samples. The tiny synthetic
+suite is an optimality and reproducibility check, not evidence of whole-board quality, production
+throughput, KiCad DRC, or superiority over another router.
+
 ## Candidate identity
 
 The route is compressed to omit collinear interior points and post-validated against the same exact
