@@ -1,8 +1,8 @@
-# Default review ownership
+# Default ownership keeps every contribution reviewable while the project has one maintainer.
 * @seunghyukchoe
 
-# Security, release, and public-contract changes require maintainer review.
-/.github/workflows/ @seunghyukchoe
+# Security, release, and public-contract changes require explicit maintainer review.
+/.github/ @seunghyukchoe
 /SECURITY.md @seunghyukchoe
 /schemas/ @seunghyukchoe
 /src/copper_mcp/security.py @seunghyukchoe

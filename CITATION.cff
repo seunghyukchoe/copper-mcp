@@ -1,16 +1,22 @@
 cff-version: 1.2.0
-message: "If you use CopperMCP in research, please cite the software and exact release tag."
-title: "CopperMCP"
+message: If you use CopperMCP, please cite the software and exact release tag.
+title: CopperMCP
 type: software
-version: 0.1.0
 authors:
-  - name: "CopperMCP Contributors"
+  - family-names: Choe
+    given-names: Seung Hyuk
+  - name: CopperMCP Contributors
+abstract: >-
+  A local-first, open-source platform for deterministic PCB automation,
+  Model Context Protocol tools, and constrained AI policy integration.
+version: 0.1.0
 license: Apache-2.0
-repository-code: "https://github.com/seunghyukchoe/copper-mcp"
-url: "https://github.com/seunghyukchoe/copper-mcp"
+repository-code: https://github.com/seunghyukchoe/copper-mcp
+url: https://github.com/seunghyukchoe/copper-mcp
 keywords:
   - PCB
   - EDA
+  - KiCad
   - Model Context Protocol
   - autorouting
-  - KiCad
+  - artificial intelligence
