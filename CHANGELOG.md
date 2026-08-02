@@ -21,9 +21,9 @@ All notable changes are documented here. The format follows
 - A pure, bounded KiCad route-patch bridge that accepts only an exact replayed A* candidate, appends
   deterministic native segments to new disposable board bytes, records CopperMCP writer provenance,
   precomputes native identities for collision checks, enforces total output-object limits, and
-  requires a full Board IR round-trip match. An optional KiCad 10 integration test validates the
-  synthetic fixture without mutating source or candidate files; durable export, DRC orchestration,
-  preview, MCP, and apply remain deferred.
+  requires native source-geometry identities plus a full Board IR round-trip match. An optional
+  KiCad 10 integration test validates the synthetic fixture without mutating source or candidate
+  files; durable export, DRC orchestration, preview, MCP, and apply remain deferred.
 - Canonical Board IR `0.1.0` with integer nanometre/microdegree geometry, typed routing constraints,
   strict canonical JSON, semantic and snapshot digests, bounded decoding, and a versioned JSON Schema.
 - A bounded, read-only, fail-closed KiCad converter for the documented rectangular-outline subset,

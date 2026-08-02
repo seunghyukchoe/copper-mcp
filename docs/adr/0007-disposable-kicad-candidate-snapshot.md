@@ -21,12 +21,14 @@ source board. It accepts a candidate only when all of these bindings hold:
 2. the candidate base revision and SHA-256 identity are valid;
 3. the bounded reference A* router reproduces the complete candidate exactly;
 4. candidate net, layer, pad endpoints, settings, and geometry therefore remain bound to that source;
-5. every orthogonal edge receives a deterministic UUIDv5 identity and exact nanometre-to-millimetre
+5. every modeled source geometry object has a native KiCad UUID/tstamp, so rewriting derivative
+   metadata cannot churn revision-derived Board IR identities;
+6. every orthogonal edge receives a deterministic UUIDv5 identity and exact nanometre-to-millimetre
    spelling within the configured input and total-object budgets;
-6. native UUID/timestamp identities are collected once under parser bounds before collision checks;
-7. the disposable derivative identifies `copper-mcp` and its package version as the KiCad writer;
+7. native UUID/timestamp identities are collected once under parser bounds before collision checks;
+8. the disposable derivative identifies `copper-mcp` and its package version as the KiCad writer;
    and
-8. the rendered board parses back into Board IR with no modeled change except source revision,
+9. the rendered board parses back into Board IR with no modeled change except source revision,
    writer provenance, and the appended route segments.
 
 The bridge returns disposable board bytes only. It does not invoke KiCad, produce a validated status,
@@ -39,9 +41,10 @@ identity, and discard stale results.
 The first routing candidate now has a deterministic, source-preserving path to a private KiCad board.
 Unit tests cover replay, tamper, stale source and candidate revisions, byte and total-object budget
 rejection, precomputed native-identity collisions, writer provenance, and successful Board IR round
-trips. Where KiCad 10 is installed, an integration test confirms the disposable two-pad candidate
-has zero violations and zero unconnected items while both source and rendered files remain unchanged
-by DRC.
+trips. Identity-less modeled geometry is rejected explicitly instead of being remapped across a
+source-revision change. Where KiCad 10 is installed, an integration test confirms the disposable
+two-pad candidate has zero violations and zero unconnected items while both source and rendered
+files remain unchanged by DRC.
 
 This evidence applies only to the committed synthetic fixture and supported A* subset. It is not
 general KiCad compatibility, whole-board routing, production throughput, electrical validation, DFM,

@@ -171,6 +171,23 @@ def _modeled_object_count(snapshot: BoardIRSnapshot) -> int:
     )
 
 
+def _require_native_geometry_identities(snapshot: BoardIRSnapshot) -> None:
+    content = snapshot.content
+    geometry_ids = (
+        tuple(item.id for item in content.outline)
+        + tuple(item.id for item in content.pads)
+        + tuple(item.id for item in content.vias)
+        + tuple(item.id for item in content.segments)
+        + tuple(item.id for item in content.arcs)
+        + tuple(item.id for item in content.zones)
+        + tuple(item.id for item in content.keepouts)
+    )
+    if any(":derived:" in identity for identity in geometry_ids):
+        raise KiCadRoutePatchError(
+            "modeled KiCad geometry requires native uuid or tstamp identities"
+        )
+
+
 def _render_segment(
     *,
     start_x_nm: int,
@@ -241,6 +258,7 @@ def render_kicad_candidate_board(
         raise KiCadRoutePatchError("KiCad source cannot be represented by the supported Board IR")
     if conversion.snapshot != snapshot:
         raise KiCadRoutePatchError("KiCad source and constraint profile do not match the snapshot")
+    _require_native_geometry_identities(snapshot)
     if candidate.base_revision != snapshot.snapshot_digest:
         raise KiCadRoutePatchError("candidate is stale for the supplied board snapshot")
     try:

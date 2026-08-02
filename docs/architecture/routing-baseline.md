@@ -93,10 +93,12 @@ The circular `candidate_id` field is excluded from those bytes, then set to thei
 
 `render_kicad_candidate_board()` first reproduces the supplied Board IR from the original KiCad bytes
 and constraint profile. It verifies candidate identity, reruns the bounded A* request, and requires an
-exact candidate match. Each compressed route edge becomes one root-level KiCad segment with exact
-decimal units and a deterministic UUIDv5 derived from candidate identity and edge order. Native
-UUID/timestamp identities are collected once for constant-time collision checks, and the derivative
-records `copper-mcp` plus its package version as its KiCad writer.
+exact candidate match. Every modeled source geometry object must have a native UUID/tstamp; the
+bridge rejects revision-derived geometry IDs because rewriting derivative metadata would otherwise
+change them. Each compressed route edge becomes one root-level KiCad segment with exact decimal
+units and a deterministic UUIDv5 derived from candidate identity and edge order. Native UUID/tstamp
+identities are collected once for constant-time collision checks, and the derivative records
+`copper-mcp` plus its package version as its KiCad writer.
 
 The rendered bytes stay under the same parser, byte, and total-object budgets and are parsed back
 through the supported KiCad adapter. The complete modeled content must equal the base snapshot after

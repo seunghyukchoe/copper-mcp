@@ -233,6 +233,31 @@ def test_quoted_net_name_round_trips_without_expression_injection() -> None:
     assert patched.snapshot.content.segments[0].net_id == net_id_for_name(net_name)
 
 
+def test_render_rejects_revision_derived_geometry_identities() -> None:
+    source = (
+        b"\n".join(line for line in FIXTURE.read_bytes().splitlines() if b"(uuid " not in line)
+        + b"\n"
+    )
+    profile = _profile()
+    conversion = parse_kicad_bytes(source, profile)
+    assert conversion.snapshot is not None
+    assert conversion.diagnostics == ()
+    snapshot = conversion.snapshot
+    result = AStarRouter().propose(
+        snapshot,
+        RouteRequest(
+            board_revision=snapshot.snapshot_digest,
+            net_id=net_id_for_name("AUDIO"),
+            layer_id="layer:F.Cu",
+            seed=23,
+        ),
+    )
+    assert result.candidate is not None
+
+    with pytest.raises(KiCadRoutePatchError, match="native uuid or tstamp"):
+        render_kicad_candidate_board(source, snapshot, result.candidate, profile)
+
+
 def test_candidate_board_render_rejects_stale_tampered_and_non_replayed_inputs() -> None:
     source, profile, candidate = _snapshot_and_candidate()
     snapshot = parse_kicad_bytes(source, profile).snapshot
