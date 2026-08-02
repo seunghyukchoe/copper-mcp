@@ -14,6 +14,7 @@ from copper_mcp import __version__
 from copper_mcp.config import Settings
 from copper_mcp.tools import compare_candidates as compare_candidates_service
 from copper_mcp.tools import inspect_board as inspect_board_service
+from copper_mcp.tools import run_board_drc as run_board_drc_service
 from copper_mcp.tools import server_info as server_info_service
 from copper_mcp.tools import validate_candidate as validate_candidate_service
 
@@ -41,6 +42,13 @@ def inspect_board(path: str) -> dict[str, Any]:
     """Inspect a .kicad_pcb file inside the configured workspace without modifying it."""
 
     return inspect_board_service(path, _SETTINGS)
+
+
+@mcp.tool()
+def run_board_drc(path: str) -> dict[str, Any]:
+    """Run fixed-argument KiCad DRC and return a privacy-preserving summary."""
+
+    return run_board_drc_service(path, _SETTINGS)
 
 
 @mcp.tool()

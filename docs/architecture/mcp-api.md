@@ -14,10 +14,19 @@
 |---|---|---|
 | `server_info` | None | Version, maturity, and honest capability inventory. |
 | `inspect_board` | None | Bounded read-only inspection inside the configured workspace. |
+| `run_board_drc` | Temporary report only | Fixed-argument KiCad DRC with a bounded, redacted summary. |
 | `validate_candidate` | None | Validate and normalize candidate metadata. |
 | `compare_candidates` | None | Correctness-first deterministic ranking. |
 
 The implemented resource `pcb://server/manifest` exposes stable server metadata.
+
+`run_board_drc` returns the board SHA-256 revision, a DRC-context revision covering the board,
+matching project/custom-rule files, and workspace-local KiCad library assets; KiCad/schema versions;
+severity and connectivity counts; violation-type counts; and a hard-correctness pass flag. It
+also reports how many DRC check classes KiCad marks ignored, while deliberately omitting their raw
+descriptions along with net names, UUIDs, and coordinates. Exit codes `0` (clean) and `5`
+(violations found) are valid report outcomes; other exit codes fail the tool. The snapshot and report
+have independent size ceilings, and report growth is limited before KiCad starts.
 
 ## Planned tools
 

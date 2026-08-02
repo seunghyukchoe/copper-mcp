@@ -11,10 +11,11 @@ from pathlib import Path
 from typing import Any
 
 from copper_mcp.config import ConfigurationError, Settings
+from copper_mcp.kicad_cli import KiCadCliError
 from copper_mcp.kicad_file import BoardFormatError, load_json_file
 from copper_mcp.models import candidate_from_dict, rank_candidates
 from copper_mcp.security import WorkspaceViolationError
-from copper_mcp.tools import inspect_board, server_info
+from copper_mcp.tools import inspect_board, run_board_drc, server_info
 
 
 def _json_dump(payload: object) -> None:
@@ -41,6 +42,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     inspect_parser = subparsers.add_parser("inspect", help="Inspect a KiCad board read-only")
     inspect_parser.add_argument("path", help="Board path relative to the workspace")
+
+    drc_parser = subparsers.add_parser("drc", help="Run authoritative KiCad DRC read-only")
+    drc_parser.add_argument("path", help="Board path relative to the workspace")
 
     validate_parser = subparsers.add_parser("validate-candidate", help="Validate candidate JSON")
     validate_parser.add_argument("path", help="Candidate path relative to the workspace")
@@ -73,6 +77,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "inspect":
             _json_dump(inspect_board(args.path, settings))
             return 0
+        if args.command == "drc":
+            _json_dump(run_board_drc(args.path, settings))
+            return 0
         if args.command == "validate-candidate":
             _json_dump(candidate_from_dict(_load_candidate(args.path, settings)).to_dict())
             return 0
@@ -91,6 +98,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (
         BoardFormatError,
         ConfigurationError,
+        KiCadCliError,
         OSError,
         ValueError,
         WorkspaceViolationError,

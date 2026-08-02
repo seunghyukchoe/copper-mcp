@@ -6,6 +6,7 @@ from typing import Any
 
 from copper_mcp import __version__
 from copper_mcp.config import Settings
+from copper_mcp.kicad_cli import run_board_drc as run_kicad_board_drc
 from copper_mcp.kicad_file import inspect_kicad_board
 from copper_mcp.models import candidate_from_dict, rank_candidates
 
@@ -20,6 +21,7 @@ def server_info() -> dict[str, Any]:
         "implemented": [
             "bounded KiCad board inspection",
             "content-addressed board revisions",
+            "authoritative read-only KiCad DRC summaries",
             "candidate manifest validation",
             "deterministic candidate ranking",
         ],
@@ -38,6 +40,13 @@ def inspect_board(path: str, settings: Settings | None = None) -> dict[str, Any]
 
     active_settings = settings or Settings.from_env()
     return inspect_kicad_board(path, active_settings).to_dict()
+
+
+def run_board_drc(path: str, settings: Settings | None = None) -> dict[str, Any]:
+    """Run authoritative KiCad DRC for a board beneath the configured workspace."""
+
+    active_settings = settings or Settings.from_env()
+    return run_kicad_board_drc(path, active_settings).to_dict()
 
 
 def validate_candidate(payload: dict[str, Any]) -> dict[str, Any]:

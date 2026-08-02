@@ -14,6 +14,7 @@
 |---|---|---|
 | MCP input → server | Path traversal, oversized payloads, excessive agency | Typed validation, workspace allowlist, size/budget limits, separate apply permission |
 | Board file → parser | Malformed data, parser DoS, hidden secrets | Bounded reads, fuzz/property tests, no execution, generic errors |
+| Server → KiCad CLI | Argument injection, hangs, oversized or incompatible reports, context-file floods, stale evidence | Validated executable, fixed argument vector, POSIX file ceiling, cumulative byte/file-count bounds, discovery/process timeouts, strict contract, revision recheck |
 | AI output → policy | Prompt injection, invalid commands, cost exhaustion | Allowlisted typed actions, deterministic validation, token/iteration budgets |
 | Router → KiCad | Stale state, partial writes, unsafe copper | Revision recheck, exact DRC, immutable patch, single undoable commit |
 | Remote client → HTTP | Spoofing, token theft, cross-tenant access | TLS, OAuth, scoped authorization, per-principal jobs, rate limits |
@@ -34,7 +35,10 @@
 
 The `0.1.x` surface is read-only. Path resolution rejects parent and symlink escapes, board reads are
 bounded, network transport binds to loopback, secret patterns are scanned, and no AI provider is
-enabled. These controls do not make arbitrary remote exposure safe.
+enabled. KiCad DRC runs with fixed arguments against a path-preserving private context snapshot and
+emits a bounded aggregate summary; save/refill flags and raw finding details are not exposed. The
+child process receives a file-size ceiling before KiCad starts, and the source context is re-hashed
+afterward. These controls do not make arbitrary remote exposure safe.
 
 ## Security acceptance for future mutation
 

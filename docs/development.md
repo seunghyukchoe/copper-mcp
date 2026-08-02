@@ -4,8 +4,8 @@
 
 - Python 3.11–3.13.
 - Git 2.40 or newer recommended.
-- KiCad is optional for the current read-only manifest tests and will become required for IPC and
-  authoritative DRC integration tests.
+- KiCad is optional for unit tests. When `kicad-cli` is available, the authoritative DRC integration
+  test runs against a temporary copy of the synthetic fixture.
 
 Create a virtual environment and install all checks:
 
@@ -30,6 +30,18 @@ pre-commit install --install-hooks
 
 Tests should not require network access or proprietary boards. GPU and KiCad integration tests must
 be separately marked and have deterministic CPU or fixture-based coverage where practical.
+
+On macOS, CopperMCP also checks the standard KiCad application path. Elsewhere, put `kicad-cli` on
+`PATH` or set `COPPER_MCP_KICAD_CLI`. Do not add CLI argument passthrough: the DRC adapter's fixed
+argument vector is a security boundary. The current bounded-execution helper requires a POSIX host;
+unsupported platforms fail closed before starting KiCad.
+
+DRC runs against a private mirror of the board's workspace-relative context. Keep project-local
+symbol/footprint libraries and library tables below `COPPER_MCP_WORKSPACE`; external environment or
+global-library dependencies may make DRC results host-dependent and must be declared in benchmark
+provenance. Tune `COPPER_MCP_MAX_DRC_CONTEXT_BYTES` only after reviewing the workspace scope.
+File-count and discovery-time ceilings are separately configurable through
+`COPPER_MCP_MAX_DRC_CONTEXT_FILES` and `COPPER_MCP_MAX_DRC_CONTEXT_SCAN_SECONDS`.
 
 ## Adding a public contract
 

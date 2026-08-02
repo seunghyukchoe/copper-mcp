@@ -37,6 +37,12 @@ class Settings:
     host: str = "127.0.0.1"
     port: int = 8765
     max_board_bytes: int = 64 * 1024 * 1024
+    kicad_cli: Path | None = None
+    kicad_timeout_seconds: int = 120
+    max_drc_report_bytes: int = 8 * 1024 * 1024
+    max_drc_context_bytes: int = 128 * 1024 * 1024
+    max_drc_context_files: int = 10_000
+    max_drc_context_scan_seconds: int = 10
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -61,10 +67,48 @@ class Settings:
             1024,
             1024 * 1024 * 1024,
         )
+        raw_kicad_cli = os.environ.get("COPPER_MCP_KICAD_CLI", "").strip()
+        kicad_cli = Path(raw_kicad_cli).expanduser() if raw_kicad_cli else None
+        kicad_timeout_seconds = _bounded_int(
+            "COPPER_MCP_KICAD_TIMEOUT_SECONDS",
+            os.environ.get("COPPER_MCP_KICAD_TIMEOUT_SECONDS", "120"),
+            1,
+            3600,
+        )
+        max_drc_report_bytes = _bounded_int(
+            "COPPER_MCP_MAX_DRC_REPORT_BYTES",
+            os.environ.get("COPPER_MCP_MAX_DRC_REPORT_BYTES", str(8 * 1024 * 1024)),
+            1024,
+            64 * 1024 * 1024,
+        )
+        max_drc_context_bytes = _bounded_int(
+            "COPPER_MCP_MAX_DRC_CONTEXT_BYTES",
+            os.environ.get("COPPER_MCP_MAX_DRC_CONTEXT_BYTES", str(128 * 1024 * 1024)),
+            1024,
+            1024 * 1024 * 1024,
+        )
+        max_drc_context_files = _bounded_int(
+            "COPPER_MCP_MAX_DRC_CONTEXT_FILES",
+            os.environ.get("COPPER_MCP_MAX_DRC_CONTEXT_FILES", "10000"),
+            1,
+            100_000,
+        )
+        max_drc_context_scan_seconds = _bounded_int(
+            "COPPER_MCP_MAX_DRC_CONTEXT_SCAN_SECONDS",
+            os.environ.get("COPPER_MCP_MAX_DRC_CONTEXT_SCAN_SECONDS", "10"),
+            1,
+            300,
+        )
         return cls(
             workspace=workspace,
             transport=transport,
             host=host,
             port=port,
             max_board_bytes=max_board_bytes,
+            kicad_cli=kicad_cli,
+            kicad_timeout_seconds=kicad_timeout_seconds,
+            max_drc_report_bytes=max_drc_report_bytes,
+            max_drc_context_bytes=max_drc_context_bytes,
+            max_drc_context_files=max_drc_context_files,
+            max_drc_context_scan_seconds=max_drc_context_scan_seconds,
         )
