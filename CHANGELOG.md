@@ -19,6 +19,8 @@ All notable changes are documented here. The format follows
 
 ### Security
 
+- GitHub Actions are pinned to reviewed immutable commits; the release workflow uses the current
+  official attestation action and explicitly scoped artifact-metadata permission.
 - Workspace confinement protects against parent-path and symlink escapes.
 - Secret-bearing files, private boards, job stores, and generated artifacts are ignored by default.
 - MCP network transport binds to loopback unless explicitly reconfigured.
