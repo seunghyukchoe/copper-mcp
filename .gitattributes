@@ -7,8 +7,14 @@
 *.webp binary
 *.pdf binary
 *.zip binary
+*.step binary
 *.kicad_pcb text eol=lf
 *.kicad_sch text eol=lf
 *.json text eol=lf
 *.md text eol=lf
 *.py text eol=lf
+
+hardware/**/manufacturing/** linguist-generated=true
+hardware/**/mechanical/** linguist-generated=true
+hardware/**/media/** linguist-generated=true
+hardware/**/validation/*.json linguist-generated=true

@@ -1,0 +1,75 @@
+schema_version: 1
+design: coppertone-buffer
+revision: 0.1.0-preview
+status: engineering_preview
+approved_for_fabrication: false
+
+toolchain:
+  required_kicad_major: 10
+  reference_kicad_version: 10.0.5
+  python: ">=3.11"
+
+board:
+  width_mm: 52.0
+  height_mm: 30.0
+  thickness_mm: 1.6
+  copper_layers: 2
+  material: FR-4
+  copper_weight_oz: 1
+  minimum_track_width_mm: 0.25
+  power_track_width_mm: 0.50
+  minimum_clearance_mm: 0.25
+  minimum_copper_to_edge_mm: 0.50
+  via_diameter_mm: 0.80
+  via_drill_mm: 0.40
+  mounting_hole_diameter_mm: 2.70
+  mounting_hole_keepout_radius_mm: 2.85
+
+power:
+  connector: J3
+  nominal_input_vdc: 9.0
+  allowed_input: "9 V DC battery or regulated isolated adapter only"
+  prohibited:
+    - AC input
+    - phantom power
+    - automotive electrical systems
+    - mains-referenced or non-isolated supplies
+  reverse_polarity_element: D1
+  regulated_on_board: false
+
+audio:
+  topology: dual unity-gain line buffer
+  input_connector: J1
+  output_connector: J2
+  input_coupling_nf: 470
+  input_bias_ohm: 100000
+  output_isolation_ohm: 47
+  output_coupling_uf: 10
+  output_discharge_ohm: 100000
+  minimum_recommended_load_ohm: 10000
+  prohibited_loads:
+    - headphones
+    - speakers
+    - inductive loads
+
+routing:
+  named_nets: 14
+  non_ground_vias: 3
+  ground_stitching_vias: 6
+  high_impedance_input_vias: 0
+  ground_plane_layers:
+    - F.Cu
+    - B.Cu
+  autorouted_by_coppermcp: false
+
+release_gates:
+  drc_zero_errors: true
+  drc_zero_warnings: true
+  unconnected_zero: true
+  source_schematic_present: false
+  erc_passed: false
+  pcb_schematic_parity_passed: false
+  independent_footprint_review: false
+  assembled_prototype_tested: false
+  measured_audio_report_present: false
+  independent_fabrication_review: false

@@ -6,15 +6,21 @@ repos:
     hooks:
       - id: check-added-large-files
         args: ["--maxkb=2048"]
+        # The checked-in STEP assembly is an intentional, reviewable hardware
+        # deliverable. Keep the exception exact so unrelated large files fail.
+        exclude: ^hardware/coppertone-buffer/mechanical/coppertone-buffer\.step$
       - id: check-json
       - id: check-merge-conflict
       - id: detect-private-key
       - id: check-toml
       - id: check-yaml
       - id: end-of-file-fixer
+        exclude: &coppertone_generated ^hardware/coppertone-buffer/(manufacturing|mechanical|media)/|^hardware/coppertone-buffer/validation/(SHA256SUMS|board-stats\.json|drc\.json)$
       - id: mixed-line-ending
         args: ["--fix=lf"]
+        exclude: *coppertone_generated
       - id: trailing-whitespace
+        exclude: *coppertone_generated
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.12.11
     hooks:
