@@ -1,0 +1,50 @@
+name: Feature proposal
+description: Propose a scoped capability with acceptance criteria
+title: "feat: "
+labels: ["type: feature", "status: needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and user
+      description: Who has this problem, and why is the current workflow insufficient?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Proposed outcome
+      description: Describe observable behavior rather than only an implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: dropdown
+    id: compatibility
+    attributes:
+      label: Contract impact
+      options:
+        - No public contract change
+        - Additive API or schema change
+        - Breaking API or schema change
+        - Unknown; RFC needed
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Security, privacy, and hardware-safety considerations
+      description: Cover filesystem, network, AI/model, board mutation, and validation implications.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

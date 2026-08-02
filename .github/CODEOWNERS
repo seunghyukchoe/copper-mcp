@@ -1,0 +1,10 @@
+# Default review ownership
+* @seunghyukchoe
+
+# Security, release, and public-contract changes require maintainer review.
+/.github/workflows/ @seunghyukchoe
+/SECURITY.md @seunghyukchoe
+/schemas/ @seunghyukchoe
+/src/copper_mcp/security.py @seunghyukchoe
+/docs/architecture/security-model.md @seunghyukchoe
+/docs/releasing.md @seunghyukchoe

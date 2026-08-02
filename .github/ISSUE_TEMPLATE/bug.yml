@@ -1,0 +1,69 @@
+name: Bug report
+description: Report a reproducible defect using sanitized or synthetic data
+title: "bug: "
+labels: ["type: bug", "status: needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug. Do not attach proprietary boards, credentials, tokens, or private keys. Security vulnerabilities belong in GitHub Private Vulnerability Reporting.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - CLI
+        - MCP gateway
+        - Board inspection / IR
+        - Routing contract or backend
+        - KiCad integration
+        - CI / release tooling
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: Include commands and a minimal synthetic or openly licensed fixture.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: CopperMCP, Python, OS, KiCad, CPU/GPU, and MCP client versions.
+      placeholder: |
+        CopperMCP:
+        Python:
+        OS:
+        KiCad:
+        MCP client:
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs
+      description: Remove paths, tokens, board contents, customer names, and other sensitive data.
+      render: text
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Confirmation
+      options:
+        - label: I searched existing issues and tested the latest supported version.
+          required: true
+        - label: This report contains no proprietary board data or secrets.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

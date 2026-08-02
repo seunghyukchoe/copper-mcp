@@ -1,0 +1,21 @@
+[
+  {"name": "status: needs-triage", "color": "D4C5F9", "description": "Awaiting initial maintainer review"},
+  {"name": "status: accepted", "color": "0E8A16", "description": "Accepted and ready for implementation"},
+  {"name": "status: blocked", "color": "B60205", "description": "Blocked by an explicit dependency or decision"},
+  {"name": "status: needs-info", "color": "FBCA04", "description": "More information is required"},
+  {"name": "type: bug", "color": "D73A4A", "description": "Something is not working as specified"},
+  {"name": "type: feature", "color": "A2EEEF", "description": "New or expanded user-facing capability"},
+  {"name": "type: research", "color": "5319E7", "description": "Algorithm, benchmark, dataset, or hardware research"},
+  {"name": "type: documentation", "color": "0075CA", "description": "Documentation-only work"},
+  {"name": "type: security", "color": "B60205", "description": "Public security hardening; vulnerabilities remain private"},
+  {"name": "area: mcp", "color": "C5DEF5", "description": "MCP tools, resources, transports, or compatibility"},
+  {"name": "area: kicad", "color": "C5DEF5", "description": "KiCad IPC, files, DRC, or plugin integration"},
+  {"name": "area: router", "color": "C5DEF5", "description": "Routing algorithms, geometry, and candidates"},
+  {"name": "area: ai-policy", "color": "C5DEF5", "description": "Learned or agent policy boundaries"},
+  {"name": "area: infrastructure", "color": "C5DEF5", "description": "CI, packaging, releases, and repository automation"},
+  {"name": "priority: critical", "color": "B60205", "description": "Immediate correctness or security impact"},
+  {"name": "priority: high", "color": "D93F0B", "description": "Important near-term work"},
+  {"name": "priority: normal", "color": "FBCA04", "description": "Normal backlog priority"},
+  {"name": "good first issue", "color": "7057FF", "description": "Scoped introduction for a new contributor"},
+  {"name": "breaking-change", "color": "B60205", "description": "Requires migration guidance and release notes"}
+]

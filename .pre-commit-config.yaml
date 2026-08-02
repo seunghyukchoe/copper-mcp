@@ -1,0 +1,35 @@
+default_install_hook_types: [pre-commit, commit-msg]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+      - id: check-json
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: trailing-whitespace
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.11
+    hooks:
+      - id: ruff-check
+        args: ["--fix"]
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: copper-mcp-secret-check
+        name: CopperMCP secret check
+        entry: python scripts/check_secrets.py
+        language: python
+        pass_filenames: false
+      - id: conventional-commit
+        name: Conventional commit message
+        entry: python scripts/check_commit_message.py
+        language: python
+        stages: [commit-msg]

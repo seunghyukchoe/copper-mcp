@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/seunghyukchoe/copper-mcp/schemas/candidate.schema.json",
+  "title": "CopperMCP Candidate Summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "candidate_id",
+    "base_revision",
+    "status",
+    "metrics",
+    "router_version",
+    "policy",
+    "seed",
+    "warnings"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "candidate_id": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "base_revision": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "status": { "enum": ["proposed", "validated", "rejected"] },
+    "router_version": { "type": "string", "minLength": 1 },
+    "policy": { "type": "string", "minLength": 1 },
+    "seed": { "type": "integer", "minimum": 0 },
+    "warnings": { "type": "array", "items": { "type": "string" }, "maxItems": 1000 },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hard_drc_errors",
+        "unrouted_connections",
+        "vias",
+        "wire_length_mm",
+        "runtime_seconds"
+      ],
+      "properties": {
+        "hard_drc_errors": { "type": "integer", "minimum": 0 },
+        "unrouted_connections": { "type": "integer", "minimum": 0 },
+        "vias": { "type": "integer", "minimum": 0 },
+        "wire_length_mm": { "type": "number", "minimum": 0 },
+        "runtime_seconds": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

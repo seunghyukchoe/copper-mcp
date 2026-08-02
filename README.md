@@ -1,0 +1,137 @@
+# CopperMCP
+
+[![CI](https://github.com/seunghyukchoe/copper-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/seunghyukchoe/copper-mcp/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/seunghyukchoe/copper-mcp/actions/workflows/codeql.yml/badge.svg)](https://github.com/seunghyukchoe/copper-mcp/actions/workflows/codeql.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
+[![Status](https://img.shields.io/badge/status-pre--alpha-orange.svg)](docs/roadmap.md)
+
+**CopperMCP is a local-first, open-source PCB automation platform designed for deterministic routing,
+MCP-based tools, and optional AI policy plugins.**
+
+> [!IMPORTANT]
+> CopperMCP is pre-alpha. The current `0.1.x` foundation provides secure board inspection, stable
+> manifests, candidate validation, and MCP contracts. It does not yet route or modify production
+> boards.
+
+## Why this project exists
+
+Existing open autorouters provide useful geometry and negotiated-congestion baselines, but there is
+no broadly adopted open platform that combines reproducible routing, safe agent tools, learned
+policy hooks, KiCad-native workflows, and transparent benchmarks. CopperMCP is building that layer
+without putting an LLM in charge of electrical correctness.
+
+The non-negotiable boundary is simple:
+
+- AI may interpret constraints and propose net ordering, corridors, cost weights, and repairs.
+- Deterministic code owns geometry, connectivity, DRC, provenance, and file mutation.
+- Generated work remains an immutable candidate until a user validates and explicitly applies it.
+
+## Current capabilities
+
+- Read-only, bounded inspection of documented `.kicad_pcb` files.
+- Workspace confinement, including protection against parent-path and symlink escapes.
+- SHA-256 board revisions and versioned JSON schemas.
+- Candidate-manifest validation and correctness-first comparison.
+- MCP tools and a stable CLI over the same application services.
+- Professional CI, CodeQL, dependency auditing, release automation, issue forms, and project ledgers.
+
+See the [roadmap](docs/roadmap.md) for routing and KiCad IPC milestones.
+
+## Quick start
+
+Prerequisites: Python 3.11 or newer.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev,security]"
+make check
+```
+
+Inspect a board without modifying it:
+
+```bash
+copper-mcp --workspace /absolute/path/to/boards inspect example.kicad_pcb
+```
+
+Start the local MCP server over standard input/output:
+
+```bash
+export COPPER_MCP_WORKSPACE=/absolute/path/to/boards
+copper-mcp-server
+```
+
+Example MCP client configuration:
+
+```json
+{
+  "mcpServers": {
+    "copper-mcp": {
+      "command": "copper-mcp-server",
+      "env": {
+        "COPPER_MCP_WORKSPACE": "/absolute/path/to/boards",
+        "COPPER_MCP_TRANSPORT": "stdio"
+      }
+    }
+  }
+}
+```
+
+Never place provider keys or proprietary board contents in committed MCP configuration. See
+[`.env.example`](.env.example) and the [security policy](SECURITY.md).
+
+## Architecture
+
+```text
+KiCad IPC / board files        MCP clients / CLI
+           \                       /
+            \                     /
+             Board IR + services
+                      |
+           deterministic router contract
+                      |
+          immutable candidate + provenance
+                      |
+        internal checks + authoritative KiCad DRC
+                      |
+               explicit user apply
+```
+
+MCP is an external adapter, not an internal dependency of the routing engine. The reference core is
+currently Python so it is executable and reviewable everywhere; performance-critical Rust or GPU
+backends will implement the same stable routing contract. Read the
+[architecture overview](docs/architecture/overview.md) and [ADRs](docs/adr/README.md) before changing
+this boundary.
+
+## Documentation
+
+- [Project charter](docs/project-charter.md)
+- [Architecture](docs/architecture/overview.md)
+- [MCP contract](docs/architecture/mcp-api.md)
+- [Security and threat model](docs/architecture/security-model.md)
+- [Development guide](docs/development.md)
+- [Roadmap](docs/roadmap.md)
+- [Release process](docs/releasing.md)
+- [Project ledgers](docs/ledgers/README.md)
+
+## Contributing
+
+Contributions are welcome, particularly reproducible boards, geometry tests, routing algorithms,
+KiCad integration, benchmark infrastructure, and documentation. Please read
+[CONTRIBUTING.md](CONTRIBUTING.md), the [Code of Conduct](CODE_OF_CONDUCT.md), and existing ADRs first.
+
+Private or customer PCB designs must not be attached to public issues. Use minimal synthetic
+reproductions or sanitized open designs.
+
+## Versioning and status
+
+CopperMCP follows [Semantic Versioning](https://semver.org/) and
+[Keep a Changelog](https://keepachangelog.com/). Before `1.0.0`, minor releases may intentionally
+change experimental contracts with migration notes. See [CHANGELOG.md](CHANGELOG.md) and the
+[release ledger](docs/ledgers/release-ledger.md).
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE). Test fixtures and contributed datasets must include
+compatible provenance and licensing metadata.

@@ -1,0 +1,28 @@
+"area: mcp":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/copper_mcp/mcp_server.py"
+          - "docs/architecture/mcp-api.md"
+"area: kicad":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/copper_mcp/kicad_file.py"
+          - "tests/fixtures/**/*.kicad_pcb"
+          - "docs/**/*kicad*"
+"area: router":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/copper_mcp/routing/**"
+          - "schemas/**"
+"area: infrastructure":
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+          - "scripts/**"
+          - "pyproject.toml"
+          - "Makefile"
+"type: documentation":
+  - changed-files:
+      - all-globs-to-all-files:
+          - "**/*.md"
+          - "!CHANGELOG.md"

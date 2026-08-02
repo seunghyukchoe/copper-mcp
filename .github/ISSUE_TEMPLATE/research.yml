@@ -1,0 +1,44 @@
+name: Algorithm or benchmark proposal
+description: Propose reproducible routing, placement, policy, or hardware research
+title: "research: "
+labels: ["type: research", "status: needs-triage"]
+body:
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Hypothesis
+      description: State the falsifiable claim and expected practical benefit.
+    validations:
+      required: true
+  - type: textarea
+    id: baseline
+    attributes:
+      label: Baselines
+      description: List strong classical/open baselines and why the comparison is fair.
+    validations:
+      required: true
+  - type: textarea
+    id: dataset
+    attributes:
+      label: Dataset and provenance
+      description: Include licences, project-family split, exclusions, and privacy review.
+    validations:
+      required: true
+  - type: textarea
+    id: protocol
+    attributes:
+      label: Evaluation protocol
+      description: Include seeds, budgets, hardware, metrics, failures, and statistical treatment.
+    validations:
+      required: true
+  - type: checkboxes
+    id: commitments
+    attributes:
+      label: Reproducibility commitments
+      options:
+        - label: I will record failed as well as successful runs.
+          required: true
+        - label: I will not weaken DRC or constraints to improve a score.
+          required: true
+        - label: I will update the benchmark ledger with machine-readable artifacts.
+          required: true

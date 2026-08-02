@@ -1,0 +1,17 @@
+changelog:
+  exclude:
+    labels:
+      - "skip-changelog"
+  categories:
+    - title: "Breaking changes"
+      labels: ["breaking-change"]
+    - title: "Features"
+      labels: ["type: feature"]
+    - title: "Security and correctness"
+      labels: ["type: security", "type: bug"]
+    - title: "Research and performance"
+      labels: ["type: research"]
+    - title: "Documentation and maintenance"
+      labels: ["type: documentation", "area: infrastructure"]
+    - title: "Other changes"
+      labels: ["*"]

@@ -1,0 +1,54 @@
+# Architecture Overview
+
+## System boundaries
+
+CopperMCP separates the stable deterministic domain from transports and experimental policies.
+
+```text
+adapters (CLI, MCP, KiCad, files)
+                 |
+application services and versioned Board IR
+                 |
+routing contracts + deterministic validation
+                 |
+backend implementations (CPU first; Rust/GPU later)
+                 |
+immutable candidate store and provenance
+```
+
+MCP does not call geometry primitives directly. It invokes the same application services used by
+the CLI and tests. A future KiCad plugin snapshots editor state, releases the synchronous IPC
+connection while routing runs, and applies only a validated candidate tied to the unchanged base
+revision.
+
+## Components
+
+| Component | Responsibility |
+|---|---|
+| `config.py` | Validate process settings and establish the workspace boundary. |
+| `security.py` | Resolve, constrain, and size-limit untrusted filesystem inputs. |
+| `models.py` | Stable board and candidate contract models. |
+| `kicad_file.py` | Read-only MVP inspection; never used to write geometry. |
+| `tools.py` | Pure application services shared by adapters. |
+| `routing/contracts.py` | Backend-neutral deterministic routing contract. |
+| `mcp_server.py` | MCP tools/resources and transport configuration. |
+
+## Candidate lifecycle
+
+1. Capture an immutable board revision.
+2. Validate constraints and scope.
+3. Produce one or more route candidates with complete provenance.
+4. Run internal connectivity/geometry checks.
+5. Run authoritative KiCad DRC and future physics/DFM checks.
+6. Compare candidates with hard correctness first.
+7. Recheck the live board revision.
+8. Apply one approved patch as a single undoable operation.
+
+No lifecycle stage may mutate the base snapshot. See [ADR-0001](../adr/0001-candidate-first.md).
+
+## Performance evolution
+
+The reference implementation begins in Python to keep contracts executable and easy to review.
+Profiling will identify kernels that earn a Rust implementation. GPU work begins only after a CPU
+baseline, deterministic benchmarks, and end-to-end profiling exist. Backends implement the same
+`RoutingBackend` contract rather than leaking hardware details into MCP tools.

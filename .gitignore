@@ -1,0 +1,66 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials.json
+service-account*.json
+.mcp.json
+mcp.json
+
+# Private designs, generated candidates, and job state
+workspaces/
+private-boards/
+artifacts/
+runs/
+job-store/
+*.sqlite
+*.sqlite3
+*.db
+
+# KiCad per-user state, locks, autosaves, and backups
+*.kicad_prl
+*.kicad_pro-bak
+*.kicad_sch-bak
+*.kicad_pcb-bak
+~*.lck
+_autosave-*
+fp-info-cache
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.venv/
+venv/
+dist/
+build/
+
+# Future Rust acceleration crates
+target/
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Temporary and log files
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig

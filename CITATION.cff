@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use CopperMCP in research, please cite the software and exact release tag."
+title: "CopperMCP"
+type: software
+version: 0.1.0
+authors:
+  - name: "CopperMCP Contributors"
+license: Apache-2.0
+repository-code: "https://github.com/seunghyukchoe/copper-mcp"
+url: "https://github.com/seunghyukchoe/copper-mcp"
+keywords:
+  - PCB
+  - EDA
+  - Model Context Protocol
+  - autorouting
+  - KiCad

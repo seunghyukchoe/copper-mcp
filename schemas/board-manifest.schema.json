@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/seunghyukchoe/copper-mcp/schemas/board-manifest.schema.json",
+  "title": "CopperMCP Board Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "board_id",
+    "revision",
+    "relative_path",
+    "format",
+    "size_bytes",
+    "counts"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "board_id": { "type": "string", "pattern": "^board:[a-f0-9]{16}$" },
+    "revision": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "relative_path": { "type": "string", "minLength": 1 },
+    "format": { "const": "kicad_pcb" },
+    "size_bytes": { "type": "integer", "minimum": 0 },
+    "source_version": { "type": ["string", "null"] },
+    "source_generator": { "type": ["string", "null"] },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["copper_layers", "footprints", "nets", "segments", "vias", "zones"],
+      "properties": {
+        "copper_layers": { "type": "integer", "minimum": 0 },
+        "footprints": { "type": "integer", "minimum": 0 },
+        "nets": { "type": "integer", "minimum": 0 },
+        "segments": { "type": "integer", "minimum": 0 },
+        "vias": { "type": "integer", "minimum": 0 },
+        "zones": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

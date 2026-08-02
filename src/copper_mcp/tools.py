@@ -1,0 +1,66 @@
+"""Pure application services shared by the CLI and MCP gateway."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from copper_mcp import __version__
+from copper_mcp.config import Settings
+from copper_mcp.kicad_file import inspect_kicad_board
+from copper_mcp.models import candidate_from_dict, rank_candidates
+
+
+def server_info() -> dict[str, Any]:
+    """Describe implemented and planned capabilities without overstating maturity."""
+
+    return {
+        "name": "CopperMCP",
+        "version": __version__,
+        "maturity": "pre-alpha",
+        "implemented": [
+            "bounded KiCad board inspection",
+            "content-addressed board revisions",
+            "candidate manifest validation",
+            "deterministic candidate ranking",
+        ],
+        "planned": [
+            "KiCad IPC adapter",
+            "routing job lifecycle",
+            "negotiated-congestion router",
+            "immutable route patches",
+            "explicit candidate application",
+        ],
+    }
+
+
+def inspect_board(path: str, settings: Settings | None = None) -> dict[str, Any]:
+    """Inspect a KiCad board beneath the configured workspace."""
+
+    active_settings = settings or Settings.from_env()
+    return inspect_kicad_board(path, active_settings).to_dict()
+
+
+def validate_candidate(payload: dict[str, Any]) -> dict[str, Any]:
+    """Validate and normalize an untrusted candidate manifest."""
+
+    candidate = candidate_from_dict(payload)
+    return {"valid": True, "candidate": candidate.to_dict()}
+
+
+def compare_candidates(payloads: list[dict[str, Any]]) -> dict[str, Any]:
+    """Rank candidate manifests by correctness, then routing cost."""
+
+    if not 1 <= len(payloads) <= 100:
+        raise ValueError("between 1 and 100 candidates are required")
+    ranked = rank_candidates([candidate_from_dict(payload) for payload in payloads])
+    return {
+        "ranking_policy": [
+            "hard_drc_errors",
+            "unrouted_connections",
+            "vias",
+            "wire_length_mm",
+            "runtime_seconds",
+            "candidate_id",
+        ],
+        "candidates": [candidate.to_dict() for candidate in ranked],
+    }
