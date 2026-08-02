@@ -215,7 +215,10 @@ refresh_artifacts() {
 
   # KiCad's SVG and STEP exporters emit harmless trailing spaces. Normalize
   # them before hashing so the checked-in text remains clean and diffable.
-  python3 - "$demo_dir/media/coppertone-buffer-copper.svg" \
+  python3 - \
+    "$demo_dir/manufacturing/drill/coppertone-buffer-NPTH-drl_map.svg" \
+    "$demo_dir/manufacturing/drill/coppertone-buffer-PTH-drl_map.svg" \
+    "$demo_dir/media/coppertone-buffer-copper.svg" \
     "$demo_dir/mechanical/coppertone-buffer.step" <<'PY'
 from pathlib import Path
 import sys
