@@ -18,5 +18,11 @@ updates:
     open-pull-requests-limit: 5
     labels: ["area: infrastructure"]
     groups:
+      codeql-suite:
+        patterns:
+          - "github/codeql-action/*"
+        update-types: ["major", "minor", "patch"]
       actions-minor-patch:
+        exclude-patterns:
+          - "github/codeql-action/*"
         update-types: ["minor", "patch"]
