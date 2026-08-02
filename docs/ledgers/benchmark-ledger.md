@@ -2,6 +2,11 @@
 
 No routing benchmark claims are recorded because the repository does not yet ship a router.
 
+> **Amendment — 2026-08-03:** ADR-0006 supersedes the final clause above: the repository now ships a
+> narrow candidate-only two-pin A* reference. No routing benchmark claim is recorded yet; the first
+> result must satisfy the evidence table below and must not be generalized beyond its synthetic
+> fixture and supported geometry.
+
 Every future entry must include:
 
 | Field | Requirement |

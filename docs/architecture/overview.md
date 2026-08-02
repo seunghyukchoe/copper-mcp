@@ -32,13 +32,17 @@ revision.
 | `board_ir/` | Canonical integer board snapshots, strict codec, geometry validation, and digests. |
 | `adapters/kicad_board_ir.py` | Bounded, read-only conversion of the documented KiCad subset. |
 | `tools.py` | Pure application services shared by adapters. |
-| `routing/contracts.py` | Backend-neutral deterministic routing contract. |
+| `routing/contracts.py` | Exact candidate, cost, settings, result, and backend-neutral contracts. |
+| `routing/astar.py` | Bounded integer two-pin A* reference; candidate-only and fail-closed. |
 | `mcp_server.py` | MCP tools/resources and transport configuration. |
 
-Board IR `0.1.0` is currently a domain and source-adapter foundation. Existing MCP tools still use
-the bounded inspection manifest; no MCP Board IR resource, route operation, preview, or apply path is
-implemented. See [Board IR and KiCad adapter contracts](board-ir.md) and
-[ADR-0005](../adr/0005-canonical-board-ir.md).
+Board IR `0.1.0` is the domain and source-adapter foundation. A narrow deterministic
+[two-pin routing baseline](routing-baseline.md) now produces immutable in-memory candidates for
+supported synthetic Board IR inputs. Existing MCP tools still use the bounded inspection manifest;
+no MCP Board IR resource, KiCad route export, authoritative candidate DRC, preview, or apply path is
+implemented. See [Board IR and KiCad adapter contracts](board-ir.md),
+[ADR-0005](../adr/0005-canonical-board-ir.md), and
+[ADR-0006](../adr/0006-bounded-deterministic-astar.md).
 
 ## Candidate lifecycle
 

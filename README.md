@@ -12,8 +12,9 @@ MCP-based tools, and optional AI policy plugins.**
 
 > [!IMPORTANT]
 > CopperMCP is pre-alpha. The current `0.1.x` foundation provides secure board inspection,
-> authoritative read-only KiCad DRC summaries, stable manifests, candidate validation, and MCP
-> contracts. It does not yet route or modify production boards.
+> authoritative read-only KiCad DRC summaries, stable manifests, candidate validation, MCP
+> contracts, and a narrow candidate-only two-pin A* reference. It does not route or modify
+> production boards.
 
 ## Why this project exists
 
@@ -37,6 +38,9 @@ The non-negotiable boundary is simple:
   bounded fail-closed converter for a documented KiCad subset.
 - Fixed-argument KiCad CLI DRC with source, time, size, schema, and stale-context guards.
 - Candidate-manifest validation and correctness-first comparison.
+- Bounded integer A* candidates for one two-pad net on a documented rectangular Board IR subset,
+  with independent lattice, search, and obstacle-work ceilings; this synthetic-domain reference has
+  no KiCad export, authoritative candidate DRC, or apply path.
 - MCP tools and a stable CLI over the same application services.
 - Professional CI, CodeQL, dependency auditing, release automation, issue forms, and project ledgers.
 
@@ -152,6 +156,7 @@ this boundary.
 - [Project charter](docs/project-charter.md)
 - [Architecture](docs/architecture/overview.md)
 - [Board IR and KiCad adapter contract](docs/architecture/board-ir.md)
+- [Deterministic A* baseline](docs/architecture/routing-baseline.md)
 - [MCP contract](docs/architecture/mcp-api.md)
 - [Security and threat model](docs/architecture/security-model.md)
 - [Development guide](docs/development.md)

@@ -1,10 +1,41 @@
-"""Routing contracts.
+"""Deterministic candidate-first routing contracts and reference backends."""
 
-The first repository milestone intentionally ships contracts, not a pretend
-autorouter. Implementations must produce immutable candidates and pass exact
-validation before they can be applied.
-"""
+from copper_mcp.routing.astar import (
+    ROUTER_VERSION,
+    ROUTING_POLICY,
+    AStarRouter,
+    canonical_candidate_bytes,
+    verify_candidate_id,
+)
+from copper_mcp.routing.contracts import (
+    AStarSettings,
+    CancellationCheck,
+    RouteCandidate,
+    RouteCost,
+    RouteDiagnostic,
+    RouteFailureCode,
+    RouteMetrics,
+    RoutePatch,
+    RouteRequest,
+    RouteResult,
+    RoutingBackend,
+)
 
-from copper_mcp.routing.contracts import RouteRequest, RoutingBackend
-
-__all__ = ["RouteRequest", "RoutingBackend"]
+__all__ = [
+    "ROUTER_VERSION",
+    "ROUTING_POLICY",
+    "AStarRouter",
+    "AStarSettings",
+    "CancellationCheck",
+    "RouteCandidate",
+    "RouteCost",
+    "RouteDiagnostic",
+    "RouteFailureCode",
+    "RouteMetrics",
+    "RoutePatch",
+    "RouteRequest",
+    "RouteResult",
+    "RoutingBackend",
+    "canonical_candidate_bytes",
+    "verify_candidate_id",
+]
