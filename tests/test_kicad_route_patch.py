@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 
 import copper_mcp.adapters.kicad_route_patch as route_patch
+from copper_mcp import __version__
 from copper_mcp.adapters import (
     KiCadConstraintProfile,
     KiCadRoutePatchError,
@@ -119,7 +120,7 @@ def test_candidate_board_render_is_deterministic_read_only_and_round_trips() -> 
     assert patched.snapshot.content.source.revision != snapshot.content.source.revision
     assert patched.snapshot.content.source.generator == "copper-mcp"
     assert b'(generator "copper-mcp")' in first
-    assert b'(generator_version "0.1.0")' in first
+    assert f'(generator_version "{__version__}")'.encode() in first
 
 
 def test_round_trip_preserves_canonical_order_with_existing_back_copper() -> None:
@@ -159,11 +160,14 @@ def test_round_trip_preserves_canonical_order_with_existing_back_copper() -> Non
     assert segment_ids == sorted(segment_ids)
 
 
-def test_render_rewrites_third_party_writer_metadata() -> None:
-    source = (
-        FIXTURE.read_bytes()
-        .replace(b'(generator "copper-mcp")', b'(generator "pcbnew")')
-        .replace(b'  (generator_version "0.1.0")\n', b"")
+@pytest.mark.parametrize("source_generator", ["pcbnew", None])
+def test_render_rewrites_or_inserts_third_party_writer_metadata(
+    source_generator: str | None,
+) -> None:
+    source = FIXTURE.read_bytes().replace(b'  (generator_version "0.1.0")\n', b"")
+    source = source.replace(
+        b'  (generator "copper-mcp")\n',
+        f'  (generator "{source_generator}")\n'.encode() if source_generator is not None else b"",
     )
     profile = _profile()
     conversion = parse_kicad_bytes(source, profile)
@@ -184,9 +188,10 @@ def test_render_rewrites_third_party_writer_metadata() -> None:
     rendered = render_kicad_candidate_board(source, snapshot, result.candidate, profile)
     patched = parse_kicad_bytes(rendered, profile)
 
-    assert b'(generator "pcbnew")' not in rendered
+    if source_generator is not None:
+        assert f'(generator "{source_generator}")'.encode() not in rendered
     assert rendered.count(b'(generator "copper-mcp")') == 1
-    assert rendered.count(b'(generator_version "0.1.0")') == 1
+    assert rendered.count(f'(generator_version "{__version__}")'.encode()) == 1
     assert patched.snapshot is not None
     assert patched.diagnostics == ()
     assert patched.snapshot.content.source.generator == "copper-mcp"
@@ -282,6 +287,14 @@ def test_candidate_board_render_enforces_output_budget_before_round_trip() -> No
 def test_candidate_board_render_enforces_total_object_budget() -> None:
     source, profile, candidate = _snapshot_and_candidate()
     limits = replace(ParseLimits(), max_objects=8)
+    base_over_budget = parse_kicad_bytes(
+        source,
+        profile,
+        replace(limits, max_objects=7),
+    )
+    assert base_over_budget.snapshot is None
+    assert tuple(item.code for item in base_over_budget.diagnostics) == ("budget.exceeded",)
+
     conversion = parse_kicad_bytes(source, profile, limits)
     assert conversion.snapshot is not None
     assert conversion.diagnostics == ()

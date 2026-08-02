@@ -44,7 +44,8 @@ the pure adapter can serialize an exact replayed candidate in memory, but no dur
 Board IR or route resource, authoritative candidate-bound DRC evidence, preview, source mutation,
 or apply path is implemented. See [Board IR and KiCad adapter contracts](board-ir.md),
 [ADR-0005](../adr/0005-canonical-board-ir.md), and
-[ADR-0006](../adr/0006-bounded-deterministic-astar.md).
+[ADR-0006](../adr/0006-bounded-deterministic-astar.md), and
+[ADR-0007](../adr/0007-disposable-kicad-candidate-snapshot.md).
 
 ## Candidate lifecycle
 
