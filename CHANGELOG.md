@@ -27,6 +27,8 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Ledger validation now rejects oversized, non-strict, or content-address mismatched benchmark JSON
+  artifacts.
 - CodeQL `init`, `analyze`, and SARIF upload now move as one pinned v4 suite, and Dependabot groups
   future CodeQL suite updates so incompatible action generations cannot be proposed separately.
 

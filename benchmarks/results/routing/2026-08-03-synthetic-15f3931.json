@@ -1,0 +1,429 @@
+{
+  "authoritative_drc": {
+    "reason": "generated Board IR fixtures are not KiCad board files",
+    "status": "not_run"
+  },
+  "benchmark": "two-pin-astar-dijkstra-synthetic-v1",
+  "commit": "15f3931e8fb59b390721c3cc4c47445911580771",
+  "configuration": {
+    "astar_policy": "orthogonal-a-star-v1",
+    "oracle_policy": "orthogonal-dijkstra-oracle-v1",
+    "seed": 7,
+    "settings": {
+      "bend_penalty_nm": 500,
+      "grid_step_nm": 1000,
+      "max_expansions": 5000,
+      "max_grid_nodes": 1000,
+      "max_obstacle_checks": 100000,
+      "max_obstacles": 128,
+      "proximity_penalty_nm": 50
+    }
+  },
+  "dataset": {
+    "exclusions": "No external boards; no train/test split; expected failures retained.",
+    "fixture_count": 4,
+    "generator_path": "scripts/benchmark_routing.py",
+    "generator_sha256": "972497b3048dc52f507cb8b515aace2016aae872570407ef81101a1c9eb84e97",
+    "license": "Apache-2.0",
+    "name": "generated-two-pin-board-ir-v1",
+    "provenance": "Deterministic synthetic fixtures committed with CopperMCP."
+  },
+  "dirty": false,
+  "environment": {
+    "accelerator": "none (CPU-only)",
+    "kicad": "not invoked",
+    "machine": "arm64",
+    "physical_memory_bytes": 38654705664,
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "processor": "arm",
+    "python": "3.12.13"
+  },
+  "instrumentation": "perf_counter_ns with tracemalloc enabled per invocation",
+  "iterations": 7,
+  "metrics": {
+    "astar_dijkstra_completion_matches": 4,
+    "astar_dijkstra_optimal_cost_matches": 3,
+    "completed_fixtures": 3,
+    "expected_no_path_fixtures": 1,
+    "hard_internal_violations_on_completed_candidates": 0
+  },
+  "recorded_at_utc": "2026-08-02T22:37:13+00:00",
+  "results": [
+    {
+      "astar": {
+        "outcome": {
+          "bend_count": 0,
+          "candidate_id": "sha256:1c9387792adc73690e87bb43db925fb841109c77f729e00928cb01166646ab5f",
+          "expanded_states": 8,
+          "obstacle_checks": 0,
+          "peak_frontier_states": 24,
+          "proximity_steps": 1,
+          "status": "ok",
+          "total_cost_nm": 8050,
+          "vertices": [
+            {
+              "x_nm": 1000,
+              "y_nm": 5000
+            },
+            {
+              "x_nm": 9000,
+              "y_nm": 5000
+            }
+          ],
+          "wire_length_nm": 8000
+        },
+        "peak_memory_bytes": {
+          "max": 10245,
+          "median": 9909,
+          "min": 9909,
+          "samples": [
+            10245,
+            9909,
+            9909,
+            9909,
+            9909,
+            9909,
+            9909
+          ]
+        },
+        "timing_ns": {
+          "max": 2852833,
+          "median": 2321333,
+          "min": 2085333,
+          "samples": [
+            2150875,
+            2791625,
+            2728834,
+            2321333,
+            2852833,
+            2085333,
+            2247583
+          ]
+        }
+      },
+      "description": "Unobstructed direct route.",
+      "expected_status": "ok",
+      "name": "straight",
+      "oracle": {
+        "outcome": {
+          "bend_count": 0,
+          "expanded_states": 154,
+          "obstacle_checks": 0,
+          "peak_frontier_states": 69,
+          "proximity_steps": 1,
+          "status": "ok",
+          "total_cost_nm": 8050
+        },
+        "peak_memory_bytes": {
+          "max": 21480,
+          "median": 21480,
+          "min": 21480,
+          "samples": [
+            21480,
+            21480,
+            21480,
+            21480,
+            21480,
+            21480,
+            21480
+          ]
+        },
+        "timing_ns": {
+          "max": 11650167,
+          "median": 9125417,
+          "min": 8882166,
+          "samples": [
+            9125417,
+            9696167,
+            8904750,
+            9008750,
+            9400167,
+            8882166,
+            11650167
+          ]
+        }
+      },
+      "snapshot_digest": "sha256:143069ac2bf85505858a25079ba85d1d4a288fd35bab00a3286ab4537ef64ea3"
+    },
+    {
+      "astar": {
+        "outcome": {
+          "bend_count": 2,
+          "candidate_id": "sha256:223e0570e0891b37ed8a143b6d60956c31119dab4737b3f3797604115d6159cc",
+          "expanded_states": 63,
+          "obstacle_checks": 403,
+          "peak_frontier_states": 61,
+          "proximity_steps": 10,
+          "status": "ok",
+          "total_cost_nm": 13500,
+          "vertices": [
+            {
+              "x_nm": 1000,
+              "y_nm": 5000
+            },
+            {
+              "x_nm": 1000,
+              "y_nm": 7000
+            },
+            {
+              "x_nm": 9000,
+              "y_nm": 7000
+            },
+            {
+              "x_nm": 9000,
+              "y_nm": 5000
+            }
+          ],
+          "wire_length_nm": 12000
+        },
+        "peak_memory_bytes": {
+          "max": 22582,
+          "median": 22246,
+          "min": 22246,
+          "samples": [
+            22582,
+            22246,
+            22246,
+            22246,
+            22246,
+            22246,
+            22246
+          ]
+        },
+        "timing_ns": {
+          "max": 7287250,
+          "median": 6961292,
+          "min": 6601834,
+          "samples": [
+            6863250,
+            7008625,
+            6936458,
+            6601834,
+            7148417,
+            7287250,
+            6961292
+          ]
+        }
+      },
+      "description": "Central rectangular keepout requires a deterministic orthogonal detour.",
+      "expected_status": "ok",
+      "name": "detour",
+      "oracle": {
+        "outcome": {
+          "bend_count": 2,
+          "expanded_states": 222,
+          "obstacle_checks": 1301,
+          "peak_frontier_states": 42,
+          "proximity_steps": 10,
+          "status": "ok",
+          "total_cost_nm": 13500
+        },
+        "peak_memory_bytes": {
+          "max": 21144,
+          "median": 21144,
+          "min": 21072,
+          "samples": [
+            21072,
+            21144,
+            21144,
+            21144,
+            21144,
+            21144,
+            21144
+          ]
+        },
+        "timing_ns": {
+          "max": 16924959,
+          "median": 15771625,
+          "min": 14885084,
+          "samples": [
+            14885084,
+            15489916,
+            15345292,
+            16924959,
+            16233083,
+            16519500,
+            15771625
+          ]
+        }
+      },
+      "snapshot_digest": "sha256:365065731e0104e1abc1d5ca38a8526cf9eeff22aa966031a9638c08a231bb1d"
+    },
+    {
+      "astar": {
+        "outcome": {
+          "bend_count": 0,
+          "candidate_id": "sha256:4310f68d0b2d7a70eea7b3ae95beaa0185dc21161c79ba007fad3f8d70b4a17f",
+          "expanded_states": 8,
+          "obstacle_checks": 93,
+          "peak_frontier_states": 18,
+          "proximity_steps": 6,
+          "status": "ok",
+          "total_cost_nm": 8300,
+          "vertices": [
+            {
+              "x_nm": 1000,
+              "y_nm": 5000
+            },
+            {
+              "x_nm": 9000,
+              "y_nm": 5000
+            }
+          ],
+          "wire_length_nm": 8000
+        },
+        "peak_memory_bytes": {
+          "max": 10586,
+          "median": 10250,
+          "min": 10250,
+          "samples": [
+            10586,
+            10250,
+            10250,
+            10250,
+            10250,
+            10250,
+            10250
+          ]
+        },
+        "timing_ns": {
+          "max": 8280083,
+          "median": 3845083,
+          "min": 2901708,
+          "samples": [
+            3845083,
+            8280083,
+            2901708,
+            5315542,
+            2904375,
+            3780958,
+            4479917
+          ]
+        }
+      },
+      "description": "Channel boundaries meet the exact legal track-clearance boundary.",
+      "expected_status": "ok",
+      "name": "exact-clearance-channel",
+      "oracle": {
+        "outcome": {
+          "bend_count": 0,
+          "expanded_states": 92,
+          "obstacle_checks": 966,
+          "peak_frontier_states": 38,
+          "proximity_steps": 6,
+          "status": "ok",
+          "total_cost_nm": 8300
+        },
+        "peak_memory_bytes": {
+          "max": 11616,
+          "median": 11616,
+          "min": 11616,
+          "samples": [
+            11616,
+            11616,
+            11616,
+            11616,
+            11616,
+            11616,
+            11616
+          ]
+        },
+        "timing_ns": {
+          "max": 10316125,
+          "median": 9417375,
+          "min": 8512125,
+          "samples": [
+            8594042,
+            8697708,
+            8512125,
+            9417375,
+            10316125,
+            9599833,
+            9836042
+          ]
+        }
+      },
+      "snapshot_digest": "sha256:5b84a4fe0c5f382864e9435975891600e3a2a2f2793707e2b228cc62c2002183"
+    },
+    {
+      "astar": {
+        "outcome": {
+          "diagnostic": "no_path",
+          "expanded_states": 119,
+          "obstacle_checks": 706,
+          "status": "no_path"
+        },
+        "peak_memory_bytes": {
+          "max": 17176,
+          "median": 16840,
+          "min": 16840,
+          "samples": [
+            17176,
+            16840,
+            16840,
+            16840,
+            16840,
+            16840,
+            16840
+          ]
+        },
+        "timing_ns": {
+          "max": 16995875,
+          "median": 11445458,
+          "min": 10234333,
+          "samples": [
+            11431333,
+            12802417,
+            16995875,
+            10469958,
+            11445458,
+            12761917,
+            10234333
+          ]
+        }
+      },
+      "description": "A spanning keepout makes the bounded lattice intentionally unroutable.",
+      "expected_status": "no_path",
+      "name": "blocked",
+      "oracle": {
+        "outcome": {
+          "diagnostic": "no_path",
+          "expanded_states": 119,
+          "obstacle_checks": 706,
+          "status": "no_path"
+        },
+        "peak_memory_bytes": {
+          "max": 11856,
+          "median": 11856,
+          "min": 11856,
+          "samples": [
+            11856,
+            11856,
+            11856,
+            11856,
+            11856,
+            11856,
+            11856
+          ]
+        },
+        "timing_ns": {
+          "max": 11959167,
+          "median": 10433666,
+          "min": 9110000,
+          "samples": [
+            11959167,
+            10415250,
+            11043709,
+            11902667,
+            9787000,
+            10433666,
+            9110000
+          ]
+        }
+      },
+      "snapshot_digest": "sha256:d9083dcc6cf7cab336e2a85296e24e1d7ce655b35f0c3a77fecf0f0e2110c13c"
+    }
+  ],
+  "run_id": "sha256:8b7dadf774868dd0694c148a87961b458525e68d9ff63b5a4f3fa5e4b075639c",
+  "warmups": 2
+}
