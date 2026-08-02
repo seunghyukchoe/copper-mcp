@@ -10,6 +10,7 @@ documentation, ledger updates, and benchmark evidence.
 - [x] Candidate schemas and comparison.
 - [x] MCP and CLI adapters over shared services.
 - [x] Governance, security, CI, releases, and ledgers.
+- [x] Reproducible KiCad audio-board preview and artifact-validation workflow.
 - [ ] First public GitHub release.
 
 ## M1 — KiCad inspection and validation

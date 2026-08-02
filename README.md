@@ -39,6 +39,29 @@ The non-negotiable boundary is simple:
 
 See the [roadmap](docs/roadmap.md) for routing and KiCad IPC milestones.
 
+## Audio Board Lab
+
+![CopperTone stereo line-buffer engineering preview](hardware/coppertone-buffer/media/coppertone-buffer-top.png)
+
+The Audio Board Lab publishes open KiCad designs that exercise CopperMCP against real audio-PCB
+workflows. **Lab #001 — [CopperTone](hardware/coppertone-buffer/README.md)** is a 52 mm × 30 mm,
+two-layer OPA1656 stereo line-buffer preview with checked-in board source, BOM, Gerbers, drill files,
+STEP assembly, renders, constraints, provenance, and a one-command KiCad 10 validation gate. The
+recorded KiCad 10.0.5 run reports 0 DRC violations, 0 unconnected items, and 0 unrouted items.
+
+CopperTone is a board-first engineering preview, not a fabrication-approved or electrically
+validated product. It has no source schematic, ERC, assembled prototype, or audio measurements yet;
+its hardware sources are separately licensed under CERN-OHL-S-2.0. CopperMCP inspected and validated
+the artifact but did not autoroute or apply its copper.
+
+## Research direction
+
+The [open autorouter research package](docs/research/README.md) compares current open routing tools
+and records the evidence behind CopperMCP's CPU-first roadmap: exact integer geometry, A*/maze search,
+PathFinder-style negotiated congestion, conflict-aware parallelism, bounded exact repair, profiled GPU
+kernels, and optional typed ML policy hooks. Deterministic code and KiCad validation remain the
+authority for every copper result.
+
 ## Quick start
 
 Prerequisites: Python 3.11 or newer.
@@ -128,6 +151,8 @@ this boundary.
 - [MCP contract](docs/architecture/mcp-api.md)
 - [Security and threat model](docs/architecture/security-model.md)
 - [Development guide](docs/development.md)
+- [Autorouter research](docs/research/README.md)
+- [Audio Board Lab](hardware/README.md)
 - [Roadmap](docs/roadmap.md)
 - [Release process](docs/releasing.md)
 - [Project ledgers](docs/ledgers/README.md)
@@ -150,5 +175,7 @@ change experimental contracts with migration notes. See [CHANGELOG.md](CHANGELOG
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE). Test fixtures and contributed datasets must include
-compatible provenance and licensing metadata.
+Except where a directory says otherwise, CopperMCP software and documentation are licensed under the
+[Apache License 2.0](LICENSE). Audio Board Lab hardware sources carry their own clearly identified
+open-hardware license; CopperTone uses [CERN-OHL-S-2.0](hardware/coppertone-buffer/LICENSE). Test
+fixtures and contributed datasets must include compatible provenance and licensing metadata.

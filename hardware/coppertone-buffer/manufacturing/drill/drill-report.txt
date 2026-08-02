@@ -1,0 +1,25 @@
+Drill report for coppertone-buffer.kicad_pcb
+Created on 2026-08-03T03:57:15
+
+Copper Layer Stackup:
+    =============================================================
+    L1 :  F.Cu                      front
+    L2 :  B.Cu                      back
+
+
+Drill file 'coppertone-buffer-PTH.drl' contains
+    plated through holes:
+    =============================================================
+    T1  0.400mm  0.0157"  (9 holes))
+    T2  0.800mm  0.0315"  (4 holes))
+    T3  1.000mm  0.0394"  (11 holes)  (with 6 slots)
+
+    Total plated holes count 24
+
+
+Drill file 'coppertone-buffer-NPTH.drl' contains
+    unplated through holes:
+    =============================================================
+    T1  2.700mm  0.1063"  (2 holes))
+
+    Total unplated holes count 2

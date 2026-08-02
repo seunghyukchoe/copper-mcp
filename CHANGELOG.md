@@ -18,6 +18,19 @@ All notable changes are documented here. The format follows
 - GitHub issue forms, CI, CodeQL, dependency auditing, release automation, and project ledgers.
 - A non-publishing release dry run that verifies the requested version, complete quality gate, and
   distribution artifacts before a version tag is created.
+- A source-linked survey of open PCB autorouters and a modern CPU, multicore, exact-repair, GPU, and
+  typed-ML research roadmap.
+- Audio Board Lab #001, CopperTone: a separately licensed, board-first KiCad 10 stereo line-buffer
+  preview with BOM, manufacturing exports, STEP model, renders, constraints, provenance, and a
+  one-command read-only DRC and artifact-hash validation workflow plus explicit snapshot refresh.
+- Public social-preview artwork and a factual KiCad development screenshot with provenance records.
+
+### Fixed
+
+- KiCad 10 named-net inspection now counts deduplicated item-level `(net "NAME")` declarations when
+  legacy numeric top-level net declarations are absent.
+- CopperTone uses stable semantic UUIDv5 identities and temporary default validation so unchanged
+  board replays no longer replace native object identities or modify tracked files.
 
 ### Security
 

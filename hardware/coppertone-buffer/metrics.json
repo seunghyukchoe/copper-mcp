@@ -1,0 +1,34 @@
+{
+  "board_mm": {
+    "copper_layers": 2,
+    "height": 30.0,
+    "width": 52.0
+  },
+  "generated_non_ground_track_length_mm": 174.886,
+  "ground_stitching_vias": 6,
+  "high_impedance_input_vias": 0,
+  "named_nets": 14,
+  "non_ground_vias": 3,
+  "notes": [
+    "Lengths are generator-centerline geometry, not an audio performance claim.",
+    "KiCad DRC and board statistics are recorded separately by validate.sh.",
+    "The layout is manually authored; CopperMCP did not route this board."
+  ],
+  "per_net_track_length_mm": {
+    "9V_RAW": 9.162,
+    "L_BUF": 6.099,
+    "L_IN_BIASED": 8.969,
+    "L_IN_RAW": 11.046,
+    "L_ISO": 2.1,
+    "L_OUT": 30.606,
+    "R_BUF": 5.015,
+    "R_IN_BIASED": 9.65,
+    "R_IN_RAW": 6.154,
+    "R_ISO": 2.1,
+    "R_OUT": 12.201,
+    "VCC": 45.755,
+    "VREF": 26.028
+  },
+  "schema_version": 1,
+  "source": "generate_board.py"
+}
