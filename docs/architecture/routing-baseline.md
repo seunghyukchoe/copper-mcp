@@ -94,14 +94,17 @@ The circular `candidate_id` field is excluded from those bytes, then set to thei
 `render_kicad_candidate_board()` first reproduces the supplied Board IR from the original KiCad bytes
 and constraint profile. It verifies candidate identity, reruns the bounded A* request, and requires an
 exact candidate match. Each compressed route edge becomes one root-level KiCad segment with exact
-decimal units and a deterministic UUIDv5 derived from candidate identity and edge order.
+decimal units and a deterministic UUIDv5 derived from candidate identity and edge order. Native
+UUID/timestamp identities are collected once for constant-time collision checks, and the derivative
+records `copper-mcp` plus its package version as its KiCad writer.
 
-The rendered bytes stay under the same parser budget and are parsed back through the supported KiCad
-adapter. The complete modeled content must equal the base snapshot after replacing only source
-identity and appending the expected segments. The function performs no file write, subprocess call,
-preview, MCP action, or board mutation. A KiCad 10.0.5 integration test exercises the returned bytes
-through the existing read-only DRC service on the synthetic two-pad fixture; that fixture yields zero
-violations and zero unconnected items.
+The rendered bytes stay under the same parser, byte, and total-object budgets and are parsed back
+through the supported KiCad adapter. The complete modeled content must equal the base snapshot after
+replacing only source revision and writer provenance and appending the expected segments. The
+function performs no file write, durable export, subprocess call, preview, MCP action, or board
+mutation. A KiCad 10 integration test exercises the returned bytes through the existing read-only
+DRC service on the synthetic two-pad fixture; that fixture yields zero violations and zero
+unconnected items.
 
 ## Safety boundary
 

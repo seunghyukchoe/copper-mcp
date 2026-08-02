@@ -6,7 +6,9 @@ import uuid
 from dataclasses import replace
 from itertools import pairwise
 
+from copper_mcp import __version__
 from copper_mcp.adapters.kicad_board_ir import KiCadConstraintProfile, parse_kicad_bytes
+from copper_mcp.adapters.sexpr import SExpr, SExprError, atoms, children, parse_sexpr
 from copper_mcp.board_ir import BoardIRSnapshot, ParseLimits, Segment, nm_to_mm
 from copper_mcp.routing import (
     AStarRouter,
@@ -16,6 +18,8 @@ from copper_mcp.routing import (
 )
 
 _SEGMENT_NAMESPACE = uuid.UUID("0d904ca7-1130-4d38-a044-6ba5d92f357b")
+_WRITER_ID = "copper-mcp"
+_NATIVE_ID_HEADS = frozenset({"tstamp", "uuid"})
 
 
 class KiCadRoutePatchError(ValueError):
@@ -36,6 +40,135 @@ def _quoted_atom(value: str) -> str:
 
 def _segment_uuid(candidate_id: str, index: int) -> str:
     return str(uuid.uuid5(_SEGMENT_NAMESPACE, f"{candidate_id}:{index}"))
+
+
+def _source_structure(source: bytes, limits: ParseLimits) -> tuple[SExpr, frozenset[str]]:
+    """Parse once and collect all native identities for constant-time collision checks."""
+
+    try:
+        root = parse_sexpr(source, limits)
+        native_identities: set[str] = set()
+        pending = [root]
+        while pending:
+            expression = pending.pop()
+            if expression.head in _NATIVE_ID_HEADS:
+                values = atoms(expression)
+                if len(values) != 1:
+                    raise SExprError(
+                        "syntax.invalid",
+                        "native identity must contain exactly one atom",
+                        expression.offset,
+                    )
+                native_identities.add(values[0].lower())
+            pending.extend(item for item in expression.items[1:] if isinstance(item, SExpr))
+    except SExprError as error:
+        raise KiCadRoutePatchError("KiCad source identity scan failed") from error
+    return root, frozenset(native_identities)
+
+
+def _expression_end(text: str, start: int) -> int:
+    """Return the exclusive end of one already-validated S-expression."""
+
+    if start >= len(text) or text[start] != "(":
+        raise KiCadRoutePatchError("KiCad writer metadata has an invalid source position")
+    depth = 0
+    quoted = False
+    escaped = False
+    for index in range(start, len(text)):
+        character = text[index]
+        if quoted:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                quoted = False
+            continue
+        if character == '"':
+            quoted = True
+        elif character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+            if depth == 0:
+                return index + 1
+    raise KiCadRoutePatchError("KiCad writer metadata has no closing delimiter")
+
+
+def _line_indent(text: str, offset: int) -> str:
+    line_start = text.rfind("\n", 0, offset) + 1
+    indentation = text[line_start:offset]
+    return indentation if indentation and not indentation.strip(" \t") else "  "
+
+
+def _rewrite_writer_metadata(source: bytes, root: SExpr) -> bytes:
+    """Identify CopperMCP as the writer of the disposable derivative."""
+
+    text = source.decode("utf-8", errors="strict")
+    newline = "\r\n" if "\r\n" in text else "\n"
+    generators = children(root, "generator")
+    generator_versions = children(root, "generator_version")
+    versions = children(root, "version")
+    if len(generators) > 1 or len(generator_versions) > 1 or len(versions) != 1:
+        raise KiCadRoutePatchError("KiCad writer metadata is ambiguous")
+
+    writer = f'(generator "{_quoted_atom(_WRITER_ID)}")'
+    writer_version = f'(generator_version "{_quoted_atom(__version__)}")'
+    replacements: list[tuple[int, int, str]] = []
+
+    if generators:
+        generator = generators[0]
+        generator_end = _expression_end(text, generator.offset)
+        replacements.append((generator.offset, generator_end, writer))
+        if not generator_versions:
+            indentation = _line_indent(text, generator.offset)
+            replacements.append(
+                (generator_end, generator_end, f"{newline}{indentation}{writer_version}")
+            )
+    else:
+        version = versions[0]
+        version_end = _expression_end(text, version.offset)
+        indentation = _line_indent(text, version.offset)
+        inserted = f"{newline}{indentation}{writer}"
+        if not generator_versions:
+            inserted += f"{newline}{indentation}{writer_version}"
+        replacements.append((version_end, version_end, inserted))
+
+    if generator_versions:
+        generator_version = generator_versions[0]
+        replacements.append(
+            (
+                generator_version.offset,
+                _expression_end(text, generator_version.offset),
+                writer_version,
+            )
+        )
+
+    for start, end, replacement in sorted(replacements, reverse=True):
+        text = text[:start] + replacement + text[end:]
+    return text.encode("utf-8", errors="strict")
+
+
+def _modeled_object_count(snapshot: BoardIRSnapshot) -> int:
+    content = snapshot.content
+    return sum(
+        len(group)
+        for group in (
+            content.outline,
+            content.copper_layers,
+            content.nets,
+            content.constraints.net_classes,
+            content.constraints.assignments,
+            content.constraints.differential_pairs,
+            content.constraints.length_rules,
+            content.pads,
+            content.vias,
+            content.segments,
+            content.arcs,
+            content.zones,
+            content.keepouts,
+        )
+    )
 
 
 def _render_segment(
@@ -87,7 +220,8 @@ def render_kicad_candidate_board(
     This function is a serialization boundary, not an apply operation and not DRC evidence. It
     accepts only a source/profile pair that reproduces ``snapshot`` exactly and only the byte-exact
     candidate reproduced by the bounded reference router. The returned bytes are parsed again and
-    must differ from the input Board IR solely by source identity and the appended track segments.
+    must differ from the input Board IR solely by source revision, CopperMCP writer provenance, and
+    the appended track segments.
     """
 
     limits = limits or ParseLimits()
@@ -123,23 +257,28 @@ def render_kicad_candidate_board(
         raise KiCadRoutePatchError("candidate references an unknown net or copper layer")
 
     edge_count = len(candidate.patch.vertices) - 1
-    if edge_count > limits.max_objects:
-        raise KiCadRoutePatchError("candidate segment count exceeds the configured object budget")
+    if _modeled_object_count(snapshot) + edge_count > limits.max_objects:
+        raise KiCadRoutePatchError("rendered board exceeds the configured object budget")
 
-    stripped = source.rstrip(b" \t\r\n")
+    root, native_identities = _source_structure(source, limits)
+    writer_source = _rewrite_writer_metadata(source, root)
+
+    stripped = writer_source.rstrip(b" \t\r\n")
     if not stripped or stripped[-1:] != b")":
         raise KiCadRoutePatchError("KiCad source has no supported root closing delimiter")
     closing_index = len(stripped) - 1
-    prefix = source[:closing_index]
-    suffix = source[closing_index:]
+    prefix = writer_source[:closing_index]
+    suffix = writer_source[closing_index:]
     separator = b"" if prefix.endswith(b"\n") else b"\n"
 
     rendered_segments: list[bytes] = []
     expected_segments: list[Segment] = []
     output_size = len(prefix) + len(separator) + len(suffix)
+    if output_size > limits.max_input_bytes:
+        raise KiCadRoutePatchError("rendered candidate board exceeds the input-byte budget")
     for index, (start, end) in enumerate(pairwise(candidate.patch.vertices)):
         native_uuid = _segment_uuid(candidate.candidate_id, index)
-        if native_uuid.encode("ascii") in source:
+        if native_uuid in native_identities:
             raise KiCadRoutePatchError(
                 "deterministic route identity collides with the source board"
             )
@@ -172,9 +311,14 @@ def render_kicad_candidate_board(
     patched = parse_kicad_bytes(rendered_board, profile, limits)
     if patched.snapshot is None or patched.diagnostics:
         raise KiCadRoutePatchError("rendered candidate board failed Board IR round-trip parsing")
+    expected_source = replace(
+        snapshot.content.source,
+        revision=patched.snapshot.content.source.revision,
+        generator=_WRITER_ID,
+    )
     expected_content = replace(
         snapshot.content,
-        source=patched.snapshot.content.source,
+        source=expected_source,
         segments=tuple(
             sorted(
                 snapshot.content.segments + tuple(expected_segments),

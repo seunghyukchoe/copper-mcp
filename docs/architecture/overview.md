@@ -31,6 +31,7 @@ revision.
 | `kicad_file.py` | Read-only MVP inspection; never used to write geometry. |
 | `board_ir/` | Canonical integer board snapshots, strict codec, geometry validation, and digests. |
 | `adapters/kicad_board_ir.py` | Bounded, read-only conversion of the documented KiCad subset. |
+| `adapters/kicad_route_patch.py` | Pure replay-bound serialization to new disposable KiCad bytes. |
 | `tools.py` | Pure application services shared by adapters. |
 | `routing/contracts.py` | Exact candidate, cost, settings, result, and backend-neutral contracts. |
 | `routing/astar.py` | Bounded integer two-pin A* reference; candidate-only and fail-closed. |
@@ -39,8 +40,9 @@ revision.
 Board IR `0.1.0` is the domain and source-adapter foundation. A narrow deterministic
 [two-pin routing baseline](routing-baseline.md) now produces immutable in-memory candidates for
 supported synthetic Board IR inputs. Existing MCP tools still use the bounded inspection manifest;
-no MCP Board IR resource, KiCad route export, authoritative candidate DRC, preview, or apply path is
-implemented. See [Board IR and KiCad adapter contracts](board-ir.md),
+the pure adapter can serialize an exact replayed candidate in memory, but no durable export, MCP
+Board IR or route resource, authoritative candidate-bound DRC evidence, preview, source mutation,
+or apply path is implemented. See [Board IR and KiCad adapter contracts](board-ir.md),
 [ADR-0005](../adr/0005-canonical-board-ir.md), and
 [ADR-0006](../adr/0006-bounded-deterministic-astar.md).
 

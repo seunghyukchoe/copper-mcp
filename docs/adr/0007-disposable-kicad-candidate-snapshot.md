@@ -22,9 +22,12 @@ source board. It accepts a candidate only when all of these bindings hold:
 3. the bounded reference A* router reproduces the complete candidate exactly;
 4. candidate net, layer, pad endpoints, settings, and geometry therefore remain bound to that source;
 5. every orthogonal edge receives a deterministic UUIDv5 identity and exact nanometre-to-millimetre
-   spelling within the configured input and object budgets; and
-6. the rendered board parses back into Board IR with no modeled change except source identity and the
-   appended route segments.
+   spelling within the configured input and total-object budgets;
+6. native UUID/timestamp identities are collected once under parser bounds before collision checks;
+7. the disposable derivative identifies `copper-mcp` and its package version as the KiCad writer;
+   and
+8. the rendered board parses back into Board IR with no modeled change except source revision,
+   writer provenance, and the appended route segments.
 
 The bridge returns disposable board bytes only. It does not invoke KiCad, produce a validated status,
 write a preview, expose MCP, or apply a patch. A separately bounded DRC orchestration layer must copy
@@ -34,9 +37,11 @@ identity, and discard stale results.
 ## Consequences
 
 The first routing candidate now has a deterministic, source-preserving path to a private KiCad board.
-Unit tests cover replay, tamper, stale-source, byte-budget, identity, and round-trip failures. Where
-KiCad 10.0.5 is installed, an integration test confirms the disposable two-pad candidate has zero
-violations and zero unconnected items while both source and rendered files remain unchanged by DRC.
+Unit tests cover replay, tamper, stale source and candidate revisions, byte and total-object budget
+rejection, precomputed native-identity collisions, writer provenance, and successful Board IR round
+trips. Where KiCad 10 is installed, an integration test confirms the disposable two-pad candidate
+has zero violations and zero unconnected items while both source and rendered files remain unchanged
+by DRC.
 
 This evidence applies only to the committed synthetic fixture and supported A* subset. It is not
 general KiCad compatibility, whole-board routing, production throughput, electrical validation, DFM,
