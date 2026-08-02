@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import tracemalloc
 from collections.abc import Callable
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from copper_mcp.adapters import KiCadConstraintProfile, net_id_for_name, parse_kicad_bytes
+from copper_mcp.adapters.sexpr import SExprError, parse_sexpr
 from copper_mcp.board_ir import (
     BoardIRSnapshot,
     NetClass,
@@ -16,6 +18,8 @@ from copper_mcp.board_ir import (
     ParseLimits,
     PointNM,
     Severity,
+    ZoneIslandRemoval,
+    ZonePadConnection,
     encode_snapshot,
 )
 
@@ -99,6 +103,9 @@ def test_synthetic_kicad_subset_maps_exact_geometry_and_constraints() -> None:
     assert content.vias[0].drill_nm == 400_000
     assert content.zones[0].clearance_nm == 200_000
     assert content.zones[0].thermal_gap_nm == 300_000
+    assert content.zones[0].priority == 0
+    assert content.zones[0].pad_connection is ZonePadConnection.THERMAL
+    assert content.zones[0].island_removal is ZoneIslandRemoval.ALWAYS
     assert content.keepouts[0].prohibit_tracks is True
     assert content.keepouts[0].prohibit_vias is True
     assert content.keepouts[0].prohibit_pads is False
@@ -178,6 +185,9 @@ def test_real_coppertone_board_maps_the_committed_audio_subset_exactly() -> None
         PointNM(52_000_000, 30_000_000),
         PointNM(0, 30_000_000),
     }
+    assert all(zone.priority == 0 for zone in content.zones)
+    assert all(zone.pad_connection is ZonePadConnection.THERMAL for zone in content.zones)
+    assert all(zone.island_removal is ZoneIslandRemoval.ALWAYS for zone in content.zones)
 
 
 Mutation = Callable[[bytes], bytes]
@@ -189,11 +199,44 @@ def _replace(source: bytes, old: bytes, new: bytes) -> bytes:
     return mutated
 
 
+def _insert_root(source: bytes, expression: bytes) -> bytes:
+    closing = source.rfind(b"\n)")
+    assert closing > 0
+    return source[:closing] + b"\n  " + expression + source[closing:]
+
+
+def _four_layer_source() -> bytes:
+    return _replace(
+        SUBSET_BOARD.read_bytes(),
+        b'    (0 "F.Cu" signal)\n    (2 "B.Cu" signal)',
+        b'    (0 "F.Cu" signal)\n'
+        b'    (2 "In1.Cu" signal)\n'
+        b'    (4 "In2.Cu" signal)\n'
+        b'    (6 "B.Cu" signal)',
+    )
+
+
 @pytest.mark.parametrize(
     ("mutation", "expected_code"),
     [
         (lambda _source: MALFORMED_BOARD.read_bytes(), "syntax.invalid"),
         (lambda _source: b"\xff", "syntax.invalid"),
+        (
+            lambda source: _replace(source, b"(version 20260206)", b"(version 20270206)"),
+            "unsupported.version",
+        ),
+        (
+            lambda source: _replace(source, b"(version 20260206)", b"(version malformed)"),
+            "unsupported.version",
+        ),
+        (
+            lambda source: _replace(
+                source,
+                b'    (0 "F.Cu" signal)\n    (2 "B.Cu" signal)',
+                b'    (2 "B.Cu" signal)\n    (0 "F.Cu" signal)',
+            ),
+            "unsupported.construct",
+        ),
         (
             lambda source: _replace(source, b'(pad "1" smd roundrect', b'(pad "1" smd custom'),
             "unsupported.construct",
@@ -222,6 +265,70 @@ def _replace(source: bytes, old: bytes, new: bytes) -> bytes:
             lambda source: _replace(source, b"(width 0.25)", b"(width 0.0000001)"),
             "integer.precision",
         ),
+        (
+            lambda source: _replace(
+                source,
+                b"    (locked yes)\n    (uuid",
+                b"    locked\n    (locked yes)\n    (uuid",
+            ),
+            "syntax.invalid",
+        ),
+        (
+            lambda source: _replace(
+                source,
+                b"(roundrect_rratio 0.25)",
+                b"(roundrect_rratio "
+                b"0.250000000000000000000000000000000000000000000000000000000000001)",
+            ),
+            "integer.precision",
+        ),
+        (
+            lambda source: _insert_root(
+                source,
+                b'(gr_text "hidden copper" (at 1 1) (layer "F.Cu"))',
+            ),
+            "unsupported.construct",
+        ),
+        (
+            lambda source: _insert_root(
+                source,
+                b"(general (legacy_teardrops yes))",
+            ),
+            "unsupported.construct",
+        ),
+        (
+            lambda source: _replace(
+                source,
+                b'    (pad "1" smd roundrect',
+                b'    (fp_circle (center 0 0) (end 1 0) (layer "Edge.Cuts"))\n'
+                b'    (pad "1" smd roundrect',
+            ),
+            "unsupported.construct",
+        ),
+        (
+            lambda source: _replace(
+                source,
+                b"(fill yes (thermal_gap 0.3) (thermal_bridge_width 0.3))",
+                b"(fill yes)",
+            ),
+            "syntax.missing_field",
+        ),
+        (
+            lambda source: _replace(
+                source,
+                b"(fill yes (thermal_gap 0.3) (thermal_bridge_width 0.3))",
+                b"(fill yes (thermal_gap 0.3) (thermal_bridge_width 0.3) (island_removal_mode 2))",
+            ),
+            "unsupported.construct",
+        ),
+        (
+            lambda source: _replace(
+                source,
+                b"(fill yes (thermal_gap 0.3) (thermal_bridge_width 0.3))",
+                b"(fill yes (thermal_gap 0.3) (thermal_bridge_width 0.3) (smoothing fillet))",
+            ),
+            "unsupported.construct",
+        ),
     ],
 )
 def test_adapter_fails_closed_with_structured_diagnostics(
@@ -237,6 +344,269 @@ def test_adapter_fails_closed_with_structured_diagnostics(
     assert diagnostic.severity is Severity.ERROR
     assert 1 <= len(diagnostic.message) <= 512
     assert diagnostic.source_locator
+
+
+def test_zone_priority_connection_and_island_policy_are_preserved() -> None:
+    source = SUBSET_BOARD.read_bytes()
+    source = _replace(
+        source,
+        b"    (connect_pads (clearance 0.2))",
+        b"    (priority 7)\n    (connect_pads yes (clearance 0.2))",
+    )
+    source = _replace(
+        source,
+        b"(fill yes (thermal_gap 0.3) (thermal_bridge_width 0.3))",
+        b"(fill yes (island_removal_mode 1))",
+    )
+
+    zone = parse_success(source, constraint_profile(assign_signal=True)).content.zones[0]
+
+    assert zone.priority == 7
+    assert zone.pad_connection is ZonePadConnection.SOLID
+    assert zone.island_removal is ZoneIslandRemoval.NEVER
+    assert zone.thermal_gap_nm == 0
+    assert zone.thermal_bridge_width_nm == 0
+
+
+def test_quoted_numeric_net_name_is_not_a_legacy_net_ordinal() -> None:
+    source = SUBSET_BOARD.read_bytes()
+    source = _replace(source, b'  (footprint "Test:R"', b'  (net 1 "GND")\n  (footprint "Test:R"')
+    source = source.replace('"SIG_µ"'.encode(), b'"1"')
+
+    content = parse_success(source, constraint_profile()).content
+    numeric_name_id = net_id_for_name("1")
+
+    assert {net.name for net in content.nets} == {"1", "GND"}
+    assert content.segments[0].net_id == numeric_name_id
+    assert content.arcs[0].net_id == numeric_name_id
+    assert content.vias[0].net_id == numeric_name_id
+    assert any(pad.net_id == numeric_name_id for pad in content.pads)
+
+
+@pytest.mark.parametrize(
+    "item_head",
+    ["segment", "arc", "via"],
+)
+def test_bare_negative_routing_net_code_is_not_treated_as_a_name(item_head: str) -> None:
+    source = SUBSET_BOARD.read_bytes()
+    marker = f"  ({item_head}\n".encode()
+    item_start = source.index(marker)
+    original_net = '    (net "SIG_µ")'.encode()
+    net_start = source.index(original_net, item_start)
+    source = source[:net_start] + b"    (net -1)" + source[net_start + len(original_net) :]
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "net.unknown"
+
+
+def test_two_field_pad_net_code_uses_canonical_numeric_identity() -> None:
+    source = _replace(
+        SUBSET_BOARD.read_bytes(),
+        b'  (footprint "Test:R"',
+        b'  (net 1 "GND")\n  (footprint "Test:R"',
+    )
+    source = _replace(source, '      (net "SIG_µ")'.encode(), b'      (net 01 "SIG_\xc2\xb5")')
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "net.ambiguous"
+
+
+def test_non_neutral_board_level_via_treatment_is_rejected() -> None:
+    source = _replace(
+        SUBSET_BOARD.read_bytes(),
+        b'  (generator "pcbnew")',
+        b'  (generator "pcbnew")\n  (setup (capping yes))',
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+
+
+def test_default_board_tenting_is_accepted_but_non_default_tenting_is_rejected() -> None:
+    default_source = _replace(
+        SUBSET_BOARD.read_bytes(),
+        b'  (generator "pcbnew")',
+        b'  (generator "pcbnew")\n  (setup (tenting (front yes) (back yes)))',
+    )
+    parse_success(default_source, constraint_profile(assign_signal=True))
+
+    non_default_source = _replace(default_source, b"(front yes)", b"(front no)")
+    result = parse_kicad_bytes(non_default_source, constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+
+
+def test_unmodeled_setup_routing_constraints_are_rejected() -> None:
+    source = _replace(
+        SUBSET_BOARD.read_bytes(),
+        b'  (generator "pcbnew")',
+        b'  (generator "pcbnew")\n  (setup (defaults (edge_clearance 5)))',
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+
+
+def test_multiple_native_identity_fields_are_rejected() -> None:
+    source = _replace(
+        SUBSET_BOARD.read_bytes(),
+        b'    (uuid "10000000-0000-0000-0000-000000000005")',
+        b'    (uuid "10000000-0000-0000-0000-000000000005")\n'
+        b'    (tstamp "deadbeef-0000-0000-0000-000000000005")',
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "identity.ambiguous"
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda source: _replace(
+            source,
+            b'  (footprint "Test:R"',
+            b'  (SECRET_BEARER_TOKEN yes)\n  (footprint "Test:R"',
+        ),
+        lambda source: _replace(
+            source,
+            b'    (pad "1" smd roundrect',
+            b'    (SECRET_BOARD_FIELD yes)\n    (pad "1" smd roundrect',
+        ),
+        lambda source: _replace(
+            source,
+            b'  (footprint "Test:R"',
+            b'  (gr_SECRET_AUDIO_DESIGN (layer "F.Cu"))\n  (footprint "Test:R"',
+        ),
+        lambda source: _replace(
+            source,
+            b'    (0 "F.Cu" signal)',
+            b"    (SECRET_LAYER_TOKEN (nested))",
+        ),
+    ],
+)
+def test_diagnostics_never_echo_attacker_controlled_construct_names(mutation: Mutation) -> None:
+    result = parse_kicad_bytes(
+        mutation(SUBSET_BOARD.read_bytes()), constraint_profile(assign_signal=True)
+    )
+
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    rendered = " ".join(
+        value
+        for value in (
+            diagnostic.message,
+            diagnostic.source_locator,
+            diagnostic.object_kind,
+            diagnostic.object_id,
+        )
+        if value is not None
+    )
+    assert "SECRET" not in rendered
+
+
+def test_adapter_semantic_diagnostics_never_echo_attacker_controlled_ids() -> None:
+    source = SUBSET_BOARD.read_bytes()
+    source = _replace(
+        source,
+        b'    (uuid "10000000-0000-0000-0000-000000000008")',
+        b'    (uuid "SECRET_AUDIO_DESIGN")',
+    )
+    source = _replace(
+        source,
+        b"      (pts (xy 1 1) (xy 39 1) (xy 39 29) (xy 1 29))",
+        b"      (pts (xy 0 0) (xy 4 0) (xy 0 4) (xy 3 3))",
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    rendered = " ".join(
+        value
+        for value in (
+            diagnostic.message,
+            diagnostic.source_locator,
+            diagnostic.object_kind,
+            diagnostic.object_id,
+        )
+        if value is not None
+    ).casefold()
+    assert diagnostic.code == "geometry.self_intersection"
+    assert "secret_audio_design" not in rendered
+
+
+def test_f_and_b_wildcard_excludes_inner_layers() -> None:
+    source = _replace(
+        _four_layer_source(),
+        b'(layers "F.Cu" "B.Cu")',
+        b'(layers "F&B.Cu")',
+    )
+
+    content = parse_success(source, constraint_profile(assign_signal=True)).content
+
+    assert [layer.name for layer in content.copper_layers] == [
+        "F.Cu",
+        "In1.Cu",
+        "In2.Cu",
+        "B.Cu",
+    ]
+    assert content.vias[0].start_layer_id == "layer:F.Cu"
+    assert content.vias[0].end_layer_id == "layer:B.Cu"
+    assert content.keepouts[0].layer_ids == ("layer:F.Cu", "layer:B.Cu")
+
+
+def test_partial_stack_via_is_rejected() -> None:
+    source = _replace(
+        _four_layer_source(),
+        b'(layers "F.Cu" "B.Cu")',
+        b'(layers "F.Cu" "In1.Cu")',
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+
+
+def test_locked_positional_names_do_not_change_lock_state() -> None:
+    source = SUBSET_BOARD.read_bytes()
+    source = _replace(source, b'(footprint "Test:R"', b'(footprint "locked"')
+    source = _replace(source, b'(pad "1" smd roundrect', b'(pad "locked" smd roundrect')
+
+    content = parse_success(source, constraint_profile(assign_signal=True)).content
+    signal_pad = next(pad for pad in content.pads if pad.net_id == net_id_for_name("SIG_µ"))
+
+    assert signal_pad.locked is False
+
+
+def test_streaming_sexpr_reader_stops_before_tokenizing_large_rejected_tail() -> None:
+    source = b"(root " + b"a " * 500_000 + b")"
+    limits = ParseLimits(
+        max_input_bytes=2_000_000,
+        max_children_per_list=8,
+    )
+
+    tracemalloc.start()
+    try:
+        with pytest.raises(SExprError) as caught:
+            parse_sexpr(source, limits)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+
+    assert caught.value.code == "budget.exceeded"
+    assert peak < 12_000_000
 
 
 @pytest.mark.parametrize(

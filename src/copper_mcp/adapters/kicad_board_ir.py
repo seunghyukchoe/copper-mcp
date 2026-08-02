@@ -5,10 +5,17 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
 from typing import Never
 
-from copper_mcp.adapters.sexpr import SExpr, SExprError, atoms, child, children, parse_sexpr
+from copper_mcp.adapters.sexpr import (
+    SExpr,
+    SExprError,
+    atoms,
+    child,
+    children,
+    is_quoted_atom,
+    parse_sexpr,
+)
 from copper_mcp.board_ir.canonical import make_content, make_snapshot
 from copper_mcp.board_ir.diagnostics import ConversionResult, Diagnostic, Severity
 from copper_mcp.board_ir.limits import ParseLimits
@@ -35,12 +42,61 @@ from copper_mcp.board_ir.types import (
     Via,
     ViaKind,
     Zone,
+    ZoneIslandRemoval,
+    ZonePadConnection,
     mm_to_nm,
     normalize_rotation_udeg,
 )
 from copper_mcp.board_ir.validation import BoardIRValidationError
 
 _PLAIN_DECIMAL = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
+_UNSIGNED_INTEGER = re.compile(r"^(?:0|[1-9][0-9]*)$")
+_SIGNED_INTEGER_TOKEN = re.compile(r"^[+-]?[0-9]+$")
+_SUPPORTED_KICAD_PCB_VERSIONS = frozenset({"20260206"})
+_ROOT_METADATA_HEADS = frozenset(
+    {
+        "embedded_fonts",
+        "general",
+        "generator",
+        "generator_version",
+        "layers",
+        "net",
+        "paper",
+        "setup",
+        "title_block",
+        "version",
+    }
+)
+_ROOT_ROUTING_HEADS = frozenset({"arc", "footprint", "segment", "via", "zone"})
+_SETUP_METADATA_HEADS = frozenset(
+    {
+        "allow_soldermask_bridges_in_footprints",
+        "capping",
+        "covering",
+        "filling",
+        "pad_to_mask_clearance",
+        "pcbplotparams",
+        "plugging",
+        "tenting",
+    }
+)
+_FOOTPRINT_METADATA_HEADS = frozenset(
+    {
+        "at",
+        "attr",
+        "duplicate_pad_numbers_are_jumpers",
+        "embedded_fonts",
+        "layer",
+        "locked",
+        "model",
+        "net_tie_pad_groups",
+        "pad",
+        "path",
+        "property",
+        "tstamp",
+        "uuid",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,6 +172,15 @@ class _Converter:
         self.profile = profile
         self.limits = limits
         self.source_revision = f"sha256:{hashlib.sha256(payload).hexdigest()}"
+        if self.root.head != "kicad_pcb":
+            self.fail("syntax.invalid", "source root must be kicad_pcb", "kicad_pcb")
+        self.version = self._values(self.root, "version", "kicad_pcb", minimum=1, maximum=1)[0]
+        if self.version not in _SUPPORTED_KICAD_PCB_VERSIONS:
+            self.fail(
+                "unsupported.version",
+                "KiCad board format version is unsupported",
+                "kicad_pcb.version",
+            )
         self.layers = self._layers()
         self.layer_by_name = {layer.name: layer for layer in self.layers}
         self.legacy_nets = self._legacy_nets()
@@ -179,8 +244,235 @@ class _Converter:
     def _rotation(self, token: str, locator: str) -> int:
         try:
             return normalize_rotation_udeg(token)
-        except (InvalidOperation, ValueError) as error:
+        except ValueError as error:
             self.fail("integer.precision", str(error), locator)
+
+    def _nonnegative_integer(self, token: str, locator: str) -> int:
+        if len(token) > 16 or not _UNSIGNED_INTEGER.fullmatch(token):
+            self.fail("integer.precision", "integer token is malformed", locator)
+        value = int(token)
+        if value > JSON_SAFE_INTEGER:
+            self.fail("integer.overflow", "integer token exceeds the supported range", locator)
+        return value
+
+    def _reject_unknown_children(
+        self, expression: SExpr, allowed: frozenset[str], locator: str
+    ) -> None:
+        if any(
+            isinstance(item, SExpr) and item.head not in allowed for item in expression.items[1:]
+        ):
+            self.fail(
+                "unsupported.construct",
+                "expression contains an unsupported semantic field",
+                locator,
+            )
+
+    def _validate_direct_atoms(
+        self,
+        expression: SExpr,
+        *,
+        positional_atoms: int,
+        allowed: frozenset[str],
+        locator: str,
+    ) -> None:
+        direct_atoms = tuple(item for item in expression.items[1:] if isinstance(item, str))
+        if len(direct_atoms) < positional_atoms or any(
+            is_quoted_atom(item) or item not in allowed for item in direct_atoms[positional_atoms:]
+        ):
+            self.fail(
+                "unsupported.construct",
+                "expression contains unsupported positional semantics",
+                locator,
+            )
+
+    @staticmethod
+    def _is_routing_layer(name: str) -> bool:
+        return name == "Edge.Cuts" or name in {"*.Cu", "F&B.Cu"} or name.endswith(".Cu")
+
+    def _graphic_layer(self, expression: SExpr, locator: str) -> str:
+        values = self._values(
+            expression,
+            "layer",
+            locator,
+            minimum=1,
+            maximum=1,
+            required=False,
+        )
+        if not values:
+            self.fail(
+                "unsupported.construct",
+                "graphic without one explicit layer is unsupported",
+                locator,
+            )
+        return values[0]
+
+    def _semantic_preflight(self) -> None:
+        """Reject physical semantics that the v0.1 model cannot preserve."""
+
+        for item in self.root.items[1:]:
+            if not isinstance(item, SExpr) or item.head is None:
+                self.fail(
+                    "syntax.invalid", "root expression contains a malformed item", "kicad_pcb"
+                )
+            head = item.head
+            if head in _ROOT_METADATA_HEADS or head in _ROOT_ROUTING_HEADS:
+                continue
+            if head.startswith("gr_"):
+                layer = self._graphic_layer(item, "kicad_pcb.graphic")
+                if self._is_routing_layer(layer) and not (
+                    head == "gr_rect" and layer == "Edge.Cuts"
+                ):
+                    self.fail(
+                        "unsupported.construct",
+                        "root graphic on copper or Edge.Cuts is unsupported",
+                        "kicad_pcb.graphic",
+                        object_kind="graphic",
+                    )
+                continue
+            self.fail(
+                "unsupported.construct",
+                "root expression contains an unsupported semantic construct",
+                "kicad_pcb.unsupported",
+            )
+
+        general = self._one(self.root, "general", "kicad_pcb", required=False)
+        if general is not None:
+            legacy_teardrops = self._values(
+                general,
+                "legacy_teardrops",
+                "kicad_pcb.general",
+                minimum=1,
+                maximum=1,
+                required=False,
+            )
+            if legacy_teardrops and legacy_teardrops != ("no",):
+                self.fail(
+                    "unsupported.construct",
+                    "legacy teardrop copper is unsupported",
+                    "kicad_pcb.general.legacy_teardrops",
+                )
+
+        setup = self._one(self.root, "setup", "kicad_pcb", required=False)
+        if setup is not None:
+            self._reject_unknown_children(setup, _SETUP_METADATA_HEADS, "kicad_pcb.setup")
+            self._validate_direct_atoms(
+                setup,
+                positional_atoms=0,
+                allowed=frozenset(),
+                locator="kicad_pcb.setup",
+            )
+            self._validate_neutral_via_treatment(setup, "kicad_pcb.setup")
+
+        for footprint_index, footprint in enumerate(children(self.root, "footprint")):
+            locator = f"kicad_pcb.footprint[{footprint_index}]"
+            self._validate_direct_atoms(
+                footprint,
+                positional_atoms=1,
+                allowed=frozenset({"locked"}),
+                locator=locator,
+            )
+            for item in footprint.items[1:]:
+                if not isinstance(item, SExpr) or item.head is None:
+                    continue
+                head = item.head
+                if head == "zone":
+                    self.fail(
+                        "unsupported.construct",
+                        "footprint-local zones are unsupported",
+                        f"{locator}.zone",
+                        object_kind="zone",
+                    )
+                if head.startswith("fp_") or head == "property":
+                    layer = self._graphic_layer(item, f"{locator}.graphic")
+                    if self._is_routing_layer(layer):
+                        self.fail(
+                            "unsupported.construct",
+                            "footprint graphic on copper or Edge.Cuts is unsupported",
+                            f"{locator}.graphic",
+                            object_kind="graphic",
+                        )
+                    continue
+                if head not in _FOOTPRINT_METADATA_HEADS:
+                    self.fail(
+                        "unsupported.construct",
+                        "footprint contains an unsupported semantic field",
+                        f"{locator}.unsupported",
+                        object_kind="footprint",
+                    )
+
+    def _validate_neutral_via_treatment(self, expression: SExpr, locator: str) -> None:
+        """Reject board-level or per-via fabrication treatment that Board IR omits."""
+
+        for neutral_head in ("capping", "filling"):
+            neutral = self._values(
+                expression,
+                neutral_head,
+                locator,
+                minimum=1,
+                maximum=1,
+                required=False,
+            )
+            if neutral and (neutral != ("no",) or is_quoted_atom(neutral[0])):
+                self.fail(
+                    "unsupported.construct",
+                    "non-neutral via fabrication treatment is unsupported",
+                    f"{locator}.{neutral_head}",
+                    object_kind="via",
+                )
+        tenting = self._one(expression, "tenting", locator, required=False)
+        if tenting is not None:
+            self._reject_unknown_children(
+                tenting, frozenset({"back", "front"}), f"{locator}.tenting"
+            )
+            self._validate_direct_atoms(
+                tenting,
+                positional_atoms=0,
+                allowed=frozenset(),
+                locator=f"{locator}.tenting",
+            )
+            for side in ("front", "back"):
+                side_values = self._values(
+                    tenting,
+                    side,
+                    f"{locator}.tenting",
+                    minimum=1,
+                    maximum=1,
+                )
+                if side_values != ("yes",) or is_quoted_atom(side_values[0]):
+                    self.fail(
+                        "unsupported.construct",
+                        "non-default via tenting is unsupported",
+                        f"{locator}.tenting.{side}",
+                        object_kind="via",
+                    )
+        for side_head in ("covering", "plugging"):
+            side_setting = self._one(expression, side_head, locator, required=False)
+            if side_setting is None:
+                continue
+            self._reject_unknown_children(
+                side_setting, frozenset({"back", "front"}), f"{locator}.{side_head}"
+            )
+            self._validate_direct_atoms(
+                side_setting,
+                positional_atoms=0,
+                allowed=frozenset(),
+                locator=f"{locator}.{side_head}",
+            )
+            for side in ("front", "back"):
+                side_values = self._values(
+                    side_setting,
+                    side,
+                    f"{locator}.{side_head}",
+                    minimum=1,
+                    maximum=1,
+                )
+                if side_values != ("no",) or is_quoted_atom(side_values[0]):
+                    self.fail(
+                        "unsupported.construct",
+                        "non-neutral via fabrication treatment is unsupported",
+                        f"{locator}.{side_head}.{side}",
+                        object_kind="via",
+                    )
 
     def _point(self, expression: SExpr, head: str, locator: str) -> PointNM:
         values = self._values(expression, head, locator, minimum=2, maximum=2)
@@ -188,10 +480,19 @@ class _Converter:
             self._mm(values[0], f"{locator}.{head}.x"), self._mm(values[1], f"{locator}.{head}.y")
         )
 
-    def _locked(self, expression: SExpr) -> bool:
-        if any(item == "locked" for item in expression.items[1:] if isinstance(item, str)):
-            return True
+    def _locked(self, expression: SExpr, *, positional_atoms: int = 0) -> bool:
+        direct_atoms = tuple(item for item in expression.items[1:] if isinstance(item, str))
+        bare_lock_count = sum(
+            item == "locked" and not is_quoted_atom(item)
+            for item in direct_atoms[positional_atoms:]
+        )
+        if bare_lock_count > 1:
+            self.fail("syntax.duplicate_field", "duplicate locked state", "locked")
         field = self._one(expression, "locked", "locked", required=False)
+        if bare_lock_count and field is not None:
+            self.fail("syntax.invalid", "locked state is ambiguous", "locked")
+        if bare_lock_count:
+            return True
         if field is None:
             return False
         values = atoms(field)
@@ -204,6 +505,7 @@ class _Converter:
         self.fail("syntax.invalid", "locked field must be yes or no", "locked")
 
     def _identity(self, kind: str, expression: SExpr, locator: str) -> str:
+        identities: list[tuple[str, str]] = []
         for head in ("uuid", "tstamp"):
             value = self._values(
                 expression,
@@ -214,52 +516,91 @@ class _Converter:
                 required=False,
             )
             if value:
-                return f"{kind}:kicad:{value[0].lower()}"
+                identities.append((head, value[0]))
+        if len(identities) > 1:
+            self.fail(
+                "identity.ambiguous",
+                "object contains multiple native identity fields",
+                locator,
+                object_kind=kind,
+            )
+        if identities:
+            return f"{kind}:kicad:{identities[0][1].lower()}"
         material = f"{self.source_revision}\0{kind}\0{locator}".encode()
         return f"{kind}:derived:{hashlib.sha256(material).hexdigest()[:32]}"
 
     def _layers(self) -> tuple[Layer, ...]:
         layers_expression = self._one(self.root, "layers", "kicad_pcb.layers")
         assert layers_expression is not None
-        result: list[Layer] = []
+        copper_entries: list[tuple[int, str, str]] = []
         for item in layers_expression.items[1:]:
             if not isinstance(item, SExpr) or item.head is None:
                 self.fail("syntax.invalid", "layer entry is malformed", "kicad_pcb.layers")
             values = atoms(item)
-            if len(values) < 2:
+            if len(values) not in {2, 3}:
                 self.fail("syntax.invalid", "layer entry is malformed", "kicad_pcb.layers")
             name, kind = values[0], values[1]
             if name.endswith(".Cu"):
-                layer_kind = {"signal": "signal", "power": "plane", "mixed": "mixed"}.get(kind)
-                if layer_kind is None:
+                if not _UNSIGNED_INTEGER.fullmatch(item.head):
                     self.fail(
-                        "unsupported.construct",
-                        "copper layer kind is unsupported",
-                        "kicad_pcb.layers",
-                        object_kind="layer",
+                        "syntax.invalid", "copper layer index is malformed", "kicad_pcb.layers"
                     )
-                result.append(
-                    Layer(id=f"layer:{name}", name=name, index=len(result), kind=layer_kind)
+                copper_entries.append((int(item.head), name, kind))
+        if len(copper_entries) < 2:
+            self.fail(
+                "unknown.layer",
+                "board must declare front and back copper layers",
+                "kicad_pcb.layers",
+            )
+        result: list[Layer] = []
+        for ordinal, (source_index, name, kind) in enumerate(copper_entries):
+            expected_name = (
+                "F.Cu"
+                if ordinal == 0
+                else "B.Cu"
+                if ordinal == len(copper_entries) - 1
+                else f"In{ordinal}.Cu"
+            )
+            if source_index != ordinal * 2 or name != expected_name:
+                self.fail(
+                    "unsupported.construct",
+                    "copper layer IDs, names, or declaration order are unsupported",
+                    "kicad_pcb.layers",
+                    object_kind="layer",
                 )
-        if not result:
-            self.fail("unknown.layer", "board has no canonical copper layers", "kicad_pcb.layers")
+            layer_kind = {"signal": "signal", "power": "plane", "mixed": "mixed"}.get(kind)
+            if layer_kind is None:
+                self.fail(
+                    "unsupported.construct",
+                    "copper layer kind is unsupported",
+                    "kicad_pcb.layers",
+                    object_kind="layer",
+                )
+            result.append(Layer(id=f"layer:{name}", name=name, index=ordinal, kind=layer_kind))
         return tuple(result)
 
     def _legacy_nets(self) -> dict[str, str]:
         result: dict[str, str] = {}
         for index, expression in enumerate(children(self.root, "net")):
             values = atoms(expression)
-            if len(values) != 2 or not values[0].isdigit():
+            if (
+                len(values) != 2
+                or is_quoted_atom(values[0])
+                or not values[0].isdigit()
+                or len(values[0]) > 16
+            ):
                 self.fail(
                     "net.ambiguous", "root net declaration is malformed", f"kicad_pcb.net[{index}]"
                 )
-            if values[0] == "0" or values[1] == "":
+            net_code = int(values[0])
+            canonical_code = str(net_code)
+            if net_code == 0 or values[1] == "":
                 continue
-            if values[0] in result and result[values[0]] != values[1]:
+            if canonical_code in result and result[canonical_code] != values[1]:
                 self.fail(
                     "net.ambiguous", "numeric net ID has multiple names", f"kicad_pcb.net[{index}]"
                 )
-            result[values[0]] = values[1]
+            result[canonical_code] = values[1]
         return result
 
     def _net_name(self, expression: SExpr, locator: str) -> str | None:
@@ -275,19 +616,30 @@ class _Converter:
             return None
         if len(values) == 2:
             numeric, name = values
-            if not numeric.isdigit():
+            if is_quoted_atom(numeric) or not numeric.isdigit() or len(numeric) > 16:
                 self.fail("net.ambiguous", "two-field net reference requires a numeric ID", locator)
-            declared = self.legacy_nets.get(numeric)
+            net_code = int(numeric)
+            if net_code == 0:
+                if name:
+                    self.fail(
+                        "net.ambiguous", "net reference conflicts with root declaration", locator
+                    )
+                return None
+            declared = self.legacy_nets.get(str(net_code))
             if declared is not None and declared != name:
                 self.fail("net.ambiguous", "net reference conflicts with root declaration", locator)
             return name or None
         net_reference = values[0]
-        if net_reference.isdigit():
-            if net_reference == "0":
+        if not is_quoted_atom(net_reference) and _SIGNED_INTEGER_TOKEN.fullmatch(net_reference):
+            if len(net_reference) > 16:
+                self.fail("integer.precision", "numeric net reference is malformed", locator)
+            net_code = int(net_reference)
+            if net_code <= 0:
                 return None
-            if net_reference not in self.legacy_nets:
+            canonical_code = str(net_code)
+            if canonical_code not in self.legacy_nets:
                 self.fail("net.unknown", "numeric net reference has no declaration", locator)
-            return self.legacy_nets[net_reference]
+            return self.legacy_nets[canonical_code]
         return net_reference or None
 
     def _iter_copper_items(self) -> tuple[tuple[SExpr, str], ...]:
@@ -317,7 +669,7 @@ class _Converter:
             self.fail(
                 "constraint.unknown_net",
                 "constraint profile references a net absent from the board",
-                f"constraints.net_class_by_name[{unknown[0]}]",
+                "constraints.net_class_by_name",
             )
         assignments = tuple(
             NetClassAssignment(
@@ -357,8 +709,12 @@ class _Converter:
             self.fail("syntax.missing_field", "item has no layer reference", locator)
         result: list[str] = []
         for name in values:
-            if name in {"*.Cu", "F&B.Cu"}:
+            if name == "*.Cu":
                 result.extend(layer.id for layer in self.layers)
+            elif name == "F&B.Cu":
+                result.append(self.layers[0].id)
+                if len(self.layers) > 1:
+                    result.append(self.layers[-1].id)
             elif name in self.layer_by_name:
                 result.append(self.layer_by_name[name].id)
             elif name.endswith(".Cu"):
@@ -394,19 +750,19 @@ class _Converter:
         return PointNM(x, y)
 
     def _roundrect_radius(self, ratio: str, short_side_nm: int, locator: str) -> int:
-        if not _PLAIN_DECIMAL.fullmatch(ratio):
+        if len(ratio) > 64 or not _PLAIN_DECIMAL.fullmatch(ratio):
             self.fail("integer.precision", "roundrect ratio is malformed", locator)
-        try:
-            decimal = Decimal(ratio)
-        except InvalidOperation as error:
-            self.fail("integer.precision", "roundrect ratio is malformed", locator)
-            raise AssertionError from error
-        if decimal <= 0 or decimal > Decimal("0.5"):
+        whole, _, fraction = ratio.partition(".")
+        denominator: int = pow(10, len(fraction))
+        numerator = int(whole) * denominator + (int(fraction) if fraction else 0)
+        if numerator <= 0 or numerator * 2 > denominator:
             self.fail("geometry.invalid", "roundrect ratio must be in (0, 0.5]", locator)
-        scaled = decimal * short_side_nm
-        if scaled != scaled.to_integral_value():
+        scaled_radius = numerator * short_side_nm
+        radius = scaled_radius // denominator
+        remainder = scaled_radius % denominator
+        if remainder:
             self.fail("integer.precision", "roundrect radius is not an exact nanometre", locator)
-        return int(scaled)
+        return radius
 
     def _pads(self) -> tuple[Pad, ...]:
         result: list[Pad] = []
@@ -451,9 +807,36 @@ class _Converter:
                 at[2] if len(at) == 3 else "0", f"{footprint_locator}.at.rotation"
             )
             turn = self._quarter_turn(footprint_rotation, footprint_locator)
-            footprint_locked = self._locked(footprint)
+            footprint_locked = self._locked(footprint, positional_atoms=1)
             for pad_index, pad in enumerate(children(footprint, "pad")):
                 locator = f"{footprint_locator}.pad[{pad_index}]"
+                self._reject_unknown_children(
+                    pad,
+                    frozenset(
+                        {
+                            "at",
+                            "drill",
+                            "layer",
+                            "layers",
+                            "locked",
+                            "net",
+                            "pinfunction",
+                            "pintype",
+                            "remove_unused_layers",
+                            "roundrect_rratio",
+                            "size",
+                            "tstamp",
+                            "uuid",
+                        }
+                    ),
+                    locator,
+                )
+                self._validate_direct_atoms(
+                    pad,
+                    positional_atoms=3,
+                    allowed=frozenset({"locked"}),
+                    locator=locator,
+                )
                 header = tuple(item for item in pad.items[1:4] if isinstance(item, str))
                 if len(header) != 3:
                     self.fail(
@@ -564,7 +947,7 @@ class _Converter:
                         drill_x_nm=drill_x,
                         drill_y_nm=drill_y,
                         layer_ids=self._layer_ids(pad, locator),
-                        locked=footprint_locked or self._locked(pad),
+                        locked=footprint_locked or self._locked(pad, positional_atoms=3),
                     )
                 )
         return tuple(result)
@@ -573,6 +956,17 @@ class _Converter:
         result: list[Segment] = []
         for index, expression in enumerate(children(self.root, "segment")):
             locator = f"kicad_pcb.segment[{index}]"
+            self._reject_unknown_children(
+                expression,
+                frozenset({"end", "layer", "locked", "net", "start", "tstamp", "uuid", "width"}),
+                locator,
+            )
+            self._validate_direct_atoms(
+                expression,
+                positional_atoms=0,
+                allowed=frozenset({"locked"}),
+                locator=locator,
+            )
             net_name = self._net_name(expression, locator)
             if net_name is None:
                 self.fail("net.unknown", "segment has no routable net", locator)
@@ -599,6 +993,19 @@ class _Converter:
         result: list[Arc] = []
         for index, expression in enumerate(children(self.root, "arc")):
             locator = f"kicad_pcb.arc[{index}]"
+            self._reject_unknown_children(
+                expression,
+                frozenset(
+                    {"end", "layer", "locked", "mid", "net", "start", "tstamp", "uuid", "width"}
+                ),
+                locator,
+            )
+            self._validate_direct_atoms(
+                expression,
+                positional_atoms=0,
+                allowed=frozenset({"locked"}),
+                locator=locator,
+            )
             net_name = self._net_name(expression, locator)
             if net_name is None:
                 self.fail("net.unknown", "track arc has no routable net", locator)
@@ -627,10 +1034,39 @@ class _Converter:
         stack_order = {layer.id: layer.index for layer in self.layers}
         for index, expression in enumerate(children(self.root, "via")):
             locator = f"kicad_pcb.via[{index}]"
+            self._reject_unknown_children(
+                expression,
+                frozenset(
+                    {
+                        "at",
+                        "capping",
+                        "covering",
+                        "drill",
+                        "filling",
+                        "layers",
+                        "locked",
+                        "net",
+                        "plugging",
+                        "size",
+                        "tstamp",
+                        "type",
+                        "uuid",
+                    }
+                ),
+                locator,
+            )
+            self._validate_direct_atoms(
+                expression,
+                positional_atoms=0,
+                allowed=frozenset({"blind", "locked", "micro"}),
+                locator=locator,
+            )
             bare_via_types = {
                 value
                 for value in expression.items[1:]
-                if isinstance(value, str) and value in {"blind", "micro"}
+                if isinstance(value, str)
+                and not is_quoted_atom(value)
+                and value in {"blind", "micro"}
             }
             if bare_via_types:
                 self.fail(
@@ -654,6 +1090,7 @@ class _Converter:
                     locator,
                     object_kind="via",
                 )
+            self._validate_neutral_via_treatment(expression, locator)
             net_name = self._net_name(expression, locator)
             if net_name is None:
                 self.fail("net.unknown", "via has no routable net", locator)
@@ -693,8 +1130,21 @@ class _Converter:
         polygons = children(expression, "polygon")
         if len(polygons) != 1:
             self.fail("unsupported.construct", "exactly one polygon loop is required", locator)
+        self._reject_unknown_children(polygons[0], frozenset({"pts"}), f"{locator}.polygon")
+        self._validate_direct_atoms(
+            polygons[0], positional_atoms=0, allowed=frozenset(), locator=f"{locator}.polygon"
+        )
         points_expression = self._one(polygons[0], "pts", f"{locator}.polygon")
         assert points_expression is not None
+        self._reject_unknown_children(
+            points_expression, frozenset({"xy"}), f"{locator}.polygon.pts"
+        )
+        self._validate_direct_atoms(
+            points_expression,
+            positional_atoms=0,
+            allowed=frozenset(),
+            locator=f"{locator}.polygon.pts",
+        )
         point_expressions = children(points_expression, "xy")
         if len(point_expressions) > self.limits.max_vertices_per_ring:
             self.fail("budget.exceeded", "ring vertex budget exceeded", locator)
@@ -721,19 +1171,78 @@ class _Converter:
             return False
         self.fail("syntax.invalid", f"keepout {head} flag is malformed", locator)
 
-    def _zones_and_keepouts(
-        self, constraints: ConstraintSet
-    ) -> tuple[tuple[Zone, ...], tuple[Keepout, ...]]:
+    def _zones_and_keepouts(self) -> tuple[tuple[Zone, ...], tuple[Keepout, ...]]:
         zones: list[Zone] = []
         keepouts: list[Keepout] = []
-        net_class_by_id = {item.id: item for item in constraints.net_classes}
-        class_by_net_id = {
-            item.net_id: net_class_by_id[item.net_class_id] for item in constraints.assignments
-        }
         for index, expression in enumerate(children(self.root, "zone")):
             locator = f"kicad_pcb.zone[{index}]"
+            self._validate_direct_atoms(
+                expression,
+                positional_atoms=0,
+                allowed=frozenset({"locked"}),
+                locator=locator,
+            )
             keepout = self._one(expression, "keepout", locator, required=False)
             if keepout is not None:
+                self._reject_unknown_children(
+                    expression,
+                    frozenset(
+                        {
+                            "connect_pads",
+                            "fill",
+                            "filled_polygon",
+                            "hatch",
+                            "keepout",
+                            "layer",
+                            "layers",
+                            "locked",
+                            "min_thickness",
+                            "name",
+                            "placement",
+                            "polygon",
+                            "property",
+                            "tstamp",
+                            "uuid",
+                        }
+                    ),
+                    locator,
+                )
+                self._reject_unknown_children(
+                    keepout,
+                    frozenset({"tracks", "vias", "pads", "copperpour", "footprints"}),
+                    f"{locator}.keepout",
+                )
+                placement = self._one(expression, "placement", locator, required=False)
+                if placement is not None:
+                    self._reject_unknown_children(
+                        placement, frozenset({"enabled", "sheetname"}), f"{locator}.placement"
+                    )
+                    self._validate_direct_atoms(
+                        placement,
+                        positional_atoms=0,
+                        allowed=frozenset(),
+                        locator=f"{locator}.placement",
+                    )
+                    if self._values(
+                        placement,
+                        "enabled",
+                        f"{locator}.placement",
+                        minimum=1,
+                        maximum=1,
+                    ) != ("no",):
+                        self.fail(
+                            "unsupported.construct",
+                            "placement-enabled rule areas are unsupported",
+                            locator,
+                        )
+                    self._values(
+                        placement,
+                        "sheetname",
+                        f"{locator}.placement",
+                        minimum=1,
+                        maximum=1,
+                        required=False,
+                    )
                 keepouts.append(
                     Keepout(
                         id=self._identity("keepout", expression, locator),
@@ -748,6 +1257,29 @@ class _Converter:
                     )
                 )
                 continue
+            self._reject_unknown_children(
+                expression,
+                frozenset(
+                    {
+                        "connect_pads",
+                        "fill",
+                        "filled_polygon",
+                        "hatch",
+                        "layer",
+                        "locked",
+                        "min_thickness",
+                        "name",
+                        "net",
+                        "net_name",
+                        "polygon",
+                        "priority",
+                        "property",
+                        "tstamp",
+                        "uuid",
+                    }
+                ),
+                locator,
+            )
             layer_ids = self._layer_ids(expression, locator)
             if len(layer_ids) != 1:
                 self.fail(
@@ -756,43 +1288,111 @@ class _Converter:
             net_name = self._net_name(expression, locator)
             if net_name is None:
                 self.fail("net.unknown", "copper zone has no net", locator)
-            net_id = net_id_for_name(net_name)
-            connect_pads = self._one(expression, "connect_pads", locator, required=False)
-            clearance_values = (
-                self._values(
-                    connect_pads,
-                    "clearance",
-                    locator,
-                    minimum=1,
-                    maximum=1,
-                    required=False,
+            declared_net_name = self._values(
+                expression,
+                "net_name",
+                locator,
+                minimum=1,
+                maximum=1,
+                required=False,
+            )
+            if declared_net_name and declared_net_name != (net_name,):
+                self.fail(
+                    "net.ambiguous", "zone net name conflicts with its net reference", locator
                 )
-                if connect_pads is not None
-                else ()
+            net_id = net_id_for_name(net_name)
+            priority_values = self._values(
+                expression,
+                "priority",
+                locator,
+                minimum=1,
+                maximum=1,
+                required=False,
             )
-            clearance = (
-                self._mm(clearance_values[0], f"{locator}.clearance")
-                if clearance_values
-                else class_by_net_id[net_id].clearance_nm
+            priority = (
+                self._nonnegative_integer(priority_values[0], f"{locator}.priority")
+                if priority_values
+                else 0
             )
+            connect_pads = self._one(expression, "connect_pads", locator)
+            assert connect_pads is not None
+            self._reject_unknown_children(
+                connect_pads, frozenset({"clearance"}), f"{locator}.connect_pads"
+            )
+            connection_values = tuple(
+                item for item in connect_pads.items[1:] if isinstance(item, str)
+            )
+            if any(is_quoted_atom(item) for item in connection_values):
+                self.fail(
+                    "unsupported.construct", "zone pad connection mode is unsupported", locator
+                )
+            try:
+                pad_connection = {
+                    (): ZonePadConnection.THERMAL,
+                    ("thru_hole_only",): ZonePadConnection.THROUGH_HOLE_THERMAL,
+                    ("yes",): ZonePadConnection.SOLID,
+                    ("no",): ZonePadConnection.NONE,
+                }[connection_values]
+            except KeyError:
+                self.fail(
+                    "unsupported.construct", "zone pad connection mode is unsupported", locator
+                )
+            clearance_values = self._values(
+                connect_pads,
+                "clearance",
+                locator,
+                minimum=1,
+                maximum=1,
+            )
+            clearance = self._mm(clearance_values[0], f"{locator}.clearance")
             fill = self._one(expression, "fill", locator)
             assert fill is not None
             fill_values = tuple(item for item in fill.items[1:] if isinstance(item, str))
-            if fill_values and fill_values[0] not in {"yes"}:
+            if (
+                len(fill_values) > 1
+                or any(value != "yes" for value in fill_values)
+                or any(is_quoted_atom(value) for value in fill_values)
+            ):
                 self.fail(
                     "unsupported.construct", "hatched or non-solid zones are unsupported", locator
                 )
-            if children(fill, "mode"):
+            self._reject_unknown_children(
+                fill,
+                frozenset({"thermal_gap", "thermal_bridge_width", "island_removal_mode"}),
+                f"{locator}.fill",
+            )
+            island_values = self._values(
+                fill,
+                "island_removal_mode",
+                locator,
+                minimum=1,
+                maximum=1,
+                required=False,
+            )
+            island_mode = island_values[0] if island_values else "0"
+            if island_mode == "0":
+                island_removal = ZoneIslandRemoval.ALWAYS
+            elif island_mode == "1":
+                island_removal = ZoneIslandRemoval.NEVER
+            elif island_mode == "2":
                 self.fail(
-                    "unsupported.construct", "explicit zone fill modes are unsupported", locator
+                    "unsupported.construct",
+                    "minimum-area island removal is unsupported",
+                    locator,
                 )
+            else:
+                self.fail("syntax.invalid", "zone island removal mode is malformed", locator)
+            thermal_required = pad_connection in {
+                ZonePadConnection.THERMAL,
+                ZonePadConnection.THROUGH_HOLE_THERMAL,
+            }
             thermal_gap = self._values(
                 fill,
                 "thermal_gap",
                 locator,
                 minimum=1,
                 maximum=1,
-                required=False,
+                required=thermal_required,
             )
             thermal_bridge = self._values(
                 fill,
@@ -800,7 +1400,7 @@ class _Converter:
                 locator,
                 minimum=1,
                 maximum=1,
-                required=False,
+                required=thermal_required,
             )
             zones.append(
                 Zone(
@@ -827,6 +1427,9 @@ class _Converter:
                         if thermal_bridge
                         else 0
                     ),
+                    priority=priority,
+                    pad_connection=pad_connection,
+                    island_removal=island_removal,
                     locked=self._locked(expression),
                 )
             )
@@ -839,6 +1442,24 @@ class _Converter:
             layer = self._values(expression, "layer", locator, minimum=1, maximum=1)[0]
             if layer != "Edge.Cuts":
                 continue
+            self._reject_unknown_children(
+                expression,
+                frozenset({"end", "fill", "layer", "locked", "start", "stroke", "tstamp", "uuid"}),
+                locator,
+            )
+            self._validate_direct_atoms(
+                expression,
+                positional_atoms=0,
+                allowed=frozenset({"locked"}),
+                locator=locator,
+            )
+            if self._values(expression, "fill", locator, minimum=1, maximum=1) != ("no",):
+                self.fail(
+                    "unsupported.construct",
+                    "Edge.Cuts rectangle must use an unfilled outline",
+                    locator,
+                    object_kind="outline",
+                )
             start = self._point(expression, "start", locator)
             end = self._point(expression, "end", locator)
             contours.append(
@@ -884,9 +1505,7 @@ class _Converter:
         return tuple(contours)
 
     def convert(self) -> ConversionResult:
-        if self.root.head != "kicad_pcb":
-            self.fail("syntax.invalid", "source root must be kicad_pcb", "kicad_pcb")
-        version = self._values(self.root, "version", "kicad_pcb", minimum=1, maximum=1)[0]
+        self._semantic_preflight()
         generator_values = self._values(
             self.root,
             "generator",
@@ -897,12 +1516,12 @@ class _Converter:
         )
         nets = self._nets()
         constraints = self._constraints(nets)
-        zones, keepouts = self._zones_and_keepouts(constraints)
+        zones, keepouts = self._zones_and_keepouts()
         content = make_content(
             source=SourceInfo(
                 format="kicad_pcb",
                 revision=self.source_revision,
-                format_version=version,
+                format_version=self.version,
                 generator=generator_values[0] if generator_values else None,
             ),
             outline=self._outline(),
@@ -963,8 +1582,8 @@ def parse_kicad_bytes(
                 Diagnostic(
                     code=error.code,
                     severity=Severity.ERROR,
-                    message=error.message,
-                    source_locator=error.source_locator,
+                    message="converted Board IR content failed semantic validation",
+                    source_locator="kicad_pcb",
                 ),
             ),
         )

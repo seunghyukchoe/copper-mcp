@@ -32,9 +32,9 @@ JSON codec and a versioned [JSON Schema](../../schemas/board-ir/0.1.0.schema.jso
   overflow, booleans, NaN, infinity, and implicit rounding are rejected.
 - IDs are typed and stable within one source revision. References, uniqueness, layer spans, net-class
   coverage, ring topology, degeneracy, and self-intersection are validated before serialization.
-- The v0.1 model covers board contours with holes, copper layers, nets, typed net classes and
-  assignments, differential-pair and length rules, pads, vias, segments, three-point arcs, solid
-  zones, keepouts, lock state, and a content-addressed source revision.
+- The v0.1 model covers exactly one hole-free board contour, copper layers, nets, typed net classes
+  and assignments, differential-pair and length rules, pads, full-stack through vias, segments,
+  three-point arcs, solid zones, keepouts, lock state, and a content-addressed source revision.
 
 ### Canonical bytes and integrity
 
@@ -51,7 +51,9 @@ Two SHA-256 digests have separate meanings:
 
 The decoder accepts only the exact `0.1.0` structure, rejects duplicate or unknown fields and all
 floating-point numbers, applies parser/geometry budgets, normalizes and validates the content, and
-verifies both digests.
+verifies both digests. Writers normalize direct domain objects and enforce the default decoder
+envelope budget; verification rejects noncanonical hand-built envelopes. Source decimal conversion
+uses string and integer arithmetic and is independent of process-global decimal context.
 
 ### Source adapters
 
@@ -59,9 +61,11 @@ Source-format adapters remain outside the domain package. The initial KiCad adap
 bounded, and deliberately narrow. It accepts only the subset documented in
 [Board IR and KiCad adapter contracts](../architecture/board-ir.md): one rectangular `Edge.Cuts`,
 front-side orthogonal footprint transforms, the four modeled pad shapes, segments, three-point
-track arcs, through vias, and single-loop solid zones/keepouts. Typed routing constraints are
-supplied separately through `KiCadConstraintProfile`; they are not inferred from project or custom
-rule files.
+track arcs, full-stack through vias, and single-loop solid zones/keepouts. The adapter supports only
+KiCad PCB format `20260206`, validates its copper-layer numbering/order, preserves modeled zone
+priority/connection/island semantics, and rejects unmodeled copper or `Edge.Cuts` graphics. Typed
+routing constraints are supplied separately through `KiCadConstraintProfile`; they are not inferred
+from project or custom rule files.
 
 Unsupported or malformed source constructs produce a structured error and no snapshot. The adapter
 does not approximate curves, flatten unsupported geometry, retain source bytes, modify a KiCad file,

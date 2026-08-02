@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 
 BOARD_IR_SCHEMA = "copper.board-ir"
@@ -60,14 +59,15 @@ def mm_to_nm(token: str) -> int:
 
     if not isinstance(token, str) or len(token) > 64 or not _DECIMAL.fullmatch(token):
         raise ValueError("millimetres must use non-exponent decimal notation")
-    try:
-        scaled = Decimal(token) * NM_PER_MM
-    except InvalidOperation as error:
-        raise ValueError("millimetre value is malformed") from error
-    integral = scaled.to_integral_value()
-    if scaled != integral:
+    negative = token.startswith("-")
+    unsigned = token[1:] if negative else token
+    whole, _, fraction = unsigned.partition(".")
+    retained = fraction[:6].ljust(6, "0")
+    if any(digit != "0" for digit in fraction[6:]):
         raise ValueError("millimetre value has sub-nanometre precision")
-    value = int(integral)
+    value = int(whole) * NM_PER_MM + int(retained)
+    if negative:
+        value = -value
     _integer("nanometre value", value, minimum=-JSON_SAFE_INTEGER)
     return 0 if value == 0 else value
 
@@ -76,10 +76,11 @@ def nm_to_mm(value: int) -> str:
     """Return the shortest exact non-exponent millimetre representation."""
 
     _integer("nanometre value", value, minimum=-JSON_SAFE_INTEGER)
-    rendered = format(Decimal(value) / NM_PER_MM, "f")
-    if "." in rendered:
-        rendered = rendered.rstrip("0").rstrip(".")
-    return "0" if rendered in {"", "-0"} else rendered
+    negative = value < 0
+    whole, remainder = divmod(abs(value), NM_PER_MM)
+    fraction = f"{remainder:06d}".rstrip("0")
+    rendered = f"{whole}.{fraction}" if fraction else str(whole)
+    return f"-{rendered}" if negative else rendered
 
 
 def normalize_rotation_udeg(token: str) -> int:
@@ -87,11 +88,15 @@ def normalize_rotation_udeg(token: str) -> int:
 
     if not isinstance(token, str) or len(token) > 64 or not _DECIMAL.fullmatch(token):
         raise ValueError("rotation must use non-exponent decimal notation")
-    scaled = Decimal(token) * UDEG_PER_DEGREE
-    integral = scaled.to_integral_value()
-    if scaled != integral:
+    negative = token.startswith("-")
+    unsigned = token[1:] if negative else token
+    whole, _, fraction = unsigned.partition(".")
+    retained = fraction[:6].ljust(6, "0")
+    if any(digit != "0" for digit in fraction[6:]):
         raise ValueError("rotation has sub-microdegree precision")
-    raw = int(integral)
+    raw = int(whole) * UDEG_PER_DEGREE + int(retained)
+    if negative:
+        raw = -raw
     _integer("rotation", raw, minimum=-JSON_SAFE_INTEGER)
     return raw % FULL_ROTATION_UDEG
 
@@ -377,8 +382,6 @@ class Pad:
 
 class ViaKind(StrEnum):
     THROUGH = "through"
-    BLIND_BURIED = "blind_buried"
-    MICRO = "micro"
 
 
 @dataclass(frozen=True, slots=True)
@@ -400,6 +403,8 @@ class Via:
             raise ValueError("via center must be a PointNM")
         if not isinstance(self.kind, ViaKind):
             raise ValueError("via kind must use the Board IR enum")
+        if self.kind is not ViaKind.THROUGH:
+            raise ValueError("Board IR v0.1 supports through vias only")
         _positive("via diameter", self.diameter_nm)
         _positive("via drill", self.drill_nm)
         if self.drill_nm >= self.diameter_nm:
@@ -464,6 +469,22 @@ class Arc:
             raise ValueError("arc locked flag must be boolean")
 
 
+class ZonePadConnection(StrEnum):
+    """How pads connect to a copper zone."""
+
+    THERMAL = "thermal"
+    THROUGH_HOLE_THERMAL = "through_hole_thermal"
+    SOLID = "solid"
+    NONE = "none"
+
+
+class ZoneIslandRemoval(StrEnum):
+    """Supported island-removal policies for solid copper zones."""
+
+    ALWAYS = "always"
+    NEVER = "never"
+
+
 @dataclass(frozen=True, slots=True)
 class Zone:
     id: str
@@ -474,6 +495,9 @@ class Zone:
     min_thickness_nm: int
     thermal_gap_nm: int
     thermal_bridge_width_nm: int
+    priority: int = 0
+    pad_connection: ZonePadConnection = ZonePadConnection.THERMAL
+    island_removal: ZoneIslandRemoval = ZoneIslandRemoval.ALWAYS
     fill_mode: str = "solid"
     locked: bool = False
 
@@ -487,6 +511,17 @@ class Zone:
         _positive("zone minimum thickness", self.min_thickness_nm)
         _integer("zone thermal gap", self.thermal_gap_nm, minimum=0)
         _integer("zone thermal bridge width", self.thermal_bridge_width_nm, minimum=0)
+        _integer("zone priority", self.priority, minimum=0)
+        if not isinstance(self.pad_connection, ZonePadConnection):
+            raise ValueError("zone pad connection must use the Board IR enum")
+        if not isinstance(self.island_removal, ZoneIslandRemoval):
+            raise ValueError("zone island removal must use the Board IR enum")
+        if self.pad_connection in {
+            ZonePadConnection.THERMAL,
+            ZonePadConnection.THROUGH_HOLE_THERMAL,
+        }:
+            _positive("zone thermal gap", self.thermal_gap_nm)
+            _positive("zone thermal bridge width", self.thermal_bridge_width_nm)
         if self.fill_mode != "solid":
             raise ValueError("Board IR v0.1 supports solid zones only")
         if not isinstance(self.locked, bool):

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
-from typing import Any, Never, TypeVar
+import re
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass, field
+from typing import Any, Literal, Never, TypeVar
 
 from copper_mcp.board_ir.canonical import normalize_content, verify_snapshot
 from copper_mcp.board_ir.limits import ParseLimits
@@ -35,8 +37,189 @@ from copper_mcp.board_ir.types import (
     Via,
     ViaKind,
     Zone,
+    ZoneIslandRemoval,
+    ZonePadConnection,
 )
 from copper_mcp.board_ir.validation import BoardIRValidationError, validate_content
+
+_JSON_NUMBER = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?")
+
+
+@dataclass(slots=True)
+class _JSONFrame:
+    kind: Literal["array", "object"]
+    state: str
+    children: int = 0
+    keys: set[str] = field(default_factory=set)
+
+
+def _json_tokens(text: str, limits: ParseLimits) -> Iterator[tuple[str, str | None]]:
+    """Yield lexical JSON tokens while bounding decoded string atoms."""
+
+    index = 0
+    length = len(text)
+    simple_escapes = frozenset('"\\/bfnrt')
+    while index < length:
+        character = text[index]
+        if character.isspace():
+            index += 1
+            continue
+        if character in "{}[]:,":
+            index += 1
+            yield character, None
+            continue
+        if character == '"':
+            start = index
+            index += 1
+            decoded_chars = 0
+            while index < length and text[index] != '"':
+                character = text[index]
+                if ord(character) < 0x20:
+                    raise ValueError("JSON string contains a control character")
+                if character == "\\":
+                    index += 1
+                    if index >= length:
+                        raise ValueError("JSON string escape is unterminated")
+                    escape = text[index]
+                    if escape in simple_escapes:
+                        index += 1
+                    elif escape == "u":
+                        digits = text[index + 1 : index + 5]
+                        if len(digits) != 4 or any(
+                            digit not in "0123456789abcdefABCDEF" for digit in digits
+                        ):
+                            raise ValueError("JSON unicode escape is malformed")
+                        index += 5
+                    else:
+                        raise ValueError("JSON string escape is unsupported")
+                else:
+                    index += 1
+                decoded_chars += 1
+                if decoded_chars > limits.max_atom_chars:
+                    raise BoardIRValidationError(
+                        "budget.exceeded", "JSON string budget exceeded", "json"
+                    )
+            if index >= length:
+                raise ValueError("JSON string is unterminated")
+            index += 1
+            decoded = json.loads(text[start:index])
+            if not isinstance(decoded, str):
+                raise ValueError("JSON string token is malformed")
+            yield "string", decoded
+            continue
+        if character == "-" or character.isdigit():
+            match = _JSON_NUMBER.match(text, index)
+            if match is None:
+                raise ValueError("JSON number is malformed")
+            end = match.end()
+            if end < length and not (text[end].isspace() or text[end] in ",]}:"):
+                raise ValueError("JSON number is malformed")
+            index = end
+            yield "scalar", None
+            continue
+        matched_literal = False
+        for literal in ("true", "false", "null"):
+            if not text.startswith(literal, index):
+                continue
+            end = index + len(literal)
+            if end < length and not (text[end].isspace() or text[end] in ",]}:"):
+                raise ValueError("JSON literal is malformed")
+            index = end
+            yield "scalar", None
+            matched_literal = True
+            break
+        if matched_literal:
+            continue
+        raise ValueError("JSON token is malformed")
+
+
+def _preflight_json(text: str, limits: ParseLimits) -> None:
+    """Enforce structural budgets and duplicate keys before allocating a JSON DOM."""
+
+    stack: list[_JSONFrame] = []
+    root_seen = False
+    nodes = 0
+
+    def start_value(kind: str) -> None:
+        nonlocal nodes
+        if kind not in {"string", "scalar", "{", "["}:
+            raise ValueError("JSON value is malformed")
+        depth = len(stack) + 1
+        if depth > limits.max_depth:
+            raise BoardIRValidationError("budget.exceeded", "JSON depth budget exceeded", "json")
+        nodes += 1
+        if nodes > limits.max_nodes:
+            raise BoardIRValidationError("budget.exceeded", "JSON node budget exceeded", "json")
+        if kind == "{":
+            stack.append(_JSONFrame("object", "key_or_end"))
+        elif kind == "[":
+            stack.append(_JSONFrame("array", "value_or_end"))
+
+    for kind, value in _json_tokens(text, limits):
+        if not stack:
+            if root_seen:
+                raise ValueError("JSON contains more than one root value")
+            root_seen = True
+            start_value(kind)
+            continue
+
+        frame = stack[-1]
+        if frame.kind == "object":
+            if frame.state in {"key_or_end", "key"}:
+                if kind == "}" and frame.state == "key_or_end":
+                    stack.pop()
+                    continue
+                if kind != "string" or value is None:
+                    raise ValueError("JSON object property is malformed")
+                frame.children += 1
+                if frame.children > limits.max_children_per_list:
+                    raise BoardIRValidationError(
+                        "budget.exceeded", "JSON object child budget exceeded", "json"
+                    )
+                if value in frame.keys:
+                    raise ValueError("JSON object contains a duplicate property")
+                frame.keys.add(value)
+                frame.state = "colon"
+                continue
+            if frame.state == "colon":
+                if kind != ":":
+                    raise ValueError("JSON object property is malformed")
+                frame.state = "value"
+                continue
+            if frame.state == "value":
+                frame.state = "comma_or_end"
+                start_value(kind)
+                continue
+            if kind == ",":
+                frame.state = "key"
+                continue
+            if kind == "}":
+                stack.pop()
+                continue
+            raise ValueError("JSON object separator is malformed")
+
+        if frame.state in {"value_or_end", "value"}:
+            if kind == "]" and frame.state == "value_or_end":
+                stack.pop()
+                continue
+            frame.children += 1
+            if frame.children > limits.max_children_per_list:
+                raise BoardIRValidationError(
+                    "budget.exceeded", "JSON array child budget exceeded", "json"
+                )
+            frame.state = "comma_or_end"
+            start_value(kind)
+            continue
+        if kind == ",":
+            frame.state = "value"
+            continue
+        if kind == "]":
+            stack.pop()
+            continue
+        raise ValueError("JSON array separator is malformed")
+
+    if not root_seen or stack:
+        raise ValueError("JSON structure is incomplete")
 
 
 def _reject_float(_: str) -> Never:
@@ -56,7 +239,7 @@ def _object_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
     result: dict[str, object] = {}
     for key, value in pairs:
         if key in result:
-            raise ValueError(f"duplicate JSON property: {key}")
+            raise ValueError("JSON object contains a duplicate property")
         result[key] = value
     return result
 
@@ -77,7 +260,7 @@ def _object(
     if missing:
         raise ValueError(f"{path} is missing {', '.join(sorted(missing))}")
     if extra:
-        raise ValueError(f"{path} contains unknown properties: {', '.join(sorted(extra))}")
+        raise ValueError(f"{path} contains an unknown property")
     return typed
 
 
@@ -428,6 +611,13 @@ def _decode_content(value: object) -> BoardIRContent:
             thermal_bridge_width_nm=_integer(
                 entry["thermal_bridge_width_nm"], f"{entry_path}.thermal_bridge_width_nm"
             ),
+            priority=_integer(entry["priority"], f"{entry_path}.priority"),
+            pad_connection=_enum_value(
+                ZonePadConnection, entry["pad_connection"], f"{entry_path}.pad_connection"
+            ),
+            island_removal=_enum_value(
+                ZoneIslandRemoval, entry["island_removal"], f"{entry_path}.island_removal"
+            ),
             fill_mode=_string(entry["fill_mode"], f"{entry_path}.fill_mode"),
             locked=_boolean(entry["locked"], f"{entry_path}.locked"),
         )
@@ -445,6 +635,9 @@ def _decode_content(value: object) -> BoardIRContent:
                     "min_thickness_nm",
                     "thermal_gap_nm",
                     "thermal_bridge_width_nm",
+                    "priority",
+                    "pad_connection",
+                    "island_removal",
                     "fill_mode",
                     "locked",
                 },
@@ -531,6 +724,11 @@ def _validate_structure(value: object, limits: ParseLimits) -> None:
                 raise BoardIRValidationError(
                     "budget.exceeded", "JSON object child budget exceeded", "json"
                 )
+            for key in item:
+                if len(key) > limits.max_atom_chars:
+                    raise BoardIRValidationError(
+                        "budget.exceeded", "JSON string budget exceeded", "json"
+                    )
             stack.extend((child, depth + 1) for child in item.values())
 
 
@@ -538,11 +736,14 @@ def decode_snapshot_json(payload: bytes, limits: ParseLimits | None = None) -> B
     """Decode, validate, and verify one untrusted Board IR JSON envelope."""
 
     limits = limits or ParseLimits()
+    validation_code = "validation.failed"
     if not isinstance(payload, bytes) or len(payload) > limits.max_input_bytes:
         raise BoardIRValidationError("budget.exceeded", "JSON input byte budget exceeded", "json")
     try:
+        text = payload.decode("utf-8", errors="strict")
+        _preflight_json(text, limits)
         decoded = json.loads(
-            payload.decode("utf-8", errors="strict"),
+            text,
             parse_int=_parse_integer,
             parse_float=_reject_float,
             parse_constant=_reject_float,
@@ -571,11 +772,20 @@ def decode_snapshot_json(payload: bytes, limits: ParseLimits | None = None) -> B
         )
         verify_snapshot(snapshot)
         return snapshot
-    except BoardIRValidationError:
-        raise
+    except BoardIRValidationError as error:
+        validation_code = error.code
     except RecursionError as error:
         raise BoardIRValidationError(
             "budget.exceeded", "JSON nesting exceeds the decoder budget", "json"
         ) from error
     except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as error:
-        raise BoardIRValidationError("schema.invalid", str(error), "json") from error
+        raise BoardIRValidationError(
+            "schema.invalid", "JSON does not conform to Board IR v0.1", "json"
+        ) from error
+    if validation_code == "budget.exceeded":
+        raise BoardIRValidationError(
+            validation_code, "Board IR input exceeded the decoder budget", "json"
+        )
+    raise BoardIRValidationError(
+        validation_code, "Board IR content failed semantic validation", "content"
+    )

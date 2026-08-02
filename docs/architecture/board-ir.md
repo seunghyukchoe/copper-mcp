@@ -71,26 +71,30 @@ board. The schema is the field-level reference.
   rounding path for sub-nanometre or sub-microdegree input.
 - IDs use type prefixes such as `layer:`, `net:`, `class:`, `pad:`, `via:`, `segment:`, `arc:`,
   `zone:`, `keepout:`, `contour:`, and `rule:`. IDs and display names have different roles.
-- All references must resolve. Layer indices and object IDs are unique, every net has exactly one
-  net-class assignment, via spans follow copper-stack order, and locked state is explicit.
+- All references must resolve. Layer indices are contiguous physical ordinals, object IDs are
+  unique, every net has exactly one net-class assignment, through vias span the complete stack, and
+  locked state is explicit.
 - Rings contain at least three distinct vertices, omit a duplicated closing point, have nonzero area,
-  and cannot self-intersect. Outer rings are canonical counter-clockwise; holes are clockwise.
+  and cannot self-intersect. The v0.1 board has exactly one counter-clockwise outer ring and no
+  outline holes.
+- Circle pads have equal axes. SMD pads are drill-free, through-hole and NPTH pads require exact
+  drill dimensions, and NPTH pads cannot carry an electrical net.
 
 ## Typed model coverage
 
 | Area | v0.1 representation |
 |---|---|
-| Board | One or more named outline contours, each with an outer ring and optional holes. |
+| Board | Exactly one named outer outline contour; holes are not representable in v0.1. |
 | Stack | Ordered copper layers of kind `signal`, `plane`, or `mixed`. |
 | Connectivity | Stable net IDs with UTF-8 display names. |
 | Constraints | Net classes, one assignment per net, differential-pair rules, and min/max length rules. |
 | Terminations | SMD, through-hole, and NPTH pads; circle, rectangle, oval, and rounded-rectangle shapes. |
-| Existing copper | Straight segments, exact three-point arcs, through/blind-buried/micro via types in the model, and solid zones. |
+| Existing copper | Straight segments, exact three-point arcs, full-stack through vias, and solid zones with priority, pad-connection, island-removal, clearance, and thermal intent. |
 | Exclusions | Multi-layer polygonal keepouts with explicit track, via, pad, zone, and footprint prohibitions. |
 | Provenance | Source format/version/generator, source SHA-256 revision, constraint digest, and snapshot digest. |
 
-Model coverage is broader than the initial KiCad adapter. In particular, the model can represent
-outline holes and non-through via kinds even though the converter does not yet import them.
+The v0.1 model and adapter intentionally share the same narrow outline and via topology. Adding
+outline holes or blind, buried, or microvias requires a later schema version and migration review.
 
 ## Canonicalization and digests
 
@@ -101,16 +105,20 @@ Before hashing, construction normalizes:
 - constraint records by stable ID or assigned net ID;
 - pad and keepout layer sets by stack order;
 - via start/end layers into stack order; and
-- ring start point, orientation, contour order, and hole order.
+- ring start point and orientation.
 
 Canonical JSON is strict UTF-8 with sorted keys, compact separators, no floating-point/non-finite
 numbers, and one trailing newline. `constraint_digest` is SHA-256 over canonical constraints and the
 sorted net-ID set. `snapshot_digest` is SHA-256 over canonical `content`; it intentionally excludes
 the envelope so the digest is not recursive. Both use the `sha256:` prefix.
 
-Decoding is also strict: the byte budget is checked first, duplicate and unknown keys fail, floats
-fail, the schema discriminator/version must match exactly, integer and structure budgets apply, and
-the normalized result must pass semantic validation and both digest checks.
+Decoding is also strict: the byte budget is checked first; a streaming lexical/structural pass rejects
+duplicate properties and enforces string, depth, node, and per-container limits before allocating the
+JSON object graph. Unknown keys and floats fail, the schema discriminator/version must match exactly,
+and the normalized result must pass semantic validation and both digest checks. `make_snapshot`
+normalizes direct domain objects before hashing, while `verify_snapshot` rejects a manually built
+envelope whose content is not already canonical. Public snapshot writers also enforce the default
+decoder's byte, node, depth, string, and per-container budgets.
 
 ## KiCad read-only subset
 
@@ -122,18 +130,25 @@ contains a bounded machine-readable diagnostic and no snapshot.
 
 | KiCad construct | Accepted subset |
 |---|---|
-| Board metadata | `kicad_pcb`, numeric `version`, optional `generator`, and declared `.Cu` layers whose kinds map to the Board IR layer model. |
-| Nets | Named item-level net references and legacy numeric root declarations. |
+| Board metadata | Exact KiCad PCB format version `20260206`, optional `generator`, ordered copper declarations `0/F.Cu`, contiguous even-numbered inner layers, then `B.Cu`, and a narrow setup-metadata allowlist with KiCad-default front/back via tenting. |
+| Nets | Quote-aware named item-level net references and legacy numeric root declarations; quoted numeric text remains a name while bare signed numeric tokens retain legacy net-code meaning. |
 | Outline | Exactly one `gr_rect` on `Edge.Cuts`; it becomes the single imported contour. |
-| Footprints/pads | Footprints on `F.Cu` with rotations in 90-degree increments; `smd`, `thru_hole`, and `np_thru_hole` pads; circle, rect, oval, and roundrect shapes; round or oval drills; copper layer names and `*.Cu`. |
+| Footprints/pads | Footprints on `F.Cu` with rotations in 90-degree increments; `smd`, `thru_hole`, and `np_thru_hole` pads; circle, rect, oval, and roundrect shapes; round or oval drills; copper layer names, `*.Cu`, and `F&B.Cu`. |
 | Routed copper | Net-bound straight `segment` items, exact start/mid/end `arc` items, and through vias spanning the declared copper stack. |
-| Zones | Net-bound, single-copper-layer, solid zones with exactly one polygon loop and typed clearance/thermal dimensions. |
+| Zones | Net-bound, single-copper-layer, solid zones with one polygon loop; explicit priority, thermal/through-hole-thermal/solid/none pad connection, always/never island removal, clearance, and conditionally required thermal dimensions. |
 | Keepouts | Copper-layer sets, exactly one polygon loop, the five modeled prohibition flags, and lock state. |
 | Constraints | A caller-supplied `KiCadConstraintProfile` containing net classes, a default class, optional per-net-name assignments, differential-pair rules, and length rules. |
 
-The source revision is the SHA-256 digest of the exact input bytes. Native UUID/tstamp values are
-used for item identity when available; otherwise identity is derived deterministically from the
-source revision and source locator. Net IDs are deterministic from net names.
+The source revision is the SHA-256 digest of the exact input bytes. One native UUID or legacy tstamp
+is used for item identity when available; simultaneous identity fields are ambiguous and rejected.
+Otherwise identity is derived deterministically from the source revision and source locator. Net IDs
+are deterministic from net names.
+
+The converter performs a version-specific semantic preflight. Root and footprint graphics on any
+copper layer are rejected. Footprint graphics on `Edge.Cuts` are also rejected, and the only accepted
+root `Edge.Cuts` primitive is the one unfilled rectangle. Non-routing documentation graphics may be
+ignored. `filled_polygon` data is treated as a derived KiCad fill cache: v0.1 records zone fill intent,
+not cached fill geometry, fill freshness, or connectivity proof.
 
 ### Rejected today
 
@@ -142,10 +157,17 @@ including:
 
 - `Edge.Cuts` lines, arcs, circles, polygons, curves, additional rectangles, and mixed/non-rectangular
   outlines;
+- root or footprint-local text/graphics on copper, and any footprint-local `Edge.Cuts` primitive;
 - back-side footprints and footprint rotations not divisible by 90 degrees;
 - custom or other unmodeled pad shapes and custom pad primitives;
 - blind, buried, or microvias in KiCad input;
-- multiple polygon loops or holes in a zone/keepout, multi-layer copper zones, and non-solid fills;
+- multiple polygon loops or holes in a zone/keepout, multi-layer copper zones, hatched fills,
+  smoothing, minimum-area island removal, and other unmodeled zone semantics;
+- non-neutral capping/filling/covering/plugging, non-default board via tenting, per-via tenting
+  overrides, and pad/via copper-removal or custom-connectivity options;
+- setup defaults, stackup/routing-rule constructs, and other setup fields outside the documented
+  non-routing metadata allowlist;
+- simultaneous UUID/tstamp identities and malformed, unresolved, or unconnected legacy net codes;
 - absent/unknown copper layers, malformed or unresolved nets, and constraints that reference missing
   nets or classes; and
 - any numeric token that requires rounding or exceeds the integer range.
@@ -159,12 +181,15 @@ not parsed from `.kicad_pro` or `.kicad_dru` in this adapter.
 Default independent limits bound input bytes, parse depth, token/node counts, atom size, list width,
 object count, vertices, intersection work, and diagnostics. Callers may supply a stricter positive
 `ParseLimits` value. These limits are compatibility and security boundaries, not promises that every
-input below each individual cap is cheap.
+input below each individual cap is cheap. The JSON Schema describes the portable structural ceiling;
+an externally produced schema-valid document can still exceed a decoder's operational security
+budget. CopperMCP's public writers never emit a snapshot that the default decoder would reject for
+those operational limits.
 
-Diagnostics expose a stable code, `warning` or `error` severity, bounded message, source locator, and
-optional object kind/ID. They do not include or echo the source board. The current adapter returns the
-first conversion error, so downstream code must treat `snapshot is None` as a hard failure rather
-than attempting partial routing.
+Diagnostics expose a stable code, `warning` or `error` severity, bounded structural locator, and
+optional object kind/ID. Messages and locators do not include or echo source values or attacker-made
+construct names. The current adapter returns the first conversion error, so downstream code must
+treat `snapshot is None` as a hard failure rather than attempting partial routing.
 
 ## Contract fixtures
 

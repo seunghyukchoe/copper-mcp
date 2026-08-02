@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 
 from copper_mcp.board_ir.limits import ParseLimits
@@ -24,6 +25,18 @@ class Token:
     offset: int
 
 
+class QuotedAtom(str):
+    """String atom whose source spelling used KiCad quotes."""
+
+    __slots__ = ()
+
+
+def is_quoted_atom(value: str) -> bool:
+    """Return whether an atom was quoted in the source expression."""
+
+    return isinstance(value, QuotedAtom)
+
+
 @dataclass(frozen=True, slots=True)
 class SExpr:
     items: tuple[str | SExpr, ...]
@@ -34,9 +47,9 @@ class SExpr:
         return self.items[0] if self.items and isinstance(self.items[0], str) else None
 
 
-def _tokens(text: str, limits: ParseLimits) -> list[Token]:
-    tokens: list[Token] = []
+def _tokens(text: str, limits: ParseLimits) -> Iterator[Token]:
     index = 0
+    token_count = 0
     length = len(text)
     escapes = {"n": "\n", "r": "\r", "t": "\t", '"': '"', "\\": "\\"}
     while index < length:
@@ -45,7 +58,7 @@ def _tokens(text: str, limits: ParseLimits) -> list[Token]:
             index += 1
             continue
         if character in "()":
-            tokens.append(Token(character, character, index))
+            token = Token(character, character, index)
             index += 1
         elif character == '"':
             start = index
@@ -68,7 +81,7 @@ def _tokens(text: str, limits: ParseLimits) -> list[Token]:
             if index >= length:
                 raise SExprError("syntax.invalid", "unterminated quoted string", start)
             index += 1
-            tokens.append(Token("atom", "".join(string_chars), start))
+            token = Token("quoted_atom", "".join(string_chars), start)
         else:
             start = index
             while index < length and not text[index].isspace() and text[index] not in "()":
@@ -76,10 +89,11 @@ def _tokens(text: str, limits: ParseLimits) -> list[Token]:
             atom_value = text[start:index]
             if len(atom_value) > limits.max_atom_chars:
                 raise SExprError("budget.exceeded", "atom length budget exceeded", start)
-            tokens.append(Token("atom", atom_value, start))
-        if len(tokens) > limits.max_tokens:
+            token = Token("atom", atom_value, start)
+        token_count += 1
+        if token_count > limits.max_tokens:
             raise SExprError("budget.exceeded", "token budget exceeded", index)
-    return tokens
+        yield token
 
 
 def parse_sexpr(payload: bytes, limits: ParseLimits | None = None) -> SExpr:
@@ -116,7 +130,7 @@ def parse_sexpr(payload: bytes, limits: ParseLimits | None = None) -> SExpr:
         else:
             if not stack:
                 raise SExprError("syntax.invalid", "atom outside root expression", token.offset)
-            target.append(token.value)
+            target.append(QuotedAtom(token.value) if token.kind == "quoted_atom" else token.value)
             nodes += 1
         if len(target) > limits.max_children_per_list:
             raise SExprError("budget.exceeded", "list child budget exceeded", token.offset)
@@ -153,7 +167,7 @@ def atoms(expression: SExpr) -> tuple[str, ...]:
     if not all(isinstance(value, str) for value in values):
         raise SExprError(
             "syntax.invalid",
-            f"{expression.head or 'expression'} must contain atoms",
+            "expression must contain atoms",
             expression.offset,
         )
     return tuple(value for value in values if isinstance(value, str))

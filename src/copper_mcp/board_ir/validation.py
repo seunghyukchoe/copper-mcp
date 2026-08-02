@@ -8,6 +8,12 @@ from dataclasses import dataclass
 from copper_mcp.board_ir.limits import ParseLimits
 from copper_mcp.board_ir.types import BoardIRContent, PointNM, Ring
 
+_SCHEMA_MAX_COPPER_LAYERS = 64
+_SCHEMA_MAX_NET_CLASSES = 10_000
+_SCHEMA_MAX_DIFFERENTIAL_PAIRS = 10_000
+_SCHEMA_MAX_OBJECTS = 250_000
+_SCHEMA_MAX_RING_POINTS = 100_000
+
 
 @dataclass(frozen=True, slots=True)
 class BoardIRValidationError(ValueError):
@@ -61,7 +67,7 @@ def _validate_ring(
     intersection_budget: list[int],
 ) -> None:
     size = len(ring.points)
-    if size > limits.max_vertices_per_ring:
+    if size > min(limits.max_vertices_per_ring, _SCHEMA_MAX_RING_POINTS):
         raise BoardIRValidationError("budget.exceeded", "ring vertex budget exceeded", locator)
     for first in range(size):
         a = ring.points[first]
@@ -88,6 +94,28 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
     """Validate budgets, references, identities, and exact polygon topology."""
 
     limits = limits or ParseLimits()
+    if len(content.outline) != 1:
+        raise BoardIRValidationError(
+            "unsupported.topology", "Board IR v0.1 requires exactly one outline contour", "outline"
+        )
+    if content.outline[0].holes:
+        raise BoardIRValidationError(
+            "unsupported.topology", "Board IR v0.1 does not support outline holes", "outline"
+        )
+    if len(content.copper_layers) > _SCHEMA_MAX_COPPER_LAYERS:
+        raise BoardIRValidationError(
+            "schema.limit", "copper-layer schema limit exceeded", "copper_layers"
+        )
+    if len(content.constraints.net_classes) > _SCHEMA_MAX_NET_CLASSES:
+        raise BoardIRValidationError(
+            "schema.limit", "net-class schema limit exceeded", "constraints.net_classes"
+        )
+    if len(content.constraints.differential_pairs) > _SCHEMA_MAX_DIFFERENTIAL_PAIRS:
+        raise BoardIRValidationError(
+            "schema.limit",
+            "differential-pair schema limit exceeded",
+            "constraints.differential_pairs",
+        )
     object_groups = (
         content.outline,
         content.copper_layers,
@@ -104,12 +132,19 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
         content.keepouts,
     )
     object_count = sum(len(group) for group in object_groups)
-    if object_count > limits.max_objects:
+    if object_count > min(limits.max_objects, _SCHEMA_MAX_OBJECTS):
         raise BoardIRValidationError("budget.exceeded", "object budget exceeded")
 
     layer_ids = _require_unique((layer.id for layer in content.copper_layers), kind="layer ID")
     _require_unique((layer.name for layer in content.copper_layers), kind="layer name")
     _require_unique((str(layer.index) for layer in content.copper_layers), kind="layer index")
+    ordered_layers = tuple(sorted(content.copper_layers, key=lambda item: item.index))
+    if tuple(layer.index for layer in ordered_layers) != tuple(range(len(ordered_layers))):
+        raise BoardIRValidationError(
+            "unsupported.topology",
+            "copper-layer indices must be contiguous physical ordinals",
+            "copper_layers",
+        )
     net_ids = _require_unique((net.id for net in content.nets), kind="net ID")
     _require_unique((net.name for net in content.nets), kind="net name")
     class_ids = _require_unique(
@@ -178,6 +213,13 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
     for via in content.vias:
         require_net(via.net_id, via.id)
         require_layers((via.start_layer_id, via.end_layer_id), via.id)
+        stack_endpoints = {ordered_layers[0].id, ordered_layers[-1].id}
+        if {via.start_layer_id, via.end_layer_id} != stack_endpoints:
+            raise BoardIRValidationError(
+                "unsupported.construct",
+                "through via must span the complete copper stack",
+                via.id,
+            )
     for segment in content.segments:
         require_net(segment.net_id, segment.id)
         require_layers((segment.layer_id,), segment.id)

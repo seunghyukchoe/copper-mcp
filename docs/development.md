@@ -60,13 +60,23 @@ bytes and a separate typed `KiCadConstraintProfile`, then returns a fail-closed 
 It is intentionally not a filesystem writer or a route/apply service. A missing snapshot or error
 diagnostic must stop downstream work; never continue with a partial board.
 
+The v0.1 adapter is pinned to KiCad PCB format `20260206`. Treat every newly accepted S-expression
+head, positional atom, graphics layer, zone option, or via treatment as a semantic change requiring
+an explicit allowlist decision and a fail-closed regression. Cached `filled_polygon` geometry is not
+authoritative Board IR content. Preserve quoted-versus-bare atom meaning, reject ambiguous native
+identities, and keep diagnostic fields independent of source-controlled names. JSON input is budgeted
+lexically before DOM construction. JSON Schema ceilings and operational `ParseLimits` are separate:
+third-party schema-valid input can still be rejected by a local security budget, while public
+CopperMCP writers must remain readable with the default limits.
+
 When extending the model or adapter:
 
 1. Decide whether canonical meaning changes. If it does, follow the versioning process in ADR-0005
    rather than changing `0.1.0` in place.
 2. Preserve exact integer conversion and reject geometry that cannot be represented without an
    explicit, reviewed rule.
-3. Add valid and invalid fixtures for the construct, including budget and malformed-input cases.
+3. Add valid and invalid fixtures for the construct, including budget, graphics-layer,
+   positional-atom, and malformed-input cases.
 4. Add deterministic encode/decode, digest, geometry, and fail-closed adapter tests.
 5. Update the accepted/rejected support matrix, decision/risk ledgers when applicable, and changelog.
 

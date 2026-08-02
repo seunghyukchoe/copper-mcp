@@ -7,6 +7,7 @@ import json
 from dataclasses import replace
 from typing import TypeAlias
 
+from copper_mcp.board_ir.limits import ParseLimits
 from copper_mcp.board_ir.types import (
     BOARD_IR_SCHEMA,
     BOARD_IR_SCHEMA_VERSION,
@@ -191,10 +192,13 @@ def _zone(item: Zone) -> dict[str, JsonValue]:
         "clearance_nm": item.clearance_nm,
         "fill_mode": item.fill_mode,
         "id": item.id,
+        "island_removal": item.island_removal.value,
         "layer_id": item.layer_id,
         "locked": item.locked,
         "min_thickness_nm": item.min_thickness_nm,
         "net_id": item.net_id,
+        "pad_connection": item.pad_connection.value,
+        "priority": item.priority,
         "thermal_bridge_width_nm": item.thermal_bridge_width_nm,
         "thermal_gap_nm": item.thermal_gap_nm,
     }
@@ -359,16 +363,23 @@ def constraint_digest(content: BoardIRContent) -> str:
     return _digest(_canonical_json(_constraint_payload(content)))
 
 
-def canonical_content_bytes(content: BoardIRContent) -> bytes:
-    """Encode the validated snapshot body using restricted canonical JSON."""
-
+def _canonicalized_content(content: BoardIRContent) -> BoardIRContent:
     validate_content(content)
-    expected = constraint_digest(content)
-    if content.constraint_digest != expected:
+    normalized = normalize_content(content)
+    validate_content(normalized)
+    expected = constraint_digest(normalized)
+    if normalized.constraint_digest != expected:
         raise BoardIRValidationError(
             "digest.constraint_mismatch", "constraint digest does not match content"
         )
-    return _canonical_json(_content_payload(content))
+    return normalized
+
+
+def canonical_content_bytes(content: BoardIRContent) -> bytes:
+    """Encode the validated snapshot body using restricted canonical JSON."""
+
+    normalized = _canonicalized_content(content)
+    return _canonical_json(_content_payload(normalized))
 
 
 def make_content(
@@ -412,14 +423,23 @@ def make_content(
 def make_snapshot(content: BoardIRContent) -> BoardIRSnapshot:
     """Create a self-verifying snapshot envelope without a recursive hash."""
 
-    digest = _digest(canonical_content_bytes(content))
-    return BoardIRSnapshot(snapshot_digest=digest, content=content)
+    normalized = _canonicalized_content(content)
+    digest = _digest(_canonical_json(_content_payload(normalized)))
+    snapshot = BoardIRSnapshot(snapshot_digest=digest, content=normalized)
+    _encode_envelope(snapshot, enforce_default_budget=True)
+    return snapshot
 
 
 def verify_snapshot(snapshot: BoardIRSnapshot) -> bool:
     """Raise on a stale or forged digest and otherwise return true."""
 
-    expected = _digest(canonical_content_bytes(snapshot.content))
+    normalized = _canonicalized_content(snapshot.content)
+    if normalized != snapshot.content:
+        raise BoardIRValidationError(
+            "canonical.not_normalized",
+            "snapshot content is not in canonical Board IR order",
+        )
+    expected = _digest(_canonical_json(_content_payload(normalized)))
     if snapshot.snapshot_digest != expected:
         raise BoardIRValidationError(
             "digest.snapshot_mismatch", "snapshot digest does not match canonical content"
@@ -427,14 +447,73 @@ def verify_snapshot(snapshot: BoardIRSnapshot) -> bool:
     return True
 
 
-def encode_snapshot(snapshot: BoardIRSnapshot) -> bytes:
-    """Encode a verified snapshot envelope as byte-stable canonical JSON."""
+def _enforce_default_budget(value: JsonValue, payload: bytes) -> None:
+    """Keep public writer output consumable by the default untrusted decoder."""
 
-    verify_snapshot(snapshot)
+    limits = ParseLimits()
+    if len(payload) > limits.max_input_bytes:
+        raise BoardIRValidationError(
+            "budget.exceeded", "canonical snapshot exceeds the default byte budget", "snapshot"
+        )
+    stack: list[tuple[JsonValue, int]] = [(value, 1)]
+    nodes = 0
+    while stack:
+        item, depth = stack.pop()
+        nodes += 1
+        if nodes > limits.max_nodes:
+            raise BoardIRValidationError(
+                "budget.exceeded", "canonical snapshot exceeds the default node budget", "snapshot"
+            )
+        if depth > limits.max_depth:
+            raise BoardIRValidationError(
+                "budget.exceeded", "canonical snapshot exceeds the default depth budget", "snapshot"
+            )
+        if isinstance(item, str) and len(item) > limits.max_atom_chars:
+            raise BoardIRValidationError(
+                "budget.exceeded",
+                "canonical snapshot exceeds the default string budget",
+                "snapshot",
+            )
+        if isinstance(item, list):
+            if len(item) > limits.max_children_per_list:
+                raise BoardIRValidationError(
+                    "budget.exceeded",
+                    "canonical snapshot exceeds the default array-child budget",
+                    "snapshot",
+                )
+            stack.extend((child, depth + 1) for child in item)
+        elif isinstance(item, dict):
+            if len(item) > limits.max_children_per_list:
+                raise BoardIRValidationError(
+                    "budget.exceeded",
+                    "canonical snapshot exceeds the default object-child budget",
+                    "snapshot",
+                )
+            for key in item:
+                if len(key) > limits.max_atom_chars:
+                    raise BoardIRValidationError(
+                        "budget.exceeded",
+                        "canonical snapshot exceeds the default string budget",
+                        "snapshot",
+                    )
+            stack.extend((child, depth + 1) for child in item.values())
+
+
+def _encode_envelope(snapshot: BoardIRSnapshot, *, enforce_default_budget: bool) -> bytes:
     envelope: dict[str, JsonValue] = {
         "content": _content_payload(snapshot.content),
         "schema": BOARD_IR_SCHEMA,
         "schema_version": BOARD_IR_SCHEMA_VERSION,
         "snapshot_digest": snapshot.snapshot_digest,
     }
-    return _canonical_json(envelope)
+    payload = _canonical_json(envelope)
+    if enforce_default_budget:
+        _enforce_default_budget(envelope, payload)
+    return payload
+
+
+def encode_snapshot(snapshot: BoardIRSnapshot) -> bytes:
+    """Encode a verified snapshot envelope as byte-stable canonical JSON."""
+
+    verify_snapshot(snapshot)
+    return _encode_envelope(snapshot, enforce_default_budget=True)

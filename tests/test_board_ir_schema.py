@@ -106,3 +106,48 @@ def test_schema_closes_nested_objects_and_requires_integer_nanometres(
     mutate(payload)
 
     assert list(_validator().iter_errors(payload))
+
+
+def test_schema_enforces_pad_kind_drill_and_npth_net_rules() -> None:
+    without_drill = deepcopy(_load_json(VALID_FIXTURE))
+    smd_pad = next(pad for pad in without_drill["content"]["items"]["pads"] if pad["kind"] == "smd")
+    smd_pad["kind"] = "through_hole"
+    assert list(_validator().iter_errors(without_drill))
+
+    connected_npth = deepcopy(_load_json(VALID_FIXTURE))
+    through_pad = next(
+        pad for pad in connected_npth["content"]["items"]["pads"] if pad["kind"] == "through_hole"
+    )
+    through_pad["kind"] = "np_through_hole"
+    assert through_pad["net_id"] is not None
+    assert list(_validator().iter_errors(connected_npth))
+
+
+def test_schema_requires_positive_dimensions_for_thermal_zone_connections() -> None:
+    payload = deepcopy(_load_json(VALID_FIXTURE))
+    zone = payload["content"]["items"]["zones"][0]
+    assert zone["pad_connection"] == "thermal"
+    zone["thermal_gap_nm"] = 0
+    zone["thermal_bridge_width_nm"] = 0
+
+    assert list(_validator().iter_errors(payload))
+
+
+def test_schema_and_runtime_both_reject_more_than_64_copper_layers() -> None:
+    payload = deepcopy(_load_json(VALID_FIXTURE))
+    layers = payload["content"]["copper_layers"]
+    for index in range(2, 65):
+        layers.append(
+            {
+                "id": f"layer:L{index}.Cu",
+                "name": f"L{index}.Cu",
+                "index": index,
+                "kind": "signal",
+            }
+        )
+
+    assert list(_validator().iter_errors(payload))
+    with pytest.raises(BoardIRValidationError) as caught:
+        decode_snapshot_json(json.dumps(payload).encode())
+
+    assert caught.value.code == "schema.limit"

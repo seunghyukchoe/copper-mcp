@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import ast
+import decimal
 import json
+import tracemalloc
 from collections.abc import Callable
 from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
@@ -26,6 +28,7 @@ from copper_mcp.board_ir import (
     Pad,
     PadKind,
     PadShape,
+    ParseLimits,
     PointNM,
     Ring,
     Segment,
@@ -263,6 +266,16 @@ def test_rotation_rejects_noncanonical_precision(token: str) -> None:
         normalize_rotation_udeg(token)
 
 
+def test_exact_unit_conversions_ignore_process_decimal_context() -> None:
+    with decimal.localcontext() as context:
+        context.prec = 3
+        assert mm_to_nm("9007199254.740991") == JSON_SAFE_INTEGER
+        assert nm_to_mm(JSON_SAFE_INTEGER) == "9007199254.740991"
+        assert normalize_rotation_udeg("450.000001") == 90_000_001
+        with pytest.raises(ValueError):
+            mm_to_nm("0.00000000000000000000000000001")
+
+
 # Bounded examples and deadline disabling follow Hypothesis' documented settings API:
 # https://hypothesis.readthedocs.io/en/latest/reference/api.html#hypothesis.settings
 @given(st.integers(min_value=-JSON_SAFE_INTEGER, max_value=JSON_SAFE_INTEGER))
@@ -307,6 +320,75 @@ def test_canonical_snapshot_is_order_and_ring_invariant() -> None:
     assert encode_snapshot(first) == encode_snapshot(reordered)
     assert encode_snapshot(first).endswith(b"\n")
     assert verify_snapshot(first)
+
+
+def test_make_snapshot_normalizes_a_directly_reversed_via_span() -> None:
+    canonical = sample_content()
+    via = canonical.vias[0]
+    reversed_content = replace(
+        canonical,
+        vias=(
+            replace(
+                via,
+                start_layer_id=via.end_layer_id,
+                end_layer_id=via.start_layer_id,
+            ),
+        ),
+    )
+
+    normalized = make_snapshot(reversed_content)
+
+    assert normalized == make_snapshot(canonical)
+    assert normalized.content.vias[0].start_layer_id == "layer:F.Cu"
+    assert decode_snapshot_json(encode_snapshot(normalized)) == normalized
+
+
+def test_board_ir_v0_1_rejects_outline_holes_and_multiple_contours() -> None:
+    content = sample_content()
+    hole = _ring(((1, 1), (2, 1), (2, 2), (1, 2)))
+
+    with pytest.raises(BoardIRValidationError) as hole_error:
+        make_snapshot(
+            replace(
+                content,
+                outline=(replace(content.outline[0], holes=(hole,)),),
+            )
+        )
+    assert hole_error.value.code == "unsupported.topology"
+
+    with pytest.raises(BoardIRValidationError) as contour_error:
+        make_snapshot(
+            replace(
+                content,
+                outline=(
+                    content.outline[0],
+                    replace(content.outline[0], id="contour:second"),
+                ),
+            )
+        )
+    assert contour_error.value.code == "unsupported.topology"
+
+
+def test_public_writer_rejects_schema_invalid_layer_count() -> None:
+    content = sample_content()
+    layers = tuple(
+        Layer(id=f"layer:L{index}.Cu", name=f"L{index}.Cu", index=index) for index in range(65)
+    )
+    oversized = replace(
+        content,
+        copper_layers=layers,
+        pads=(),
+        vias=(),
+        segments=(),
+        arcs=(),
+        zones=(),
+        keepouts=(),
+    )
+
+    with pytest.raises(BoardIRValidationError) as caught:
+        make_snapshot(oversized)
+
+    assert caught.value.code == "schema.limit"
 
 
 def test_codec_round_trip_preserves_frozen_snapshot() -> None:
@@ -381,6 +463,59 @@ def test_decoder_rejects_duplicate_json_properties() -> None:
         decode_snapshot_json(duplicate)
 
     assert caught.value.code == "schema.invalid"
+
+
+def test_decoder_rejects_duplicate_property_tail_before_dom_allocation() -> None:
+    payload = b"{" + b'"a":0,' * 499_999 + b'"a":0}'
+    assert len(payload) == 3_000_001
+
+    tracemalloc.start()
+    try:
+        with pytest.raises(BoardIRValidationError) as caught:
+            decode_snapshot_json(
+                payload,
+                ParseLimits(max_input_bytes=4_000_000, max_children_per_list=8),
+            )
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+
+    assert caught.value.code == "schema.invalid"
+    assert peak < 12_000_000
+
+
+def test_decoder_never_echoes_attacker_controlled_property_names() -> None:
+    secret = "PRIVATE_BOARD_TOKEN_" + "x" * 10_000
+    payload = json.loads(encode_snapshot(make_snapshot(sample_content())))
+    payload[secret] = True
+
+    with pytest.raises(BoardIRValidationError) as caught:
+        decode_snapshot_json(json.dumps(payload).encode())
+
+    rendered = str(caught.value)
+    assert "PRIVATE_BOARD_TOKEN" not in rendered
+    assert len(caught.value.message) <= 512
+
+
+def test_decoder_never_echoes_attacker_controlled_semantic_ids() -> None:
+    secret = "segment:SECRET_AUDIO_DESIGN"
+    payload = json.loads(encode_snapshot(make_snapshot(sample_content())))
+    payload["content"]["items"]["segments"][0]["id"] = secret
+    payload["content"]["items"]["segments"][0]["net_id"] = "net:missing"
+
+    with pytest.raises(BoardIRValidationError) as caught:
+        decode_snapshot_json(json.dumps(payload).encode())
+
+    assert caught.value.code == "reference.unknown"
+    assert "SECRET_AUDIO_DESIGN" not in str(caught.value)
+    assert caught.value.source_locator == "content"
+
+
+def test_decoder_applies_string_budget_to_property_names() -> None:
+    with pytest.raises(BoardIRValidationError) as caught:
+        decode_snapshot_json(b'{"ABCDE":0}', ParseLimits(max_atom_chars=4))
+
+    assert caught.value.code == "budget.exceeded"
 
 
 def test_decoder_maps_excessive_json_nesting_to_a_bounded_domain_error() -> None:
