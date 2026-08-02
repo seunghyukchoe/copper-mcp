@@ -6,6 +6,11 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The tag-only publish job now passes its repository explicitly when creating a GitHub release, so
+  it does not depend on a checkout in the isolated publish job.
+
 ## [0.1.0] - 2026-08-03
 
 ### Added

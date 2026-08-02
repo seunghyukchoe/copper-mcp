@@ -1,10 +1,9 @@
 # Release Ledger
 
-No public releases have been published.
+Public releases and any recovery actions are recorded below.
 
 | Version | Date | Tag / commit | Artifacts | Validation | Security | Notes |
 |---|---|---|---|---|---|---|
-| 0.1.0 | Release candidate prepared 2026-08-03 | `v0.1.0` / pending release commit | Wheel and sdist built by the release verifier; tag workflow will rebuild and attest them | `make check` and 32-test suite passed locally and on GitHub; non-publishing release dry run [#30762423298](https://github.com/seunghyukchoe/copper-mcp/actions/runs/30762423298) passed against `b0b9c28`, including version verification, full gate, and artifact upload | Initial, KiCad boundary, and Actions supply-chain reviews recorded; CodeQL, secret scan, dependency review, and dependency audit passed on `main` | Foundation release candidate; not yet published |
+| 0.1.0 | 2026-08-03 | [`v0.1.0`](https://github.com/seunghyukchoe/copper-mcp/releases/tag/v0.1.0) / [`a65c548`](https://github.com/seunghyukchoe/copper-mcp/commit/a65c5484fe57b1c67a93dc913fdec47f766e82d7) | Wheel `e563e2f3…6edc` and sdist `7128688e…202` published with GitHub build-provenance attestations | Dry run [#30762423298](https://github.com/seunghyukchoe/copper-mcp/actions/runs/30762423298) and tag run [#30762649321](https://github.com/seunghyukchoe/copper-mcp/actions/runs/30762649321) passed version, 32-test, audit, build, upload, and attestation gates; published wheel installed and reported `0.1.0` in a clean environment | CodeQL, secret scan, dependency review, dependency audit, immutable tag, and both artifact attestations verified against the release workflow, `refs/tags/v0.1.0`, and exact source digest | Published. The automated release-create step lacked repository context; the same attested artifacts were manually recovered after digest/provenance/install verification, and the workflow now passes `--repo` explicitly. |
 
-When a release completes, replace `Planned` and `TBD` with immutable facts and link the GitHub
-release. Corrections require a dated note below the table.
+Corrections require a dated note below the table; never replace released assets silently.
