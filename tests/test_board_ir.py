@@ -283,6 +283,22 @@ def test_malformed_sizes_and_degenerate_segments_are_rejected(value: int) -> Non
         replace(content.segments[0], start=point, end=point)
 
 
+def test_pad_kind_shape_and_drill_semantics_are_explicit() -> None:
+    pad = next(item for item in sample_content().pads if item.kind is PadKind.SMD)
+
+    with pytest.raises(ValueError, match="dimensions"):
+        replace(pad, shape=PadShape.CIRCLE, size_x_nm=2_000_000, size_y_nm=1_000_000)
+    with pytest.raises(ValueError, match="require a drill"):
+        replace(pad, kind=PadKind.THROUGH_HOLE)
+    with pytest.raises(ValueError, match="electrical net"):
+        replace(
+            pad,
+            kind=PadKind.NPTH,
+            drill_x_nm=500_000,
+            drill_y_nm=500_000,
+        )
+
+
 def test_canonical_snapshot_is_order_and_ring_invariant() -> None:
     first = make_snapshot(sample_content())
     reordered = make_snapshot(sample_content(alternate_order=True))

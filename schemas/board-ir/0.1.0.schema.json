@@ -254,6 +254,28 @@
               }
             }
           ]
+        },
+        {
+          "if": { "properties": { "kind": { "const": "smd" } }, "required": ["kind"] },
+          "then": {
+            "properties": {
+              "drill_x_nm": { "type": "null" },
+              "drill_y_nm": { "type": "null" }
+            }
+          },
+          "else": {
+            "properties": {
+              "drill_x_nm": { "$ref": "#/$defs/positive" },
+              "drill_y_nm": { "$ref": "#/$defs/positive" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "np_through_hole" } },
+            "required": ["kind"]
+          },
+          "then": { "properties": { "net_id": { "type": "null" } } }
         }
       ]
     },

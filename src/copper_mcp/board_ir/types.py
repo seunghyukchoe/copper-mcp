@@ -343,6 +343,8 @@ class Pad:
         _integer("pad rotation", self.rotation_udeg, minimum=0, maximum=FULL_ROTATION_UDEG - 1)
         _positive("pad width", self.size_x_nm)
         _positive("pad height", self.size_y_nm)
+        if self.shape is PadShape.CIRCLE and self.size_x_nm != self.size_y_nm:
+            raise ValueError("circle pad dimensions must be equal")
         if self.shape is PadShape.ROUNDRECT:
             if self.roundrect_radius_nm is None:
                 raise ValueError("roundrect pad requires an exact corner radius")
@@ -360,6 +362,10 @@ class Pad:
                 raise ValueError("pad drill cannot exceed pad size")
         if self.kind is PadKind.SMD and self.drill_x_nm is not None:
             raise ValueError("SMD pads cannot carry a drill")
+        if self.kind is not PadKind.SMD and self.drill_x_nm is None:
+            raise ValueError("through-hole pads require a drill")
+        if self.kind is PadKind.NPTH and self.net_id is not None:
+            raise ValueError("NPTH pads cannot belong to an electrical net")
         _tuple_of("pad layer IDs", self.layer_ids, str)
         if not self.layer_ids:
             raise ValueError("pad must reference at least one copper layer")
