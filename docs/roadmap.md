@@ -26,6 +26,9 @@ documentation, ledger updates, and benchmark evidence.
 ## M2 — Deterministic routing baseline
 
 - [ ] Single two-pin A* routing with exact connectivity.
+  - [x] Candidate-only integer four-neighbour reference with exact revision binding, deterministic
+    identity, rectangular keepouts, bounded search, and cancellation.
+  - [ ] KiCad patch export, authoritative DRC, preview, and integration evidence.
 - [ ] Multilayer vias and keepouts.
 - [ ] Negotiated-congestion multi-net routing.
 - [ ] Incremental spatial index and bounded rip-up/reroute.
