@@ -16,6 +16,8 @@ All notable changes are documented here. The format follows
 - MCP tools for server information, board inspection, KiCad DRC, candidate validation, and comparison.
 - Correctness-first candidate ranking and routing backend contracts.
 - GitHub issue forms, CI, CodeQL, dependency auditing, release automation, and project ledgers.
+- A non-publishing release dry run that verifies the requested version, complete quality gate, and
+  distribution artifacts before a version tag is created.
 
 ### Security
 
