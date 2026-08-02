@@ -10,9 +10,9 @@
 MCP-based tools, and optional AI policy plugins.**
 
 > [!IMPORTANT]
-> CopperMCP is pre-alpha. The current `0.1.x` foundation provides secure board inspection, stable
-> manifests, candidate validation, and MCP contracts. It does not yet route or modify production
-> boards.
+> CopperMCP is pre-alpha. The current `0.1.x` foundation provides secure board inspection,
+> authoritative read-only KiCad DRC summaries, stable manifests, candidate validation, and MCP
+> contracts. It does not yet route or modify production boards.
 
 ## Why this project exists
 
@@ -32,6 +32,7 @@ The non-negotiable boundary is simple:
 - Read-only, bounded inspection of documented `.kicad_pcb` files.
 - Workspace confinement, including protection against parent-path and symlink escapes.
 - SHA-256 board revisions and versioned JSON schemas.
+- Fixed-argument KiCad CLI DRC with source, time, size, schema, and stale-context guards.
 - Candidate-manifest validation and correctness-first comparison.
 - MCP tools and a stable CLI over the same application services.
 - Professional CI, CodeQL, dependency auditing, release automation, issue forms, and project ledgers.
@@ -54,6 +55,22 @@ Inspect a board without modifying it:
 ```bash
 copper-mcp --workspace /absolute/path/to/boards inspect example.kicad_pcb
 ```
+
+Run authoritative KiCad DRC and return only bounded aggregate evidence:
+
+```bash
+export COPPER_MCP_KICAD_CLI=/absolute/path/to/kicad-cli  # optional when discoverable
+copper-mcp --workspace /absolute/path/to/boards drc example.kicad_pcb
+```
+
+The DRC adapter never accepts arbitrary KiCad flags and never requests zone refill or board save.
+It mirrors the board, matching project/rule files, and workspace-local KiCad library assets into a
+private snapshot; bounds that snapshot cumulatively; limits report growth in the child process; and
+rejects results when any captured context changes during execution. Context discovery also has file
+count and wall-clock ceilings, and the pre-run byte snapshot is released before KiCad starts. Keep
+KiCad projects and their project-relative libraries self-contained below the configured workspace.
+DRC-clean is not a substitute for electrical, signal-integrity, manufacturability, or hardware
+review.
 
 Start the local MCP server over standard input/output:
 

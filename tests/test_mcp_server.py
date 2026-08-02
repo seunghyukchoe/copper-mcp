@@ -11,7 +11,13 @@ class McpServerTests(unittest.TestCase):
         tools = asyncio.run(mcp.list_tools())
         self.assertEqual(
             {tool.name for tool in tools},
-            {"server_info", "inspect_board", "validate_candidate", "compare_candidates"},
+            {
+                "compare_candidates",
+                "inspect_board",
+                "run_board_drc",
+                "server_info",
+                "validate_candidate",
+            },
         )
 
 

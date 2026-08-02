@@ -16,9 +16,9 @@ documentation, ledger updates, and benchmark evidence.
 
 - [ ] Official `kicad-python` IPC plugin.
 - [ ] Canonical Board IR with integer units and typed constraints.
-- [ ] Headless `kicad-cli pcb drc --format json` validation.
+- [x] Headless `kicad-cli pcb drc --format json` validation.
 - [ ] Candidate preview without mutation.
-- [ ] Version-skew and stale-board tests.
+- [x] Version-skew and stale-board tests for the DRC adapter.
 
 ## M2 — Deterministic routing baseline
 

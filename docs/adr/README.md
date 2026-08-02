@@ -7,3 +7,4 @@ from the decision ledger.
 - [ADR-0001: Candidate-first mutation model](0001-candidate-first.md)
 - [ADR-0002: MCP is an external adapter](0002-mcp-adapter.md)
 - [ADR-0003: Python reference core with Rust-ready contracts](0003-python-reference-core.md)
+- [ADR-0004: Authoritative KiCad CLI DRC gate](0004-authoritative-kicad-drc.md)

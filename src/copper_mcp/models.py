@@ -50,6 +50,64 @@ class BoardManifest:
 
 
 @dataclass(frozen=True, slots=True)
+class DrcSummary:
+    """Privacy-preserving evidence from an authoritative KiCad DRC run."""
+
+    base_revision: str
+    drc_context_revision: str
+    kicad_version: str
+    drc_schema: str
+    coordinate_units: str
+    error_count: int
+    warning_count: int
+    exclusion_count: int
+    ignored_check_count: int
+    unconnected_count: int
+    violation_type_counts: dict[str, int]
+    passed: bool
+    schema_version: str = SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        for name, revision in (
+            ("base_revision", self.base_revision),
+            ("drc_context_revision", self.drc_context_revision),
+        ):
+            if not _SHA256_ID.fullmatch(revision):
+                raise ValueError(f"{name} must be content-addressed with sha256")
+        if not 1 <= len(self.kicad_version.strip()) <= 128:
+            raise ValueError("KiCad version is malformed")
+        if self.drc_schema != "https://schemas.kicad.org/drc.v1.json":
+            raise ValueError("DRC schema is unsupported")
+        if self.coordinate_units != "mm":
+            raise ValueError("DRC coordinates must use millimetres")
+        for name in (
+            "error_count",
+            "warning_count",
+            "exclusion_count",
+            "ignored_check_count",
+            "unconnected_count",
+        ):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError(f"{name} must be an integer")
+            _non_negative(name, value)
+        if len(self.violation_type_counts) > 1000:
+            raise ValueError("too many DRC violation types")
+        for violation_type, count in self.violation_type_counts.items():
+            if not violation_type or len(violation_type) > 128:
+                raise ValueError("DRC violation type is malformed")
+            if isinstance(count, bool) or not isinstance(count, int):
+                raise ValueError("DRC violation count must be an integer")
+            _non_negative(violation_type, count)
+        expected_pass = self.error_count == 0 and self.unconnected_count == 0
+        if self.passed is not expected_pass:
+            raise ValueError("passed must reflect hard DRC and connectivity correctness")
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
 class CandidateMetrics:
     """Comparable metrics, ordered by correctness before optimization quality."""
 
