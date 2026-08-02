@@ -28,6 +28,7 @@ from copper_mcp.routing import (
     AStarRouter,
     AStarSettings,
     RouteCandidate,
+    RouteDiagnostic,
     RouteFailureCode,
     RoutePatch,
     RouteRequest,
@@ -309,6 +310,14 @@ def test_dijkstra_oracle_is_bounded_and_rejects_malformed_public_inputs() -> Non
 
     with pytest.raises(ValueError, match="exactly one"):
         DijkstraResult()
+    with pytest.raises(ValueError, match="exactly one"):
+        DijkstraResult(
+            total_cost_nm=1,
+            diagnostic=RouteDiagnostic(
+                code=RouteFailureCode.NO_PATH,
+                message="no path",
+            ),
+        )
 
 
 def test_exact_keepout_clearance_is_legal_and_one_nanometre_inside_is_not() -> None:

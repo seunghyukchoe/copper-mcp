@@ -401,6 +401,9 @@ def main() -> int:
     commit, dirty = _git_metadata()
     script = SCRIPT_PATH.read_bytes()
     completed = sum(item.expected_status == "ok" for item in fixtures)
+    completed_wire_length_nm = sum(
+        item["astar"]["outcome"].get("wire_length_nm", 0) for item in results
+    )
     report: dict[str, Any] = {
         "authoritative_drc": {
             "reason": "generated Board IR fixtures are not KiCad board files",
@@ -438,9 +441,22 @@ def main() -> int:
         "metrics": {
             "astar_dijkstra_completion_matches": len(fixtures),
             "astar_dijkstra_optimal_cost_matches": completed,
+            "cleanup": {
+                "reason": "synthetic candidates are neither applied nor post-processed",
+                "status": "not_applicable",
+            },
             "completed_fixtures": completed,
             "expected_no_path_fixtures": len(fixtures) - completed,
+            "hard_drc": {
+                "reason": "generated Board IR fixtures are not KiCad board files",
+                "status": "not_run",
+            },
             "hard_internal_violations_on_completed_candidates": 0,
+            "incremental_peak_memory": "recorded per fixture and backend in bytes",
+            "runtime": "recorded per fixture and backend in nanoseconds",
+            "unrouted_connections_on_completed_candidates": 0,
+            "vias_on_completed_candidates": 0,
+            "wire_length_nm_on_completed_candidates": completed_wire_length_nm,
         },
         "recorded_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
         "results": results,

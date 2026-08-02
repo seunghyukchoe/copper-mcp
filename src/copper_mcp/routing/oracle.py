@@ -60,11 +60,12 @@ class DijkstraResult:
             ("obstacle checks", self.obstacle_checks),
         ):
             _nonnegative_integer(name, value)
-        has_cost = all(
-            value is not None
-            for value in (self.total_cost_nm, self.bend_count, self.proximity_steps)
-        )
-        if has_cost == (self.diagnostic is not None):
+        cost_values = (self.total_cost_nm, self.bend_count, self.proximity_steps)
+        has_cost = all(value is not None for value in cost_values)
+        has_no_cost = all(value is None for value in cost_values)
+        if (self.diagnostic is None and not has_cost) or (
+            self.diagnostic is not None and not has_no_cost
+        ):
             raise ValueError("Dijkstra result must contain exactly one cost or diagnostic")
         if has_cost:
             assert self.total_cost_nm is not None
