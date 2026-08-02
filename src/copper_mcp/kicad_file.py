@@ -17,7 +17,8 @@ from copper_mcp.security import read_bounded_file, resolve_workspace_file
 _VERSION_RE = re.compile(r"\(version\s+(\d+)\)")
 _GENERATOR_RE = re.compile(r'\(generator\s+(?:"([^"]+)"|([^\s\)]+))\)')
 _FOOTPRINT_RE = re.compile(r"^\s*\(footprint\s", re.MULTILINE)
-_NET_RE = re.compile(r'^\s*\(net\s+(\d+)\s+"', re.MULTILINE)
+_LEGACY_NET_RE = re.compile(r'^\s*\(net\s+(\d+)\s+"', re.MULTILINE)
+_NAMED_NET_RE = re.compile(r'^\s*\(net\s+"((?:\\.|[^"\\])*)"\s*\)', re.MULTILINE)
 _SEGMENT_RE = re.compile(r"^\s*\(segment\s", re.MULTILINE)
 _VIA_RE = re.compile(r"^\s*\(via\s", re.MULTILINE)
 _ZONE_RE = re.compile(r"^\s*\(zone\s", re.MULTILINE)
@@ -57,12 +58,17 @@ def inspect_kicad_board(requested_path: str, settings: Settings) -> BoardManifes
 
     revision_digest = hashlib.sha256(payload).hexdigest()
     relative_path = board_path.relative_to(settings.workspace).as_posix()
-    net_ids = {int(match) for match in _NET_RE.findall(text)}
-    net_ids.discard(0)
+    # KiCad 9 and earlier declare numeric net IDs at the board root. KiCad 10
+    # persists the net name directly on pads, tracks, vias, and zones instead.
+    # Prefer named nets when present so repeated object references are deduplicated.
+    legacy_net_ids = set(_LEGACY_NET_RE.findall(text))
+    legacy_net_ids.discard("0")
+    named_nets = set(_NAMED_NET_RE.findall(text))
+    named_nets.discard("")
     counts = BoardCounts(
         copper_layers=len(_COPPER_LAYER_RE.findall(text)),
         footprints=len(_FOOTPRINT_RE.findall(text)),
-        nets=len(net_ids),
+        nets=len(named_nets or legacy_net_ids),
         segments=len(_SEGMENT_RE.findall(text)),
         vias=len(_VIA_RE.findall(text)),
         zones=len(_ZONE_RE.findall(text)),
