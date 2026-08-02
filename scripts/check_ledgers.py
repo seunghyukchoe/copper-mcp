@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,13 @@ def _reject_json_constant(value: str) -> Any:
     raise ValueError(f"unsupported JSON constant: {value}")
 
 
+def _parse_finite_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"non-finite JSON number: {value}")
+    return parsed
+
+
 def _check_benchmark_artifacts(failures: list[str]) -> None:
     results = ROOT / "benchmarks" / "results"
     for path in sorted(results.rglob("*.json")):
@@ -36,7 +44,11 @@ def _check_benchmark_artifacts(failures: list[str]) -> None:
             failures.append(f"{relative} exceeds the benchmark artifact size limit")
             continue
         try:
-            report = json.loads(payload, parse_constant=_reject_json_constant)
+            report = json.loads(
+                payload,
+                parse_constant=_reject_json_constant,
+                parse_float=_parse_finite_float,
+            )
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
             failures.append(f"{relative} is not strict JSON: {error}")
             continue
@@ -47,7 +59,12 @@ def _check_benchmark_artifacts(failures: list[str]) -> None:
         expected = (
             "sha256:"
             + hashlib.sha256(
-                json.dumps(report, sort_keys=True, separators=(",", ":")).encode()
+                json.dumps(
+                    report,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ).encode()
             ).hexdigest()
         )
         if run_id != expected:
