@@ -29,9 +29,16 @@ revision.
 | `security.py` | Resolve, constrain, and size-limit untrusted filesystem inputs. |
 | `models.py` | Stable board and candidate contract models. |
 | `kicad_file.py` | Read-only MVP inspection; never used to write geometry. |
+| `board_ir/` | Canonical integer board snapshots, strict codec, geometry validation, and digests. |
+| `adapters/kicad_board_ir.py` | Bounded, read-only conversion of the documented KiCad subset. |
 | `tools.py` | Pure application services shared by adapters. |
 | `routing/contracts.py` | Backend-neutral deterministic routing contract. |
 | `mcp_server.py` | MCP tools/resources and transport configuration. |
+
+Board IR `0.1.0` is currently a domain and source-adapter foundation. Existing MCP tools still use
+the bounded inspection manifest; no MCP Board IR resource, route operation, preview, or apply path is
+implemented. See [Board IR and KiCad adapter contracts](board-ir.md) and
+[ADR-0005](../adr/0005-canonical-board-ir.md).
 
 ## Candidate lifecycle
 

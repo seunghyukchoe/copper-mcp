@@ -33,6 +33,8 @@ The non-negotiable boundary is simple:
 - Read-only, bounded inspection of documented `.kicad_pcb` files.
 - Workspace confinement, including protection against parent-path and symlink escapes.
 - SHA-256 board revisions and versioned JSON schemas.
+- Immutable Board IR `0.1.0` with exact integer units, typed constraints, canonical digests, and a
+  bounded fail-closed converter for a documented KiCad subset.
 - Fixed-argument KiCad CLI DRC with source, time, size, schema, and stale-context guards.
 - Candidate-manifest validation and correctness-first comparison.
 - MCP tools and a stable CLI over the same application services.
@@ -149,6 +151,7 @@ this boundary.
 
 - [Project charter](docs/project-charter.md)
 - [Architecture](docs/architecture/overview.md)
+- [Board IR and KiCad adapter contract](docs/architecture/board-ir.md)
 - [MCP contract](docs/architecture/mcp-api.md)
 - [Security and threat model](docs/architecture/security-model.md)
 - [Development guide](docs/development.md)

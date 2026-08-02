@@ -9,7 +9,7 @@ install-dev:
 	$(PYTHON) -m pip install -e ".[dev,security]"
 
 test:
-	PYTHONPATH=src $(PYTHON) -m unittest discover -s tests -v
+	PYTHONPATH=src $(PYTHON) -m pytest
 
 lint:
 	$(PYTHON) -m ruff check .

@@ -10,3 +10,4 @@
 | D-006 | 2026-08-03 | Accepted | Permit manual release verification, but restrict attestation and publication to version-tag pushes. | `.github/workflows/release.yml` |
 | D-007 | 2026-08-03 | Accepted | Publish audio hardware labs under a separate open-hardware license with explicit evidence limits; DRC and artifact checks never imply fabrication approval. | [`hardware/coppertone-buffer/README.md`](../../hardware/coppertone-buffer/README.md) |
 | D-008 | 2026-08-03 | Accepted | Make hardware snapshot validation read-only by default; replacement of tracked manufacturing evidence requires an explicit refresh operation. | [`hardware/coppertone-buffer/validate.sh`](../../hardware/coppertone-buffer/validate.sh) |
+| D-009 | 2026-08-03 | Accepted | Use a strict integer, content-addressed Board IR v0.1 and fail closed when a source adapter cannot represent geometry or constraints exactly. | [ADR-0005](../adr/0005-canonical-board-ir.md) |

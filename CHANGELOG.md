@@ -6,6 +6,16 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Canonical Board IR `0.1.0` with integer nanometre/microdegree geometry, typed routing constraints,
+  strict canonical JSON, semantic and snapshot digests, bounded decoding, and a versioned JSON Schema.
+- A bounded, read-only, fail-closed KiCad converter for the documented rectangular-outline subset,
+  plus golden valid/invalid JSON and synthetic source fixtures and explicit architecture/ADR
+  documentation. This converter does not route, mutate, preview, or apply board changes.
+- Explicit solid-zone priority, pad-connection, and island-removal intent in Board IR, plus a
+  version-pinned KiCad semantic preflight for copper/`Edge.Cuts` graphics and supported object fields.
+
 ### Changed
 
 - CodeQL `init`, `analyze`, and SARIF upload now move as one pinned v4 suite, and Dependabot groups
@@ -15,6 +25,15 @@ All notable changes are documented here. The format follows
 
 - The tag-only publish job now passes its repository explicitly when creating a GitHub release, so
   it does not depend on a checkout in the isolated publish job.
+- Board IR construction now normalizes direct content before hashing, aligns runtime/schema limits,
+  restricts v0.1 to one hole-free outline and full-stack through vias, and keeps public writer output
+  readable by default decoder budgets.
+
+### Security
+
+- KiCad and Board IR parsing now use quote-aware streaming S-expression tokens, a pre-DOM JSON
+  lexical/structural budget pass, exact context-independent decimal conversion, bounded non-echoing
+  diagnostics, and explicit rejection of unmodeled routing or non-default fabrication semantics.
 
 ## [0.1.0] - 2026-08-03
 
