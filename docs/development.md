@@ -94,6 +94,20 @@ structural limits, timing samples, and incremental peak memory while `tracemallo
 measures KiCad-to-Board-IR conversion only; it is not an autorouting performance result. Check in a
 result only from a clean tree and append, rather than replacing, benchmark evidence.
 
+Run the synthetic two-pin optimality comparison from the repository root:
+
+```bash
+make PYTHON=.venv/bin/python benchmark-routing
+```
+
+This invokes the production A* candidate backend and a benchmark-only zero-heuristic Dijkstra
+oracle over the same bounded integer state graph. The report retains the straight, detour,
+exact-clearance, and expected-no-path fixtures; checks completion and exact cost agreement on every
+iteration; and records deterministic counters plus instrumented runtime and incremental peak memory.
+It does not invoke KiCad, perform authoritative DRC, establish production throughput, or compare
+CopperMCP with another router. Generate recorded evidence to a path outside the repository so the
+embedded Git dirty-state check remains meaningful, then append the reviewed result and ledger entry.
+
 ## Adding a public contract
 
 1. Open an RFC issue.

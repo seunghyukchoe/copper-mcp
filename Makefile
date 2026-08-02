@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-.PHONY: install install-dev test lint format typecheck security build check clean
+.PHONY: install install-dev test lint format typecheck security build check benchmark-routing clean
 
 install:
 	$(PYTHON) -m pip install -e .
@@ -31,6 +31,9 @@ build:
 	$(PYTHON) -m build
 
 check: lint typecheck test security build
+
+benchmark-routing:
+	PYTHONPATH=src $(PYTHON) scripts/benchmark_routing.py --iterations 7 --warmups 2
 
 clean:
 	$(PYTHON) -c "import shutil; [shutil.rmtree(p, ignore_errors=True) for p in ['build', 'dist', '.coverage', 'htmlcov', '.mypy_cache', '.pytest_cache', '.ruff_cache']]"
