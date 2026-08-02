@@ -10,3 +10,4 @@ from the decision ledger.
 - [ADR-0004: Authoritative KiCad CLI DRC gate](0004-authoritative-kicad-drc.md)
 - [ADR-0005: Canonical integer Board IR v0.1](0005-canonical-board-ir.md)
 - [ADR-0006: Bounded deterministic A* reference](0006-bounded-deterministic-astar.md)
+- [ADR-0007: Disposable KiCad candidate snapshots](0007-disposable-kicad-candidate-snapshot.md)

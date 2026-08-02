@@ -39,8 +39,10 @@ The non-negotiable boundary is simple:
 - Fixed-argument KiCad CLI DRC with source, time, size, schema, and stale-context guards.
 - Candidate-manifest validation and correctness-first comparison.
 - Bounded integer A* candidates for one two-pad net on a documented rectangular Board IR subset,
-  with independent lattice, search, and obstacle-work ceilings; this synthetic-domain reference has
-  no KiCad export, authoritative candidate DRC, or apply path.
+  with independent lattice, search, and obstacle-work ceilings, plus replay-bound serialization to
+  new disposable KiCad bytes when every modeled source geometry object has a native UUID/tstamp.
+  This synthetic-domain reference has no durable export, authoritative candidate-bound DRC evidence,
+  preview, MCP route tool, source mutation, or apply path.
 - MCP tools and a stable CLI over the same application services.
 - Professional CI, CodeQL, dependency auditing, release automation, issue forms, and project ledgers.
 

@@ -2,9 +2,11 @@
 
 ## Status
 
-`routing/astar.py` is a candidate-only CPU reference for one exact two-pin route. It is intentionally
-smaller than issue #10's complete acceptance target: it does not serialize a KiCad patch, invoke
-authoritative KiCad DRC, expose an MCP tool, route multiple nets, or apply copper.
+`routing/astar.py` is a candidate-only CPU reference for one exact two-pin route. The separate
+`adapters/kicad_route_patch.py` bridge can now serialize that exact replayed candidate into a
+disposable KiCad board. The slice remains smaller than issue #10's complete acceptance target: it
+does not orchestrate authoritative candidate DRC, expose an MCP tool, route multiple nets, preview,
+or apply copper.
 
 ## Accepted input
 
@@ -87,12 +89,33 @@ board and obstacle bounds. Canonical JSON identity bytes contain:
 The circular `candidate_id` field is excluded from those bytes, then set to their SHA-256 digest.
 `verify_candidate_id()` rechecks that binding. Runtime and memory measurements do not affect the ID.
 
+## Disposable KiCad bridge
+
+`render_kicad_candidate_board()` first reproduces the supplied Board IR from the original KiCad bytes
+and constraint profile. It verifies candidate identity, reruns the bounded A* request, and requires an
+exact candidate match. Every modeled source geometry object must have a native UUID/tstamp; the
+bridge rejects revision-derived geometry IDs because rewriting derivative metadata would otherwise
+change them. Each compressed route edge becomes one root-level KiCad segment with exact decimal
+units and a deterministic UUIDv5 derived from candidate identity and edge order. Native UUID/tstamp
+identities are collected once for constant-time collision checks, and the derivative records
+`copper-mcp` plus its package version as its KiCad writer.
+
+The rendered bytes stay under the same parser, byte, and total-object budgets and are parsed back
+through the supported KiCad adapter. The complete modeled content must equal the base snapshot after
+replacing only source revision and writer provenance and appending the expected segments. The
+function performs no file write, durable export, subprocess call, preview, MCP action, or board
+mutation. A KiCad 10 integration test exercises the returned bytes through the existing read-only
+DRC service on the synthetic two-pad fixture; that fixture yields zero violations and zero
+unconnected items.
+
 ## Safety boundary
 
 Zero `hard_internal_violations` means only that this implementation's supported-grid post-checks
-passed. It is not a KiCad DRC result and says nothing about electrical behavior, SI/PI, EMC, thermal
-performance, DFM, or fabrication readiness. A future candidate pipeline must export the patch to a
-private board snapshot and pass the authoritative KiCad gate before preview or application.
+passed. Successful serialization is also not a KiCad DRC result. The optional installed-KiCad test is
+evidence for one synthetic fixture, not a durable candidate-evidence API, and says nothing about
+electrical behavior, SI/PI, EMC, thermal performance, DFM, or fabrication readiness. A future
+orchestration layer must bind a private candidate snapshot to authoritative KiCad evidence before
+preview or application.
 
-See [ADR-0006](../adr/0006-bounded-deterministic-astar.md) and the
-[roadmap](../roadmap.md).
+See [ADR-0006](../adr/0006-bounded-deterministic-astar.md),
+[ADR-0007](../adr/0007-disposable-kicad-candidate-snapshot.md), and the [roadmap](../roadmap.md).

@@ -47,7 +47,7 @@ from copper_mcp.board_ir.types import (
     mm_to_nm,
     normalize_rotation_udeg,
 )
-from copper_mcp.board_ir.validation import BoardIRValidationError
+from copper_mcp.board_ir.validation import BoardIRValidationError, validate_content
 
 _PLAIN_DECIMAL = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _UNSIGNED_INTEGER = re.compile(r"^(?:0|[1-9][0-9]*)$")
@@ -1548,7 +1548,10 @@ def parse_kicad_bytes(
     limits = limits or ParseLimits()
     try:
         root = parse_sexpr(source, limits)
-        return _Converter(source, root, profile, limits).convert()
+        conversion = _Converter(source, root, profile, limits).convert()
+        assert conversion.snapshot is not None
+        validate_content(conversion.snapshot.content, limits)
+        return conversion
     except _ConversionError as error:
         return ConversionResult(
             snapshot=None,
