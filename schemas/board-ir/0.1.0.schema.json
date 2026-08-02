@@ -1,0 +1,474 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/seunghyukchoe/copper-mcp/schemas/board-ir/0.1.0.schema.json",
+  "title": "CopperMCP Board IR 0.1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schema_version", "snapshot_digest", "content"],
+  "properties": {
+    "schema": { "const": "copper.board-ir" },
+    "schema_version": { "const": "0.1.0" },
+    "snapshot_digest": { "$ref": "#/$defs/digest" },
+    "content": { "$ref": "#/$defs/content" }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "typedId": {
+      "type": "string",
+      "pattern": "^(layer|net|class|pad|via|segment|arc|zone|keepout|contour|rule):[A-Za-z0-9_.:-]{1,160}$"
+    },
+    "coordinate": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "nonNegative": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "positive": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x_nm", "y_nm"],
+      "properties": {
+        "x_nm": { "$ref": "#/$defs/coordinate" },
+        "y_nm": { "$ref": "#/$defs/coordinate" }
+      }
+    },
+    "ring": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["points"],
+      "properties": {
+        "points": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 100000,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/point" }
+        }
+      }
+    },
+    "layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "index", "kind"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^layer:[A-Za-z0-9_.:-]{1,160}$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "index": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "kind": { "enum": ["signal", "plane", "mixed"] }
+      }
+    },
+    "net": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^net:[A-Za-z0-9_.:-]{1,160}$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 512 }
+      }
+    },
+    "netClass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "clearance_nm",
+        "track_width_nm",
+        "via_diameter_nm",
+        "via_drill_nm"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^class:[A-Za-z0-9_.:-]{1,160}$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "clearance_nm": { "$ref": "#/$defs/nonNegative" },
+        "track_width_nm": { "$ref": "#/$defs/positive" },
+        "via_diameter_nm": { "$ref": "#/$defs/positive" },
+        "via_drill_nm": { "$ref": "#/$defs/positive" }
+      }
+    },
+    "assignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["net_id", "net_class_id"],
+      "properties": {
+        "net_id": { "type": "string", "pattern": "^net:[A-Za-z0-9_.:-]{1,160}$" },
+        "net_class_id": {
+          "type": "string",
+          "pattern": "^class:[A-Za-z0-9_.:-]{1,160}$"
+        }
+      }
+    },
+    "differentialPair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "positive_net_id",
+        "negative_net_id",
+        "width_nm",
+        "gap_nm",
+        "max_skew_nm"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^rule:[A-Za-z0-9_.:-]{1,160}$" },
+        "positive_net_id": {
+          "type": "string",
+          "pattern": "^net:[A-Za-z0-9_.:-]{1,160}$"
+        },
+        "negative_net_id": {
+          "type": "string",
+          "pattern": "^net:[A-Za-z0-9_.:-]{1,160}$"
+        },
+        "width_nm": { "$ref": "#/$defs/positive" },
+        "gap_nm": { "$ref": "#/$defs/positive" },
+        "max_skew_nm": { "$ref": "#/$defs/nonNegative" }
+      }
+    },
+    "lengthRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "net_id", "minimum_nm", "maximum_nm"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^rule:[A-Za-z0-9_.:-]{1,160}$" },
+        "net_id": { "type": "string", "pattern": "^net:[A-Za-z0-9_.:-]{1,160}$" },
+        "minimum_nm": { "$ref": "#/$defs/nonNegative" },
+        "maximum_nm": { "$ref": "#/$defs/nonNegative" }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["net_classes", "assignments", "differential_pairs", "length_rules"],
+      "properties": {
+        "net_classes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/netClass" }
+        },
+        "assignments": {
+          "type": "array",
+          "maxItems": 250000,
+          "items": { "$ref": "#/$defs/assignment" }
+        },
+        "differential_pairs": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/differentialPair" }
+        },
+        "length_rules": {
+          "type": "array",
+          "maxItems": 250000,
+          "items": { "$ref": "#/$defs/lengthRule" }
+        }
+      }
+    },
+    "contour": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "outer", "holes"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^contour:[A-Za-z0-9_.:-]{1,160}$" },
+        "outer": { "$ref": "#/$defs/ring" },
+        "holes": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/ring" }
+        }
+      }
+    },
+    "pad": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "net_id",
+        "center",
+        "rotation_udeg",
+        "shape",
+        "kind",
+        "size_x_nm",
+        "size_y_nm",
+        "roundrect_radius_nm",
+        "drill_x_nm",
+        "drill_y_nm",
+        "layer_ids",
+        "locked"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^pad:[A-Za-z0-9_.:-]{1,160}$" },
+        "net_id": {
+          "type": ["string", "null"],
+          "pattern": "^net:[A-Za-z0-9_.:-]{1,160}$"
+        },
+        "center": { "$ref": "#/$defs/point" },
+        "rotation_udeg": { "type": "integer", "minimum": 0, "maximum": 359999999 },
+        "shape": { "enum": ["circle", "rect", "oval", "roundrect"] },
+        "kind": { "enum": ["smd", "through_hole", "np_through_hole"] },
+        "size_x_nm": { "$ref": "#/$defs/positive" },
+        "size_y_nm": { "$ref": "#/$defs/positive" },
+        "roundrect_radius_nm": {
+          "oneOf": [{ "$ref": "#/$defs/positive" }, { "type": "null" }]
+        },
+        "drill_x_nm": { "oneOf": [{ "$ref": "#/$defs/positive" }, { "type": "null" }] },
+        "drill_y_nm": { "oneOf": [{ "$ref": "#/$defs/positive" }, { "type": "null" }] },
+        "layer_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^layer:[A-Za-z0-9_.:-]{1,160}$" }
+        },
+        "locked": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "shape": { "const": "roundrect" } }, "required": ["shape"] },
+          "then": { "properties": { "roundrect_radius_nm": { "$ref": "#/$defs/positive" } } },
+          "else": { "properties": { "roundrect_radius_nm": { "type": "null" } } }
+        },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "drill_x_nm": { "$ref": "#/$defs/positive" },
+                "drill_y_nm": { "$ref": "#/$defs/positive" }
+              }
+            },
+            {
+              "properties": {
+                "drill_x_nm": { "type": "null" },
+                "drill_y_nm": { "type": "null" }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "via": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "net_id",
+        "center",
+        "diameter_nm",
+        "drill_nm",
+        "start_layer_id",
+        "end_layer_id",
+        "kind",
+        "locked"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^via:[A-Za-z0-9_.:-]{1,160}$" },
+        "net_id": { "type": "string", "pattern": "^net:[A-Za-z0-9_.:-]{1,160}$" },
+        "center": { "$ref": "#/$defs/point" },
+        "diameter_nm": { "$ref": "#/$defs/positive" },
+        "drill_nm": { "$ref": "#/$defs/positive" },
+        "start_layer_id": {
+          "type": "string",
+          "pattern": "^layer:[A-Za-z0-9_.:-]{1,160}$"
+        },
+        "end_layer_id": {
+          "type": "string",
+          "pattern": "^layer:[A-Za-z0-9_.:-]{1,160}$"
+        },
+        "kind": { "enum": ["through", "blind_buried", "micro"] },
+        "locked": { "type": "boolean" }
+      }
+    },
+    "segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "net_id", "layer_id", "start", "end", "width_nm", "locked"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^segment:[A-Za-z0-9_.:-]{1,160}$" },
+        "net_id": { "type": "string", "pattern": "^net:[A-Za-z0-9_.:-]{1,160}$" },
+        "layer_id": { "type": "string", "pattern": "^layer:[A-Za-z0-9_.:-]{1,160}$" },
+        "start": { "$ref": "#/$defs/point" },
+        "end": { "$ref": "#/$defs/point" },
+        "width_nm": { "$ref": "#/$defs/positive" },
+        "locked": { "type": "boolean" }
+      }
+    },
+    "arc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "net_id",
+        "layer_id",
+        "start",
+        "mid",
+        "end",
+        "width_nm",
+        "locked"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^arc:[A-Za-z0-9_.:-]{1,160}$" },
+        "net_id": { "type": "string", "pattern": "^net:[A-Za-z0-9_.:-]{1,160}$" },
+        "layer_id": { "type": "string", "pattern": "^layer:[A-Za-z0-9_.:-]{1,160}$" },
+        "start": { "$ref": "#/$defs/point" },
+        "mid": { "$ref": "#/$defs/point" },
+        "end": { "$ref": "#/$defs/point" },
+        "width_nm": { "$ref": "#/$defs/positive" },
+        "locked": { "type": "boolean" }
+      }
+    },
+    "zone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "net_id",
+        "layer_id",
+        "boundary",
+        "clearance_nm",
+        "min_thickness_nm",
+        "thermal_gap_nm",
+        "thermal_bridge_width_nm",
+        "fill_mode",
+        "locked"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^zone:[A-Za-z0-9_.:-]{1,160}$" },
+        "net_id": { "type": "string", "pattern": "^net:[A-Za-z0-9_.:-]{1,160}$" },
+        "layer_id": { "type": "string", "pattern": "^layer:[A-Za-z0-9_.:-]{1,160}$" },
+        "boundary": { "$ref": "#/$defs/ring" },
+        "clearance_nm": { "$ref": "#/$defs/nonNegative" },
+        "min_thickness_nm": { "$ref": "#/$defs/positive" },
+        "thermal_gap_nm": { "$ref": "#/$defs/nonNegative" },
+        "thermal_bridge_width_nm": { "$ref": "#/$defs/nonNegative" },
+        "fill_mode": { "const": "solid" },
+        "locked": { "type": "boolean" }
+      }
+    },
+    "keepout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "layer_ids",
+        "boundary",
+        "prohibit_tracks",
+        "prohibit_vias",
+        "prohibit_pads",
+        "prohibit_zones",
+        "prohibit_footprints",
+        "locked"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^keepout:[A-Za-z0-9_.:-]{1,160}$" },
+        "layer_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^layer:[A-Za-z0-9_.:-]{1,160}$" }
+        },
+        "boundary": { "$ref": "#/$defs/ring" },
+        "prohibit_tracks": { "type": "boolean" },
+        "prohibit_vias": { "type": "boolean" },
+        "prohibit_pads": { "type": "boolean" },
+        "prohibit_zones": { "type": "boolean" },
+        "prohibit_footprints": { "type": "boolean" },
+        "locked": { "type": "boolean" }
+      }
+    },
+    "content": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "units",
+        "source",
+        "constraint_digest",
+        "outline",
+        "copper_layers",
+        "nets",
+        "constraints",
+        "items"
+      ],
+      "properties": {
+        "units": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["distance", "angle"],
+          "properties": {
+            "distance": { "const": "nm" },
+            "angle": { "const": "udeg" }
+          }
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["format", "revision", "format_version", "generator"],
+          "properties": {
+            "format": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "revision": { "$ref": "#/$defs/digest" },
+            "format_version": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "generator": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 }
+          }
+        },
+        "constraint_digest": { "$ref": "#/$defs/digest" },
+        "outline": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contours"],
+          "properties": {
+            "contours": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 10000,
+              "items": { "$ref": "#/$defs/contour" }
+            }
+          }
+        },
+        "copper_layers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/layer" }
+        },
+        "nets": {
+          "type": "array",
+          "maxItems": 250000,
+          "items": { "$ref": "#/$defs/net" }
+        },
+        "constraints": { "$ref": "#/$defs/constraints" },
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pads", "vias", "segments", "arcs", "zones", "keepouts"],
+          "properties": {
+            "pads": { "type": "array", "maxItems": 250000, "items": { "$ref": "#/$defs/pad" } },
+            "vias": { "type": "array", "maxItems": 250000, "items": { "$ref": "#/$defs/via" } },
+            "segments": {
+              "type": "array",
+              "maxItems": 250000,
+              "items": { "$ref": "#/$defs/segment" }
+            },
+            "arcs": { "type": "array", "maxItems": 250000, "items": { "$ref": "#/$defs/arc" } },
+            "zones": { "type": "array", "maxItems": 250000, "items": { "$ref": "#/$defs/zone" } },
+            "keepouts": {
+              "type": "array",
+              "maxItems": 250000,
+              "items": { "$ref": "#/$defs/keepout" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

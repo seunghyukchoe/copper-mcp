@@ -6,6 +6,14 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Canonical Board IR `0.1.0` with integer nanometre/microdegree geometry, typed routing constraints,
+  strict canonical JSON, semantic and snapshot digests, bounded decoding, and a versioned JSON Schema.
+- A bounded, read-only, fail-closed KiCad converter for the documented rectangular-outline subset,
+  plus golden valid/invalid JSON and synthetic source fixtures and explicit architecture/ADR
+  documentation. This converter does not route, mutate, preview, or apply board changes.
+
 ### Changed
 
 - CodeQL `init`, `analyze`, and SARIF upload now move as one pinned v4 suite, and Dependabot groups

@@ -21,7 +21,7 @@ pre-commit install --install-hooks
 
 | Command | Purpose |
 |---|---|
-| `make test` | Fast dependency-light unit suite. |
+| `make test` | Pytest unit and contract suite. |
 | `make lint` | Ruff plus version and ledger structure. |
 | `make typecheck` | Strict static typing. |
 | `make security` | Secret and dependency audit. |
@@ -42,6 +42,47 @@ global-library dependencies may make DRC results host-dependent and must be decl
 provenance. Tune `COPPER_MCP_MAX_DRC_CONTEXT_BYTES` only after reviewing the workspace scope.
 File-count and discovery-time ceilings are separately configurable through
 `COPPER_MCP_MAX_DRC_CONTEXT_FILES` and `COPPER_MCP_MAX_DRC_CONTEXT_SCAN_SECONDS`.
+
+## Board IR development
+
+Board IR `0.1.0` is a strict public contract. Start with
+[`docs/architecture/board-ir.md`](architecture/board-ir.md),
+[`ADR-0005`](adr/0005-canonical-board-ir.md), and the
+[`0.1.0` JSON Schema](../schemas/board-ir/0.1.0.schema.json).
+
+The pure domain API is exported by `copper_mcp.board_ir`. Use `make_content` and `make_snapshot` for
+programmatic construction, `encode_snapshot` for byte-stable JSON, and `decode_snapshot_json` for
+untrusted bytes. Do not hand-build digest fields: construction computes the semantic constraint
+digest, and decoding verifies both that digest and the snapshot digest.
+
+The current KiCad entry point is `parse_kicad_bytes(source, profile, limits)`. It accepts source
+bytes and a separate typed `KiCadConstraintProfile`, then returns a fail-closed `ConversionResult`.
+It is intentionally not a filesystem writer or a route/apply service. A missing snapshot or error
+diagnostic must stop downstream work; never continue with a partial board.
+
+When extending the model or adapter:
+
+1. Decide whether canonical meaning changes. If it does, follow the versioning process in ADR-0005
+   rather than changing `0.1.0` in place.
+2. Preserve exact integer conversion and reject geometry that cannot be represented without an
+   explicit, reviewed rule.
+3. Add valid and invalid fixtures for the construct, including budget and malformed-input cases.
+4. Add deterministic encode/decode, digest, geometry, and fail-closed adapter tests.
+5. Update the accepted/rejected support matrix, decision/risk ledgers when applicable, and changelog.
+
+Tests must use synthetic or redistributable fixtures. Private boards, raw diagnostic content, and
+source bytes must not be copied into logs, snapshots, or MCP responses.
+
+Run the instrumented CopperTone conversion benchmark from the repository root:
+
+```bash
+PYTHONPATH=src python scripts/benchmark_board_ir.py --iterations 7 --warmups 2
+```
+
+The JSON report records the exact commit and dirty state, input and snapshot digests, object counts,
+structural limits, timing samples, and incremental peak memory while `tracemalloc` is enabled. This
+measures KiCad-to-Board-IR conversion only; it is not an autorouting performance result. Check in a
+result only from a clean tree and append, rather than replacing, benchmark evidence.
 
 ## Adding a public contract
 

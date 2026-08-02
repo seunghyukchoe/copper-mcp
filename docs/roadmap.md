@@ -16,7 +16,9 @@ documentation, ledger updates, and benchmark evidence.
 ## M1 — KiCad inspection and validation
 
 - [ ] Official `kicad-python` IPC plugin.
-- [ ] Canonical Board IR with integer units and typed constraints.
+- [x] Canonical Board IR v0.1 contract with integer units, typed constraints, strict codecs, and
+  content digests.
+- [ ] Broader KiCad geometry/rule coverage and Board IR application-service/MCP exposure.
 - [x] Headless `kicad-cli pcb drc --format json` validation.
 - [ ] Candidate preview without mutation.
 - [x] Version-skew and stale-board tests for the DRC adapter.
