@@ -13,11 +13,26 @@ notes, build attestations, and an append-only release ledger.
 6. Complete the release-ledger row, including validation and security status.
 7. Run `python scripts/check_version.py --tag vX.Y.Z`.
 
+## Dry run
+
+Before creating a tag, run the release verifier against the intended version from `main`:
+
+```bash
+gh workflow run release.yml --ref main -f version=vX.Y.Z
+gh run watch
+```
+
+The manual workflow runs the version check, complete test and security gate, and distribution build,
+then retains the artifacts for 14 days. It cannot attest or publish a GitHub release. The `publish`
+job is restricted to a pushed `v*.*.*` tag, so reviewing dry-run artifacts does not create a public
+release or a release attestation.
+
 ## Publish
 
 1. Merge the release pull request to `main`.
 2. Create and push an annotated tag: `git tag -a vX.Y.Z -m "CopperMCP X.Y.Z"`.
-3. The release workflow rebuilds, tests, audits, attests, and creates the GitHub release.
+3. The tag-triggered release workflow rebuilds, tests, audits, attests, and creates the GitHub
+   release.
 4. Verify checksums, provenance, generated notes, and downloadable artifacts.
 
 Publishing to PyPI is intentionally disabled until package ownership, trusted publishing, and a
