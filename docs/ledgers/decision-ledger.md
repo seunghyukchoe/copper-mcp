@@ -9,3 +9,4 @@
 | D-005 | 2026-08-03 | Accepted | Use fixed-argument KiCad JSON DRC as the authoritative validation gate. | [ADR-0004](../adr/0004-authoritative-kicad-drc.md) |
 | D-006 | 2026-08-03 | Accepted | Permit manual release verification, but restrict attestation and publication to version-tag pushes. | `.github/workflows/release.yml` |
 | D-007 | 2026-08-03 | Accepted | Publish audio hardware labs under a separate open-hardware license with explicit evidence limits; DRC and artifact checks never imply fabrication approval. | [`hardware/coppertone-buffer/README.md`](../../hardware/coppertone-buffer/README.md) |
+| D-008 | 2026-08-03 | Accepted | Make hardware snapshot validation read-only by default; replacement of tracked manufacturing evidence requires an explicit refresh operation. | [`hardware/coppertone-buffer/validate.sh`](../../hardware/coppertone-buffer/validate.sh) |

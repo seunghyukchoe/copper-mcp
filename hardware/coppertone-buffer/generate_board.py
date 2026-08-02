@@ -12,16 +12,19 @@ the authoritative KiCad checks and exports.
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import UUID, uuid5
 
 ROOT = Path(__file__).resolve().parent
 BOARD_PATH = ROOT / "coppertone-buffer.kicad_pcb"
 PROJECT_PATH = ROOT / "coppertone-buffer.kicad_pro"
 METRICS_PATH = ROOT / "metrics.json"
+UUID_NAMESPACE = UUID("c7d2f477-f367-5e7b-98c6-95b1ec8781c6")
 
 
 NETS: dict[str, int] = {
@@ -48,13 +51,21 @@ def f(value: float) -> str:
     return f"{value:.4f}".rstrip("0").rstrip(".")
 
 
+def stable_uuid(*parts: object) -> str:
+    """Return a stable UUID for one semantic board object."""
+
+    key = "\x1f".join(str(part) for part in parts)
+    return str(uuid5(UUID_NAMESPACE, key))
+
+
 def effects(size: float = 1.0, thickness: float = 0.15) -> str:
     return f"(effects (font (size {f(size)} {f(size)}) (thickness {f(thickness)})))"
 
 
-def property_text(name: str, value: str, y: float) -> str:
+def property_text(owner: str, name: str, value: str, y: float) -> str:
     return (
-        f'    (property "{name}" "{value}" (at 0 {f(y)} 0) (layer "F.Fab") (hide yes) {effects()})'
+        f'    (property "{name}" "{value}" (at 0 {f(y)} 0) (layer "F.Fab") '
+        f'(hide yes) (uuid "{stable_uuid("property", owner, name)}") {effects()})'
     )
 
 
@@ -71,6 +82,7 @@ def pad_net(name: str) -> str:
 
 
 def smd_pad(
+    owner: str,
     number: str,
     x: float,
     y: float,
@@ -84,11 +96,13 @@ def smd_pad(
     return (
         f'    (pad "{number}" smd {shape} (at {f(x)} {f(y)}) '
         f'(size {f(sx)} {f(sy)}) (layers "F.Cu" "F.Paste" "F.Mask") '
-        f'{ratio} {pad_net(net)} (pintype "passive"))'
+        f'{ratio} {pad_net(net)} (pintype "passive") '
+        f'(uuid "{stable_uuid("pad", owner, number)}"))'
     )
 
 
 def tht_pad(
+    owner: str,
     number: str,
     x: float,
     y: float,
@@ -105,7 +119,7 @@ def tht_pad(
         f'    (pad "{number}" thru_hole {shape} '
         f"(at {f(x)} {f(y)}{rotation}) (size {f(sx)} {f(sy)}) "
         f'(drill {drill}) (layers "*.Cu" "*.Mask") {pad_net(net)} '
-        '(pintype "passive"))'
+        f'(pintype "passive") (uuid "{stable_uuid("pad", owner, number)}"))'
     )
 
 
@@ -113,9 +127,12 @@ def footprint_start(name: str, ref: str, value: str, x: float, y: float, rot: fl
     return [
         f'  (footprint "CopperTone_{name}"',
         '    (layer "F.Cu")',
+        f'    (uuid "{stable_uuid("footprint", ref)}")',
         f"    (at {f(x)} {f(y)} {f(rot)})",
-        property_text("Reference", ref, -2.0),
-        property_text("Value", value, 2.0),
+        property_text(ref, "Reference", ref, -2.0),
+        property_text(ref, "Value", value, 2.0),
+        property_text(ref, "Datasheet", "", 0.0),
+        property_text(ref, "Description", "", 0.0),
     ]
 
 
@@ -125,9 +142,10 @@ def resistor(ref: str, value: str, x: float, y: float, rot: float, n1: str, n2: 
         [
             "    (attr smd)",
             "    (fp_rect (start -1.5 -0.9) (end 1.5 0.9) "
-            '(stroke (width 0.1) (type default)) (fill none) (layer "F.Fab"))',
-            smd_pad("1", -1.2, 0, 1.2, 1.4, n1),
-            smd_pad("2", 1.2, 0, 1.2, 1.4, n2),
+            f'(stroke (width 0.1) (type default)) (fill none) (layer "F.Fab") '
+            f'(uuid "{stable_uuid("fp-graphic", ref, "outline")}"))',
+            smd_pad(ref, "1", -1.2, 0, 1.2, 1.4, n1),
+            smd_pad(ref, "2", 1.2, 0, 1.2, 1.4, n2),
             model("Resistor_SMD.3dshapes/R_0805_2012Metric.step"),
             "  )",
         ]
@@ -141,9 +159,10 @@ def ceramic_cap(ref: str, value: str, x: float, y: float, rot: float, n1: str, n
         [
             "    (attr smd)",
             "    (fp_rect (start -1.5 -0.9) (end 1.5 0.9) "
-            '(stroke (width 0.1) (type default)) (fill none) (layer "F.Fab"))',
-            smd_pad("1", -1.2, 0, 1.2, 1.4, n1),
-            smd_pad("2", 1.2, 0, 1.2, 1.4, n2),
+            f'(stroke (width 0.1) (type default)) (fill none) (layer "F.Fab") '
+            f'(uuid "{stable_uuid("fp-graphic", ref, "outline")}"))',
+            smd_pad(ref, "1", -1.2, 0, 1.2, 1.4, n1),
+            smd_pad(ref, "2", 1.2, 0, 1.2, 1.4, n2),
             model("Capacitor_SMD.3dshapes/C_0805_2012Metric.step"),
             "  )",
         ]
@@ -173,9 +192,10 @@ def electrolytic(
         [
             "    (attr smd)",
             f"    (fp_circle (center 0 0) (end {f(diameter / 2)} 0) "
-            '(stroke (width 0.1) (type default)) (fill none) (layer "F.Fab"))',
-            smd_pad("1", -pitch, 0, pad_x, 1.6, n_positive),
-            smd_pad("2", pitch, 0, pad_x, 1.6, n_negative),
+            f'(stroke (width 0.1) (type default)) (fill none) (layer "F.Fab") '
+            f'(uuid "{stable_uuid("fp-graphic", ref, "outline")}"))',
+            smd_pad(ref, "1", -pitch, 0, pad_x, 1.6, n_positive),
+            smd_pad(ref, "2", pitch, 0, pad_x, 1.6, n_negative),
             model(f"Capacitor_SMD.3dshapes/{model_name}.step"),
             "  )",
         ]
@@ -189,9 +209,10 @@ def film_cap(ref: str, x: float, y: float, n1: str, n2: str) -> str:
         [
             "    (attr through_hole)",
             "    (fp_rect (start -1.1 -1.75) (end 6.1 1.75) "
-            '(stroke (width 0.1) (type default)) (fill none) (layer "F.Fab"))',
-            tht_pad("1", 0, 0, 1.6, 1.6, "0.8", n1, shape="circle"),
-            tht_pad("2", 5, 0, 1.6, 1.6, "0.8", n2, shape="circle"),
+            f'(stroke (width 0.1) (type default)) (fill none) (layer "F.Fab") '
+            f'(uuid "{stable_uuid("fp-graphic", ref, "outline")}"))',
+            tht_pad(ref, "1", 0, 0, 1.6, 1.6, "0.8", n1, shape="circle"),
+            tht_pad(ref, "2", 5, 0, 1.6, 1.6, "0.8", n2, shape="circle"),
             model("Capacitor_THT.3dshapes/C_Rect_L7.2mm_W3.5mm_P5.00mm_FKS2_FKP2_MKS2_MKP2.step"),
             "  )",
         ]
@@ -205,9 +226,10 @@ def diode(ref: str, x: float, y: float, rot: float) -> str:
         [
             "    (attr smd)",
             "    (fp_rect (start -2.6 -1.3) (end 2.6 1.3) "
-            '(stroke (width 0.1) (type default)) (fill none) (layer "F.Fab"))',
-            smd_pad("1", -2, 0, 2.5, 1.8, "VCC"),
-            smd_pad("2", 2, 0, 2.5, 1.8, "9V_RAW"),
+            f'(stroke (width 0.1) (type default)) (fill none) (layer "F.Fab") '
+            f'(uuid "{stable_uuid("fp-graphic", ref, "outline")}"))',
+            smd_pad(ref, "1", -2, 0, 2.5, 1.8, "VCC"),
+            smd_pad(ref, "2", 2, 0, 2.5, 1.8, "9V_RAW"),
             model("Diode_SMD.3dshapes/D_SMA.step"),
             "  )",
         ]
@@ -241,11 +263,12 @@ def opamp(x: float, y: float, rot: float) -> str:
         [
             "    (attr smd)",
             "    (fp_rect (start -1.95 -2.45) (end 1.95 2.45) "
-            '(stroke (width 0.1) (type default)) (fill none) (layer "F.Fab"))',
+            f'(stroke (width 0.1) (type default)) (fill none) (layer "F.Fab") '
+            f'(uuid "{stable_uuid("fp-graphic", "U1", "outline")}"))',
         ]
     )
     for number, (px, py) in positions.items():
-        lines.append(smd_pad(number, px, py, 0.6, 1.95, pad_nets[number]))
+        lines.append(smd_pad("U1", number, px, py, 0.6, 1.95, pad_nets[number]))
     lines.extend(
         [
             model("Package_SO.3dshapes/SOIC-8_3.9x4.9mm_P1.27mm.step"),
@@ -261,10 +284,11 @@ def audio_jack(ref: str, x: float, y: float, rot: float, ring: str, tip: str) ->
         [
             "    (attr through_hole)",
             "    (fp_rect (start -1.8 -5.75) (end 12.2 5.75) "
-            '(stroke (width 0.1) (type default)) (fill none) (layer "F.Fab"))',
-            tht_pad("R", 8.3, -5, 3, 1.5, "oval 2 1", ring),
-            tht_pad("S", 0, 0, 3.5, 2.5, "oval 2 1", "GND", at_rotation=270),
-            tht_pad("T", 3.5, 4.5, 3.5, 2.5, "oval 2 1", tip),
+            f'(stroke (width 0.1) (type default)) (fill none) (layer "F.Fab") '
+            f'(uuid "{stable_uuid("fp-graphic", ref, "outline")}"))',
+            tht_pad(ref, "R", 8.3, -5, 3, 1.5, "oval 2 1", ring),
+            tht_pad(ref, "S", 0, 0, 3.5, 2.5, "oval 2 1", "GND", at_rotation=270),
+            tht_pad(ref, "T", 3.5, 4.5, 3.5, 2.5, "oval 2 1", tip),
             "  )",
         ]
     )
@@ -277,9 +301,10 @@ def power_header() -> str:
         [
             "    (attr through_hole)",
             "    (fp_rect (start -1.27 -1.27) (end 1.27 3.81) "
-            '(stroke (width 0.1) (type default)) (fill none) (layer "F.Fab"))',
-            tht_pad("1", 0, 0, 1.7, 1.7, "1", "9V_RAW", shape="rect"),
-            tht_pad("2", 0, 2.54, 1.7, 1.7, "1", "GND", shape="circle"),
+            f'(stroke (width 0.1) (type default)) (fill none) (layer "F.Fab") '
+            f'(uuid "{stable_uuid("fp-graphic", "J3", "outline")}"))',
+            tht_pad("J3", "1", 0, 0, 1.7, 1.7, "1", "9V_RAW", shape="rect"),
+            tht_pad("J3", "2", 0, 2.54, 1.7, 1.7, "1", "GND", shape="circle"),
             model("Connector_PinHeader_2.54mm.3dshapes/PinHeader_1x02_P2.54mm_Vertical.step"),
             "  )",
         ]
@@ -292,7 +317,7 @@ def testpoint(ref: str, x: float, y: float, net: str) -> str:
     lines.extend(
         [
             "    (attr through_hole)",
-            tht_pad("1", 0, 0, 2, 2, "1", net, shape="circle"),
+            tht_pad(ref, "1", 0, 0, 2, 2, "1", net, shape="circle"),
             "  )",
         ]
     )
@@ -305,9 +330,11 @@ def mounting_hole(ref: str, x: float, y: float) -> str:
         [
             "    (attr exclude_from_pos_files exclude_from_bom)",
             "    (fp_circle (center 0 0) (end 2.85 0) "
-            '(stroke (width 0.1) (type default)) (fill none) (layer "F.Fab"))',
+            f'(stroke (width 0.1) (type default)) (fill none) (layer "F.Fab") '
+            f'(uuid "{stable_uuid("fp-graphic", ref, "outline")}"))',
             '    (pad "" np_thru_hole circle (at 0 0) (size 2.7 2.7) '
-            '(drill 2.7) (layers "*.Cu" "*.Mask"))',
+            f'(drill 2.7) (layers "*.Cu" "*.Mask") '
+            f'(uuid "{stable_uuid("pad", ref, "mounting")}"))',
             "  )",
         ]
     )
@@ -326,7 +353,8 @@ class Route:
             yield (
                 f"  (segment (start {f(start[0])} {f(start[1])}) "
                 f"(end {f(end[0])} {f(end[1])}) (width {f(self.width)}) "
-                f'(layer "{self.layer}") (net {NETS[self.net]}))'
+                f'(layer "{self.layer}") (net {NETS[self.net]}) '
+                f'(uuid "{stable_uuid("segment", self.net, self.layer, *start, *end)}"))'
             )
 
     def length(self) -> float:
@@ -373,7 +401,8 @@ ROUTES: tuple[Route, ...] = (
 def via(x: float, y: float, net: str, *, size: float = 0.8, drill: float = 0.4) -> str:
     return (
         f"  (via (at {f(x)} {f(y)}) (size {f(size)}) (drill {f(drill)}) "
-        f'(layers "F.Cu" "B.Cu") (net {NETS[net]}))'
+        f'(layers "F.Cu" "B.Cu") (net {NETS[net]}) '
+        f'(uuid "{stable_uuid("via", net, x, y)}"))'
     )
 
 
@@ -389,7 +418,8 @@ def keepout(cx: float, cy: float) -> str:
         "(hatch full 0.5) (connect_pads (clearance 0)) (min_thickness 0.25) "
         "(keepout (tracks not_allowed) (vias not_allowed) (pads allowed) "
         "(copperpour not_allowed) (footprints allowed)) "
-        f"(fill (thermal_gap 0.3) (thermal_bridge_width 0.3)) (polygon (pts {pts})))"
+        f"(fill (thermal_gap 0.3) (thermal_bridge_width 0.3)) (polygon (pts {pts})) "
+        f'(uuid "{stable_uuid("keepout", cx, cy)}"))'
     )
 
 
@@ -400,7 +430,8 @@ def copper_zone(layer: str) -> str:
         "(min_thickness 0.25) (fill yes (thermal_gap 0.3) "
         "(island_removal_mode 0) "
         "(thermal_bridge_width 0.3)) (polygon (pts "
-        "(xy 0.5 0.5) (xy 51.5 0.5) (xy 51.5 29.5) (xy 0.5 29.5))))"
+        "(xy 0.5 0.5) (xy 51.5 0.5) (xy 51.5 29.5) (xy 0.5 29.5))) "
+        f'(uuid "{stable_uuid("zone", layer)}"))'
     )
 
 
@@ -460,14 +491,19 @@ def board_text() -> str:
     lines.extend(
         [
             "  (gr_rect (start 0 0) (end 52 30) "
-            '(stroke (width 0.1) (type default)) (fill none) (layer "Edge.Cuts"))',
+            f'(stroke (width 0.1) (type default)) (fill none) (layer "Edge.Cuts") '
+            f'(uuid "{stable_uuid("graphic", "outline")}"))',
             '  (gr_text "CopperTone v0.1 — BOARD-FIRST PREVIEW" (at 26 28) '
-            '(layer "F.SilkS") (effects (font (size 1.2 1.2) (thickness 0.2))))',
+            f'(layer "F.SilkS") (uuid "{stable_uuid("graphic", "preview-label")}") '
+            "(effects (font (size 1.2 1.2) (thickness 0.2))))",
             '  (gr_text "9V ONLY" (at 36 2) (layer "F.SilkS") '
+            f'(uuid "{stable_uuid("graphic", "power-label")}") '
             "(effects (font (size 1 1) (thickness 0.18))))",
             '  (gr_text "IN" (at 4 23) (layer "F.SilkS") '
+            f'(uuid "{stable_uuid("graphic", "input-label")}") '
             "(effects (font (size 1 1) (thickness 0.18))))",
             '  (gr_text "OUT" (at 48 23) (layer "F.SilkS") '
+            f'(uuid "{stable_uuid("graphic", "output-label")}") '
             "(effects (font (size 1 1) (thickness 0.18))))",
         ]
     )
@@ -613,12 +649,25 @@ def metrics_data() -> dict[str, object]:
     }
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=ROOT,
+        help="directory for generated board, project, and metrics files",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
-    BOARD_PATH.write_text(board_text(), encoding="utf-8")
-    PROJECT_PATH.write_text(
+    output_dir = parse_args().output_dir.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / BOARD_PATH.name).write_text(board_text(), encoding="utf-8")
+    (output_dir / PROJECT_PATH.name).write_text(
         json.dumps(project_data(), indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    METRICS_PATH.write_text(
+    (output_dir / METRICS_PATH.name).write_text(
         json.dumps(metrics_data(), indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
 

@@ -5,17 +5,22 @@ It is evidence for a board-file preview, not approval to fabricate.
 
 ## 2026-08-03 — KiCad 10.0.5 reference run
 
-Command, from this directory's parent repository:
+Snapshot refresh command, from this directory's parent repository:
 
 ```sh
-hardware/coppertone-buffer/validate.sh
+hardware/coppertone-buffer/validate.sh --refresh-artifacts
 ```
 
 Result: **pass** (process exit 0).
 
+The default `hardware/coppertone-buffer/validate.sh` command also passed. It
+verified every recorded artifact hash, rebuilt and refilled the deterministic
+board in a temporary directory, reran DRC and statistics, compared semantic
+evidence while ignoring only report dates, and did not modify tracked files.
+
 | Check or export | Observed result |
 | --- | --- |
-| PCB parse and zone refill | Pass; board saved after refill |
+| PCB parse and zone refill | Pass; release snapshot saved after explicit refresh; default replay saved only to a temporary directory |
 | DRC included severities | Error, warning, exclusion |
 | DRC violations | 0 |
 | Unconnected items | 0 |

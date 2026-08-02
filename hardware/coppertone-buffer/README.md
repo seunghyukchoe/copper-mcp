@@ -35,7 +35,7 @@ The estimates above are first-order calculations, not specifications or
 measurements. See [`constraints.yaml`](constraints.yaml) and
 [`validation/README.md`](validation/README.md) for the exact validation gates.
 
-## Reproduce the design and outputs
+## Verify the checked-in snapshot
 
 Install KiCad 10 and Python 3.11 or newer, then run:
 
@@ -44,8 +44,19 @@ Install KiCad 10 and Python 3.11 or newer, then run:
 ```
 
 Set `KICAD_CLI=/absolute/path/to/kicad-cli` if the CLI is not on `PATH`. The
-script regenerates the PCB, refills zones, fails on any DRC warning or error,
-and exports:
+default command is read-only with respect to this directory. It verifies every
+checked-in SHA-256 digest, rebuilds the board in a temporary directory using
+stable semantic UUIDs, refills zones, fails on any DRC warning or error, and
+compares the regenerated board, project, metrics, DRC, and statistics with the
+snapshot while ignoring only KiCad's report timestamp.
+
+To intentionally refresh the public release artifacts, run:
+
+```sh
+./validate.sh --refresh-artifacts
+```
+
+That explicit maintenance mode updates:
 
 - DRC JSON and board statistics under `validation/`;
 - Gerber and Excellon files under `manufacturing/`;
@@ -54,8 +65,10 @@ and exports:
 - SHA-256 hashes in `validation/SHA256SUMS`.
 
 `generate_board.py` is the preferred editable source for this preview. The
-checked-in `.kicad_pcb` is its generated, zone-filled result. The generator is
-deterministic until KiCad refills zones and may be regenerated at any time.
+checked-in `.kicad_pcb` is its generated, zone-filled result. Semantic UUIDv5
+identities keep the native board serialization stable across identical refreshes.
+Other KiCad exports include volatile creation metadata, so refresh their recorded
+hashes only when intentionally publishing a new evidence snapshot.
 
 ## Circuit walk-through
 

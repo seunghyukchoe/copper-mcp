@@ -45,4 +45,9 @@ qualification. The BOM therefore keeps all orderable parts at `VERIFY` or
 `coppertone-buffer.kicad_pcb`, `coppertone-buffer.kicad_pro`, `metrics.json`,
 the `manufacturing/`, `mechanical/`, `media/`, and machine-readable validation
 outputs are derived from `generate_board.py` plus KiCad 10.0.5. Hashes are
-recorded in `validation/SHA256SUMS`.
+recorded in `validation/SHA256SUMS`. The generator derives native KiCad object
+identities with UUIDv5 from semantic object keys so an unchanged board does not
+receive fresh random identities on each replay. KiCad export files still carry
+volatile creation metadata; `validate.sh` therefore verifies the committed
+snapshot read-only by default, while `--refresh-artifacts` is the explicit
+operation that replaces public evidence and its hashes.

@@ -6,6 +6,12 @@ Versioning-style preview identifiers. It does not imply fabrication approval.
 
 ## [Unreleased]
 
+### Changed
+
+- Native board objects now use stable semantic UUIDv5 identities.
+- Default validation rebuilds and checks the snapshot in a temporary directory;
+  tracked artifacts change only through the explicit `--refresh-artifacts` mode.
+
 ### Required
 
 - Source schematic, ERC, and PCB/schematic parity validation.
