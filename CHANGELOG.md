@@ -6,6 +6,11 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- CodeQL `init`, `analyze`, and SARIF upload now move as one pinned v4 suite, and Dependabot groups
+  future CodeQL suite updates so incompatible action generations cannot be proposed separately.
+
 ### Fixed
 
 - The tag-only publish job now passes its repository explicitly when creating a GitHub release, so
