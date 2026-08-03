@@ -20,7 +20,6 @@ from copper_mcp.board_ir.canonical import make_content, make_snapshot
 from copper_mcp.board_ir.diagnostics import ConversionResult, Diagnostic, Severity
 from copper_mcp.board_ir.limits import ParseLimits
 from copper_mcp.board_ir.types import (
-    FULL_ROTATION_UDEG,
     JSON_SAFE_INTEGER,
     Arc,
     ConstraintSet,
@@ -874,10 +873,21 @@ class _Converter:
                     self._mm(pad_at[1], f"{locator}.at.y"),
                 )
                 center = self._transform(local, origin, turn, locator)
-                pad_rotation = self._rotation(
+                # A pad's *position* is footprint-local and must be transformed by the
+                # footprint's placement, which `_transform` above does. Its *orientation* is
+                # not: KiCad stores the pad angle already resolved into the board frame and
+                # rewrites every pad angle when a footprint is rotated, so adding the
+                # footprint rotation here counted it twice and transposed the extents of
+                # every non-square pad on a rotated footprint.
+                #
+                # Established by experiment against KiCad 10.0.5 rather than from the format
+                # documentation: a 4mm x 1mm pad at `(at 3 0)` inside a footprint placed at
+                # 90 degrees is drawn by `kicad-cli pcb export svg` at the rotated position
+                # (30, 7) but with its extents still 4mm x 1mm. Position rotates, shape does
+                # not. `tests/test_kicad_board_ir.py` pins this against KiCad's own renderer.
+                rotation = self._rotation(
                     pad_at[2] if len(pad_at) == 3 else "0", f"{locator}.at.rotation"
                 )
-                rotation = (footprint_rotation + pad_rotation) % FULL_ROTATION_UDEG
                 size = self._values(pad, "size", locator, minimum=2, maximum=2)
                 size_x = self._mm(size[0], f"{locator}.size.x")
                 size_y = self._mm(size[1], f"{locator}.size.y")

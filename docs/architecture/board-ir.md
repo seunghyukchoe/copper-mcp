@@ -70,8 +70,13 @@ board. The schema is the field-level reference.
   footprint-local point `(x, y)` to `(y, -x)`, not `(-y, x)`. The two differ by a mirror and agree at
   0 and 180 degrees, so an error here is invisible on half of all boards; the KiCad adapter's map is
   pinned by a fixture whose expected pad positions are adjudicated by KiCad's own connectivity
-  engine. Pad `rotation_udeg` is the sum of the footprint and pad angles, which is a rotation
-  composition and so carries no coordinate-frame sign.
+  engine. Pad `rotation_udeg` is the pad's angle **as written**, not the sum of the footprint and
+  pad angles: KiCad resolves a pad's orientation into the board frame and rewrites every pad angle
+  when a footprint is rotated, so a footprint's placement turns where its pads *are* without
+  turning what shape they present. Adding the two counted the turn twice and transposed the extents
+  of every non-square pad on a rotated footprint. The convention is pinned against KiCad's own
+  plotted geometry rather than against the format documentation, by exporting the fixture with
+  `kicad-cli pcb export svg` and comparing drawn extents.
 - Integers are capped at `2^53 - 1` in magnitude so JSON consumers do not lose precision. Positive
   widths, diameters, and drills cannot be zero; typed non-negative values may be zero.
 - Millimetre/degree source tokens use ordinary decimal notation and must convert exactly. There is no

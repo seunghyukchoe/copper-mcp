@@ -25,6 +25,7 @@ from copper_mcp.circuit_scene import (
 )
 from copper_mcp.config import Settings
 from copper_mcp.mcp_contracts import CircuitSceneToolResponse
+from copper_mcp.request_boundary import MAX_JSON_SAFE_INTEGER
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "circuit-scene-v0.1"
@@ -389,6 +390,198 @@ class CopperToneScaleTests(unittest.TestCase):
     def test_every_reference_on_the_real_board_is_natively_stable(self) -> None:
         document = _observe("coppertone-buffer.kicad_pcb", workspace=COPPERTONE)
         self.assertTrue(document["ref_stability"]["all_board_refs_native"])
+
+
+BOUNDS_BOARD = "scene-bounds.kicad_pcb"
+
+
+class BoundsFindingTests(unittest.TestCase):
+    """Region bounds must over-approximate. Missing an object is the unrecoverable error."""
+
+    def test_a_region_touching_only_an_arc_bulge_still_returns_the_arc(self) -> None:
+        """The arc bows past all three of the points that used to define its bounds.
+
+        Its circle is centred (55, 25) with radius 25, so the sweep reaches y = 50mm, while
+        start, middle and end top out at y = 49mm. A window in that 1mm band contains real
+        copper, and bounding the arc by its sample points alone reported the band as empty.
+        """
+
+        window = {
+            "min_x_nm": 40_000_000,
+            "min_y_nm": 49_500_000,
+            "max_x_nm": 70_000_000,
+            "max_y_nm": 50_500_000,
+        }
+        document = _observe(BOUNDS_BOARD, region=window)
+        self.assertEqual(len(document["mutable"]["arcs"]), 1)
+
+        # Guard the guard: the old start/mid/end box must genuinely miss this window, or the
+        # assertion above would pass for a board that never exercised the defect.
+        naive_max_y = 49_000_000 + 200_000
+        self.assertLess(naive_max_y, window["min_y_nm"])
+
+    def test_an_arc_is_not_returned_for_a_window_it_genuinely_misses(self) -> None:
+        """Guard the guard: over-approximating must not degrade into returning everything."""
+
+        document = _observe(
+            BOUNDS_BOARD,
+            region={
+                "min_x_nm": 0,
+                "min_y_nm": 0,
+                "max_x_nm": 20_000_000,
+                "max_y_nm": 10_000_000,
+            },
+        )
+        self.assertEqual(document["mutable"]["arcs"], [])
+
+    def test_an_obliquely_rotated_pad_is_bounded_by_a_box_that_contains_it(self) -> None:
+        """A 45-degree pad is not a quadrant swap.
+
+        Board IR accepts any pad angle - KiCad only restricts *footprint* transforms to
+        quarter turns - so swapping width and height on quadrant parity under-bounds every
+        oblique pad. This 8mm x 1mm pad at 45 degrees really spans about 6.4mm on each axis,
+        which a 1mm x 8mm swap does not cover.
+        """
+
+        import math
+
+        whole = _observe(BOUNDS_BOARD)
+        pad = next(
+            item
+            for item in whole["static"]["pads"]
+            if item["geometry"]["rotation_udeg"] == 45_000_000
+        )
+        centre_x, centre_y = pad["geometry"]["center_nm"]
+        width, height = pad["geometry"]["size_nm"]
+
+        angle = math.radians(45.0)
+        corners = [
+            (
+                centre_x + dx * width / 2 * math.cos(angle) - dy * height / 2 * math.sin(angle),
+                centre_y + dx * width / 2 * math.sin(angle) + dy * height / 2 * math.cos(angle),
+            )
+            for dx in (-1, 1)
+            for dy in (-1, 1)
+        ]
+        span_x = max(x for x, _ in corners) - min(x for x, _ in corners)
+        self.assertGreater(span_x, 6_000_000, "the fixture pad must really be oblique")
+
+        # A window covering only the pad's true extent, but outside a quadrant-swapped box,
+        # must still find it.
+        edge = max(x for x, _ in corners)
+        document = _observe(
+            BOUNDS_BOARD,
+            region={
+                "min_x_nm": int(edge) - 100_000,
+                "min_y_nm": int(centre_y) - 100_000,
+                "max_x_nm": int(edge) + 100_000,
+                "max_y_nm": int(centre_y) + 100_000,
+            },
+        )
+        self.assertEqual(len(document["static"]["pads"]), 1)
+        self.assertEqual(document["static"]["pads"][0]["ref_id"], pad["ref_id"])
+
+    def test_an_around_ref_radius_cannot_push_the_window_out_of_range(self) -> None:
+        """Anchor and radius are each in range; their sum need not be."""
+
+        whole = _observe(BOUNDS_BOARD)
+        pad = whole["static"]["pads"][0]
+        document = _observe(
+            BOUNDS_BOARD,
+            region={"around_ref_id": pad["ref_id"], "radius_nm": MAX_JSON_SAFE_INTEGER},
+        )
+        region = document["region"]
+        # Only the upper edges overflow here: the anchor is a few millimetres from the
+        # origin, so subtracting the radius stays representable while adding it does not.
+        self.assertEqual(region["max_x_nm"], MAX_JSON_SAFE_INTEGER)
+        self.assertEqual(region["max_y_nm"], MAX_JSON_SAFE_INTEGER)
+        for name in ("min_x_nm", "min_y_nm", "max_x_nm", "max_y_nm"):
+            with self.subTest(bound=name):
+                self.assertGreaterEqual(region[name], -MAX_JSON_SAFE_INTEGER)
+                self.assertLessEqual(region[name], MAX_JSON_SAFE_INTEGER)
+        self.assertLess(region["min_x_nm"], 0, "the window really did expand")
+        # Clamping is lossless: a window already covering the coordinate range selects
+        # everything the board can contain.
+        self.assertEqual(
+            document["truncation"]["objects_returned"],
+            whole["truncation"]["objects_returned"],
+        )
+
+
+class ObjectDetailFindingTests(unittest.TestCase):
+    def test_a_roundrect_pad_reports_the_radius_that_defines_its_shape(self) -> None:
+        document = _observe(BOUNDS_BOARD)
+        radii = {
+            item["geometry"]["shape"]: item["geometry"]["roundrect_radius_nm"]
+            for item in document["static"]["pads"]
+        }
+        self.assertEqual(radii["roundrect"], 500_000)
+        self.assertIsNone(radii["rect"], "only roundrect pads carry a corner radius")
+
+    def test_locked_objects_are_flagged_without_leaving_the_mutable_partition(self) -> None:
+        """Lockedness is a property of an object, not a different kind of object.
+
+        Keeping locked copper in ``mutable`` means code that iterates the segments finds all
+        of them; a third partition would make the split non-exhaustive and quietly hide
+        copper from anything that only walked the two documented collections.
+        """
+
+        document = _observe(BOUNDS_BOARD)
+        segments = {item["ref_id"]: item["locked"] for item in document["mutable"]["segments"]}
+        self.assertEqual(len(segments), 2)
+        self.assertEqual(sorted(segments.values()), [False, True])
+
+    def test_kinds_without_lockedness_report_none_rather_than_false(self) -> None:
+        document = _observe(BOUNDS_BOARD)
+        for item in document["static"]["outline"] + document["static"]["rules"]:
+            with self.subTest(kind=item["kind"]):
+                self.assertIsNone(item["locked"])
+
+
+class AnnotationBudgetTests(unittest.TestCase):
+    def test_annotations_are_charged_against_a_ceiling(self) -> None:
+        settings = _settings(FIXTURES, max_scene_annotations=3)
+        document = observe_board_scene(
+            _request("scene-hostile-text.kicad_pcb", include_annotations=True), settings
+        ).to_dict()
+        CircuitSceneToolResponse.model_validate(document)
+        truncation = document["truncation"]
+        self.assertEqual(truncation["annotations_returned"], 3)
+        self.assertGreater(truncation["annotations_omitted"], 0)
+        self.assertEqual(len(document["annotations"]), 3)
+        self.assertEqual(truncation["ceiling_hit"], "max_scene_annotations")
+
+    def test_an_untruncated_annotation_set_says_so(self) -> None:
+        document = _observe("scene-hostile-text.kicad_pcb", include_annotations=True)
+        self.assertEqual(document["truncation"]["annotations_omitted"], 0)
+        self.assertEqual(
+            document["truncation"]["annotations_returned"], len(document["annotations"])
+        )
+        self.assertIsNone(document["truncation"]["ceiling_hit"])
+
+    def test_object_truncation_is_still_reported_when_annotations_also_truncate(self) -> None:
+        """Both budgets can bite at once, so the counts - not ceiling_hit - are the signal."""
+
+        settings = _settings(FIXTURES, max_scene_objects=2, max_scene_annotations=1)
+        document = observe_board_scene(
+            _request("scene-hostile-text.kicad_pcb", include_annotations=True), settings
+        ).to_dict()
+        CircuitSceneToolResponse.model_validate(document)
+        self.assertGreater(document["truncation"]["objects_omitted"], 0)
+        self.assertGreater(document["truncation"]["annotations_omitted"], 0)
+        self.assertEqual(document["truncation"]["ceiling_hit"], "max_scene_objects")
+
+    def test_the_default_ceiling_keeps_a_response_inside_its_own_contract(self) -> None:
+        """The contract caps the annotation list; the ceiling must be the tighter bound."""
+
+        contract = CircuitSceneToolResponse.model_fields["annotations"]
+        limits = [
+            getattr(item, "max_length", None)
+            for item in contract.metadata
+            if getattr(item, "max_length", None) is not None
+        ]
+        self.assertTrue(limits)
+        self.assertLessEqual(Settings(workspace=FIXTURES).max_scene_annotations, min(limits))
 
 
 if __name__ == "__main__":  # pragma: no cover

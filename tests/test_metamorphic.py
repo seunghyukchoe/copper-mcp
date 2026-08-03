@@ -533,16 +533,25 @@ def rotate_kicad_source(source: str, board_width_mm: float) -> str:
     for line in lines:
         stripped = line.strip()
         is_footprint_header = stripped.startswith("(footprint")
-        # A footprint's own (at ...) is a board coordinate and must move; a pad's (at ...) is
-        # one level deeper, expressed in the footprint's frame, and must not. Getting this
-        # backwards is the same confusion the y-down defect was made of.
+        # A footprint's own (at ...) is a board coordinate and must move; a pad's (at ...)
+        # position is one level deeper, expressed in the footprint's frame, and must not.
+        # Getting this backwards is the same confusion the y-down defect was made of. The
+        # pad's angle is the exception and is handled inside replace_at below.
         inside_footprint = footprint_depth is not None and depth > footprint_depth + 1
 
         def replace_at(match: re.Match[str], *, skip: bool = inside_footprint) -> str:
             x, y = float(match.group(1)), float(match.group(2))
             angle = match.group(3)
             if skip:
-                return match.group(0)
+                # A pad's *position* is footprint-local and does not move when the board
+                # turns. Its *angle* is not local: KiCad resolves pad angles into the board
+                # frame, so turning the board turns them with it. Leaving the angle alone
+                # here would build a board whose pads point the wrong way relative to their
+                # own footprint, and the relation would then be checking a fiction.
+                # An absent angle means zero, so a turn has to write one in - which is what
+                # KiCad itself does when it rotates a footprint whose pads carried none.
+                turned_angle = (float(angle or 0.0) + 90.0) % 360.0
+                return f"(at {_decimal(x)} {_decimal(y)} {_decimal(turned_angle)})"
             new_x, new_y = turn(x, y)
             if angle is None:
                 return f"(at {_decimal(new_x)} {_decimal(new_y)})"
@@ -619,7 +628,10 @@ def test_adapter_places_rotated_footprint_pads_equivariantly() -> None:
     for pad_id, pad in before.items():
         expected = PointNM(pad.center.y, width_nm - pad.center.x)
         assert after[pad_id].center == expected, pad_id
-        # A quarter turn flips which axis a non-square pad spans.
+        # A quarter turn flips which axis a non-square pad spans. Pad angles are absolute in
+        # the board frame, so the turned board must report each pad's angle advanced by
+        # exactly one quarter turn - no more, which is what the double-counted footprint
+        # rotation used to produce.
         assert after[pad_id].rotation_udeg == (pad.rotation_udeg + 90_000_000) % FULL_TURN_UDEG
 
 

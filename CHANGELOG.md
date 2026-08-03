@@ -6,6 +6,53 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Pad orientation was double-counted, transposing the extents of every non-square pad on a
+  rotated footprint.** A pad's angle in a KiCad file is already resolved into the board frame -
+  KiCad rewrites every pad angle when a footprint is rotated - so adding the footprint's rotation
+  on top counted the turn twice. Established against KiCad 10.0.5 rather than from documentation: a
+  4mm x 1mm pad written `(at 3 0)` inside a footprint placed at 90 degrees is drawn by
+  `kicad-cli pcb export svg` at the rotated position but with its extents still 4mm x 1mm. Position
+  rotates; shape does not.
+
+  **This changes geometry on boards with rotated non-square pads.** Pad cores feed routing
+  obstacles and same-net attachment, and pad bounds feed scene region queries, so proposals on such
+  boards may differ from previous releases. On this repository's own CopperTone board - where 30 of
+  55 pads are non-square with a non-zero angle - different-net pad bounding-box overlaps drop from
+  **6 to 1**, against `kicad-cli pcb drc` reporting zero violations; the single survivor is an
+  oval-against-roundrect pair whose *boxes* clip at a corner both shapes round away. Route coverage
+  is unchanged at 13 of 14 nets `already_connected` (`GND` still needs `include_fill_authority`),
+  and the scene still returns 123 objects.
+
+  The defect survived because the two test layers each missed the other's half: the adapter-level
+  rotation fixture contained only square pads, so it could not observe a transposition, while the
+  non-square metamorphic cases built `Pad` objects directly and never exercised the adapter. Both
+  are now closed - the fixture carries a non-square rotated pad, and a new oracle test compares
+  Board IR's pad extents against the geometry KiCad itself plots, which is the first test here that
+  checks the adapter against something other than itself.
+- Region bounds no longer under-report an arc. Bounding an arc by its start, middle and end points
+  ignores the bulge between them, so a window touching only the sweep was told the board was empty
+  there. The cardinal extrema the sweep actually crosses are now included, using exact integer
+  circumcentre and orientation arithmetic with no floating point; worst-case slack over 400
+  randomised arcs is 4nm, always outward.
+- Region bounds no longer under-report an obliquely rotated pad. Board IR accepts any pad angle -
+  only *footprint* transforms are restricted to quarter turns - so swapping width and height on
+  quadrant parity alone under-bounded every oblique pad. Quarter turns keep their exact extents;
+  any other angle falls back to the pad rectangle's circumscribed circle, which contains it at
+  every rotation and needs no trigonometry. Bounds may now only ever be too large: returning an
+  object that turns out to be just outside a window is harmless, while omitting one that overlaps
+  is not recoverable by the caller.
+- `include_annotations` no longer bypasses the response budget. Board text was collected without a
+  ceiling, so a board with enough footprint properties could grow the annotation list past the
+  length the response contract itself advertises. Annotations are now charged against
+  `max_scene_annotations` (default 5,000, configurable) and truncation is reported explicitly as
+  `annotations_returned` / `annotations_omitted`.
+- An `around_ref_id` radius can no longer push the resolved window outside the coordinate range the
+  contract advertises. The anchor and the radius are each in range but their sum need not be, so
+  the window is clamped - losslessly, because every board coordinate is inside that range, so a
+  window already covering it cannot select more by growing.
+
 ### Added
 
 - An opt-in deterministic board render on `observe_board_scene` (`include_render`), with a matching
@@ -38,6 +85,18 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Scene objects now report `locked`, so copper the board's author pinned is distinguishable from
+  copper a proposal may move. It is a field rather than a third partition: the static/mutable split
+  is by *kind* and is exhaustive, while lockedness is a per-object property its author can toggle
+  without changing what kind of thing the object is - a third collection would hide segments from
+  any consumer that walked only the two documented ones. Kinds with no such concept, an outline
+  contour or a net class, report `null` rather than `false`.
+- Scene pad geometry now carries `roundrect_radius_nm`, without which a rounded-rectangle pad could
+  not be reconstructed from the scene.
+- Scene truncation reports `annotations_returned` and `annotations_omitted` alongside the object
+  counts. `ceiling_hit` names the first ceiling reached; the two `*_omitted` counts are the
+  authoritative signal, because objects and annotations are charged against separate budgets and
+  both can truncate in a single response.
 - The schematic capability store's TTL, LRU, locking and digest-recheck logic moved into a shared
   `BoundedArtifactStore` so the render store inherits the reviewed discipline rather than repeating
   it. The schematic store keeps its exact public contract, including the cross-check of the
