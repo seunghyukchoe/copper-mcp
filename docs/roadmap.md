@@ -30,7 +30,8 @@ documentation, ledger updates, and benchmark evidence.
     identity, rectangular keepouts, bounded search, and cancellation.
   - [x] Reproducible synthetic A*/Dijkstra completion and optimal-cost oracle baseline.
   - [x] Replay-bound, read-only disposable KiCad patch serialization with Board IR round-trip checks.
-  - [ ] Durable candidate-bound authoritative DRC evidence, preview, and service integration.
+  - [x] Internal candidate-bound authoritative KiCad DRC evidence over a private disposable board.
+  - [ ] Durable jobs, public service integration, and non-mutating candidate preview.
 - [ ] Multilayer vias and keepouts.
 - [ ] Negotiated-congestion multi-net routing.
 - [ ] Incremental spatial index and bounded rip-up/reroute.

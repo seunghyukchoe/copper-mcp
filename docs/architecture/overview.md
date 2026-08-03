@@ -32,6 +32,7 @@ revision.
 | `board_ir/` | Canonical integer board snapshots, strict codec, geometry validation, and digests. |
 | `adapters/kicad_board_ir.py` | Bounded, read-only conversion of the documented KiCad subset. |
 | `adapters/kicad_route_patch.py` | Pure replay-bound serialization to new disposable KiCad bytes. |
+| `kicad_cli.py` | Fixed-argument ordinary and candidate-bound DRC over private context snapshots. |
 | `tools.py` | Pure application services shared by adapters. |
 | `routing/contracts.py` | Exact candidate, cost, settings, result, and backend-neutral contracts. |
 | `routing/astar.py` | Bounded integer two-pin A* reference; candidate-only and fail-closed. |
@@ -40,12 +41,14 @@ revision.
 Board IR `0.1.0` is the domain and source-adapter foundation. A narrow deterministic
 [two-pin routing baseline](routing-baseline.md) now produces immutable in-memory candidates for
 supported synthetic Board IR inputs. Existing MCP tools still use the bounded inspection manifest;
-the pure adapter can serialize an exact replayed candidate in memory, but no durable export, MCP
-Board IR or route resource, authoritative candidate-bound DRC evidence, preview, source mutation,
-or apply path is implemented. See [Board IR and KiCad adapter contracts](board-ir.md),
-[ADR-0005](../adr/0005-canonical-board-ir.md), and
-[ADR-0006](../adr/0006-bounded-deterministic-astar.md), and
-[ADR-0007](../adr/0007-disposable-kicad-candidate-snapshot.md).
+the pure adapter can serialize an exact replayed candidate in memory, and an internal service binds
+that private derivative to strict aggregate KiCad DRC evidence. No durable export, MCP Board IR,
+route/evidence resource, preview, source mutation, or apply path is implemented. See
+[Board IR and KiCad adapter contracts](board-ir.md),
+[ADR-0005](../adr/0005-canonical-board-ir.md),
+[ADR-0006](../adr/0006-bounded-deterministic-astar.md),
+[ADR-0007](../adr/0007-disposable-kicad-candidate-snapshot.md), and
+[ADR-0008](../adr/0008-candidate-bound-kicad-drc.md).
 
 ## Candidate lifecycle
 

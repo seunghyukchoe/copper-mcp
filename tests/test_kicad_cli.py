@@ -132,6 +132,48 @@ class KiCadCliTests(unittest.TestCase):
                 summary = run_board_drc(self.board.name, self.settings)
         self.assertTrue(summary.passed)
 
+    def test_accepts_warning_and_exclusion_findings_with_violation_exit(self) -> None:
+        report = drc_report(
+            violations=[
+                finding("courtyard_overlap", "warning"),
+                finding("silk_overlap", "error", excluded=True),
+            ]
+        )
+        with patch(
+            "copper_mcp.kicad_cli.discover_kicad_cli", return_value=Path("/trusted/kicad-cli")
+        ):
+            with patch(
+                "copper_mcp.kicad_cli.subprocess.run",
+                side_effect=self._completed_run(report, returncode=5),
+            ):
+                summary = run_board_drc(self.board.name, self.settings)
+
+        self.assertTrue(summary.passed)
+        self.assertEqual(summary.warning_count, 1)
+        self.assertEqual(summary.exclusion_count, 1)
+
+    def test_rejects_exit_code_and_report_finding_mismatches(self) -> None:
+        cases = (
+            ("clean report with violation exit", drc_report(), 5),
+            (
+                "active finding with success exit",
+                drc_report(violations=[finding("clearance", "error")]),
+                0,
+            ),
+        )
+        for name, report, returncode in cases:
+            with self.subTest(name=name):
+                with patch(
+                    "copper_mcp.kicad_cli.discover_kicad_cli",
+                    return_value=Path("/trusted/kicad-cli"),
+                ):
+                    with patch(
+                        "copper_mcp.kicad_cli.subprocess.run",
+                        side_effect=self._completed_run(report, returncode=returncode),
+                    ):
+                        with self.assertRaisesRegex(KiCadCliError, "does not match"):
+                            run_board_drc(self.board.name, self.settings)
+
     def test_rejects_unexpected_return_code(self) -> None:
         with patch(
             "copper_mcp.kicad_cli.discover_kicad_cli", return_value=Path("/trusted/kicad-cli")

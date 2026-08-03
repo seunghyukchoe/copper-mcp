@@ -16,7 +16,7 @@
 | Board file → parser | Malformed data, parser DoS, hidden secrets | Bounded reads, fuzz/property tests, no execution, generic errors |
 | Server → KiCad CLI | Argument injection, hangs, oversized or incompatible reports, context-file floods, stale evidence | Validated executable, fixed argument vector, POSIX file ceiling, cumulative byte/file-count bounds, discovery/process timeouts, strict contract, revision recheck |
 | AI output → policy | Prompt injection, invalid commands, cost exhaustion | Allowlisted typed actions, deterministic validation, token/iteration budgets |
-| Router → KiCad | Stale state, partial writes, unsafe copper | Revision recheck, exact DRC, immutable patch, single undoable commit |
+| Router → KiCad | Candidate/source/context misbinding, stale state, unsafe copper | Exact replay, immutable multi-revision evidence, live-context recheck, private candidate snapshot, separate apply authorization |
 | Remote client → HTTP | Spoofing, token theft, cross-tenant access | TLS, OAuth, scoped authorization, per-principal jobs, rate limits |
 | Dependency → build | Compromise, typosquat, vulnerable package | Locking, Dependabot, CodeQL, dependency audit, build attestations |
 
@@ -38,7 +38,15 @@ bounded, network transport binds to loopback, secret patterns are scanned, and n
 enabled. KiCad DRC runs with fixed arguments against a path-preserving private context snapshot and
 emits a bounded aggregate summary; save/refill flags and raw finding details are not exposed. The
 child process receives a file-size ceiling before KiCad starts, and the source context is re-hashed
-afterward. These controls do not make arbitrary remote exposure safe.
+afterward. For route candidates, only one captured source is parsed, the candidate must match its
+Board IR base and exact deterministic replay, and only an in-memory board payload is replaced before
+the same DRC path runs. Evidence binds candidate, Board IR, original source, patched board, patched
+context, and nested summary revisions; copied violation counts are immutable, must sum to the
+aggregate findings, and KiCad's exit code must agree with report finding presence. The private
+board is part of a complete private input-context recapture after KiCad exits, and any private or live
+board/rule/library change discards the result. Candidate bytes, raw findings, and this internal
+operation are not exposed through MCP or CLI. These controls do not make arbitrary remote exposure
+safe.
 
 ## Security acceptance for future mutation
 

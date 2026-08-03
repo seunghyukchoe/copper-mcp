@@ -4,9 +4,10 @@
 
 `routing/astar.py` is a candidate-only CPU reference for one exact two-pin route. The separate
 `adapters/kicad_route_patch.py` bridge can now serialize that exact replayed candidate into a
-disposable KiCad board. The slice remains smaller than issue #10's complete acceptance target: it
-does not orchestrate authoritative candidate DRC, expose an MCP tool, route multiple nets, preview,
-or apply copper.
+disposable KiCad board, and the internal KiCad service can bind that private derivative to
+authoritative DRC evidence. The slice remains smaller than issue #10's complete acceptance target:
+it does not expose route or evidence ingestion through MCP/CLI, route multiple nets, persist or
+preview candidate boards, or apply copper.
 
 ## Accepted input
 
@@ -104,18 +105,41 @@ The rendered bytes stay under the same parser, byte, and total-object budgets an
 through the supported KiCad adapter. The complete modeled content must equal the base snapshot after
 replacing only source revision and writer provenance and appending the expected segments. The
 function performs no file write, durable export, subprocess call, preview, MCP action, or board
-mutation. A KiCad 10 integration test exercises the returned bytes through the existing read-only
-DRC service on the synthetic two-pad fixture; that fixture yields zero violations and zero
-unconnected items.
+mutation. DRC orchestration remains a separate adapter boundary.
+
+## Candidate-bound authoritative DRC
+
+`run_route_candidate_drc()` captures the source board and its bounded project/rule/library context
+before parsing. It builds the Board IR snapshot only from those captured bytes and invokes only the
+replay-verified serializer above. The patched board replaces the original board payload in memory;
+the adapter rechecks the per-file, file-count, and cumulative context budgets before writing a
+path-preserving private temporary snapshot.
+
+Candidate DRC and ordinary board DRC use the same fixed KiCad argument vector, POSIX file ceiling,
+timeout, discarded output, accepted result codes, bounded report reader, and strict JSON parser. The
+complete private board/rule/library input context is recaptured and hashed after the subprocess
+exits. A final recapture of the original board, rules, and workspace-local libraries must match the
+initial context revision or the evidence is discarded.
+
+The frozen evidence record binds the candidate ID, its Board IR base revision, original KiCad source
+revision, patched board revision, complete patched context revision, and nested aggregate
+`DrcSummary`. The summary's base and context revisions must match the patched revisions, its
+violation-type total must equal its aggregate finding counts, and KiCad exit code `0` or `5` must
+agree with the absence or presence of report findings. Exit code `5` is valid evidence rather than
+an adapter failure; warning-only or exclusion-only evidence may still have a hard-pass flag. No
+candidate bytes, raw descriptions, coordinates, UUIDs, or net names are returned. A KiCad 10.0.5
+integration test runs this path from the original synthetic two-pad fixture and verifies that source
+bytes, inode, modification time, and workspace entries remain unchanged.
 
 ## Safety boundary
 
 Zero `hard_internal_violations` means only that this implementation's supported-grid post-checks
-passed. Successful serialization is also not a KiCad DRC result. The optional installed-KiCad test is
-evidence for one synthetic fixture, not a durable candidate-evidence API, and says nothing about
-electrical behavior, SI/PI, EMC, thermal performance, DFM, or fabrication readiness. A future
-orchestration layer must bind a private candidate snapshot to authoritative KiCad evidence before
-preview or application.
+passed. Successful serialization alone is not a KiCad DRC result. Candidate-bound DRC evidence is
+internal and applies to one private replayed derivative plus its recorded context; it is not a
+durable candidate file, public route service, whole-board routing result, or production approval.
+It says nothing about electrical behavior, SI/PI, EMC, thermal performance, DFM, fabrication
+readiness, or hardware safety. Preview, persistence, and application require separate contracts.
 
 See [ADR-0006](../adr/0006-bounded-deterministic-astar.md),
-[ADR-0007](../adr/0007-disposable-kicad-candidate-snapshot.md), and the [roadmap](../roadmap.md).
+[ADR-0007](../adr/0007-disposable-kicad-candidate-snapshot.md),
+[ADR-0008](../adr/0008-candidate-bound-kicad-drc.md), and the [roadmap](../roadmap.md).

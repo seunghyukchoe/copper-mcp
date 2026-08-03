@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
+from types import MappingProxyType
 from typing import Any
 
 SCHEMA_VERSION = "1.0"
@@ -63,7 +65,7 @@ class DrcSummary:
     exclusion_count: int
     ignored_check_count: int
     unconnected_count: int
-    violation_type_counts: dict[str, int]
+    violation_type_counts: Mapping[str, int]
     passed: bool
     schema_version: str = SCHEMA_VERSION
 
@@ -91,20 +93,54 @@ class DrcSummary:
             if isinstance(value, bool) or not isinstance(value, int):
                 raise ValueError(f"{name} must be an integer")
             _non_negative(name, value)
+        if not isinstance(self.violation_type_counts, Mapping):
+            raise ValueError("DRC violation counts must be a mapping")
         if len(self.violation_type_counts) > 1000:
             raise ValueError("too many DRC violation types")
+        normalized_counts: dict[str, int] = {}
         for violation_type, count in self.violation_type_counts.items():
-            if not violation_type or len(violation_type) > 128:
+            if (
+                not isinstance(violation_type, str)
+                or not violation_type
+                or len(violation_type) > 128
+            ):
                 raise ValueError("DRC violation type is malformed")
             if isinstance(count, bool) or not isinstance(count, int):
                 raise ValueError("DRC violation count must be an integer")
             _non_negative(violation_type, count)
+            normalized_counts[violation_type] = count
+        aggregate_finding_count = (
+            self.error_count + self.warning_count + self.exclusion_count + self.unconnected_count
+        )
+        if sum(normalized_counts.values()) != aggregate_finding_count:
+            raise ValueError("DRC violation-type counts must equal aggregate finding counts")
         expected_pass = self.error_count == 0 and self.unconnected_count == 0
         if self.passed is not expected_pass:
             raise ValueError("passed must reflect hard DRC and connectivity correctness")
+        if self.schema_version != SCHEMA_VERSION:
+            raise ValueError("DRC summary schema version is unsupported")
+        object.__setattr__(
+            self,
+            "violation_type_counts",
+            MappingProxyType(dict(sorted(normalized_counts.items()))),
+        )
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {
+            "base_revision": self.base_revision,
+            "drc_context_revision": self.drc_context_revision,
+            "kicad_version": self.kicad_version,
+            "drc_schema": self.drc_schema,
+            "coordinate_units": self.coordinate_units,
+            "error_count": self.error_count,
+            "warning_count": self.warning_count,
+            "exclusion_count": self.exclusion_count,
+            "ignored_check_count": self.ignored_check_count,
+            "unconnected_count": self.unconnected_count,
+            "violation_type_counts": dict(self.violation_type_counts),
+            "passed": self.passed,
+            "schema_version": self.schema_version,
+        }
 
 
 @dataclass(frozen=True, slots=True)
