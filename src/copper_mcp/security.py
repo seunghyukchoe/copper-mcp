@@ -58,10 +58,7 @@ def read_workspace_file(
         raise WorkspaceViolationError("path must stay inside the configured workspace")
     allowed_suffix_set = {suffix.lower() for suffix in allowed_suffixes}
     allowed_name_set = set(allowed_names)
-    if (
-        relative.name not in allowed_name_set
-        and relative.suffix.lower() not in allowed_suffix_set
-    ):
+    if relative.name not in allowed_name_set and relative.suffix.lower() not in allowed_suffix_set:
         raise WorkspaceViolationError("file type is not allowed")
     if (
         os.open not in os.supports_dir_fd

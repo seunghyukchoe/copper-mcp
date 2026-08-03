@@ -341,9 +341,7 @@ class KiCadCliTests(unittest.TestCase):
         outside.write_text(
             json.dumps(
                 drc_report(
-                    violations=[
-                        finding("clearance", "error", description="SECRET_REPORT_TARGET")
-                    ]
+                    violations=[finding("clearance", "error", description="SECRET_REPORT_TARGET")]
                 )
             ),
             encoding="utf-8",

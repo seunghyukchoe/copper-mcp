@@ -14,9 +14,7 @@ from copper_mcp.circuit_intent_service import build_schematic_from_snapshot_json
 from copper_mcp.cli import main
 
 ROOT = Path(__file__).resolve().parents[1]
-CIRCUIT_FIXTURE = (
-    ROOT / "benchmarks" / "audio" / "fixtures" / "rc-low-pass-intent-v1.json"
-)
+CIRCUIT_FIXTURE = ROOT / "benchmarks" / "audio" / "fixtures" / "rc-low-pass-intent-v1.json"
 
 
 def _file_state(path: Path) -> tuple[bytes, int, int, int]:
@@ -174,12 +172,9 @@ class CliTests(unittest.TestCase):
             }
             self.assertEqual(document, expected_document)
             build_schema = json.loads(
-                (
-                    ROOT
-                    / "schemas"
-                    / "circuit-schematic-build"
-                    / "0.1.0.schema.json"
-                ).read_text(encoding="utf-8")
+                (ROOT / "schemas" / "circuit-schematic-build" / "0.1.0.schema.json").read_text(
+                    encoding="utf-8"
+                )
             )
             Draft202012Validator.check_schema(build_schema)
             Draft202012Validator(build_schema).validate(document)

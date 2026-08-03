@@ -19,9 +19,7 @@ from copper_mcp.adapters.kicad_schematic import (
 MAX_SCHEMATIC_ARTIFACTS = 16
 MAX_SCHEMATIC_ARTIFACT_STORE_BYTES = 16 * 1024 * 1024
 SCHEMATIC_ARTIFACT_TTL_SECONDS = 15 * 60
-SCHEMATIC_ARTIFACT_URI_TEMPLATE = (
-    "pcb://artifacts/schematic/{token}/circuit.kicad_sch"
-)
+SCHEMATIC_ARTIFACT_URI_TEMPLATE = "pcb://artifacts/schematic/{token}/circuit.kicad_sch"
 
 _TOKEN = re.compile(r"^[A-Za-z0-9_-]{43}$")
 
@@ -56,10 +54,7 @@ class SchematicArtifactStore:
             (ttl_seconds, SCHEMATIC_ARTIFACT_TTL_SECONDS),
         )
         if any(
-            isinstance(value, bool)
-            or not isinstance(value, int)
-            or value < 1
-            or value > ceiling
+            isinstance(value, bool) or not isinstance(value, int) or value < 1 or value > ceiling
             for value, ceiling in limits
         ):
             raise ValueError("schematic artifact store limits must be positive and tighten-only")

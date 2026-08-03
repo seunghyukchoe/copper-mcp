@@ -19,9 +19,7 @@ from copper_mcp.schematic_artifacts import (
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "benchmarks" / "audio" / "fixtures" / "rc-low-pass-intent-v1.json"
-TOKEN_PATTERN = re.compile(
-    r"^pcb://artifacts/schematic/([A-Za-z0-9_-]{43})/circuit\.kicad_sch$"
-)
+TOKEN_PATTERN = re.compile(r"^pcb://artifacts/schematic/([A-Za-z0-9_-]{43})/circuit\.kicad_sch$")
 
 
 class _Clock:

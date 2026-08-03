@@ -190,9 +190,7 @@ def _library_table_dependencies(
     project_root = board_path.parent
     dependencies: list[Path] = []
     library_names: set[str] = set()
-    allowed_fields = frozenset(
-        {"name", "type", "uri", "options", "descr", "hidden", "disabled"}
-    )
+    allowed_fields = frozenset({"name", "type", "uri", "options", "descr", "hidden", "disabled"})
     for library in libraries:
         if time.monotonic() > deadline:
             raise KiCadCliError("KiCad DRC context discovery timed out")
@@ -416,9 +414,7 @@ def _validate_snapshot_tree(
             if file_stat.st_mode & 0o222:
                 raise KiCadCliError("private KiCad DRC context became writable")
             if relative not in expected_directories:
-                raise KiCadCliError(
-                    "private KiCad DRC context changed: unknown side effect"
-                )
+                raise KiCadCliError("private KiCad DRC context changed: unknown side effect")
             observed_directories.add(relative)
             continue
         if not stat.S_ISREG(file_stat.st_mode):

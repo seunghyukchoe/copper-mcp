@@ -16,13 +16,9 @@ from copper_mcp.circuit_intent_service import build_schematic_from_content
 from copper_mcp.mcp_server import mcp
 
 ROOT = Path(__file__).resolve().parents[1]
-CIRCUIT_FIXTURE = (
-    ROOT / "benchmarks" / "audio" / "fixtures" / "rc-low-pass-intent-v1.json"
-)
+CIRCUIT_FIXTURE = ROOT / "benchmarks" / "audio" / "fixtures" / "rc-low-pass-intent-v1.json"
 RESOURCE_TEMPLATE = "pcb://artifacts/schematic/{token}/circuit.kicad_sch"
-RESOURCE_URI = re.compile(
-    r"^pcb://artifacts/schematic/([A-Za-z0-9_-]{43})/circuit\.kicad_sch$"
-)
+RESOURCE_URI = re.compile(r"^pcb://artifacts/schematic/([A-Za-z0-9_-]{43})/circuit\.kicad_sch$")
 
 
 def _content() -> dict[str, object]:
