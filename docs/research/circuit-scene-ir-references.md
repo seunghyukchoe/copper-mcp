@@ -76,6 +76,46 @@ return populated `structuredContent`. The contrast is with this repository's own
 `{"type": "object", "additionalProperties": true}`. That is a gap in those tools' typing, not in the
 SDK, and `tests/test_mcp_server.py` now asserts both halves so the difference stays visible.
 
+### Rendering, measured 2026-08-04
+
+All numbers from `kicad-cli pcb export svg` on KiCad 10.0.5, same environment as above.
+
+- **Nondeterminism is exactly one line.** Two exports of an unchanged board three seconds
+  apart differ only in the `<title>` element, which carries a wall-clock timestamp and the
+  output filename: 1 differing line out of 5,603, with the line count unchanged. Everything
+  else - path data, ordering, viewBox, style attributes - is byte-identical. This is what
+  makes `title-line-v1` sufficient and anything more unjustified.
+- **Silkscreen text is not safely "drawn as paths".** An export including `F.SilkS` and
+  `F.Fab` contains each author string **twice in literal form**: in a `<desc>` beside the
+  stroked paths and in an invisible `<text opacity="0">`. A hostile fixture with six text
+  items produced 6 `<text>` nodes and 12 literal marker occurrences. The copper-only export of
+  the same board contains zero. Excluding the layers is the only control that works; filtering
+  `<text>` would leave the `<desc>` copy. This corrects a plausible-sounding assumption, and
+  it corrects it in the more dangerous direction.
+- **Colour output is theme-dependent.** The same board renders `#4D7FC4` under the default
+  theme and `#008400` under "KiCad Classic". With `--black-and-white` the two are
+  byte-identical, so the flag is a determinism control.
+- **The exporter does not need a writable input directory.** It completes against a fully
+  read-only tree. Given a writable one it drops a `.kicad_prl` beside the input, which is the
+  side effect the read-only snapshot removes.
+- **Hitting the file-size ceiling does not fail loudly.** With `RLIMIT_FSIZE` set below the
+  output size, KiCad exits 0 having written a truncated file rather than dying on `SIGXFSZ`.
+  Because the title line sits near the top of the document it survives truncation, so the exit
+  code, the title check and the digest all accept half an SVG. Requiring a complete document
+  is what turns this into a refusal.
+- **Page sizing.** The default is an A4 page with the board in a corner; `--page-size-mode 2`
+  produces a board-sized viewBox (51.9938mm x 29.9974mm for this board) at essentially the
+  same byte count.
+
+## Reproducible builds
+
+- The canonicalization problem here is the standard reproducible-builds one: an otherwise
+  deterministic tool stamps its output with a build time and a path. The standard remedy is
+  `SOURCE_DATE_EPOCH` (Debian/`reproducible-builds.org`), which KiCad's SVG exporter does not
+  honour, so the normalisation happens after the fact instead. Naming and versioning the rule
+  (`title-line-v1`) follows the same discipline as recording a toolchain version: a digest
+  should never be ambiguous about the rule that produced it.
+
 ## Prompt injection and untrusted content
 
 - Debenedetti, Shumailov, Fabian, Tramèr et al., **"Defeating Prompt Injections by Design"** (CaMeL,

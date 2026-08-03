@@ -10,6 +10,7 @@ from copper_mcp.circuit_intent_service import (
     CircuitSchematicBuild,
     build_schematic_from_content,
 )
+from copper_mcp.circuit_scene import CircuitScene
 from copper_mcp.circuit_scene import observe_board_scene as observe_scene
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import run_board_drc as run_kicad_board_drc
@@ -33,12 +34,13 @@ def server_info() -> dict[str, Any]:
             "deterministic candidate ranking",
             "read-only Board IR structural inspection",
             "region-scoped semantic Circuit Scene observation with quarantined board text",
+            "opt-in deterministic digest-bound copper-only board rendering",
             "non-mutating two-pin route preview on a documented Board IR subset",
             "bounded Circuit Intent validation and deterministic KiCad schematic rendering",
             "explicit create-only CLI schematic export and ephemeral stdio MCP artifact delivery",
         ],
         "planned": [
-            "deterministic Circuit Scene rendering as an advisory orientation aid",
+            "region-scoped and human-facing board rendering",
             "validated placement preview and immutable placement candidates",
             "KiCad IPC adapter",
             "routing job lifecycle",
@@ -83,13 +85,26 @@ def preview_route(payload: dict[str, Any], settings: Settings | None = None) -> 
     return preview_route_candidate(payload, active_settings).to_dict()
 
 
+def observe_board_scene_raw(
+    payload: dict[str, Any], settings: Settings | None = None
+) -> CircuitScene:
+    """Observe one board and return the scene object, including any render bytes.
+
+    The MCP gateway and the CLI both need the bytes, which never belong in the JSON
+    response, so the shared service hands back the scene itself and each adapter decides how
+    to deliver them.
+    """
+
+    active_settings = settings or Settings.from_env()
+    return observe_scene(payload, active_settings)
+
+
 def observe_board_scene(
     payload: dict[str, Any], settings: Settings | None = None
 ) -> dict[str, Any]:
     """Observe one board as a bounded, region-scoped Circuit Scene without modifying it."""
 
-    active_settings = settings or Settings.from_env()
-    return observe_scene(payload, active_settings).to_dict()
+    return observe_board_scene_raw(payload, settings).to_dict()
 
 
 def validate_candidate(payload: dict[str, Any]) -> dict[str, Any]:

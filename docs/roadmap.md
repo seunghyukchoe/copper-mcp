@@ -91,14 +91,16 @@ documentation, ledger updates, and benchmark evidence.
 
 ## M4 — High-fidelity Circuit Scene and AI policy plugins
 
-The semantic half of the Circuit Scene now ships; the visual half and the whole placement surface
-remain future work.
+Circuit Scene IR now covers both semantic and visual observation; the placement surface remains
+future work.
 
-- [~] Versioned Circuit Scene IR for bounded semantic and visual observation. Semantic observation
-  is implemented as `observe_board_scene` (Circuit Scene IR 0.1.0): region-scoped, exact integer
-  geometry, static/mutable partition, stable Board IR references with declared durability, explicit
-  truncation, and board text quarantined in a separately typed untrusted collection. Deterministic
-  visual rendering is designed but not implemented, and is subordinate to the scene by construction.
+- [x] Versioned Circuit Scene IR for bounded semantic and visual observation. Semantic observation
+  is `observe_board_scene` (Circuit Scene IR 0.1.0): region-scoped, exact integer geometry,
+  static/mutable partition, stable Board IR references with declared durability, explicit
+  truncation, and board text quarantined in a separately typed untrusted collection. Visual
+  observation is the opt-in `include_render` flag: a deterministic, digest-bound, copper-only SVG
+  delivered as an ephemeral capability, subordinate to the scene by construction and whole-board
+  rather than region-scoped. A human-facing thumbnail remains unimplemented.
 - [ ] Typed placement-intent contract and immutable placement preview/candidates.
 - [ ] Deterministic snapping, connectivity, clearance, rule, provenance, and revision validation for
   every placement candidate.

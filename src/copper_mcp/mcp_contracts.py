@@ -203,6 +203,7 @@ class CircuitSchematicToolResponse(_ClosedContract):
 
 RefId = Annotated[str, Field(pattern=r"^[a-z_]+:[a-z]+(:[0-9a-zA-Z:._-]{1,128})?$")]
 LayerId = Annotated[str, Field(pattern=r"^layer:[A-Za-z0-9_.\-]{1,64}$")]
+LayerName = Annotated[str, Field(pattern=r"^[A-Za-z0-9_.\-]{1,64}$")]
 NetRefId = Annotated[str, Field(pattern=r"^net:[a-z]+:[0-9a-zA-Z._-]{1,128}$")]
 RefStability = Literal["native", "content_derived", "request_scoped"]
 
@@ -395,8 +396,34 @@ class SceneRequestEchoContract(_ClosedContract):
     board: str
     layers: list[str]
     include_annotations: bool
+    include_render: bool
     constraints: dict[str, int]
     region: dict[str, Any]
+
+
+class SceneRenderContract(_ClosedContract):
+    """Evidence binding a deterministic render to the exact board that produced it.
+
+    A digest alone cannot say whether two renders are comparable, so every input that changes
+    the bytes is recorded: the board, the project context around it, the KiCad that drew it,
+    the layers drawn, the side viewed, and the canonicalization rule the digest is taken under.
+    """
+
+    normalized_digest: Digest
+    source_revision: Digest
+    context_revision: Digest
+    kicad_version: Annotated[str, Field(pattern=r"^\d+\.\d+(?:\.\d+)?(?:[-+][A-Za-z0-9._-]+)?$")]
+    layers: Annotated[list[LayerName], Field(min_length=1, max_length=64)]
+    side: Literal["top", "bottom"]
+    canonicalization: Literal["title-line-v1"]
+    byte_count: Annotated[int, Field(ge=1, le=64 * 1024 * 1024)]
+    resource_uri: (
+        Annotated[
+            str,
+            Field(pattern=r"^pcb://artifacts/scene/[A-Za-z0-9_-]{43}/board\.svg$"),
+        ]
+        | None
+    ) = None
 
 
 class CircuitSceneToolResponse(_ClosedContract):
@@ -413,6 +440,7 @@ class CircuitSceneToolResponse(_ClosedContract):
     static: SceneStaticContract
     mutable: SceneMutableContract
     annotations: Annotated[list[SceneAnnotationContract], Field(max_length=100_000)]
+    render: SceneRenderContract | None = None
     truncation: SceneTruncationContract
     ref_stability: SceneRefStabilityContract
     conversion_diagnostic_counts: dict[str, int]
@@ -423,4 +451,5 @@ __all__ = [
     "CircuitIntentToolContent",
     "CircuitSceneToolResponse",
     "CircuitSchematicToolResponse",
+    "SceneRenderContract",
 ]

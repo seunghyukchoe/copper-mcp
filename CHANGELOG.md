@@ -8,6 +8,50 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- An opt-in deterministic board render on `observe_board_scene` (`include_render`), with a matching
+  `copper-mcp observe-scene --render` CLI flag that writes the SVG to a create-only workspace path.
+  Two exports of an unchanged board are byte-identical after canonicalization: KiCad stamps the file
+  with a wall-clock timestamp and the output filename in a single `<title>` line, and the named
+  `title-line-v1` rule rewrites exactly that line and nothing else - measured as the entire delta
+  between two real exports taken three seconds apart, one line out of 5,603. Canonicalization is
+  idempotent and fails closed, so an export whose title line is missing or duplicated is refused
+  rather than digested unnormalized. Evidence records `normalized_digest`, `source_revision`,
+  `context_revision`, `kicad_version`, `layers`, `side`, `canonicalization` and `byte_count`,
+  because a digest alone cannot tell a caller whether two renders are comparable.
+- Copper-only rendering as a security control. The export draws `F.Cu`, `B.Cu` and `Edge.Cuts`
+  only, and this is not a presentation choice: measured against KiCad 10.0.5, an export including
+  silkscreen or fabrication layers embeds each board string **twice in literal, greppable form** -
+  once in a `<desc>` beside the stroked paths and once in an invisible `<text opacity="0">`. Text is
+  therefore not safely "drawn as paths", and filtering `<text>` after the fact would leave the
+  `<desc>` copy behind; excluding the layers is the only control that works. A hostile fixture whose
+  every author-controlled slot carries a marker is asserted absent from the render bytes, with a
+  companion test proving those same markers *do* leak when the layers are included.
+- Refusal on a truncated render. At the `max_render_bytes` ceiling (4 MiB default) KiCad does not
+  die on `SIGXFSZ` - it exits 0 having written a partial file, and the title line is near the top of
+  the document so it survives. The exit code, the title check and the digest would all have been
+  satisfied by half an SVG, so the canonicalizer now requires a complete document.
+- Delivery as an MCP `resource_link` annotated `audience: ["assistant"]`, from a bounded
+  process-local store holding at most 8 renders and 32 MiB, deliberately separate from the schematic
+  store so the two cannot evict each other. `include_render` is stdio-only because those bytes need
+  the process-local store, even though the semantic scene remains available over both transports;
+  only the flag is withdrawn off stdio, never the whole tool.
+
+### Changed
+
+- The schematic capability store's TTL, LRU, locking and digest-recheck logic moved into a shared
+  `BoundedArtifactStore` so the render store inherits the reviewed discipline rather than repeating
+  it. The schematic store keeps its exact public contract, including the cross-check of the
+  retained artifact object that catches post-insertion tampering, and its existing tests pass
+  unchanged as the regression proof.
+- `--black-and-white` is now forced on the render, for determinism rather than aesthetics: colour
+  output follows the active KiCad theme, and black-and-white output is byte-identical across themes.
+- KiCad renders against a **read-only** private snapshot, which is stricter than the zone-fill path.
+  Given a writable directory KiCad drops a `.kicad_prl` beside the input; the read-only snapshot
+  removes that side effect rather than relocating it, and a test asserts the workspace is unchanged
+  down to the board's inode and mtime.
+
+### Added
+
 - Circuit Scene IR 0.1.0 and the `observe_board_scene` tool: a bounded, region-scoped semantic
   observation of one board, with a matching `copper-mcp observe-scene` CLI command. A caller states
   a window - either an exact nanometre bounding box or one `around_ref_id` with a radius, never a

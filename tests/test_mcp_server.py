@@ -13,10 +13,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.types import ResourceLink
 
 import copper_mcp.mcp_server as _server
 from copper_mcp.circuit_intent_service import build_schematic_from_content
 from copper_mcp.mcp_server import mcp
+from copper_mcp.scene_render import SceneRenderStore
 from copper_mcp.schematic_artifacts import SchematicArtifactStore
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -432,6 +434,101 @@ class SceneToolSurfaceTests(unittest.TestCase):
         self.assertEqual(structured["region"]["source"], "explicit")
         self.assertEqual(len(structured["static"]["pads"]), 1)
         self.assertEqual(structured["annotations"], [])
+
+
+REAL_KICAD_CLI = Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli")
+
+
+class SceneRenderDeliveryTests(unittest.TestCase):
+    """How render bytes reach a caller, and where the flag is refused."""
+
+    def setUp(self) -> None:
+        store = SceneRenderStore()
+        patcher = patch.object(_server, "_SCENE_RENDERS", store)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.store = store
+
+    def _request(self, **overrides: object) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "board": "scene-region.kicad_pcb",
+            "constraints": {
+                "clearance_nm": 200_000,
+                "track_width_nm": 250_000,
+                "via_diameter_nm": 800_000,
+                "via_drill_nm": 400_000,
+            },
+            "region": {
+                "min_x_nm": 0,
+                "min_y_nm": 0,
+                "max_x_nm": 30_000_000,
+                "max_y_nm": 30_000_000,
+            },
+        }
+        payload.update(overrides)
+        return payload
+
+    def _call(self, settings: object, request: dict[str, object]) -> object:
+        with patch.object(_server, "_SETTINGS", settings):
+            return asyncio.run(_server.mcp.call_tool("observe_board_scene", {"request": request}))
+
+    def test_the_render_flag_is_refused_off_stdio(self) -> None:
+        """The asymmetry: the scene is both-transport, its render is stdio-only.
+
+        Render bytes are delivered through the process-local capability store, which a
+        stateless HTTP deployment cannot resolve - the same reason render_circuit_schematic
+        is stdio-only. Only the flag is withdrawn, not the whole tool.
+        """
+
+        board = ROOT / "tests" / "fixtures" / "circuit-scene-v0.1"
+        http_settings = replace(
+            _server._SETTINGS, workspace=board.resolve(), transport="streamable-http"
+        )
+        with self.assertRaises(ToolError) as caught:
+            self._call(http_settings, self._request(include_render=True))
+        self.assertIn("stdio", str(caught.exception))
+
+    def test_the_scene_itself_still_works_off_stdio(self) -> None:
+        """Guard the guard: the refusal above must be about the flag, not the transport."""
+
+        board = ROOT / "tests" / "fixtures" / "circuit-scene-v0.1"
+        http_settings = replace(
+            _server._SETTINGS, workspace=board.resolve(), transport="streamable-http"
+        )
+        result = self._call(http_settings, self._request())
+        self.assertFalse(result.is_error)
+        self.assertIsNone(result.structured_content["render"])
+
+    @unittest.skipUnless(REAL_KICAD_CLI.is_file(), "KiCad CLI is not installed")
+    def test_a_render_is_delivered_as_a_model_facing_resource_link(self) -> None:
+        board = ROOT / "tests" / "fixtures" / "circuit-scene-v0.1"
+        settings = replace(
+            _server._SETTINGS,
+            workspace=board.resolve(),
+            transport="stdio",
+            kicad_cli=REAL_KICAD_CLI,
+        )
+        result = self._call(settings, self._request(include_render=True))
+
+        self.assertFalse(result.is_error)
+        links = [item for item in result.content if isinstance(item, ResourceLink)]
+        self.assertEqual(len(links), 1)
+        link = links[0]
+        self.assertEqual(link.mime_type, "image/svg+xml")
+        self.assertIsNotNone(link.annotations)
+        assert link.annotations is not None
+        # Model-facing. A human thumbnail would be a separate artifact with audience ["user"].
+        self.assertEqual(link.annotations.audience, ["assistant"])
+        self.assertRegex(str(link.uri), r"^pcb://artifacts/scene/[A-Za-z0-9_-]{43}/board\.svg$")
+
+        render = result.structured_content["render"]
+        self.assertEqual(render["resource_uri"], str(link.uri))
+        payload = self.store.read(str(link.uri).split("/")[-2])
+        self.assertEqual(len(payload), render["byte_count"])
+        self.assertEqual(
+            f"sha256:{hashlib.sha256(payload).hexdigest()}", render["normalized_digest"]
+        )
+        self.assertNotIn(b"CANARY", payload)
 
 
 if __name__ == "__main__":

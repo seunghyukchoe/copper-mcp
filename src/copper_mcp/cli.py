@@ -27,7 +27,7 @@ from copper_mcp.security import (
 from copper_mcp.tools import (
     inspect_board,
     inspect_board_ir,
-    observe_board_scene,
+    observe_board_scene_raw,
     preview_route,
     run_board_drc,
     server_info,
@@ -90,6 +90,7 @@ def _scene_request(args: argparse.Namespace) -> dict[str, Any]:
         "region": region,
         "layers": list(args.scene_layers or ()),
         "include_annotations": args.include_annotations,
+        "include_render": args.render is not None,
     }
 
 
@@ -168,6 +169,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Restrict to a copper layer; repeatable",
     )
     scene_parser.add_argument(
+        "--render",
+        default=None,
+        metavar="OUTPUT_SVG",
+        help=(
+            "Also render the board's copper to this new .svg path inside the workspace; "
+            "existing files are never replaced"
+        ),
+    )
+    scene_parser.add_argument(
         "--include-annotations",
         action="store_true",
         help="Also return board text, quarantined and marked untrusted",
@@ -227,7 +237,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             _json_dump(preview_route(_preview_request(args), settings))
             return 0
         if args.command == "observe-scene":
-            _json_dump(observe_board_scene(_scene_request(args), settings))
+            scene = observe_board_scene_raw(_scene_request(args), settings)
+            document = scene.to_dict()
+            if args.render is not None:
+                if scene.render_bytes is None:
+                    raise ValueError("the board produced no render; it is outside Board IR")
+                # Create-only, exact lowercase suffix, workspace-confined: the same discipline
+                # as the schematic export. Observation must never overwrite a caller's file.
+                output_path = create_workspace_file(
+                    settings.workspace,
+                    args.render,
+                    scene.render_bytes,
+                    allowed_suffixes={".svg"},
+                    max_bytes=settings.max_render_bytes,
+                )
+                document["export"] = {
+                    "created": True,
+                    "output_path": output_path.relative_to(
+                        settings.workspace.resolve(strict=True)
+                    ).as_posix(),
+                }
+            _json_dump(document)
             return 0
         if args.command == "validate-candidate":
             _json_dump(candidate_from_dict(_load_candidate(args.path, settings)).to_dict())
