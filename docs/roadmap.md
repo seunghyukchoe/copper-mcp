@@ -101,10 +101,14 @@ future work.
   observation is the opt-in `include_render` flag: a deterministic, digest-bound, copper-only SVG
   delivered as an ephemeral capability, subordinate to the scene by construction and whole-board
   rather than region-scoped. A human-facing thumbnail remains unimplemented.
-- [~] Typed placement-intent contract and immutable placement preview/candidates. The seven-rule
-  intent language, the out-of-band footprint view, the deterministic legalizer and the
-  dual-digest-bound `PlacementCandidate` are implemented; there is no MCP or CLI surface yet, and
-  nothing applies a placement.
+- [x] Typed placement-intent contract and immutable placement preview/candidates. The seven-rule
+  intent language, the out-of-band footprint view, the deterministic legalizer, the
+  dual-digest-bound `PlacementCandidate` and the `preview_placement` MCP tool and CLI command are
+  implemented. Nothing applies a placement.
+- [ ] Authoritative KiCad DRC binding for placement candidates. Deferred deliberately: a
+  footprint-move serializer would have to rewrite roughly twice as many pose-carrying nodes as
+  Board IR can verify, so the round-trip assertion that makes the route patch trustworthy would be
+  blind to most of the edit. Revisit once Board IR models footprints.
 - [~] Deterministic snapping, connectivity, clearance, rule, provenance, and revision validation for
   every placement candidate. Grid snapping, rule residuals, three-valued pad overlap, outline
   containment, keepout respect and dual-digest binding are implemented. Courtyard overlap is

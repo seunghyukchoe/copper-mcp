@@ -16,6 +16,7 @@ from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import run_board_drc as run_kicad_board_drc
 from copper_mcp.kicad_file import inspect_kicad_board
 from copper_mcp.models import candidate_from_dict, rank_candidates
+from copper_mcp.placement_preview import preview_placement as preview_placement_service
 from copper_mcp.route_preview import preview_route as preview_route_candidate
 
 
@@ -35,13 +36,15 @@ def server_info() -> dict[str, Any]:
             "read-only Board IR structural inspection",
             "region-scoped semantic Circuit Scene observation with quarantined board text",
             "opt-in deterministic digest-bound copper-only board rendering",
+            "typed placement intent with deterministic legality preview (no apply, no DRC binding)",
             "non-mutating two-pin route preview on a documented Board IR subset",
             "bounded Circuit Intent validation and deterministic KiCad schematic rendering",
             "explicit create-only CLI schematic export and ephemeral stdio MCP artifact delivery",
         ],
         "planned": [
             "region-scoped and human-facing board rendering",
-            "validated placement preview and immutable placement candidates",
+            "authoritative KiCad DRC binding for placement candidates",
+            "explicit placement apply and post-placement observation",
             "KiCad IPC adapter",
             "routing job lifecycle",
             "negotiated-congestion router",
@@ -105,6 +108,13 @@ def observe_board_scene(
     """Observe one board as a bounded, region-scoped Circuit Scene without modifying it."""
 
     return observe_board_scene_raw(payload, settings).to_dict()
+
+
+def preview_placement(payload: dict[str, Any], settings: Settings | None = None) -> dict[str, Any]:
+    """Validate one placement proposal against a workspace board without modifying it."""
+
+    active_settings = settings or Settings.from_env()
+    return preview_placement_service(payload, active_settings).to_dict()
 
 
 def validate_candidate(payload: dict[str, Any]) -> dict[str, Any]:

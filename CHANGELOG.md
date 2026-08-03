@@ -8,6 +8,28 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- `preview_placement`, the public surface for the placement legalizer, as an MCP tool over both
+  transports and a `copper-mcp preview-placement` CLI command. The response is a closed contract,
+  so the tool advertises a real `outputSchema` and returns populated `structuredContent`. Requests
+  are validated at the boundary before any file is read, refusals are typed and never echo the
+  rejected value, and the board is loaded through the same workspace confinement as
+  `preview_route`. Budgets - subjects, rules, checks and a deadline - come from configuration.
+  Rules and proposals are structured enough that flags would be a poor interface, so the CLI takes
+  them from an optional workspace-confined JSON document whose fields are restricted to `rules` and
+  `proposals`: the board, constraints and subjects always come from the flags, so the document
+  cannot redirect the request at a different board.
+- A transport-parity test asserting the tool returns byte-identical structured content over stdio
+  and streamable-HTTP, and a subprocess test asserting it is registered on a stateless HTTP server.
+  Unlike a render or a schematic artifact, a placement preview holds no capability handle, so there
+  is nothing a stateless deployment cannot resolve.
+
+### Changed
+
+- The capability inventory now lists placement preview as implemented and names DRC binding for
+  placement, apply, and post-placement observation as planned rather than done.
+
+### Added
+
 - A typed placement-intent contract and a deterministic legalizer (`copper_mcp.placement`), the
   first half of the M4 placement surface. The intent language has seven rule kinds - proximity,
   alignment, symmetry, board edge, region keep-in/keep-out, discrete orientation and side - and is

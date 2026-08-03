@@ -18,6 +18,7 @@
 | `run_board_drc` | Temporary report only | Fixed-argument KiCad DRC with a bounded, redacted summary. |
 | `inspect_board_ir` | None | Read-only Board IR conversion check and structural description. |
 | `observe_board_scene` | None, or a process-local render artifact when `include_render` is set | Bounded, region-scoped semantic scene of one board, with board text quarantined. |
+| `preview_placement` | None | Deterministic legality preview for a proposed footprint placement. Never applies, and carries no DRC evidence. |
 | `preview_route` | None, or a temporary report when `include_drc` is set | Bounded, non-mutating two-pin route proposal on the documented Board IR subset. |
 | `render_circuit_schematic` | Process-local artifact only; stdio only | Validate structured Circuit Intent, require deterministic replay, and issue one opaque schematic resource capability. |
 | `validate_candidate` | None | Validate and normalize candidate metadata. |
@@ -120,6 +121,40 @@ bounds that disclosure. `include_render` is the one asymmetry: render bytes are 
 through the process-local capability store, which a stateless HTTP deployment cannot resolve,
 so that flag alone is refused off stdio while the semantic scene stays available everywhere. Its handler returns a closed contract, so it advertises a real `outputSchema`
 and returns populated `structuredContent`.
+
+`preview_placement` takes one request object with a workspace-relative `board`, integer
+`constraints`, and `subjects` - the footprint references a proposal may move - plus optional
+`rules`, `proposals` and `placement_grid_nm`. Rules come in seven kinds (proximity, alignment,
+symmetry, edge, region, orientation, side) and name objects only by references a scene already
+returned. Proposals are anchored the same way, as an offset from another object's edge or
+centre; there is no field anywhere in the language that accepts an absolute coordinate, so every
+position in a response was derived by the server and snapped to the placement grid.
+
+A `previewed` response carries an immutable candidate bound to **both** digests - `base_revision`
+for the board geometry and `view_revision` for the footprint grouping, which is recovered out of
+band and so is not covered by the snapshot digest - together with evidence holding per-rule
+residuals and the legality record. `pad_overlap` is **three-valued**: `proven_clear` when pad
+bounds are disjoint, `violated` when pad cores overlap, and `inconclusive` in between.
+`inconclusive` is not a failure and a candidate is still produced; it means neither clearance nor
+collision could be proven. `courtyard_overlap` has exactly one permitted value, `not_modelled`,
+because Board IR carries no courtyard geometry - there is deliberately no vocabulary in which a
+response could claim a courtyard was checked.
+
+A `refused` response carries a typed code: `unresolved_ref`, `infeasible_constraints`,
+`budget_exhausted`, `unsupported_geometry`, `illegal_placement`, `stale_revision` or
+`invalid_request`. `infeasible_constraints` and `budget_exhausted` are kept strictly apart - the
+first is a proof that no placement satisfies the rules as written, the second an admission that
+the work ran out - and only syntactic contradictions are claimed as infeasible. An
+`illegal_placement` refusal includes the legality record that condemned it, so a caller never has
+to guess which of the three independent checks failed. `satisfied_within_tolerance` appears only
+when the caller supplied a `tolerance_nm`; an unstated tolerance means exact.
+
+**The tool never applies a placement, and a placement candidate is not bound to KiCad DRC.** What
+it claims is exactly what the deterministic legalizer proved. Moving a footprint moves its pads,
+so a placement candidate invalidates any route candidate bound to the same base revision, and
+observing a scene after a hypothetical placement is not supported. Like `preview_route`, the tool
+is exposed over both transports: the response is self-contained, retains no server-side state and
+holds no capability handle, so workspace confinement is what bounds the disclosure.
 
 `preview_route` takes one request object with a workspace-relative `board`, a KiCad `net` name, a
 copper `layer` name, integer `constraints` for the applied net class, and optional `seed`,
