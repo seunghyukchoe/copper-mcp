@@ -263,6 +263,26 @@ class McpServerTests(unittest.TestCase):
         self.assertNotIn("SECRET_MCP_CIRCUIT", message)
         self.assertNotIn("AUDIO_IN", message)
 
+    def test_rejected_component_kind_never_reaches_the_exception_chain(self) -> None:
+        content = _content()
+        components = content["components"]
+        assert isinstance(components, list)
+        components[0]["kind"] = "SECRET_PRIVATE_KIND"
+
+        with self.assertRaises(ToolError) as raised:
+            asyncio.run(mcp.call_tool("render_circuit_schematic", {"content": content}))
+
+        chain: list[BaseException] = []
+        pending: list[BaseException | None] = [raised.exception]
+        while pending:
+            error = pending.pop()
+            if error is None or any(error is seen for seen in chain):
+                continue
+            chain.append(error)
+            pending.extend((error.__cause__, error.__context__))
+        for error in chain:
+            self.assertNotIn("SECRET_PRIVATE_KIND", repr(error))
+
     def test_scalar_list_and_oversized_mcp_content_never_echoes_private_values(self) -> None:
         oversized = _content()
         oversized["title"] = "SECRET_MCP_OVERSIZED_" + "x" * 300_000

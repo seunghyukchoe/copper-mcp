@@ -79,8 +79,8 @@ an individual build.
 
 The capability token has at least 256 bits of randomness; the artifact digest identifies content
 but is not authorization. Access expires absolutely 15 minutes after insertion and a read does not
-renew it. The thread-safe process-local store permits at most 16 entries, 16 MiB in total, and 1 MiB
-per artifact, evicts deterministically by least-recently-used order, rechecks the digest on every
+renew it. The thread-safe process-local store permits at most 16 entries, 16 MiB in total, and
+1 MB (1,000,000 bytes) per artifact, evicts deterministically by least-recently-used order, rechecks the digest on every
 read, and gives the same unavailable result for malformed, expired, evicted, and unknown tokens.
 Expired entries are reclaimed lazily on a later store read/insertion or process exit. This access
 TTL is not a secure-erasure guarantee for stale allocator memory, crash/swap artifacts, or byte

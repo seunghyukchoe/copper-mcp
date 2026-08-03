@@ -136,8 +136,10 @@ are rejected before KiCad starts. The child runs from a private working director
 from the invoking user's global configuration and environment. Snapshot bytes and child side
 effects are bounded cumulatively, report growth is limited in the child process, and results are
 discarded when captured context changes. Context discovery also has file-count and wall-clock
-ceilings, and the pre-run byte snapshot is released before KiCad starts. Keep KiCad projects and
-their project-relative libraries self-contained below the configured workspace. DRC-clean is not a
+ceilings, and the pre-run byte snapshot is released before KiCad starts. Keep KiCad projects
+self-contained below the configured workspace, with any libraries referenced as project-relative
+`${KIPRJMOD}/` paths from an `fp-lib-table` or `sym-lib-table` beside the board file. No other
+library location is read, and design-block library entries are rejected. DRC-clean is not a
 substitute for electrical, signal-integrity, manufacturability, or hardware review.
 
 Check whether a board is representable by the supported Board IR subset:

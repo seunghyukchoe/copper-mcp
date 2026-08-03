@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Collection
 from typing import Any
 
 from copper_mcp.circuit_ir.canonical import (
@@ -88,11 +89,17 @@ def _validate_tree(value: Any, limits: CircuitParseLimits) -> None:
             raise CircuitIntentValidationError(
                 "budget.exceeded", "decoded JSON exceeds the structure budget"
             )
-        if isinstance(item, dict):
-            stack.extend((child, depth + 1) for child in item.values())
-        elif isinstance(item, list):
-            stack.extend((child, depth + 1) for child in item)
-        elif not isinstance(item, (str, bool, type(None))):
+        if isinstance(item, dict | list):
+            children: Collection[Any] = item.values() if isinstance(item, dict) else item
+            # Every pending entry is counted once it is popped, so the budget can be
+            # refused from the container size alone. Expanding first would let one
+            # oversized array materialize a child tuple per element before the refusal.
+            if count + len(stack) + len(children) > limits.max_json_values:
+                raise CircuitIntentValidationError(
+                    "budget.exceeded", "decoded JSON exceeds the structure budget"
+                )
+            stack.extend((child, depth + 1) for child in children)
+        elif not isinstance(item, str | bool | None):
             raise ValueError("unsupported JSON scalar")
 
 
@@ -251,14 +258,13 @@ def decode_snapshot_json(
         return snapshot
     except CircuitIntentValidationError:
         raise
-    except RecursionError as error:
-        raise CircuitIntentValidationError(
-            "budget.exceeded", "JSON nesting exceeds the decoder budget"
-        ) from error
-    except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as error:
-        raise CircuitIntentValidationError(
-            "schema.invalid", "JSON does not conform to Circuit Intent IR v0.1"
-        ) from error
+    except RecursionError:
+        failure = ("budget.exceeded", "JSON nesting exceeds the decoder budget")
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        failure = ("schema.invalid", "JSON does not conform to Circuit Intent IR v0.1")
+    # Raised outside the handlers so neither __cause__ nor __context__ can carry a
+    # stdlib message that embeds the caller's rejected value past this boundary.
+    raise CircuitIntentValidationError(*failure)
 
 
 def snapshot_from_content(
@@ -287,11 +293,10 @@ def snapshot_from_content(
         return make_snapshot(content)
     except CircuitIntentValidationError:
         raise
-    except RecursionError as error:
-        raise CircuitIntentValidationError(
-            "budget.exceeded", "Circuit Intent structure exceeds the decoder budget"
-        ) from error
-    except (TypeError, UnicodeEncodeError, ValueError) as error:
-        raise CircuitIntentValidationError(
-            "schema.invalid", "content does not conform to Circuit Intent IR v0.1"
-        ) from error
+    except RecursionError:
+        failure = ("budget.exceeded", "Circuit Intent structure exceeds the decoder budget")
+    except (TypeError, UnicodeEncodeError, ValueError):
+        failure = ("schema.invalid", "content does not conform to Circuit Intent IR v0.1")
+    # Raised outside the handlers so neither __cause__ nor __context__ can carry a
+    # stdlib message that embeds the caller's rejected value past this boundary.
+    raise CircuitIntentValidationError(*failure)

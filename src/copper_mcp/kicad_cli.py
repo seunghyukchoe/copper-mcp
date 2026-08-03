@@ -221,8 +221,10 @@ def _library_table_dependencies(
             or len(fields["uri"]) != 1
             or ("options" in fields and fields["options"] != ("",))
             or ("descr" in fields and len(fields["descr"]) != 1)
-            or fields.get("hidden")
-            or fields.get("disabled")
+            # KiCad also writes these as bare flags, whose atom tuple is empty,
+            # so presence alone marks the entry as unusable for this run.
+            or "hidden" in fields
+            or "disabled" in fields
         ):
             raise KiCadCliError("KiCad DRC library table entry is unsupported")
         library_names.add(fields["name"][0])
@@ -597,7 +599,7 @@ def _validate_drc_json_tree(value: Any) -> None:
             pending.extend((child, depth + 1) for child in item.values())
         elif isinstance(item, list):
             pending.extend((child, depth + 1) for child in item)
-        elif not isinstance(item, (str, int, float, bool, type(None))):
+        elif not isinstance(item, str | int | float | bool | None):
             raise ValueError("DRC report JSON contains an unsupported value")
 
 

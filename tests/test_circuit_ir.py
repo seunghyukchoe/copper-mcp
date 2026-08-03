@@ -16,6 +16,7 @@ from copper_mcp.circuit_ir import (
     encode_snapshot,
     make_snapshot,
     normalize_content,
+    snapshot_from_content,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -148,6 +149,55 @@ def test_input_depth_and_value_budgets_fail_before_full_decode() -> None:
         with pytest.raises(CircuitIntentValidationError) as raised:
             decode_snapshot_json(payload, limits)
         assert raised.value.code == "budget.exceeded"
+
+
+def test_oversized_array_is_refused_before_the_decoder_expands_it() -> None:
+    class _UnexpandableList(list[Any]):
+        def __iter__(self) -> Any:
+            raise AssertionError("array was expanded before the structure budget was checked")
+
+    oversized = _UnexpandableList(["x"] * 9_000)
+
+    with pytest.raises(CircuitIntentValidationError) as raised:
+        snapshot_from_content(oversized)
+
+    assert raised.value.code == "budget.exceeded"
+
+
+def test_multi_million_element_array_is_refused_without_materializing_it() -> None:
+    with pytest.raises(CircuitIntentValidationError) as raised:
+        snapshot_from_content(["x"] * 4_000_000)
+
+    assert raised.value.code == "budget.exceeded"
+
+
+def _exception_chain(error: BaseException) -> list[BaseException]:
+    chain: list[BaseException] = []
+    pending: list[BaseException | None] = [error]
+    while pending:
+        item = pending.pop()
+        if item is None or any(item is seen for seen in chain):
+            continue
+        chain.append(item)
+        pending.extend((item.__cause__, item.__context__))
+    return chain
+
+
+def test_rejected_enum_values_never_reach_the_exception_chain() -> None:
+    document = _document()
+    document["content"]["components"][0]["kind"] = "SECRET_PRIVATE_KIND"
+    content = _document()["content"]
+    content["ports"][0]["direction"] = "SECRET_PRIVATE_KIND"
+
+    with pytest.raises(CircuitIntentValidationError) as decoded:
+        decode_snapshot_json(_payload(document))
+    with pytest.raises(CircuitIntentValidationError) as structured:
+        snapshot_from_content(content)
+
+    for raised in (decoded, structured):
+        assert raised.value.code == "schema.invalid"
+        for error in _exception_chain(raised.value):
+            assert "SECRET_PRIVATE_KIND" not in repr(error)
 
 
 @pytest.mark.parametrize(

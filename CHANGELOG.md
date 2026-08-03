@@ -117,6 +117,11 @@ All notable changes are documented here. The format follows
   benchmark JSON artifacts.
 - CodeQL `init`, `analyze`, and SARIF upload now move as one pinned v4 suite, and Dependabot groups
   future CodeQL suite updates so incompatible action generations cannot be proposed separately.
+- Workspace path validation compares a caller-supplied absolute path against the resolved workspace
+  root without resolving the caller's own path first. An absolute path spelled through a symlinked
+  prefix, such as `/tmp/...` where the resolved root is `/private/tmp/...` on macOS, is therefore
+  rejected fail-closed and must be spelled through the resolved path. Workspace-relative paths are
+  unaffected.
 
 ### Fixed
 

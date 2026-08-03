@@ -524,6 +524,26 @@ class KiCadCliTests(unittest.TestCase):
         mocked_discovery.assert_not_called()
         mocked_run.assert_not_called()
 
+    def test_rejects_flag_form_hidden_and_disabled_library_entries(self) -> None:
+        library_table = self.workspace / "fp-lib-table"
+        footprint = self.workspace / "local.pretty" / "R.kicad_mod"
+        footprint.parent.mkdir()
+        footprint.write_text("(footprint R)", encoding="utf-8")
+
+        for flag in ("(hidden)", "(disabled)", "(hidden yes)"):
+            with self.subTest(flag=flag):
+                library_table.write_text(
+                    '(fp_lib_table (version 7) (lib (name "Local") (type "KiCad") '
+                    f'(uri "${{KIPRJMOD}}/local.pretty") (options "") (descr "") {flag}))',
+                    encoding="utf-8",
+                )
+                with patch("copper_mcp.kicad_cli.discover_kicad_cli") as mocked_discovery:
+                    with patch("copper_mcp.kicad_cli.subprocess.run") as mocked_run:
+                        with self.assertRaisesRegex(KiCadCliError, "library"):
+                            run_board_drc(self.board.name, self.settings)
+                mocked_discovery.assert_not_called()
+                mocked_run.assert_not_called()
+
     def test_rejects_cumulative_context_before_starting_kicad(self) -> None:
         footprint = self.workspace / "local.pretty" / "R.kicad_mod"
         footprint.parent.mkdir()
