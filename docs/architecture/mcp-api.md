@@ -15,6 +15,7 @@
 | `server_info` | None | Version, maturity, and honest capability inventory. |
 | `inspect_board` | None | Bounded read-only inspection inside the configured workspace. |
 | `run_board_drc` | Temporary report only | Fixed-argument KiCad DRC with a bounded, redacted summary. |
+| `preview_route` | None, or a temporary report when `include_drc` is set | Bounded, non-mutating two-pin route proposal on the documented Board IR subset. |
 | `validate_candidate` | None | Validate and normalize candidate metadata. |
 | `compare_candidates` | None | Correctness-first deterministic ranking. |
 
@@ -30,10 +31,26 @@ other exit codes or process/report disagreement fail the tool. Warning-only and 
 findings can retain a hard-correctness pass flag while still requiring exit code `5`. The snapshot
 and report have independent size ceilings, and report growth is limited before KiCad starts.
 
-Candidate-bound DRC is currently an internal Python application boundary, not an implemented MCP
-tool or resource. It accepts typed in-memory routing contracts only and returns no candidate board
-bytes. JSON ingestion, authorization, job persistence, resource exposure, preview, export, and apply
-remain deferred to the planned routing-service contract.
+`preview_route` takes one request object with a workspace-relative `board`, a KiCad `net` name, a
+copper `layer` name, integer `constraints` for the applied net class, and optional `seed`,
+`settings`, and `include_drc` fields. Unknown fields, non-integer or out-of-range budgets, booleans
+supplied as integers, control characters, and unsupported layer names are rejected before any file
+is read. Every response carries a `status` of `routed`, `not_routed`, or `unsupported_board`, the
+board revision, the Board IR snapshot digest when conversion succeeded, and the validated request.
+A routed response includes the candidate ID, endpoint pad IDs, integer geometry, exact cost
+decomposition, deterministic search metrics, and the resource ceilings that produced it. An unrouted
+response carries one typed, non-echoing diagnostic; an unsupported board carries bounded conversion
+diagnostic-code counts instead of raw adapter text.
+
+Setting `include_drc` binds the proposal to candidate-bound authoritative KiCad DRC evidence, which
+returns the same aggregate, redacted summary as `run_board_drc` plus the candidate, source, patched
+board, and patched context revisions. The call fails rather than returning a candidate whose
+requested evidence is missing or does not bind. Preview writes no file, creates no job, and never
+returns source board bytes; it does return the geometry it generated, so a host that must not
+disclose generated copper to a model should not enable this tool.
+
+Candidate persistence, durable routing jobs, resource exposure, export, and apply remain deferred to
+the planned routing-service contract.
 
 ## Planned tools
 

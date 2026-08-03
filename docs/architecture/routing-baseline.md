@@ -5,9 +5,9 @@
 `routing/astar.py` is a candidate-only CPU reference for one exact two-pin route. The separate
 `adapters/kicad_route_patch.py` bridge can now serialize that exact replayed candidate into a
 disposable KiCad board, and the internal KiCad service can bind that private derivative to
-authoritative DRC evidence. The slice remains smaller than issue #10's complete acceptance target:
-it does not expose route or evidence ingestion through MCP/CLI, route multiple nets, persist or
-preview candidate boards, or apply copper.
+authoritative DRC evidence. A bounded, non-mutating preview now exposes that pipeline through MCP
+and the CLI. The slice remains smaller than issue #10's complete acceptance target: it does not
+route multiple nets, run durable jobs, persist or export candidate boards, or apply copper.
 
 ## Accepted input
 
@@ -131,15 +131,51 @@ candidate bytes, raw descriptions, coordinates, UUIDs, or net names are returned
 integration test runs this path from the original synthetic two-pad fixture and verifies that source
 bytes, inode, modification time, and workspace entries remain unchanged.
 
+## Public non-mutating preview
+
+`route_preview.preview_route()` is the first public routing surface, exposed as the `preview_route`
+MCP tool and the `copper-mcp preview-route` command. It parses one untrusted request, resolves a
+single `.kicad_pcb` beneath the workspace, converts it through the fail-closed Board IR adapter,
+proposes one candidate, and optionally binds ADR-0008 DRC evidence.
+
+Requests carry a workspace-relative board path, a KiCad net name, a copper layer name, integer
+net-class constraints, and optional seed, A* settings, and `include_drc` fields. Unknown fields,
+non-integer or out-of-range budgets, booleans supplied as integers, control characters, oversized
+net names, and non-copper layer names are rejected before any file is read. Routing constraints come
+only from the caller, never from untrusted board content, so a board file cannot widen its own
+clearance.
+
+Every outcome is one of three statuses. `routed` carries a candidate whose base revision must equal
+the previewed Board IR snapshot digest. `not_routed` carries exactly one typed, non-echoing
+diagnostic. `unsupported_board` carries bounded conversion diagnostic-code counts and no snapshot
+digest; any conversion diagnostic, including a warning, produces this status. A wall-clock deadline
+(`COPPER_MCP_MAX_ROUTE_PREVIEW_SECONDS`, default 30 s) starts at the operation boundary, before the
+board is resolved, read, or converted, and bounds the whole call rather than only the search. It is
+checked after conversion, consulted during search, and clamps the KiCad timeout for optional DRC to
+whatever budget remains. Exceeding it surfaces as the ordinary `cancelled` diagnostic, and it never
+participates in candidate identity.
+
+`include_drc` runs the candidate-bound authoritative path and returns the same aggregate, redacted
+`DrcSummary` plus the candidate, source, patched-board, and patched-context revisions. A missing
+KiCad CLI or non-binding evidence fails the whole call rather than returning an unverified
+candidate. `RoutePreview` revalidates all of these bindings on construction and serializes to a
+detached plain dictionary.
+
+The preview writes no file, creates no job, persists nothing, and applies no copper. It does return
+the integer geometry and endpoint pad IDs it generated, which is an intentional and documented
+disclosure; source board bytes and unrelated board objects are never returned.
+
 ## Safety boundary
 
 Zero `hard_internal_violations` means only that this implementation's supported-grid post-checks
-passed. Successful serialization alone is not a KiCad DRC result. Candidate-bound DRC evidence is
-internal and applies to one private replayed derivative plus its recorded context; it is not a
-durable candidate file, public route service, whole-board routing result, or production approval.
+passed. Successful serialization alone is not a KiCad DRC result. Candidate-bound DRC evidence
+applies to one private replayed derivative plus its recorded context; it is not a durable candidate
+file, a whole-board routing result, or production approval. A preview is a proposal, not an applied
+route.
 It says nothing about electrical behavior, SI/PI, EMC, thermal performance, DFM, fabrication
 readiness, or hardware safety. Preview, persistence, and application require separate contracts.
 
 See [ADR-0006](../adr/0006-bounded-deterministic-astar.md),
 [ADR-0007](../adr/0007-disposable-kicad-candidate-snapshot.md),
-[ADR-0008](../adr/0008-candidate-bound-kicad-drc.md), and the [roadmap](../roadmap.md).
+[ADR-0008](../adr/0008-candidate-bound-kicad-drc.md),
+[ADR-0009](../adr/0009-non-mutating-route-preview.md), and the [roadmap](../roadmap.md).

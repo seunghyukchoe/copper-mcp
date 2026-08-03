@@ -9,6 +9,7 @@ from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import run_board_drc as run_kicad_board_drc
 from copper_mcp.kicad_file import inspect_kicad_board
 from copper_mcp.models import candidate_from_dict, rank_candidates
+from copper_mcp.route_preview import preview_route as preview_route_candidate
 
 
 def server_info() -> dict[str, Any]:
@@ -24,6 +25,7 @@ def server_info() -> dict[str, Any]:
             "authoritative read-only KiCad DRC summaries",
             "candidate manifest validation",
             "deterministic candidate ranking",
+            "non-mutating two-pin route preview on a documented Board IR subset",
         ],
         "planned": [
             "KiCad IPC adapter",
@@ -47,6 +49,13 @@ def run_board_drc(path: str, settings: Settings | None = None) -> dict[str, Any]
 
     active_settings = settings or Settings.from_env()
     return run_kicad_board_drc(path, active_settings).to_dict()
+
+
+def preview_route(payload: dict[str, Any], settings: Settings | None = None) -> dict[str, Any]:
+    """Preview one deterministic two-pin candidate without writing or applying anything."""
+
+    active_settings = settings or Settings.from_env()
+    return preview_route_candidate(payload, active_settings).to_dict()
 
 
 def validate_candidate(payload: dict[str, Any]) -> dict[str, Any]:

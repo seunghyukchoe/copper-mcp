@@ -13,8 +13,8 @@ MCP-based tools, and optional AI policy plugins.**
 > [!IMPORTANT]
 > CopperMCP is pre-alpha. The current `0.1.x` foundation provides secure board inspection,
 > authoritative read-only KiCad DRC summaries, stable manifests, candidate validation, MCP
-> contracts, and a narrow candidate-only two-pin A* reference. It does not route or modify
-> production boards.
+> contracts, and a narrow non-mutating two-pin A* route preview. It does not modify production
+> boards.
 
 ## Why this project exists
 
@@ -44,8 +44,10 @@ The non-negotiable boundary is simple:
 - Bounded integer A* candidates for one two-pad net on a documented rectangular Board IR subset,
   with independent lattice, search, and obstacle-work ceilings, plus replay-bound serialization to
   new disposable KiCad bytes when every modeled source geometry object has a native UUID/tstamp.
-  This synthetic-domain reference has no durable export, preview, MCP route/evidence tool, source
-  mutation, or apply path.
+- A bounded, non-mutating route preview over MCP and the CLI that validates an untrusted request,
+  proposes one candidate under a wall-clock deadline, and optionally binds it to aggregate
+  authoritative KiCad DRC evidence. It has no durable export, persistence, job, source mutation, or
+  apply path.
 - MCP tools and a stable CLI over the same application services.
 - Professional CI, CodeQL, dependency auditing, release automation, issue forms, and project ledgers.
 
@@ -106,6 +108,21 @@ count and wall-clock ceilings, and the pre-run byte snapshot is released before 
 KiCad projects and their project-relative libraries self-contained below the configured workspace.
 DRC-clean is not a substitute for electrical, signal-integrity, manufacturability, or hardware
 review.
+
+Preview one two-pin route without modifying the board, then optionally validate it with KiCad:
+
+```bash
+copper-mcp --workspace /absolute/path/to/boards preview-route example.kicad_pcb \
+  --net AUDIO --layer F.Cu \
+  --clearance-nm 250000 --track-width-nm 250000 \
+  --via-diameter-nm 800000 --via-drill-nm 400000 --drc
+```
+
+The preview writes no file, creates no job, and stores no candidate. It succeeds only for the
+documented Board IR subset and the two-pad single-layer routing case; anything else returns a typed
+diagnostic or bounded conversion-code counts. The response contains the geometry CopperMCP
+generated, so hosts that must not disclose generated copper to a model should not enable the
+`preview_route` tool.
 
 Start the local MCP server over standard input/output:
 

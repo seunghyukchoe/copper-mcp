@@ -47,11 +47,19 @@ The internal `run_route_candidate_drc()` service accepts only a typed `RouteCand
 `KiCadConstraintProfile`. It captures the original context, reconstructs Board IR from captured
 bytes, invokes the replay-verified disposable serializer, and runs the patched in-memory context
 through the same fixed KiCad DRC path. Its evidence binds candidate, Board IR, raw source, patched
-board, patched context, and nested summary revisions. Do not wrap this function in a new CLI/MCP
-command, candidate-file export, preview, or apply action without a separate public contract and
-security review. Tests for this boundary must prove negative violation evidence, stale board/rule/
-library rejection, context budgets, temporary cleanup, deep evidence immutability, and source inode,
-mtime, byte, and workspace-entry preservation where real KiCad is available.
+board, patched context, and nested summary revisions. Tests for this boundary must prove negative
+violation evidence, stale board/rule/library rejection, context budgets, temporary cleanup, deep
+evidence immutability, and source inode, mtime, byte, and workspace-entry preservation where real
+KiCad is available.
+
+Its only public caller is `route_preview.preview_route()`, reached through the `preview_route` MCP
+tool and `copper-mcp preview-route`, and only when the caller sets `include_drc`. That service owns
+the untrusted request boundary: extend `parse_route_preview_request()` rather than loosening any
+downstream contract, keep routing constraints caller-supplied, and add a rejection test with every
+new field. `COPPER_MCP_MAX_ROUTE_PREVIEW_SECONDS` bounds preview wall-clock time above the router's
+integer budgets. Preview must remain free of file writes, durable candidates, and jobs; a
+candidate-file export, persistence, or apply action still needs a separate public contract and
+security review.
 
 ## Board IR development
 
