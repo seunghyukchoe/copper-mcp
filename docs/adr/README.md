@@ -25,3 +25,4 @@ from the decision ledger.
 - [ADR-0019: Route multi-pin nets by deterministic component merging](0019-multi-pin-component-merging.md)
 - [ADR-0020: Treat same-net through vias as connectivity joints](0020-via-aware-connectivity.md)
 - [ADR-0021: Trust poured copper only against a fresh KiCad refill](0021-zone-fill-authority.md)
+- [ADR-0022: Observe a board as a semantic scene, with its text held at arm's length](0022-circuit-scene-observation.md)

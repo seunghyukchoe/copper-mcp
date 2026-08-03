@@ -166,6 +166,23 @@ copper-mcp --workspace /absolute/path/to/boards board-ir example.kicad_pcb \
   --via-diameter-nm 800000 --via-drill-nm 400000
 ```
 
+Observe a region of a board as a typed semantic scene. The region is mandatory — either an exact
+nanometre bounding box or one object reference with a radius — because full detail inside a stated
+window is more useful than a summary of everything:
+
+```bash
+copper-mcp --workspace /absolute/path/to/boards observe-scene example.kicad_pcb \
+  --clearance-nm 250000 --track-width-nm 250000 \
+  --via-diameter-nm 800000 --via-drill-nm 400000 \
+  --region 0 0 30000000 30000000
+```
+
+Objects come back split into `static` (outline, pads, keepouts, rules) and `mutable` (segments,
+arcs, vias, zones), each named by the Board IR reference it already carries so you can refer to it
+in a later call. Board text is omitted unless `--include-annotations` is passed, and even then it is
+confined to a separate `annotations` collection marked untrusted: it is written by whoever authored
+the board, and it is data to be read, never instructions to follow.
+
 Preview one route without modifying the board, then optionally validate it with KiCad:
 
 ```bash

@@ -6,6 +6,42 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Circuit Scene IR 0.1.0 and the `observe_board_scene` tool: a bounded, region-scoped semantic
+  observation of one board, with a matching `copper-mcp observe-scene` CLI command. A caller states
+  a window - either an exact nanometre bounding box or one `around_ref_id` with a radius, never a
+  whole-board shorthand - and receives full-precision integer geometry for the objects that overlap
+  it. Objects arrive in two collections rather than behind a flag: `static` (outline, pads, keepouts,
+  rules) is what a proposal must take as given, and `mutable` (segments, arcs, vias, zones) is what
+  it may change, so code meaning to read only the givens cannot iterate over both by accident. Every
+  object is named by the Board IR identity it already carries, so a model can refer to what it saw
+  in a later call instead of repeating coordinates back, and each reference declares its own
+  durability as `native`, `content_derived` or `request_scoped` - with a scene-level summary - so a
+  caller knows in one place whether the references it is about to store will outlive an edit.
+  Object and vertex ceilings are charged as the scene is built and reported as an explicit
+  `ceiling_hit`, so a truncated scene can never be mistaken for a complete one. The whole of this
+  repository's own board is 123 objects and 41KB in 38ms, roughly 6% of the provisional 2,000-object
+  ceiling; region scoping cut that response eleven-fold with no change in wall time, because parsing
+  dominates, so the window is a context-budget economy rather than a server-cost one.
+- Quarantine for board-author-controlled text. Silkscreen, fabrication text and footprint properties
+  are off by default and, when explicitly requested, appear only in a separately typed `annotations`
+  collection whose `trust` field is a one-value literal - there is no vocabulary for a trusted
+  string, so no board can label its own text safe. Both the name and the value of each footprint
+  property are quarantined, because the name is as attacker-controlled as the value. Net names never
+  appear at any setting, since Board IR hashes them at conversion. The test for this is a
+  whole-response grep against a hostile fixture carrying prompt-injection strings in every
+  author-controlled slot, rather than a per-field assertion, because sanitisation defences fail by
+  leaking into the one field nobody audited.
+- A metamorphic relation over the scene: turn the board a quarter turn and every coordinate must be
+  the image of the original under that turn while every `ref_id` holds still. A companion guard
+  confirms the fixture actually contains geometry the turn changes, so the invariance of the
+  references proves something.
+- `observe_board_scene` advertises a real `outputSchema` and returns populated `structuredContent`,
+  because its handler returns a closed contract rather than a bare dictionary. A test pins the
+  contrast with the older `dict`-typed tools, which advertise a vacuous object schema - a gap in
+  those tools' typing rather than in the SDK.
+
 ## [0.3.0] - 2026-08-04
 
 ### Added

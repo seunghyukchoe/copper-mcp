@@ -8,12 +8,16 @@ import re
 import subprocess
 import sys
 import unittest
+from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 from mcp.server.mcpserver.exceptions import ToolError
 
+import copper_mcp.mcp_server as _server
 from copper_mcp.circuit_intent_service import build_schematic_from_content
 from copper_mcp.mcp_server import mcp
+from copper_mcp.schematic_artifacts import SchematicArtifactStore
 
 ROOT = Path(__file__).resolve().parents[1]
 CIRCUIT_FIXTURE = ROOT / "benchmarks" / "audio" / "fixtures" / "rc-low-pass-intent-v1.json"
@@ -53,6 +57,24 @@ def _assert_closed_object(schema: dict[str, object], properties: set[str]) -> No
 
 
 class McpServerTests(unittest.TestCase):
+    def setUp(self) -> None:
+        """Give each test its own schematic artifact store.
+
+        The store is a module-level singleton, so without this every test in the process
+        shares one LRU, one byte budget and one TTL clock. Nothing in the current suite is
+        known to depend on that — the store holds far fewer entries than its 16-entry ceiling
+        and the 15-minute TTL cannot expire inside a 30-second run, and a deliberate
+        reproduction attempt over more than twenty runs never reproduced the transient
+        failure that prompted this. The isolation is therefore defensive rather than a fix
+        for a diagnosed cause: it removes an entire class of cross-test coupling cheaply, and
+        makes any future failure here attributable to the test that caused it.
+        """
+
+        store = SchematicArtifactStore()
+        patcher = patch.object(_server, "_SCHEMATIC_ARTIFACTS", store)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_declares_expected_read_only_tools(self) -> None:
         tools = asyncio.run(mcp.list_tools())
         self.assertEqual(
@@ -61,6 +83,7 @@ class McpServerTests(unittest.TestCase):
                 "compare_candidates",
                 "inspect_board",
                 "inspect_board_ir",
+                "observe_board_scene",
                 "preview_route",
                 "render_circuit_schematic",
                 "run_board_drc",
@@ -332,6 +355,83 @@ asyncio.run(main())
         inventory = json.loads(result.stdout)
         self.assertNotIn("render_circuit_schematic", inventory["tools"])
         self.assertNotIn(RESOURCE_TEMPLATE, inventory["templates"])
+
+
+class SceneToolSurfaceTests(unittest.TestCase):
+    """The MCP surface of observe_board_scene, checked against the wire, not the docstring."""
+
+    def _tool(self) -> object:
+        tools = asyncio.run(mcp.list_tools())
+        return next(tool for tool in tools if tool.name == "observe_board_scene")
+
+    def test_the_scene_tool_advertises_a_real_output_schema(self) -> None:
+        """A tool typed as a bare dict advertises nothing; this one must advertise its shape."""
+
+        scene = self._tool()
+        schema = scene.output_schema
+        self.assertIsNotNone(schema)
+        assert isinstance(schema, dict)
+        self.assertEqual(schema["type"], "object")
+        self.assertIs(schema["additionalProperties"], False)
+        self.assertIn("static", schema["properties"])
+        self.assertIn("mutable", schema["properties"])
+        self.assertIn("annotations", schema["properties"])
+        self.assertIn("truncation", schema["properties"])
+
+        # Contrast with a dict-returning tool: the SDK emits a schema either way, but only a
+        # typed return makes it say anything. This is a gap in those tools, not in the SDK.
+        tools = asyncio.run(mcp.list_tools())
+        loose = next(tool for tool in tools if tool.name == "preview_route")
+        assert isinstance(loose.output_schema, dict)
+        self.assertNotIn("properties", loose.output_schema)
+
+    def test_the_scene_tool_is_annotated_read_only(self) -> None:
+        scene = self._tool()
+        self.assertIsNotNone(scene.annotations)
+        assert scene.annotations is not None
+        self.assertIs(scene.annotations.read_only_hint, True)
+        self.assertIs(scene.annotations.destructive_hint, False)
+        self.assertIs(scene.annotations.open_world_hint, False)
+
+    def test_the_scene_tool_returns_structured_content_that_matches_its_schema(self) -> None:
+        board = ROOT / "tests" / "fixtures" / "circuit-scene-v0.1" / "scene-region.kicad_pcb"
+
+        # Point the module's settings at the fixture workspace rather than reloading the
+        # module. Reloading would rebuild the module-level schematic artifact store, so a
+        # capability minted by another test in this process would stop resolving — exactly
+        # the cross-test coupling the store isolation below exists to prevent.
+        replacement = replace(_server._SETTINGS, workspace=board.parent.resolve())
+        with patch.object(_server, "_SETTINGS", replacement):
+            result = asyncio.run(
+                _server.mcp.call_tool(
+                    "observe_board_scene",
+                    {
+                        "request": {
+                            "board": board.name,
+                            "constraints": {
+                                "clearance_nm": 200_000,
+                                "track_width_nm": 250_000,
+                                "via_diameter_nm": 600_000,
+                                "via_drill_nm": 300_000,
+                            },
+                            "region": {
+                                "min_x_nm": 0,
+                                "min_y_nm": 0,
+                                "max_x_nm": 30_000_000,
+                                "max_y_nm": 30_000_000,
+                            },
+                        }
+                    },
+                )
+            )
+
+        self.assertFalse(result.is_error)
+        structured = result.structured_content
+        assert isinstance(structured, dict)
+        self.assertEqual(structured["scene_version"], "0.1.0")
+        self.assertEqual(structured["region"]["source"], "explicit")
+        self.assertEqual(len(structured["static"]["pads"]), 1)
+        self.assertEqual(structured["annotations"], [])
 
 
 if __name__ == "__main__":
