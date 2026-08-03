@@ -8,6 +8,11 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Through vias outside the routed net are now selected-layer obstacles built from their outer
+  diameter, rather than a board-level rejection. A via on the routed net still fails closed as
+  partial routing. On the repository's own CopperTone board this moves the failure from "nine vias
+  reject everything" to per-net diagnostics; the board still previews zero of fourteen nets,
+  because zones and multi-pin nets remain unsupported.
 - Selected-layer pads and orthogonal segments outside the routed net are now exact rectangular
   routing obstacles instead of a hard rejection, so preview works on boards that already carry
   copper. Obstacles are inflated by the routed half-width plus the stricter of the routed and

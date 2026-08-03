@@ -363,11 +363,14 @@ def _prepare(
             "coincident route endpoints are outside the first-slice contract",
         )
 
-    if content.vias:
-        raise _fail(
-            RouteFailureCode.UNSUPPORTED_GEOMETRY,
-            "vias occupy every layer and are outside the single-layer obstacle model",
-        )
+    for index, via in enumerate(content.vias):
+        if index % 64 == 0:
+            work.checkpoint()
+        if via.net_id == request.net_id:
+            raise _fail(
+                RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                "the selected net already carries a via and is partially routed",
+            )
     for index, arc in enumerate(content.arcs):
         if index % 64 == 0:
             work.checkpoint()
@@ -491,6 +494,21 @@ def _prepare(
                 "a selected-layer segment is diagonal and is not modeled exactly",
             )
         add_obstacle(segment_extent, governing_clearance_nm(segment.net_id))
+
+    for index, via in enumerate(content.vias):
+        if index % 64 == 0:
+            work.checkpoint()
+        # Board IR v0.1 admits through vias only, so every via crosses the selected layer.
+        half_span_nm = (via.diameter_nm + 1) // 2
+        add_obstacle(
+            (
+                via.center.x - half_span_nm,
+                via.center.y - half_span_nm,
+                via.center.x + half_span_nm,
+                via.center.y + half_span_nm,
+            ),
+            governing_clearance_nm(via.net_id),
+        )
 
     step = request.settings.grid_step_nm
     delta_x = end_pad.center.x - start_pad.center.x

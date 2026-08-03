@@ -21,6 +21,7 @@ from copper_mcp.board_ir import (
     Ring,
     Segment,
     SourceInfo,
+    Via,
     make_content,
     make_snapshot,
 )
@@ -82,11 +83,17 @@ def _snapshot(
     blocking_pad: tuple[int, int] | None = None,
     blocking_pad_rotation_udeg: int = 0,
     foreign_segment: tuple[int, int, int, int] | None = None,
+    foreign_via: tuple[int, int] | None = None,
+    own_via: bool = False,
     existing_copper: bool = False,
     layer_kind: str = "signal",
     length_rule: bool = False,
 ) -> BoardIRSnapshot:
     layer = Layer(id=LAYER_ID, name="F.Cu", index=0, kind=layer_kind)
+    # Vias span two layers, so the back layer only exists when a fixture needs one.
+    copper_layers: tuple[Layer, ...] = (layer,)
+    if foreign_via is not None or own_via:
+        copper_layers += (Layer(id="layer:B.Cu", name="B.Cu", index=1, kind="signal"),)
     net = Net(id=NET_ID, name="AUDIO")
     net_class = NetClass(
         id="class:audio",
@@ -135,6 +142,31 @@ def _snapshot(
                 width_nm=200,
             ),
         )
+    vias: tuple[Via, ...] = ()
+    if foreign_via is not None:
+        vias += (
+            Via(
+                id="via:foreign",
+                net_id=OTHER_NET_ID,
+                center=PointNM(*foreign_via),
+                diameter_nm=800,
+                drill_nm=400,
+                start_layer_id=LAYER_ID,
+                end_layer_id="layer:B.Cu",
+            ),
+        )
+    if own_via:
+        vias += (
+            Via(
+                id="via:own",
+                net_id=NET_ID,
+                center=PointNM(5_000, 5_000),
+                diameter_nm=800,
+                drill_nm=400,
+                start_layer_id=LAYER_ID,
+                end_layer_id="layer:B.Cu",
+            ),
+        )
     content = make_content(
         source=SourceInfo(
             format="test",
@@ -148,7 +180,7 @@ def _snapshot(
                 outer=outline or _rectangle(0, 0, 10_000, 10_000),
             ),
         ),
-        copper_layers=(layer,),
+        copper_layers=copper_layers,
         nets=(net, Net(id=OTHER_NET_ID, name="POWER")),
         constraints=ConstraintSet(
             net_classes=(net_class,),
@@ -169,6 +201,7 @@ def _snapshot(
         ),
         pads=tuple(pads),
         segments=segments,
+        vias=vias,
         keepouts=tuple(
             Keepout(
                 id=f"keepout:{index:02d}",
@@ -650,3 +683,37 @@ def test_existing_copper_counts_against_the_obstacle_budget() -> None:
     request = _request(snapshot, settings=_settings(max_obstacles=1))
 
     _assert_failure(router.propose(snapshot, request), RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+
+
+def test_foreign_vias_become_obstacles_on_every_layer_they_cross() -> None:
+    router = AStarRouter()
+    blocked = _snapshot(foreign_via=(5_000, 5_000))
+
+    detour = _candidate(router.propose(blocked, _request(blocked)))
+
+    assert detour.cost.bend_count > 0
+    # The 800 nm via spans 4600..5400 on both axes; inflated by half width 100 plus
+    # clearance 100 it forbids any centreline inside 4500..5500.
+    assert all(
+        not (4_500 < point.x < 5_500 and 4_500 < point.y < 5_500) for point in detour.patch.vertices
+    )
+    oracle = run_dijkstra_oracle(blocked, _request(blocked))
+    assert isinstance(oracle, DijkstraResult)
+    assert oracle.total_cost_nm == detour.cost.total_cost_nm
+
+
+def test_a_via_on_the_routed_net_still_fails_closed() -> None:
+    router = AStarRouter()
+    partially_routed = _snapshot(own_via=True)
+
+    _assert_failure(
+        router.propose(partially_routed, _request(partially_routed)),
+        RouteFailureCode.UNSUPPORTED_GEOMETRY,
+    )
+
+
+def test_a_via_clear_of_the_route_does_not_force_a_detour() -> None:
+    router = AStarRouter()
+    aside = _snapshot(foreign_via=(5_000, 8_000))
+
+    assert _candidate(router.propose(aside, _request(aside))).cost.bend_count == 0

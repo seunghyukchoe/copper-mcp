@@ -18,8 +18,8 @@ route multiple nets, run durable jobs, persist or export candidate boards, or ap
 | Connectivity | Exactly two pads belonging to the net; both accessible on the selected layer |
 | Constraints | One net-class width/clearance assignment; no selected-net length or differential-pair rule |
 | Board | One hole-free, axis-aligned rectangular outline |
-| Obstacles | Rectangular track keepouts, plus foreign-net pads and orthogonal segments on the selected layer |
-| Existing geometry | No vias, selected-layer arcs or zones, off-axis pads, diagonal segments, or copper already on the routed net |
+| Obstacles | Rectangular track keepouts, plus foreign-net pads, orthogonal segments, and through vias |
+| Existing geometry | No selected-layer arcs or zones, off-axis pads, diagonal segments, or copper already on the routed net |
 | Search | Four-neighbour orthogonal grid; east, north, west, south expansion order |
 | Output | Immutable orthogonal `RoutePatch` tied to the unchanged snapshot digest |
 
@@ -43,7 +43,12 @@ segment contributes the rectangle its centreline sweeps, grown by the ceiling of
 Each is inflated by the routed half-width plus the stricter of the routed net's and the obstacle
 net's class clearance, so a board mixing net classes cannot be routed to the looser rule.
 
-Round pad shapes use their bounding box. That over-approximates only: it can refuse a route a
+A through via outside the routed net contributes the bounding box of its outer diameter; Board IR
+v0.1 admits through vias only, so every via provably crosses the routed layer. Drill diameter is
+ignored because copper, not the hole, is what a track must clear. A via on the routed net is
+rejected as partial routing, exactly like a same-net segment.
+
+Round pad and via shapes use their bounding box. That over-approximates only: it can refuse a route a
 rounder shape would allow, never permit a clearance violation. Arcs, zones, vias, off-axis pad
 rotations, diagonal segments, and a net that is already partially routed still fail closed, because
 a rectangle cannot represent them without lying. Every obstacle counts against `max_obstacles`.
@@ -183,19 +188,18 @@ own [CopperTone](../../hardware/coppertone-buffer/README.md) design at commit `8
 | Board IR conversion | Supported — 2 copper layers, 14 nets, 55 pads, 53 segments, 9 vias, 2 zones, 2 keepouts |
 | Nets previewable on `F.Cu` | 0 of 14 |
 
-Conversion is not the blocker; the router's contract is. Four separate limits each independently
-disqualify this board:
+Conversion is not the blocker; the router's contract is. After ADR-0012 made vias obstacles rather
+than a board-level veto, the remaining limits are per-net and precise:
 
-- 9 vias occupy every layer and are rejected before any net is considered;
-- 2 `F.Cu` zones are rejected, and a bounding box would be useless for a pour that covers most of the
-  board, so zones need real polygon obstacles rather than a rectangle;
-- 13 of 14 nets already carry `F.Cu` copper, because the board is fully routed; and
-- 9 of 14 nets have more than two `F.Cu` pads, with the largest at twelve.
+- 9 of 14 nets have more than two `F.Cu` pads, the largest at twelve;
+- all 5 two-pin nets fail on the board's two `F.Cu` zones; and
+- 13 of 14 nets already carry `F.Cu` copper, because the board is fully routed.
 
-Five two-pin nets do exist, but all five are already routed. So the honest summary is that Board IR
-handles a real two-layer audio board today, and the router does not route one. The ordering that
-follows from this measurement — via obstacles, then zone polygons, then multi-pin nets, then rip-up —
-is what the [roadmap](../roadmap.md) now reflects.
+Zones are the next blocker and need real polygon obstacles: a bounding box around a pour covering
+most of a board would make every route impossible while claiming to be conservative. So the honest
+summary is that Board IR handles a real two-layer audio board today, and the router does not route
+one. The ordering that follows — polygon zones, then multi-pin nets, then rip-up — is what the
+[roadmap](../roadmap.md) now reflects.
 
 ## Safety boundary
 
@@ -216,4 +220,5 @@ See [ADR-0006](../adr/0006-bounded-deterministic-astar.md),
 [ADR-0007](../adr/0007-disposable-kicad-candidate-snapshot.md),
 [ADR-0008](../adr/0008-candidate-bound-kicad-drc.md),
 [ADR-0009](../adr/0009-non-mutating-route-preview.md),
-[ADR-0011](../adr/0011-existing-copper-obstacles.md), and the [roadmap](../roadmap.md).
+[ADR-0011](../adr/0011-existing-copper-obstacles.md),
+[ADR-0012](../adr/0012-via-obstacles.md), and the [roadmap](../roadmap.md).
