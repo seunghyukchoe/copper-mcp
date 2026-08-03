@@ -79,3 +79,19 @@ Corrections require a dated note below the table; never replace released assets 
 > hosted gates supersede the local network/build blocker as PR evidence, but the local managed
 > checkout remains metadata-write-restricted. The temporary CI artifact is not a release artifact,
 > and no `Ready` authorization, version tag, GitHub release, or package publication exists.
+
+> **Unrestricted desktop gate closure — 2026-08-03:** On the unrestricted desktop checkout at PR
+> [#34](https://github.com/seunghyukchoe/copper-mcp/pull/34) head
+> [`169add2`](https://github.com/seunghyukchoe/copper-mcp/commit/169add2db175b7fa2219fc892b8242f31a0bef39)
+> (working tree byte-identical to that commit, tree `8075288d6249ab744919fe333e4398ca6d264d6e`),
+> every previously outstanding external gate passed locally with Python 3.12.13 and KiCad 10.0.5:
+> the full pytest suite reported 389 passed plus 26 subtests including all real-KiCad DRC nodes;
+> Ruff, strict mypy across 39 source files, the version, ledger, audio, and Circuit Intent
+> checkers, and the secret scan passed; `pip-audit` resolved PyPI and found no known
+> vulnerabilities; and `python -m build` produced the `0.2.0` wheel and sdist. The eight hosted PR
+> checks (CI 3.11/3.12/3.13, CodeQL ×2, dependency review, dependency and secret audit, label)
+> were re-confirmed green at this head. Live end-to-end verification exercised `board-ir`,
+> `preview-route --drc` (routed, with digest-bound authoritative KiCad DRC evidence), and
+> `render-schematic` (deterministic artifact digest matching the committed fixture digest). This
+> closes the readiness row's outstanding gates as evidence only; no `Ready` authorization row, tag,
+> or publication is added here.
