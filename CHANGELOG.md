@@ -8,6 +8,31 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Diagonal copper on the *routed* net is now attachment copper rather than a refusal, completing
+  the model: obstacles are over-approximated, attachment copper under-approximated. A diagonal track
+  has no single axis-aligned inner rectangle, so it contributes a chain of axis-aligned squares
+  centred at `start + (delta * i) // steps`. Flooring moves a centre less than a nanometre per axis
+  off the exact centreline point, so it stays within `sqrt(2)` of the track; a two-nanometre
+  tolerance absorbs that, and the square half side satisfies `2 * s^2 <= (radius - 2)^2`, which by
+  the triangle inequality on distance-to-a-set puts every square provably inside the real copper.
+  `steps` is chosen so consecutive centres differ by at most `2 * s` per axis — exactly when two
+  closed squares still touch — so the chain is one connected component by construction rather than
+  by inspection, and both properties are covered by a property test over many orientations and
+  widths in exact integer arithmetic. The first and last squares are centred exactly on the track's
+  endpoints, so a diagonal stub reaches its pad and can be picked up at its far end. Endpoints are
+  canonically ordered, so a track recorded in either direction yields the identical chain; each
+  square charges the shared obstacle-check budget, so an over-long track fails closed; and a track
+  too thin to model at all is refused with a distinct diagnostic. Same-net vias and zones remain
+  fail-closed, and foreign diagonal envelopes are unchanged. Boards carrying same-net diagonals were
+  previously refused outright, so no board the router already accepted changes geometry or identity
+  and `ROUTER_VERSION` does not move. The `diagonal-stub` fixture now completes a route off a
+  diagonal stub, adding 18 mm where an empty board needs 20 mm, verified against real KiCad 10.0.5;
+  that check is discriminating because displacing the same proposal by 0.5 mm so it misses the stub
+  end makes KiCad report two `track_dangling` warnings and one unconnected item. On the repository's
+  own CopperTone board this resolves the entire two-pin surface: all five two-pin `F.Cu` nets now
+  report `already_connected`, five of fourteen overall, with `kicad-cli pcb drc` corroborating by
+  reporting zero unconnected items. No copper is proposed for that board — the nets it can reason
+  about need none — and multi-pin routing remains the contract its other nine nets require.
 - Diagonal selected-layer copper on a foreign net is now a conservative obstacle instead of a
   board-level refusal. The envelope is the Minkowski sum of the track's centreline with an
   axis-aligned square of its half width — the convex hull of the two squares at its endpoints —

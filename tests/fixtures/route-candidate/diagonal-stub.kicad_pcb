@@ -32,8 +32,8 @@
     )
   )
   (segment
-    (start 12 13)
-    (end 18 17)
+    (start 10 15)
+    (end 16 19)
     (width 0.25)
     (layer "F.Cu")
     (net "AUDIO")

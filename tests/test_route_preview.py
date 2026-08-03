@@ -289,17 +289,25 @@ def test_preview_completes_a_partial_route_from_existing_copper(tmp_path: Path) 
     assert _entries(tmp_path) == before
 
 
-def test_preview_reports_a_diagonal_same_net_segment(tmp_path: Path) -> None:
+def test_preview_completes_a_route_from_a_diagonal_stub(tmp_path: Path) -> None:
     settings = _copy_fixture(tmp_path, "diagonal-stub.kicad_pcb")
+    before = _entries(tmp_path)
 
-    preview = preview_route(_request(board="diagonal-stub.kicad_pcb"), settings)
+    first = preview_route(_request(board="diagonal-stub.kicad_pcb"), settings)
+    second = preview_route(_request(board="diagonal-stub.kicad_pcb"), settings)
 
-    assert preview.status is RoutePreviewStatus.NOT_ROUTED
-    assert preview.candidate is None
-    assert preview.connection is None
-    assert preview.diagnostic is not None
-    assert preview.diagnostic.code is RouteFailureCode.UNSUPPORTED_GEOMETRY
-    assert "diagonal" in preview.diagnostic.message
+    assert first.status is RoutePreviewStatus.ROUTED
+    assert first.candidate is not None
+    # The stub runs diagonally from the start pad at (10, 15) to (16, 19); the proposal picks
+    # it up at that far end and adds 18 mm instead of the 20 mm an empty board would need.
+    assert first.candidate.patch.vertices == (
+        PointNM(16_000_000, 19_000_000),
+        PointNM(16_000_000, 15_000_000),
+        PointNM(30_000_000, 15_000_000),
+    )
+    assert first.candidate.cost.length_nm == 18_000_000
+    assert first.to_dict() == second.to_dict()
+    assert _entries(tmp_path) == before
 
 
 def test_preview_reports_a_diagnostic_instead_of_routing_off_grid(tmp_path: Path) -> None:
@@ -791,6 +799,38 @@ def test_real_kicad_confirms_a_route_detoured_around_an_octagonal_keepout(
     not REAL_KICAD_CLI.is_file(),
     reason="requires a locally installed KiCad CLI",
 )
+def test_real_kicad_confirms_a_route_completed_off_a_diagonal_stub(tmp_path: Path) -> None:
+    settings = replace(
+        _copy_fixture(tmp_path, "diagonal-stub.kicad_pcb"),
+        kicad_cli=REAL_KICAD_CLI,
+        max_drc_report_bytes=8 * 1024 * 1024,
+    )
+    before = _entries(tmp_path)
+
+    preview = preview_route(
+        _request(board="diagonal-stub.kicad_pcb", include_drc=True),
+        settings,
+    )
+
+    assert preview.status is RoutePreviewStatus.ROUTED
+    assert preview.candidate is not None
+    assert preview.candidate.patch.vertices[0] == PointNM(16_000_000, 19_000_000)
+    # This is the check that the under-approximating diagonal core is sound at the attachment
+    # point: displacing the same proposal by 0.5 mm so it misses the stub end makes KiCad
+    # report two `track_dangling` warnings and one unconnected item, so a clean report here is
+    # evidence the chosen start really does sit on existing copper.
+    assert preview.drc_evidence is not None
+    assert preview.drc_evidence.summary.error_count == 0
+    assert preview.drc_evidence.summary.warning_count == 0
+    assert preview.drc_evidence.summary.unconnected_count == 0
+    assert preview.drc_evidence.summary.passed is True
+    assert _entries(tmp_path) == before
+
+
+@pytest.mark.skipif(
+    not REAL_KICAD_CLI.is_file(),
+    reason="requires a locally installed KiCad CLI",
+)
 def test_real_kicad_confirms_a_completed_partial_route(tmp_path: Path) -> None:
     settings = replace(
         _copy_fixture(tmp_path, "partial-route.kicad_pcb"),
@@ -825,8 +865,21 @@ COPPERTONE_BOARD = (
 )
 
 
-@pytest.mark.parametrize("net_name", ["L_ISO", "R_ISO"])
-def test_coppertone_iso_nets_report_already_connected(net_name: str, tmp_path: Path) -> None:
+# Every two-pin `F.Cu` net on the board, with the same-net segment count each one carries.
+# The RAW nets are the ones whose copper includes diagonals.
+COPPERTONE_TWO_PIN_NETS = {
+    "9V_RAW": 2,
+    "L_IN_RAW": 3,
+    "R_IN_RAW": 2,
+    "L_ISO": 1,
+    "R_ISO": 1,
+}
+
+
+@pytest.mark.parametrize(("net_name", "segments"), sorted(COPPERTONE_TWO_PIN_NETS.items()))
+def test_coppertone_two_pin_nets_report_already_connected(
+    net_name: str, segments: int, tmp_path: Path
+) -> None:
     board = tmp_path / COPPERTONE_BOARD.name
     board.write_bytes(COPPERTONE_BOARD.read_bytes())
     settings = Settings(workspace=tmp_path, max_drc_report_bytes=4096)
@@ -838,9 +891,8 @@ def test_coppertone_iso_nets_report_already_connected(net_name: str, tmp_path: P
     assert first.status is RoutePreviewStatus.ALREADY_CONNECTED
     assert first.to_dict() == second.to_dict()
     assert first.connection is not None
-    # Each ISO net is two pads joined by exactly one segment running between their centres.
-    assert first.connection.attachment_segments == 1
-    assert first.connection.component_objects == 3
+    assert first.connection.attachment_segments == segments
+    assert first.connection.component_objects == segments + 2
 
 
 @pytest.mark.skipif(
@@ -868,6 +920,6 @@ def test_real_kicad_corroborates_the_coppertone_already_connected_nets(tmp_path:
 
     assert summary.unconnected_count == 0
     assert summary.error_count == 0
-    for net_name in ("L_ISO", "R_ISO"):
+    for net_name in COPPERTONE_TWO_PIN_NETS:
         preview = preview_route(_request(board=COPPERTONE_BOARD.name, net=net_name), settings)
         assert preview.status is RoutePreviewStatus.ALREADY_CONNECTED

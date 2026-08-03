@@ -19,8 +19,8 @@ route multiple nets, run durable jobs, persist or export candidate boards, or ap
 | Constraints | One net-class width/clearance assignment; no selected-net length or differential-pair rule |
 | Board | One hole-free, axis-aligned rectangular outline |
 | Obstacles | Track keepouts of any simple polygon outline; foreign-net pads, segments at any angle, and through vias; conservative foreign-net solid-zone polygon envelopes |
-| Attachment | Orthogonal same-net selected-layer segments, as connectable copper rather than obstacles |
-| Existing geometry | No selected-layer arcs or off-axis pads; no diagonal segments on the routed net; no same-net vias or zones |
+| Attachment | Same-net selected-layer segments at any angle, as connectable copper rather than obstacles |
+| Existing geometry | No selected-layer arcs or off-axis pads; no same-net vias or zones |
 | Search | Four-neighbour orthogonal grid; east, north, west, south expansion order; multi-source and multi-target when same-net copper is present |
 | Output | Immutable orthogonal `RoutePatch` tied to the unchanged snapshot digest, or a typed already-connected record |
 
@@ -99,25 +99,40 @@ stricter of the two class clearances is a superset of offsetting the true stadiu
 margin, so the inflation rule is identical to the orthogonal path. Diagonal envelopes charge one
 obstacle check per vertex and count against `max_obstacles` like any other object.
 
-A diagonal segment on the *routed* net is still refused, and the asymmetry is deliberate: an
-obstacle only has to be over-approximated, whereas attachment copper has to be *under*-approximated
-so a connection is never claimed that the board does not have, and there is no exact integer inner
-core for a diagonal yet. The two cases carry distinct diagnostics — the routed-net message names the
-routed net explicitly.
+Diagonal copper on the *routed* net is handled by the mirror-image construction, described under
+same-net attachment below. The direction of error differs because the purpose differs: an obstacle
+is over-approximated, attachment copper is under-approximated.
 
 ## Same-net attachment
 
-An orthogonal same-net segment on the selected layer is attachment copper: never an obstacle, and a
-legal place for the proposal to begin or end. Deciding that requires a second rectangle model that
-errs the opposite way from the obstacle model. Obstacle rectangles over-approximate copper so a
-clearance is never understated; connectivity rectangles under-approximate it, because claiming
-copper that is not there would assert an electrical connection the board does not have.
+A same-net segment on the selected layer is attachment copper: never an obstacle, and a legal place
+for the proposal to begin or end. Deciding that requires a second rectangle model that errs the
+opposite way from the obstacle model. Obstacle rectangles over-approximate copper so a clearance is
+never understated; connectivity rectangles under-approximate it, because claiming copper that is not
+there would assert an electrical connection the board does not have.
 
 A track's connectivity core drops its round end caps and floors the half width. A pad's core is the
 largest axis-aligned rectangle provably inside its shape: the whole rectangle for `rect`, inset by
 the corner radius for `roundrect`, the central band for `oval`, and a centre line for `circle`.
 Every core is a subset of real copper, so overlapping cores prove overlapping copper, while the
 residual error can only fail to notice a connection.
+
+A diagonal track has no single axis-aligned inner rectangle, so it contributes a **chain of squares**
+instead. Centres are placed at `start + (delta * i) // steps`; flooring moves a centre less than a
+nanometre per axis off the exact centreline point, so it stays within `sqrt(2) < 2` of the track, and
+a two-nanometre tolerance is subtracted from the usable half width to absorb that. The square half
+side `s` then satisfies `2 * s^2 <= (radius - 2)^2`, which by the triangle inequality on
+distance-to-a-set puts every point of every square inside the real copper. `steps` is chosen so
+consecutive centres differ by at most `2 * s` per axis, which is exactly when two closed squares of
+that size still touch — so the chain is one connected component by construction. The first and last
+squares are centred exactly on the track's endpoints, which is what lets a diagonal stub reach the
+pad it is soldered to and be picked up at its far end. Endpoints are canonically ordered first, so a
+track recorded in either direction produces the identical chain, and squares are emitted in ascending
+order. Each square charges the obstacle-check budget as it is generated, so a track too long for the
+budget fails closed; one whose floored half width does not exceed the tolerance cannot be modelled at
+all and is refused with a distinct diagnostic. The chain is deliberately coarser than the copper —
+squares reach about `0.7 * radius` — so attachment is possible only near sampled points, and the
+residual error is under-connection, never a claimed connection that does not exist.
 
 Components are exact integer union-find over the two pad cores and every same-net segment core, with
 closed rectangle intersection as the connection test — exact contact counts. The lowest index always
@@ -144,10 +159,17 @@ copper, which KiCad accepts for the same net; the committed `partial-route.kicad
 checked against KiCad 10.0.5 for zero errors, warnings, and unconnected items. When the cheapest
 attachment is mid-stub rather than at a stub endpoint, the leftover tail is copper with an
 unconnected end and KiCad reports `track_dangling` at warning severity — not a hard-correctness
-failure, but a real quality consequence. A diagonal same-net segment, a same-net via, a same-net
-zone, and an endpoint pad whose shape is not modeled exactly all still fail closed. The component
-analysis is skipped entirely when the net carries no same-net selected-layer segment, so two
-overlapping same-net pads with no track between them are still routed redundantly.
+failure, but a real quality consequence. A same-net via, a same-net zone, and an endpoint pad whose
+shape is not modeled exactly all still fail closed. The component analysis is skipped entirely when
+the net carries no same-net selected-layer segment, so two overlapping same-net pads with no track
+between them are still routed redundantly.
+
+That `track_dangling` behaviour is also what makes the diagonal fixture's DRC evidence mean
+something. The committed `diagonal-stub.kicad_pcb` carries a stub running diagonally from one pad to
+`(16, 19)`; the router picks it up at that far end and adds 18 mm where an empty board needs 20 mm,
+and KiCad reports nothing. Displacing the same proposal by 0.5 mm so it misses the stub end produces
+two `track_dangling` warnings and one unconnected item, so a clean report is positive evidence that
+the under-approximating chain put the attachment point on real copper rather than merely near it.
 
 ## Objective and determinism
 
@@ -292,40 +314,43 @@ what neither yet reaches. Measured against the repository's own
 | Stage | Result |
 |---|---|
 | Board IR conversion | Supported — 2 copper layers, 14 nets, 55 pads, 53 segments, 9 vias, 2 zones, 2 keepouts |
-| Nets reaching a terminal outcome on `F.Cu` | 2 of 14, both `already_connected` |
+| Two-pin nets resolved on `F.Cu` | 5 of 5, all `already_connected` |
+| Nets reaching a terminal outcome on `F.Cu` | 5 of 14 |
 | Nets routed on `F.Cu` | 0 of 14 |
 
-Conversion is not the blocker; the router's contract is. Four refusals have been removed in
+Conversion is not the blocker; the router's contract is. Five refusals have been removed in
 succession — the same-net partial-routing veto (ADR-0016), non-rectangular track keepouts,
-foreign-net diagonal segments (ADR-0017), and a mirrored footprint-rotation defect in the adapter.
-The first three moved nothing. The fourth moved the number, because it was not a router limitation
-at all: pads on every rotated footprint were being placed at their mirror image, so the router was
-being asked about a board that did not exist.
+foreign-net diagonal segments (ADR-0017), a mirrored footprint-rotation defect in the adapter, and
+diagonal copper on the routed net (ADR-0018). The first three moved nothing. The fourth moved the
+number, because it was not a router limitation at all: pads on every rotated footprint were placed
+at their mirror image, so the router was being asked about a board that did not exist. The fifth
+resolved the rest of the two-pin surface.
 
 Measured per net at the default 250 µm grid step, twice, with identical results:
 
 | Nets | Outcome |
 |---|---|
 | 9 of 14 — `GND`, `VCC`, `VREF`, `L_BUF`, `R_BUF`, `L_OUT`, `R_OUT`, `L_IN_BIASED`, `R_IN_BIASED` | `invalid_two_pin_net`; more than two `F.Cu` pads, the largest at twelve |
-| 3 of 14 — `9V_RAW`, `L_IN_RAW`, `R_IN_RAW` | `unsupported_geometry`; diagonal copper **on the routed net**, which is still deliberate |
-| 2 of 14 — `L_ISO`, `R_ISO` | **`already_connected`** |
+| 5 of 14 — `9V_RAW`, `L_IN_RAW`, `R_IN_RAW`, `L_ISO`, `R_ISO` | **`already_connected`** |
 
-`L_ISO` and `R_ISO` are each two pads joined by exactly one segment running precisely between their
-centres — `(33.2, 19.5)`–`(35.3, 19.5)` and `(33.2, 9.5)`–`(35.3, 9.5)`. There is nothing to route,
-and saying so is the correct answer rather than a consolation prize.
+Every two-pin net on this board is one the designer already routed, and the router now recognises
+all five. `L_ISO` and `R_ISO` are a single orthogonal segment joining their two pads; `9V_RAW`,
+`L_IN_RAW` and `R_IN_RAW` carry two or three segments each, of which one or two are diagonal — those
+three are exactly the nets ADR-0018 unlocked. There is nothing to route on any of them, and saying
+so is the correct answer rather than a consolation prize.
 
-That claim is bound to authoritative evidence, though not the usual kind: an already-connected
+The claim is bound to authoritative evidence, though not the usual kind: an already-connected
 preview emits no candidate, so candidate-bound DRC has nothing to replay. The available
 authoritative check is the board-level one — `kicad-cli pcb drc` reports **zero unconnected items**
-on this board, so KiCad agrees every net including both ISO nets is fully connected. A regression
-test asserts both halves together.
+on this board, so KiCad agrees every net is fully connected. A regression test asserts both halves
+together across all five nets.
 
-This is the first coverage this board has ever shown, and it is worth being precise about what it is
-not. Zero nets are *routed*: no copper has been proposed for CopperTone. Two nets are correctly
-identified as needing none. The remaining contracts are unchanged — exact diagonal-segment
-*attachment* modelling for three nets, multi-pin routing for nine, and, behind those, a
-freshness-bound fill authority and a lattice that does not require the pad-centre delta to divide by
-the grid step.
+It is worth being precise about what this is not. Zero nets are *routed*: no copper has been proposed
+for CopperTone, and none is needed for the nets it can currently reason about. The remaining
+contract for this board is multi-pin routing, which nine of its fourteen nets require. Behind that
+sit a freshness-bound fill authority and a lattice that does not require the pad-centre delta to
+divide by the grid step; neither is currently reached, because no two-pin net on this board still
+needs a route.
 
 Board IR handles a real two-layer audio board today, and the router still does not route one
 unaided. Attachment, polygon keepouts, and diagonal envelopes remain validated by purpose-built
@@ -353,9 +378,10 @@ read-only public preview and workspace-preservation checks, not authoritative zo
 A committed `partial-route.kicad_pcb` fixture carries a same-net stub across half the gap; the
 router proposes only the remaining 10 mm, and a KiCad 10.0.5 integration test asserts the patched
 board reports zero errors, zero warnings, and zero unconnected items, so attachment copper is
-checked against the authoritative tool rather than only against itself. The `connected-net` and
-`diagonal-stub` fixtures cover the already-connected outcome and the diagonal same-net refusal
-through the public preview and need no KiCad.
+checked against the authoritative tool rather than only against itself. The `diagonal-stub.kicad_pcb`
+fixture does the same for a stub that leaves its pad diagonally, and carries its own KiCad
+integration test. The `connected-net` fixture covers the already-connected outcome through the
+public preview and needs no KiCad.
 
 A committed `octagon-keepout.kicad_pcb` fixture places an octagonal track rule area between the
 endpoints. The router detours around it, and a KiCad 10.0.5 integration test asserts zero errors,

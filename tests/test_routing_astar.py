@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import random
 from dataclasses import replace
+from itertools import pairwise
 
 import pytest
 
@@ -40,6 +42,7 @@ from copper_mcp.routing import (
     verify_candidate_id,
 )
 from copper_mcp.routing.astar import (
+    _diagonal_segment_cores,
     _point_segment_distance_lt,
     _prepare,
     _Problem,
@@ -113,6 +116,7 @@ def _snapshot(
     existing_copper: bool = False,
     own_segments: tuple[tuple[int, int, int, int], ...] = (),
     own_segment_layer_id: str = LAYER_ID,
+    own_segment_width_nm: int = 200,
     start_pad_rotation_udeg: int = 0,
     layer_kind: str = "signal",
     length_rule: bool = False,
@@ -180,7 +184,7 @@ def _snapshot(
             layer_id=own_segment_layer_id,
             start=PointNM(bounds[0], bounds[1]),
             end=PointNM(bounds[2], bounds[3]),
-            width_nm=200,
+            width_nm=own_segment_width_nm,
         )
         for index, bounds in enumerate(own_segments)
     )
@@ -757,14 +761,13 @@ def test_unmodeled_obstacle_geometry_still_fails_closed() -> None:
         router.propose(rotated, _request(rotated)), RouteFailureCode.UNSUPPORTED_GEOMETRY
     )
 
-    # A diagonal on the routed net is still refused: the connectivity model has to
-    # under-approximate copper, and there is no exact integer inner core for a diagonal yet.
-    # A foreign diagonal only has to be over-approximated, so it is an obstacle instead.
-    own_diagonal = _snapshot(own_segments=((1_000, 5_000, 3_000, 7_000),))
-    result = router.propose(own_diagonal, _request(own_diagonal))
+    # A via on the routed net is the remaining same-net refusal: a layer change is not
+    # something this single-layer contract can model, however the copper is shaped.
+    own_via = _snapshot(own_via=True)
+    result = router.propose(own_via, _request(own_via))
     _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
     assert result.diagnostic is not None
-    assert "on the routed net" in result.diagnostic.message
+    assert "via" in result.diagnostic.message
 
 
 def test_quarter_turn_pads_swap_their_modeled_extents() -> None:
@@ -1157,15 +1160,110 @@ def test_route_result_admits_exactly_one_terminal_arm() -> None:
     assert not RouteResult(connected=connection).ok
 
 
-def test_diagonal_same_net_segment_still_fails_closed() -> None:
+def test_diagonal_same_net_segment_is_attachment_copper() -> None:
+    router = AStarRouter()
+    clear = _snapshot()
+    stubbed = _snapshot(own_segments=((1_000, 5_000, 4_000, 6_000),))
+
+    full = _candidate(router.propose(clear, _request(clear)))
+    completion = _candidate(router.propose(stubbed, _request(stubbed)))
+
+    assert full.patch.vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
+    assert full.cost.length_nm == 8_000
+    # The chain's last square is centred exactly on the stub's far endpoint, so the search may
+    # start there and only has to add the remaining 6,000 nm.
+    assert completion.patch.vertices == (
+        PointNM(4_000, 6_000),
+        PointNM(4_000, 5_000),
+        PointNM(9_000, 5_000),
+    )
+    assert completion.cost.length_nm == 6_000
+    assert completion.cost.bend_count == 1
+    assert completion.metrics.unrouted_connections == 0
+
+
+def test_diagonal_attachment_chain_seeds_every_covered_lattice_node() -> None:
+    # A chain square is centred on each sampled centreline point, so a diagonal crossing
+    # several lattice nodes offers all of them as attachment points, not just its endpoints.
     snapshot = _snapshot(own_segments=((1_000, 5_000, 3_000, 7_000),))
+
+    problem = _problem_of(snapshot, _request(snapshot))
+
+    assert problem.source_nodes == {(0, 0), (1, 1), (2, 2)}
+    assert problem.target_nodes == {(8, 0)}
+
+
+def test_a_diagonal_segment_joining_both_pads_reports_already_connected() -> None:
+    # One diagonal running corner to corner between the two pads: nothing to route.
+    snapshot = _snapshot(
+        start=(1_000, 1_000),
+        end=(9_000, 9_000),
+        own_segments=((1_000, 1_000, 9_000, 9_000),),
+    )
+
+    connection = _connection(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    assert connection.attachment_segments == 1
+    assert connection.component_objects == 3
+
+
+def test_diagonal_attachment_is_deterministic_and_matches_the_oracle() -> None:
+    snapshot = _snapshot(
+        own_segments=((1_000, 5_000, 4_000, 6_000), (7_000, 3_000, 9_000, 5_000)),
+        keepouts=((5_000, 4_000, 6_000, 6_000),),
+    )
+    request = _request(snapshot)
+    router = AStarRouter()
+
+    first = _candidate(router.propose(snapshot, request))
+    second = _candidate(router.propose(snapshot, request))
+    oracle = run_dijkstra_oracle(snapshot, request)
+
+    assert first == second
+    assert canonical_candidate_bytes(first) == canonical_candidate_bytes(second)
+    assert isinstance(oracle, DijkstraResult)
+    assert oracle.total_cost_nm == first.cost.total_cost_nm
+    assert oracle.bend_count == first.cost.bend_count
+    assert oracle.proximity_steps == first.cost.proximity_steps
+
+
+def test_diagonal_core_chain_is_independent_of_stored_endpoint_order() -> None:
+    work = _WorkBudget(settings=_settings(), cancelled=None)
+    forward = Segment(
+        id="segment:own:forward",
+        net_id=NET_ID,
+        layer_id=LAYER_ID,
+        start=PointNM(1_000, 5_000),
+        end=PointNM(4_000, 6_000),
+        width_nm=200,
+    )
+    reversed_segment = replace(forward, start=forward.end, end=forward.start)
+
+    assert _diagonal_segment_cores(forward, work) == _diagonal_segment_cores(reversed_segment, work)
+
+
+def test_a_diagonal_too_narrow_to_model_fails_closed() -> None:
+    snapshot = _snapshot(own_segments=((1_000, 5_000, 4_000, 6_000),), own_segment_width_nm=4)
 
     result = AStarRouter().propose(snapshot, _request(snapshot))
 
     _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
     assert result.diagnostic is not None
-    assert "diagonal" in result.diagnostic.message
-    assert "routed net" in result.diagnostic.message
+    assert "too narrow" in result.diagnostic.message
+
+
+def test_diagonal_core_chain_charges_the_obstacle_check_budget() -> None:
+    # A long diagonal needs many squares, and each one charges the shared budget.
+    snapshot = _snapshot(own_segments=((1_000, 1_000, 9_000, 9_000),))
+
+    result = AStarRouter().propose(
+        snapshot, _request(snapshot, settings=_settings(max_obstacle_checks=5))
+    )
+
+    _assert_failure(result, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    assert result.diagnostic is not None
+    assert result.diagnostic.obstacle_checks == 5
+    assert result.diagnostic.expanded_states == 0
 
 
 def test_same_net_via_and_zone_remain_partial_routing_beside_a_stub() -> None:
@@ -1798,3 +1896,77 @@ def test_a_diagonal_foreign_segment_clear_of_the_route_does_not_force_a_detour()
     aside = _snapshot(foreign_segment=(3_000, 8_000, 5_000, 9_500))
 
     assert _candidate(AStarRouter().propose(aside, _request(aside))).cost.bend_count == 0
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3, 4])
+def test_diagonal_core_chain_is_inside_the_track_and_self_connected(seed: int) -> None:
+    """Every square is real copper and touches its neighbour, in exact integer arithmetic.
+
+    These are the two properties the component model relies on. The subset half is what stops
+    the router claiming an electrical connection the board does not have; the overlap half is
+    what makes a chain behave as one piece of copper rather than a dotted line.
+    """
+
+    # Reproducible sampling of the geometry space; nothing here is security relevant.
+    generator = random.Random(seed)  # noqa: S311
+    work = _WorkBudget(settings=_settings(max_obstacle_checks=10_000_000), cancelled=None)
+    checked_squares = 0
+
+    for _ in range(60):
+        start_x = generator.randint(-50_000, 50_000)
+        start_y = generator.randint(-50_000, 50_000)
+        end_x = start_x + generator.choice([-1, 1]) * generator.randint(1, 2_000_000)
+        end_y = start_y + generator.choice([-1, 1]) * generator.randint(1, 2_000_000)
+        width_nm = generator.choice([63_500, 100_000, 150_000, 200_000, 250_000, 400_000])
+        segment = Segment(
+            id="segment:probe",
+            net_id=NET_ID,
+            layer_id=LAYER_ID,
+            start=PointNM(start_x, start_y),
+            end=PointNM(end_x, end_y),
+            width_nm=width_nm,
+        )
+        cores = _diagonal_segment_cores(segment, work)
+        assert cores is not None
+
+        radius_nm = width_nm // 2
+        edge_x, edge_y = end_x - start_x, end_y - start_y
+        edge_length_sq = edge_x * edge_x + edge_y * edge_y
+
+        for minimum_x, minimum_y, maximum_x, maximum_y in cores:
+            # A square is convex, so containment of its four corners implies containment of
+            # every point in it.
+            for corner_x, corner_y in (
+                (minimum_x, minimum_y),
+                (maximum_x, minimum_y),
+                (minimum_x, maximum_y),
+                (maximum_x, maximum_y),
+            ):
+                point_x, point_y = corner_x - start_x, corner_y - start_y
+                projection = point_x * edge_x + point_y * edge_y
+                if projection <= 0:
+                    distance_sq = point_x * point_x + point_y * point_y
+                elif projection >= edge_length_sq:
+                    distance_sq = (corner_x - end_x) ** 2 + (corner_y - end_y) ** 2
+                else:
+                    area = edge_x * point_y - edge_y * point_x
+                    distance_sq = (area * area) // edge_length_sq
+                assert distance_sq <= radius_nm * radius_nm
+            checked_squares += 1
+
+        for previous, following in pairwise(cores):
+            assert previous[0] <= following[2]
+            assert following[0] <= previous[2]
+            assert previous[1] <= following[3]
+            assert following[1] <= previous[3]
+
+        # The chain reaches both solder points, which is what lets it attach to pads.
+        canonical_start, canonical_end = sorted(
+            [(start_x, start_y), (end_x, end_y)],
+        )
+        assert (cores[0][0] + cores[0][2]) // 2 == canonical_start[0]
+        assert (cores[0][1] + cores[0][3]) // 2 == canonical_start[1]
+        assert (cores[-1][0] + cores[-1][2]) // 2 == canonical_end[0]
+        assert (cores[-1][1] + cores[-1][3]) // 2 == canonical_end[1]
+
+    assert checked_squares > 200

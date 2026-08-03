@@ -7,6 +7,7 @@ import heapq
 import json
 from dataclasses import dataclass, replace
 from itertools import pairwise
+from math import isqrt
 from typing import TypeAlias, cast
 
 from copper_mcp.board_ir import (
@@ -445,6 +446,10 @@ _AXIS_ALIGNED_ROTATIONS_UDEG = frozenset(
 _CORE_MODELED_PAD_SHAPES: frozenset[PadShape] = frozenset(
     {PadShape.RECT, PadShape.ROUNDRECT, PadShape.CIRCLE, PadShape.OVAL}
 )
+# Flooring a diagonal core centre onto the integer lattice moves it less than one nanometre on
+# each axis, so it stays within sqrt(2) of the exact centreline point. Two nanometres is the
+# smallest integer that covers that, and it is subtracted from the usable half width.
+_CORE_CENTRE_TOLERANCE_NM = 2
 
 
 def _net_clearance_nm(
@@ -551,6 +556,67 @@ def _segment_core_extent(segment: Segment) -> _Rect | None:
         segment.start.x + half_width_nm,
         max(segment.start.y, segment.end.y),
     )
+
+
+def _diagonal_segment_cores(segment: Segment, work: _WorkBudget) -> tuple[_Rect, ...] | None:
+    """Return a connected chain of squares strictly inside a diagonal track, or None.
+
+    The component model is axis-aligned, and a diagonal track is not; the answer is to cover it
+    with axis-aligned squares that are each provably inside it and that provably overlap their
+    neighbour, so the chain is one connected piece of real copper. Everything below is exact
+    integer arithmetic, and every rounding step is toward the track's interior.
+
+    Let ``radius`` be the floored half width, so the real copper contains every point within
+    ``radius`` of the centreline. Centres are placed at ``start + (delta * i) // steps`` for
+    ``i`` in ``0..steps``. Flooring each axis moves a centre less than one nanometre per axis
+    off the exact point of the segment it approximates, so a centre is within ``sqrt(2) < 2``
+    of the segment; ``_CORE_CENTRE_TOLERANCE_NM`` absorbs that. A square of half side ``s``
+    centred there reaches at most ``s * sqrt(2)`` further, and distance to a set obeys the
+    triangle inequality, so every point of the square is within ``2 + s * sqrt(2)`` of the
+    segment. Choosing ``s`` with ``2 * s^2 <= (radius - 2)^2`` makes that at most ``radius``,
+    which is the subset property. ``steps`` is chosen so consecutive centres differ by at most
+    ``2 * s`` on each axis, which is exactly when two closed squares of half side ``s`` still
+    touch, giving the overlap property. ``i = 0`` and ``i = steps`` land exactly on the
+    endpoints, so the chain reaches the pads a diagonal stub is soldered to.
+
+    Endpoints are canonically ordered first, so a segment recorded in either direction yields
+    the identical chain, and squares are returned in ascending ``i``.
+    """
+
+    start, end = segment.start, segment.end
+    if start.x == end.x or start.y == end.y:
+        return None
+    if (start.x, start.y) > (end.x, end.y):
+        start, end = end, start
+    radius_nm = segment.width_nm // 2
+    if radius_nm <= _CORE_CENTRE_TOLERANCE_NM:
+        return None
+    reach_nm = radius_nm - _CORE_CENTRE_TOLERANCE_NM
+    half_side_nm = isqrt(reach_nm * reach_nm // 2)
+    if half_side_nm < 1:
+        return None
+    delta_x = end.x - start.x
+    delta_y = end.y - start.y
+    span_nm = 2 * half_side_nm
+    steps = max(
+        _ceil_div(abs(delta_x), span_nm),
+        _ceil_div(abs(delta_y), span_nm),
+        1,
+    )
+    cores: list[_Rect] = []
+    for index in range(steps + 1):
+        work.obstacle_check()
+        centre_x = start.x + (delta_x * index) // steps
+        centre_y = start.y + (delta_y * index) // steps
+        cores.append(
+            (
+                centre_x - half_side_nm,
+                centre_y - half_side_nm,
+                centre_x + half_side_nm,
+                centre_y + half_side_nm,
+            )
+        )
+    return tuple(cores)
 
 
 def _pad_core_extent(pad: Pad) -> tuple[int, int] | None:
@@ -743,11 +809,6 @@ def _prepare(
             work.checkpoint()
         if segment.layer_id != request.layer_id or segment.net_id != request.net_id:
             continue
-        if _segment_core_extent(segment) is None:
-            raise _fail(
-                RouteFailureCode.UNSUPPORTED_GEOMETRY,
-                "a selected-layer segment on the routed net is diagonal and is not modeled exactly",
-            )
         attachment_segments.append(segment)
 
     # Connectivity depends only on exactly modeled pad and same-net segment geometry, so it is
@@ -779,9 +840,23 @@ def _prepare(
                     pad.center.y + half_y_nm,
                 )
             )
-        segment_cores = tuple(
-            cast("_Rect", _segment_core_extent(segment)) for segment in attachment_segments
-        )
+        # An orthogonal track is one exact rectangle; a diagonal one is a chain of squares that
+        # is provably inside it and provably self-connected, so both reduce to axis-aligned
+        # rectangles the component model already understands.
+        core_list: list[_Rect] = []
+        for segment in attachment_segments:
+            orthogonal_core = _segment_core_extent(segment)
+            if orthogonal_core is not None:
+                core_list.append(orthogonal_core)
+                continue
+            diagonal_cores = _diagonal_segment_cores(segment, work)
+            if diagonal_cores is None:
+                raise _fail(
+                    RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                    "a selected-layer track on the routed net is too narrow to model exactly",
+                )
+            core_list.extend(diagonal_cores)
+        segment_cores = tuple(core_list)
         roots = _component_roots(tuple(pad_cores) + segment_cores, work)
         if roots[0] == roots[1]:
             raise _AlreadyConnectedError(

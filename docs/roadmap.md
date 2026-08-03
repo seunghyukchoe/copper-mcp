@@ -54,8 +54,8 @@ documentation, ledger updates, and benchmark evidence.
 - [x] Non-rectangular selected-layer track keepouts, including the octagonal mounting-hole rule
   areas KiCad emits, under that same envelope model.
 - [x] Diagonal foreign-net copper as conservative exact-integer swept-square envelopes.
-- [ ] Diagonal copper on the routed net, which needs an exact integer inner core before it can be
-  attachment copper rather than only an obstacle.
+- [x] Diagonal copper on the routed net as attachment copper, using a chain of exact integer squares
+  that is provably inside the track and provably self-connected.
 - [ ] Fill-aware zone routing with a freshness-bound KiCad refill/fill-digest authority contract.
 - [ ] Multi-pin nets, since most real nets have more than two pads.
 - [x] Attachment to existing same-net copper and bounded partial-route completion.
