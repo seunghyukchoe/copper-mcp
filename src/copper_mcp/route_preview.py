@@ -325,6 +325,7 @@ class RoutePreview:
                     "attachment_segments": self.connection.attachment_segments,
                     "component_objects": self.connection.component_objects,
                     "pad_count": self.connection.pad_count,
+                    "vias": self.connection.vias,
                     "obstacle_checks": self.connection.obstacle_checks,
                 }
             ),

@@ -306,7 +306,9 @@ class RouteConnection:
     ``start_pad_id`` and ``end_pad_id`` are the lexicographically first and last of the net's
     pads on the layer. For the two-pin case those are simply its two pads; for a wider net they
     bound the set rather than naming a route, because a connected net has no route to name.
-    ``pad_count`` is what tells the two apart.
+    ``pad_count`` is what tells the two apart. A non-zero ``vias`` means the connection was
+    established across copper layers through those vias, so the evidence is multilayer even
+    though the request names one layer.
     """
 
     base_revision: str
@@ -315,6 +317,7 @@ class RouteConnection:
     attachment_segments: int
     component_objects: int
     pad_count: int = 2
+    vias: int = 0
     obstacle_checks: int = 0
 
     def __post_init__(self) -> None:
@@ -325,10 +328,11 @@ class RouteConnection:
             raise ValueError("connected pads must be distinct")
         _integer("attachment segments", self.attachment_segments)
         _integer("pad count", self.pad_count, minimum=2)
+        _integer("via count", self.vias)
         _integer("component objects", self.component_objects, minimum=2)
         _integer("connection obstacle checks", self.obstacle_checks)
-        if self.component_objects != self.attachment_segments + self.pad_count:
-            raise ValueError("a connected component must account for every pad and every segment")
+        if self.component_objects != self.attachment_segments + self.pad_count + self.vias:
+            raise ValueError("a connected component must account for every pad, segment and via")
 
 
 class RouteFailureCode(StrEnum):

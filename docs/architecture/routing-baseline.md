@@ -360,7 +360,7 @@ what neither yet reaches. Measured against the repository's own
 | Stage | Result |
 |---|---|
 | Board IR conversion | Supported — 2 copper layers, 14 nets, 55 pads, 53 segments, 9 vias, 2 zones, 2 keepouts |
-| Nets reaching a terminal outcome on `F.Cu` | 11 of 14, all `already_connected` |
+| Nets reaching a terminal outcome on `F.Cu` | 13 of 14, all `already_connected` |
 | Nets routed on `F.Cu` | 0 of 14 |
 
 Conversion is not the blocker; the router's contract is. Six refusals have been removed in
@@ -378,7 +378,8 @@ Measured per net at the default 250 µm grid step, twice, with identical results
 |---|---|
 | 5 of 14 — `9V_RAW`, `L_IN_RAW`, `R_IN_RAW`, `L_ISO`, `R_ISO` | **`already_connected`**, two pads each |
 | 6 of 14 — `L_BUF`, `R_BUF`, `L_IN_BIASED`, `R_IN_BIASED`, `R_OUT`, `VREF` | **`already_connected`**, three to seven pads each |
-| 3 of 14 — `GND`, `VCC`, `L_OUT` | `invalid_two_pin_net`; each carries same-net vias |
+| 2 of 14 — `VCC`, `L_OUT` | **`already_connected`** across layers, through two vias and one via respectively |
+| 1 of 14 — `GND` | `invalid_two_pin_net`; it carries a same-net zone, so its connectivity cannot be proved |
 
 Every net on this board is one the designer already routed, and the router now recognises eleven of
 the fourteen. The widest is `VREF` at seven pads joined by ten segments. There is nothing to route on
@@ -403,11 +404,14 @@ so there is no tree left to build. That is why the multi-pin slice is validated 
 fixtures rather than by this board, and the roadmap's old framing of multi-pin routing as the single
 remaining contract for CopperTone was simply wrong.
 
-What this board actually still needs is **via-aware connectivity**. Its three unresolved nets all
-carry same-net vias, which are copper on another layer that this single-layer model cannot see, so
-their pads may well be connected through them while nothing here can show it. Behind that sit a
-freshness-bound fill authority and a lattice that does not require the pad-centre delta to divide by
-the grid step; neither is currently reached, because no net on this board still needs a route.
+Via-aware connectivity has since resolved two of the three: `VCC` and `L_OUT` are joined across the
+back layer through their vias, and the router now says so. `GND` remains refused, and honestly — it
+carries a same-net zone, and a stale or unfilled zone cannot prove connectivity, so the one net left
+is blocked by a fill-authority contract rather than by anything about vias.
+
+Behind that sit routing *through* vias, which needs a layer-aware lattice this router does not have,
+and a lattice that does not require the pad-centre delta to divide by the grid step; neither is
+currently reached, because no net on this board still needs a route.
 
 Board IR handles a real two-layer audio board today, and the router still does not route one
 unaided. Attachment, polygon keepouts, and diagonal envelopes remain validated by purpose-built

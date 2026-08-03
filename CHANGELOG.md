@@ -8,6 +8,28 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- A same-net through via is now a connectivity joint rather than a blanket veto, so a net already
+  joined across copper layers reports `already_connected` instead of being refused. Routing is
+  unchanged and stays single-layer: a net that still needs new copper while carrying a via keeps its
+  existing refusal. The via's core is its **annulus**, never the drill hole - a square inscribed in
+  the outer circle would claim the one region that certainly is not copper - so the ring is covered
+  by four axis-aligned rectangles, one per side, with the hole radius taken as the ceiling of half
+  the drill and each rectangle's far corner satisfying `a^2 + b^2 <= R^2` in exact integers. Those
+  four are unioned atomically because the annulus is one piece of physical copper joined by a plated
+  barrel; deriving its self-connectivity from rectangle overlap would report a via as four separate
+  objects. Objects now connect only when they share a layer, and a through via shares every layer,
+  which is exactly what makes it a joint. Board IR admits through vias only and validates that they
+  span the complete stack, so blind, buried and microvias stay fail-closed at the adapter.
+  `RouteConnection` gains a `vias` count and its invariant becomes
+  `attachment_segments + pad_count + vias`. Same-net zones still veto the claim, because a stale or
+  unfilled zone cannot prove connectivity. On the repository's own CopperTone board this takes
+  recognition from 11 of 14 nets to **13 of 14**: `VCC` and `L_OUT` are joined through their vias,
+  while `GND` stays refused honestly because it carries a same-net zone. A committed `via-joint`
+  fixture runs front stub to via to back stub to via to front stub, corroborated by board-level
+  KiCad DRC reporting zero unconnected items, and the check is discriminating because removing
+  either the via or the back-layer stub makes KiCad report an unconnected item. See
+  [ADR-0020](docs/adr/0020-via-aware-connectivity.md).
+
 - Multi-pin nets are routed, not just recognised. A net with more than two pads is spanned by a
   deterministic minimum spanning tree over its connected components - edges weighted by the exact
   integer rectilinear gap between component bounding boxes, ordered by `(gap, lower index, higher
