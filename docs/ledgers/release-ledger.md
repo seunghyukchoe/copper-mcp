@@ -65,3 +65,17 @@ Corrections require a dated note below the table; never replace released assets 
 > evidence because the two later tests cover only the pure release-ledger parser. `pip-audit` still
 > cannot resolve `pypi.org`, and the no-isolation build still lacks `hatchling`; no `Ready` row,
 > tag, build artifact, or release is claimed.
+
+> **Draft-PR hosted-gate correction — 2026-08-03:** GitHub commit
+> [`dae0e90`](https://github.com/seunghyukchoe/copper-mcp/commit/dae0e90d8379a1cb82af08a5836a57cfaf4d565f)
+> has tree `e196836314569674d1f1bc363c9aeaf522625f08`, matching the final formatted local
+> working tree. Draft PR [#34](https://github.com/seunghyukchoe/copper-mcp/pull/34) then passed
+> [CI run 30799036239](https://github.com/seunghyukchoe/copper-mcp/actions/runs/30799036239)
+> across Python 3.11, 3.12, and 3.13, including the isolated package build and temporary workflow
+> artifact; [Security run
+> 30799036250](https://github.com/seunghyukchoe/copper-mcp/actions/runs/30799036250) passed the
+> dependency and secret audits; and [CodeQL run
+> 30799037008](https://github.com/seunghyukchoe/copper-mcp/actions/runs/30799037008) passed. These
+> hosted gates supersede the local network/build blocker as PR evidence, but the local managed
+> checkout remains metadata-write-restricted. The temporary CI artifact is not a release artifact,
+> and no `Ready` authorization, version tag, GitHub release, or package publication exists.
