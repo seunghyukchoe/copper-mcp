@@ -221,6 +221,8 @@ class _SceneObjectContract(_ClosedContract):
     ref_id: RefId
     layer_ids: Annotated[list[LayerId], Field(max_length=64)]
     ref_stability: RefStability
+    #: ``None`` where the kind has no lockedness (outline, rules), which is not "unlocked".
+    locked: bool | None
 
 
 class OutlineGeometryContract(_ClosedContract):
@@ -241,6 +243,7 @@ class PadGeometryContract(_ClosedContract):
     # A pad with no net is legal and common (mounting holes, NPTH); every other copper
     # object on a supported board carries one, so only this field is nullable.
     net_id: NetRefId | None
+    roundrect_radius_nm: PositiveNanometres | None
     drill_nm: Annotated[list[PositiveNanometres], Field(min_length=2, max_length=2)] | None
 
 
@@ -373,13 +376,17 @@ class SceneRegionContract(_ClosedContract):
 class SceneTruncationContract(_ClosedContract):
     """Whether the scene is complete for its region, stated rather than implied.
 
-    ``ceiling_hit`` is non-null exactly when objects were dropped, so a caller never has to
-    infer completeness from a count it cannot independently check.
+    ``ceiling_hit`` is non-null exactly when something was dropped and names the first ceiling
+    reached; the two ``*_omitted`` counts are authoritative, because objects and annotations
+    are charged against separate budgets and both can truncate in a single response. A caller
+    never has to infer completeness from a count it cannot independently check.
     """
 
     objects_returned: Annotated[int, Field(ge=0)]
     objects_omitted: Annotated[int, Field(ge=0)]
-    ceiling_hit: Literal["max_scene_objects", "max_scene_vertices"] | None
+    annotations_returned: Annotated[int, Field(ge=0)]
+    annotations_omitted: Annotated[int, Field(ge=0)]
+    ceiling_hit: Literal["max_scene_objects", "max_scene_vertices", "max_scene_annotations"] | None
 
 
 class SceneRefStabilityContract(_ClosedContract):

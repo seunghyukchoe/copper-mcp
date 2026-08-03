@@ -50,6 +50,7 @@ class Settings:
     max_scene_objects: int = 2_000
     max_scene_vertices: int = 200_000
     max_render_bytes: int = 4 * 1024 * 1024
+    max_scene_annotations: int = 5_000
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -136,6 +137,12 @@ class Settings:
             1024,
             64 * 1024 * 1024,
         )
+        max_scene_annotations = _bounded_int(
+            "COPPER_MCP_MAX_SCENE_ANNOTATIONS",
+            os.environ.get("COPPER_MCP_MAX_SCENE_ANNOTATIONS", "5000"),
+            1,
+            1_000_000,
+        )
         return cls(
             workspace=workspace,
             transport=transport,
@@ -153,4 +160,5 @@ class Settings:
             max_scene_objects=max_scene_objects,
             max_scene_vertices=max_scene_vertices,
             max_render_bytes=max_render_bytes,
+            max_scene_annotations=max_scene_annotations,
         )

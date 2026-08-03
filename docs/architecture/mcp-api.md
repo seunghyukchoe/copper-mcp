@@ -51,7 +51,9 @@ either a complete `min_x_nm`/`min_y_nm`/`max_x_nm`/`max_y_nm` box or one `around
 a radius, or reversed bounds is rejected before any file is read. There is no whole-board shorthand.
 The resolved window is echoed back with a `source` of `explicit` or `around_ref`.
 
-Objects are returned in two collections rather than flagged. `static` holds `outline`, `pads`,
+Objects are returned in two collections rather than flagged, each object additionally reporting
+`locked` so pinned copper is distinguishable from copper a proposal may move (`null` for kinds with
+no such concept, such as an outline contour or a net class). `static` holds `outline`, `pads`,
 `keepouts` and `rules` — what a proposal must take as given — and `mutable` holds `segments`,
 `arcs`, `vias` and `zones`. Each object carries the Board IR `ref_id` it already has, its
 `layer_ids`, exact integer `geometry`, and a `ref_stability` of `native` (a KiCad UUID, stable under
@@ -60,10 +62,19 @@ unrelated edits), `content_derived` (a geometry hash, which moves when its objec
 `ref_stability` summary reports `all_board_refs_native` plus the two counts, so a caller can decide
 in one place whether the references it is about to store will survive.
 
-`truncation` states completeness rather than implying it: `objects_returned`, `objects_omitted`, and
-a `ceiling_hit` that is non-null exactly when objects were dropped, naming `max_scene_objects` or
-`max_scene_vertices`. Both ceilings are configurable; the object default of 2,000 is provisional and
-about sixteen times the size of this repository's own board.
+`truncation` states completeness rather than implying it: `objects_returned`, `objects_omitted`,
+`annotations_returned`, `annotations_omitted`, and a `ceiling_hit` that is non-null exactly when
+something was dropped, naming `max_scene_objects`, `max_scene_vertices` or `max_scene_annotations`.
+`ceiling_hit` names the first ceiling reached, so the two `*_omitted` counts are the authoritative
+signal - objects and annotations are charged against separate budgets and both can truncate in one
+response. Every ceiling is configurable; the object default of 2,000 is provisional and about
+sixteen times the size of this repository's own board.
+
+Object bounds over-approximate on purpose. An arc is bounded including the bulge between its
+sample points, and a pad rotated off the quarter turns is bounded by its circumscribed circle, both
+in exact integers. Returning an object that turns out to lie just outside the window is a harmless
+false positive; omitting one that overlaps would tell a caller the board is empty where it is not.
+An `around_ref_id` window is clamped to the advertised coordinate range rather than overflowing it.
 
 Board text is **off by default**. With `include_annotations` set, every string the board's author
 controls — `gr_text`, `fp_text`, and both the name and the value of each footprint property —

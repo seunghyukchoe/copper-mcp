@@ -102,12 +102,19 @@ def test_synthetic_kicad_subset_maps_exact_geometry_and_constraints() -> None:
     # (10, 11) and its local (1, 0) pad to (10, 9) under KiCad's own convention. See
     # test_footprint_rotation_matches_kicad_placement for how that is derived.
     assert signal_pad.center == PointNM(10_000_000, 11_000_000)
-    assert signal_pad.rotation_udeg == 90_000_000
+    # The pad angle is absolute, not relative to its footprint: this pad is written
+    # `(at -1 0 0)` inside a footprint placed at 90 degrees, and KiCad draws it unrotated.
+    # Verified against `kicad-cli pcb export svg` on this very fixture, which plots a
+    # 2.00mm x 1.00mm rectangle centred on (10, 11) - see
+    # test_pad_extents_match_the_geometry_kicad_actually_draws.
+    assert signal_pad.rotation_udeg == 0
     assert signal_pad.shape is PadShape.ROUNDRECT
     assert signal_pad.roundrect_radius_nm == 250_000
     assert signal_pad.layer_ids == ("layer:F.Cu",)
     assert through_pad.center == PointNM(10_000_000, 9_000_000)
-    assert through_pad.rotation_udeg == 180_000_000
+    # Written `(at 1 0 90)`, so its absolute angle is 90 degrees; the footprint's own 90
+    # degrees is already resolved into that number by KiCad and must not be added again.
+    assert through_pad.rotation_udeg == 90_000_000
     assert through_pad.drill_x_nm == through_pad.drill_y_nm == 1_000_000
     assert through_pad.layer_ids == ("layer:F.Cu", "layer:B.Cu")
 
@@ -812,3 +819,155 @@ def test_real_kicad_confirms_the_footprint_rotation_ground_truth(tmp_path: Path)
     # quarter turn would put that track on the neighbouring pad, which is a different net.
     assert payload["violations"] == []
     assert payload["unconnected_items"] == []
+
+
+def _drawn_rectangles(svg: bytes) -> dict[tuple[float, float], tuple[float, float]]:
+    """Bounding box of every plotted path, keyed by its centre in millimetres.
+
+    KiCad plots each pad as one closed path. A rounded or oval pad's bounding box is still
+    its full rectangle, and a circle's is its diameter square, so comparing bounding boxes is
+    valid for every shape Board IR models.
+    """
+
+    import re as _re
+
+    boxes: dict[tuple[float, float], tuple[float, float]] = {}
+    for data in _re.findall(rb'<path[^>]*d="([^"]+)"', svg):
+        numbers = [float(value) for value in _re.findall(rb"-?\d+\.?\d*", data)]
+        xs, ys = numbers[0::2], numbers[1::2]
+        if not xs or not ys:
+            continue
+        centre = (round((min(xs) + max(xs)) / 2, 3), round((min(ys) + max(ys)) / 2, 3))
+        boxes[centre] = (round(max(xs) - min(xs), 3), round(max(ys) - min(ys), 3))
+    return boxes
+
+
+@pytest.mark.skipif(not REAL_KICAD_CLI.is_file(), reason="KiCad CLI is not installed")
+def test_pad_extents_match_the_geometry_kicad_actually_draws(tmp_path: Path) -> None:
+    """Compare Board IR's pad extents against KiCad's own plotted geometry.
+
+    This is the oracle the adapter lacked. Every previous rotation test compared the adapter
+    with itself - ``parse(rotate(board))`` against ``rotate(parse(board))`` - which a
+    consistently wrong convention satisfies perfectly. It also could not have discriminated
+    anything, because the rotation fixture's pads were all square.
+
+    The defect this pins: a pad's angle in a KiCad file is already resolved into the board
+    frame, so adding its footprint's rotation counted the turn twice and transposed the
+    extents of every non-square pad on a rotated footprint.
+    """
+
+    from copper_mcp.config import Settings
+    from copper_mcp.kicad_cli import run_scene_render
+
+    board = tmp_path / "footprint-rotation.kicad_pcb"
+    shutil.copy2(ROTATION_BOARD, board)
+    _, svg = run_scene_render(board.name, Settings(workspace=tmp_path, kicad_cli=REAL_KICAD_CLI))
+    drawn = _drawn_rectangles(svg)
+
+    snapshot = parse_success(ROTATION_BOARD.read_bytes(), constraint_profile())
+    compared = 0
+    oblong = 0
+    for pad in snapshot.content.pads:
+        width_nm, height_nm = pad.size_x_nm, pad.size_y_nm
+        if pad.rotation_udeg // 90_000_000 % 2 == 1:
+            width_nm, height_nm = height_nm, width_nm
+        centre = (round(pad.center.x / 1e6, 3), round(pad.center.y / 1e6, 3))
+        plotted = drawn.get(centre)
+        assert plotted is not None, f"KiCad plotted no pad centred on {centre}"
+        assert plotted == pytest.approx((width_nm / 1e6, height_nm / 1e6), abs=1e-3), (
+            f"pad {pad.id} at {centre}: Board IR says "
+            f"{width_nm / 1e6}x{height_nm / 1e6}, KiCad drew {plotted}"
+        )
+        compared += 1
+        if pad.size_x_nm != pad.size_y_nm:
+            oblong += 1
+
+    assert compared >= 8, "the oracle must actually have compared some pads"
+    assert oblong >= 2, (
+        "the fixture must contain non-square pads, or this oracle cannot tell a correct "
+        "rotation convention from a transposed one"
+    )
+
+
+@pytest.mark.skipif(not REAL_KICAD_CLI.is_file(), reason="KiCad CLI is not installed")
+def test_the_pad_extent_oracle_would_reject_the_double_counted_rotation(tmp_path: Path) -> None:
+    """Guard the guard: re-introducing the defect must make the oracle fail."""
+
+    from copper_mcp.config import Settings
+    from copper_mcp.kicad_cli import run_scene_render
+
+    board = tmp_path / "footprint-rotation.kicad_pcb"
+    shutil.copy2(ROTATION_BOARD, board)
+    _, svg = run_scene_render(board.name, Settings(workspace=tmp_path, kicad_cli=REAL_KICAD_CLI))
+    drawn = _drawn_rectangles(svg)
+
+    snapshot = parse_success(ROTATION_BOARD.read_bytes(), constraint_profile())
+    footprint_turns = {"OBLONG_ROT": 90_000_000}
+    names = _net_names(snapshot)
+    disagreements = 0
+    for pad in snapshot.content.pads:
+        added = footprint_turns.get(names(pad))
+        if added is None or pad.size_x_nm == pad.size_y_nm:
+            continue
+        # The old behaviour: footprint rotation added on top of the pad's own angle.
+        doubled = (pad.rotation_udeg + added) % 360_000_000
+        width_nm, height_nm = pad.size_x_nm, pad.size_y_nm
+        if doubled // 90_000_000 % 2 == 1:
+            width_nm, height_nm = height_nm, width_nm
+        centre = (round(pad.center.x / 1e6, 3), round(pad.center.y / 1e6, 3))
+        if drawn.get(centre) != pytest.approx((width_nm / 1e6, height_nm / 1e6), abs=1e-3):
+            disagreements += 1
+
+    assert disagreements > 0, (
+        "the double-counted rotation would still match KiCad, so this fixture cannot "
+        "detect the defect"
+    )
+
+
+def test_coppertone_has_one_residual_pad_bounding_box_overlap_and_it_is_a_rounding_artifact() -> (
+    None
+):
+    """Pin the real board's overlap count, which the rotation fix moved from six to one.
+
+    ``kicad-cli pcb drc`` reports zero violations on this board, so every different-net pad
+    overlap found by axis-aligned bounding boxes is an artifact rather than real copper.
+    Before the fix there were six, all caused by transposed extents on rotated footprints.
+
+    The single survivor is an oval against a roundrect whose *bounding boxes* clip at a
+    corner that both shapes round away. That is the expected direction of error: a bounding
+    box over-approximates a rounded pad, so "boxes do not overlap" proves the pads do not,
+    while "boxes overlap" proves nothing. Placement legality has to respect that asymmetry.
+    """
+
+    snapshot = parse_success(COPPERTONE_BOARD.read_bytes(), constraint_profile())
+    pads = list(snapshot.content.pads)
+
+    def bounds(pad: Pad) -> tuple[int, int, int, int]:
+        width_nm, height_nm = pad.size_x_nm, pad.size_y_nm
+        if pad.rotation_udeg // 90_000_000 % 2 == 1:
+            width_nm, height_nm = height_nm, width_nm
+        return (
+            pad.center.x - width_nm // 2,
+            pad.center.y - height_nm // 2,
+            pad.center.x + width_nm // 2,
+            pad.center.y + height_nm // 2,
+        )
+
+    overlapping: list[tuple[PadShape, PadShape]] = []
+    for index, first in enumerate(pads):
+        for second in pads[index + 1 :]:
+            if not set(first.layer_ids) & set(second.layer_ids):
+                continue
+            if first.net_id is not None and first.net_id == second.net_id:
+                continue
+            left, right = bounds(first), bounds(second)
+            if not (
+                left[2] <= right[0]
+                or right[2] <= left[0]
+                or left[3] <= right[1]
+                or right[3] <= left[1]
+            ):
+                overlapping.append((first.shape, second.shape))
+
+    assert len(overlapping) == 1, overlapping
+    assert set(overlapping[0]) == {PadShape.OVAL, PadShape.ROUNDRECT}

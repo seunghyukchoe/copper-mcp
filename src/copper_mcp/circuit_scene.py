@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
+from math import isqrt
 from typing import Any
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
@@ -141,6 +142,15 @@ class SceneObject:
     layer_ids: tuple[str, ...]
     geometry: Mapping[str, Any]
     ref_stability: str
+    #: Whether the board's author pinned this object. ``None`` means the kind has no such
+    #: concept (an outline contour, a net class), which is different from "not locked".
+    #:
+    #: Deliberately a field rather than a third partition. The static/mutable split is by
+    #: *kind* - what a proposal may change at all - and is exhaustive; lockedness is a
+    #: property of an individual object that its author can toggle without changing what kind
+    #: of thing it is. A third collection would make the partition non-exhaustive and force
+    #: every consumer to look in three places to find all the segments.
+    locked: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -148,6 +158,7 @@ class SceneObject:
             "kind": self.kind,
             "layer_ids": list(self.layer_ids),
             "ref_stability": self.ref_stability,
+            "locked": self.locked,
             "geometry": dict(self.geometry),
         }
 
@@ -306,19 +317,159 @@ def parse_circuit_scene_request(payload: Any) -> CircuitSceneRequest:
         raise CircuitSceneError(str(error)) from error
 
 
+_QUARTER_UDEG = 90_000_000
+
+
+def _ceil_sqrt(value: int) -> int:
+    """Smallest integer whose square is at least ``value``. Exact, no floating point."""
+
+    if value <= 0:
+        return 0
+    root = isqrt(value)
+    return root if root * root == value else root + 1
+
+
+def _pad_half_extents(pad: Pad) -> tuple[int, int]:
+    """Half extents of an axis-aligned box that contains the pad, whatever its angle.
+
+    Board IR accepts any pad angle, not only quarter turns: KiCad rejects a non-orthogonal
+    *footprint* transform but a pad may carry its own 45-degree angle. Swapping width and
+    height on quadrant parity alone is therefore only correct for quarter turns, and
+    under-bounds every other angle - the direction that makes a region query miss a pad.
+
+    Quarter turns keep their exact extents. Any other angle falls back to the circumscribed
+    circle of the pad rectangle, which contains it at every rotation and needs no trigonometry
+    to compute exactly.
+    """
+
+    if pad.rotation_udeg % _QUARTER_UDEG == 0:
+        half_x, half_y = (pad.size_x_nm + 1) // 2, (pad.size_y_nm + 1) // 2
+        if pad.rotation_udeg // _QUARTER_UDEG % 2 == 1:
+            half_x, half_y = half_y, half_x
+        return half_x, half_y
+    half = _ceil_sqrt(pad.size_x_nm * pad.size_x_nm + pad.size_y_nm * pad.size_y_nm)
+    half = (half + 1) // 2
+    return half, half
+
+
+def _circumcentre(start: PointNM, mid: PointNM, end: PointNM) -> tuple[int, int, int] | None:
+    """Return the arc's centre as an exact rational ``(x_numerator, y_numerator, denominator)``.
+
+    Returns ``None`` when the three points are collinear, which has no circle.
+    """
+
+    ax, ay = start.x, start.y
+    bx, by = mid.x, mid.y
+    cx, cy = end.x, end.y
+    denominator = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
+    if denominator == 0:
+        return None
+    a2, b2, c2 = ax * ax + ay * ay, bx * bx + by * by, cx * cx + cy * cy
+    x_numerator = a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)
+    y_numerator = a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)
+    if denominator < 0:
+        return -x_numerator, -y_numerator, -denominator
+    return x_numerator, y_numerator, denominator
+
+
+def _sweep_half(anchor: tuple[int, int], vector: tuple[int, int]) -> int:
+    """Which half-turn counter-clockwise from ``anchor`` a direction falls in."""
+
+    cross = anchor[0] * vector[1] - anchor[1] * vector[0]
+    if cross > 0:
+        return 0
+    if cross == 0 and anchor[0] * vector[0] + anchor[1] * vector[1] > 0:
+        return 0
+    return 1
+
+
+def _ccw_at_or_before(
+    anchor: tuple[int, int], first: tuple[int, int], second: tuple[int, int]
+) -> bool:
+    """Whether ``first`` is reached no later than ``second`` sweeping CCW from ``anchor``.
+
+    Exact integer comparison standing in for an angle. Comparing dot products directly would
+    be wrong: a dot product scales with a vector's length, and the cardinal directions tested
+    here are unit vectors while the arc's own points are radius-length, so the two are not on
+    the same scale. Splitting the turn into halves and then comparing a single cross product -
+    decisive because two directions inside one half-turn differ by less than a half turn -
+    depends only on direction, never on magnitude.
+    """
+
+    first_half, second_half = _sweep_half(anchor, first), _sweep_half(anchor, second)
+    if first_half != second_half:
+        return first_half < second_half
+    return first[0] * second[1] - first[1] * second[0] >= 0
+
+
+def _arc_bounds(arc: Arc) -> tuple[int, int, int, int]:
+    """Bound an arc including the bulge between its endpoints.
+
+    Start, middle and end points alone under-bound every arc whose extreme point is not one of
+    them, so a region touching only the bulge would miss the arc entirely. The four cardinal
+    points of the arc's circle are the only places an axis-aligned extreme can occur, so each
+    one that the sweep actually crosses is folded in.
+    """
+
+    half = (arc.width_nm + 1) // 2
+    xs = [arc.start.x, arc.mid.x, arc.end.x]
+    ys = [arc.start.y, arc.mid.y, arc.end.y]
+    minimum_x, minimum_y = min(xs), min(ys)
+    maximum_x, maximum_y = max(xs), max(ys)
+
+    centre = _circumcentre(arc.start, arc.mid, arc.end)
+    if centre is not None:
+        centre_x, centre_y, denominator = centre
+
+        def scaled(point: PointNM) -> tuple[int, int]:
+            return point.x * denominator - centre_x, point.y * denominator - centre_y
+
+        anchor = scaled(arc.start)
+        radius_squared = anchor[0] * anchor[0] + anchor[1] * anchor[1]
+        if radius_squared > 0:
+            end_vector = scaled(arc.end)
+            forward = _ccw_at_or_before(anchor, scaled(arc.mid), end_vector)
+            radius = _ceil_sqrt(radius_squared)
+            for direction, axis in (
+                ((1, 0), "east"),
+                ((0, 1), "south"),
+                ((-1, 0), "west"),
+                ((0, -1), "north"),
+            ):
+                before_end = _ccw_at_or_before(anchor, direction, end_vector)
+                # Sweeping the other way, the arc is everything the forward sweep is not.
+                if not (before_end if forward else not before_end):
+                    continue
+                # ``radius`` is a ceiling, so these bounds stay outside the true circle.
+                if axis == "east":
+                    maximum_x = max(maximum_x, -(-(centre_x + radius) // denominator))
+                elif axis == "west":
+                    minimum_x = min(minimum_x, (centre_x - radius) // denominator)
+                elif axis == "south":
+                    maximum_y = max(maximum_y, -(-(centre_y + radius) // denominator))
+                else:
+                    minimum_y = min(minimum_y, (centre_y - radius) // denominator)
+
+    return minimum_x - half, minimum_y - half, maximum_x + half, maximum_y + half
+
+
 def _object_bounds(
     snapshot: BoardIRSnapshot,
 ) -> dict[str, tuple[int, int, int, int]]:
-    """Index every referenced object's bounding box for around_ref resolution."""
+    """Index every referenced object's bounding box for around_ref resolution.
+
+    Bounds here decide which objects a region query returns, so they must **over**-approximate.
+    Returning an object whose true geometry lies slightly outside the window is a harmless
+    false positive; omitting one that overlaps tells a caller the board is empty where it is
+    not, and nothing downstream can recover from that.
+    """
 
     bounds: dict[str, tuple[int, int, int, int]] = {}
     content = snapshot.content
     for contour in content.outline:
         bounds[contour.id] = _ring_bounds(contour.outer)
     for pad in content.pads:
-        half_x, half_y = (pad.size_x_nm + 1) // 2, (pad.size_y_nm + 1) // 2
-        if pad.rotation_udeg // 90_000_000 % 2 == 1:
-            half_x, half_y = half_y, half_x
+        half_x, half_y = _pad_half_extents(pad)
         bounds[pad.id] = (
             pad.center.x - half_x,
             pad.center.y - half_y,
@@ -342,15 +493,18 @@ def _object_bounds(
             max(segment.start.y, segment.end.y) + half,
         )
     for arc in content.arcs:
-        half = (arc.width_nm + 1) // 2
-        xs = [arc.start.x, arc.mid.x, arc.end.x]
-        ys = [arc.start.y, arc.mid.y, arc.end.y]
-        bounds[arc.id] = (min(xs) - half, min(ys) - half, max(xs) + half, max(ys) + half)
+        bounds[arc.id] = _arc_bounds(arc)
     for zone in content.zones:
         bounds[zone.id] = _ring_bounds(zone.boundary)
     for keepout in content.keepouts:
         bounds[keepout.id] = _ring_bounds(keepout.boundary)
     return bounds
+
+
+def _clamped(value: int) -> int:
+    """Hold a coordinate inside the range the response contract advertises."""
+
+    return max(-MAX_JSON_SAFE_INTEGER, min(MAX_JSON_SAFE_INTEGER, value))
 
 
 def _resolve_region(
@@ -366,11 +520,16 @@ def _resolve_region(
             # rather than a disclosure; the message still avoids quoting it.
             raise CircuitSceneError("the requested reference does not exist on this board")
         radius = int(region["radius_nm"])
+        # Clamped, not wrapped. Both the radius and the anchor are individually inside the
+        # advertised range, but their sum need not be, and a window that silently exceeded it
+        # would violate the contract this scene is about to be validated against. Clamping is
+        # lossless here: every coordinate on a board is inside the range, so a window already
+        # covering the range cannot select anything more by growing.
         return SceneRegion(
-            min_x_nm=anchor[0] - radius,
-            min_y_nm=anchor[1] - radius,
-            max_x_nm=anchor[2] + radius,
-            max_y_nm=anchor[3] + radius,
+            min_x_nm=_clamped(anchor[0] - radius),
+            min_y_nm=_clamped(anchor[1] - radius),
+            max_x_nm=_clamped(anchor[2] + radius),
+            max_y_nm=_clamped(anchor[3] + radius),
             source="around_ref",
         )
     return SceneRegion(
@@ -401,9 +560,11 @@ def _pad_object(pad: Pad) -> SceneObject:
             "shape": str(pad.shape),
             "kind": str(pad.kind),
             "net_id": pad.net_id,
+            "roundrect_radius_nm": pad.roundrect_radius_nm,
             "drill_nm": (None if pad.drill_x_nm is None else [pad.drill_x_nm, pad.drill_y_nm]),
         },
         ref_stability=_ref_stability(pad.id),
+        locked=pad.locked,
     )
 
 
@@ -419,6 +580,7 @@ def _segment_object(segment: Segment) -> SceneObject:
             "net_id": segment.net_id,
         },
         ref_stability=_ref_stability(segment.id),
+        locked=segment.locked,
     )
 
 
@@ -435,6 +597,7 @@ def _arc_object(arc: Arc) -> SceneObject:
             "net_id": arc.net_id,
         },
         ref_stability=_ref_stability(arc.id),
+        locked=arc.locked,
     )
 
 
@@ -450,6 +613,7 @@ def _via_object(via: Via, layer_ids: tuple[str, ...]) -> SceneObject:
             "net_id": via.net_id,
         },
         ref_stability=_ref_stability(via.id),
+        locked=via.locked,
     )
 
 
@@ -465,6 +629,7 @@ def _zone_object(zone: Zone) -> SceneObject:
             "min_thickness_nm": zone.min_thickness_nm,
         },
         ref_stability=_ref_stability(zone.id),
+        locked=zone.locked,
     )
 
 
@@ -480,10 +645,13 @@ def _keepout_object(keepout: Keepout) -> SceneObject:
             "prohibit_pads": keepout.prohibit_pads,
         },
         ref_stability=_ref_stability(keepout.id),
+        locked=keepout.locked,
     )
 
 
-def _read_annotations(source: bytes, limits: ParseLimits) -> tuple[SceneAnnotation, ...]:
+def _read_annotations(
+    source: bytes, limits: ParseLimits, ceiling: int
+) -> tuple[tuple[SceneAnnotation, ...], int]:
     """Collect every board-author-controlled string, out of band from Board IR.
 
     Board IR deliberately carries no text, which is the right default: none of it is needed to
@@ -497,6 +665,7 @@ def _read_annotations(source: bytes, limits: ParseLimits) -> tuple[SceneAnnotati
         raise CircuitSceneError("board source could not be parsed for annotations") from error
 
     collected: list[SceneAnnotation] = []
+    omitted = 0
 
     def leading_atoms(node: SExpr) -> tuple[str, ...]:
         """Return the payload strings before the first nested field.
@@ -524,9 +693,17 @@ def _read_annotations(source: bytes, limits: ParseLimits) -> tuple[SceneAnnotati
         # Every leading atom is emitted separately. A property is ``(property "Name" "Value")``
         # and the *name* is as author-controlled as the value, so neither may be promoted into
         # a structural field like ``origin`` where it would read as our own vocabulary.
+        nonlocal omitted
         layer_id = layer_of(node)
         for slot, payload in enumerate(leading_atoms(node)):
             if not payload:
+                continue
+            if len(collected) >= ceiling:
+                # Every other collection in this response is charged against a ceiling; this
+                # one used not to be, so a board with enough properties could grow the
+                # response past the length its own contract advertises. Counted, not dropped
+                # silently: the caller is told how many strings it is not seeing.
+                omitted += 1
                 continue
             digest = hashlib.sha256(payload.encode("utf-8", errors="replace")).hexdigest()[:16]
             collected.append(
@@ -549,7 +726,7 @@ def _read_annotations(source: bytes, limits: ParseLimits) -> tuple[SceneAnnotati
             add(node, "silkscreen", f"fp{footprint_index}")
         for node in children(footprint, "property"):
             add(node, "footprint_property", f"fp{footprint_index}")
-    return tuple(collected)
+    return tuple(collected), omitted
 
 
 @dataclass(frozen=True, slots=True)
@@ -568,6 +745,7 @@ class CircuitScene:
     render: SceneRenderEvidence | None = None
     render_bytes: bytes | None = None
     objects_omitted: int = 0
+    annotations_omitted: int = 0
     ceiling_hit: str | None = None
     content_derived_ref_count: int = 0
     request_scoped_ref_count: int = 0
@@ -605,6 +783,11 @@ class CircuitScene:
             "truncation": {
                 "objects_returned": total,
                 "objects_omitted": self.objects_omitted,
+                "annotations_returned": len(self.annotations),
+                "annotations_omitted": self.annotations_omitted,
+                # Names the first ceiling reached. The two ``*_omitted`` counts are the
+                # authoritative signal, because objects and annotations are charged against
+                # separate budgets and both can truncate in one response.
                 "ceiling_hit": self.ceiling_hit,
             },
             "ref_stability": {
@@ -736,8 +919,11 @@ def observe_board_scene(payload: Any, settings: Settings) -> CircuitScene:
             )
 
     annotations: tuple[SceneAnnotation, ...] = ()
+    annotations_omitted = 0
     if request.include_annotations:
-        annotations = _read_annotations(source, limits)
+        annotations, annotations_omitted = _read_annotations(
+            source, limits, settings.max_scene_annotations
+        )
 
     render_evidence: SceneRenderEvidence | None = None
     render_bytes: bytes | None = None
@@ -768,7 +954,9 @@ def observe_board_scene(payload: Any, settings: Settings) -> CircuitScene:
         mutable_objects={name: tuple(items) for name, items in mutable.items()},
         annotations=annotations,
         objects_omitted=budget.omitted,
-        ceiling_hit=budget.ceiling_hit,
+        annotations_omitted=annotations_omitted,
+        ceiling_hit=budget.ceiling_hit
+        or ("max_scene_annotations" if annotations_omitted else None),
         render=render_evidence,
         render_bytes=render_bytes,
         content_derived_ref_count=content_derived,
