@@ -59,11 +59,12 @@ All notable changes are documented here. The format follows
   same-net copper produce byte-identical geometry, costs, and metrics; only `ROUTER_VERSION`
   advances, to `astar-grid/0.3.0`. A committed `partial-route` fixture proposes 10 mm where the
   equivalent empty board needs 20 mm, verified against real KiCad 10.0.5 DRC for zero errors,
-  warnings, and unconnected items. Coverage on the repository's own CopperTone board is unchanged at
-  zero of fourteen previewable `F.Cu` nets: removing the veto reveals that three of the five
-  two-pin nets carry diagonal same-net copper, while the other two become genuinely attachable and
-  fail on the next unmodeled object instead. This is a contract improvement and an honesty
-  correction, not a coverage improvement. Attaching mid-stub rather than at a stub endpoint leaves
+  warnings, and unconnected items. Coverage on the repository's own CopperTone board did not move at
+  the time: removing the veto revealed that three of the five two-pin nets carry diagonal same-net
+  copper, while the other two became genuinely attachable and failed on the next unmodeled object
+  instead. (Both those measurements, and the ones in the entries below, were taken before the
+  footprint-rotation fix recorded under Fixed; with pads placed correctly the two attachable nets
+  report `already_connected`.) Attaching mid-stub rather than at a stub endpoint leaves
   copper with an unconnected end, which KiCad reports as a `track_dangling` warning. (Corrected
   while adding polygon keepouts above: this entry originally named octagonal keepouts, then the
   `GND` zone envelope, then an off-grid pad delta as the remaining chain for those two nets. Direct
@@ -104,19 +105,19 @@ All notable changes are documented here. The format follows
   containment, intersection, and rational squared-distance checks under the strictest routed class,
   zone-net class, and zone clearance; bounds construction and every polygon relation consume the
   existing obstacle-work budget. Same-net zones remain unsupported, cached KiCad fill is not
-  trusted, and CopperTone remains at zero of fourteen previewable `F.Cu` nets because nine are
-  multi-pin and all five two-pin nets already carry same-net copper. (Corrected while adding
-  same-net attachment below: that last clause was true but misleading. The partial-routing veto
-  fired early enough to mask several further blockers on this board, so it was credited with more
-  than it deserved.) A committed `blocked-zone` fixture verifies deterministic read-only
+  trusted, and CopperTone previewed zero of fourteen `F.Cu` nets at the time because nine are
+  multi-pin and all five two-pin nets already carry same-net copper. (Corrected twice since: that
+  last clause was true but misleading, because the partial-routing veto fired early enough to mask
+  several further blockers; and the board's per-net measurements were themselves distorted by the
+  footprint-rotation defect recorded under Fixed. The routing baseline carries the current
+  numbers.) A committed `blocked-zone` fixture verifies deterministic read-only
   adapter-to-preview routing without claiming fill-aware KiCad DRC.
 - Through vias outside the routed net are now selected-layer obstacles built from their outer
   diameter, rather than a board-level rejection. A via on the routed net still fails closed as
   partial routing. On the repository's own CopperTone board this moved the failure from "nine vias
-  reject everything" to per-net diagnostics; current re-measurement still previews zero of fourteen
-  nets because multi-pin nets remain unsupported and, as the same-net attachment entry below
-  records, the two-pin nets are blocked by diagonal same-net copper, octagonal keepouts, a
-  board-wide zone envelope, and an off-grid pad delta rather than only by partial routing.
+  reject everything" to per-net diagnostics. Later re-measurement, after the footprint-rotation fix
+  recorded under Fixed, shows two of fourteen nets reaching a terminal `already_connected` outcome
+  and none routed; the remaining two-pin nets are blocked by diagonal copper on the routed net.
 - Selected-layer pads and orthogonal segments outside the routed net are now exact rectangular
   routing obstacles instead of a hard rejection, so preview works on boards that already carry
   copper. Obstacles are inflated by the routed half-width plus the stricter of the routed and
@@ -190,6 +191,28 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- The KiCad adapter placed pads on rotated footprints at their mirror image. KiCad stores board
+  coordinates with y increasing downward while its `(at x y angle)` angle is counter-clockwise on
+  screen, so a quarter turn maps a footprint-local point `(x, y)` to `(y, -x)`; the adapter used the
+  `(-y, x)` that a y-up reading gives. The 0° and 180° cases are identical either way, so the defect
+  was invisible except at 90° and 270°, where it silently swapped the two pads of every rotated
+  two-pad footprint. The convention is now pinned by a committed `footprint-rotation.kicad_pcb`
+  fixture whose expected positions come from KiCad itself: each rotated footprint has a track drawn
+  to where the corrected placement predicts its first pad, and a real KiCad 10.0.5 test asserts zero
+  violations and zero unconnected items — which a mirrored turn could not produce, because the track
+  would land on the neighbouring pad's net. `_transform` is used only for pad centres; footprint-local
+  zones and graphics are separately refused and all other geometry is stored absolutely, so no other
+  object class was affected, and pad `rotation_udeg` composition was already correct because it is a
+  rotation sum rather than a coordinate map. **Board IR snapshot digests change for any board with a
+  rotated footprint**, and with them route-candidate `base_revision` and candidate IDs; the committed
+  golden `schema-valid.json` is regenerated, and its diff is exactly the two pad coordinates plus the
+  digest. The Board IR `0.1.0` schema is unchanged — no field changed shape — so no version bump is
+  warranted; this restores conformance rather than altering the format. Historical benchmark records
+  under `benchmarks/results/board-ir/` retain digests computed before the fix and are no longer
+  reproducible against current code, which is correct for dated evidence. On the repository's own
+  CopperTone board the correction produces its first coverage: `L_ISO` and `R_ISO` are each two pads
+  joined by one segment running between their centres and now report `already_connected`, which
+  `kicad-cli pcb drc` corroborates by reporting zero unconnected items for the whole board.
 - The deterministic passive-schematic layout now uses longer symbol leads, wider A4-aware
   component spacing, and grid-aligned reference/value offsets. The RC fixture's pin labels,
   component bodies, and visible properties no longer collide in the reviewed KiCad SVG. This is a

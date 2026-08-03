@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import shutil
+import subprocess
 import tracemalloc
 from collections.abc import Callable
 from pathlib import Path
@@ -14,6 +17,7 @@ from copper_mcp.adapters.sexpr import SExprError, parse_sexpr
 from copper_mcp.board_ir import (
     BoardIRSnapshot,
     NetClass,
+    Pad,
     PadShape,
     ParseLimits,
     PointNM,
@@ -26,7 +30,14 @@ from copper_mcp.board_ir import (
 TEST_ROOT = Path(__file__).parent
 REPOSITORY_ROOT = TEST_ROOT.parent
 SUBSET_BOARD = TEST_ROOT / "fixtures" / "board-ir-v0.1" / "subset.kicad_pcb"
+ROTATION_BOARD = TEST_ROOT / "fixtures" / "board-ir-v0.1" / "footprint-rotation.kicad_pcb"
 MALFORMED_BOARD = TEST_ROOT / "fixtures" / "board-ir-v0.1" / "malformed-unbalanced.kicad_pcb"
+_DISCOVERED_KICAD_CLI = shutil.which("kicad-cli")
+REAL_KICAD_CLI = (
+    Path(_DISCOVERED_KICAD_CLI)
+    if _DISCOVERED_KICAD_CLI is not None
+    else Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli")
+)
 COPPERTONE_BOARD = (
     REPOSITORY_ROOT / "hardware" / "coppertone-buffer" / "coppertone-buffer.kicad_pcb"
 )
@@ -87,12 +98,15 @@ def test_synthetic_kicad_subset_maps_exact_geometry_and_constraints() -> None:
     pads = {pad.id: pad for pad in content.pads}
     signal_pad = pads["pad:kicad:10000000-0000-0000-0000-000000000002"]
     through_pad = pads["pad:kicad:10000000-0000-0000-0000-000000000003"]
-    assert signal_pad.center == PointNM(10_000_000, 9_000_000)
+    # The footprint is at (10, 10) turned 90 degrees, so its local (-1, 0) pad maps to
+    # (10, 11) and its local (1, 0) pad to (10, 9) under KiCad's own convention. See
+    # test_footprint_rotation_matches_kicad_placement for how that is derived.
+    assert signal_pad.center == PointNM(10_000_000, 11_000_000)
     assert signal_pad.rotation_udeg == 90_000_000
     assert signal_pad.shape is PadShape.ROUNDRECT
     assert signal_pad.roundrect_radius_nm == 250_000
     assert signal_pad.layer_ids == ("layer:F.Cu",)
-    assert through_pad.center == PointNM(10_000_000, 11_000_000)
+    assert through_pad.center == PointNM(10_000_000, 9_000_000)
     assert through_pad.rotation_udeg == 180_000_000
     assert through_pad.drill_x_nm == through_pad.drill_y_nm == 1_000_000
     assert through_pad.layer_ids == ("layer:F.Cu", "layer:B.Cu")
@@ -654,3 +668,147 @@ def test_bounded_random_bytes_never_escape_the_conversion_contract(source: bytes
         assert all(diagnostic.severity is Severity.ERROR for diagnostic in result.diagnostics)
     else:
         assert not any(diagnostic.severity is Severity.ERROR for diagnostic in result.diagnostics)
+
+
+# Ground truth for these positions is KiCad itself, not arithmetic in this repository. The
+# committed `footprint-rotation.kicad_pcb` runs a track from each rotated footprint's pad "1"
+# to a separate anchor pad on the same net. If a quarter turn were mirrored, that track would
+# land on pad "2" — a different net — and KiCad would report a short plus an unconnected net.
+# `test_real_kicad_confirms_the_footprint_rotation_ground_truth` asserts that it does not.
+# The 0 and 180 degree cases are controls: they are identical under either convention, so only
+# the 90 and 270 rows can actually discriminate.
+_ROTATION_PAD_CENTERS = {
+    "PROBE_0_A": PointNM(7_000_000, 12_000_000),
+    "PROBE_0_B": PointNM(17_000_000, 12_000_000),
+    "PROBE_90_A": PointNM(32_000_000, 17_000_000),
+    "PROBE_90_B": PointNM(32_000_000, 7_000_000),
+    "PROBE_180_A": PointNM(17_000_000, 28_000_000),
+    "PROBE_180_B": PointNM(7_000_000, 28_000_000),
+    "PROBE_270_A": PointNM(32_000_000, 23_000_000),
+    "PROBE_270_B": PointNM(32_000_000, 33_000_000),
+}
+
+
+def _net_names(snapshot: BoardIRSnapshot) -> Callable[[Pad], str]:
+    names = {net.id: net.name for net in snapshot.content.nets}
+
+    def name_of(pad: Pad) -> str:
+        return "" if pad.net_id is None else names.get(pad.net_id, "")
+
+    return name_of
+
+
+@pytest.mark.parametrize(("net_name", "expected"), sorted(_ROTATION_PAD_CENTERS.items()))
+def test_footprint_rotation_matches_kicad_placement(net_name: str, expected: PointNM) -> None:
+    snapshot = parse_success(ROTATION_BOARD.read_bytes(), constraint_profile())
+    name_of = _net_names(snapshot)
+
+    # Anchor pads sit outside the rotated footprints and are the only ones ending in "5".
+    probe = [
+        pad
+        for pad in snapshot.content.pads
+        if name_of(pad) == net_name and not pad.id.endswith("5")
+    ]
+
+    assert len(probe) == 1
+    assert probe[0].center == expected
+
+
+def test_footprint_rotation_keeps_pad_orientation_and_rejects_off_axis_turns() -> None:
+    snapshot = parse_success(ROTATION_BOARD.read_bytes(), constraint_profile())
+    name_of = _net_names(snapshot)
+    rotations = {
+        name_of(pad): pad.rotation_udeg
+        for pad in snapshot.content.pads
+        if name_of(pad).endswith("_B")
+    }
+
+    # Pad orientation composes the footprint and pad angles, which is unaffected by the
+    # coordinate-mapping sign and is only ever consumed as a quarter-turn parity.
+    assert rotations == {
+        "PROBE_0_B": 0,
+        "PROBE_90_B": 90_000_000,
+        "PROBE_180_B": 180_000_000,
+        "PROBE_270_B": 270_000_000,
+    }
+
+    off_axis = ROTATION_BOARD.read_bytes().replace(b"(at 32 12 90)", b"(at 32 12 45)")
+    result = parse_kicad_bytes(off_axis, constraint_profile())
+    assert result.snapshot is None
+    assert any(
+        "orthogonal footprint transforms" in diagnostic.message for diagnostic in result.diagnostics
+    )
+
+
+def test_coppertone_rotated_pads_are_consistent_with_its_clean_kicad_drc() -> None:
+    """No foreign track may end inside a foreign pad, because KiCad reports no shorts.
+
+    This is the argument that exposed the mirrored quarter turn: with the pads of every
+    rotated two-pad footprint swapped, two tracks appeared to start inside a pad belonging to
+    another net, which `kicad-cli pcb drc` contradicts by reporting zero violations.
+    """
+
+    snapshot = parse_success(COPPERTONE_BOARD.read_bytes(), constraint_profile())
+    content = snapshot.content
+    front_pads = [pad for pad in content.pads if "layer:F.Cu" in pad.layer_ids]
+
+    def covered(pad: Pad) -> tuple[int, int, int, int]:
+        size_x, size_y = pad.size_x_nm, pad.size_y_nm
+        if pad.rotation_udeg // 90_000_000 % 2 == 1:
+            size_x, size_y = size_y, size_x
+        half_x, half_y = (size_x + 1) // 2, (size_y + 1) // 2
+        return (
+            pad.center.x - half_x,
+            pad.center.y - half_y,
+            pad.center.x + half_x,
+            pad.center.y + half_y,
+        )
+
+    shorts = [
+        (segment.id, pad.id)
+        for segment in content.segments
+        if segment.layer_id == "layer:F.Cu"
+        for pad in front_pads
+        if pad.net_id != segment.net_id
+        for endpoint in (segment.start, segment.end)
+        if covered(pad)[0] <= endpoint.x <= covered(pad)[2]
+        and covered(pad)[1] <= endpoint.y <= covered(pad)[3]
+    ]
+
+    assert shorts == []
+
+
+@pytest.mark.skipif(not REAL_KICAD_CLI.is_file(), reason="KiCad CLI is not installed")
+def test_real_kicad_confirms_the_footprint_rotation_ground_truth(tmp_path: Path) -> None:
+    """KiCad's own connectivity engine adjudicates the rotation convention."""
+
+    board = tmp_path / ROTATION_BOARD.name
+    board.write_bytes(ROTATION_BOARD.read_bytes())
+    report = tmp_path / "drc.json"
+
+    completed = subprocess.run(  # noqa: S603 - fixed local argv, trusted discovered CLI
+        [
+            str(REAL_KICAD_CLI),
+            "pcb",
+            "drc",
+            "--format",
+            "json",
+            "--units",
+            "mm",
+            "--severity-all",
+            "--exit-code-violations",
+            "--output",
+            str(report),
+            str(board),
+        ],
+        check=False,
+        capture_output=True,
+        timeout=120,
+    )
+
+    assert completed.returncode == 0
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    # Every probe track was drawn to the pad position this repository now predicts. A mirrored
+    # quarter turn would put that track on the neighbouring pad, which is a different net.
+    assert payload["violations"] == []
+    assert payload["unconnected_items"] == []

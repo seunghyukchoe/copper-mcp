@@ -4,6 +4,12 @@
 - Date: 2026-08-03
 - Owners: `@seunghyukchoe`
 - Related: Roadmap M2, ADR-0011, ADR-0013
+- Correction: the final Consequences bullet says coverage on CopperTone did not move and that the
+  two affected nets' results are not valid evidence. The upstream defect it names — a mirrored
+  footprint rotation in the KiCad adapter — has since been fixed. With pads placed correctly,
+  `L_ISO` and `R_ISO` report `already_connected`, the board's first coverage. The decision in this
+  ADR is unaffected; the [routing baseline](../architecture/routing-baseline.md) carries the
+  current measurement.
 
 ## Context
 

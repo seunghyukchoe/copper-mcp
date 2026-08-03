@@ -7,7 +7,10 @@
 - Correction: the final Consequences bullet lists the CopperTone blockers behind this change as
   octagonal keepouts, then the `GND` zone envelope, then an off-grid pad delta. Only the first was
   measured. Direct measurement after polygon keepouts landed shows foreign-net diagonal segments
-  come next, and the remaining two are in the opposite order. The evidenced chain lives in the
+  come next, and the remaining two are in the opposite order. Later still, a mirrored
+  footprint-rotation defect in the KiCad adapter was found to have contaminated all of those
+  CopperTone measurements; with it fixed, the two nets this ADR made attachable report
+  `already_connected`. The current measurement lives in the
   [routing baseline](../architecture/routing-baseline.md); the decision itself is unaffected.
 
 ## Context

@@ -292,45 +292,45 @@ what neither yet reaches. Measured against the repository's own
 | Stage | Result |
 |---|---|
 | Board IR conversion | Supported — 2 copper layers, 14 nets, 55 pads, 53 segments, 9 vias, 2 zones, 2 keepouts |
-| Nets previewable on `F.Cu` | 0 of 14 |
+| Nets reaching a terminal outcome on `F.Cu` | 2 of 14, both `already_connected` |
+| Nets routed on `F.Cu` | 0 of 14 |
 
-Conversion is not the blocker; the router's contract is. Three refusals have now been removed in
-succession — the same-net partial-routing veto (ADR-0016), the rejection of non-rectangular track
-keepouts, and the rejection of foreign-net diagonal segments — and the coverage number has not moved
-any of the three times. Each removal did reveal the next blocker, which is the point of measuring
-rather than predicting.
+Conversion is not the blocker; the router's contract is. Four refusals have been removed in
+succession — the same-net partial-routing veto (ADR-0016), non-rectangular track keepouts,
+foreign-net diagonal segments (ADR-0017), and a mirrored footprint-rotation defect in the adapter.
+The first three moved nothing. The fourth moved the number, because it was not a router limitation
+at all: pads on every rotated footprint were being placed at their mirror image, so the router was
+being asked about a board that did not exist.
 
-Measured per net with all three removed:
+Measured per net at the default 250 µm grid step, twice, with identical results:
 
-- 9 of 14 nets have more than two `F.Cu` pads, the largest at twelve, and fail as
-  `invalid_two_pin_net`;
-- 3 of the 5 two-pin nets — `9V_RAW`, `L_IN_RAW`, `R_IN_RAW` — carry **diagonal same-net** `F.Cu`
-  segments and fail as unsupported routed-net geometry, which is still deliberate;
-- the remaining 2, `L_ISO` and `R_ISO`, now reach the geometry stage: `off_grid` at the default
-  250 µm step, because their pad-centre delta is 2.1 mm by 3.6 mm, and `no_path` at a 100 µm step
-  that does divide it.
+| Nets | Outcome |
+|---|---|
+| 9 of 14 — `GND`, `VCC`, `VREF`, `L_BUF`, `R_BUF`, `L_OUT`, `R_OUT`, `L_IN_BIASED`, `R_IN_BIASED` | `invalid_two_pin_net`; more than two `F.Cu` pads, the largest at twelve |
+| 3 of 14 — `9V_RAW`, `L_IN_RAW`, `R_IN_RAW` | `unsupported_geometry`; diagonal copper **on the routed net**, which is still deliberate |
+| 2 of 14 — `L_ISO`, `R_ISO` | **`already_connected`** |
 
-> **This last row is not currently trustworthy evidence about the router.** While measuring it, the
-> `no_path` was traced to a foreign `L_OUT` track whose envelope covers the `L_ISO` pad centre — a
-> foreign track apparently starting *inside* a routed pad. KiCad reports zero violations and zero
-> unconnected items on the same board, which it could not if that were real. The cause is upstream:
-> the KiCad adapter applies footprint rotation with the wrong sign when placing pads, so the two
-> pads of each `-90°` capacitor are swapped. Under KiCad's own convention `L_ISO` sits at
-> (35.3, 19.5) and `L_OUT` at (35.3, 23.1) — the exact opposite of what the adapter reports, and the
-> assignment that makes the board consistent with its clean DRC. Until that is fixed, the `L_ISO`
-> and `R_ISO` rows measure a mislocated board rather than a router limitation, and the earlier peel
-> tables in this section inherit the same defect.
+`L_ISO` and `R_ISO` are each two pads joined by exactly one segment running precisely between their
+centres — `(33.2, 19.5)`–`(35.3, 19.5)` and `(33.2, 9.5)`–`(35.3, 9.5)`. There is nothing to route,
+and saying so is the correct answer rather than a consolation prize.
 
-What is trustworthy here is the negative space: no amount of removing router refusals has yet made
-this board route, and the remaining known contracts are exact diagonal-segment *attachment*
-modelling, a freshness-bound fill authority that can distinguish a zone outline from its current
-copper, a grid step or lattice that does not require the pad delta to divide, and multi-pin routing
-for the other nine nets.
+That claim is bound to authoritative evidence, though not the usual kind: an already-connected
+preview emits no candidate, so candidate-bound DRC has nothing to replay. The available
+authoritative check is the board-level one — `kicad-cli pcb drc` reports **zero unconnected items**
+on this board, so KiCad agrees every net including both ISO nets is fully connected. A regression
+test asserts both halves together.
 
-The honest summary is unchanged: Board IR handles a real two-layer audio board today, and the router
-does not route one unaided. Attachment, polygon keepouts, and diagonal envelopes are validated
-instead by purpose-built fixtures whose KiCad DRC evidence is real and which are checked to be
-discriminating. The [roadmap](../roadmap.md) records the remainder as separate contracts.
+This is the first coverage this board has ever shown, and it is worth being precise about what it is
+not. Zero nets are *routed*: no copper has been proposed for CopperTone. Two nets are correctly
+identified as needing none. The remaining contracts are unchanged — exact diagonal-segment
+*attachment* modelling for three nets, multi-pin routing for nine, and, behind those, a
+freshness-bound fill authority and a lattice that does not require the pad-centre delta to divide by
+the grid step.
+
+Board IR handles a real two-layer audio board today, and the router still does not route one
+unaided. Attachment, polygon keepouts, and diagonal envelopes remain validated by purpose-built
+fixtures whose KiCad DRC evidence is real and which are checked to be discriminating. The
+[roadmap](../roadmap.md) records the remainder as separate contracts.
 
 ## Safety boundary
 

@@ -818,3 +818,56 @@ def test_real_kicad_confirms_a_completed_partial_route(tmp_path: Path) -> None:
     assert preview.drc_evidence.summary.unconnected_count == 0
     assert preview.drc_evidence.summary.passed is True
     assert _entries(tmp_path) == before
+
+
+COPPERTONE_BOARD = (
+    Path(__file__).parent.parent / "hardware" / "coppertone-buffer" / "coppertone-buffer.kicad_pcb"
+)
+
+
+@pytest.mark.parametrize("net_name", ["L_ISO", "R_ISO"])
+def test_coppertone_iso_nets_report_already_connected(net_name: str, tmp_path: Path) -> None:
+    board = tmp_path / COPPERTONE_BOARD.name
+    board.write_bytes(COPPERTONE_BOARD.read_bytes())
+    settings = Settings(workspace=tmp_path, max_drc_report_bytes=4096)
+    request = _request(board=COPPERTONE_BOARD.name, net=net_name)
+
+    first = preview_route(request, settings)
+    second = preview_route(request, settings)
+
+    assert first.status is RoutePreviewStatus.ALREADY_CONNECTED
+    assert first.to_dict() == second.to_dict()
+    assert first.connection is not None
+    # Each ISO net is two pads joined by exactly one segment running between their centres.
+    assert first.connection.attachment_segments == 1
+    assert first.connection.component_objects == 3
+
+
+@pytest.mark.skipif(
+    not REAL_KICAD_CLI.is_file(),
+    reason="requires a locally installed KiCad CLI",
+)
+def test_real_kicad_corroborates_the_coppertone_already_connected_nets(tmp_path: Path) -> None:
+    """KiCad's own connectivity report is the evidence behind the already-connected claim.
+
+    An already-connected preview emits no candidate, so there is nothing for candidate-bound
+    DRC to replay. The authoritative check available is the board-level one: KiCad reporting
+    zero unconnected items means every net on this board, including both ISO nets, is fully
+    connected — which is exactly what the preview claims for them.
+    """
+
+    board = tmp_path / COPPERTONE_BOARD.name
+    board.write_bytes(COPPERTONE_BOARD.read_bytes())
+    settings = Settings(
+        workspace=tmp_path,
+        kicad_cli=REAL_KICAD_CLI,
+        max_drc_report_bytes=8 * 1024 * 1024,
+    )
+
+    summary = kicad_cli.run_board_drc(COPPERTONE_BOARD.name, settings)
+
+    assert summary.unconnected_count == 0
+    assert summary.error_count == 0
+    for net_name in ("L_ISO", "R_ISO"):
+        preview = preview_route(_request(board=COPPERTONE_BOARD.name, net=net_name), settings)
+        assert preview.status is RoutePreviewStatus.ALREADY_CONNECTED
