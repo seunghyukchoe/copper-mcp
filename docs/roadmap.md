@@ -101,9 +101,15 @@ future work.
   observation is the opt-in `include_render` flag: a deterministic, digest-bound, copper-only SVG
   delivered as an ephemeral capability, subordinate to the scene by construction and whole-board
   rather than region-scoped. A human-facing thumbnail remains unimplemented.
-- [ ] Typed placement-intent contract and immutable placement preview/candidates.
-- [ ] Deterministic snapping, connectivity, clearance, rule, provenance, and revision validation for
-  every placement candidate.
+- [~] Typed placement-intent contract and immutable placement preview/candidates. The seven-rule
+  intent language, the out-of-band footprint view, the deterministic legalizer and the
+  dual-digest-bound `PlacementCandidate` are implemented; there is no MCP or CLI surface yet, and
+  nothing applies a placement.
+- [~] Deterministic snapping, connectivity, clearance, rule, provenance, and revision validation for
+  every placement candidate. Grid snapping, rule residuals, three-valued pad overlap, outline
+  containment, keepout respect and dual-digest binding are implemented. Courtyard overlap is
+  reported as `not_modelled` because Board IR carries no courtyard geometry, and connectivity
+  after a placement is future work.
 - [ ] Separately authorized placement apply; direct AI mutation of KiCad remains prohibited.
 - [ ] Heuristic policy baseline and trace dataset.
 - [ ] Typed net-ordering, corridor, and repair policy interface.

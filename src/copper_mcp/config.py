@@ -51,6 +51,10 @@ class Settings:
     max_scene_vertices: int = 200_000
     max_render_bytes: int = 4 * 1024 * 1024
     max_scene_annotations: int = 5_000
+    max_placement_subjects: int = 64
+    max_placement_rules: int = 256
+    max_placement_checks: int = 2_000_000
+    max_placement_seconds: int = 10
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -143,6 +147,30 @@ class Settings:
             1,
             1_000_000,
         )
+        max_placement_subjects = _bounded_int(
+            "COPPER_MCP_MAX_PLACEMENT_SUBJECTS",
+            os.environ.get("COPPER_MCP_MAX_PLACEMENT_SUBJECTS", "64"),
+            1,
+            4_096,
+        )
+        max_placement_rules = _bounded_int(
+            "COPPER_MCP_MAX_PLACEMENT_RULES",
+            os.environ.get("COPPER_MCP_MAX_PLACEMENT_RULES", "256"),
+            0,
+            16_384,
+        )
+        max_placement_checks = _bounded_int(
+            "COPPER_MCP_MAX_PLACEMENT_CHECKS",
+            os.environ.get("COPPER_MCP_MAX_PLACEMENT_CHECKS", "2000000"),
+            1,
+            100_000_000,
+        )
+        max_placement_seconds = _bounded_int(
+            "COPPER_MCP_MAX_PLACEMENT_SECONDS",
+            os.environ.get("COPPER_MCP_MAX_PLACEMENT_SECONDS", "10"),
+            1,
+            600,
+        )
         return cls(
             workspace=workspace,
             transport=transport,
@@ -161,4 +189,8 @@ class Settings:
             max_scene_vertices=max_scene_vertices,
             max_render_bytes=max_render_bytes,
             max_scene_annotations=max_scene_annotations,
+            max_placement_subjects=max_placement_subjects,
+            max_placement_rules=max_placement_rules,
+            max_placement_checks=max_placement_checks,
+            max_placement_seconds=max_placement_seconds,
         )
