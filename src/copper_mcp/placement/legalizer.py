@@ -484,6 +484,7 @@ def evaluate_placement(
     *,
     max_checks: int = 2_000_000,
     deadline_seconds: float = 10.0,
+    board_path: str = "",
 ) -> PlacementResult:
     """Validate one placement proposal and return a candidate or a typed refusal."""
 
@@ -494,6 +495,8 @@ def evaluate_placement(
             snapshot,
             PlacementFailureCode.STALE_REVISION,
             "the placement view and the board snapshot describe different boards",
+            intent=intent,
+            board_path=board_path,
         )
     budget = _Budget(max_checks=max_checks, deadline_seconds=deadline_seconds)
     try:
@@ -512,7 +515,13 @@ def evaluate_placement(
         )
     except _BudgetExhaustedError as error:
         return _refuse(
-            board_revision, snapshot, PlacementFailureCode.BUDGET_EXHAUSTED, str(error), budget
+            board_revision,
+            snapshot,
+            PlacementFailureCode.BUDGET_EXHAUSTED,
+            str(error),
+            budget,
+            intent=intent,
+            board_path=board_path,
         )
     except _InfeasibleError as error:
         return _refuse(
@@ -521,10 +530,18 @@ def evaluate_placement(
             PlacementFailureCode.INFEASIBLE_CONSTRAINTS,
             str(error),
             budget,
+            intent=intent,
+            board_path=board_path,
         )
     except _UnresolvedError as error:
         return _refuse(
-            board_revision, snapshot, PlacementFailureCode.UNRESOLVED_REF, str(error), budget
+            board_revision,
+            snapshot,
+            PlacementFailureCode.UNRESOLVED_REF,
+            str(error),
+            budget,
+            intent=intent,
+            board_path=board_path,
         )
     except _UnsupportedError as error:
         return _refuse(
@@ -533,6 +550,8 @@ def evaluate_placement(
             PlacementFailureCode.UNSUPPORTED_GEOMETRY,
             str(error),
             budget,
+            intent=intent,
+            board_path=board_path,
         )
 
     if not legality.legal:
@@ -544,6 +563,8 @@ def evaluate_placement(
             budget,
             legality=legality,
             rule_results=rule_results,
+            intent=intent,
+            board_path=board_path,
         )
 
     candidate = finalise_candidate(
@@ -574,6 +595,8 @@ def evaluate_placement(
     return PlacementResult(
         status="previewed",
         board_revision=board_revision,
+        board_path=board_path,
+        request=intent,
         snapshot_digest=snapshot.snapshot_digest,
         candidate=candidate,
     )
@@ -588,10 +611,14 @@ def _refuse(
     *,
     legality: PlacementLegality | None = None,
     rule_results: tuple[RuleResult, ...] = (),
+    intent: PlacementIntent | None = None,
+    board_path: str = "",
 ) -> PlacementResult:
     return PlacementResult(
         status="refused",
         board_revision=board_revision,
+        board_path=board_path,
+        request=intent,
         snapshot_digest=snapshot.snapshot_digest,
         diagnostic=PlacementDiagnostic(
             code=code,

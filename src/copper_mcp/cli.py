@@ -28,6 +28,7 @@ from copper_mcp.tools import (
     inspect_board,
     inspect_board_ir,
     observe_board_scene_raw,
+    preview_placement,
     preview_route,
     run_board_drc,
     server_info,
@@ -92,6 +93,41 @@ def _scene_request(args: argparse.Namespace) -> dict[str, Any]:
         "include_annotations": args.include_annotations,
         "include_render": args.render is not None,
     }
+
+
+def _placement_request(args: argparse.Namespace, settings: Settings) -> dict[str, Any]:
+    """Build a placement request from flags; the service still validates every field.
+
+    Rules and proposals are structured enough that flags would be a worse interface than a
+    document, so they come from an optional workspace-confined JSON file. The board,
+    constraints and subjects always come from the flags, so the file cannot redirect the
+    request at a different board.
+    """
+
+    request: dict[str, Any] = {}
+    if args.intent is not None:
+        raw = load_json_file(args.intent, settings)
+        try:
+            document = json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("intent file must contain valid UTF-8 JSON") from error
+        if not isinstance(document, dict):
+            raise ValueError("intent document must be a JSON object")
+        for key in ("rules", "proposals"):
+            if key in document:
+                request[key] = document[key]
+        extra = set(document) - {"rules", "proposals"}
+        if extra:
+            raise ValueError(
+                f"intent document has {len(extra)} unsupported field(s); "
+                "supported fields are: proposals, rules"
+            )
+    request["board"] = args.path
+    request["constraints"] = _constraints(args)
+    request["subjects"] = list(args.placement_subjects)
+    if args.placement_grid_nm is not None:
+        request["placement_grid_nm"] = args.placement_grid_nm
+    return request
 
 
 def _load_candidate(path: str, settings: Settings) -> dict[str, Any]:
@@ -183,6 +219,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also return board text, quarantined and marked untrusted",
     )
 
+    placement_parser = subparsers.add_parser(
+        "preview-placement",
+        help="Validate a proposed footprint placement without modifying the board",
+    )
+    placement_parser.add_argument("path", help="Board path relative to the workspace")
+    for option in _CONSTRAINT_OPTIONS:
+        placement_parser.add_argument(f"--{option.replace('_', '-')}", type=int, required=True)
+    placement_parser.add_argument(
+        "--subject",
+        action="append",
+        required=True,
+        dest="placement_subjects",
+        help="Footprint reference the proposal may move; repeatable",
+    )
+    placement_parser.add_argument(
+        "--intent",
+        default=None,
+        help=(
+            "Optional JSON document inside the workspace supplying rules and proposals; "
+            "its board, constraints and subjects come from the flags above"
+        ),
+    )
+    placement_parser.add_argument(
+        "--placement-grid-nm",
+        type=int,
+        default=None,
+        help="Snap proposed origins to this grid",
+    )
+
     validate_parser = subparsers.add_parser("validate-candidate", help="Validate candidate JSON")
     validate_parser.add_argument("path", help="Candidate path relative to the workspace")
 
@@ -258,6 +323,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     ).as_posix(),
                 }
             _json_dump(document)
+            return 0
+        if args.command == "preview-placement":
+            _json_dump(preview_placement(_placement_request(args, settings), settings))
             return 0
         if args.command == "validate-candidate":
             _json_dump(candidate_from_dict(_load_candidate(args.path, settings)).to_dict())

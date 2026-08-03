@@ -21,8 +21,10 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Any
 
+from copper_mcp.adapters import KiCadConstraintProfile
 from copper_mcp.board_ir import NetClass
 from copper_mcp.request_boundary import (
+    CONSTRAINT_FIELDS,
     MAX_JSON_SAFE_INTEGER,
     RequestError,
     board_path,
@@ -238,6 +240,28 @@ class PlacementIntent:
     rules: tuple[PlacementRule, ...]
     proposals: tuple[PlacementProposal, ...]
     placement_grid_nm: int = 1_000
+
+    def profile(self) -> KiCadConstraintProfile:
+        """The constraint profile this intent's board must be converted under."""
+
+        return KiCadConstraintProfile(
+            net_classes=(self.constraints,), default_net_class_id=self.constraints.id
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Echo the validated request so a result is self-describing once detached."""
+
+        return {
+            "board": self.board,
+            "subjects": list(self.subject_refs),
+            "rule_count": len(self.rules),
+            "proposal_count": len(self.proposals),
+            "placement_grid_nm": self.placement_grid_nm,
+            "constraints": {
+                field_name: getattr(self.constraints, field_name)
+                for field_name in CONSTRAINT_FIELDS
+            },
+        }
 
     def __post_init__(self) -> None:
         if not self.subject_refs:
@@ -663,6 +687,8 @@ class PlacementResult:
 
     status: str
     board_revision: str
+    board_path: str = ""
+    request: PlacementIntent | None = None
     snapshot_digest: str | None = None
     candidate: PlacementCandidate | None = None
     diagnostic: PlacementDiagnostic | None = None
@@ -683,6 +709,8 @@ class PlacementResult:
         return {
             "status": self.status,
             "placement_version": PLACEMENT_VERSION,
+            "board_path": self.board_path,
+            "request": None if self.request is None else self.request.to_dict(),
             "board_revision": self.board_revision,
             "snapshot_digest": self.snapshot_digest,
             "candidate": None if self.candidate is None else self.candidate.to_dict(),

@@ -88,6 +88,43 @@ Placement intent is a **typed rule language that cannot express an illegal resul
 - There is **no MCP or CLI surface yet**. The contract and legalizer land first so the rule
   vocabulary is exercised before it is published.
 
+## Follow-up, 2026-08-04: placement candidates are not bound to KiCad DRC
+
+The preview surface shipped without an `include_drc` flag. This is a scoping decision with a
+specific technical reason, not an omission for time.
+
+Binding a *route* candidate to authoritative DRC works because
+`render_kicad_candidate_board` is **append-only**: it adds `(segment ...)` nodes before the
+board's closing delimiter, re-parses, and asserts the resulting Board IR differs from the
+original by exactly the added segments and nothing else. That round-trip equality assertion is
+what makes the rendered board trustworthy.
+
+A placement patch cannot be append-only. Moving a footprint means editing its `(at x y angle)`
+in place and - because a pad's angle is absolute, as ADR-0005's amendment records - rewriting
+the angle on every pad and every `property` node it owns. The problem is what verifies that
+edit. **Board IR models only pads inside a footprint.** It carries no silkscreen, no
+fabrication text, no 3D model placement, and no courtyards, so the round-trip check would be
+structurally blind to most of what a move has to rewrite.
+
+Measured on this repository's own board: a footprint move must rewrite **104 pose-carrying
+`property` nodes** that Board IR cannot verify, against **55 pads** that it can - nearly two
+unverifiable edits for every verifiable one. Worse, those `property` nodes carry a
+footprint-local *position* together with an absolute *angle*, which is precisely the
+distinction whose confusion produced the pad-rotation defect. A serializer that got it wrong
+would rotate silkscreen the wrong way and still pass a Board IR round-trip cleanly, because
+Board IR has no text to compare.
+
+So the choice was between a serializer that is verifiable for a third of what it touches, and
+no serializer. **No serializer**, and the limitation is named in the tool description, the MCP
+API document, the README and the roadmap rather than buried. What a placement candidate claims
+today is exactly what the deterministic legalizer proved: pad overlap, outline containment and
+keepout respect. It does not claim DRC cleanliness, and there is no field in which it could.
+
+The honest route to DRC binding is a Board IR that models footprints as first-class objects,
+which ADR-0024 already defers to the point where apply lands. At that point the round-trip
+assertion becomes total again and the serializer becomes verifiable, which is the only
+condition under which it should be written.
+
 ## Prior art
 
 The split is the **generator-proposes / legalizer-disposes** pipeline that the analytical and

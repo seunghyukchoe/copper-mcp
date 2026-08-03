@@ -28,6 +28,7 @@ from copper_mcp.mcp_contracts import (
     CircuitIntentToolContent,
     CircuitSceneToolResponse,
     CircuitSchematicToolResponse,
+    PlacementPreviewToolResponse,
 )
 from copper_mcp.scene_render import (
     SCENE_RENDER_URI_TEMPLATE,
@@ -44,6 +45,7 @@ from copper_mcp.tools import compare_candidates as compare_candidates_service
 from copper_mcp.tools import inspect_board as inspect_board_service
 from copper_mcp.tools import inspect_board_ir as inspect_board_ir_service
 from copper_mcp.tools import observe_board_scene_raw as observe_board_scene_service_raw
+from copper_mcp.tools import preview_placement as preview_placement_service
 from copper_mcp.tools import preview_route as preview_route_service
 from copper_mcp.tools import render_circuit_schematic as render_circuit_schematic_service
 from copper_mcp.tools import run_board_drc as run_board_drc_service
@@ -204,6 +206,40 @@ def observe_board_scene(request: dict[str, Any]) -> CircuitSceneToolResponse:
             )
         ],
         structured_content=validated.model_dump(mode="json", by_alias=True),
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def preview_placement(request: dict[str, Any]) -> PlacementPreviewToolResponse:
+    """Validate a proposed footprint placement against a board, without changing anything.
+
+    ``request`` takes ``board``, ``constraints``, and ``subjects`` (the footprint references
+    the proposal may move), plus optional ``rules``, ``proposals`` and ``placement_grid_nm``.
+
+    Rules come in seven kinds - proximity, alignment, symmetry, edge, region, orientation and
+    side - and name objects only by the references a scene already returned. Proposals are
+    anchored the same way: an offset from another object's edge or centre, never an absolute
+    coordinate. Positions in the response are derived here and snapped to the placement grid.
+
+    A ``previewed`` result carries an immutable candidate whose legality was proven
+    deterministically. Note that ``pad_overlap`` is three-valued: ``inconclusive`` means
+    neither clearance nor collision could be proven, and is not a failure. Courtyard overlap is
+    reported as ``not_modelled`` and is genuinely not checked. This tool never applies a
+    placement, and a placement is not bound to KiCad DRC evidence in this version.
+    """
+
+    # Both transports, like preview_route: one self-contained response, no server-side state,
+    # no capability handle to resolve. Workspace confinement is what bounds the disclosure.
+    return PlacementPreviewToolResponse.model_validate(
+        preview_placement_service(request, _SETTINGS)
     )
 
 

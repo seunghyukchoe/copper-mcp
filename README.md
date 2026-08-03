@@ -191,6 +191,24 @@ layers are excluded because KiCad embeds their text literally in the SVG - and i
 board rather than the requested region. It is an orientation aid: where it and the scene disagree,
 the scene is right.
 
+Validate a proposed footprint placement without modifying the board:
+
+```bash
+copper-mcp --workspace /absolute/path/to/boards preview-placement example.kicad_pcb \
+  --clearance-nm 250000 --track-width-nm 250000 \
+  --via-diameter-nm 800000 --via-drill-nm 400000 \
+  --subject footprint:kicad:<uuid> --subject footprint:kicad:<uuid>
+```
+
+Placement rules and proposals name objects only by the references a scene returned - there is no
+way to write an absolute coordinate - so every position in the response was derived by CopperMCP
+and snapped to an explicit grid. The response proves three things and claims nothing else: pad
+overlap, board-outline containment, and keepout respect. `pad_overlap` is three-valued, so
+`inconclusive` means neither clearance nor collision could be proven rather than that something is
+wrong. Courtyard overlap is reported as `not_modelled` because Board IR carries no courtyard
+geometry. **The preview never applies a placement and is not bound to KiCad DRC evidence**; a
+placement also invalidates any route candidate bound to the same board revision.
+
 Preview one route without modifying the board, then optionally validate it with KiCad:
 
 ```bash

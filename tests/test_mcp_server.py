@@ -86,6 +86,7 @@ class McpServerTests(unittest.TestCase):
                 "inspect_board",
                 "inspect_board_ir",
                 "observe_board_scene",
+                "preview_placement",
                 "preview_route",
                 "render_circuit_schematic",
                 "run_board_drc",
