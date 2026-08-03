@@ -28,3 +28,4 @@ from the decision ledger.
 - [ADR-0022: Observe a board as a semantic scene, with its text held at arm's length](0022-circuit-scene-observation.md)
 - [ADR-0023: Render a board deterministically, and only as an advisory aid](0023-deterministic-board-render.md)
 - [ADR-0024: Typed placement intent, validated by a deterministic legalizer](0024-placement-intent-and-legalization.md)
+- [ADR-0025: Apply a route candidate by splicing bytes, not by rewriting a board](0025-file-level-candidate-apply.md)

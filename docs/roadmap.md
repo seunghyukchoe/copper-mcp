@@ -85,9 +85,20 @@ documentation, ledger updates, and benchmark evidence.
 
 - [ ] Durable routing jobs and cancellation.
 - [ ] MCP Tasks progressive enhancement.
-- [ ] Immutable route patch format.
-- [ ] Explicit, separately authorized `apply_candidate`.
-- [ ] One KiCad undo commit and revision-race protection.
+- [~] Immutable route patch format. A byte-preserving span-splice CST and a pure apply engine
+  exist: given board bytes and a verified candidate they return the bytes an apply would write,
+  proven by a three-part assertion (untouched bytes bit-identical, result reparses fail-closed,
+  resulting Board IR equals source plus patch exactly). Verified against real KiCad — the applied
+  board opens, the previously unconnected net becomes connected, and no DRC error is introduced.
+  **Nothing writes to disk yet.**
+- [ ] Explicit, separately authorized `apply_candidate`. The mutating path is designed —
+  operator opt-in flag, single-use HMAC apply token, `.lck` hard refusal, whole-file
+  compare-and-swap under a held lock, timestamped pre-apply copy, and O_EXCL temp + fsync +
+  rename + fsync(dir) — but none of it is implemented and there is no tool or CLI command.
+- [ ] One KiCad undo commit and revision-race protection. File-level apply gives a pre-apply copy
+  the user restores manually, not a KiCad undo step; a real single-undo transaction needs the IPC
+  API, which is deferred because it mutates an in-memory document whose state cannot be bound to
+  a file digest.
 
 ## M4 — High-fidelity Circuit Scene and AI policy plugins
 

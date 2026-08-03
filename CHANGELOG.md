@@ -6,6 +6,45 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A byte-preserving span-splice layer over the KiCad S-expression parser (`adapters/cst.py`):
+  expression spans, an overlap-rejecting `Splice`, and a source-level splice that decodes once and
+  encodes once. It extends the existing parser rather than adding a second tokenizer, which would
+  have duplicated the budget ceilings that keep parsing bounded. **Offsets are character indices,
+  not byte offsets** - the parser decodes strictly before tokenizing, and both reference boards
+  contain multi-byte characters (an em-dash in CopperTone, a `µ` in the Board IR subset fixture),
+  so conflating the two would corrupt exactly the boards under test. Splicing in the character
+  domain is nonetheless byte-exact because strict UTF-8 decoding round-trips, which is asserted on
+  all 26 committed boards. Overlapping splices are refused outright rather than resolved: every
+  resolution rule - last wins, longest wins, merge - is a silent guess about intent.
+  `_rewrite_writer_metadata` was refactored onto the new module, with the existing candidate-DRC
+  suite as the regression proof.
+- A pure route-candidate apply engine (`copper_mcp.apply`): given board bytes and a verified
+  candidate it returns the bytes an apply *would* write, proven by a three-part assertion - every
+  untouched byte bit-identical (checked in bytes, not characters), the result reparsing through the
+  fail-closed adapter with no diagnostics, and the resulting Board IR equalling the source IR plus
+  the candidate exactly. Route patches are inserted at the root's closing delimiter, which
+  measurement selected rather than convention: after a real KiCad save this repository's own board
+  interleaves segments and vias across four runs, so there is no "segment section" to append to,
+  and the root close is the only position that modifies no existing span - leaving 99.999% of the
+  file untouched before the splice and 2 bytes after it.
+- Verified against real KiCad rather than asserted: the applied board opens, the net KiCad
+  previously reported as unconnected becomes connected, no DRC error is introduced, and KiCad keeps
+  the added segments when it later rewrites the board itself.
+- A candidate is never trusted from its manifest. The engine recomputes the candidate identity and
+  replays the geometry against the board before splicing, so a tampered candidate is refused even
+  when its digest has been recomputed to match its own altered contents.
+- An applied board is deliberately **not** stamped with CopperMCP writer metadata. The disposable
+  board rendered for candidate DRC is our derivative and claims authorship honestly; an applied
+  board is the user's file with tracks added, and rewriting its `generator` would both misattribute
+  it and break the untouched-bytes assertion. A test pins both halves of that distinction.
+
+  **Nothing writes to disk.** There is no mutating path, no authorization token, no lockfile
+  handling, no compare-and-swap, no pre-apply copy, and no `apply_candidate` tool or CLI command;
+  all of that is designed in ADR-0025 and explicitly unshipped. Merge, lock override, IPC apply,
+  placement apply and batch apply are stated non-goals rather than omissions.
+
 ## [0.4.0] - 2026-08-04
 
 ### Added
