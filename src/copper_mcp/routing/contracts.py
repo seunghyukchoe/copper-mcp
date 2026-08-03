@@ -240,6 +240,30 @@ class RouteCandidate:
             raise ValueError("a successful candidate must record a non-empty frontier")
 
 
+@dataclass(frozen=True, slots=True)
+class RouteConnection:
+    """Exact evidence that both pads already share one selected-layer copper component."""
+
+    base_revision: str
+    start_pad_id: str
+    end_pad_id: str
+    attachment_segments: int
+    component_objects: int
+    obstacle_checks: int = 0
+
+    def __post_init__(self) -> None:
+        _digest("base revision", self.base_revision)
+        _typed_id("start pad ID", self.start_pad_id, "pad:")
+        _typed_id("end pad ID", self.end_pad_id, "pad:")
+        if self.start_pad_id == self.end_pad_id:
+            raise ValueError("route endpoints must be distinct pads")
+        _integer("attachment segments", self.attachment_segments, minimum=1)
+        _integer("component objects", self.component_objects, minimum=3)
+        _integer("connection obstacle checks", self.obstacle_checks)
+        if self.component_objects != self.attachment_segments + 2:
+            raise ValueError("a connected component must account for both pads and every segment")
+
+
 class RouteFailureCode(StrEnum):
     """Stable failure taxonomy for expected, fail-closed routing outcomes."""
 
@@ -277,16 +301,24 @@ class RouteDiagnostic:
 
 @dataclass(frozen=True, slots=True)
 class RouteResult:
-    """Exactly one successful candidate or expected routing diagnostic."""
+    """Exactly one candidate, one already-connected record, or one expected diagnostic."""
 
     candidate: RouteCandidate | None = None
+    connected: RouteConnection | None = None
     diagnostic: RouteDiagnostic | None = None
 
     def __post_init__(self) -> None:
-        if (self.candidate is None) == (self.diagnostic is None):
-            raise ValueError("route result must contain exactly one candidate or diagnostic")
+        present = sum(
+            value is not None for value in (self.candidate, self.connected, self.diagnostic)
+        )
+        if present != 1:
+            raise ValueError(
+                "route result must contain exactly one candidate, connection, or diagnostic"
+            )
         if self.candidate is not None and not isinstance(self.candidate, RouteCandidate):
             raise ValueError("route result candidate is malformed")
+        if self.connected is not None and not isinstance(self.connected, RouteConnection):
+            raise ValueError("route result connection is malformed")
         if self.diagnostic is not None and not isinstance(self.diagnostic, RouteDiagnostic):
             raise ValueError("route result diagnostic is malformed")
 
@@ -295,6 +327,12 @@ class RouteResult:
         """Return true only when an immutable candidate is present."""
 
         return self.candidate is not None
+
+    @property
+    def terminal(self) -> bool:
+        """Return true when routing succeeded or was provably unnecessary."""
+
+        return self.candidate is not None or self.connected is not None
 
 
 CancellationCheck = Callable[[], bool]

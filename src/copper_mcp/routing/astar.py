@@ -15,6 +15,7 @@ from copper_mcp.board_ir import (
     BoardIRValidationError,
     NetClass,
     Pad,
+    PadShape,
     PointNM,
     Ring,
     Segment,
@@ -25,6 +26,7 @@ from copper_mcp.routing.contracts import (
     AStarSettings,
     CancellationCheck,
     RouteCandidate,
+    RouteConnection,
     RouteCost,
     RouteDiagnostic,
     RouteFailureCode,
@@ -34,11 +36,12 @@ from copper_mcp.routing.contracts import (
     RouteResult,
 )
 
-ROUTER_VERSION = "astar-grid/0.2.0"
+ROUTER_VERSION = "astar-grid/0.3.0"
 ROUTING_POLICY = "orthogonal-a-star-v1"
 _EMPTY_DIGEST = f"sha256:{'0' * 64}"
 
 _Rect: TypeAlias = tuple[int, int, int, int]
+_Node: TypeAlias = tuple[int, int]
 _State: TypeAlias = tuple[int, int, int]
 _Score: TypeAlias = tuple[int, int, int]
 _DIRECTIONS: tuple[tuple[int, int], ...] = (
@@ -77,6 +80,12 @@ class _Problem:
     max_iy: int
     goal_ix: int
     goal_iy: int
+    source_nodes: frozenset[_Node]
+    target_nodes: frozenset[_Node]
+    target_min_ix: int
+    target_max_ix: int
+    target_min_iy: int
+    target_max_iy: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +93,16 @@ class _ExpectedFailureError(Exception):
     code: RouteFailureCode
     message: str
     expanded_states: int = 0
+    obstacle_checks: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class _AlreadyConnectedError(Exception):
+    """Internal signal that the two pads already share one selected-layer component."""
+
+    start_pad_id: str
+    end_pad_id: str
+    attachment_segments: int
     obstacle_checks: int = 0
 
 
@@ -464,6 +483,94 @@ def _segment_extent(segment: Segment) -> _Rect | None:
     )
 
 
+def _segment_core_extent(segment: Segment) -> _Rect | None:
+    """Return a rectangle strictly inside an orthogonal track, or None when it is diagonal.
+
+    Obstacle rectangles over-approximate copper so a clearance can never be understated.
+    Connectivity must err the other way: claiming copper that is not there would assert an
+    electrical connection the board does not have. The centreline caps are therefore dropped
+    and the half width is floored, so the result is always a subset of the real stadium.
+    """
+
+    if segment.start.x != segment.end.x and segment.start.y != segment.end.y:
+        return None
+    half_width_nm = segment.width_nm // 2
+    if segment.start.y == segment.end.y:
+        return (
+            min(segment.start.x, segment.end.x),
+            segment.start.y - half_width_nm,
+            max(segment.start.x, segment.end.x),
+            segment.start.y + half_width_nm,
+        )
+    return (
+        segment.start.x - half_width_nm,
+        min(segment.start.y, segment.end.y),
+        segment.start.x + half_width_nm,
+        max(segment.start.y, segment.end.y),
+    )
+
+
+def _pad_core_extent(pad: Pad) -> tuple[int, int] | None:
+    """Return half extents of a rectangle strictly inside the pad, or None when unmodeled."""
+
+    if pad.rotation_udeg not in _AXIS_ALIGNED_ROTATIONS_UDEG:
+        return None
+    size_x, size_y = pad.size_x_nm, pad.size_y_nm
+    if pad.rotation_udeg // _QUARTER_ROTATION_UDEG % 2 == 1:
+        size_x, size_y = size_y, size_x
+    half_x_nm, half_y_nm = size_x // 2, size_y // 2
+    if pad.shape is PadShape.RECT:
+        return half_x_nm, half_y_nm
+    if pad.shape is PadShape.ROUNDRECT:
+        # Board IR guarantees 2 * radius <= min(size_x, size_y), so this stays non-negative
+        # and spans the full pad width across its middle band.
+        radius_nm = pad.roundrect_radius_nm
+        if radius_nm is None:
+            return None
+        return half_x_nm, half_y_nm - radius_nm
+    if pad.shape in {PadShape.CIRCLE, PadShape.OVAL}:
+        # A stadium contains its central rectangle; a circle degenerates to a centre line.
+        if half_x_nm >= half_y_nm:
+            return half_x_nm - half_y_nm, half_y_nm
+        return half_x_nm, half_y_nm - half_x_nm
+    return None
+
+
+def _rectangles_touch(first: _Rect, second: _Rect) -> bool:
+    """Closed rectangle intersection; exact contact is an electrical connection."""
+
+    return (
+        first[0] <= second[2]
+        and second[0] <= first[2]
+        and first[1] <= second[3]
+        and second[1] <= first[3]
+    )
+
+
+def _component_roots(rectangles: tuple[_Rect, ...], work: _WorkBudget) -> tuple[int, ...]:
+    """Return each rectangle's exact component root with deterministic bounded union-find."""
+
+    parent = list(range(len(rectangles)))
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    for first in range(len(rectangles)):
+        for second in range(first + 1, len(rectangles)):
+            work.obstacle_check()
+            if not _rectangles_touch(rectangles[first], rectangles[second]):
+                continue
+            left, right = find(first), find(second)
+            if left != right:
+                # The lowest index always wins, so a component's root never depends on
+                # discovery order and stays reproducible across runs.
+                parent[max(left, right)] = min(left, right)
+    return tuple(find(index) for index in range(len(rectangles)))
+
+
 def _prepare(
     snapshot: BoardIRSnapshot,
     request: RouteRequest,
@@ -581,14 +688,65 @@ def _prepare(
                 "the selected net already carries a zone and is partially routed",
             )
         blocking_zones.append(zone)
+    attachment_segments: list[Segment] = []
     for index, segment in enumerate(content.segments):
         if index % 64 == 0:
             work.checkpoint()
-        if segment.layer_id == request.layer_id and segment.net_id == request.net_id:
+        if segment.layer_id != request.layer_id or segment.net_id != request.net_id:
+            continue
+        if _segment_core_extent(segment) is None:
             raise _fail(
                 RouteFailureCode.UNSUPPORTED_GEOMETRY,
-                "the selected net is already partially routed on the selected layer",
+                "a selected-layer segment on the routed net is diagonal and is not modeled exactly",
             )
+        attachment_segments.append(segment)
+
+    # Connectivity depends only on exactly modeled pad and same-net segment geometry, so it is
+    # decided here rather than after the outline, keepout, and obstacle model. Nothing later in
+    # preparation can change the answer, and reporting an unsupported outline for a net that
+    # needs no routing at all would be less honest than reporting that it is already connected.
+    source_cores: tuple[_Rect, ...] = ()
+    target_cores: tuple[_Rect, ...] = ()
+    if attachment_segments:
+        if len(attachment_segments) > request.settings.max_obstacles:
+            raise _fail(
+                RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+                "the same-net attachment copper exceeds the configured obstacle budget",
+            )
+        pad_cores: list[_Rect] = []
+        for pad in (start_pad, end_pad):
+            pad_core = _pad_core_extent(pad)
+            if pad_core is None:
+                raise _fail(
+                    RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                    "a route endpoint pad is not modeled exactly for same-net attachment",
+                )
+            half_x_nm, half_y_nm = pad_core
+            pad_cores.append(
+                (
+                    pad.center.x - half_x_nm,
+                    pad.center.y - half_y_nm,
+                    pad.center.x + half_x_nm,
+                    pad.center.y + half_y_nm,
+                )
+            )
+        segment_cores = tuple(
+            cast("_Rect", _segment_core_extent(segment)) for segment in attachment_segments
+        )
+        roots = _component_roots(tuple(pad_cores) + segment_cores, work)
+        if roots[0] == roots[1]:
+            raise _AlreadyConnectedError(
+                start_pad_id=start_pad.id,
+                end_pad_id=end_pad.id,
+                attachment_segments=len(attachment_segments),
+                obstacle_checks=work.obstacle_checks,
+            )
+        source_cores = tuple(
+            core for core, root in zip(segment_cores, roots[2:], strict=True) if root == roots[0]
+        )
+        target_cores = tuple(
+            core for core, root in zip(segment_cores, roots[2:], strict=True) if root == roots[1]
+        )
 
     if len(content.outline) != 1 or content.outline[0].holes:
         raise _fail(
@@ -618,7 +776,10 @@ def _prepare(
     polygon_obstacles: list[_PolygonObstacle] = []
 
     def ensure_obstacle_capacity() -> None:
-        if len(rect_obstacles) + len(polygon_obstacles) >= request.settings.max_obstacles:
+        # Same-net attachment copper is a modeled selected-layer object too, so it shares the
+        # object ceiling with every obstacle rather than escaping it.
+        modeled = len(attachment_segments) + len(rect_obstacles) + len(polygon_obstacles)
+        if modeled >= request.settings.max_obstacles:
             raise _fail(
                 RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
                 "the selected-layer obstacle count exceeds the configured obstacle budget",
@@ -676,6 +837,9 @@ def _prepare(
         if index % 64 == 0:
             work.checkpoint()
         if segment.layer_id != request.layer_id:
+            continue
+        if segment.net_id == request.net_id:
+            # Classified above as attachment copper; the routed net never blocks itself.
             continue
         segment_extent = _segment_extent(segment)
         if segment_extent is None:
@@ -741,6 +905,36 @@ def _prepare(
             "the bounded routing lattice exceeds the configured node budget",
         )
 
+    def attachment_nodes(rectangle: _Rect) -> tuple[_Node, ...]:
+        """Enumerate the lattice nodes one attachment rectangle covers, by index range.
+
+        Scanning the lattice and testing every rectangle would cost the node budget times the
+        obstacle budget. Solving the covered index range directly costs one charge per
+        rectangle plus one per emitted node, so the seed set stays bounded by the same
+        obstacle-check budget as every other geometric relation.
+        """
+
+        work.obstacle_check()
+        low_ix = max(min_ix, _ceil_div(rectangle[0] - start_pad.center.x, step))
+        high_ix = min(max_ix, (rectangle[2] - start_pad.center.x) // step)
+        low_iy = max(min_iy, _ceil_div(rectangle[1] - start_pad.center.y, step))
+        high_iy = min(max_iy, (rectangle[3] - start_pad.center.y) // step)
+        nodes: list[_Node] = []
+        for node_ix in range(low_ix, high_ix + 1):
+            for node_iy in range(low_iy, high_iy + 1):
+                work.obstacle_check()
+                nodes.append((node_ix, node_iy))
+        return tuple(nodes)
+
+    # Pads contribute only their centre node. Their cores decide connectivity, but seeding from
+    # every node beneath a pad would change the geometry of every board that routes today.
+    source_nodes: set[_Node] = {(0, 0)}
+    for rectangle in source_cores:
+        source_nodes.update(attachment_nodes(rectangle))
+    target_nodes: set[_Node] = {(goal_ix, goal_iy)}
+    for rectangle in target_cores:
+        target_nodes.update(attachment_nodes(rectangle))
+
     problem = _Problem(
         snapshot=snapshot,
         request=request,
@@ -757,6 +951,12 @@ def _prepare(
         max_iy=max_iy,
         goal_ix=goal_ix,
         goal_iy=goal_iy,
+        source_nodes=frozenset(source_nodes),
+        target_nodes=frozenset(target_nodes),
+        target_min_ix=min(node[0] for node in target_nodes),
+        target_max_ix=max(node[0] for node in target_nodes),
+        target_min_iy=min(node[1] for node in target_nodes),
+        target_max_iy=max(node[1] for node in target_nodes),
     )
     for obstacle in problem.rect_obstacles:
         work.obstacle_check()
@@ -796,9 +996,18 @@ def _point(problem: _Problem, ix: int, iy: int) -> PointNM:
 
 
 def _heuristic(problem: _Problem, ix: int, iy: int) -> int:
-    return (
-        abs(problem.goal_ix - ix) + abs(problem.goal_iy - iy)
-    ) * problem.request.settings.grid_step_nm
+    """Return the Manhattan distance to the target bounding box, in nanometres.
+
+    Every target node lies inside that box, so this never exceeds the Manhattan distance to
+    the nearest target; each grid edge costs at least one grid step and the bend and proximity
+    terms are non-negative, so the estimate stays admissible. One unit step changes it by at
+    most one step, so it is also consistent and no state is ever reopened. With a single
+    target the box is degenerate and this is exactly the original two-pin heuristic.
+    """
+
+    delta_ix = max(problem.target_min_ix - ix, 0, ix - problem.target_max_ix)
+    delta_iy = max(problem.target_min_iy - iy, 0, iy - problem.target_max_iy)
+    return (delta_ix + delta_iy) * problem.request.settings.grid_step_nm
 
 
 def _compress(points: tuple[PointNM, ...]) -> tuple[PointNM, ...]:
@@ -883,6 +1092,8 @@ def _build_candidate(
     problem: _Problem,
     points: tuple[PointNM, ...],
     *,
+    start_node: _Node,
+    end_node: _Node,
     bend_count: int,
     proximity_steps: int,
     expanded_states: int,
@@ -890,8 +1101,13 @@ def _build_candidate(
     work: _WorkBudget,
 ) -> RouteCandidate:
     compressed = _compress(points)
-    if compressed[0] != problem.start_pad.center or compressed[-1] != problem.end_pad.center:
-        raise RuntimeError("internal route reconstruction changed its endpoints")
+    if (
+        start_node not in problem.source_nodes
+        or end_node not in problem.target_nodes
+        or compressed[0] != _point(problem, *start_node)
+        or compressed[-1] != _point(problem, *end_node)
+    ):
+        raise RuntimeError("internal route reconstruction left its attachment copper")
     for start, end in pairwise(compressed):
         if not _edge_is_legal(start, end, problem, work):
             raise RuntimeError("internal route post-validation rejected generated geometry")
@@ -947,35 +1163,59 @@ def _build_candidate(
     return candidate
 
 
+def _start_states(problem: _Problem) -> tuple[_State, ...]:
+    """Return every seed state in the heap's own ordering, so counters stay reproducible."""
+
+    return tuple(
+        (node[0], node[1], _NO_DIRECTION)
+        for node in sorted(problem.source_nodes, key=lambda node: (node[1], node[0]))
+    )
+
+
 def _search(problem: _Problem, work: _WorkBudget) -> RouteCandidate:
     settings = problem.request.settings
-    start: _State = (0, 0, _NO_DIRECTION)
+    start_states = _start_states(problem)
+    start_state_set = frozenset(start_states)
     start_score: _Score = (0, 0, 0)
-    best: dict[_State, _Score] = {start: start_score}
+    best: dict[_State, _Score] = dict.fromkeys(start_states, start_score)
     parents: dict[_State, _State] = {}
     frontier: list[tuple[int, int, int, int, int, int, int, int, _State]] = []
     counter = 0
-    heapq.heappush(
-        frontier,
-        (_heuristic(problem, 0, 0), 0, 0, 0, 0, 0, _NO_DIRECTION, counter, start),
-    )
+    for state in start_states:
+        heapq.heappush(
+            frontier,
+            (
+                _heuristic(problem, state[0], state[1]),
+                0,
+                0,
+                0,
+                state[1],
+                state[0],
+                _NO_DIRECTION,
+                counter,
+                state,
+            ),
+        )
+        counter += 1
     expanded_states = 0
-    peak_frontier_states = 1
+    peak_frontier_states = len(start_states)
 
     while frontier:
         work.checkpoint()
         _, g_cost, bends, proximity_steps, iy, ix, direction, _, state = heapq.heappop(frontier)
         if best.get(state) != (g_cost, bends, proximity_steps):
             continue
-        if (ix, iy) == (problem.goal_ix, problem.goal_iy):
+        if (ix, iy) in problem.target_nodes:
             route_states = [state]
-            while route_states[-1] != start:
+            while route_states[-1] not in start_state_set:
                 route_states.append(parents[route_states[-1]])
             route_states.reverse()
             points = tuple(_point(problem, item[0], item[1]) for item in route_states)
             return _build_candidate(
                 problem,
                 points,
+                start_node=(route_states[0][0], route_states[0][1]),
+                end_node=(ix, iy),
                 bend_count=bends,
                 proximity_steps=proximity_steps,
                 expanded_states=expanded_states,
@@ -1081,7 +1321,7 @@ class AStarRouter:
         *,
         cancelled: CancellationCheck | None = None,
     ) -> RouteResult:
-        """Return an unapplied candidate or a stable, non-echoing expected failure."""
+        """Return an unapplied candidate, an already-connected record, or an expected failure."""
 
         validated = _validate_public_inputs(snapshot, request, cancelled)
         if isinstance(validated, RouteResult):
@@ -1091,5 +1331,16 @@ class AStarRouter:
         try:
             problem = _prepare(checked_snapshot, checked_request, work)
             return RouteResult(candidate=_search(problem, work))
+        except _AlreadyConnectedError as connection:
+            return RouteResult(
+                connected=RouteConnection(
+                    base_revision=checked_snapshot.snapshot_digest,
+                    start_pad_id=connection.start_pad_id,
+                    end_pad_id=connection.end_pad_id,
+                    attachment_segments=connection.attachment_segments,
+                    component_objects=connection.attachment_segments + 2,
+                    obstacle_checks=connection.obstacle_checks,
+                )
+            )
         except _ExpectedFailureError as failure:
             return _result_failure(failure)

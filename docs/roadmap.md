@@ -53,7 +53,7 @@ documentation, ledger updates, and benchmark evidence.
   geometry and vertex-level work accounting.
 - [ ] Fill-aware zone routing with a freshness-bound KiCad refill/fill-digest authority contract.
 - [ ] Multi-pin nets, since most real nets have more than two pads.
-- [ ] Attachment to existing same-net copper and bounded partial-route completion.
+- [x] Attachment to existing same-net copper and bounded partial-route completion.
 - [ ] Multilayer vias and keepouts.
 - [ ] Negotiated-congestion multi-net routing.
 - [ ] Incremental spatial index and bounded rip-up/reroute.

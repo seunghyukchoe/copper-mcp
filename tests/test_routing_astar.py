@@ -30,6 +30,7 @@ from copper_mcp.routing import (
     AStarRouter,
     AStarSettings,
     RouteCandidate,
+    RouteConnection,
     RouteDiagnostic,
     RouteFailureCode,
     RoutePatch,
@@ -38,6 +39,7 @@ from copper_mcp.routing import (
     canonical_candidate_bytes,
     verify_candidate_id,
 )
+from copper_mcp.routing.astar import _prepare, _Problem, _WorkBudget
 from copper_mcp.routing.oracle import DijkstraResult, run_dijkstra_oracle
 
 SOURCE_REVISION = f"sha256:{'a' * 64}"
@@ -55,12 +57,18 @@ def _rectangle(min_x: int, min_y: int, max_x: int, max_y: int) -> Ring:
     return _ring(((min_x, min_y), (max_x, min_y), (max_x, max_y), (min_x, max_y)))
 
 
-def _pad(identifier: str, center: tuple[int, int], *, net_id: str | None = NET_ID) -> Pad:
+def _pad(
+    identifier: str,
+    center: tuple[int, int],
+    *,
+    net_id: str | None = NET_ID,
+    rotation_udeg: int = 0,
+) -> Pad:
     return Pad(
         id=identifier,
         net_id=net_id,
         center=PointNM(*center),
-        rotation_udeg=0,
+        rotation_udeg=rotation_udeg,
         shape=PadShape.RECT,
         kind=PadKind.SMD,
         size_x_nm=400,
@@ -93,13 +101,21 @@ def _snapshot(
     other_clearance_nm: int = 100,
     zone_clearance_nm: int = 100,
     existing_copper: bool = False,
+    own_segments: tuple[tuple[int, int, int, int], ...] = (),
+    own_segment_layer_id: str = LAYER_ID,
+    start_pad_rotation_udeg: int = 0,
     layer_kind: str = "signal",
     length_rule: bool = False,
 ) -> BoardIRSnapshot:
     layer = Layer(id=LAYER_ID, name="F.Cu", index=0, kind=layer_kind)
     # Vias span two layers, so the back layer only exists when a fixture needs one.
     copper_layers: tuple[Layer, ...] = (layer,)
-    if foreign_via is not None or own_via or foreign_zone_layer_id != LAYER_ID:
+    if (
+        foreign_via is not None
+        or own_via
+        or foreign_zone_layer_id != LAYER_ID
+        or own_segment_layer_id != LAYER_ID
+    ):
         copper_layers += (Layer(id="layer:B.Cu", name="B.Cu", index=1, kind="signal"),)
     net = Net(id=NET_ID, name="AUDIO")
     net_class = NetClass(
@@ -118,7 +134,7 @@ def _snapshot(
         via_diameter_nm=600,
         via_drill_nm=300,
     )
-    pads = [_pad("pad:01", start)]
+    pads = [_pad("pad:01", start, rotation_udeg=start_pad_rotation_udeg)]
     if include_end:
         pads.append(_pad("pad:02", end))
     if third_target:
@@ -146,6 +162,17 @@ def _snapshot(
                 width_nm=200,
             ),
         )
+    segments += tuple(
+        Segment(
+            id=f"segment:own:{index:02d}",
+            net_id=NET_ID,
+            layer_id=own_segment_layer_id,
+            start=PointNM(bounds[0], bounds[1]),
+            end=PointNM(bounds[2], bounds[3]),
+            width_nm=200,
+        )
+        for index, bounds in enumerate(own_segments)
+    )
     if foreign_segment is not None:
         segments += (
             Segment(
@@ -298,9 +325,24 @@ def _candidate(result: RouteResult) -> RouteCandidate:
 
 def _assert_failure(result: RouteResult, code: RouteFailureCode) -> None:
     assert not result.ok
+    assert not result.terminal
     assert result.candidate is None
+    assert result.connected is None
     assert result.diagnostic is not None
     assert result.diagnostic.code is code
+
+
+def _connection(result: RouteResult) -> RouteConnection:
+    assert not result.ok
+    assert result.terminal
+    assert result.candidate is None
+    assert result.diagnostic is None
+    assert result.connected is not None
+    return result.connected
+
+
+def _problem_of(snapshot: BoardIRSnapshot, request: RouteRequest) -> _Problem:
+    return _prepare(snapshot, request, _WorkBudget(settings=request.settings, cancelled=None))
 
 
 def test_straight_route_is_exact_replayable_and_content_addressed() -> None:
@@ -312,7 +354,7 @@ def test_straight_route_is_exact_replayable_and_content_addressed() -> None:
     second = _candidate(router.propose(snapshot, request))
 
     assert router.name == "orthogonal-a-star-v1"
-    assert first.router_version == "astar-grid/0.2.0"
+    assert first.router_version == "astar-grid/0.3.0"
     assert first == second
     assert first.patch.vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
     assert first.patch.width_nm == 200
@@ -488,10 +530,6 @@ def test_revision_snapshot_net_grid_and_geometry_fail_closed() -> None:
     triangle = _snapshot(outline=_ring(((0, 0), (10_000, 0), (0, 10_000))))
     _assert_failure(
         router.propose(triangle, _request(triangle)), RouteFailureCode.UNSUPPORTED_GEOMETRY
-    )
-    existing = _snapshot(existing_copper=True)
-    _assert_failure(
-        router.propose(existing, _request(existing)), RouteFailureCode.UNSUPPORTED_GEOMETRY
     )
     _assert_failure(
         router.propose(snapshot, _request(snapshot, layer_id="layer:B.Cu")),
@@ -700,9 +738,9 @@ def test_unmodeled_obstacle_geometry_still_fails_closed() -> None:
         router.propose(diagonal, _request(diagonal)), RouteFailureCode.UNSUPPORTED_GEOMETRY
     )
 
-    partially_routed = _snapshot(existing_copper=True)
+    own_diagonal = _snapshot(own_segments=((1_000, 5_000, 3_000, 7_000),))
     _assert_failure(
-        router.propose(partially_routed, _request(partially_routed)),
+        router.propose(own_diagonal, _request(own_diagonal)),
         RouteFailureCode.UNSUPPORTED_GEOMETRY,
     )
 
@@ -1025,3 +1063,337 @@ def test_zone_net_class_lookup_does_not_swallow_cancellation(cancel_at: int) -> 
 
     _assert_failure(result, RouteFailureCode.CANCELLED)
     assert calls == cancel_at
+
+
+def test_same_net_stub_is_attachment_copper_not_a_veto() -> None:
+    router = AStarRouter()
+    clear = _snapshot()
+    stubbed = _snapshot(existing_copper=True)
+
+    full = _candidate(router.propose(clear, _request(clear)))
+    completion = _candidate(router.propose(stubbed, _request(stubbed)))
+
+    # The stub reaches x=2,000, so the router only has to add the remaining 7,000 nm.
+    assert full.patch.vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
+    assert completion.patch.vertices == (PointNM(2_000, 5_000), PointNM(9_000, 5_000))
+    assert completion.cost.length_nm == 7_000
+    assert completion.cost.bend_count == 0
+    assert completion.metrics.hard_internal_violations == 0
+    assert completion.metrics.unrouted_connections == 0
+    assert completion.start_pad_id == full.start_pad_id
+    assert completion.end_pad_id == full.end_pad_id
+
+
+def test_same_net_segment_joining_both_pads_reports_already_connected() -> None:
+    snapshot = _snapshot(own_segments=((1_000, 5_000, 9_000, 5_000),))
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+    connection = _connection(result)
+
+    assert connection.base_revision == snapshot.snapshot_digest
+    assert connection.start_pad_id == "pad:01"
+    assert connection.end_pad_id == "pad:02"
+    assert connection.attachment_segments == 1
+    assert connection.component_objects == 3
+    assert connection.obstacle_checks > 0
+
+
+def test_already_connected_nets_agree_with_the_dijkstra_oracle() -> None:
+    snapshot = _snapshot(own_segments=((1_000, 5_000, 9_000, 5_000),))
+
+    oracle = run_dijkstra_oracle(snapshot, _request(snapshot))
+
+    assert oracle.ok
+    assert oracle.total_cost_nm == 0
+    assert oracle.bend_count == 0
+    assert oracle.proximity_steps == 0
+
+
+def test_route_result_admits_exactly_one_terminal_arm() -> None:
+    connection = RouteConnection(
+        base_revision=SOURCE_REVISION,
+        start_pad_id="pad:01",
+        end_pad_id="pad:02",
+        attachment_segments=1,
+        component_objects=3,
+    )
+    snapshot = _snapshot()
+    candidate = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    with pytest.raises(ValueError, match="exactly one"):
+        RouteResult(candidate=candidate, connected=connection)
+    with pytest.raises(ValueError, match="exactly one"):
+        RouteResult(
+            connected=connection,
+            diagnostic=RouteDiagnostic(code=RouteFailureCode.NO_PATH, message="no path"),
+        )
+    with pytest.raises(ValueError, match="distinct pads"):
+        replace(connection, end_pad_id="pad:01")
+    with pytest.raises(ValueError, match="both pads and every segment"):
+        replace(connection, attachment_segments=2)
+    assert RouteResult(connected=connection).terminal
+    assert not RouteResult(connected=connection).ok
+
+
+def test_diagonal_same_net_segment_still_fails_closed() -> None:
+    snapshot = _snapshot(own_segments=((1_000, 5_000, 3_000, 7_000),))
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert "diagonal" in result.diagnostic.message
+    assert "routed net" in result.diagnostic.message
+
+
+def test_same_net_via_and_zone_remain_partial_routing_beside_a_stub() -> None:
+    router = AStarRouter()
+    with_via = _snapshot(own_segments=((1_000, 5_000, 2_000, 5_000),), own_via=True)
+    with_zone = _snapshot(
+        own_segments=((1_000, 5_000, 2_000, 5_000),),
+        own_zone=_rectangle(1_000, 1_000, 2_000, 2_000),
+    )
+
+    _assert_failure(
+        router.propose(with_via, _request(with_via)), RouteFailureCode.UNSUPPORTED_GEOMETRY
+    )
+    _assert_failure(
+        router.propose(with_zone, _request(with_zone)), RouteFailureCode.UNSUPPORTED_GEOMETRY
+    )
+
+
+def test_off_axis_routed_pad_fails_closed_only_when_attachment_copper_exists() -> None:
+    router = AStarRouter()
+    rotated = _snapshot(start_pad_rotation_udeg=45_000_000)
+    rotated_with_stub = _snapshot(
+        start_pad_rotation_udeg=45_000_000,
+        own_segments=((1_000, 5_000, 2_000, 5_000),),
+    )
+
+    # Without same-net copper no connectivity question arises, so the pad centre still routes.
+    assert _candidate(router.propose(rotated, _request(rotated))).cost.bend_count == 0
+    result = router.propose(rotated_with_stub, _request(rotated_with_stub))
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert "route endpoint pad" in result.diagnostic.message
+
+
+@pytest.mark.parametrize(
+    ("stub_end_x", "expected_vertices", "expected_length_nm"),
+    [
+        # The end-pad core starts at x=8,800; a stub reaching it exactly is connected copper.
+        (8_800, (PointNM(1_000, 5_000), PointNM(5_000, 5_000)), 4_000),
+        # One nanometre short it is an isolated component, neither obstacle nor attachment.
+        (8_799, (PointNM(1_000, 5_000), PointNM(9_000, 5_000)), 8_000),
+    ],
+)
+def test_component_contact_is_exact_and_touching_counts(
+    stub_end_x: int,
+    expected_vertices: tuple[PointNM, ...],
+    expected_length_nm: int,
+) -> None:
+    snapshot = _snapshot(own_segments=((5_000, 5_000, stub_end_x, 5_000),))
+
+    candidate = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    assert candidate.patch.vertices == expected_vertices
+    assert candidate.cost.length_nm == expected_length_nm
+
+
+def test_attachment_copper_is_never_an_obstacle() -> None:
+    router = AStarRouter()
+    clear = _snapshot()
+    crossed = _snapshot(own_segments=((5_000, 3_000, 5_000, 7_000),))
+
+    straight = _candidate(router.propose(clear, _request(clear)))
+    crossing = _candidate(router.propose(crossed, _request(crossed)))
+
+    # The identical foreign segment forces a detour; on the routed net it is not an obstacle.
+    assert crossing.patch.vertices == straight.patch.vertices
+    assert crossing.cost == straight.cost
+
+
+def test_multi_target_search_is_deterministic_and_matches_the_oracle() -> None:
+    snapshot = _snapshot(
+        own_segments=(
+            (1_000, 5_000, 2_000, 5_000),
+            (8_000, 5_000, 9_000, 5_000),
+            (8_000, 5_000, 8_000, 6_000),
+        )
+    )
+    request = _request(snapshot)
+    router = AStarRouter()
+
+    first = _candidate(router.propose(snapshot, request))
+    second = _candidate(router.propose(snapshot, request))
+    oracle = run_dijkstra_oracle(snapshot, request)
+
+    assert first == second
+    assert canonical_candidate_bytes(first) == canonical_candidate_bytes(second)
+    assert first.patch.vertices == (PointNM(2_000, 5_000), PointNM(8_000, 5_000))
+    assert first.cost.length_nm == 6_000
+    assert first.cost.bend_count == 0
+    assert isinstance(oracle, DijkstraResult)
+    assert oracle.total_cost_nm == first.cost.total_cost_nm
+    assert oracle.bend_count == first.cost.bend_count
+    assert oracle.proximity_steps == first.cost.proximity_steps
+
+
+@pytest.mark.parametrize(
+    ("own_segments", "keepouts"),
+    [
+        (((1_000, 5_000, 2_000, 5_000),), ()),
+        (((1_000, 5_000, 2_000, 5_000),), ((4_000, 4_000, 6_000, 6_000),)),
+        (((8_000, 5_000, 9_000, 5_000),), ((4_000, 4_000, 6_000, 6_000),)),
+        (
+            ((1_000, 5_000, 1_000, 7_000), (8_000, 5_000, 9_000, 5_000)),
+            ((4_000, 4_000, 6_000, 6_000),),
+        ),
+        (((1_000, 5_000, 2_000, 5_000),), ((4_500, -1_000, 5_500, 11_000),)),
+    ],
+)
+def test_multi_target_heuristic_stays_admissible(
+    own_segments: tuple[tuple[int, int, int, int], ...],
+    keepouts: tuple[tuple[int, int, int, int], ...],
+) -> None:
+    snapshot = _snapshot(own_segments=own_segments, keepouts=keepouts)
+    request = _request(snapshot)
+
+    astar = AStarRouter().propose(snapshot, request)
+    oracle = run_dijkstra_oracle(snapshot, request)
+
+    assert astar.ok is oracle.ok
+    if astar.candidate is None:
+        assert oracle.diagnostic is not None
+        assert astar.diagnostic is not None
+        assert astar.diagnostic.code is oracle.diagnostic.code
+        return
+    assert oracle.total_cost_nm == astar.candidate.cost.total_cost_nm
+    assert oracle.bend_count == astar.candidate.cost.bend_count
+    assert oracle.proximity_steps == astar.candidate.cost.proximity_steps
+
+
+def test_seed_and_target_nodes_are_disjoint_and_inside_the_lattice() -> None:
+    snapshot = _snapshot(
+        own_segments=(
+            (1_000, 5_000, 2_000, 5_000),
+            (8_000, 5_000, 9_000, 5_000),
+        )
+    )
+
+    problem = _problem_of(snapshot, _request(snapshot))
+
+    assert problem.source_nodes & problem.target_nodes == frozenset()
+    assert (0, 0) in problem.source_nodes
+    assert (problem.goal_ix, problem.goal_iy) in problem.target_nodes
+    assert problem.source_nodes == {(0, 0), (1, 0)}
+    assert problem.target_nodes == {(7, 0), (8, 0)}
+    assert problem.target_min_ix == 7
+    assert problem.target_max_ix == 8
+    assert problem.target_min_iy == problem.target_max_iy == 0
+    for node_ix, node_iy in problem.source_nodes | problem.target_nodes:
+        assert problem.min_ix <= node_ix <= problem.max_ix
+        assert problem.min_iy <= node_iy <= problem.max_iy
+
+
+def test_same_net_copper_on_another_layer_is_neither_attachment_nor_obstacle() -> None:
+    router = AStarRouter()
+    clear = _snapshot()
+    # A back-layer stub that would join both pads if the layer filter were wrong.
+    other_layer = _snapshot(
+        own_segments=((1_000, 5_000, 9_000, 5_000),),
+        own_segment_layer_id="layer:B.Cu",
+    )
+
+    straight = _candidate(router.propose(clear, _request(clear)))
+    unaffected = _candidate(router.propose(other_layer, _request(other_layer)))
+
+    assert unaffected.patch.vertices == straight.patch.vertices
+    assert unaffected.cost == straight.cost
+
+
+def test_attachment_copper_outside_the_lattice_is_clamped() -> None:
+    # The stub touches the start pad but runs far below the board, so its covered index
+    # range has to be clamped rather than producing nodes outside the lattice.
+    snapshot = _snapshot(own_segments=((1_000, 5_000, 1_000, -20_000),))
+    request = _request(snapshot)
+
+    problem = _problem_of(snapshot, request)
+    candidate = _candidate(AStarRouter().propose(snapshot, request))
+
+    assert problem.source_nodes == {(0, 0), (0, -1), (0, -2), (0, -3), (0, -4)}
+    for _, node_iy in problem.source_nodes:
+        assert node_iy >= problem.min_iy
+    assert candidate.patch.vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
+
+
+def test_attachment_copper_shares_the_obstacle_object_budget() -> None:
+    router = AStarRouter()
+    stub_and_keepout = _snapshot(
+        own_segments=((1_000, 5_000, 2_000, 5_000),),
+        keepouts=((-10_000, -10_000, -9_995, -9_995),),
+    )
+    two_stubs = _snapshot(
+        own_segments=(
+            (1_000, 5_000, 2_000, 5_000),
+            (8_000, 5_000, 9_000, 5_000),
+        )
+    )
+
+    shared = router.propose(
+        stub_and_keepout, _request(stub_and_keepout, settings=_settings(max_obstacles=1))
+    )
+    _assert_failure(shared, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+
+    attachment_only = router.propose(
+        two_stubs, _request(two_stubs, settings=_settings(max_obstacles=1))
+    )
+    _assert_failure(attachment_only, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    assert attachment_only.diagnostic is not None
+    assert "attachment copper" in attachment_only.diagnostic.message
+
+
+def test_component_build_respects_the_obstacle_check_budget() -> None:
+    snapshot = _snapshot(
+        own_segments=(
+            (1_000, 5_000, 2_000, 5_000),
+            (4_000, 1_000, 5_000, 1_000),
+            (7_000, 8_000, 8_000, 8_000),
+        )
+    )
+
+    result = AStarRouter().propose(
+        snapshot,
+        _request(snapshot, settings=_settings(max_obstacle_checks=4)),
+    )
+
+    _assert_failure(result, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    assert result.diagnostic is not None
+    assert result.diagnostic.obstacle_checks == 4
+    assert result.diagnostic.expanded_states == 0
+
+
+def test_component_build_observes_the_cancellation_cadence() -> None:
+    # Eleven stubs plus two pads make thirteen rectangles and seventy-eight exact pair
+    # comparisons, so the union-find crosses the sixty-fourth obstacle-check checkpoint.
+    snapshot = _snapshot(
+        own_segments=tuple((500 + index * 500, 500, 700 + index * 500, 500) for index in range(11))
+    )
+    calls = 0
+
+    def cancel_on_first_component_checkpoint() -> bool:
+        nonlocal calls
+        calls += 1
+        return calls >= 7
+
+    result = AStarRouter().propose(
+        snapshot,
+        _request(snapshot),
+        cancelled=cancel_on_first_component_checkpoint,
+    )
+
+    _assert_failure(result, RouteFailureCode.CANCELLED)
+    assert result.diagnostic is not None
+    assert result.diagnostic.obstacle_checks == 64
+    assert result.diagnostic.expanded_states == 0
+    assert calls == 7

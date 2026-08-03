@@ -20,6 +20,7 @@ from copper_mcp.adapters import (
     parse_kicad_bytes,
     render_kicad_candidate_board,
 )
+from copper_mcp.adapters.kicad_route_patch import KiCadRoutePatchError
 from copper_mcp.board_ir import NetClass
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import (
@@ -607,9 +608,68 @@ def _workspace_entries(root: Path) -> tuple[str, ...]:
     return tuple(sorted(path.relative_to(root).as_posix() for path in root.rglob("*")))
 
 
-@pytest.mark.skipif(not REAL_KICAD_CLI.is_file(), reason="KiCad CLI is not installed")
-def test_real_kicad_candidate_evidence_is_private_and_read_only(tmp_path: Path) -> None:
+def test_replay_rejects_a_candidate_whose_net_is_already_connected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     board, source, profile, candidate = _workspace_board(tmp_path)
+    calls = 0
+
+    def unexpected_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal calls
+        calls += 1
+        return subprocess.CompletedProcess([], 0)
+
+    _install_fake_kicad(monkeypatch, unexpected_run)
+    # The already-connected board produces no candidate at all, so replaying the two-pad
+    # candidate against it must fail closed rather than dereference a missing proposal.
+    connected = FIXTURE.parent / "connected-net.kicad_pcb"
+    board.write_bytes(connected.read_bytes())
+    connected_snapshot = parse_kicad_bytes(connected.read_bytes(), profile).snapshot
+    assert connected_snapshot is not None
+    assert (
+        AStarRouter()
+        .propose(
+            connected_snapshot,
+            RouteRequest(
+                board_revision=connected_snapshot.snapshot_digest,
+                net_id=net_id_for_name("AUDIO"),
+                layer_id="layer:F.Cu",
+                seed=23,
+            ),
+        )
+        .candidate
+        is None
+    )
+
+    # Rebind the proposal to the connected snapshot so the staleness guard passes and the
+    # replay guard is the one that has to refuse it.
+    rebound = _rehash(
+        replace(
+            candidate,
+            candidate_id=EMPTY_DIGEST,
+            base_revision=connected_snapshot.snapshot_digest,
+        )
+    )
+    with pytest.raises(KiCadRoutePatchError, match="deterministic router replay"):
+        render_kicad_candidate_board(connected.read_bytes(), connected_snapshot, rebound, profile)
+    with pytest.raises(KiCadCliError):
+        run_route_candidate_drc(board.name, rebound, profile, Settings(workspace=tmp_path))
+    assert calls == 0
+    assert source != board.read_bytes()
+
+
+@pytest.mark.skipif(not REAL_KICAD_CLI.is_file(), reason="KiCad CLI is not installed")
+@pytest.mark.parametrize("fixture_name", ["two-pad.kicad_pcb", "partial-route.kicad_pcb"])
+def test_real_kicad_candidate_evidence_is_private_and_read_only(
+    fixture_name: str,
+    tmp_path: Path,
+) -> None:
+    board = tmp_path / fixture_name
+    shutil.copy2(FIXTURE.parent / fixture_name, board)
+    source = board.read_bytes()
+    profile = _profile()
+    candidate = _candidate(source, profile)
     before_stat = board.stat()
     before_entries = _workspace_entries(tmp_path)
 

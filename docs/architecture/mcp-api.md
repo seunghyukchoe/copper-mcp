@@ -47,19 +47,27 @@ identities, UUIDs, or source bytes.
 copper `layer` name, integer `constraints` for the applied net class, and optional `seed`,
 `settings`, and `include_drc` fields. Unknown fields, non-integer or out-of-range budgets, booleans
 supplied as integers, control characters, and unsupported layer names are rejected before any file
-is read. Every response carries a `status` of `routed`, `not_routed`, or `unsupported_board`, the
-board revision, the Board IR snapshot digest when conversion succeeded, and the validated request.
-A routed response includes the candidate ID, endpoint pad IDs, integer geometry, exact cost
-decomposition, deterministic search metrics, and the resource ceilings that produced it. An unrouted
-response carries one typed, non-echoing diagnostic; an unsupported board carries bounded conversion
-diagnostic-code counts instead of raw adapter text.
+is read. Every response carries a `status` of `routed`, `already_connected`, `not_routed`, or
+`unsupported_board`, the board revision, the Board IR snapshot digest when conversion succeeded, and
+the validated request. A routed response includes the candidate ID, endpoint pad IDs, integer
+geometry, exact cost decomposition, deterministic search metrics, and the resource ceilings that
+produced it. An unrouted response carries one typed, non-echoing diagnostic; an unsupported board
+carries bounded conversion diagnostic-code counts instead of raw adapter text.
+
+`already_connected` is a terminal success, not a failure: the two pads already share one copper
+component on the selected layer, so there is nothing to propose. Its `connection` object carries the
+Board IR base revision it is bound to, both endpoint pad IDs, and integer counts of the attachment
+segments and component objects involved. It returns no geometry and no diagnostic, and the outcome
+deliberately has no `RouteFailureCode`. Clients that switch exhaustively over the previous three
+statuses need a fourth branch.
 
 Setting `include_drc` binds the proposal to candidate-bound authoritative KiCad DRC evidence, which
 returns the same aggregate, redacted summary as `run_board_drc` plus the candidate, source, patched
 board, and patched context revisions. The call fails rather than returning a candidate whose
-requested evidence is missing or does not bind. Preview writes no file, creates no job, and never
-returns source board bytes; it does return the geometry it generated, so a host that must not
-disclose generated copper to a model should not enable this tool.
+requested evidence is missing or does not bind. On an `already_connected` net the flag is skipped
+and `drc_evidence` is `null`, because that rule protects a proposal and none is being made. Preview
+writes no file, creates no job, and never returns source board bytes; it does return the geometry it
+generated, so a host that must not disclose generated copper to a model should not enable this tool.
 
 `render_circuit_schematic` takes one structured Circuit Intent `content` object. The shared service
 performs bounded semantic validation and normalization, computes the intent digest, renders the

@@ -15,6 +15,7 @@ import pytest
 import copper_mcp.kicad_cli as kicad_cli
 import copper_mcp.request_boundary as request_boundary
 import copper_mcp.route_preview as route_preview
+from copper_mcp.board_ir import PointNM
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import KiCadCliError, RouteCandidateDrcEvidence
 from copper_mcp.models import DrcSummary
@@ -25,7 +26,7 @@ from copper_mcp.route_preview import (
     parse_route_preview_request,
     preview_route,
 )
-from copper_mcp.routing import RouteDiagnostic, RouteFailureCode
+from copper_mcp.routing import RouteConnection, RouteDiagnostic, RouteFailureCode
 
 FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "two-pad.kicad_pcb"
 _DISCOVERED_KICAD_CLI = shutil.which("kicad-cli")
@@ -175,6 +176,90 @@ def test_preview_routes_around_a_zone_outline_without_mutating_the_source(
         for point in first.candidate.patch.vertices
     )
     assert _entries(tmp_path) == before
+
+
+def _copy_fixture(tmp_path: Path, name: str) -> Settings:
+    board = tmp_path / name
+    board.write_bytes((FIXTURE.parent / name).read_bytes())
+    return Settings(workspace=tmp_path, max_drc_report_bytes=4096)
+
+
+def test_preview_reports_an_already_connected_net(tmp_path: Path) -> None:
+    settings = _copy_fixture(tmp_path, "connected-net.kicad_pcb")
+    before = _entries(tmp_path)
+
+    preview = preview_route(_request(board="connected-net.kicad_pcb"), settings)
+    document = preview.to_dict()
+
+    assert preview.status is RoutePreviewStatus.ALREADY_CONNECTED
+    assert preview.connection is not None
+    assert preview.candidate is None
+    assert preview.diagnostic is None
+    assert preview.drc_evidence is None
+    assert document["status"] == "already_connected"
+    assert document["connection"]["attachment_segments"] == 1
+    assert document["connection"]["component_objects"] == 3
+    assert document["connection"]["base_revision"] == preview.snapshot_digest
+    assert document["connection"]["start_pad_id"] != document["connection"]["end_pad_id"]
+    assert _entries(tmp_path) == before
+
+
+def test_already_connected_preview_skips_authoritative_drc(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _copy_fixture(tmp_path, "connected-net.kicad_pcb")
+    calls = 0
+
+    def unexpected_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal calls
+        calls += 1
+        return subprocess.CompletedProcess([], 0)
+
+    monkeypatch.setattr(
+        kicad_cli, "discover_kicad_cli", lambda settings: Path("/trusted/kicad-cli")
+    )
+    monkeypatch.setattr(subprocess, "run", unexpected_run)
+
+    preview = preview_route(_request(board="connected-net.kicad_pcb", include_drc=True), settings)
+
+    assert preview.status is RoutePreviewStatus.ALREADY_CONNECTED
+    assert preview.drc_evidence is None
+    assert calls == 0
+
+
+def test_preview_completes_a_partial_route_from_existing_copper(tmp_path: Path) -> None:
+    settings = _copy_fixture(tmp_path, "partial-route.kicad_pcb")
+    before = _entries(tmp_path)
+
+    first = preview_route(_request(board="partial-route.kicad_pcb"), settings)
+    second = preview_route(_request(board="partial-route.kicad_pcb"), settings)
+
+    assert first.status is RoutePreviewStatus.ROUTED
+    assert first.connection is None
+    assert first.candidate is not None
+    # The committed stub already spans x=10..20 mm, so only the remaining 10 mm is proposed.
+    assert first.candidate.patch.vertices == (
+        PointNM(20_000_000, 15_000_000),
+        PointNM(30_000_000, 15_000_000),
+    )
+    assert first.candidate.cost.length_nm == 10_000_000
+    assert first.candidate.cost.bend_count == 0
+    assert first.to_dict() == second.to_dict()
+    assert _entries(tmp_path) == before
+
+
+def test_preview_reports_a_diagonal_same_net_segment(tmp_path: Path) -> None:
+    settings = _copy_fixture(tmp_path, "diagonal-stub.kicad_pcb")
+
+    preview = preview_route(_request(board="diagonal-stub.kicad_pcb"), settings)
+
+    assert preview.status is RoutePreviewStatus.NOT_ROUTED
+    assert preview.candidate is None
+    assert preview.connection is None
+    assert preview.diagnostic is not None
+    assert preview.diagnostic.code is RouteFailureCode.UNSUPPORTED_GEOMETRY
+    assert "diagonal" in preview.diagnostic.message
 
 
 def test_preview_reports_a_diagnostic_instead_of_routing_off_grid(tmp_path: Path) -> None:
@@ -455,6 +540,69 @@ def test_preview_record_rejects_inconsistent_bindings(tmp_path: Path) -> None:
         )
 
 
+def test_preview_record_rejects_inconsistent_connection_bindings(tmp_path: Path) -> None:
+    _, settings = _workspace(tmp_path)
+    preview = preview_route(_request(), settings)
+    assert preview.candidate is not None
+    assert preview.snapshot_digest is not None
+    connection = RouteConnection(
+        base_revision=preview.snapshot_digest,
+        start_pad_id=preview.candidate.start_pad_id,
+        end_pad_id=preview.candidate.end_pad_id,
+        attachment_segments=1,
+        component_objects=3,
+    )
+
+    with pytest.raises(RoutePreviewError, match="exactly one connection"):
+        RoutePreview(
+            status=RoutePreviewStatus.ALREADY_CONNECTED,
+            board_path=preview.board_path,
+            board_revision=preview.board_revision,
+            request=preview.request,
+            snapshot_digest=preview.snapshot_digest,
+            connection=connection,
+            candidate=preview.candidate,
+        )
+    with pytest.raises(RoutePreviewError, match="exactly one connection"):
+        RoutePreview(
+            status=RoutePreviewStatus.ALREADY_CONNECTED,
+            board_path=preview.board_path,
+            board_revision=preview.board_revision,
+            request=preview.request,
+            snapshot_digest=preview.snapshot_digest,
+            connection=connection,
+            diagnostic=RouteDiagnostic(code=RouteFailureCode.NO_PATH, message="no path"),
+        )
+    with pytest.raises(RoutePreviewError, match="previewed Board IR snapshot"):
+        RoutePreview(
+            status=RoutePreviewStatus.ALREADY_CONNECTED,
+            board_path=preview.board_path,
+            board_revision=preview.board_revision,
+            request=preview.request,
+            snapshot_digest=preview.snapshot_digest,
+            connection=replace(connection, base_revision=preview.board_revision),
+        )
+    with pytest.raises(RoutePreviewError, match="exactly one candidate"):
+        RoutePreview(
+            status=RoutePreviewStatus.ROUTED,
+            board_path=preview.board_path,
+            board_revision=preview.board_revision,
+            request=preview.request,
+            snapshot_digest=preview.snapshot_digest,
+            candidate=preview.candidate,
+            connection=connection,
+        )
+    with pytest.raises(RoutePreviewError, match="routing outcome"):
+        RoutePreview(
+            status=RoutePreviewStatus.UNSUPPORTED_BOARD,
+            board_path=preview.board_path,
+            board_revision=preview.board_revision,
+            request=preview.request,
+            connection=connection,
+            conversion_diagnostic_counts={"geometry.missing": 1},
+        )
+
+
 def _evidence(preview: RoutePreview) -> Any:
     assert preview.candidate is not None
     return RouteCandidateDrcEvidence(
@@ -530,6 +678,39 @@ def test_real_kicad_confirms_a_route_detoured_around_existing_copper(tmp_path: P
     )
     assert preview.drc_evidence is not None
     assert preview.drc_evidence.summary.error_count == 0
+    assert preview.drc_evidence.summary.unconnected_count == 0
+    assert preview.drc_evidence.summary.passed is True
+    assert _entries(tmp_path) == before
+
+
+@pytest.mark.skipif(
+    not REAL_KICAD_CLI.is_file(),
+    reason="requires a locally installed KiCad CLI",
+)
+def test_real_kicad_confirms_a_completed_partial_route(tmp_path: Path) -> None:
+    settings = replace(
+        _copy_fixture(tmp_path, "partial-route.kicad_pcb"),
+        kicad_cli=REAL_KICAD_CLI,
+        max_drc_report_bytes=8 * 1024 * 1024,
+    )
+    before = _entries(tmp_path)
+
+    preview = preview_route(
+        _request(board="partial-route.kicad_pcb", include_drc=True),
+        settings,
+    )
+
+    assert preview.status is RoutePreviewStatus.ROUTED
+    assert preview.candidate is not None
+    assert preview.candidate.patch.vertices == (
+        PointNM(20_000_000, 15_000_000),
+        PointNM(30_000_000, 15_000_000),
+    )
+    assert preview.drc_evidence is not None
+    # New copper overlapping same-net copper is legal, and attaching at the stub's own
+    # endpoint leaves no dangling tail, so KiCad reports nothing at all.
+    assert preview.drc_evidence.summary.error_count == 0
+    assert preview.drc_evidence.summary.warning_count == 0
     assert preview.drc_evidence.summary.unconnected_count == 0
     assert preview.drc_evidence.summary.passed is True
     assert _entries(tmp_path) == before

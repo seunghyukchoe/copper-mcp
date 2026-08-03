@@ -46,6 +46,7 @@ from copper_mcp.routing import (
     AStarRouter,
     AStarSettings,
     RouteCandidate,
+    RouteConnection,
     RouteDiagnostic,
     RouteFailureCode,
     RouteRequest,
@@ -67,6 +68,7 @@ class RoutePreviewStatus(StrEnum):
     """Stable outcome taxonomy for one preview attempt."""
 
     ROUTED = "routed"
+    ALREADY_CONNECTED = "already_connected"
     NOT_ROUTED = "not_routed"
     UNSUPPORTED_BOARD = "unsupported_board"
 
@@ -208,6 +210,7 @@ class RoutePreview:
     request: RoutePreviewRequest
     snapshot_digest: str | None = None
     candidate: RouteCandidate | None = None
+    connection: RouteConnection | None = None
     diagnostic: RouteDiagnostic | None = None
     conversion_diagnostic_counts: Mapping[str, int] = field(default_factory=dict)
     drc_evidence: RouteCandidateDrcEvidence | None = None
@@ -240,7 +243,11 @@ class RoutePreview:
         )
 
         if self.status is RoutePreviewStatus.UNSUPPORTED_BOARD:
-            if self.candidate is not None or self.diagnostic is not None:
+            if (
+                self.candidate is not None
+                or self.connection is not None
+                or self.diagnostic is not None
+            ):
                 raise RoutePreviewError("an unsupported board cannot carry a routing outcome")
             if self.snapshot_digest is not None or not counts:
                 raise RoutePreviewError("an unsupported board must report conversion diagnostics")
@@ -251,12 +258,31 @@ class RoutePreview:
                 raise RoutePreviewError("a converted board must record its Board IR digest")
 
         if self.status is RoutePreviewStatus.ROUTED:
-            if not isinstance(self.candidate, RouteCandidate) or self.diagnostic is not None:
+            if (
+                not isinstance(self.candidate, RouteCandidate)
+                or self.connection is not None
+                or self.diagnostic is not None
+            ):
                 raise RoutePreviewError("a routed preview must carry exactly one candidate")
             if self.candidate.base_revision != self.snapshot_digest:
                 raise RoutePreviewError("candidate is not bound to the previewed Board IR snapshot")
+        elif self.status is RoutePreviewStatus.ALREADY_CONNECTED:
+            if (
+                not isinstance(self.connection, RouteConnection)
+                or self.candidate is not None
+                or self.diagnostic is not None
+            ):
+                raise RoutePreviewError(
+                    "an already-connected preview must carry exactly one connection"
+                )
+            if self.connection.base_revision != self.snapshot_digest:
+                raise RoutePreviewError(
+                    "connection is not bound to the previewed Board IR snapshot"
+                )
         elif self.status is RoutePreviewStatus.NOT_ROUTED and (
-            not isinstance(self.diagnostic, RouteDiagnostic) or self.candidate is not None
+            not isinstance(self.diagnostic, RouteDiagnostic)
+            or self.candidate is not None
+            or self.connection is not None
         ):
             raise RoutePreviewError("an unrouted preview must carry exactly one diagnostic")
 
@@ -284,6 +310,18 @@ class RoutePreview:
             "snapshot_digest": self.snapshot_digest,
             "request": self.request.to_dict(),
             "candidate": None if self.candidate is None else _candidate_to_dict(self.candidate),
+            "connection": (
+                None
+                if self.connection is None
+                else {
+                    "base_revision": self.connection.base_revision,
+                    "start_pad_id": self.connection.start_pad_id,
+                    "end_pad_id": self.connection.end_pad_id,
+                    "attachment_segments": self.connection.attachment_segments,
+                    "component_objects": self.connection.component_objects,
+                    "obstacle_checks": self.connection.obstacle_checks,
+                }
+            ),
             "diagnostic": (
                 None
                 if self.diagnostic is None
@@ -374,6 +412,17 @@ def preview_route(payload: Any, settings: Settings) -> RoutePreview:
         ),
         cancelled=lambda: time.monotonic() >= deadline,
     )
+    if result.connected is not None:
+        # There is no candidate to bind evidence to, so `include_drc` is skipped rather than
+        # failed: the fail-closed rule protects a proposal, and no copper is being proposed.
+        return RoutePreview(
+            status=RoutePreviewStatus.ALREADY_CONNECTED,
+            board_path=relative_path,
+            board_revision=board_revision,
+            request=request,
+            snapshot_digest=snapshot.snapshot_digest,
+            connection=result.connected,
+        )
     if result.candidate is None:
         return RoutePreview(
             status=RoutePreviewStatus.NOT_ROUTED,

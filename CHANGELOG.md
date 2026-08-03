@@ -8,6 +8,31 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Orthogonal same-net copper on the selected layer is now attachment copper instead of a
+  partial-routing veto, so a half-routed net completes from its stub rather than being refused.
+  Connectivity uses a second rectangle model that deliberately errs opposite to the obstacle model:
+  obstacle rectangles over-approximate copper so clearance is never understated, while connectivity
+  cores under-approximate it — dropping a track's round end caps, flooring half widths, insetting a
+  `roundrect` by its corner radius, and reducing a `circle` to a centre line — so an electrical
+  connection can never be claimed that the board does not have. Exact integer union-find over those
+  cores decides components under the existing obstacle-work budget and cancellation cadence. A net
+  whose pads already share one component returns the new terminal `already_connected` preview
+  status carrying a typed `RouteConnection`, not a failure code; `include_drc` is skipped there
+  because no copper is proposed. Otherwise a multi-source, multi-target search seeded from the
+  covered lattice nodes proposes only the missing piece, using a target-bounding-box heuristic that
+  stays admissible and consistent and reduces exactly to the previous estimate for a single target.
+  Diagonal same-net segments, same-net vias and zones, and endpoint pads whose shape is not modeled
+  exactly still fail closed, and attachment copper counts against `max_obstacles`. Boards with no
+  same-net copper produce byte-identical geometry, costs, and metrics; only `ROUTER_VERSION`
+  advances, to `astar-grid/0.3.0`. A committed `partial-route` fixture proposes 10 mm where the
+  equivalent empty board needs 20 mm, verified against real KiCad 10.0.5 DRC for zero errors,
+  warnings, and unconnected items. Coverage on the repository's own CopperTone board is unchanged at
+  zero of fourteen previewable `F.Cu` nets: removing the veto reveals that three of the five
+  two-pin nets carry diagonal same-net copper and the other two are blocked in turn by octagonal
+  mounting-hole keepouts, a board-wide `GND` zone envelope, and an off-grid pad-centre delta. This
+  is a contract improvement and an honesty correction, not a coverage improvement. Attaching
+  mid-stub rather than at a stub endpoint leaves copper with an unconnected end, which KiCad reports
+  as a `track_dangling` warning.
 - Canonical Circuit Intent IR `0.1.0` as a strict, immutable, content-addressed logical topology
   contract for two-pin resistors and non-polarized capacitors. A pure bounded adapter renders
   verified snapshots into byte-deterministic in-memory KiCad `20250114` schematics with original
@@ -42,16 +67,20 @@ All notable changes are documented here. The format follows
   obstacles instead of a blanket rejection. Concave and diagonal outlines use exact integer
   containment, intersection, and rational squared-distance checks under the strictest routed class,
   zone-net class, and zone clearance; bounds construction and every polygon relation consume the
-  existing obstacle-work budget. Same-net zones remain partial routing, cached KiCad fill is not
+  existing obstacle-work budget. Same-net zones remain unsupported, cached KiCad fill is not
   trusted, and CopperTone remains at zero of fourteen previewable `F.Cu` nets because nine are
-  multi-pin and all five two-pin nets already carry same-net copper. A committed `blocked-zone`
-  fixture verifies deterministic read-only adapter-to-preview routing without claiming fill-aware
-  KiCad DRC.
+  multi-pin and all five two-pin nets already carry same-net copper. (Corrected while adding
+  same-net attachment below: that last clause was true but misleading. The partial-routing veto
+  fired early enough to mask several further blockers on this board, so it was credited with more
+  than it deserved.) A committed `blocked-zone` fixture verifies deterministic read-only
+  adapter-to-preview routing without claiming fill-aware KiCad DRC.
 - Through vias outside the routed net are now selected-layer obstacles built from their outer
   diameter, rather than a board-level rejection. A via on the routed net still fails closed as
   partial routing. On the repository's own CopperTone board this moved the failure from "nine vias
   reject everything" to per-net diagnostics; current re-measurement still previews zero of fourteen
-  nets because multi-pin and already-partially-routed nets remain unsupported.
+  nets because multi-pin nets remain unsupported and, as the same-net attachment entry below
+  records, the two-pin nets are blocked by diagonal same-net copper, octagonal keepouts, a
+  board-wide zone envelope, and an off-grid pad delta rather than only by partial routing.
 - Selected-layer pads and orthogonal segments outside the routed net are now exact rectangular
   routing obstacles instead of a hard rejection, so preview works on boards that already carry
   copper. Obstacles are inflated by the routed half-width plus the stricter of the routed and

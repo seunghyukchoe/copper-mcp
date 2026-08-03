@@ -19,3 +19,4 @@ from the decision ledger.
 - [ADR-0013: Conservative polygon zone-boundary obstacles](0013-polygon-zone-obstacles.md)
 - [ADR-0014: Canonical circuit intent and deterministic schematic rendering](0014-canonical-circuit-intent.md)
 - [ADR-0015: Bounded Circuit Intent schematic delivery](0015-bounded-circuit-schematic-delivery.md)
+- [ADR-0016: Same-net attachment and partial-route completion](0016-same-net-attachment.md)
