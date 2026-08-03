@@ -36,6 +36,9 @@ documentation, ledger updates, and benchmark evidence.
     candidate DRC evidence.
   - [ ] Durable routing jobs, candidate persistence, and export.
 - [x] Existing selected-layer copper as exact rectangular obstacles.
+- [ ] Via obstacles on the selected layer, the first limit a real board hits.
+- [ ] Polygon zone obstacles; a bounding box is useless for a pour covering most of a board.
+- [ ] Multi-pin nets, since most real nets have more than two pads.
 - [ ] Multilayer vias and keepouts.
 - [ ] Negotiated-congestion multi-net routing.
 - [ ] Incremental spatial index and bounded rip-up/reroute.
