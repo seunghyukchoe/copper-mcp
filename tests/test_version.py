@@ -45,12 +45,17 @@ class VersionGateTests(unittest.TestCase):
 
         self.assertIsNone(_authorized_source_commit(ledger, "0.2.0"))
 
-    def test_tag_gate_refuses_unreleased_v0_2_0(self) -> None:
+    def test_tag_gate_refuses_a_tag_that_does_not_match_the_project_version(self) -> None:
+        # A live-state assertion ("the current version is unreleased") flips the moment a
+        # release is legitimately authorized, so the executable regression pins the
+        # state-independent refusal path instead: a mismatched tag never passes.
         metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-        self.assertEqual(metadata["project"]["version"], "0.2.0")
+        version = metadata["project"]["version"]
+        mismatched = "v999.999.999"
+        self.assertNotEqual(f"v{version}", mismatched)
 
         result = subprocess.run(  # noqa: S603
-            [sys.executable, str(ROOT / "scripts" / "check_version.py"), "--tag", "v0.2.0"],
+            [sys.executable, str(ROOT / "scripts" / "check_version.py"), "--tag", mismatched],
             cwd=ROOT,
             stdin=subprocess.DEVNULL,
             capture_output=True,
@@ -61,8 +66,8 @@ class VersionGateTests(unittest.TestCase):
 
         message = f"{result.stdout}\n{result.stderr}"
         self.assertNotEqual(result.returncode, 0, message)
-        self.assertIn("0.2.0", message)
-        self.assertIn("tag", message.lower())
+        self.assertIn(mismatched, message)
+        self.assertIn("does not match", message)
 
 
 if __name__ == "__main__":
