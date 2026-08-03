@@ -12,3 +12,4 @@ from the decision ledger.
 - [ADR-0006: Bounded deterministic A* reference](0006-bounded-deterministic-astar.md)
 - [ADR-0007: Disposable KiCad candidate snapshots](0007-disposable-kicad-candidate-snapshot.md)
 - [ADR-0008: Candidate-bound authoritative KiCad DRC evidence](0008-candidate-bound-kicad-drc.md)
+- [ADR-0009: Bounded non-mutating route preview](0009-non-mutating-route-preview.md)

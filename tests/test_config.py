@@ -23,6 +23,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.max_drc_context_bytes, 128 * 1024 * 1024)
         self.assertEqual(settings.max_drc_context_files, 10_000)
         self.assertEqual(settings.max_drc_context_scan_seconds, 10)
+        self.assertEqual(settings.max_route_preview_seconds, 30)
 
     def test_rejects_unknown_transport(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -46,6 +47,7 @@ class SettingsTests(unittest.TestCase):
                     "COPPER_MCP_MAX_DRC_CONTEXT_BYTES": "8192",
                     "COPPER_MCP_MAX_DRC_CONTEXT_FILES": "64",
                     "COPPER_MCP_MAX_DRC_CONTEXT_SCAN_SECONDS": "4",
+                    "COPPER_MCP_MAX_ROUTE_PREVIEW_SECONDS": "5",
                 },
                 clear=True,
             ):
@@ -56,6 +58,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.max_drc_context_bytes, 8192)
         self.assertEqual(settings.max_drc_context_files, 64)
         self.assertEqual(settings.max_drc_context_scan_seconds, 4)
+        self.assertEqual(settings.max_route_preview_seconds, 5)
 
 
 if __name__ == "__main__":

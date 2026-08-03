@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import json
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -34,6 +34,68 @@ class CliTests(unittest.TestCase):
                 result = main(["--workspace", str(root), "drc", "fixtures/minimal.kicad_pcb"])
         self.assertEqual(result, 0)
         self.assertEqual(json.loads(stdout.getvalue()), {"passed": True})
+
+    def test_preview_route_builds_a_validated_request(self) -> None:
+        root = Path(__file__).parent / "fixtures" / "route-candidate"
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            result = main(
+                [
+                    "--workspace",
+                    str(root),
+                    "preview-route",
+                    "two-pad.kicad_pcb",
+                    "--net",
+                    "AUDIO",
+                    "--layer",
+                    "F.Cu",
+                    "--clearance-nm",
+                    "250000",
+                    "--track-width-nm",
+                    "250000",
+                    "--via-diameter-nm",
+                    "800000",
+                    "--via-drill-nm",
+                    "400000",
+                    "--seed",
+                    "23",
+                    "--grid-step-nm",
+                    "250000",
+                ]
+            )
+        self.assertEqual(result, 0)
+        document = json.loads(stdout.getvalue())
+        self.assertEqual(document["status"], "routed")
+        self.assertEqual(document["request"]["settings"]["grid_step_nm"], 250000)
+        self.assertIsNone(document["drc_evidence"])
+        self.assertEqual(len(document["candidate"]["patch"]["vertices_nm"]), 2)
+
+    def test_preview_route_reports_invalid_requests_without_a_traceback(self) -> None:
+        root = Path(__file__).parent / "fixtures" / "route-candidate"
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = main(
+                [
+                    "--workspace",
+                    str(root),
+                    "preview-route",
+                    "two-pad.kicad_pcb",
+                    "--net",
+                    "AUDIO",
+                    "--layer",
+                    "F.Silkscreen",
+                    "--clearance-nm",
+                    "250000",
+                    "--track-width-nm",
+                    "250000",
+                    "--via-diameter-nm",
+                    "800000",
+                    "--via-drill-nm",
+                    "400000",
+                ]
+            )
+        self.assertEqual(result, 2)
+        self.assertIn("copper layer", stderr.getvalue())
 
 
 if __name__ == "__main__":
