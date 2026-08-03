@@ -6,6 +6,8 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-03
+
 ### Added
 
 - Connectivity analysis now spans nets of any width, not only two-pin nets. When every pad of a net
@@ -334,5 +336,6 @@ All notable changes are documented here. The format follows
   lifetimes, timeouts, strict contract parsing, and before/after DRC-context revision checks.
 - The development dependency floor excludes pytest versions affected by `PYSEC-2026-1845`.
 
-[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/seunghyukchoe/copper-mcp/releases/tag/v0.1.0

@@ -16,6 +16,7 @@ or package publication exists.
 
 | Version | Date | Validated source commit | Full gate evidence | Status |
 |---|---|---|---|---|
+| 0.2.0 | 2026-08-03 | `0cdb1fac7c16c2ccce72c8d1777c3f68d48d3bb1` | Clean `make check` on this exact commit with Python 3.12.13 and KiCad 10.0.5: Ruff lint and format, version, ledger, audio, and Circuit Intent checkers, strict mypy across 39 source files also clean under mypy 2.3.0, 494 tests plus 29 subtests including all 14 real-KiCad DRC nodes, secret scan, `pip-audit` with no known vulnerabilities, and the isolated sdist and wheel build; hosted PR #34 checks (CI on Python 3.11-3.13, CodeQL, dependency review, dependency and secret audit) green at this head | Ready |
 
 ## Unreleased readiness
 
