@@ -43,6 +43,16 @@ provenance. Tune `COPPER_MCP_MAX_DRC_CONTEXT_BYTES` only after reviewing the wor
 File-count and discovery-time ceilings are separately configurable through
 `COPPER_MCP_MAX_DRC_CONTEXT_FILES` and `COPPER_MCP_MAX_DRC_CONTEXT_SCAN_SECONDS`.
 
+The internal `run_route_candidate_drc()` service accepts only a typed `RouteCandidate` and
+`KiCadConstraintProfile`. It captures the original context, reconstructs Board IR from captured
+bytes, invokes the replay-verified disposable serializer, and runs the patched in-memory context
+through the same fixed KiCad DRC path. Its evidence binds candidate, Board IR, raw source, patched
+board, patched context, and nested summary revisions. Do not wrap this function in a new CLI/MCP
+command, candidate-file export, preview, or apply action without a separate public contract and
+security review. Tests for this boundary must prove negative violation evidence, stale board/rule/
+library rejection, context budgets, temporary cleanup, deep evidence immutability, and source inode,
+mtime, byte, and workspace-entry preservation where real KiCad is available.
+
 ## Board IR development
 
 Board IR `0.1.0` is a strict public contract. Start with

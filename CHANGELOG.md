@@ -12,8 +12,7 @@ All notable changes are documented here. The format follows
   two-pin candidates for a narrow rectangular Board IR subset, with exact boundary semantics,
   deterministic tie-breaking, preparation/search cancellation, independent grid/expansion/obstacle
   work ceilings, typed diagnostics with deterministic counters, and fail-closed geometry and API
-  handling. Durable KiCad export, authoritative candidate-bound DRC evidence, MCP exposure, preview,
-  and apply are deferred.
+  handling. Durable KiCad export, MCP exposure, preview, and apply are deferred.
 - A bounded benchmark-only Dijkstra oracle plus a reproducible synthetic harness that verifies A*
   completion and exact optimal-cost agreement while retaining the expected no-path fixture and raw
   deterministic, runtime, and incremental-memory evidence. This is not a KiCad DRC or throughput
@@ -23,7 +22,13 @@ All notable changes are documented here. The format follows
   precomputes native identities for collision checks, enforces total output-object limits, and
   requires native source-geometry identities plus a full Board IR round-trip match. An optional
   KiCad 10 integration test validates the synthetic fixture without mutating source or candidate
-  files; durable export, DRC orchestration, preview, MCP, and apply remain deferred.
+  files; durable export, preview, MCP, and apply remain deferred.
+- Internal candidate-bound KiCad DRC orchestration that captures one bounded source/rule/library
+  context, parses and exact-replay serializes only its captured board bytes, replaces the board only
+  in memory, rechecks all context budgets, and returns frozen evidence binding candidate, Board IR,
+  source, patched-board, patched-context, and strict aggregate DRC revisions. The derivative exists
+  only in a private temporary directory; public ingestion, persistence, preview, and apply remain
+  deferred.
 - Canonical Board IR `0.1.0` with integer nanometre/microdegree geometry, typed routing constraints,
   strict canonical JSON, semantic and snapshot digests, bounded decoding, and a versioned JSON Schema.
 - A bounded, read-only, fail-closed KiCad converter for the documented rectangular-outline subset,
@@ -52,6 +57,11 @@ All notable changes are documented here. The format follows
 - KiCad and Board IR parsing now use quote-aware streaming S-expression tokens, a pre-DOM JSON
   lexical/structural budget pass, exact context-independent decimal conversion, bounded non-echoing
   diagnostics, and explicit rejection of unmodeled routing or non-default fabrication semantics.
+- Candidate and ordinary DRC now share one fixed KiCad subprocess/report path; candidate evidence
+  rejects stale source/rule/library context and any private input-context mutation, accepts
+  documented finding exit code `5` as valid evidence only when it agrees with the strict report,
+  requires violation-type totals to equal aggregate counts, and freezes copied counts against
+  post-validation mutation.
 
 ## [0.1.0] - 2026-08-03
 

@@ -37,12 +37,15 @@ The non-negotiable boundary is simple:
 - Immutable Board IR `0.1.0` with exact integer units, typed constraints, canonical digests, and a
   bounded fail-closed converter for a documented KiCad subset.
 - Fixed-argument KiCad CLI DRC with source, time, size, schema, and stale-context guards.
+- Internal candidate-bound DRC evidence tying an exact replayed candidate to its Board IR base,
+  original KiCad bytes, private patched board, complete patched rule/library context, and strict
+  aggregate KiCad summary without writing a candidate file into the source workspace.
 - Candidate-manifest validation and correctness-first comparison.
 - Bounded integer A* candidates for one two-pad net on a documented rectangular Board IR subset,
   with independent lattice, search, and obstacle-work ceilings, plus replay-bound serialization to
   new disposable KiCad bytes when every modeled source geometry object has a native UUID/tstamp.
-  This synthetic-domain reference has no durable export, authoritative candidate-bound DRC evidence,
-  preview, MCP route tool, source mutation, or apply path.
+  This synthetic-domain reference has no durable export, preview, MCP route/evidence tool, source
+  mutation, or apply path.
 - MCP tools and a stable CLI over the same application services.
 - Professional CI, CodeQL, dependency auditing, release automation, issue forms, and project ledgers.
 

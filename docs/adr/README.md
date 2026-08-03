@@ -11,3 +11,4 @@ from the decision ledger.
 - [ADR-0005: Canonical integer Board IR v0.1](0005-canonical-board-ir.md)
 - [ADR-0006: Bounded deterministic A* reference](0006-bounded-deterministic-astar.md)
 - [ADR-0007: Disposable KiCad candidate snapshots](0007-disposable-kicad-candidate-snapshot.md)
+- [ADR-0008: Candidate-bound authoritative KiCad DRC evidence](0008-candidate-bound-kicad-drc.md)

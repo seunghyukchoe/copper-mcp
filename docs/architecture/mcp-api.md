@@ -25,8 +25,15 @@ matching project/custom-rule files, and workspace-local KiCad library assets; Ki
 severity and connectivity counts; violation-type counts; and a hard-correctness pass flag. It
 also reports how many DRC check classes KiCad marks ignored, while deliberately omitting their raw
 descriptions along with net names, UUIDs, and coordinates. Exit codes `0` (clean) and `5`
-(violations found) are valid report outcomes; other exit codes fail the tool. The snapshot and report
-have independent size ceilings, and report growth is limited before KiCad starts.
+(findings reported) are valid only when they agree with the strict report's finding collections;
+other exit codes or process/report disagreement fail the tool. Warning-only and exclusion-only
+findings can retain a hard-correctness pass flag while still requiring exit code `5`. The snapshot
+and report have independent size ceilings, and report growth is limited before KiCad starts.
+
+Candidate-bound DRC is currently an internal Python application boundary, not an implemented MCP
+tool or resource. It accepts typed in-memory routing contracts only and returns no candidate board
+bytes. JSON ingestion, authorization, job persistence, resource exposure, preview, export, and apply
+remain deferred to the planned routing-service contract.
 
 ## Planned tools
 
