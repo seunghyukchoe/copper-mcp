@@ -14,6 +14,7 @@ class McpServerTests(unittest.TestCase):
             {
                 "compare_candidates",
                 "inspect_board",
+                "preview_route",
                 "run_board_drc",
                 "server_info",
                 "validate_candidate",

@@ -43,6 +43,7 @@ class Settings:
     max_drc_context_bytes: int = 128 * 1024 * 1024
     max_drc_context_files: int = 10_000
     max_drc_context_scan_seconds: int = 10
+    max_route_preview_seconds: int = 30
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -99,6 +100,12 @@ class Settings:
             1,
             300,
         )
+        max_route_preview_seconds = _bounded_int(
+            "COPPER_MCP_MAX_ROUTE_PREVIEW_SECONDS",
+            os.environ.get("COPPER_MCP_MAX_ROUTE_PREVIEW_SECONDS", "30"),
+            1,
+            600,
+        )
         return cls(
             workspace=workspace,
             transport=transport,
@@ -111,4 +118,5 @@ class Settings:
             max_drc_context_bytes=max_drc_context_bytes,
             max_drc_context_files=max_drc_context_files,
             max_drc_context_scan_seconds=max_drc_context_scan_seconds,
+            max_route_preview_seconds=max_route_preview_seconds,
         )

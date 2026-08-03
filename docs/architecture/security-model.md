@@ -17,6 +17,7 @@
 | Server → KiCad CLI | Argument injection, hangs, oversized or incompatible reports, context-file floods, stale evidence | Validated executable, fixed argument vector, POSIX file ceiling, cumulative byte/file-count bounds, discovery/process timeouts, strict contract, revision recheck |
 | AI output → policy | Prompt injection, invalid commands, cost exhaustion | Allowlisted typed actions, deterministic validation, token/iteration budgets |
 | Router → KiCad | Candidate/source/context misbinding, stale state, unsafe copper | Exact replay, immutable multi-revision evidence, live-context recheck, private candidate snapshot, separate apply authorization |
+| MCP input → preview | Unbounded search, unsupported-subset confusion, geometry disclosure, unverified candidates | Strict typed request parsing, caller-supplied constraints, wall-clock deadline over integer ceilings, fail-closed conversion with code-only diagnostics, opt-in authoritative DRC that fails closed, no write or job side effect |
 | Remote client → HTTP | Spoofing, token theft, cross-tenant access | TLS, OAuth, scoped authorization, per-principal jobs, rate limits |
 | Dependency → build | Compromise, typosquat, vulnerable package | Locking, Dependabot, CodeQL, dependency audit, build attestations |
 
@@ -33,7 +34,7 @@
 
 ## Current controls
 
-The `0.1.x` surface is read-only. Path resolution rejects parent and symlink escapes, board reads are
+The `0.1.x` surface remains read-only, including route preview. Path resolution rejects parent and symlink escapes, board reads are
 bounded, network transport binds to loopback, secret patterns are scanned, and no AI provider is
 enabled. KiCad DRC runs with fixed arguments against a path-preserving private context snapshot and
 emits a bounded aggregate summary; save/refill flags and raw finding details are not exposed. The
@@ -44,9 +45,20 @@ the same DRC path runs. Evidence binds candidate, Board IR, original source, pat
 context, and nested summary revisions; copied violation counts are immutable, must sum to the
 aggregate findings, and KiCad's exit code must agree with report finding presence. The private
 board is part of a complete private input-context recapture after KiCad exits, and any private or live
-board/rule/library change discards the result. Candidate bytes, raw findings, and this internal
-operation are not exposed through MCP or CLI. These controls do not make arbitrary remote exposure
-safe.
+board/rule/library change discards the result. Candidate bytes and raw findings are not exposed
+through MCP or CLI.
+
+The public `preview_route` surface adds no write path. Requests are validated before any file is
+read: unknown fields, non-integer or out-of-range budgets, booleans supplied as integers, control
+characters, oversized net names, and non-copper layer names are rejected, and routing constraints
+come only from typed caller values rather than from untrusted board content. A wall-clock deadline
+bounds preview latency above the existing grid, expansion, and obstacle ceilings. Unsupported boards
+return bounded diagnostic-code counts, not raw adapter text, and routing failures return typed
+non-echoing diagnostics. Authoritative DRC runs only when the caller opts in, still yields aggregate
+redacted evidence, and fails the call when the evidence is missing or does not bind. A preview does
+return the candidate geometry and endpoint pad IDs it generated, so hosts that must not disclose
+generated copper to a model should not enable the tool; source board bytes and unrelated board
+objects are never returned. These controls do not make arbitrary remote exposure safe.
 
 ## Security acceptance for future mutation
 

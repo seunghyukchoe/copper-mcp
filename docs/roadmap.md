@@ -20,7 +20,7 @@ documentation, ledger updates, and benchmark evidence.
   content digests.
 - [ ] Broader KiCad geometry/rule coverage and Board IR application-service/MCP exposure.
 - [x] Headless `kicad-cli pcb drc --format json` validation.
-- [ ] Candidate preview without mutation.
+- [x] Candidate preview without mutation.
 - [x] Version-skew and stale-board tests for the DRC adapter.
 
 ## M2 — Deterministic routing baseline
@@ -31,7 +31,9 @@ documentation, ledger updates, and benchmark evidence.
   - [x] Reproducible synthetic A*/Dijkstra completion and optimal-cost oracle baseline.
   - [x] Replay-bound, read-only disposable KiCad patch serialization with Board IR round-trip checks.
   - [x] Internal candidate-bound authoritative KiCad DRC evidence over a private disposable board.
-  - [ ] Durable jobs, public service integration, and non-mutating candidate preview.
+  - [x] Bounded, non-mutating public route preview over MCP and the CLI, with opt-in authoritative
+    candidate DRC evidence.
+  - [ ] Durable routing jobs, candidate persistence, and export.
 - [ ] Multilayer vias and keepouts.
 - [ ] Negotiated-congestion multi-net routing.
 - [ ] Incremental spatial index and bounded rip-up/reroute.
