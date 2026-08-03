@@ -15,6 +15,7 @@
 | `server_info` | None | Version, maturity, and honest capability inventory. |
 | `inspect_board` | None | Bounded read-only inspection inside the configured workspace. |
 | `run_board_drc` | Temporary report only | Fixed-argument KiCad DRC with a bounded, redacted summary. |
+| `inspect_board_ir` | None | Read-only Board IR conversion check and structural description. |
 | `preview_route` | None, or a temporary report when `include_drc` is set | Bounded, non-mutating two-pin route proposal on the documented Board IR subset. |
 | `validate_candidate` | None | Validate and normalize candidate metadata. |
 | `compare_candidates` | None | Correctness-first deterministic ranking. |
@@ -30,6 +31,13 @@ descriptions along with net names, UUIDs, and coordinates. Exit codes `0` (clean
 other exit codes or process/report disagreement fail the tool. Warning-only and exclusion-only
 findings can retain a hard-correctness pass flag while still requiring exit code `5`. The snapshot
 and report have independent size ceilings, and report growth is limited before KiCad starts.
+
+`inspect_board_ir` takes a workspace-relative `board` and integer `constraints`, and answers
+whether the board converts to the supported Board IR before a caller commits to a preview. It
+returns the board revision, snapshot and constraint digests, Board IR schema and units, copper
+layer identities, and per-collection object counts, or bounded conversion diagnostic-code counts
+when the board is outside the subset. It never returns coordinates, net names, pad or net
+identities, UUIDs, or source bytes.
 
 `preview_route` takes one request object with a workspace-relative `board`, a KiCad `net` name, a
 copper `layer` name, integer `constraints` for the applied net class, and optional `seed`,
