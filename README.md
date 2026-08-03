@@ -44,6 +44,8 @@ The non-negotiable boundary is simple:
 - Bounded integer A* candidates for one two-pad net on a documented rectangular Board IR subset,
   with independent lattice, search, and obstacle-work ceilings, plus replay-bound serialization to
   new disposable KiCad bytes when every modeled source geometry object has a native UUID/tstamp.
+- Read-only Board IR structural inspection that reports whether a board is representable by the
+  supported subset, using counts and digests rather than geometry, names, or identities.
 - A bounded, non-mutating route preview over MCP and the CLI that validates an untrusted request,
   proposes one candidate under a wall-clock deadline, and optionally binds it to aggregate
   authoritative KiCad DRC evidence. It has no durable export, persistence, job, source mutation, or
@@ -108,6 +110,14 @@ count and wall-clock ceilings, and the pre-run byte snapshot is released before 
 KiCad projects and their project-relative libraries self-contained below the configured workspace.
 DRC-clean is not a substitute for electrical, signal-integrity, manufacturability, or hardware
 review.
+
+Check whether a board is representable by the supported Board IR subset:
+
+```bash
+copper-mcp --workspace /absolute/path/to/boards board-ir example.kicad_pcb \
+  --clearance-nm 250000 --track-width-nm 250000 \
+  --via-diameter-nm 800000 --via-drill-nm 400000
+```
 
 Preview one two-pin route without modifying the board, then optionally validate it with KiCad:
 

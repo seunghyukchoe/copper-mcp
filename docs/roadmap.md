@@ -18,7 +18,8 @@ documentation, ledger updates, and benchmark evidence.
 - [ ] Official `kicad-python` IPC plugin.
 - [x] Canonical Board IR v0.1 contract with integer units, typed constraints, strict codecs, and
   content digests.
-- [ ] Broader KiCad geometry/rule coverage and Board IR application-service/MCP exposure.
+- [x] Board IR application-service and MCP exposure as a read-only structural summary.
+- [ ] Broader KiCad geometry and rule coverage.
 - [x] Headless `kicad-cli pcb drc --format json` validation.
 - [x] Candidate preview without mutation.
 - [x] Version-skew and stale-board tests for the DRC adapter.

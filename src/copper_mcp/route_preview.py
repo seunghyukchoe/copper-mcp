@@ -28,6 +28,20 @@ from copper_mcp.board_ir import NetClass, ParseLimits
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import RouteCandidateDrcEvidence, run_route_candidate_drc
 from copper_mcp.models import SCHEMA_VERSION
+from copper_mcp.request_boundary import (
+    CONSTRAINT_FIELDS,
+    MAX_JSON_SAFE_INTEGER,
+    RequestError,
+    board_path,
+    boolean,
+    copper_layer,
+    integer,
+    known_fields,
+    mapping,
+    net_class_constraints,
+    required_fields,
+    text,
+)
 from copper_mcp.routing import (
     AStarRouter,
     AStarSettings,
@@ -38,27 +52,14 @@ from copper_mcp.routing import (
 )
 from copper_mcp.security import read_bounded_file, resolve_workspace_file
 
-PREVIEW_NET_CLASS_ID = "class:preview"
-PREVIEW_NET_CLASS_NAME = "Preview"
-
-_COPPER_LAYER = re.compile(r"^(?:F\.Cu|B\.Cu|In(?:[1-9]|[12][0-9]|3[0-2])\.Cu)$")
-_CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f]")
 _SHA256_ID = re.compile(r"^sha256:[a-f0-9]{64}$")
-_MAX_SEED = (1 << 53) - 1
-_MAX_DIMENSION_NM = 1_000_000_000
 _MAX_NET_NAME_CHARACTERS = 255
 _REQUIRED_FIELDS = ("board", "net", "layer", "constraints")
 _OPTIONAL_FIELDS = ("seed", "settings", "include_drc")
-_CONSTRAINT_FIELDS = (
-    "clearance_nm",
-    "track_width_nm",
-    "via_diameter_nm",
-    "via_drill_nm",
-)
 _SETTINGS_FIELDS = tuple(AStarSettings.__dataclass_fields__)
 
 
-class RoutePreviewError(ValueError):
+class RoutePreviewError(RequestError):
     """Raised when a route-preview request is malformed or cannot be honoured."""
 
 
@@ -68,46 +69,6 @@ class RoutePreviewStatus(StrEnum):
     ROUTED = "routed"
     NOT_ROUTED = "not_routed"
     UNSUPPORTED_BOARD = "unsupported_board"
-
-
-def _mapping(name: str, value: Any) -> dict[str, Any]:
-    if not isinstance(value, Mapping):
-        raise RoutePreviewError(f"{name} must be an object")
-    if len(value) > 64:
-        raise RoutePreviewError(f"{name} has too many fields")
-    for key in value:
-        if not isinstance(key, str):
-            raise RoutePreviewError(f"{name} field names must be strings")
-    return dict(value)
-
-
-def _known_fields(name: str, payload: Mapping[str, Any], allowed: frozenset[str]) -> None:
-    """Reject unsupported fields by count, never by echoing caller-controlled names."""
-
-    unknown = len(set(payload) - allowed)
-    if unknown:
-        raise RoutePreviewError(
-            f"{name} has {unknown} unsupported field(s); supported fields are: "
-            f"{', '.join(sorted(allowed))}"
-        )
-
-
-def _integer(name: str, value: Any, *, minimum: int, maximum: int) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise RoutePreviewError(f"{name} must be an integer")
-    if not minimum <= value <= maximum:
-        raise RoutePreviewError(f"{name} must be between {minimum} and {maximum}")
-    return int(value)
-
-
-def _text(name: str, value: Any, *, maximum: int) -> str:
-    if not isinstance(value, str) or not 1 <= len(value) <= maximum:
-        raise RoutePreviewError(
-            f"{name} must be a non-empty string of at most {maximum} characters"
-        )
-    if _CONTROL_CHARACTERS.search(value):
-        raise RoutePreviewError(f"{name} must not contain control characters")
-    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,13 +88,11 @@ class RoutePreviewRequest:
             raise RoutePreviewError("constraints must be a typed net class")
         if not isinstance(self.settings, AStarSettings):
             raise RoutePreviewError("settings must be typed router settings")
-        if not isinstance(self.include_drc, bool):
-            raise RoutePreviewError("include_drc must be a boolean")
-        _integer("seed", self.seed, minimum=0, maximum=_MAX_SEED)
-        _text("board", self.board, maximum=4096)
-        _text("net", self.net, maximum=_MAX_NET_NAME_CHARACTERS)
-        if not _COPPER_LAYER.fullmatch(self.layer):
-            raise RoutePreviewError("layer must be a documented KiCad copper layer name")
+        boolean("include_drc", self.include_drc)
+        integer("seed", self.seed, minimum=0, maximum=MAX_JSON_SAFE_INTEGER)
+        board_path(self.board)
+        text("net", self.net, maximum=_MAX_NET_NAME_CHARACTERS)
+        copper_layer("layer", self.layer)
 
     @property
     def net_id(self) -> str:
@@ -162,71 +121,44 @@ class RoutePreviewRequest:
             "layer": self.layer,
             "seed": self.seed,
             "include_drc": self.include_drc,
-            "constraints": {
-                field: getattr(self.constraints, field) for field in _CONSTRAINT_FIELDS
-            },
+            "constraints": {field: getattr(self.constraints, field) for field in CONSTRAINT_FIELDS},
             "settings": {field: getattr(self.settings, field) for field in _SETTINGS_FIELDS},
         }
 
 
-def _constraints(payload: Any) -> NetClass:
-    fields = _mapping("constraints", payload)
-    _known_fields("constraints", fields, frozenset(_CONSTRAINT_FIELDS))
-    missing = sorted(set(_CONSTRAINT_FIELDS) - set(fields))
-    if missing:
-        raise RoutePreviewError(f"constraints are missing required fields: {', '.join(missing)}")
-    values = {
-        field: _integer(
-            f"constraints.{field}",
-            fields[field],
-            minimum=0 if field == "clearance_nm" else 1,
-            maximum=_MAX_DIMENSION_NM,
-        )
-        for field in _CONSTRAINT_FIELDS
-    }
-    try:
-        return NetClass(
-            id=PREVIEW_NET_CLASS_ID,
-            name=PREVIEW_NET_CLASS_NAME,
-            **values,
-        )
-    except ValueError as error:
-        raise RoutePreviewError(f"constraints are invalid: {error}") from error
-
-
 def _settings(payload: Any) -> AStarSettings:
-    fields = _mapping("settings", payload)
-    _known_fields("settings", fields, frozenset(_SETTINGS_FIELDS))
+    fields = mapping("settings", payload)
+    known_fields("settings", fields, frozenset(_SETTINGS_FIELDS))
     overrides = {
-        field: _integer(f"settings.{field}", value, minimum=0, maximum=_MAX_SEED)
+        field: integer(f"settings.{field}", value, minimum=0, maximum=MAX_JSON_SAFE_INTEGER)
         for field, value in fields.items()
     }
     try:
         return AStarSettings(**overrides)
     except ValueError as error:
-        raise RoutePreviewError(f"settings are invalid: {error}") from error
+        raise RequestError(f"settings are invalid: {error}") from error
 
 
 def parse_route_preview_request(payload: Any) -> RoutePreviewRequest:
     """Validate one untrusted preview request without echoing unvalidated input."""
 
-    fields = _mapping("request", payload)
-    _known_fields("request", fields, frozenset(_REQUIRED_FIELDS + _OPTIONAL_FIELDS))
-    missing = sorted(set(_REQUIRED_FIELDS) - set(fields))
-    if missing:
-        raise RoutePreviewError(f"request is missing required fields: {', '.join(missing)}")
-    include_drc = fields.get("include_drc", False)
-    if not isinstance(include_drc, bool):
-        raise RoutePreviewError("include_drc must be a boolean")
-    return RoutePreviewRequest(
-        board=_text("board", fields["board"], maximum=4096),
-        net=_text("net", fields["net"], maximum=_MAX_NET_NAME_CHARACTERS),
-        layer=_text("layer", fields["layer"], maximum=64),
-        constraints=_constraints(fields["constraints"]),
-        settings=_settings(fields.get("settings", {})),
-        seed=_integer("seed", fields.get("seed", 0), minimum=0, maximum=_MAX_SEED),
-        include_drc=include_drc,
-    )
+    try:
+        fields = mapping("request", payload)
+        known_fields("request", fields, frozenset(_REQUIRED_FIELDS + _OPTIONAL_FIELDS))
+        required_fields("request", fields, _REQUIRED_FIELDS)
+        return RoutePreviewRequest(
+            board=board_path(fields["board"]),
+            net=text("net", fields["net"], maximum=_MAX_NET_NAME_CHARACTERS),
+            layer=copper_layer("layer", fields["layer"]),
+            constraints=net_class_constraints(fields["constraints"]),
+            settings=_settings(fields.get("settings", {})),
+            seed=integer("seed", fields.get("seed", 0), minimum=0, maximum=MAX_JSON_SAFE_INTEGER),
+            include_drc=boolean("include_drc", fields.get("include_drc", False)),
+        )
+    except RoutePreviewError:
+        raise
+    except RequestError as error:
+        raise RoutePreviewError(str(error)) from error
 
 
 def _candidate_to_dict(candidate: RouteCandidate) -> dict[str, Any]:
@@ -296,7 +228,9 @@ class RoutePreview:
             raise RoutePreviewError("conversion diagnostic counts must be a mapping")
 
         counts = {
-            str(code): _integer(f"diagnostic count for {code}", count, minimum=0, maximum=_MAX_SEED)
+            str(code): integer(
+                f"diagnostic count for {code}", count, minimum=0, maximum=MAX_JSON_SAFE_INTEGER
+            )
             for code, count in self.conversion_diagnostic_counts.items()
         }
         object.__setattr__(

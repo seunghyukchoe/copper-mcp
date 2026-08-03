@@ -8,6 +8,11 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Read-only Board IR inspection as the `inspect_board_ir` MCP tool and the `copper-mcp board-ir`
+  command. It reports whether a board converts to the supported Board IR subset and describes its
+  revision, snapshot and constraint digests, schema, units, copper layer identities, and object
+  counts, or bounded conversion diagnostic-code counts. Coordinates, net names, pad and net
+  identities, UUIDs, and source bytes are never returned.
 - A bounded, non-mutating route preview exposed as the `preview_route` MCP tool and the
   `copper-mcp preview-route` command. It strictly validates an untrusted request, takes routing
   constraints only from typed caller values, reads one workspace board read-only, and reports
@@ -50,6 +55,8 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Untrusted JSON request validation now lives in one shared `request_boundary` module, so field,
+  type, range, boolean, and character rules cannot drift between public services.
 - Ledger validation now rejects oversized, non-strict, non-finite, or content-address mismatched
   benchmark JSON artifacts.
 - CodeQL `init`, `analyze`, and SARIF upload now move as one pinned v4 suite, and Dependabot groups

@@ -35,6 +35,32 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertEqual(json.loads(stdout.getvalue()), {"passed": True})
 
+    def test_board_ir_reports_supported_structure(self) -> None:
+        root = Path(__file__).parent / "fixtures" / "route-candidate"
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            result = main(
+                [
+                    "--workspace",
+                    str(root),
+                    "board-ir",
+                    "two-pad.kicad_pcb",
+                    "--clearance-nm",
+                    "250000",
+                    "--track-width-nm",
+                    "250000",
+                    "--via-diameter-nm",
+                    "800000",
+                    "--via-drill-nm",
+                    "400000",
+                ]
+            )
+        self.assertEqual(result, 0)
+        document = json.loads(stdout.getvalue())
+        self.assertTrue(document["supported"])
+        self.assertEqual(document["copper_layer_ids"], ["layer:B.Cu", "layer:F.Cu"])
+        self.assertEqual(document["object_counts"]["pads"], 2)
+
     def test_preview_route_builds_a_validated_request(self) -> None:
         root = Path(__file__).parent / "fixtures" / "route-candidate"
         stdout = io.StringIO()
