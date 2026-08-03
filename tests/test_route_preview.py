@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 
 import copper_mcp.kicad_cli as kicad_cli
+import copper_mcp.request_boundary as request_boundary
 import copper_mcp.route_preview as route_preview
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import KiCadCliError, RouteCandidateDrcEvidence
@@ -335,7 +336,7 @@ def test_request_normalization_exposes_only_validated_fields() -> None:
 
     assert request.layer_id == "layer:F.Cu"
     assert request.net_id.startswith("net:name:")
-    assert request.profile().default_net_class_id == route_preview.PREVIEW_NET_CLASS_ID
+    assert request.profile().default_net_class_id == request_boundary.NET_CLASS_ID
     assert set(request.to_dict()) == {
         "board",
         "net",

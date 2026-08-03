@@ -48,19 +48,25 @@ board is part of a complete private input-context recapture after KiCad exits, a
 board/rule/library change discards the result. Candidate bytes and raw findings are not exposed
 through MCP or CLI.
 
-The public `preview_route` surface adds no write path. Requests are validated before any file is
-read: unknown fields, non-integer or out-of-range budgets, booleans supplied as integers, control
-characters, oversized net names, and non-copper layer names are rejected, rejections report counts
-rather than echoing caller-supplied field names, and routing constraints come only from typed caller
-values rather than from untrusted board content. A wall-clock deadline starts at the operation
-boundary and bounds the entire call — conversion, search, and the clamped KiCad timeout for optional
-DRC — above the existing grid, expansion, and obstacle ceilings. Unsupported boards
+The public `inspect_board_ir` and `preview_route` surfaces add no write path. Both parse untrusted
+requests through one shared boundary before any file is read: unknown fields, non-integer or
+out-of-range budgets, booleans supplied as integers, control characters, oversized net names, and
+non-copper layer names are rejected, rejections report counts rather than echoing caller-supplied
+field names, and routing constraints come only from typed caller values rather than from untrusted
+board content. A wall-clock deadline starts at the operation boundary and bounds the entire preview
+call — conversion, search, and the clamped KiCad timeout for optional DRC — above the existing grid,
+expansion, and obstacle ceilings. Unsupported boards
 return bounded diagnostic-code counts, not raw adapter text, and routing failures return typed
 non-echoing diagnostics. Authoritative DRC runs only when the caller opts in, still yields aggregate
 redacted evidence, and fails the call when the evidence is missing or does not bind. A preview does
 return the candidate geometry and endpoint pad IDs it generated, so hosts that must not disclose
 generated copper to a model should not enable the tool; source board bytes and unrelated board
-objects are never returned. These controls do not make arbitrary remote exposure safe.
+objects are never returned.
+
+Board IR inspection discloses only object counts, digests, units, and standard KiCad copper layer
+names. Coordinates, net names, pad and net identities, UUIDs, and source bytes are excluded, and a
+regression test asserts their absence from the serialized document. These controls do not make
+arbitrary remote exposure safe.
 
 ## Security acceptance for future mutation
 

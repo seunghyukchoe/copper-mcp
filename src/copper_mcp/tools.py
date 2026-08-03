@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from copper_mcp import __version__
+from copper_mcp.board_ir_service import summarize_board_ir
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import run_board_drc as run_kicad_board_drc
 from copper_mcp.kicad_file import inspect_kicad_board
@@ -25,6 +26,7 @@ def server_info() -> dict[str, Any]:
             "authoritative read-only KiCad DRC summaries",
             "candidate manifest validation",
             "deterministic candidate ranking",
+            "read-only Board IR structural inspection",
             "non-mutating two-pin route preview on a documented Board IR subset",
         ],
         "planned": [
@@ -49,6 +51,13 @@ def run_board_drc(path: str, settings: Settings | None = None) -> dict[str, Any]
 
     active_settings = settings or Settings.from_env()
     return run_kicad_board_drc(path, active_settings).to_dict()
+
+
+def inspect_board_ir(payload: dict[str, Any], settings: Settings | None = None) -> dict[str, Any]:
+    """Describe one board's Board IR structure without disclosing its content."""
+
+    active_settings = settings or Settings.from_env()
+    return summarize_board_ir(payload, active_settings).to_dict()
 
 
 def preview_route(payload: dict[str, Any], settings: Settings | None = None) -> dict[str, Any]:

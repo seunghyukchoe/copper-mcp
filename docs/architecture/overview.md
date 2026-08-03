@@ -36,22 +36,26 @@ revision.
 | `tools.py` | Pure application services shared by adapters. |
 | `routing/contracts.py` | Exact candidate, cost, settings, result, and backend-neutral contracts. |
 | `routing/astar.py` | Bounded integer two-pin A* reference; candidate-only and fail-closed. |
-| `route_preview.py` | Strict untrusted request parsing and the public non-mutating preview service. |
+| `request_boundary.py` | Shared untrusted-request validation primitives for every public service. |
+| `board_ir_service.py` | Read-only Board IR conversion check and structural description. |
+| `route_preview.py` | The public non-mutating route preview service. |
 | `mcp_server.py` | MCP tools/resources and transport configuration. |
 
 Board IR `0.1.0` is the domain and source-adapter foundation. A narrow deterministic
 [two-pin routing baseline](routing-baseline.md) now produces immutable in-memory candidates for
 supported synthetic Board IR inputs. The pure adapter can serialize an exact replayed candidate in
 memory, an internal service binds that private derivative to strict aggregate KiCad DRC evidence,
-and `preview_route` exposes that pipeline as a bounded, non-mutating public proposal. No durable
+`preview_route` exposes that pipeline as a bounded, non-mutating public proposal, and
+`inspect_board_ir` reports whether a board is representable at all. No durable
 export, MCP Board IR, route/evidence resource, routing job, candidate persistence, source mutation,
 or apply path is implemented. See
 [Board IR and KiCad adapter contracts](board-ir.md),
 [ADR-0005](../adr/0005-canonical-board-ir.md),
 [ADR-0006](../adr/0006-bounded-deterministic-astar.md),
 [ADR-0007](../adr/0007-disposable-kicad-candidate-snapshot.md),
-[ADR-0008](../adr/0008-candidate-bound-kicad-drc.md), and
-[ADR-0009](../adr/0009-non-mutating-route-preview.md).
+[ADR-0008](../adr/0008-candidate-bound-kicad-drc.md),
+[ADR-0009](../adr/0009-non-mutating-route-preview.md), and
+[ADR-0010](../adr/0010-board-ir-inspection-service.md).
 
 ## Candidate lifecycle
 

@@ -14,16 +14,27 @@ from copper_mcp.config import ConfigurationError, Settings
 from copper_mcp.kicad_cli import KiCadCliError
 from copper_mcp.kicad_file import BoardFormatError, load_json_file
 from copper_mcp.models import candidate_from_dict, rank_candidates
-from copper_mcp.route_preview import RoutePreviewError
+from copper_mcp.request_boundary import CONSTRAINT_FIELDS, RequestError
 from copper_mcp.routing import AStarSettings
 from copper_mcp.security import WorkspaceViolationError
-from copper_mcp.tools import inspect_board, preview_route, run_board_drc, server_info
+from copper_mcp.tools import (
+    inspect_board,
+    inspect_board_ir,
+    preview_route,
+    run_board_drc,
+    server_info,
+)
 
 _ROUTER_SETTING_OPTIONS = tuple(AStarSettings.__dataclass_fields__)
+_CONSTRAINT_OPTIONS = CONSTRAINT_FIELDS
 
 
 def _json_dump(payload: object) -> None:
     print(json.dumps(payload, indent=2, sort_keys=True))
+
+
+def _constraints(args: argparse.Namespace) -> dict[str, Any]:
+    return {option: getattr(args, option) for option in _CONSTRAINT_OPTIONS}
 
 
 def _preview_request(args: argparse.Namespace) -> dict[str, Any]:
@@ -40,12 +51,7 @@ def _preview_request(args: argparse.Namespace) -> dict[str, Any]:
         "layer": args.layer,
         "seed": args.seed,
         "include_drc": args.drc,
-        "constraints": {
-            "clearance_nm": args.clearance_nm,
-            "track_width_nm": args.track_width_nm,
-            "via_diameter_nm": args.via_diameter_nm,
-            "via_drill_nm": args.via_drill_nm,
-        },
+        "constraints": _constraints(args),
         "settings": overrides,
     }
 
@@ -74,16 +80,21 @@ def build_parser() -> argparse.ArgumentParser:
     drc_parser = subparsers.add_parser("drc", help="Run authoritative KiCad DRC read-only")
     drc_parser.add_argument("path", help="Board path relative to the workspace")
 
+    board_ir_parser = subparsers.add_parser(
+        "board-ir", help="Report whether a board converts to the supported Board IR"
+    )
+    board_ir_parser.add_argument("path", help="Board path relative to the workspace")
+    for option in _CONSTRAINT_OPTIONS:
+        board_ir_parser.add_argument(f"--{option.replace('_', '-')}", type=int, required=True)
+
     preview_parser = subparsers.add_parser(
         "preview-route", help="Preview one two-pin route candidate without modifying files"
     )
     preview_parser.add_argument("path", help="Board path relative to the workspace")
     preview_parser.add_argument("--net", required=True, help="KiCad net name to route")
     preview_parser.add_argument("--layer", required=True, help="Copper layer name, such as F.Cu")
-    preview_parser.add_argument("--clearance-nm", type=int, required=True)
-    preview_parser.add_argument("--track-width-nm", type=int, required=True)
-    preview_parser.add_argument("--via-diameter-nm", type=int, required=True)
-    preview_parser.add_argument("--via-drill-nm", type=int, required=True)
+    for option in _CONSTRAINT_OPTIONS:
+        preview_parser.add_argument(f"--{option.replace('_', '-')}", type=int, required=True)
     preview_parser.add_argument("--seed", type=int, default=0)
     for option in _ROUTER_SETTING_OPTIONS:
         preview_parser.add_argument(f"--{option.replace('_', '-')}", type=int, default=None)
@@ -127,6 +138,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "drc":
             _json_dump(run_board_drc(args.path, settings))
             return 0
+        if args.command == "board-ir":
+            _json_dump(
+                inspect_board_ir({"board": args.path, "constraints": _constraints(args)}, settings)
+            )
+            return 0
         if args.command == "preview-route":
             _json_dump(preview_route(_preview_request(args), settings))
             return 0
@@ -150,7 +166,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ConfigurationError,
         KiCadCliError,
         OSError,
-        RoutePreviewError,
+        RequestError,
         ValueError,
         WorkspaceViolationError,
     ) as error:

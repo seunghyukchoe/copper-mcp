@@ -53,13 +53,24 @@ evidence immutability, and source inode, mtime, byte, and workspace-entry preser
 KiCad is available.
 
 Its only public caller is `route_preview.preview_route()`, reached through the `preview_route` MCP
-tool and `copper-mcp preview-route`, and only when the caller sets `include_drc`. That service owns
-the untrusted request boundary: extend `parse_route_preview_request()` rather than loosening any
-downstream contract, keep routing constraints caller-supplied, and add a rejection test with every
-new field. `COPPER_MCP_MAX_ROUTE_PREVIEW_SECONDS` bounds preview wall-clock time above the router's
-integer budgets. Preview must remain free of file writes, durable candidates, and jobs; a
-candidate-file export, persistence, or apply action still needs a separate public contract and
-security review.
+tool and `copper-mcp preview-route`, and only when the caller sets `include_drc`.
+`COPPER_MCP_MAX_ROUTE_PREVIEW_SECONDS` bounds preview wall-clock time above the router's integer
+budgets. Preview must remain free of file writes, durable candidates, and jobs; a candidate-file
+export, persistence, or apply action still needs a separate public contract and security review.
+
+## Public request boundary
+
+Every public service that accepts a JSON-shaped request parses it through `request_boundary.py`.
+Add or tighten a rule there rather than in a service, so field, type, range, boolean, and character
+handling cannot drift between `inspect_board_ir`, `preview_route`, and whatever comes next. Services
+keep their own `RequestError` subclass and translate at their own parse entry point, so callers can
+still discriminate. Routing and clearance constraints are always caller-supplied typed values; a
+board file must never be able to supply its own. Add a rejection test with every new field.
+
+`board_ir_service.summarize_board_ir()` is the read-only structural surface. It must keep returning
+counts, digests, units, and standard KiCad layer names only — never coordinates, net names, pad or
+net identities, UUIDs, or source bytes — and its disclosure regression test must keep asserting
+that.
 
 ## Board IR development
 

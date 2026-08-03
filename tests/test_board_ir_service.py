@@ -1,0 +1,234 @@
+from __future__ import annotations
+
+import hashlib
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from copper_mcp.board_ir_service import (
+    BoardIrError,
+    BoardIrSummary,
+    parse_board_ir_request,
+    summarize_board_ir,
+)
+from copper_mcp.config import Settings
+
+FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "two-pad.kicad_pcb"
+
+
+def _request(**overrides: Any) -> dict[str, Any]:
+    request: dict[str, Any] = {
+        "board": "two-pad.kicad_pcb",
+        "constraints": {
+            "clearance_nm": 250_000,
+            "track_width_nm": 250_000,
+            "via_diameter_nm": 800_000,
+            "via_drill_nm": 400_000,
+        },
+    }
+    request.update(overrides)
+    return request
+
+
+def _workspace(tmp_path: Path, *, source: bytes | None = None) -> tuple[Path, Settings]:
+    board = tmp_path / "two-pad.kicad_pcb"
+    board.write_bytes(source if source is not None else FIXTURE.read_bytes())
+    return board, Settings(workspace=tmp_path)
+
+
+def _entries(root: Path) -> dict[str, tuple[int, int, bytes]]:
+    return {
+        str(path.relative_to(root)): (
+            path.stat().st_ino,
+            path.stat().st_mtime_ns,
+            path.read_bytes(),
+        )
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+def test_describes_a_supported_board_without_disclosing_content(tmp_path: Path) -> None:
+    board, settings = _workspace(tmp_path)
+    before = _entries(tmp_path)
+
+    summary = summarize_board_ir(_request(), settings)
+
+    assert summary.supported is True
+    assert summary.board_revision == f"sha256:{hashlib.sha256(board.read_bytes()).hexdigest()}"
+    assert summary.snapshot_digest is not None
+    assert summary.snapshot_digest != summary.board_revision
+    assert summary.constraint_digest is not None
+    assert summary.ir_schema_version == "0.1.0"
+    assert summary.distance_unit == "nm"
+    assert summary.angle_unit == "udeg"
+    assert summary.copper_layer_ids == ("layer:B.Cu", "layer:F.Cu")
+    assert summary.object_counts["pads"] == 2
+    assert summary.object_counts["nets"] == 1
+    assert summary.object_counts["segments"] == 0
+    assert dict(summary.conversion_diagnostic_counts) == {}
+    assert _entries(tmp_path) == before
+
+
+def test_summary_never_returns_names_coordinates_or_identities(tmp_path: Path) -> None:
+    _, settings = _workspace(tmp_path)
+
+    document = summarize_board_ir(_request(), settings).to_dict()
+
+    flattened = repr(document)
+    assert "AUDIO" not in flattened
+    assert "20000000-0000-0000-0000" not in flattened
+    assert "pad:" not in flattened
+    assert "net:" not in flattened
+
+
+def test_summary_is_deterministic_and_detached(tmp_path: Path) -> None:
+    _, settings = _workspace(tmp_path)
+
+    summary = summarize_board_ir(_request(), settings)
+    document = summary.to_dict()
+    document["supported"] = False
+    document["object_counts"]["pads"] = 99
+
+    assert summarize_board_ir(_request(), settings).to_dict() == summary.to_dict()
+    assert summary.to_dict()["supported"] is True
+    assert summary.to_dict()["object_counts"]["pads"] == 2
+    with pytest.raises(TypeError):
+        summary.object_counts["injected"] = 1  # type: ignore[index]
+
+
+def test_reports_an_unsupported_board_as_diagnostic_codes(tmp_path: Path) -> None:
+    unsupported = FIXTURE.read_bytes().replace(b'(layer "Edge.Cuts")', b'(layer "F.SilkS")')
+    _, settings = _workspace(tmp_path, source=unsupported)
+
+    summary = summarize_board_ir(_request(), settings)
+
+    assert summary.supported is False
+    assert summary.snapshot_digest is None
+    assert summary.constraint_digest is None
+    assert summary.copper_layer_ids == ()
+    assert dict(summary.object_counts) == {}
+    assert dict(summary.conversion_diagnostic_counts) == {"geometry.missing": 1}
+
+
+def test_constraints_change_the_snapshot_digest(tmp_path: Path) -> None:
+    _, settings = _workspace(tmp_path)
+
+    default = summarize_board_ir(_request(), settings)
+    widened = summarize_board_ir(
+        _request(
+            constraints={
+                "clearance_nm": 300_000,
+                "track_width_nm": 250_000,
+                "via_diameter_nm": 800_000,
+                "via_drill_nm": 400_000,
+            }
+        ),
+        settings,
+    )
+
+    assert default.board_revision == widened.board_revision
+    assert default.constraint_digest != widened.constraint_digest
+    assert default.snapshot_digest != widened.snapshot_digest
+
+
+def test_rejects_boards_outside_the_workspace(tmp_path: Path) -> None:
+    _, settings = _workspace(tmp_path)
+
+    with pytest.raises(ValueError, match="workspace"):
+        summarize_board_ir(_request(board="../two-pad.kicad_pcb"), settings)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        [],
+        "not-an-object",
+        {"constraints": {}},
+        {"board": "two-pad.kicad_pcb"},
+        _request(net="AUDIO"),
+        _request(board=""),
+        _request(board="two-pad\x00.kicad_pcb"),
+        _request(constraints={"clearance_nm": 1}),
+        _request(
+            constraints={
+                "clearance_nm": 250_000,
+                "track_width_nm": True,
+                "via_diameter_nm": 800_000,
+                "via_drill_nm": 400_000,
+            }
+        ),
+        _request(
+            constraints={
+                "clearance_nm": 250_000,
+                "track_width_nm": 250_000,
+                "via_diameter_nm": 400_000,
+                "via_drill_nm": 800_000,
+            }
+        ),
+    ],
+)
+def test_rejects_malformed_requests(payload: Any) -> None:
+    with pytest.raises(BoardIrError):
+        parse_board_ir_request(payload)
+
+
+def test_errors_never_echo_caller_supplied_field_names() -> None:
+    secret = "y" * 5000 + "-internal-project-codename"
+
+    with pytest.raises(BoardIrError) as raised:
+        parse_board_ir_request(_request(**{secret: 1}))
+
+    message = str(raised.value)
+    assert secret not in message
+    assert "internal-project-codename" not in message
+    assert len(message) < 500
+    assert "1 unsupported field" in message
+
+
+def test_summary_record_rejects_inconsistent_states(tmp_path: Path) -> None:
+    _, settings = _workspace(tmp_path)
+    summary = summarize_board_ir(_request(), settings)
+
+    with pytest.raises(BoardIrError, match="must describe its Board IR snapshot"):
+        BoardIrSummary(
+            board_path=summary.board_path,
+            board_revision=summary.board_revision,
+            supported=True,
+            request=summary.request,
+            object_counts={"pads": 2},
+            copper_layer_ids=("layer:F.Cu",),
+        )
+    with pytest.raises(BoardIrError, match="cannot describe a Board IR snapshot"):
+        BoardIrSummary(
+            board_path=summary.board_path,
+            board_revision=summary.board_revision,
+            supported=False,
+            request=summary.request,
+            snapshot_digest=summary.snapshot_digest,
+            conversion_diagnostic_counts={"geometry.missing": 1},
+        )
+    with pytest.raises(BoardIrError, match="must report conversion diagnostics"):
+        BoardIrSummary(
+            board_path=summary.board_path,
+            board_revision=summary.board_revision,
+            supported=False,
+            request=summary.request,
+        )
+    with pytest.raises(BoardIrError, match="must not report conversion diagnostics"):
+        BoardIrSummary(
+            board_path=summary.board_path,
+            board_revision=summary.board_revision,
+            supported=True,
+            request=summary.request,
+            snapshot_digest=summary.snapshot_digest,
+            constraint_digest=summary.constraint_digest,
+            ir_schema=summary.ir_schema,
+            ir_schema_version=summary.ir_schema_version,
+            distance_unit=summary.distance_unit,
+            angle_unit=summary.angle_unit,
+            copper_layer_ids=summary.copper_layer_ids,
+            object_counts=dict(summary.object_counts),
+            conversion_diagnostic_counts={"geometry.missing": 1},
+        )
