@@ -318,9 +318,22 @@ class StalenessTests(_Case):
     def test_two_concurrent_applies_from_the_same_base_do_not_both_win(self) -> None:
         """The confirmed exploit: two applies from one base, only one may change the board.
 
-        The exclusive lock held across the compare-and-swap and the rename serialises them, so
-        the second sees the first's bytes under the swap and refuses instead of destroying it.
-        This deadlocks without a real lock, so it runs in a worker thread with a timeout.
+        The outcome is decided by the real ``flock`` in ``replace_workspace_file``, not by any
+        wall-clock timeout. The interleaving is driven through the precheck hook, which runs
+        under the lock after the compare-and-swap and just before the rename:
+
+        * Thread A's apply is given a precheck that, still holding the lock and having passed
+          its swap, parks on an event. A is now committed to renaming but has not released the
+          lock.
+        * Thread B is started only once A is parked. B does all of its own work and then blocks
+          in ``replace_workspace_file`` trying to acquire the lock A holds. While A is parked, B
+          therefore cannot have finished - which is what proves the lock is real: without it, B
+          would read the still-unchanged board, pass its swap, and win a second write.
+        * A is released. It renames and returns ``applied`` and drops the lock; B acquires it,
+          re-reads the now-changed board under its swap, and refuses as ``stale_candidate``.
+
+        The only timeouts are generous liveness guards for a genuinely stuck thread; none of
+        them decides ``applied`` versus ``refused``.
         """
 
         import threading
@@ -343,13 +356,29 @@ class StalenessTests(_Case):
 
         import copper_mcp.apply.service as service
 
-        barrier = threading.Barrier(2)
-        released = threading.Event()
         real_replace = service.replace_workspace_file
+        a_holds_lock = threading.Event()
+        release_a = threading.Event()
+        # If any assertion below fails, releasing A and joining both threads in cleanup stops a
+        # parked worker from lingering - a failure must report quickly, never hang on the lock.
+        self.addCleanup(release_a.set)
 
-        def gated_replace(*args: Any, **kwargs: Any) -> Any:
-            # Both threads reach the swap together, so they genuinely contend on the lock.
-            barrier.wait(timeout=10)
+        def dispatch_replace(*args: Any, **kwargs: Any) -> Any:
+            # Only the first apply (thread "apply-A") is parked under the lock; the second runs
+            # the replacement untouched and blocks naturally on the lock A is holding.
+            if threading.current_thread().name != "apply-A":
+                return real_replace(*args, **kwargs)
+            service_precheck = kwargs.get("precheck")
+
+            def parked_precheck() -> None:
+                if service_precheck is not None:
+                    service_precheck()
+                # A now holds the lock and has passed its compare-and-swap.
+                a_holds_lock.set()
+                if not release_a.wait(timeout=30):  # pragma: no cover - liveness guard
+                    raise RuntimeError("thread A was never released")
+
+            kwargs["precheck"] = parked_precheck
             return real_replace(*args, **kwargs)
 
         results: dict[str, dict[str, Any]] = {}
@@ -364,40 +393,61 @@ class StalenessTests(_Case):
             }
             results[name] = apply_candidate(request, self.fixture.settings, authority).to_dict()
 
-        with patch.object(service, "replace_workspace_file", gated_replace):
-            threads = [
-                threading.Thread(
-                    target=run,
-                    args=(
-                        "a",
-                        self.fixture.authority,
-                        str(self.fixture.preview["apply_token"]),
-                        str(self.fixture.preview["board_revision"]),
-                    ),
-                ),
-                threading.Thread(
-                    target=run,
-                    args=(
-                        "b",
-                        second_authority,
-                        str(second_preview["apply_token"]),
-                        str(second_preview["board_revision"]),
-                    ),
-                ),
-            ]
-            for thread in threads:
-                thread.start()
-            released.set()
-            for thread in threads:
-                thread.join(timeout=15)
-                self.assertFalse(thread.is_alive(), "an apply thread deadlocked without a lock")
+        thread_a = threading.Thread(
+            name="apply-A",
+            target=run,
+            args=(
+                "a",
+                self.fixture.authority,
+                str(self.fixture.preview["apply_token"]),
+                str(self.fixture.preview["board_revision"]),
+            ),
+        )
+        thread_b = threading.Thread(
+            name="apply-B",
+            target=run,
+            args=(
+                "b",
+                second_authority,
+                str(second_preview["apply_token"]),
+                str(second_preview["board_revision"]),
+            ),
+        )
+        self.addCleanup(lambda: thread_a.join(timeout=5))
+        self.addCleanup(lambda: thread_b.join(timeout=5))
 
+        with patch.object(service, "replace_workspace_file", dispatch_replace):
+            thread_a.start()
+            self.assertTrue(
+                a_holds_lock.wait(timeout=30), "thread A never reached its parked precheck"
+            )
+            # A is holding the lock. Start B; it must not be able to complete while A holds it.
+            thread_b.start()
+            thread_b.join(timeout=2.0)
+            self.assertTrue(
+                thread_b.is_alive(),
+                "thread B completed while A held the lock - the lock is not serialising applies",
+            )
+            # Release A; both threads must now finish, deterministically, one applied one stale.
+            release_a.set()
+            thread_a.join(timeout=30)
+            thread_b.join(timeout=30)
+            self.assertFalse(thread_a.is_alive(), "thread A did not finish")
+            self.assertFalse(thread_b.is_alive(), "thread B did not finish")
+
+        self.assertEqual(sorted(results), ["a", "b"], results)
         statuses = sorted(document["status"] for document in results.values())
         self.assertEqual(statuses, ["applied", "refused"], results)
         loser = next(d for d in results.values() if d["status"] == "refused")
+        assert loser["diagnostic"] is not None
         self.assertEqual(loser["diagnostic"]["code"], "stale_candidate")
-        # Exactly one write landed, and it is a valid applied board.
+        # Exactly one write landed, and the board on disk is precisely the winner's output.
+        import hashlib
+
         self.assertNotEqual(self.fixture.board.read_bytes(), self.fixture.original)
+        winner = next(d for d in results.values() if d["status"] == "applied")
+        on_disk = f"sha256:{hashlib.sha256(self.fixture.board.read_bytes()).hexdigest()}"
+        self.assertEqual(on_disk, winner["board_revision_after"])
 
     def test_a_stale_board_is_never_auto_refreshed(self) -> None:
         self.fixture.board.write_bytes(self.fixture.original + b"\n")
