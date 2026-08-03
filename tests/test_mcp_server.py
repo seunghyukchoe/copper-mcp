@@ -82,6 +82,7 @@ class McpServerTests(unittest.TestCase):
         self.assertEqual(
             {tool.name for tool in tools},
             {
+                "apply_candidate",
                 "compare_candidates",
                 "inspect_board",
                 "inspect_board_ir",

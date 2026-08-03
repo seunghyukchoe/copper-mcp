@@ -25,6 +25,7 @@ from copper_mcp.security import (
     read_workspace_file,
 )
 from copper_mcp.tools import (
+    apply_candidate,
     inspect_board,
     inspect_board_ir,
     observe_board_scene_raw,
@@ -93,6 +94,38 @@ def _scene_request(args: argparse.Namespace) -> dict[str, Any]:
         "include_annotations": args.include_annotations,
         "include_render": args.render is not None,
     }
+
+
+def _cli_apply_authorization(
+    board: str, manifest: dict[str, Any], expected_revision: str
+) -> tuple[Any, str]:
+    """Authorize a CLI apply and return the authority plus a token bound to this request.
+
+    The MCP surface uses a single-use token because a *model* drives it and must not be able
+    to apply anything the operator has not previewed. The CLI is different: the operator is
+    the one typing the command, and the apply token's signing key exists only inside the
+    issuing process, so a token minted by an earlier `preview-route` run could never verify
+    here. Requiring one would therefore be theatre - a flag that can only ever be satisfied by
+    a value this process just made up.
+
+    The CLI's real authorization is the operator flag plus `--expect-board-revision`, which is
+    the compare-and-swap the operator states explicitly. The token is minted here for exactly
+    that binding so the service keeps one code path and its token check stays a genuine
+    internal invariant rather than a branch that is skipped on this route.
+    """
+
+    from copper_mcp.apply.tokens import ApplyBinding, ApplyTokenAuthority
+
+    authority = ApplyTokenAuthority()
+    token = authority.issue(
+        ApplyBinding(
+            candidate_id=str(manifest.get("candidate_id", "")),
+            base_revision=str(manifest.get("base_revision", "")),
+            board_revision=expected_revision,
+            relative_path=board,
+        )
+    )
+    return authority, token
 
 
 def _placement_request(args: argparse.Namespace, settings: Settings) -> dict[str, Any]:
@@ -248,6 +281,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Snap proposed origins to this grid",
     )
 
+    apply_parser = subparsers.add_parser(
+        "apply-candidate",
+        help="Apply a previewed route candidate to a board (requires COPPER_MCP_ALLOW_APPLY=1)",
+    )
+    apply_parser.add_argument("path", help="Board path relative to the workspace")
+    apply_parser.add_argument(
+        "--candidate",
+        required=True,
+        help="Candidate manifest JSON inside the workspace, as returned by preview-route",
+    )
+    apply_parser.add_argument(
+        "--expect-board-revision",
+        required=True,
+        help="The sha256 board revision the candidate was previewed against",
+    )
+    for option in _CONSTRAINT_OPTIONS:
+        apply_parser.add_argument(f"--{option.replace('_', '-')}", type=int, required=True)
+
     validate_parser = subparsers.add_parser("validate-candidate", help="Validate candidate JSON")
     validate_parser.add_argument("path", help="Candidate path relative to the workspace")
 
@@ -326,6 +377,30 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if args.command == "preview-placement":
             _json_dump(preview_placement(_placement_request(args, settings), settings))
+            return 0
+        if args.command == "apply-candidate":
+            document = _load_candidate(args.candidate, settings)
+            # The manifest may be a whole preview response; take just the candidate so a
+            # caller can pass either shape without editing the file.
+            manifest = document.get("candidate", document)
+            if not isinstance(manifest, dict):
+                raise ValueError("candidate document must contain a candidate object")
+            authority, token = _cli_apply_authorization(
+                args.path, manifest, args.expect_board_revision
+            )
+            _json_dump(
+                apply_candidate(
+                    {
+                        "board": args.path,
+                        "candidate": manifest,
+                        "apply_token": token,
+                        "expect_board_revision": args.expect_board_revision,
+                        "constraints": _constraints(args),
+                    },
+                    settings,
+                    authority,
+                )
+            )
             return 0
         if args.command == "validate-candidate":
             _json_dump(candidate_from_dict(_load_candidate(args.path, settings)).to_dict())

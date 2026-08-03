@@ -8,6 +8,54 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- `apply_candidate`: the first and only operation in this project that changes a user's board.
+  It applies **route patches only**, and three independent things must hold before a single byte
+  is written. The operator must have set `COPPER_MCP_ALLOW_APPLY=1` — matched as exactly `"0"` or
+  `"1"`, because `bool("false")` is `True` and a flag that enables board mutation must not be
+  switched on by an ambiguous spelling. Over MCP the caller must present a single-use token that
+  `preview_route` issued for exactly this candidate, board revision and path, verified with
+  `compare_digest` against an HMAC key that exists only inside the running process — so a model
+  cannot mint one, and outstanding tokens do not survive a restart. And KiCad must be closed: a
+  `~name.lck` sibling is a hard refusal that names the file and is **never removed**, because
+  pcbnew has no external-change watcher and would silently overwrite the applied board on its
+  next save.
+- Revision-race protection. The whole-file digest and the Board IR snapshot digest are compared
+  before the splice, and the file digest again immediately before publication; a mismatch returns
+  `stale_candidate` and is **never auto-refreshed**, because re-routing against copper the caller
+  has not seen would apply a proposal nobody approved.
+- A timestamped, content-addressed pre-apply copy written beside the board before anything is
+  replaced, with its path returned. **That copy is the undo, and restoring it is manual** — there
+  is no `undo_apply` tool and no journal, and it never appears in KiCad's undo stack. KiCad's own
+  `-bak` files are never read, written, or removed.
+- `replace_workspace_file`, the project's only clobbering primitive, placed beside
+  `create_workspace_file` so it inherits the same descriptor-anchored no-follow walk, symlink
+  refusal, and post-write read-back verification. It writes an `O_EXCL` temporary in the target's
+  own directory, `fsync`s it, renames over the name through a held directory descriptor, and
+  `fsync`s the directory. `os.rename` rather than `os.replace`: on POSIX both are the same
+  `renameat` syscall and both replace atomically, while `os.replace` does not accept `dir_fd` on
+  macOS and would have forfeited the descriptor anchoring.
+- Unsafe-filesystem refusal where it is cheaply detectable. `statvfs` names the filesystem on
+  macOS and the BSDs but not on Linux, so a negative result means *not detected*, never *known
+  safe* — which is why detection refuses rather than reassures.
+- `apply_candidate` stays **listed even when applying is disabled**, refusing with
+  `apply_disabled`. Hiding it would make the capability undiscoverable and invite retry loops; a
+  tool that vanishes when a flag is off looks like a broken server rather than a locked door. Its
+  annotations declare `destructiveHint: true` and `readOnlyHint: false` truthfully, but they are
+  advisory client hints and enforce nothing — authorization is the flag and the token.
+- A `copper-mcp apply-candidate` CLI command. It deliberately takes **no token**: the signing key
+  lives only in the issuing process, so a token from an earlier `preview-route` run could never
+  verify in a later `apply-candidate` run, and requiring one would be a flag satisfiable only by
+  a value the same process just invented. The CLI's authorization is the operator flag plus the
+  `--expect-board-revision` compare-and-swap the operator states explicitly.
+
+### Fixed
+
+- A failure while writing the pre-apply copy now returns a typed `backup_failed` refusal instead
+  of escaping as an uncaught `OSError`. Found by crash injection: no copy means no way back, so
+  the apply must stop rather than proceed without one.
+
+### Added
+
 - A byte-preserving span-splice layer over the KiCad S-expression parser (`adapters/cst.py`):
   expression spans, an overlap-rejecting `Splice`, and a source-level splice that decodes once and
   encodes once. It extends the existing parser rather than adding a second tokenizer, which would

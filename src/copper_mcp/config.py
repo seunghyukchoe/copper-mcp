@@ -55,6 +55,7 @@ class Settings:
     max_placement_rules: int = 256
     max_placement_checks: int = 2_000_000
     max_placement_seconds: int = 10
+    allow_apply: bool = False
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -171,6 +172,12 @@ class Settings:
             1,
             600,
         )
+        raw_allow_apply = os.environ.get("COPPER_MCP_ALLOW_APPLY", "0")
+        if raw_allow_apply not in {"0", "1"}:
+            # Exact membership, no case folding and no truthiness. "false", "no" and "" would
+            # all be truthy under bool(), and a flag that enables board mutation must never be
+            # switched on by an ambiguous spelling.
+            raise ConfigurationError('COPPER_MCP_ALLOW_APPLY must be exactly "0" or "1"')
         return cls(
             workspace=workspace,
             transport=transport,
@@ -193,4 +200,5 @@ class Settings:
             max_placement_rules=max_placement_rules,
             max_placement_checks=max_placement_checks,
             max_placement_seconds=max_placement_seconds,
+            allow_apply=raw_allow_apply == "1",
         )

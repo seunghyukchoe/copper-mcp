@@ -24,6 +24,7 @@ from copper_mcp.adapters import (
     net_id_for_name,
     parse_kicad_bytes,
 )
+from copper_mcp.apply.tokens import ApplyBinding, ApplyTokenAuthority
 from copper_mcp.board_ir import NetClass, ParseLimits
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import (
@@ -63,7 +64,13 @@ from copper_mcp.security import read_workspace_file
 _SHA256_ID = re.compile(r"^sha256:[a-f0-9]{64}$")
 _MAX_NET_NAME_CHARACTERS = 255
 _REQUIRED_FIELDS = ("board", "net", "layer", "constraints")
-_OPTIONAL_FIELDS = ("seed", "settings", "include_drc", "include_fill_authority")
+_OPTIONAL_FIELDS = (
+    "seed",
+    "settings",
+    "include_drc",
+    "include_fill_authority",
+    "include_apply_token",
+)
 _SETTINGS_FIELDS = tuple(AStarSettings.__dataclass_fields__)
 
 
@@ -92,6 +99,7 @@ class RoutePreviewRequest:
     seed: int
     include_drc: bool
     include_fill_authority: bool = False
+    include_apply_token: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.constraints, NetClass):
@@ -100,6 +108,7 @@ class RoutePreviewRequest:
             raise RoutePreviewError("settings must be typed router settings")
         boolean("include_drc", self.include_drc)
         boolean("include_fill_authority", self.include_fill_authority)
+        boolean("include_apply_token", self.include_apply_token)
         integer("seed", self.seed, minimum=0, maximum=MAX_JSON_SAFE_INTEGER)
         board_path(self.board)
         text("net", self.net, maximum=_MAX_NET_NAME_CHARACTERS)
@@ -133,6 +142,7 @@ class RoutePreviewRequest:
             "seed": self.seed,
             "include_drc": self.include_drc,
             "include_fill_authority": self.include_fill_authority,
+            "include_apply_token": self.include_apply_token,
             "constraints": {field: getattr(self.constraints, field) for field in CONSTRAINT_FIELDS},
             "settings": {field: getattr(self.settings, field) for field in _SETTINGS_FIELDS},
         }
@@ -168,6 +178,9 @@ def parse_route_preview_request(payload: Any) -> RoutePreviewRequest:
             include_drc=boolean("include_drc", fields.get("include_drc", False)),
             include_fill_authority=boolean(
                 "include_fill_authority", fields.get("include_fill_authority", False)
+            ),
+            include_apply_token=boolean(
+                "include_apply_token", fields.get("include_apply_token", False)
             ),
         )
     except RoutePreviewError:
@@ -233,6 +246,7 @@ class RoutePreview:
     diagnostic: RouteDiagnostic | None = None
     conversion_diagnostic_counts: Mapping[str, int] = field(default_factory=dict)
     drc_evidence: RouteCandidateDrcEvidence | None = None
+    apply_token: str | None = None
     schema_version: str = SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -305,6 +319,17 @@ class RoutePreview:
         ):
             raise RoutePreviewError("an unrouted preview must carry exactly one diagnostic")
 
+        if self.apply_token is not None:
+            # Cross-bound exactly like DRC evidence below. A token is an authorization to
+            # change a file, so it must never appear on a preview that proposed no change,
+            # and it must never be attachable to a different candidate than the one shown.
+            if not isinstance(self.apply_token, str) or not 1 <= len(self.apply_token) <= 512:
+                raise RoutePreviewError("apply token is malformed")
+            if self.status is not RoutePreviewStatus.ROUTED or self.candidate is None:
+                raise RoutePreviewError("an apply token requires a routed candidate")
+            if not self.request.include_apply_token:
+                raise RoutePreviewError("an apply token was not requested")
+
         if self.drc_evidence is None:
             return
         if not isinstance(self.drc_evidence, RouteCandidateDrcEvidence):
@@ -356,6 +381,7 @@ class RoutePreview:
             ),
             "conversion_diagnostic_counts": dict(self.conversion_diagnostic_counts),
             "drc_evidence": (None if self.drc_evidence is None else self.drc_evidence.to_dict()),
+            "apply_token": self.apply_token,
             "fill_authority": (
                 None if self.fill_authority is None else self.fill_authority.to_dict()
             ),
@@ -374,7 +400,11 @@ def _drc_settings(settings: Settings, deadline: float) -> Settings:
     )
 
 
-def preview_route(payload: Any, settings: Settings) -> RoutePreview:
+def preview_route(
+    payload: Any,
+    settings: Settings,
+    token_authority: ApplyTokenAuthority | None = None,
+) -> RoutePreview:
     """Propose one deterministic candidate for a workspace board without mutating it."""
 
     if not isinstance(settings, Settings):
@@ -501,6 +531,18 @@ def preview_route(payload: Any, settings: Settings) -> RoutePreview:
             profile,
             _drc_settings(settings, deadline),
         )
+    apply_token = None
+    if request.include_apply_token and token_authority is not None:
+        # Issued only for a routed candidate, and bound to the four things that make an apply
+        # unambiguous: which candidate, which Board IR snapshot, which file bytes, which path.
+        apply_token = token_authority.issue(
+            ApplyBinding(
+                candidate_id=result.candidate.candidate_id,
+                base_revision=result.candidate.base_revision,
+                board_revision=board_revision,
+                relative_path=relative_path,
+            )
+        )
     return RoutePreview(
         status=RoutePreviewStatus.ROUTED,
         board_path=relative_path,
@@ -509,4 +551,5 @@ def preview_route(payload: Any, settings: Settings) -> RoutePreview:
         snapshot_digest=snapshot.snapshot_digest,
         candidate=result.candidate,
         drc_evidence=evidence,
+        apply_token=apply_token,
     )

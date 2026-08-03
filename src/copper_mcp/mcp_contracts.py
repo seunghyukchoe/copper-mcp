@@ -557,7 +557,71 @@ class PlacementPreviewToolResponse(_ClosedContract):
     conversion_diagnostic_counts: dict[str, int]
 
 
+class ApplyVerificationContract(_ClosedContract):
+    """What was checked, in the vocabulary of what was actually performed.
+
+    The three performed stages are one-value literals so a caller cannot read a missing check
+    as a passing one, and the two unperformed stages are literals for the same reason: this
+    operation never runs KiCad, so there is no value in which it could claim otherwise.
+    """
+
+    untouched_bytes_identical: Literal["passed"]
+    reparse_fail_closed: Literal["passed"]
+    ir_equals_source_plus_patch: Literal["passed"]
+    kicad_opened_board: Literal["not_run"]
+    drc_after_apply: Literal["not_run"]
+
+
+class ApplyDiagnosticContract(_ClosedContract):
+    code: Literal[
+        "invalid_request",
+        "apply_disabled",
+        "invalid_token",
+        "token_expired",
+        "token_already_used",
+        "stale_candidate",
+        "backup_failed",
+        "kicad_open",
+        "unsupported_board",
+        "unsafe_filesystem",
+        "splice_assertion_failed",
+        "apply_verification_failed",
+    ]
+    message: Annotated[str, Field(max_length=1024)]
+
+
+class ApplyRequestEchoContract(_ClosedContract):
+    """The validated request. The apply token is deliberately never echoed back."""
+
+    board: str
+    expect_board_revision: Digest
+    candidate_id: str
+    constraints: dict[str, int]
+
+
+class ApplyCandidateToolResponse(_ClosedContract):
+    """Strict structured output contract for ``apply_candidate``."""
+
+    status: Literal["applied", "refused"]
+    apply_version: Literal["0.1.0"]
+    board_path: str
+    board_revision_before: Digest
+    board_revision_after: Digest | None
+    snapshot_digest_before: Digest | None
+    base_revision: Digest | None
+    candidate_id: Digest | None
+    request: ApplyRequestEchoContract | None
+    #: Where the pre-apply copy went. This is the undo: restoring means copying it back.
+    backup_path: str | None
+    bytes_added: Annotated[int, Field(ge=0)]
+    segments_added: Annotated[int, Field(ge=0)]
+    verification: ApplyVerificationContract | None
+    diagnostic: ApplyDiagnosticContract | None
+    conversion_diagnostic_counts: dict[str, int]
+
+
 __all__ = [
+    "ApplyCandidateToolResponse",
     "CircuitIntentContentContract",
     "CircuitIntentToolContent",
     "CircuitSceneToolResponse",

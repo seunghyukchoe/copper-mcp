@@ -1,6 +1,6 @@
 # ADR-0025: Apply a route candidate by splicing bytes, not by rewriting a board
 
-- Status: Accepted
+- Status: Accepted (mutating path added 2026-08-04)
 - Date: 2026-08-04
 - Owners: `@seunghyukchoe`
 - Related: ADR-0005, ADR-0007, ADR-0008
@@ -105,19 +105,73 @@ replay.
   route apply so M3 does not stall on an M4 dependency. A pose edit is not additive, so the
   assertion above would not be total for it.
 
-## Designed but not yet shipped
+## The mutating path (shipped 2026-08-04)
 
-Stated so nothing here is mistaken for a capability:
+The engine above computes bytes; this is what is allowed to write them. The order of the checks
+is the design, and each one refuses rather than repairing.
 
-- **No mutating path.** No lockfile refusal, no compare-and-swap, no pre-apply copy, no atomic
-  replacement. Nothing writes.
-- **No authorization tokens.** The operator opt-in flag and the single-use HMAC apply token
-  bound to `(candidate_id, base_revision, relative_path)` are designed and not implemented.
-- **No `apply_candidate` tool or CLI command.**
+- **Operator opt-in.** `COPPER_MCP_ALLOW_APPLY` must be exactly `"0"` or `"1"`, default off.
+  Exact membership rather than truthiness: `bool("false")` is `True`, and a flag that enables
+  board mutation must never be switched on by an ambiguous spelling.
+- **A single-use token, enforced server-side.** Issued only by `preview_route`, only for a
+  routed candidate, and bound to `(candidate_id, base_revision, board_revision, relative_path)`
+  under an HMAC whose key exists only in this process. Verified with `compare_digest`; the
+  expiry sits inside the MAC so editing it fails. Single use comes from the binding itself - a
+  successful apply changes the board revision, so the token can never match again - with a
+  bounded consumed-nonce set on top to turn a replay into a precise `token_already_used`.
+  **Restarting the server invalidates outstanding tokens**, which is the right default for a
+  short-lived confirmation.
+- **A lockfile is a hard refusal.** A `~name.lck` sibling means a GUI may hold the board open,
+  and pcbnew has no external-change watcher, so a later save would silently overwrite the
+  applied board. The file is named in the error and **never removed** - stale locks are a known
+  KiCad bug, but deleting one is the operator's judgement, not ours.
+- **Compare and swap, twice.** The whole-file digest and the Board IR snapshot digest are
+  checked before the splice, and the file digest again immediately before publishing. A
+  mismatch is refused and **never auto-refreshed**.
+- **A pre-apply copy is written first**, timestamped and content-addressed beside the board,
+  with its path returned. If it cannot be written the apply stops: no copy means no way back.
+  KiCad's own `-bak` files are never read, written, or removed.
+- **Publication is atomic and then verified.** `replace_workspace_file` writes an `O_EXCL`
+  temporary in the target's own directory, `fsync`s it, renames over the name through a held
+  directory descriptor, and `fsync`s the directory. If post-publication verification fails, the
+  pre-apply copy is restored and `apply_verification_failed` is reported.
+- **Unsafe filesystems are refused where detectable.** `statvfs` names the filesystem on macOS
+  and the BSDs but not on Linux, so a negative result means *not detected*, never *known safe* -
+  which is why detection refuses rather than reassures.
+
+`os.rename` is used rather than `os.replace`. On POSIX both are the same `renameat` syscall and
+both replace atomically; `os.replace` exists to give Windows those semantics and does not accept
+`dir_fd` on macOS, so using it would forfeit the descriptor anchoring that keeps the operation
+confined.
+
+### The undo story, stated plainly
+
+**The pre-apply copy is the undo, and restoring it is manual.** The user copies that file back
+over the board. There is no `undo_apply` tool, no journal, and no automatic revert. This is not
+a KiCad undo step and never appears in KiCad's undo stack; a real single-undo transaction needs
+the IPC API, which is deferred.
+
+### Why the CLI does not take a token
+
+The token defends the MCP surface, where a *model* drives the tools and must not be able to
+apply something the operator never previewed. On the CLI the operator is the one typing the
+command, and the signing key lives only inside the issuing process - so a token minted by an
+earlier `preview-route` run could never verify in a later `apply-candidate` run. Requiring one
+would be a flag that can only ever be satisfied by a value the same process just made up.
+
+The CLI's authorization is therefore the operator flag plus `--expect-board-revision`, the
+compare-and-swap the operator states explicitly. The token is minted in-process for exactly
+that binding, so the service keeps one code path and its token check stays a real invariant
+rather than a branch skipped on this route.
+
+## Still not shipped
+
 - **No merge, no lock override, no IPC apply, no placement apply, no batch apply.** These are
   non-goals for v0.1, not omissions. IPC in particular is excluded on a technical ground rather
   than an effort one: it mutates an in-memory document whose state cannot be bound to a file
   digest, so revision binding would be unsound there.
+- **No DRC evidence on an applied board.** The verification matrix reports `kicad_opened_board`
+  and `drc_after_apply` as one-value `not_run` literals, because this path never runs KiCad.
 
 ## Prior art
 

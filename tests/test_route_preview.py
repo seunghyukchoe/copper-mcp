@@ -503,6 +503,7 @@ def test_request_normalization_exposes_only_validated_fields() -> None:
         "seed",
         "include_drc",
         "include_fill_authority",
+        "include_apply_token",
         "constraints",
         "settings",
     }
