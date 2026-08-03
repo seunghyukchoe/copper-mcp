@@ -58,6 +58,9 @@ documentation, ledger updates, and benchmark evidence.
   that is provably inside the track and provably self-connected.
 - [ ] Fill-aware zone routing with a freshness-bound KiCad refill/fill-digest authority contract.
 - [ ] Multi-pin nets, since most real nets have more than two pads.
+  - [x] Connectivity analysis for nets of any width, so an already-connected multi-pin net
+    is recognised rather than refused.
+  - [ ] Routing a multi-pin net, which needs a Steiner topology rather than one path.
 - [x] Attachment to existing same-net copper and bounded partial-route completion.
 - [ ] Multilayer vias and keepouts.
 - [ ] Negotiated-congestion multi-net routing.

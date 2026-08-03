@@ -139,6 +139,15 @@ closed rectangle intersection as the connection test — exact contact counts. T
 wins a union, so a component's root never depends on discovery order. Each pair comparison charges
 the obstacle-check budget, so the every-64-checks cancellation cadence applies unchanged.
 
+Connectivity is asked of nets of any width. When every pad of the net lands in one component the
+router returns a typed `RouteConnection` instead of a candidate, whatever the pad count; its
+`pad_count` field distinguishes the cases, and its `start_pad_id`/`end_pad_id` are the
+lexicographically first and last pads, which bound the set rather than naming a route. Routing a
+multi-pin net remains unsupported: a net that is not fully connected and has more than two pads gets
+the unchanged `invalid_two_pin_net` refusal. A net carrying a same-net via or zone is never claimed
+connected, because that copper is not represented here; a two-pin net names the via or zone
+directly, while a wider one is refused for its pad count, which is the more useful fact about it.
+
 If both pads land in one component the router returns a typed `RouteConnection` instead of a
 candidate: the net is already connected on the selected layer and there is nothing to route. That is
 a terminal success, not a `RouteFailureCode`. Otherwise the search is seeded from every lattice node
@@ -314,43 +323,49 @@ what neither yet reaches. Measured against the repository's own
 | Stage | Result |
 |---|---|
 | Board IR conversion | Supported — 2 copper layers, 14 nets, 55 pads, 53 segments, 9 vias, 2 zones, 2 keepouts |
-| Two-pin nets resolved on `F.Cu` | 5 of 5, all `already_connected` |
-| Nets reaching a terminal outcome on `F.Cu` | 5 of 14 |
+| Nets reaching a terminal outcome on `F.Cu` | 11 of 14, all `already_connected` |
 | Nets routed on `F.Cu` | 0 of 14 |
 
-Conversion is not the blocker; the router's contract is. Five refusals have been removed in
+Conversion is not the blocker; the router's contract is. Six refusals have been removed in
 succession — the same-net partial-routing veto (ADR-0016), non-rectangular track keepouts,
-foreign-net diagonal segments (ADR-0017), a mirrored footprint-rotation defect in the adapter, and
-diagonal copper on the routed net (ADR-0018). The first three moved nothing. The fourth moved the
-number, because it was not a router limitation at all: pads on every rotated footprint were placed
-at their mirror image, so the router was being asked about a board that did not exist. The fifth
-resolved the rest of the two-pin surface.
+foreign-net diagonal segments (ADR-0017), a mirrored footprint-rotation defect in the adapter,
+diagonal copper on the routed net (ADR-0018), and the assumption that connectivity is only a
+two-pin question. The first three moved nothing. The fourth moved the number, because it was not a
+router limitation at all: pads on every rotated footprint were placed at their mirror image, so the
+router was being asked about a board that did not exist. The fifth resolved the rest of the two-pin
+surface, and the sixth extended the same analysis to nets of any width.
 
 Measured per net at the default 250 µm grid step, twice, with identical results:
 
 | Nets | Outcome |
 |---|---|
-| 9 of 14 — `GND`, `VCC`, `VREF`, `L_BUF`, `R_BUF`, `L_OUT`, `R_OUT`, `L_IN_BIASED`, `R_IN_BIASED` | `invalid_two_pin_net`; more than two `F.Cu` pads, the largest at twelve |
-| 5 of 14 — `9V_RAW`, `L_IN_RAW`, `R_IN_RAW`, `L_ISO`, `R_ISO` | **`already_connected`** |
+| 5 of 14 — `9V_RAW`, `L_IN_RAW`, `R_IN_RAW`, `L_ISO`, `R_ISO` | **`already_connected`**, two pads each |
+| 6 of 14 — `L_BUF`, `R_BUF`, `L_IN_BIASED`, `R_IN_BIASED`, `R_OUT`, `VREF` | **`already_connected`**, three to seven pads each |
+| 3 of 14 — `GND`, `VCC`, `L_OUT` | `invalid_two_pin_net`; each carries same-net vias |
 
-Every two-pin net on this board is one the designer already routed, and the router now recognises
-all five. `L_ISO` and `R_ISO` are a single orthogonal segment joining their two pads; `9V_RAW`,
-`L_IN_RAW` and `R_IN_RAW` carry two or three segments each, of which one or two are diagonal — those
-three are exactly the nets ADR-0018 unlocked. There is nothing to route on any of them, and saying
-so is the correct answer rather than a consolation prize.
+Every net on this board is one the designer already routed, and the router now recognises eleven of
+the fourteen. The widest is `VREF` at seven pads joined by ten segments. There is nothing to route on
+any of them, and saying so is the correct answer rather than a consolation prize.
+
+The three refusals are honest rather than incidental. `GND`, `VCC` and `L_OUT` carry same-net vias,
+and a via is copper on another layer that this single-layer model does not represent. Their pads may
+well be connected through it, but nothing here can show that, so the router declines to claim it and
+falls back to the pad-count refusal — which is also true, since routing a multi-pin net remains
+unsupported. `GND` additionally carries a same-net zone, which is refused for the same reason.
 
 The claim is bound to authoritative evidence, though not the usual kind: an already-connected
 preview emits no candidate, so candidate-bound DRC has nothing to replay. The available
 authoritative check is the board-level one — `kicad-cli pcb drc` reports **zero unconnected items**
 on this board, so KiCad agrees every net is fully connected. A regression test asserts both halves
-together across all five nets.
+together across all eleven nets.
 
 It is worth being precise about what this is not. Zero nets are *routed*: no copper has been proposed
-for CopperTone, and none is needed for the nets it can currently reason about. The remaining
-contract for this board is multi-pin routing, which nine of its fourteen nets require. Behind that
-sit a freshness-bound fill authority and a lattice that does not require the pad-centre delta to
-divide by the grid step; neither is currently reached, because no two-pin net on this board still
-needs a route.
+for CopperTone, and none is needed for the nets it can currently reason about. Connectivity analysis
+now spans nets of any width, but **routing** a multi-pin net is still unsupported — that separation
+is deliberate, because recognising an existing connection and choosing a Steiner topology for a new
+one are different problems. Behind them sit multilayer connectivity through vias, a freshness-bound
+fill authority, and a lattice that does not require the pad-centre delta to divide by the grid step;
+none is currently reached, because no net on this board still needs a route.
 
 Board IR handles a real two-layer audio board today, and the router still does not route one
 unaided. Attachment, polygon keepouts, and diagonal envelopes remain validated by purpose-built

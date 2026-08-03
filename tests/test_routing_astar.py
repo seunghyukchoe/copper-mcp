@@ -1152,9 +1152,9 @@ def test_route_result_admits_exactly_one_terminal_arm() -> None:
             connected=connection,
             diagnostic=RouteDiagnostic(code=RouteFailureCode.NO_PATH, message="no path"),
         )
-    with pytest.raises(ValueError, match="distinct pads"):
+    with pytest.raises(ValueError, match="must be distinct"):
         replace(connection, end_pad_id="pad:01")
-    with pytest.raises(ValueError, match="both pads and every segment"):
+    with pytest.raises(ValueError, match="every pad and every segment"):
         replace(connection, attachment_segments=2)
     assert RouteResult(connected=connection).terminal
     assert not RouteResult(connected=connection).ok
@@ -1970,3 +1970,86 @@ def test_diagonal_core_chain_is_inside_the_track_and_self_connected(seed: int) -
         assert (cores[-1][1] + cores[-1][3]) // 2 == canonical_end[1]
 
     assert checked_squares > 200
+
+
+# Three pads: pad:01 at (1,000, 5,000), pad:02 at (9,000, 5,000), pad:03 at (5,000, 8,000).
+_SPINE = (1_000, 5_000, 9_000, 5_000)
+_BRANCH = (5_000, 5_000, 5_000, 8_000)
+
+
+def test_a_fully_connected_multi_pin_net_reports_already_connected() -> None:
+    snapshot = _snapshot(third_target=True, own_segments=(_SPINE, _BRANCH))
+    request = _request(snapshot)
+    router = AStarRouter()
+
+    first = router.propose(snapshot, request)
+    connection = _connection(first)
+
+    assert first == router.propose(snapshot, request)
+    assert connection.pad_count == 3
+    assert connection.attachment_segments == 2
+    assert connection.component_objects == 5
+    # The bounding pair of the lexicographically sorted pads, not a route.
+    assert connection.start_pad_id == "pad:01"
+    assert connection.end_pad_id == "pad:03"
+
+
+def test_a_partly_connected_multi_pin_net_is_still_refused_for_its_pad_count() -> None:
+    # The spine joins pad:01 and pad:02 but nothing reaches pad:03.
+    snapshot = _snapshot(third_target=True, own_segments=(_SPINE,))
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.INVALID_TWO_PIN_NET)
+    assert result.diagnostic is not None
+    assert "exactly two pads" in result.diagnostic.message
+
+
+def test_a_multi_pin_net_carrying_a_via_is_never_claimed_connected() -> None:
+    # Every pad's copper meets, but a via is connectivity this model cannot see, so the net
+    # falls back to the pad-count refusal rather than a connection claim.
+    snapshot = _snapshot(third_target=True, own_segments=(_SPINE, _BRANCH), own_via=True)
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.INVALID_TWO_PIN_NET)
+
+
+def test_a_multi_pin_net_carrying_a_zone_is_never_claimed_connected() -> None:
+    snapshot = _snapshot(
+        third_target=True,
+        own_segments=(_SPINE, _BRANCH),
+        own_zone=_rectangle(1_000, 1_000, 2_000, 2_000),
+    )
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.INVALID_TWO_PIN_NET)
+
+
+def test_a_two_pin_net_still_names_its_via_and_zone_directly() -> None:
+    router = AStarRouter()
+    with_via = _snapshot(own_segments=((1_000, 5_000, 9_000, 5_000),), own_via=True)
+    with_zone = _snapshot(
+        own_segments=((1_000, 5_000, 9_000, 5_000),),
+        own_zone=_rectangle(1_000, 1_000, 2_000, 2_000),
+    )
+
+    via_result = router.propose(with_via, _request(with_via))
+    zone_result = router.propose(with_zone, _request(with_zone))
+
+    _assert_failure(via_result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    _assert_failure(zone_result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert via_result.diagnostic is not None
+    assert zone_result.diagnostic is not None
+    assert "via" in via_result.diagnostic.message
+    assert "zone" in zone_result.diagnostic.message
+
+
+def test_a_multi_pin_net_without_same_net_copper_is_refused() -> None:
+    snapshot = _snapshot(third_target=True)
+
+    _assert_failure(
+        AStarRouter().propose(snapshot, _request(snapshot)),
+        RouteFailureCode.INVALID_TWO_PIN_NET,
+    )

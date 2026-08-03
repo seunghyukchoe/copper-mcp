@@ -8,6 +8,23 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Connectivity analysis now spans nets of any width, not only two-pin nets. When every pad of a net
+  lands in one component the router reports the terminal `already_connected` outcome whatever the
+  pad count, reusing the existing pad cores, orthogonal rectangles and diagonal chains unchanged.
+  `RouteConnection` gains a `pad_count` field and its component invariant generalises to
+  `attachment_segments + pad_count`; `start_pad_id` and `end_pad_id` keep their names and their
+  two-pin meaning, and are documented as the lexicographically first and last pads, which bound the
+  set rather than naming a route a connected net does not have. **Routing** a multi-pin net stays
+  unsupported: a wider net that is not fully connected gets the unchanged `invalid_two_pin_net`
+  refusal, and no new failure code is introduced. A net carrying a same-net via or zone is never
+  claimed connected, because that copper is on another layer or otherwise unrepresented here; a
+  two-pin net still names the via or zone directly, while a wider one is refused for its pad count.
+  Two-pin behaviour is bit-identical and `ROUTER_VERSION` does not move. On the repository's own
+  CopperTone board this takes recognition from five of fourteen nets to **eleven of fourteen**, the
+  widest being `VREF` at seven pads joined by ten segments; the three that remain refused — `GND`,
+  `VCC`, `L_OUT` — are exactly the nets carrying same-net vias. `kicad-cli pcb drc` corroborates by
+  reporting zero unconnected items for the whole board. Still zero nets routed: no copper is
+  proposed for that board, and none of its nets needs any.
 - Diagonal copper on the *routed* net is now attachment copper rather than a refusal, completing
   the model: obstacles are over-approximated, attachment copper under-approximated. A diagonal track
   has no single axis-aligned inner rectangle, so it contributes a chain of axis-aligned squares

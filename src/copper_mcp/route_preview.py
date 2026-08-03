@@ -319,6 +319,7 @@ class RoutePreview:
                     "end_pad_id": self.connection.end_pad_id,
                     "attachment_segments": self.connection.attachment_segments,
                     "component_objects": self.connection.component_objects,
+                    "pad_count": self.connection.pad_count,
                     "obstacle_checks": self.connection.obstacle_checks,
                 }
             ),

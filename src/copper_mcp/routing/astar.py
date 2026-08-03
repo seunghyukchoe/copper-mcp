@@ -104,6 +104,7 @@ class _AlreadyConnectedError(Exception):
     start_pad_id: str
     end_pad_id: str
     attachment_segments: int
+    pad_count: int = 2
     obstacle_checks: int = 0
 
 
@@ -763,26 +764,35 @@ def _prepare(
         elif request.layer_id in pad.layer_ids:
             blocking_pads.append(pad)
     pads = tuple(sorted(target_pads, key=lambda pad: pad.id))
-    if len(pads) != 2 or any(request.layer_id not in pad.layer_ids for pad in pads):
+    # A net wider than two pads cannot be routed, but it can still be recognised as already
+    # connected, so the pad-count refusal is deferred until after connectivity is decided.
+    two_pin = len(pads) == 2
+    if len(pads) < 2 or any(request.layer_id not in pad.layer_ids for pad in pads):
         raise _fail(
             RouteFailureCode.INVALID_TWO_PIN_NET,
             "the selected net must resolve to exactly two pads on the selected layer",
         )
-    start_pad, end_pad = pads
-    if start_pad.center == end_pad.center:
+    if two_pin and pads[0].center == pads[1].center:
         raise _fail(
             RouteFailureCode.UNSUPPORTED_GEOMETRY,
             "coincident route endpoints are outside the first-slice contract",
         )
 
+    # A via or a zone on the routed net is copper this model does not represent, so it can
+    # neither be routed around nor counted as connectivity. A two-pin net says so directly; a
+    # wider one is refused for its pad count instead, which is the more useful fact about it.
+    same_net_via = False
     for index, via in enumerate(content.vias):
         if index % 64 == 0:
             work.checkpoint()
         if via.net_id == request.net_id:
-            raise _fail(
-                RouteFailureCode.UNSUPPORTED_GEOMETRY,
-                "the selected net already carries a via and is partially routed",
-            )
+            same_net_via = True
+            if two_pin:
+                raise _fail(
+                    RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                    "the selected net already carries a via and is partially routed",
+                )
+            break
     for index, arc in enumerate(content.arcs):
         if index % 64 == 0:
             work.checkpoint()
@@ -792,16 +802,20 @@ def _prepare(
                 "selected-layer arcs are outside the supported obstacle model",
             )
     blocking_zones: list[Zone] = []
+    same_net_zone = False
     for index, zone in enumerate(content.zones):
         if index % 64 == 0:
             work.checkpoint()
         if zone.layer_id != request.layer_id:
             continue
         if zone.net_id == request.net_id:
-            raise _fail(
-                RouteFailureCode.UNSUPPORTED_GEOMETRY,
-                "the selected net already carries a zone and is partially routed",
-            )
+            same_net_zone = True
+            if two_pin:
+                raise _fail(
+                    RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                    "the selected net already carries a zone and is partially routed",
+                )
+            continue
         blocking_zones.append(zone)
     attachment_segments: list[Segment] = []
     for index, segment in enumerate(content.segments):
@@ -824,9 +838,13 @@ def _prepare(
                 "the same-net attachment copper exceeds the configured obstacle budget",
             )
         pad_cores: list[_Rect] = []
-        for pad in (start_pad, end_pad):
+        for pad in pads:
             pad_core = _pad_core_extent(pad)
             if pad_core is None:
+                if not two_pin:
+                    # Unmodeled pad geometry cannot support a connectivity claim, and a wider
+                    # net has the pad-count refusal waiting for it below regardless.
+                    break
                 raise _fail(
                     RouteFailureCode.UNSUPPORTED_GEOMETRY,
                     "a route endpoint pad is not modeled exactly for same-net attachment",
@@ -857,20 +875,38 @@ def _prepare(
                 )
             core_list.extend(diagonal_cores)
         segment_cores = tuple(core_list)
-        roots = _component_roots(tuple(pad_cores) + segment_cores, work)
-        if roots[0] == roots[1]:
-            raise _AlreadyConnectedError(
-                start_pad_id=start_pad.id,
-                end_pad_id=end_pad.id,
-                attachment_segments=len(attachment_segments),
-                obstacle_checks=work.obstacle_checks,
-            )
-        source_cores = tuple(
-            core for core, root in zip(segment_cores, roots[2:], strict=True) if root == roots[0]
+        if len(pad_cores) == len(pads):
+            roots = _component_roots(tuple(pad_cores) + segment_cores, work)
+            pad_roots = roots[: len(pads)]
+            # Vias and zones on the routed net are copper this model cannot see, so a net that
+            # carries them is never claimed connected however its segments happen to fall.
+            if len(set(pad_roots)) == 1 and not same_net_via and not same_net_zone:
+                raise _AlreadyConnectedError(
+                    start_pad_id=pads[0].id,
+                    end_pad_id=pads[-1].id,
+                    attachment_segments=len(attachment_segments),
+                    pad_count=len(pads),
+                    obstacle_checks=work.obstacle_checks,
+                )
+            if two_pin:
+                segment_roots = roots[2:]
+                source_cores = tuple(
+                    core
+                    for core, root in zip(segment_cores, segment_roots, strict=True)
+                    if root == pad_roots[0]
+                )
+                target_cores = tuple(
+                    core
+                    for core, root in zip(segment_cores, segment_roots, strict=True)
+                    if root == pad_roots[1]
+                )
+
+    if not two_pin:
+        raise _fail(
+            RouteFailureCode.INVALID_TWO_PIN_NET,
+            "the selected net must resolve to exactly two pads on the selected layer",
         )
-        target_cores = tuple(
-            core for core, root in zip(segment_cores, roots[2:], strict=True) if root == roots[1]
-        )
+    start_pad, end_pad = pads
 
     if len(content.outline) != 1 or content.outline[0].holes:
         raise _fail(
@@ -1490,7 +1526,8 @@ class AStarRouter:
                     start_pad_id=connection.start_pad_id,
                     end_pad_id=connection.end_pad_id,
                     attachment_segments=connection.attachment_segments,
-                    component_objects=connection.attachment_segments + 2,
+                    component_objects=connection.attachment_segments + connection.pad_count,
+                    pad_count=connection.pad_count,
                     obstacle_checks=connection.obstacle_checks,
                 )
             )

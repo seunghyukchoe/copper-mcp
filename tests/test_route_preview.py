@@ -865,21 +865,31 @@ COPPERTONE_BOARD = (
 )
 
 
-# Every two-pin `F.Cu` net on the board, with the same-net segment count each one carries.
-# The RAW nets are the ones whose copper includes diagonals.
-COPPERTONE_TWO_PIN_NETS = {
-    "9V_RAW": 2,
-    "L_IN_RAW": 3,
-    "R_IN_RAW": 2,
-    "L_ISO": 1,
-    "R_ISO": 1,
+# Every `F.Cu` net the router can currently resolve, as (pad count, same-net segment count).
+# The RAW nets are the ones whose copper includes diagonals; the wider ones only became
+# answerable once connectivity stopped being a two-pin-only question.
+COPPERTONE_CONNECTED_NETS = {
+    "9V_RAW": (2, 2),
+    "L_IN_RAW": (2, 3),
+    "R_IN_RAW": (2, 2),
+    "L_ISO": (2, 1),
+    "R_ISO": (2, 1),
+    "L_BUF": (3, 3),
+    "R_BUF": (3, 3),
+    "L_IN_BIASED": (3, 3),
+    "R_IN_BIASED": (3, 3),
+    "R_OUT": (3, 4),
+    "VREF": (7, 10),
 }
+# Refused because they carry vias, which this model does not represent as connectivity.
+COPPERTONE_VIA_NETS = ("GND", "L_OUT", "VCC")
 
 
-@pytest.mark.parametrize(("net_name", "segments"), sorted(COPPERTONE_TWO_PIN_NETS.items()))
-def test_coppertone_two_pin_nets_report_already_connected(
-    net_name: str, segments: int, tmp_path: Path
+@pytest.mark.parametrize(("net_name", "shape"), sorted(COPPERTONE_CONNECTED_NETS.items()))
+def test_coppertone_connected_nets_report_already_connected(
+    net_name: str, shape: tuple[int, int], tmp_path: Path
 ) -> None:
+    pad_count, segments = shape
     board = tmp_path / COPPERTONE_BOARD.name
     board.write_bytes(COPPERTONE_BOARD.read_bytes())
     settings = Settings(workspace=tmp_path, max_drc_report_bytes=4096)
@@ -891,8 +901,9 @@ def test_coppertone_two_pin_nets_report_already_connected(
     assert first.status is RoutePreviewStatus.ALREADY_CONNECTED
     assert first.to_dict() == second.to_dict()
     assert first.connection is not None
+    assert first.connection.pad_count == pad_count
     assert first.connection.attachment_segments == segments
-    assert first.connection.component_objects == segments + 2
+    assert first.connection.component_objects == segments + pad_count
 
 
 @pytest.mark.skipif(
@@ -920,6 +931,22 @@ def test_real_kicad_corroborates_the_coppertone_already_connected_nets(tmp_path:
 
     assert summary.unconnected_count == 0
     assert summary.error_count == 0
-    for net_name in COPPERTONE_TWO_PIN_NETS:
+    for net_name in COPPERTONE_CONNECTED_NETS:
         preview = preview_route(_request(board=COPPERTONE_BOARD.name, net=net_name), settings)
         assert preview.status is RoutePreviewStatus.ALREADY_CONNECTED
+
+
+@pytest.mark.parametrize("net_name", COPPERTONE_VIA_NETS)
+def test_coppertone_via_carrying_nets_stay_refused(net_name: str, tmp_path: Path) -> None:
+    """A via is copper this model cannot see, so those nets are never claimed connected."""
+
+    board = tmp_path / COPPERTONE_BOARD.name
+    board.write_bytes(COPPERTONE_BOARD.read_bytes())
+    settings = Settings(workspace=tmp_path, max_drc_report_bytes=4096)
+
+    preview = preview_route(_request(board=COPPERTONE_BOARD.name, net=net_name), settings)
+
+    assert preview.status is RoutePreviewStatus.NOT_ROUTED
+    assert preview.connection is None
+    assert preview.diagnostic is not None
+    assert preview.diagnostic.code is RouteFailureCode.INVALID_TWO_PIN_NET

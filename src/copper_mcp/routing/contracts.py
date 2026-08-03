@@ -242,13 +242,20 @@ class RouteCandidate:
 
 @dataclass(frozen=True, slots=True)
 class RouteConnection:
-    """Exact evidence that both pads already share one selected-layer copper component."""
+    """Exact evidence that every pad of a net already shares one selected-layer component.
+
+    ``start_pad_id`` and ``end_pad_id`` are the lexicographically first and last of the net's
+    pads on the layer. For the two-pin case those are simply its two pads; for a wider net they
+    bound the set rather than naming a route, because a connected net has no route to name.
+    ``pad_count`` is what tells the two apart.
+    """
 
     base_revision: str
     start_pad_id: str
     end_pad_id: str
     attachment_segments: int
     component_objects: int
+    pad_count: int = 2
     obstacle_checks: int = 0
 
     def __post_init__(self) -> None:
@@ -256,12 +263,13 @@ class RouteConnection:
         _typed_id("start pad ID", self.start_pad_id, "pad:")
         _typed_id("end pad ID", self.end_pad_id, "pad:")
         if self.start_pad_id == self.end_pad_id:
-            raise ValueError("route endpoints must be distinct pads")
+            raise ValueError("connected pads must be distinct")
         _integer("attachment segments", self.attachment_segments, minimum=1)
+        _integer("pad count", self.pad_count, minimum=2)
         _integer("component objects", self.component_objects, minimum=3)
         _integer("connection obstacle checks", self.obstacle_checks)
-        if self.component_objects != self.attachment_segments + 2:
-            raise ValueError("a connected component must account for both pads and every segment")
+        if self.component_objects != self.attachment_segments + self.pad_count:
+            raise ValueError("a connected component must account for every pad and every segment")
 
 
 class RouteFailureCode(StrEnum):

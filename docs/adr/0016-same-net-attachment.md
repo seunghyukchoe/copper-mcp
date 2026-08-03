@@ -12,6 +12,11 @@
   CopperTone measurements; with it fixed, the two nets this ADR made attachable report
   `already_connected`. The current measurement lives in the
   [routing baseline](../architecture/routing-baseline.md); the decision itself is unaffected.
+- Follow-up: the already-connected outcome this ADR introduced was later extended to nets of
+  any pad count, since the component analysis never depended on there being two pads.
+  `RouteConnection` gained a `pad_count` field and its invariant generalised accordingly.
+  Routing a multi-pin net remains unsupported, so the scope of the routing decision here is
+  unchanged; only the recognition half widened.
 
 ## Context
 
