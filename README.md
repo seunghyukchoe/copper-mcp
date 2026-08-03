@@ -183,6 +183,14 @@ in a later call. Board text is omitted unless `--include-annotations` is passed,
 confined to a separate `annotations` collection marked untrusted: it is written by whoever authored
 the board, and it is data to be read, never instructions to follow.
 
+Add `--render out/board.svg` to also write a deterministic SVG of the board's copper. The path
+must be new and end in lowercase `.svg`; observation never overwrites a file. Two renders of an
+unchanged board are byte-identical, and the response records the digest and the exact inputs it
+was taken under. The render draws copper and the board outline only - silkscreen and fabrication
+layers are excluded because KiCad embeds their text literally in the SVG - and it covers the whole
+board rather than the requested region. It is an orientation aid: where it and the scene disagree,
+the scene is right.
+
 Preview one route without modifying the board, then optionally validate it with KiCad:
 
 ```bash

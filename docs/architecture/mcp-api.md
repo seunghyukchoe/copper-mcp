@@ -17,7 +17,7 @@
 | `inspect_board` | None | Bounded read-only inspection inside the configured workspace. |
 | `run_board_drc` | Temporary report only | Fixed-argument KiCad DRC with a bounded, redacted summary. |
 | `inspect_board_ir` | None | Read-only Board IR conversion check and structural description. |
-| `observe_board_scene` | None | Bounded, region-scoped semantic scene of one board, with board text quarantined. |
+| `observe_board_scene` | None, or a process-local render artifact when `include_render` is set | Bounded, region-scoped semantic scene of one board, with board text quarantined. |
 | `preview_route` | None, or a temporary report when `include_drc` is set | Bounded, non-mutating two-pin route proposal on the documented Board IR subset. |
 | `render_circuit_schematic` | Process-local artifact only; stdio only | Validate structured Circuit Intent, require deterministic replay, and issue one opaque schematic resource capability. |
 | `validate_candidate` | None | Validate and normalize candidate metadata. |
@@ -73,10 +73,41 @@ annotation, so no board can mark its own text safe. Treat every `text` value as 
 board and never as instructions. Net names never appear at any setting, because Board IR hashes them
 at conversion. An unsupported board returns no annotations at all.
 
+Setting `include_render` additionally produces a deterministic SVG of the board's copper. It
+spawns KiCad, so it is opt-in and never implicit. KiCad runs against a **read-only** private
+snapshot of the board and its project context; the workspace is never written, not even the
+`.kicad_prl` KiCad drops beside a writable input. The export draws `F.Cu`, `B.Cu` and
+`Edge.Cuts` only, excludes the drawing sheet, and forces black and white. The layer list is a
+security control rather than a presentation choice: an export including silkscreen or
+fabrication layers embeds each board string twice in literal, greppable form - in a `<desc>`
+beside the stroked paths and in an invisible `<text opacity="0">` - so excluding those layers
+is the only thing that keeps author text out of the bytes.
+
+Two exports of an unchanged board are byte-identical after canonicalization. KiCad stamps the
+file with a wall-clock timestamp and the output filename in a single `<title>` line; the
+`title-line-v1` rule rewrites exactly that line, and nothing else. Canonicalization fails
+closed: a document whose title line is missing or duplicated, or that is incomplete because it
+hit the `max_render_bytes` ceiling (4 MiB by default), is refused rather than digested. A
+truncated export is a real case - at the ceiling KiCad exits 0 having written a partial file.
+
+The `render` object records `normalized_digest`, `source_revision`, `context_revision`,
+`kicad_version`, `layers`, `side`, `canonicalization` and `byte_count`, because a digest alone
+cannot tell a caller whether two renders are comparable. The bytes are never inlined: over MCP
+they arrive as a `resource_link` annotated `audience: ["assistant"]`, naming a non-enumerable
+process-local capability that expires 15 minutes after issue, from a store holding at most 8
+renders and 32 MiB - deliberately separate from the schematic store so the two cannot evict
+each other. A human-facing thumbnail would be a separate artifact annotated `audience:
+["user"]` and is not implemented. The render is **whole-board even when the scene is a
+window**: region scoping applies to semantics, not to the picture. It is advisory - any
+disagreement with the scene should be resolved in favour of the scene - and no render is
+produced for a board outside Board IR.
+
 Unlike `render_circuit_schematic`, this tool is exposed over both transports: it returns one
 self-contained response and retains no server-side state, so it follows the `preview_route`
 precedent. It discloses workspace board coordinates by design, and workspace confinement is what
-bounds that disclosure. Its handler returns a closed contract, so it advertises a real `outputSchema`
+bounds that disclosure. `include_render` is the one asymmetry: render bytes are delivered
+through the process-local capability store, which a stateless HTTP deployment cannot resolve,
+so that flag alone is refused off stdio while the semantic scene stays available everywhere. Its handler returns a closed contract, so it advertises a real `outputSchema`
 and returns populated `structuredContent`.
 
 `preview_route` takes one request object with a workspace-relative `board`, a KiCad `net` name, a

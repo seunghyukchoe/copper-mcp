@@ -26,3 +26,4 @@ from the decision ledger.
 - [ADR-0020: Treat same-net through vias as connectivity joints](0020-via-aware-connectivity.md)
 - [ADR-0021: Trust poured copper only against a fresh KiCad refill](0021-zone-fill-authority.md)
 - [ADR-0022: Observe a board as a semantic scene, with its text held at arm's length](0022-circuit-scene-observation.md)
+- [ADR-0023: Render a board deterministically, and only as an advisory aid](0023-deterministic-board-render.md)

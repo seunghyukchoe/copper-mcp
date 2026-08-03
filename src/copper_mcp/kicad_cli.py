@@ -30,6 +30,14 @@ from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
 from copper_mcp.models import DrcSummary
 from copper_mcp.routing import RouteCandidate
+from copper_mcp.scene_render import (
+    RENDER_LAYERS,
+    SVG_CANONICALIZATION,
+    SceneRenderError,
+    SceneRenderEvidence,
+    canonicalize_svg,
+    render_digest,
+)
 from copper_mcp.security import (
     WorkspaceFileSnapshot,
     WorkspaceViolationError,
@@ -1188,4 +1196,193 @@ def run_route_candidate_drc(
         patched_board_revision=patched_board_revision,
         patched_drc_context_revision=patched_drc_context_revision,
         summary=summary,
+    )
+
+
+def _kicad_version(executable: Path, settings: Settings) -> str:
+    """Ask the CLI its own version.
+
+    An SVG export, unlike a DRC report, carries no version field, and a render is only
+    comparable against another render from the same KiCad. Asking is the honest way to get
+    it; inferring it from the executable's path would be a guess.
+    """
+
+    try:
+        completed = subprocess.run(  # noqa: S603
+            [str(executable), "--version"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            shell=False,
+            timeout=settings.kicad_timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise KiCadCliError("KiCad version query timed out") from error
+    if completed.returncode != 0:
+        raise KiCadCliError("KiCad version query failed")
+    reported = completed.stdout.decode("utf-8", errors="replace").strip()
+    if not _KICAD_VERSION.fullmatch(reported):
+        raise KiCadCliError("KiCad reported an unrecognized version")
+    return reported
+
+
+def run_scene_render(
+    requested_path: str,
+    settings: Settings,
+    *,
+    side: str = "top",
+) -> tuple[SceneRenderEvidence, bytes]:
+    """Render one board to deterministic SVG bytes without touching the workspace.
+
+    Unlike zone fill authority, the private snapshot here is made **read-only** before KiCad
+    starts. Verified against KiCad 10.0.5: `pcb export svg` completes against a fully
+    read-only input tree and writes nothing beside the board. Given a writable directory it
+    does drop a `.kicad_prl` next to the input, which is exactly the side effect the
+    read-only snapshot removes rather than merely relocates.
+    """
+
+    if side not in {"top", "bottom"}:
+        raise SceneRenderError("a scene render side must be top or bottom")
+
+    board = read_workspace_file(
+        settings.workspace,
+        requested_path,
+        allowed_suffixes={".kicad_pcb"},
+        max_bytes=settings.max_board_bytes,
+    )
+    board_path = board.path
+    # The project context travels with the board for the same reason it does for fill: layer
+    # and theme settings live beside the board, and a render taken without them is a render of
+    # a board that never existed. Recording context_revision is what makes the evidence
+    # falsifiable rather than merely plausible.
+    captured_context = _drc_context(board_path, settings, board)
+    board_relative = board_path.relative_to(settings.workspace.resolve(strict=True)).as_posix()
+    context_revision = _context_revision(captured_context)
+    source_revision = _revision(captured_context[board_relative])
+
+    executable = discover_kicad_cli(settings)
+    if os.name != "posix":
+        raise KiCadCliError("bounded KiCad execution is unsupported on this platform")
+    python_executable = _validated_executable(Path(sys.executable))
+    bounded_exec = _BOUNDED_EXEC.resolve(strict=True)
+    if python_executable is None or not bounded_exec.is_file():
+        raise KiCadCliError("bounded KiCad execution helper is unavailable")
+    kicad_version = _kicad_version(executable, settings)
+
+    with tempfile.TemporaryDirectory(prefix="copper-mcp-render-") as temporary_directory:
+        temporary_root = Path(temporary_directory)
+        try:
+            temporary_root.chmod(0o700)
+        except OSError as error:
+            raise KiCadCliError("private KiCad render directory could not be secured") from error
+        workspace_snapshot = temporary_root / "workspace"
+        try:
+            _write_drc_snapshot(captured_context, workspace_snapshot)
+            expected_snapshot_files = frozenset(captured_context)
+            _make_snapshot_read_only(workspace_snapshot)
+            workspace_snapshot = workspace_snapshot.resolve(strict=True)
+        except OSError as error:
+            raise KiCadCliError("private KiCad render context could not be written") from error
+        snapshot_board = (workspace_snapshot / board_relative).resolve(strict=True)
+        # The output name is fixed. It appears in KiCad's <title> line, so letting a caller
+        # influence it would put caller-controlled text inside the artifact and, worse, make
+        # the digest depend on the filename the caller happened to choose.
+        render_path = temporary_root / "scene.svg"
+        private_state = temporary_root / "process-state"
+        try:
+            child_environment = _private_kicad_environment(private_state)
+        except OSError as error:
+            raise KiCadCliError("private KiCad process state could not be created") from error
+        command = [
+            str(python_executable),
+            "-I",
+            str(bounded_exec),
+            str(settings.max_render_bytes),
+            str(executable),
+            "pcb",
+            "export",
+            "svg",
+            "--mode-single",
+            # No drawing sheet: the frame and title block carry project text and add nothing
+            # a router or a model can use.
+            "--exclude-drawing-sheet",
+            # Measured: colour output follows the active KiCad theme, so the same board
+            # renders differently under "KiCad Classic" than under the default. Black and
+            # white removes that dependence entirely and makes the bytes theme-invariant.
+            "--black-and-white",
+            # Board area only. The default is an A4 page with a small board in the corner.
+            "--page-size-mode",
+            "2",
+            "--layers",
+            ",".join(RENDER_LAYERS),
+            "--output",
+            str(render_path),
+            str(snapshot_board),
+        ]
+        if side == "bottom":
+            # Both sides draw the same copper layers; only the viewing side differs, so the
+            # layer list is identical and `side` is recorded in evidence to keep the two
+            # renders from being compared as though they were the same artifact.
+            command.insert(command.index("--layers"), "--mirror")
+        try:
+            completed = subprocess.run(  # noqa: S603
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                shell=False,
+                timeout=settings.kicad_timeout_seconds,
+                env=child_environment,
+                cwd=child_environment["TMPDIR"],
+            )
+        except subprocess.TimeoutExpired as error:
+            raise KiCadCliError("KiCad board render timed out") from error
+        _validate_private_kicad_state(private_state, settings)
+        # Proves the read-only snapshot held: an export that wrote anything beside the board
+        # would show up here as an unexpected path rather than being discovered later.
+        _validate_snapshot_tree(workspace_snapshot, expected_snapshot_files, settings)
+        if completed.returncode == -signal.SIGXFSZ:
+            raise SceneRenderError("the board render exceeds the configured size limit")
+        if completed.returncode != 0:
+            raise KiCadCliError(f"KiCad board render failed with exit code {completed.returncode}")
+        try:
+            exported = read_workspace_file(
+                temporary_root,
+                render_path.name,
+                allowed_suffixes={".svg"},
+                max_bytes=settings.max_render_bytes,
+            ).content
+        except FileNotFoundError as error:
+            raise KiCadCliError("KiCad did not produce a board render") from error
+        except WorkspaceViolationError as error:
+            if isinstance(error.__cause__, FileNotFoundError):
+                raise KiCadCliError("KiCad did not produce a board render") from error
+            raise SceneRenderError("the board render exceeds the configured size limit") from error
+
+    # The whole live context, not just the board, must be unchanged; a layer or rule edited
+    # mid-run would mean the evidence describes a board that no longer exists.
+    try:
+        recaptured_context = _drc_context(board_path, settings)
+    except (KiCadCliError, OSError) as error:
+        raise KiCadCliError(
+            "the workspace context changed while the board render was running"
+        ) from error
+    if _context_revision(recaptured_context) != context_revision:
+        raise KiCadCliError("the workspace context changed while the board render was running")
+
+    canonical = canonicalize_svg(exported)
+    return (
+        SceneRenderEvidence(
+            normalized_digest=render_digest(canonical),
+            source_revision=source_revision,
+            context_revision=context_revision,
+            kicad_version=kicad_version,
+            layers=RENDER_LAYERS,
+            side=side,
+            canonicalization=SVG_CANONICALIZATION,
+            byte_count=len(canonical),
+        ),
+        canonical,
     )

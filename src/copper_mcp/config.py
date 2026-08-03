@@ -49,6 +49,7 @@ class Settings:
     # dense board rather than guessing upward now.
     max_scene_objects: int = 2_000
     max_scene_vertices: int = 200_000
+    max_render_bytes: int = 4 * 1024 * 1024
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -129,6 +130,12 @@ class Settings:
             3,
             5_000_000,
         )
+        max_render_bytes = _bounded_int(
+            "COPPER_MCP_MAX_RENDER_BYTES",
+            os.environ.get("COPPER_MCP_MAX_RENDER_BYTES", str(4 * 1024 * 1024)),
+            1024,
+            64 * 1024 * 1024,
+        )
         return cls(
             workspace=workspace,
             transport=transport,
@@ -145,4 +152,5 @@ class Settings:
             max_fill_vertices=max_fill_vertices,
             max_scene_objects=max_scene_objects,
             max_scene_vertices=max_scene_vertices,
+            max_render_bytes=max_render_bytes,
         )

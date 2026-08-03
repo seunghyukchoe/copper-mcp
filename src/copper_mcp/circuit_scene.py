@@ -49,6 +49,7 @@ from copper_mcp.request_boundary import (
     required_fields,
     text,
 )
+from copper_mcp.scene_render import SceneRenderEvidence
 from copper_mcp.security import read_workspace_file
 
 SCENE_VERSION = "0.1.0"
@@ -58,7 +59,7 @@ _STATIC_KINDS = ("outline", "pads", "keepouts", "rules")
 _MUTABLE_KINDS = ("segments", "arcs", "vias", "zones")
 
 _REQUIRED_FIELDS = ("board", "constraints", "region")
-_OPTIONAL_FIELDS = ("layers", "include_annotations")
+_OPTIONAL_FIELDS = ("layers", "include_annotations", "include_render")
 _REGION_FIELDS = ("min_x_nm", "min_y_nm", "max_x_nm", "max_y_nm", "around_ref_id", "radius_nm")
 _MAX_REF_CHARACTERS = 200
 
@@ -213,6 +214,7 @@ class CircuitSceneRequest:
     region: Mapping[str, Any]
     layers: tuple[str, ...]
     include_annotations: bool
+    include_render: bool = False
 
     def profile(self) -> KiCadConstraintProfile:
         return KiCadConstraintProfile(
@@ -225,6 +227,7 @@ class CircuitSceneRequest:
             "board": self.board,
             "layers": list(self.layers),
             "include_annotations": self.include_annotations,
+            "include_render": self.include_render,
             "constraints": {field: getattr(self.constraints, field) for field in CONSTRAINT_FIELDS},
             "region": dict(self.region),
         }
@@ -295,6 +298,7 @@ def parse_circuit_scene_request(payload: Any) -> CircuitSceneRequest:
             include_annotations=boolean(
                 "include_annotations", fields.get("include_annotations", False)
             ),
+            include_render=boolean("include_render", fields.get("include_render", False)),
         )
     except CircuitSceneError:
         raise
@@ -561,6 +565,8 @@ class CircuitScene:
     static_objects: Mapping[str, tuple[SceneObject, ...]] = field(default_factory=dict)
     mutable_objects: Mapping[str, tuple[SceneObject, ...]] = field(default_factory=dict)
     annotations: tuple[SceneAnnotation, ...] = ()
+    render: SceneRenderEvidence | None = None
+    render_bytes: bytes | None = None
     objects_omitted: int = 0
     ceiling_hit: str | None = None
     content_derived_ref_count: int = 0
@@ -593,6 +599,9 @@ class CircuitScene:
                 for name in _MUTABLE_KINDS
             },
             "annotations": [item.to_dict() for item in self.annotations],
+            # Evidence only. The bytes themselves are delivered as a capability by the MCP
+            # gateway or written to an explicit path by the CLI, never inlined here.
+            "render": None if self.render is None else self.render.to_dict(),
             "truncation": {
                 "objects_returned": total,
                 "objects_omitted": self.objects_omitted,
@@ -730,6 +739,21 @@ def observe_board_scene(payload: Any, settings: Settings) -> CircuitScene:
     if request.include_annotations:
         annotations = _read_annotations(source, limits)
 
+    render_evidence: SceneRenderEvidence | None = None
+    render_bytes: bytes | None = None
+    if request.include_render:
+        # Reached only on a supported board. A board Board IR cannot represent might still be
+        # drawable by KiCad, but returning a picture of a board whose semantics we could not
+        # produce is exactly the inversion ADR-0022 forbids: it invites a reader to trust the
+        # render precisely where there is nothing to check it against.
+        from copper_mcp.kicad_cli import run_scene_render
+
+        render_evidence, render_bytes = run_scene_render(request.board, settings)
+        if render_evidence.source_revision != board_revision:
+            # The scene and the render must describe the same bytes. They are read
+            # separately, so this is the only thing that makes them one observation.
+            raise CircuitSceneError("the board changed while its render was being produced")
+
     emitted = [item for group in (*static.values(), *mutable.values()) for item in group]
     content_derived = sum(1 for item in emitted if item.ref_stability == "content_derived")
     request_scoped = sum(1 for item in emitted if item.ref_stability == "request_scoped")
@@ -745,6 +769,8 @@ def observe_board_scene(payload: Any, settings: Settings) -> CircuitScene:
         annotations=annotations,
         objects_omitted=budget.omitted,
         ceiling_hit=budget.ceiling_hit,
+        render=render_evidence,
+        render_bytes=render_bytes,
         content_derived_ref_count=content_derived,
         request_scoped_ref_count=request_scoped,
     )

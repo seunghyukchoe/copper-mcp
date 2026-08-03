@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -131,6 +132,94 @@ class CliTests(unittest.TestCase):
             )
         self.assertEqual(result, 2)
         self.assertIn("radius", stderr.getvalue())
+
+    @unittest.skipUnless(
+        Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli").is_file(),
+        "KiCad CLI is not installed",
+    )
+    def test_observe_scene_render_writes_a_new_svg_and_never_replaces_one(self) -> None:
+        source = Path(__file__).parent / "fixtures" / "circuit-scene-v0.1"
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            shutil.copy2(source / "scene-region.kicad_pcb", workspace)
+            (workspace / "out").mkdir()
+            arguments = [
+                "--workspace",
+                str(workspace),
+                "observe-scene",
+                "scene-region.kicad_pcb",
+                "--clearance-nm",
+                "250000",
+                "--track-width-nm",
+                "250000",
+                "--via-diameter-nm",
+                "800000",
+                "--via-drill-nm",
+                "400000",
+                "--region",
+                "0",
+                "0",
+                "30000000",
+                "30000000",
+                "--render",
+                "out/board.svg",
+            ]
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                self.assertEqual(main(arguments), 0)
+            document = json.loads(stdout.getvalue())
+            self.assertEqual(document["export"]["output_path"], "out/board.svg")
+            written = (workspace / "out" / "board.svg").read_bytes()
+            self.assertEqual(len(written), document["render"]["byte_count"])
+            self.assertTrue(written.rstrip().endswith(b"</svg>"))
+
+            # Create-only: observation must never overwrite a caller's file.
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                self.assertEqual(main(arguments), 2)
+            self.assertIn("already exists", stderr.getvalue())
+            self.assertEqual((workspace / "out" / "board.svg").read_bytes(), written)
+
+            # And the workspace board itself is untouched by the render.
+            self.assertEqual(
+                (workspace / "scene-region.kicad_pcb").read_bytes(),
+                (source / "scene-region.kicad_pcb").read_bytes(),
+            )
+
+    def test_observe_scene_without_render_writes_no_file(self) -> None:
+        source = Path(__file__).parent / "fixtures" / "circuit-scene-v0.1"
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            shutil.copy2(source / "scene-region.kicad_pcb", workspace)
+            before = {path.name for path in workspace.iterdir()}
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                self.assertEqual(
+                    main(
+                        [
+                            "--workspace",
+                            str(workspace),
+                            "observe-scene",
+                            "scene-region.kicad_pcb",
+                            "--clearance-nm",
+                            "250000",
+                            "--track-width-nm",
+                            "250000",
+                            "--via-diameter-nm",
+                            "800000",
+                            "--via-drill-nm",
+                            "400000",
+                            "--region",
+                            "0",
+                            "0",
+                            "30000000",
+                            "30000000",
+                        ]
+                    ),
+                    0,
+                )
+            self.assertIsNone(json.loads(stdout.getvalue())["render"])
+            self.assertEqual({path.name for path in workspace.iterdir()}, before)
 
     def test_preview_route_builds_a_validated_request(self) -> None:
         root = Path(__file__).parent / "fixtures" / "route-candidate"
