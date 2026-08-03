@@ -6,6 +6,54 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A typed placement-intent contract and a deterministic legalizer (`copper_mcp.placement`), the
+  first half of the M4 placement surface. The intent language has seven rule kinds - proximity,
+  alignment, symmetry, board edge, region keep-in/keep-out, discrete orientation and side - and is
+  deliberately **unable to express an illegal result**: every rule names objects by the references
+  a scene already handed out, every parameter is an exact integer, and there is no way to state a
+  coordinate or to permit an overlap. Proposals are ref-anchored for the same reason ("2.5mm right
+  of that object's east edge", never a raw position), so the absolute coordinates in a candidate
+  are always derived here and then snapped to an explicit `placement_grid_nm`. A test asserts that
+  an absolute position cannot be smuggled in through any field.
+- Footprint identity recovered out of band and joined to Board IR pads, which have no parent
+  reference of their own. Adding footprints to Board IR would cost a schema version bump and change
+  the digest of every board ever converted, so the grouping is read from the same source bytes and
+  the candidate binds to **both** digests. The join is total rather than best-effort: pads with a
+  native UUID join directly, pads without one are matched by reproducing the adapter's documented
+  derived-id hash, and a view that cannot account for every pad refuses.
+- Three-valued pad overlap. Bounds over-approximate a pad and cores under-approximate it, so
+  disjoint bounds *prove* clearance and overlapping cores *prove* collision, while everything
+  between is reported as `inconclusive` rather than guessed. Measured on this repository's own
+  board, bounding boxes settle **1,359 of 1,360** different-net pad pairs and exactly one is
+  inconclusive - 0.07%, an oval against a roundrect whose boxes clip at a corner both shapes round
+  away. That measurement is why exact pad-shape geometry is not in v0.1, and a test pins the rate
+  so the conclusion is revisited if it moves.
+- Outline containment and keepout respect via exact integer ray casting, with `courtyard_overlap`
+  reported as a one-value `not_modelled` literal: Board IR carries no courtyard geometry, and this
+  repository's own board draws none at all while its project sets `missing_courtyard: ignore`, so
+  KiCad's own courtyard check is equally blind on it. There is no vocabulary for a courtyard that
+  was checked, so a candidate can never imply one.
+- An honest failure taxonomy in which `infeasible_constraints` and `budget_exhausted` never
+  collapse into each other - the first is a proof that no placement satisfies the rules, the second
+  an admission that the work ran out - alongside `unresolved_ref`, `unsupported_geometry`,
+  `illegal_placement` and `stale_revision`. Only syntactic contradictions are claimed as infeasible,
+  because anything needing search would be reporting ignorance as certainty.
+- Rule results carry exact residuals, and `satisfied_within_tolerance` is reported **only** when the
+  caller supplied a `tolerance_nm`. An unstated tolerance means exact, so a one-nanometre residual
+  is a violation and says so.
+- Immutable `PlacementCandidate` with two-phase identity derivation over its own canonical content,
+  placements recorded in reference order under `ordering_policy` `validate-snap-v1`, and evidence
+  carrying per-rule residuals, the legality record and the checks consumed. An illegal placement is
+  refused *with* its legality record, so a caller never has to guess which of three independent
+  checks failed.
+
+  Placement is **preview only**: nothing applies a candidate, and moving a footprint invalidates
+  every route bound to the same base revision. There is no MCP or CLI surface yet - the contract
+  and legalizer land first so the rule vocabulary is exercised before it is published. A side
+  change is refused as `unsupported_geometry` rather than mirrored approximately.
+
 ### Fixed
 
 - **Pad orientation was double-counted, transposing the extents of every non-square pad on a
