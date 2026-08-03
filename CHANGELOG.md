@@ -6,6 +6,8 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-04
+
 ### Added
 
 - A metamorphic test family over the routing pipeline: whole-board rotation by 90, 180 and 270
@@ -449,6 +451,7 @@ All notable changes are documented here. The format follows
   lifetimes, timeouts, strict contract parsing, and before/after DRC-context revision checks.
 - The development dependency floor excludes pytest versions affected by `PYSEC-2026-1845`.
 
-[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/seunghyukchoe/copper-mcp/releases/tag/v0.1.0
