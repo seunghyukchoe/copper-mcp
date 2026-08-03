@@ -17,3 +17,5 @@ from the decision ledger.
 - [ADR-0011: Existing copper as exact rectangular obstacles](0011-existing-copper-obstacles.md)
 - [ADR-0012: Through vias as selected-layer obstacles](0012-via-obstacles.md)
 - [ADR-0013: Conservative polygon zone-boundary obstacles](0013-polygon-zone-obstacles.md)
+- [ADR-0014: Canonical circuit intent and deterministic schematic rendering](0014-canonical-circuit-intent.md)
+- [ADR-0015: Bounded Circuit Intent schematic delivery](0015-bounded-circuit-schematic-delivery.md)

@@ -13,11 +13,19 @@
 | Boundary | Representative threats | Required controls |
 |---|---|---|
 | MCP input → server | Path traversal, oversized payloads, excessive agency | Typed validation, workspace allowlist, size/budget limits, separate apply permission |
-| Board file → parser | Malformed data, parser DoS, hidden secrets | Bounded reads, fuzz/property tests, no execution, generic errors |
-| Server → KiCad CLI | Argument injection, hangs, oversized or incompatible reports, context-file floods, stale evidence | Validated executable, fixed argument vector, POSIX file ceiling, cumulative byte/file-count bounds, discovery/process timeouts, strict contract, revision recheck |
+| MCP wrapper/content/output schemas | Scalar/list shape confusion, extra-field smuggling, validation errors echoing proprietary values | Closed schemas at every wrapper and nested object, non-echo rejection of scalar/list/extra input, output-schema validation |
+| Board file → parser | Malformed data, parser DoS, hidden secrets, validate/reopen replacement race | Descriptor-anchored bounded reads, no-follow path walk, before/after descriptor state check, fuzz/property tests, no execution, generic errors |
+| Server → KiCad CLI | Argument injection, hangs, oversized or incompatible reports, context-file floods, stale evidence, inherited global configuration/plugins or credential-bearing environment, library-table escape to host or remote resources | Validated executable, fixed argument vector, minimal child environment, private configuration/state roots and working directory, snapshot-confined file-table dependencies only, environment/absolute/remote/plugin URI rejection, symlink/special-file rejection, POSIX file ceiling, cumulative byte/file-count bounds, discovery/process timeouts, strict contract, revision recheck |
 | AI output → policy | Prompt injection, invalid commands, cost exhaustion | Allowlisted typed actions, deterministic validation, token/iteration budgets |
 | Router → KiCad | Candidate/source/context misbinding, stale state, unsafe copper | Exact replay, immutable multi-revision evidence, live-context recheck, private candidate snapshot, separate apply authorization |
 | MCP input → preview | Unbounded search, unsupported-subset confusion, geometry disclosure, unverified candidates | Strict typed request parsing, caller-supplied constraints, wall-clock deadline over integer ceilings, fail-closed conversion with code-only diagnostics, opt-in authoritative DRC that fails closed, no write or job side effect |
+| Benchmark catalog → offline runner | Licence laundering, fabricated capability claims, copied third-party circuits, path/symlink escape, artifact substitution or replacement races, hidden network intake | Reference-only source records, no downloader, strict bounded schema, single-read validation snapshot, repository-confined paths, artifact and licence hashes, evidence-derived claims, explicit safety/derivation fields, original or separately open fixtures only |
+| Circuit Intent → schematic renderer | Malformed or oversized model topology, reference confusion, incomplete connectivity, S-expression injection, output amplification, false electrical/PCB claims | Strict bounded codec, typed IDs, complete-pin validation, canonical digest, escaped strings, original embedded symbols, deterministic 1 MB pure renderer, empty footprints, `on_board=no`, explicit non-claims |
+| MCP schematic build → artifact resource | Proprietary topology in model context, guessable capability, cross-client disclosure, unbounded retention, digest used as authorization, TTL mistaken for secure erasure | Redacted tool result, independent 256-bit opaque token, stdio-only process-local store, no listing/logging/persistence, 15-minute access expiry with documented lazy reclamation, 16-entry/16 MiB limits, 1 MiB artifact limit, uniform unavailable error, digest recheck |
+| CLI schematic build → workspace | Traversal, symlink overwrite, replacement race, suffix ambiguity, partial final file, implicit model-directed mutation | Explicit output argument, descriptor-anchored workspace input, exact lowercase `.kicad_sch`, create-exclusive atomic publication through a held directory, final-byte/parent-identity verification, no overwrite mode |
+| KiCad report/private snapshot → evidence | Symlink/FIFO blocking, report replacement, duplicate/non-finite/deep JSON, untracked child writes | No-follow nonblocking descriptor capture of regular reports, strict bounded JSON, read-only full-tree snapshot validation before accepting evidence |
+| Artifact object → capability store | Post-insertion mutation corrupts content identity or byte accounting | Detached entry snapshot of exact content, digest, and size; digest recheck and accounting use only stored fields |
+| Release request → tag | Tagging unreviewed or unrecorded source | Dated version section in changelog, append-only `Ready` authorization tied to exact commit and clean full gate; publication remains separate |
 | Remote client → HTTP | Spoofing, token theft, cross-tenant access | TLS, OAuth, scoped authorization, per-principal jobs, rate limits |
 | Dependency → build | Compromise, typosquat, vulnerable package | Locking, Dependabot, CodeQL, dependency audit, build attestations |
 
@@ -34,12 +42,25 @@
 
 ## Current controls
 
-The `0.1.x` surface remains read-only, including route preview. Path resolution rejects parent and symlink escapes, board reads are
-bounded, network transport binds to loopback, secret patterns are scanned, and no AI provider is
-enabled. KiCad DRC runs with fixed arguments against a path-preserving private context snapshot and
-emits a bounded aggregate summary; save/refill flags and raw finding details are not exposed. The
-child process receives a file-size ceiling before KiCad starts, and the source context is re-hashed
-afterward. For route candidates, only one captured source is parsed, the candidate must match its
+The `0.2.x` board-facing surface remains non-mutating, including route preview. The one current
+durable write is an explicitly named, create-new schematic export; it cannot overwrite a board or
+existing file. Workspace files are captured through descriptor-anchored, no-follow path walks; the
+same final descriptor supplies type/size validation, bytes, and before/after mutation checks, so a
+validated pathname is never reopened for the operation. Network transport binds to loopback, secret
+patterns are scanned, and no AI provider is enabled. KiCad DRC runs with fixed arguments against a
+path-preserving private context snapshot and emits a bounded aggregate summary; save/refill flags and
+raw finding details are not exposed. File-table entries may name only dependencies that resolve
+inside the captured snapshot. Environment-expanded, absolute, remote, and plugin-backed URIs are
+rejected before execution, preventing KiCad from consulting uncaptured host or network resources.
+The DRC child receives
+only `PATH=os.defpath`, `LANG=C`, and `LC_ALL=C`, plus private per-run `HOME`, `KICAD_CONFIG_HOME`,
+`KICAD_DOCUMENTS_HOME`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`,
+`XDG_RUNTIME_DIR`, and `TMPDIR`. No caller environment entries, credentials, or KiCad overrides are
+inherited. It runs with its private `TMPDIR` as the working directory rather than the repository or
+live workspace. The private state tree rejects symlinks and special files and shares the existing
+per-file, file-count, cumulative-byte, and scan-time ceilings. The child process also receives a
+file-size ceiling before KiCad starts, and the source context is re-hashed afterward. For route
+candidates, only one captured source is parsed, the candidate must match its
 Board IR base and exact deterministic replay, and only an in-memory board payload is replaced before
 the same DRC path runs. Evidence binds candidate, Board IR, original source, patched board, patched
 context, and nested summary revisions; copied violation counts are immutable, must sum to the
@@ -48,7 +69,8 @@ board is part of a complete private input-context recapture after KiCad exits, a
 board/rule/library change discards the result. Candidate bytes and raw findings are not exposed
 through MCP or CLI.
 
-The public `inspect_board_ir` and `preview_route` surfaces add no write path. Both parse untrusted
+The public `inspect_board_ir` and `preview_route` surfaces add no write path. Their accepted board
+bytes come from the descriptor-anchored snapshot, not a later pathname reopen. Both parse untrusted
 requests through one shared boundary before any file is read: unknown fields, non-integer or
 out-of-range budgets, booleans supplied as integers, control characters, oversized net names, and
 non-copper layer names are rejected, rejections report counts rather than echoing caller-supplied
@@ -76,6 +98,72 @@ Board IR inspection discloses only object counts, digests, units, and standard K
 names. Coordinates, net names, pad and net identities, UUIDs, and source bytes are excluded, and a
 regression test asserts their absence from the serialized document. These controls do not make
 arbitrary remote exposure safe.
+
+The development-only audio benchmark runner has no URL client and never executes external catalog
+entries. Its strict catalog checker caps JSON and artifact sizes, rejects duplicate fields and IDs,
+requires HTTPS provenance URLs without credentials, confines resolved artifact and licence paths to
+the repository, binds both artifact and licence bytes to SHA-256 plus licence-identity markers, and
+encodes third-party references as non-redistributable. Catalog, artifact, and licence bytes are read
+once under bounds and carried as one validation snapshot, so execution and report digests cannot
+silently bind different rereads. Executable fixtures must state that no third-party content is
+included. The runner copies the validated board bytes to a private temporary workspace, invokes
+only the MCP-shared read-only services twice, requires candidate IDs for routed outcomes, derives
+claims from observed structural/status evidence, and verifies that its private board copy did not
+change. This does not adjudicate copyright, electrical safety, or fabrication readiness.
+
+Circuit Intent public inputs remain untrusted. The strict snapshot decoder caps input, nesting,
+decoded values, components, nets, ports, and connections, and callers may only tighten those
+ceilings; it rejects unknown or duplicate fields and unsupported numeric scalars, validates typed
+references and complete pin ownership, normalizes ordering, and verifies a canonical content
+digest. Structured MCP content passes the same semantic validation, but the service computes its
+digest rather than trusting a model-supplied value. The KiCad adapter accepts only a verified
+immutable snapshot, escapes every S-expression string, embeds original fixed symbols without
+library resolution, derives stable identities from the source digest, binds reported source/count
+provenance into the content, and returns at most 1 MB of new bytes without file, network, or
+subprocess access. The build service renders twice and requires byte equality.
+
+Ordinary MCP build results contain only schema/format versions, digests, sizes, topology counts, and
+explicit verification statuses. Exact bytes require a separate random capability read from a
+bounded, non-enumerable, process-local store. That store is stdio-only because stateless HTTP has no
+principal isolation; expiry, eviction, and unknown tokens are indistinguishable. Capability access
+ends 15 minutes after insertion, but expired entries are removed only on subsequent store activity
+or process exit. This is not a memory-erasure guarantee, and returned copies are outside the store's
+control. The CLI instead requires an explicit new path ending in exact lowercase `.kicad_sch`, reads
+its input through one held descriptor, and publishes one verified file through a held workspace
+directory without overwrite. Empty
+footprints, `on_board=no`, and `not_run` per-build KiCad/ERC/parity/electrical statuses prevent the
+structural derivative from presenting itself as board-ready. The reviewed fixture's KiCad 10.0.5
+run preserves exact nets and reduces ERC warnings from seven to four—two isolated external-port
+labels and two missing private-library-configuration warnings—but is neither per-build evidence nor
+an ERC-clean claim.
+
+A future Circuit Scene IR adds another disclosure boundary: semantic and visual observation may
+reveal placement and connectivity even without source files. It must therefore be bounded,
+versioned, redacted by capability, and revision-bound. AI output remains typed placement intent;
+deterministic code constructs and validates immutable previews/candidates, and explicit apply stays
+separate. Direct model-generated KiCad mutation remains prohibited. This describes the high-fidelity
+north star only; none of those Circuit Scene or placement surfaces currently exists.
+
+MCP schematic delivery validates a closed outer wrapper, closed Circuit Intent content, and closed
+structured output. Scalars, lists, and extra fields at those boundaries fail without echoing the
+offending field name or value. This prevents transport coercion or error text from bypassing the
+redacted build record.
+
+The KiCad report is opened through a no-follow, nonblocking descriptor and accepted only when
+descriptor metadata identifies a regular file. Its JSON decoder rejects duplicate keys, non-finite
+numbers, excessive nesting, and excessive decoded values before the report contract is evaluated.
+KiCad receives a read-only private design snapshot, and the complete snapshot tree—not only known
+board/rule files—is checked for additions, mutation, symlinks, special files, or permission changes
+before evidence is accepted.
+
+Each schematic capability-store entry detaches and retains the exact bytes, digest, and size at
+insertion. Retrieval and aggregate accounting use that snapshot rather than a caller-owned artifact
+object, so later alias mutation cannot change identity or evade the byte ceiling.
+
+Release authorization is also fail-closed. A release tag requires a dated changelog section for the
+same version and an append-only `Ready` release-ledger row naming the exact commit after its clean
+full gate. Authorization permits tagging only; it does not claim a built artifact or published
+release.
 
 ## Security acceptance for future mutation
 

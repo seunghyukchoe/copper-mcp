@@ -50,7 +50,7 @@ from copper_mcp.routing import (
     RouteFailureCode,
     RouteRequest,
 )
-from copper_mcp.security import read_bounded_file, resolve_workspace_file
+from copper_mcp.security import read_workspace_file
 
 _SHA256_ID = re.compile(r"^sha256:[a-f0-9]{64}$")
 _MAX_NET_NAME_CHARACTERS = 255
@@ -319,14 +319,14 @@ def preview_route(payload: Any, settings: Settings) -> RoutePreview:
     deadline = time.monotonic() + settings.max_route_preview_seconds
     request = parse_route_preview_request(payload)
 
-    board_path = resolve_workspace_file(
+    board = read_workspace_file(
         settings.workspace,
         request.board,
         allowed_suffixes={".kicad_pcb"},
         max_bytes=settings.max_board_bytes,
     )
-    relative_path = board_path.relative_to(settings.workspace.resolve(strict=True)).as_posix()
-    source = read_bounded_file(board_path, max_bytes=settings.max_board_bytes)
+    relative_path = board.path.relative_to(settings.workspace.resolve(strict=True)).as_posix()
+    source = board.content
     board_revision = f"sha256:{hashlib.sha256(source).hexdigest()}"
 
     default_limits = ParseLimits()

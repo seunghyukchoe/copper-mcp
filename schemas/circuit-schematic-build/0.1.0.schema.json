@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/seunghyukchoe/copper-mcp/schemas/circuit-schematic-build/0.1.0.schema.json",
+  "title": "CopperMCP Circuit Schematic Build 0.1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "status",
+    "intent",
+    "artifact",
+    "verification"
+  ],
+  "properties": {
+    "schema": {
+      "const": "copper.circuit-schematic-build"
+    },
+    "schema_version": {
+      "const": "0.1.0"
+    },
+    "status": {
+      "const": "rendered"
+    },
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "schema_version",
+        "intent_digest",
+        "counts"
+      ],
+      "properties": {
+        "schema": {
+          "const": "copper.circuit-intent"
+        },
+        "schema_version": {
+          "const": "0.1.0"
+        },
+        "intent_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "components",
+            "nets",
+            "ports"
+          ],
+          "properties": {
+            "components": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            "nets": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 128
+            },
+            "ports": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 32
+            }
+          }
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "mime_type",
+        "format_version",
+        "artifact_digest",
+        "intent_digest",
+        "size_bytes"
+      ],
+      "properties": {
+        "kind": {
+          "const": "kicad_schematic"
+        },
+        "mime_type": {
+          "const": "application/x-kicad-schematic"
+        },
+        "format_version": {
+          "const": "20250114"
+        },
+        "artifact_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "intent_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "resource_uri": {
+          "type": "string",
+          "pattern": "^pcb://artifacts/schematic/[A-Za-z0-9_-]{43}/circuit\\.kicad_sch$"
+        },
+        "retention": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scope",
+            "ttl_seconds",
+            "persistent",
+            "reclamation"
+          ],
+          "properties": {
+            "scope": {
+              "const": "process"
+            },
+            "ttl_seconds": {
+              "const": 900
+            },
+            "persistent": {
+              "const": false
+            },
+            "reclamation": {
+              "const": "lazy_on_access_or_process_exit"
+            }
+          }
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intent_topology",
+        "artifact_digest",
+        "provenance_binding",
+        "deterministic_replay",
+        "kicad_cli_parse",
+        "erc",
+        "schematic_board_parity",
+        "electrical_validation",
+        "board_ready"
+      ],
+      "properties": {
+        "intent_topology": {
+          "const": "passed"
+        },
+        "artifact_digest": {
+          "const": "passed"
+        },
+        "provenance_binding": {
+          "const": "passed"
+        },
+        "deterministic_replay": {
+          "const": "passed"
+        },
+        "kicad_cli_parse": {
+          "const": "not_run"
+        },
+        "erc": {
+          "const": "not_run"
+        },
+        "schematic_board_parity": {
+          "const": "not_run"
+        },
+        "electrical_validation": {
+          "const": "not_run"
+        },
+        "board_ready": {
+          "const": false
+        }
+      }
+    },
+    "export": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "created",
+        "output_path"
+      ],
+      "properties": {
+        "created": {
+          "const": true
+        },
+        "output_path": {
+          "type": "string",
+          "minLength": 11,
+          "maxLength": 4096,
+          "pattern": "^[^/].*\\.kicad_sch$"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

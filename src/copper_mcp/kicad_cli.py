@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -15,7 +17,7 @@ import time
 from collections import Counter
 from dataclasses import dataclass, replace
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from copper_mcp.adapters.kicad_board_ir import KiCadConstraintProfile, parse_kicad_bytes
@@ -23,14 +25,15 @@ from copper_mcp.adapters.kicad_route_patch import (
     KiCadRoutePatchError,
     render_kicad_candidate_board,
 )
+from copper_mcp.adapters.sexpr import SExpr, SExprError, atoms, parse_sexpr
 from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
 from copper_mcp.models import DrcSummary
 from copper_mcp.routing import RouteCandidate
 from copper_mcp.security import (
+    WorkspaceFileSnapshot,
     WorkspaceViolationError,
-    read_bounded_file,
-    resolve_workspace_file,
+    read_workspace_file,
 )
 
 KICAD_DRC_SCHEMA = "https://schemas.kicad.org/drc.v1.json"
@@ -39,13 +42,20 @@ _ACCEPTED_DRC_RETURN_CODES = frozenset({0, 5})
 _SEVERITIES = frozenset({"error", "warning"})
 _INCLUDED_SEVERITIES = frozenset({"error", "warning", "exclusion"})
 _DRC_CONTEXT_SUFFIXES = (".kicad_pro", ".kicad_dru")
-_LOCAL_LIBRARY_SUFFIXES = frozenset({".kicad_dru", ".kicad_mod", ".kicad_sym"})
-_LOCAL_LIBRARY_TABLES = frozenset({"fp-lib-table", "sym-lib-table", "design-block-lib-table"})
+_LOCAL_LIBRARY_SUFFIXES = frozenset({".kicad_mod", ".kicad_sym"})
+_LOCAL_LIBRARY_TABLE_ROOTS = {
+    "fp-lib-table": "fp_lib_table",
+    "sym-lib-table": "sym_lib_table",
+    "design-block-lib-table": "design_block_lib_table",
+}
+_LOCAL_LIBRARY_TABLES = frozenset(_LOCAL_LIBRARY_TABLE_ROOTS)
 _KICAD_VERSION = re.compile(r"^\d+\.\d+(?:\.\d+)?(?:[-+][A-Za-z0-9._-]+)?$")
 _SHA256_ID = re.compile(r"^sha256:[a-f0-9]{64}$")
 _KICAD_DATE_TIME = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$"
 )
+_MAX_DRC_JSON_DEPTH = 64
+_MAX_DRC_JSON_VALUES = 250_000
 _BOUNDED_EXEC = Path(__file__).with_name("_bounded_exec.py")
 
 
@@ -125,19 +135,153 @@ def _revision(payload: bytes) -> str:
     return f"sha256:{hashlib.sha256(payload).hexdigest()}"
 
 
-def _resolve_context_file(path: Path, settings: Settings) -> tuple[str, Path]:
+def _context_relative_path(path: Path, settings: Settings) -> str:
     root = settings.workspace.resolve(strict=True)
     try:
-        resolved = path.resolve(strict=True)
-        relative = resolved.relative_to(root).as_posix()
-    except (FileNotFoundError, OSError, RuntimeError, ValueError) as error:
+        relative = path.relative_to(root).as_posix()
+    except ValueError as error:
         raise KiCadCliError("KiCad DRC context must stay inside the workspace") from error
-    if path.is_symlink() or not resolved.is_file():
-        raise KiCadCliError("KiCad DRC context must contain regular files, not symlinks")
-    return relative, resolved
+    return relative
 
 
-def _drc_context(board_path: Path, settings: Settings) -> dict[str, bytes]:
+def _library_table_dependencies(
+    table_path: Path,
+    payload: bytes,
+    board_path: Path,
+    settings: Settings,
+    *,
+    deadline: float,
+) -> tuple[Path, ...]:
+    """Resolve only bounded, project-local KiCad file-library table entries."""
+
+    expected_root = _LOCAL_LIBRARY_TABLE_ROOTS.get(table_path.name)
+    if expected_root is None:
+        raise KiCadCliError("KiCad DRC library table type is unsupported")
+    try:
+        root = parse_sexpr(payload, ParseLimits())
+        if root.head != expected_root:
+            raise SExprError("syntax.invalid", "library table root is unsupported", root.offset)
+        libraries: list[SExpr] = []
+        version_seen = False
+        for item in root.items[1:]:
+            if not isinstance(item, SExpr) or item.head not in {"version", "lib"}:
+                raise SExprError(
+                    "syntax.invalid",
+                    "library table field is unsupported",
+                    root.offset,
+                )
+            if item.head == "version":
+                if version_seen or len(atoms(item)) != 1:
+                    raise SExprError(
+                        "syntax.invalid",
+                        "library table version is malformed",
+                        item.offset,
+                    )
+                version_seen = True
+                continue
+            libraries.append(item)
+    except SExprError as error:
+        raise KiCadCliError("KiCad DRC library table is malformed or over budget") from error
+
+    if table_path.name == "design-block-lib-table" and libraries:
+        raise KiCadCliError("KiCad DRC design-block library entries are unsupported")
+
+    workspace_root = settings.workspace.resolve(strict=True)
+    project_root = board_path.parent
+    dependencies: list[Path] = []
+    library_names: set[str] = set()
+    allowed_fields = frozenset(
+        {"name", "type", "uri", "options", "descr", "hidden", "disabled"}
+    )
+    for library in libraries:
+        if time.monotonic() > deadline:
+            raise KiCadCliError("KiCad DRC context discovery timed out")
+        fields: dict[str, tuple[str, ...]] = {}
+        try:
+            for item in library.items[1:]:
+                if (
+                    not isinstance(item, SExpr)
+                    or item.head is None
+                    or item.head not in allowed_fields
+                    or item.head in fields
+                ):
+                    raise SExprError(
+                        "syntax.invalid",
+                        "library entry field is unsupported",
+                        library.offset,
+                    )
+                fields[item.head] = atoms(item)
+        except SExprError as error:
+            raise KiCadCliError("KiCad DRC library table entry is malformed") from error
+        if not {"name", "type", "uri"} <= fields.keys():
+            raise KiCadCliError("KiCad DRC library table entry is incomplete")
+        if (
+            len(fields["name"]) != 1
+            or not fields["name"][0]
+            or fields["name"][0] in library_names
+            or fields["type"] != ("KiCad",)
+            or len(fields["uri"]) != 1
+            or ("options" in fields and fields["options"] != ("",))
+            or ("descr" in fields and len(fields["descr"]) != 1)
+            or fields.get("hidden")
+            or fields.get("disabled")
+        ):
+            raise KiCadCliError("KiCad DRC library table entry is unsupported")
+        library_names.add(fields["name"][0])
+
+        prefix = "${KIPRJMOD}/"
+        uri = fields["uri"][0]
+        if not uri.startswith(prefix) or "\\" in uri:
+            raise KiCadCliError("KiCad DRC library URI must be project-local")
+        relative_uri = PurePosixPath(uri.removeprefix(prefix))
+        if (
+            relative_uri.is_absolute()
+            or not relative_uri.parts
+            or any(part in {"", ".", ".."} for part in relative_uri.parts)
+            or any("$" in part or ":" in part for part in relative_uri.parts)
+        ):
+            raise KiCadCliError("KiCad DRC library URI must be project-local")
+        target = project_root.joinpath(*relative_uri.parts)
+        try:
+            target.relative_to(workspace_root)
+        except ValueError as error:
+            raise KiCadCliError("KiCad DRC library URI escapes the workspace") from error
+
+        current = workspace_root
+        try:
+            for part in target.relative_to(workspace_root).parts:
+                current /= part
+                if stat.S_ISLNK(current.lstat().st_mode):
+                    raise KiCadCliError("KiCad DRC library URI contains a symlink")
+        except FileNotFoundError as error:
+            raise KiCadCliError("KiCad DRC library dependency is missing") from error
+
+        if table_path.name == "fp-lib-table":
+            if target.suffix != ".pretty" or not target.is_dir():
+                raise KiCadCliError("KiCad DRC footprint library target is unsupported")
+            for candidate in target.rglob("*"):
+                if time.monotonic() > deadline:
+                    raise KiCadCliError("KiCad DRC context discovery timed out")
+                try:
+                    candidate_stat = candidate.lstat()
+                except OSError as error:
+                    raise KiCadCliError("KiCad DRC library dependency changed") from error
+                if stat.S_ISLNK(candidate_stat.st_mode):
+                    raise KiCadCliError("KiCad DRC library dependency contains a symlink")
+                if stat.S_ISREG(candidate_stat.st_mode) and candidate.suffix == ".kicad_mod":
+                    dependencies.append(candidate)
+        elif table_path.name == "sym-lib-table":
+            if target.suffix != ".kicad_sym" or not target.is_file():
+                raise KiCadCliError("KiCad DRC symbol library target is unsupported")
+            dependencies.append(target)
+    return tuple(dependencies)
+
+
+def _drc_context(
+    board_path: Path,
+    settings: Settings,
+    board_snapshot: WorkspaceFileSnapshot | None = None,
+) -> dict[str, bytes]:
     context: dict[str, bytes] = {}
     total_bytes = 0
     deadline = time.monotonic() + settings.max_drc_context_scan_seconds
@@ -146,22 +290,32 @@ def _drc_context(board_path: Path, settings: Settings) -> dict[str, bytes]:
         if time.monotonic() > deadline:
             raise KiCadCliError("KiCad DRC context discovery timed out")
 
-    def add(candidate: Path) -> None:
+    def add(candidate: Path, captured: WorkspaceFileSnapshot | None = None) -> bytes:
         nonlocal total_bytes
         check_discovery_budget()
-        relative, resolved = _resolve_context_file(candidate, settings)
+        relative = _context_relative_path(candidate, settings)
         if relative in context:
-            return
+            return context[relative]
         if len(context) >= settings.max_drc_context_files:
             raise KiCadCliError("KiCad DRC context exceeds the configured file-count limit")
         remaining_bytes = settings.max_drc_context_bytes - total_bytes
         if remaining_bytes <= 0:
             raise KiCadCliError("KiCad DRC context exceeds the configured cumulative limit")
         try:
-            payload = read_bounded_file(
-                resolved,
+            snapshot = captured or read_workspace_file(
+                settings.workspace,
+                relative,
+                allowed_suffixes={
+                    ".kicad_pcb",
+                    *_DRC_CONTEXT_SUFFIXES,
+                    *_LOCAL_LIBRARY_SUFFIXES,
+                },
+                allowed_names=_LOCAL_LIBRARY_TABLES,
                 max_bytes=min(settings.max_board_bytes, remaining_bytes),
             )
+            if snapshot.path != settings.workspace.resolve(strict=True) / relative:
+                raise WorkspaceViolationError("captured context path does not match its request")
+            payload = snapshot.content
         except WorkspaceViolationError as error:
             raise KiCadCliError(
                 "KiCad DRC context exceeds the configured cumulative limit"
@@ -171,23 +325,28 @@ def _drc_context(board_path: Path, settings: Settings) -> dict[str, bytes]:
         if total_bytes > settings.max_drc_context_bytes:
             raise KiCadCliError("KiCad DRC context exceeds the configured cumulative limit")
         context[relative] = payload
+        return payload
 
-    add(board_path)
+    add(board_path, board_snapshot)
     for suffix in _DRC_CONTEXT_SUFFIXES:
         candidate = board_path.with_suffix(suffix)
         if not candidate.exists():
             continue
         add(candidate)
 
-    for candidate in settings.workspace.rglob("*"):
-        check_discovery_budget()
-        if not candidate.is_file():
+    for table_name in sorted(_LOCAL_LIBRARY_TABLES):
+        table_path = board_path.parent / table_name
+        if not table_path.exists():
             continue
-        if candidate.name not in _LOCAL_LIBRARY_TABLES and candidate.suffix not in (
-            _LOCAL_LIBRARY_SUFFIXES
+        table_payload = add(table_path)
+        for dependency in _library_table_dependencies(
+            table_path,
+            table_payload,
+            board_path,
+            settings,
+            deadline=deadline,
         ):
-            continue
-        add(candidate)
+            add(dependency)
     return context
 
 
@@ -196,6 +355,142 @@ def _write_drc_snapshot(context: dict[str, bytes], destination_root: Path) -> No
         destination = destination_root / name
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(payload)
+
+
+def _make_snapshot_read_only(snapshot_root: Path) -> None:
+    """Remove write permission from every captured input before KiCad starts."""
+
+    paths = tuple(snapshot_root.rglob("*"))
+    for path in paths:
+        file_stat = path.lstat()
+        if stat.S_ISLNK(file_stat.st_mode):
+            raise KiCadCliError("private KiCad DRC context contains a symlink")
+        if stat.S_ISREG(file_stat.st_mode):
+            path.chmod(0o400)
+        elif not stat.S_ISDIR(file_stat.st_mode):
+            raise KiCadCliError("private KiCad DRC context contains a special file")
+    for path in sorted(
+        (path for path in paths if path.is_dir()),
+        key=lambda item: len(item.parts),
+        reverse=True,
+    ):
+        path.chmod(0o500)
+    snapshot_root.chmod(0o500)
+
+
+def _validate_snapshot_tree(
+    snapshot_root: Path,
+    expected_files: frozenset[str],
+    settings: Settings,
+) -> None:
+    """Bound and reject every unknown or writable child-side-effect path."""
+
+    expected_directories: set[str] = set()
+    for name in expected_files:
+        parent = PurePosixPath(name).parent
+        while str(parent) != ".":
+            expected_directories.add(parent.as_posix())
+            parent = parent.parent
+
+    deadline = time.monotonic() + settings.max_drc_context_scan_seconds
+    observed_files: set[str] = set()
+    observed_directories: set[str] = set()
+    total_bytes = 0
+    try:
+        root_stat = snapshot_root.lstat()
+    except OSError as error:
+        raise KiCadCliError("private KiCad DRC context could not be inspected") from error
+    if not stat.S_ISDIR(root_stat.st_mode) or root_stat.st_mode & 0o222:
+        raise KiCadCliError("private KiCad DRC context root changed or became writable")
+    for path in snapshot_root.rglob("*"):
+        if time.monotonic() > deadline:
+            raise KiCadCliError("private KiCad DRC context inspection timed out")
+        try:
+            file_stat = path.lstat()
+            relative = path.relative_to(snapshot_root).as_posix()
+        except (OSError, ValueError) as error:
+            raise KiCadCliError("private KiCad DRC context could not be inspected") from error
+        if stat.S_ISLNK(file_stat.st_mode):
+            raise KiCadCliError("private KiCad DRC context contains a symlink")
+        if stat.S_ISDIR(file_stat.st_mode):
+            if file_stat.st_mode & 0o222:
+                raise KiCadCliError("private KiCad DRC context became writable")
+            if relative not in expected_directories:
+                raise KiCadCliError(
+                    "private KiCad DRC context changed: unknown side effect"
+                )
+            observed_directories.add(relative)
+            continue
+        if not stat.S_ISREG(file_stat.st_mode):
+            raise KiCadCliError("private KiCad DRC context contains a special file")
+        if file_stat.st_mode & 0o222:
+            raise KiCadCliError("private KiCad DRC context became writable")
+        if relative not in expected_files:
+            raise KiCadCliError("private KiCad DRC context changed: unknown side effect")
+        observed_files.add(relative)
+        if len(observed_files) > settings.max_drc_context_files:
+            raise KiCadCliError("private KiCad DRC context exceeds the file-count limit")
+        if file_stat.st_size > settings.max_board_bytes:
+            raise KiCadCliError("private KiCad DRC context exceeds the per-file limit")
+        total_bytes += file_stat.st_size
+        if total_bytes > settings.max_drc_context_bytes:
+            raise KiCadCliError("private KiCad DRC context exceeds the cumulative limit")
+    if observed_files != set(expected_files) or observed_directories != expected_directories:
+        raise KiCadCliError("private KiCad DRC context changed: unknown side effect")
+
+
+def _private_kicad_environment(state_root: Path) -> dict[str, str]:
+    """Create a minimal child environment isolated from live KiCad user state."""
+
+    locations = {
+        "HOME": state_root / "home",
+        "KICAD_CONFIG_HOME": state_root / "config",
+        "KICAD_DOCUMENTS_HOME": state_root / "documents",
+        "XDG_CONFIG_HOME": state_root / "xdg-config",
+        "XDG_CACHE_HOME": state_root / "cache",
+        "XDG_DATA_HOME": state_root / "data",
+        "XDG_STATE_HOME": state_root / "state",
+        "XDG_RUNTIME_DIR": state_root / "runtime",
+        "TMPDIR": state_root / "tmp",
+    }
+    state_root.mkdir(mode=0o700)
+    for location in locations.values():
+        location.mkdir(mode=0o700)
+    return {
+        "PATH": os.defpath,
+        "LANG": "C",
+        "LC_ALL": "C",
+        **{name: str(location) for name, location in locations.items()},
+    }
+
+
+def _validate_private_kicad_state(state_root: Path, settings: Settings) -> None:
+    """Reject symlinks, special files, or unbounded KiCad child side effects."""
+
+    deadline = time.monotonic() + settings.max_drc_context_scan_seconds
+    file_count = 0
+    total_bytes = 0
+    for path in state_root.rglob("*"):
+        if time.monotonic() > deadline:
+            raise KiCadCliError("private KiCad state inspection timed out")
+        try:
+            file_stat = path.lstat()
+        except OSError as error:
+            raise KiCadCliError("private KiCad state could not be inspected") from error
+        if stat.S_ISLNK(file_stat.st_mode):
+            raise KiCadCliError("private KiCad state contains a symlink")
+        if stat.S_ISDIR(file_stat.st_mode):
+            continue
+        if not stat.S_ISREG(file_stat.st_mode):
+            raise KiCadCliError("private KiCad state contains a special file")
+        file_count += 1
+        if file_count > settings.max_drc_context_files:
+            raise KiCadCliError("private KiCad state exceeds the configured file-count limit")
+        if file_stat.st_size > settings.max_drc_report_bytes:
+            raise KiCadCliError("private KiCad state exceeds the configured per-file limit")
+        total_bytes += file_stat.st_size
+        if total_bytes > settings.max_drc_context_bytes:
+            raise KiCadCliError("private KiCad state exceeds the configured cumulative limit")
 
 
 def _context_revision(context: dict[str, bytes]) -> str:
@@ -238,6 +533,78 @@ def _candidate_drc_context(
     return patched_context
 
 
+def _preflight_drc_json(text: str) -> None:
+    """Bound JSON depth and approximate value count before recursive decoding."""
+
+    depth = 0
+    values = 0
+    in_string = False
+    escaped = False
+    for character in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            continue
+        if character == '"':
+            in_string = True
+        elif character in "[{":
+            depth += 1
+            values += 1
+            if depth > _MAX_DRC_JSON_DEPTH:
+                raise ValueError("DRC report JSON exceeds the nesting budget")
+        elif character in "]}":
+            depth -= 1
+            if depth < 0:
+                raise ValueError("DRC report JSON is unbalanced")
+        elif character == ",":
+            values += 1
+        if values > _MAX_DRC_JSON_VALUES:
+            raise ValueError("DRC report JSON exceeds the value budget")
+    if in_string or depth != 0:
+        raise ValueError("DRC report JSON is incomplete")
+
+
+def _drc_object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("DRC report JSON contains a duplicate key")
+        result[key] = value
+    return result
+
+
+def _reject_json_constant(value: str) -> Any:
+    del value
+    raise ValueError("DRC report JSON contains a non-finite number")
+
+
+def _finite_json_float(value: str) -> float:
+    decoded = float(value)
+    if not math.isfinite(decoded):
+        raise ValueError("DRC report JSON contains a non-finite number")
+    return decoded
+
+
+def _validate_drc_json_tree(value: Any) -> None:
+    pending: list[tuple[Any, int]] = [(value, 1)]
+    visited = 0
+    while pending:
+        item, depth = pending.pop()
+        visited += 1
+        if visited > _MAX_DRC_JSON_VALUES or depth > _MAX_DRC_JSON_DEPTH:
+            raise ValueError("DRC report JSON exceeds the structure budget")
+        if isinstance(item, dict):
+            pending.extend((child, depth + 1) for child in item.values())
+        elif isinstance(item, list):
+            pending.extend((child, depth + 1) for child in item)
+        elif not isinstance(item, (str, int, float, bool, type(None))):
+            raise ValueError("DRC report JSON contains an unsupported value")
+
+
 def _parse_drc_report(
     payload: bytes,
     *,
@@ -247,8 +614,16 @@ def _parse_drc_report(
     expected_source: str,
 ) -> DrcSummary:
     try:
-        report: Any = json.loads(payload)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        text = payload.decode("utf-8", errors="strict")
+        _preflight_drc_json(text)
+        report: Any = json.loads(
+            text,
+            object_pairs_hook=_drc_object_pairs,
+            parse_constant=_reject_json_constant,
+            parse_float=_finite_json_float,
+        )
+        _validate_drc_json_tree(report)
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError, ValueError) as error:
         raise KiCadCliError("KiCad DRC report is not valid UTF-8 JSON") from error
     if not isinstance(report, dict):
         raise KiCadCliError("KiCad DRC report must be a JSON object")
@@ -392,11 +767,19 @@ def _run_captured_drc(
         workspace_snapshot = temporary_root / "workspace"
         try:
             _write_drc_snapshot(context, workspace_snapshot)
+            expected_snapshot_files = frozenset(context)
+            _make_snapshot_read_only(workspace_snapshot)
+            workspace_snapshot = workspace_snapshot.resolve(strict=True)
         except OSError as error:
             raise KiCadCliError("private KiCad DRC context could not be written") from error
         context.clear()
-        snapshot_board = workspace_snapshot / board_relative
+        snapshot_board = (workspace_snapshot / board_relative).resolve(strict=True)
         report_path = temporary_root / "drc.json"
+        private_state = temporary_root / "process-state"
+        try:
+            child_environment = _private_kicad_environment(private_state)
+        except OSError as error:
+            raise KiCadCliError("private KiCad process state could not be created") from error
         kicad_command = [
             str(executable),
             "pcb",
@@ -427,9 +810,13 @@ def _run_captured_drc(
                 check=False,
                 shell=False,
                 timeout=settings.kicad_timeout_seconds,
+                env=child_environment,
+                cwd=child_environment["TMPDIR"],
             )
         except subprocess.TimeoutExpired as error:
             raise KiCadCliError("KiCad DRC timed out") from error
+        _validate_private_kicad_state(private_state, settings)
+        _validate_snapshot_tree(workspace_snapshot, expected_snapshot_files, settings)
         if completed.returncode == -signal.SIGXFSZ:
             raise KiCadCliError("KiCad DRC report exceeds the configured limit")
         if completed.returncode not in _ACCEPTED_DRC_RETURN_CODES:
@@ -445,13 +832,17 @@ def _run_captured_drc(
             raise KiCadCliError("private KiCad DRC context changed during DRC")
         del private_context_after
         try:
-            report = read_bounded_file(
-                report_path,
+            report = read_workspace_file(
+                temporary_root,
+                report_path.name,
+                allowed_suffixes={".json"},
                 max_bytes=settings.max_drc_report_bytes,
-            )
+            ).content
         except FileNotFoundError as error:
             raise KiCadCliError("KiCad DRC did not create a report") from error
         except WorkspaceViolationError as error:
+            if isinstance(error.__cause__, FileNotFoundError):
+                raise KiCadCliError("KiCad DRC did not create a report") from error
             raise KiCadCliError("KiCad DRC report exceeds the configured limit") from error
 
     return _parse_drc_report(
@@ -466,13 +857,14 @@ def _run_captured_drc(
 def run_board_drc(requested_path: str, settings: Settings) -> DrcSummary:
     """Run fixed-argument KiCad DRC and reject stale or malformed evidence."""
 
-    board_path = resolve_workspace_file(
+    board = read_workspace_file(
         settings.workspace,
         requested_path,
         allowed_suffixes={".kicad_pcb"},
         max_bytes=settings.max_board_bytes,
     )
-    before_context = _drc_context(board_path, settings)
+    board_path = board.path
+    before_context = _drc_context(board_path, settings, board)
     board_relative = board_path.relative_to(settings.workspace.resolve(strict=True)).as_posix()
     drc_context_revision = _context_revision(before_context)
     summary = _run_captured_drc(
@@ -500,13 +892,14 @@ def run_route_candidate_drc(
     if not isinstance(profile, KiCadConstraintProfile):
         raise KiCadCliError("KiCad constraint profile is malformed")
 
-    board_path = resolve_workspace_file(
+    board = read_workspace_file(
         settings.workspace,
         requested_path,
         allowed_suffixes={".kicad_pcb"},
         max_bytes=settings.max_board_bytes,
     )
-    captured_context = _drc_context(board_path, settings)
+    board_path = board.path
+    captured_context = _drc_context(board_path, settings, board)
     board_relative = board_path.relative_to(settings.workspace.resolve(strict=True)).as_posix()
     original_context_revision = _context_revision(captured_context)
     source = captured_context[board_relative]

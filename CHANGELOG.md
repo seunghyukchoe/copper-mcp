@@ -8,6 +8,36 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Canonical Circuit Intent IR `0.1.0` as a strict, immutable, content-addressed logical topology
+  contract for two-pin resistors and non-polarized capacitors. A pure bounded adapter renders
+  verified snapshots into byte-deterministic in-memory KiCad `20250114` schematics with original
+  embedded symbols, empty footprints, tighten-only parser budgets, content-verified source/count
+  provenance, source/artifact digests, exact 1.27 mm grid placement, global labels at every
+  connection of port-backed nets, and no file, library, or network access. A shared service accepts
+  strict snapshot JSON or structured content, normalizes it, and requires byte-identical double
+  rendering. The CLI explicitly creates one new workspace `.kicad_sch` without overwrite; the
+  stdio-only MCP tool returns redacted metadata plus a non-enumerable opaque resource whose access
+  expires after 15 minutes in a 16-entry, 16 MiB process-local store. Expired objects are reclaimed
+  lazily on later store activity or process exit; this is not a secure memory-erasure claim. An
+  independently authored RC low-pass fixture passes
+  schema/canonical checks and a real KiCad 10.0.5 SVG plus `kicadxml` connectivity round trip; the
+  reviewed run preserved exact nets and reduced ERC warnings from seven to four, with two isolated
+  external-port labels and two missing private-library-configuration warnings remaining. This is
+  not an ERC-clean, electrical, board-parity, manufacturability, or fabrication-readiness claim.
+- ADR-0015 defines a future Circuit Scene IR for bounded semantic and visual observation, typed
+  placement intent, immutable previews/candidates, deterministic validation, and separately
+  authorized apply. It does not add placement or permit direct AI mutation of KiCad.
+- A licence-aware, network-free audio capability catalog and runner. Elliott Sound Products and
+  diyAudioProjects.com are recorded only as non-redistributable reference sources; no
+  project/article content, schematics, or downloads are copied or fetched. An independently
+  authored low-voltage RC connectivity fixture and the existing open-hardware CopperTone board are
+  bound with their exact licence bytes into one bounded validation snapshot, then exercised twice
+  through the MCP-shared Board IR and route-preview services. The result demonstrates one routed
+  two-pad audio net and typed multi-pad
+  refusals, with claims derived from observed outcomes and kept disjoint from explicit non-claims;
+  a local KiCad 10.0.5 parse/plot smoke test is kept distinct from DRC. This board-routing corpus
+  does not itself claim circuit derivation, schematic-to-board parity, ERC, electrical validation,
+  autorouted boards, or fabrication readiness.
 - Foreign-net solid zones on the selected layer are now conservative polygon boundary-envelope
   obstacles instead of a blanket rejection. Concave and diagonal outlines use exact integer
   containment, intersection, and rational squared-distance checks under the strictest routed class,
@@ -75,6 +105,12 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Project metadata and `server_info` now identify the source as the `0.2.0` MVP-alpha; the latest
+  public GitHub release remains `0.1.0` until the separate tag-and-release gate succeeds.
+- Release-tag validation now requires both a dated changelog section for the version and an
+  append-only `Ready` release-ledger authorization naming the exact fully checked source commit.
+  The later tag commit may differ only in `CHANGELOG.md` and the release ledger. Authorization
+  permits tagging but does not claim publication.
 - Untrusted JSON request validation now lives in one shared `request_boundary` module, so field,
   type, range, boolean, and character rules cannot drift between public services.
 - Ledger validation now rejects oversized, non-strict, non-finite, or content-address mismatched
@@ -92,6 +128,24 @@ All notable changes are documented here. The format follows
 
 ### Security
 
+- KiCad subprocesses now receive a minimal allowlisted environment and private per-run HOME, KiCad,
+  XDG, runtime, and temporary roots instead of inherited credentials or user-global KiCad settings.
+  They run from a private working directory, accept only snapshot-confined file-table dependencies,
+  and reject environment-expanded, absolute, remote, and plugin-backed URIs. The private state tree
+  rejects symlinks and special files and is covered by the same per-file, file-count,
+  cumulative-byte, and scan-time ceilings as captured design context.
+- Schematic delivery separates redacted build metadata from exact bytes using an independent
+  256-bit capability, a stdio-only bounded process-local store, uniform unavailable responses, and
+  digest verification on every read. Workspace inputs are captured through descriptor-anchored,
+  no-follow reads. CLI export requires the exact lowercase `.kicad_sch` suffix, is explicit,
+  workspace-confined and create-exclusive, and cannot overwrite an existing path.
+- MCP schematic wrapper, nested content, and structured output schemas are closed. Scalar, list, and
+  extra-field failures are rejected without echoing attacker-controlled names or values.
+- KiCad DRC reports are captured as no-follow, nonblocking regular files and decoded with duplicate,
+  non-finite, depth, and value-count rejection. Evidence is accepted only after read-only validation
+  of the complete private snapshot tree, including unrecognized side effects.
+- Schematic artifact-store entries detach the exact content, digest, and size at insertion, so later
+  alias mutation cannot change identity or evade aggregate byte accounting.
 - KiCad and Board IR parsing now use quote-aware streaming S-expression tokens, a pre-DOM JSON
   lexical/structural budget pass, exact context-independent decimal conversion, bounded non-echoing
   diagnostics, and explicit rejection of unmodeled routing or non-default fabrication semantics.

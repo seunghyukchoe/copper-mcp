@@ -1,0 +1,152 @@
+{
+  "$schema": "../../schemas/audio-benchmark-catalog/0.1.0.schema.json",
+  "schema_version": "0.1.0",
+  "reviewed_on": "2026-08-03",
+  "external_references": [
+    {
+      "id": "elliott-sound-products",
+      "name": "Elliott Sound Products",
+      "index_url": "https://sound-au.com/p-cat.htm",
+      "terms_url": "https://sound-au.com/disclaimer.htm",
+      "reviewed_on": "2026-08-03",
+      "rights_context": "The reviewed ESP disclaimer identifies Rod Elliott as the site author and rights contact.",
+      "source_rights": "personal-noncommercial",
+      "reuse_policy": "reference-only",
+      "redistribution_allowed": false,
+      "commercial_use_allowed": false,
+      "written_permission_ref": null,
+      "third_party_content_included": false,
+      "safety_class": "metadata-only"
+    },
+    {
+      "id": "diy-audio-projects",
+      "name": "diyAudioProjects.com",
+      "index_url": "https://diyaudioprojects.com/",
+      "terms_url": "https://www.diyaudioprojects.com/tos.htm",
+      "reviewed_on": "2026-08-03",
+      "rights_context": "The reviewed terms describe site-owned material and contributor submissions licensed to the site; individual project rights remain unreviewed.",
+      "source_rights": "personal-noncommercial",
+      "reuse_policy": "reference-only",
+      "redistribution_allowed": false,
+      "commercial_use_allowed": false,
+      "written_permission_ref": null,
+      "third_party_content_included": false,
+      "safety_class": "metadata-only"
+    }
+  ],
+  "fixtures": [
+    {
+      "id": "rc-low-pass-routing-v1",
+      "title": "Original low-voltage RC audio routing microcase",
+      "origin": "coppermcp-original",
+      "artifact_path": "benchmarks/audio/fixtures/rc-low-pass-routing-v1.kicad_pcb",
+      "artifact_sha256": "8cfea1dbcedbfede05905cdeb36160aa41f1022245f4dfe5c1e723aa503a758b",
+      "license_spdx": "Apache-2.0",
+      "license_path": "LICENSE",
+      "license_sha256": "947af68b9ff8f542f5bba7a084e343573274741f4d7e4cbe1e4e9668a89331de",
+      "stated_rightsholder": "CopperMCP Contributors",
+      "third_party_content_included": false,
+      "derivation_statement": "Independently authored synthetic connectivity fixture; no external schematic, values, layout, artwork, or download was used.",
+      "safety_class": "synthetic-low-voltage",
+      "constraints": {
+        "clearance_nm": 250000,
+        "track_width_nm": 250000,
+        "via_diameter_nm": 800000,
+        "via_drill_nm": 400000
+      },
+      "inspection": {
+        "expected_supported": true,
+        "expected_object_counts": {
+          "nets": 3,
+          "pads": 8,
+          "segments": 0,
+          "vias": 0,
+          "zones": 0
+        }
+      },
+      "routes": [
+        {
+          "net": "AUDIO_IN",
+          "layer": "F.Cu",
+          "seed": 23,
+          "expected_status": "routed",
+          "expected_diagnostic": null
+        },
+        {
+          "net": "AUDIO_OUT",
+          "layer": "F.Cu",
+          "seed": 23,
+          "expected_status": "not_routed",
+          "expected_diagnostic": "invalid_two_pin_net"
+        },
+        {
+          "net": "GND",
+          "layer": "F.Cu",
+          "seed": 23,
+          "expected_status": "not_routed",
+          "expected_diagnostic": "invalid_two_pin_net"
+        }
+      ],
+      "claims": [
+        "board-ir-inspection",
+        "two-pin-route-preview",
+        "typed-route-refusal"
+      ],
+      "not_claimed": [
+        "circuit-generation",
+        "schematic-generation",
+        "erc",
+        "electrical-validation",
+        "candidate-drc",
+        "manufacturability",
+        "fabrication-readiness",
+        "hardware-measurement"
+      ]
+    },
+    {
+      "id": "coppertone-buffer-preview-v1",
+      "title": "CopperTone open-hardware line-buffer preview",
+      "origin": "coppermcp-open-hardware",
+      "artifact_path": "hardware/coppertone-buffer/coppertone-buffer.kicad_pcb",
+      "artifact_sha256": "3bcd01ec4942fccabfaf1c21bdae050a31a7bf99af7ab1bcb0dbb3d0aabcfb94",
+      "license_spdx": "CERN-OHL-S-2.0",
+      "license_path": "hardware/coppertone-buffer/LICENSE",
+      "license_sha256": "253ad3f89603e728abfa60c36fbcaf8225cf55c1eab12725f19fb3d74d647f3a",
+      "stated_rightsholder": "CopperMCP Contributors",
+      "third_party_content_included": false,
+      "derivation_statement": "Independently authored CopperMCP Audio Board Lab preview with separately recorded provenance and evidence limits.",
+      "safety_class": "engineering-preview",
+      "constraints": {
+        "clearance_nm": 250000,
+        "track_width_nm": 250000,
+        "via_diameter_nm": 800000,
+        "via_drill_nm": 400000
+      },
+      "inspection": {
+        "expected_supported": true,
+        "expected_object_counts": {
+          "nets": 14,
+          "pads": 55,
+          "segments": 53,
+          "vias": 9,
+          "zones": 2,
+          "keepouts": 2
+        }
+      },
+      "routes": [],
+      "claims": [
+        "board-ir-inspection"
+      ],
+      "not_claimed": [
+        "circuit-generation",
+        "schematic-generation",
+        "erc",
+        "electrical-validation",
+        "autorouted-board",
+        "manufacturability",
+        "fabrication-readiness",
+        "hardware-measurement"
+      ]
+    }
+  ]
+}

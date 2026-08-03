@@ -14,6 +14,9 @@ that every product feature, price, or repository release will remain current.
 - [Modern algorithms and hardware](./modern-algorithms-and-hardware.md) separates
   mature PCB techniques from promising transfers and speculative research, then
   recommends a staged architecture and evaluation plan.
+- [Audio circuit benchmark intake](./audio-circuit-benchmarks.md) records why public DIY catalogs
+  are reference-only and defines a licence-aware, original-fixture capability ladder for MCP-shared
+  board inspection/routing tests plus MCP-independent Circuit Intent and schematic-rendering checks.
 
 ## Terms used in this review
 

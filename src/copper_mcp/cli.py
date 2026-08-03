@@ -10,13 +10,20 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from copper_mcp.adapters.kicad_schematic import MAX_RENDERED_SCHEMATIC_BYTES
+from copper_mcp.circuit_intent_service import build_schematic_from_snapshot_json
+from copper_mcp.circuit_ir.limits import MAX_CIRCUIT_INPUT_BYTES
 from copper_mcp.config import ConfigurationError, Settings
 from copper_mcp.kicad_cli import KiCadCliError
 from copper_mcp.kicad_file import BoardFormatError, load_json_file
 from copper_mcp.models import candidate_from_dict, rank_candidates
 from copper_mcp.request_boundary import CONSTRAINT_FIELDS, RequestError
 from copper_mcp.routing import AStarSettings
-from copper_mcp.security import WorkspaceViolationError
+from copper_mcp.security import (
+    WorkspaceViolationError,
+    create_workspace_file,
+    read_workspace_file,
+)
 from copper_mcp.tools import (
     inspect_board,
     inspect_board_ir,
@@ -112,6 +119,17 @@ def build_parser() -> argparse.ArgumentParser:
         "paths", nargs="+", help="Candidate paths relative to the workspace"
     )
 
+    render_parser = subparsers.add_parser(
+        "render-schematic",
+        help="Validate Circuit Intent and create one new deterministic KiCad schematic",
+    )
+    render_parser.add_argument("path", help="Circuit Intent snapshot JSON inside the workspace")
+    render_parser.add_argument(
+        "--output",
+        required=True,
+        help="New .kicad_sch path inside the workspace; existing files are never replaced",
+    )
+
     serve_parser = subparsers.add_parser("serve", help="Run the MCP gateway")
     serve_parser.add_argument("--transport", choices=("stdio", "streamable-http"), default="stdio")
     return parser
@@ -154,6 +172,30 @@ def main(argv: Sequence[str] | None = None) -> int:
                 candidate_from_dict(_load_candidate(path, settings)) for path in args.paths
             ]
             _json_dump([candidate.to_dict() for candidate in rank_candidates(candidates)])
+            return 0
+        if args.command == "render-schematic":
+            intent_snapshot = read_workspace_file(
+                settings.workspace,
+                args.path,
+                allowed_suffixes={".json"},
+                max_bytes=MAX_CIRCUIT_INPUT_BYTES,
+            )
+            build = build_schematic_from_snapshot_json(intent_snapshot.content)
+            output_path = create_workspace_file(
+                settings.workspace,
+                args.output,
+                build.artifact.content,
+                allowed_suffixes={".kicad_sch"},
+                max_bytes=MAX_RENDERED_SCHEMATIC_BYTES,
+            )
+            response = build.to_dict()
+            response["export"] = {
+                "created": True,
+                "output_path": output_path.relative_to(
+                    settings.workspace.resolve(strict=True)
+                ).as_posix(),
+            }
+            _json_dump(response)
             return 0
         if args.command == "serve":
             os.environ["COPPER_MCP_TRANSPORT"] = args.transport

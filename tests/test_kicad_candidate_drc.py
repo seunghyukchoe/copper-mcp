@@ -423,6 +423,11 @@ def test_discards_candidate_evidence_when_original_context_changes(
     library = tmp_path / "local.pretty" / "R.kicad_mod"
     library.parent.mkdir()
     library.write_text("(footprint R)", encoding="utf-8")
+    (tmp_path / "fp-lib-table").write_text(
+        '(fp_lib_table (version 7) (lib (name "Local") (type "KiCad") '
+        '(uri "${KIPRJMOD}/local.pretty") (options "") (descr "")))',
+        encoding="utf-8",
+    )
 
     def mutate() -> None:
         if mutation == "source":
@@ -523,14 +528,24 @@ def test_rejects_private_candidate_context_mutation(
 
     def mutate_private_context(command: list[str]) -> None:
         snapshot = Path(command[-1])
+        snapshot_root = snapshot.parent
+        snapshot_root.chmod(0o700)
         if private_mutation == "board":
+            snapshot.chmod(0o600)
             snapshot.write_bytes(b"mutated by subprocess")
+            snapshot.chmod(0o400)
         elif private_mutation == "rules":
-            snapshot.with_suffix(".kicad_dru").write_text("(version 2)", encoding="utf-8")
+            snapshot_rules = snapshot.with_suffix(".kicad_dru")
+            snapshot_rules.chmod(0o600)
+            snapshot_rules.write_text("(version 2)", encoding="utf-8")
+            snapshot_rules.chmod(0o400)
         else:
             library = snapshot.parent / "private.pretty" / "R.kicad_mod"
             library.parent.mkdir()
             library.write_text("(footprint R)", encoding="utf-8")
+            library.chmod(0o400)
+            library.parent.chmod(0o500)
+        snapshot_root.chmod(0o500)
 
     _install_fake_kicad(
         monkeypatch,

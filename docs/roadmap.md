@@ -3,7 +3,7 @@
 Roadmap items describe outcomes, not promises about dates. Each milestone requires tests,
 documentation, ledger updates, and benchmark evidence.
 
-## M0 — Repository foundation (`0.1.x`, current)
+## M0 — Repository foundation (`0.1.x`, complete)
 
 - [x] Secure workspace and file boundary.
 - [x] Content-addressed board manifests.
@@ -11,16 +11,26 @@ documentation, ledger updates, and benchmark evidence.
 - [x] MCP and CLI adapters over shared services.
 - [x] Governance, security, CI, releases, and ledgers.
 - [x] Reproducible KiCad audio-board preview and artifact-validation workflow.
+- [x] Licence-aware, network-free audio capability corpus with original/open fixtures and
+  reference-only external source metadata.
 - [x] First public GitHub release.
 
-## M1 — KiCad inspection and validation
+## M1 — KiCad inspection and validation (`0.2.x`, current)
 
 - [ ] Official `kicad-python` IPC plugin.
+- [x] Canonical Circuit Intent IR `0.1.0` and deterministic in-memory KiCad schematic generation
+  contract for a bounded two-pin passive subset.
+- [x] Bounded Circuit Intent build service, explicit create-new CLI schematic export, and
+  stdio-only opaque MCP resource delivery with redacted verification metadata.
+- [x] Descriptor-anchored workspace reads and exact-lowercase create-only schematic output.
+- [ ] Schematic round trip, authoritative ERC, and source-to-board connectivity parity.
 - [x] Canonical Board IR v0.1 contract with integer units, typed constraints, strict codecs, and
   content digests.
 - [x] Board IR application-service and MCP exposure as a read-only structural summary.
 - [ ] Broader KiCad geometry and rule coverage.
 - [x] Headless `kicad-cli pcb drc --format json` validation.
+- [x] Minimal KiCad child environment, private working directory, bounded private
+  global-configuration/state roots, and snapshot-confined file-table dependencies.
 - [x] Candidate preview without mutation.
 - [x] Version-skew and stale-board tests for the DRC adapter.
 
@@ -55,8 +65,16 @@ documentation, ledger updates, and benchmark evidence.
 - [ ] Explicit, separately authorized `apply_candidate`.
 - [ ] One KiCad undo commit and revision-race protection.
 
-## M4 — AI policy plugins
+## M4 — High-fidelity Circuit Scene and AI policy plugins
 
+Every item in this milestone remains future work; the current MVP exposes no Circuit Scene or
+placement surface.
+
+- [ ] Versioned Circuit Scene IR for bounded semantic and visual observation.
+- [ ] Typed placement-intent contract and immutable placement preview/candidates.
+- [ ] Deterministic snapping, connectivity, clearance, rule, provenance, and revision validation for
+  every placement candidate.
+- [ ] Separately authorized placement apply; direct AI mutation of KiCad remains prohibited.
 - [ ] Heuristic policy baseline and trace dataset.
 - [ ] Typed net-ordering, corridor, and repair policy interface.
 - [ ] Optional local GNN/RL reference policy.

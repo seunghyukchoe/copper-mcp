@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "copper-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local-first, AI-extensible PCB automation through the Model Context Protocol"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,7 +12,7 @@ license = "Apache-2.0"
 authors = [{ name = "CopperMCP Contributors" }]
 keywords = ["pcb", "eda", "mcp", "autorouting", "kicad", "ai"]
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
+  "Development Status :: 3 - Alpha",
   "Environment :: Console",
   "Intended Audience :: Developers",
   "Intended Audience :: Science/Research",

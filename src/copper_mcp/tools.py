@@ -6,6 +6,10 @@ from typing import Any
 
 from copper_mcp import __version__
 from copper_mcp.board_ir_service import summarize_board_ir
+from copper_mcp.circuit_intent_service import (
+    CircuitSchematicBuild,
+    build_schematic_from_content,
+)
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import run_board_drc as run_kicad_board_drc
 from copper_mcp.kicad_file import inspect_kicad_board
@@ -19,7 +23,7 @@ def server_info() -> dict[str, Any]:
     return {
         "name": "CopperMCP",
         "version": __version__,
-        "maturity": "pre-alpha",
+        "maturity": "mvp",
         "implemented": [
             "bounded KiCad board inspection",
             "content-addressed board revisions",
@@ -28,8 +32,12 @@ def server_info() -> dict[str, Any]:
             "deterministic candidate ranking",
             "read-only Board IR structural inspection",
             "non-mutating two-pin route preview on a documented Board IR subset",
+            "bounded Circuit Intent validation and deterministic KiCad schematic rendering",
+            "explicit create-only CLI schematic export and ephemeral stdio MCP artifact delivery",
         ],
         "planned": [
+            "high-fidelity Circuit Scene IR and semantic/visual observation",
+            "validated placement preview and immutable placement candidates",
             "KiCad IPC adapter",
             "routing job lifecycle",
             "negotiated-congestion router",
@@ -37,6 +45,12 @@ def server_info() -> dict[str, Any]:
             "explicit candidate application",
         ],
     }
+
+
+def render_circuit_schematic(content: Any) -> CircuitSchematicBuild:
+    """Validate structured circuit content and return a private schematic build."""
+
+    return build_schematic_from_content(content)
 
 
 def inspect_board(path: str, settings: Settings | None = None) -> dict[str, Any]:
