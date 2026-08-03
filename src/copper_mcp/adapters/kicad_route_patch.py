@@ -7,6 +7,7 @@ from dataclasses import replace
 from itertools import pairwise
 
 from copper_mcp import __version__
+from copper_mcp.adapters.cst import CstError, Splice, apply_splices, line_indent, span
 from copper_mcp.adapters.kicad_board_ir import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.adapters.sexpr import SExpr, SExprError, atoms, children, parse_sexpr
 from copper_mcp.board_ir import BoardIRSnapshot, ParseLimits, Segment, nm_to_mm
@@ -66,41 +67,6 @@ def _source_structure(source: bytes, limits: ParseLimits) -> tuple[SExpr, frozen
     return root, frozenset(native_identities)
 
 
-def _expression_end(text: str, start: int) -> int:
-    """Return the exclusive end of one already-validated S-expression."""
-
-    if start >= len(text) or text[start] != "(":
-        raise KiCadRoutePatchError("KiCad writer metadata has an invalid source position")
-    depth = 0
-    quoted = False
-    escaped = False
-    for index in range(start, len(text)):
-        character = text[index]
-        if quoted:
-            if escaped:
-                escaped = False
-            elif character == "\\":
-                escaped = True
-            elif character == '"':
-                quoted = False
-            continue
-        if character == '"':
-            quoted = True
-        elif character == "(":
-            depth += 1
-        elif character == ")":
-            depth -= 1
-            if depth == 0:
-                return index + 1
-    raise KiCadRoutePatchError("KiCad writer metadata has no closing delimiter")
-
-
-def _line_indent(text: str, offset: int) -> str:
-    line_start = text.rfind("\n", 0, offset) + 1
-    indentation = text[line_start:offset]
-    return indentation if indentation and not indentation.strip(" \t") else "  "
-
-
 def _rewrite_writer_metadata(source: bytes, root: SExpr) -> bytes:
     """Identify CopperMCP as the writer of the disposable derivative."""
 
@@ -114,39 +80,32 @@ def _rewrite_writer_metadata(source: bytes, root: SExpr) -> bytes:
 
     writer = f'(generator "{_quoted_atom(_WRITER_ID)}")'
     writer_version = f'(generator_version "{_quoted_atom(__version__)}")'
-    replacements: list[tuple[int, int, str]] = []
+    replacements: list[Splice] = []
 
     if generators:
-        generator = generators[0]
-        generator_end = _expression_end(text, generator.offset)
-        replacements.append((generator.offset, generator_end, writer))
+        generator_start, generator_end = span(generators[0], text)
+        replacements.append(Splice(generator_start, generator_end, writer))
         if not generator_versions:
-            indentation = _line_indent(text, generator.offset)
+            indentation = line_indent(text, generator_start)
             replacements.append(
-                (generator_end, generator_end, f"{newline}{indentation}{writer_version}")
+                Splice(generator_end, generator_end, f"{newline}{indentation}{writer_version}")
             )
     else:
-        version = versions[0]
-        version_end = _expression_end(text, version.offset)
-        indentation = _line_indent(text, version.offset)
+        version_start, version_end = span(versions[0], text)
+        indentation = line_indent(text, version_start)
         inserted = f"{newline}{indentation}{writer}"
         if not generator_versions:
             inserted += f"{newline}{indentation}{writer_version}"
-        replacements.append((version_end, version_end, inserted))
+        replacements.append(Splice(version_end, version_end, inserted))
 
     if generator_versions:
-        generator_version = generator_versions[0]
-        replacements.append(
-            (
-                generator_version.offset,
-                _expression_end(text, generator_version.offset),
-                writer_version,
-            )
-        )
+        version_start, version_end = span(generator_versions[0], text)
+        replacements.append(Splice(version_start, version_end, writer_version))
 
-    for start, end, replacement in sorted(replacements, reverse=True):
-        text = text[:start] + replacement + text[end:]
-    return text.encode("utf-8", errors="strict")
+    try:
+        return apply_splices(text, replacements).encode("utf-8", errors="strict")
+    except CstError as error:
+        raise KiCadRoutePatchError("KiCad writer metadata could not be rewritten") from error
 
 
 def _modeled_object_count(snapshot: BoardIRSnapshot) -> int:
