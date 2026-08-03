@@ -22,7 +22,8 @@ route multiple nets, run durable jobs, persist or export candidate boards, or ap
 | Attachment | Same-net selected-layer segments at any angle, as connectable copper rather than obstacles |
 | Existing geometry | No selected-layer arcs or off-axis pads; no same-net vias or zones |
 | Search | Four-neighbour orthogonal grid; east, north, west, south expansion order; multi-source and multi-target when same-net copper is present |
-| Output | Immutable orthogonal `RoutePatch` tied to the unchanged snapshot digest, or a typed already-connected record |
+| Nets | Any pad count; two pads route as one path, more as a spanning tree over components |
+| Output | Immutable orthogonal `RoutePatch` of one or more paths tied to the unchanged snapshot digest, or a typed already-connected record |
 
 Anything outside this matrix returns a typed diagnostic. Unsupported objects and selected-net
 constraints are never silently ignored.
@@ -312,6 +313,42 @@ The preview writes no file, creates no job, persists nothing, and applies no cop
 the integer geometry and endpoint pad IDs it generated, which is an intentional and documented
 disclosure; source board bytes and unrelated board objects are never returned.
 
+## Multi-pin trees
+
+A net with more than two pads is routed by sequential component merging. Connectivity analysis
+produces the net's initial components; those components are spanned by a minimum spanning tree with
+edges weighted by the exact integer rectilinear gap between component bounding boxes and ordered by
+`(gap, lower index, higher index)`, so the order is a pure function of the snapshot. Each edge is
+one leg, routed by the same multi-source/multi-target search a two-pin stub attachment uses: the
+source component's copper supplies the seeds and the target component's the goals. A routed leg's
+copper joins the merged component, so later legs may attach anywhere along it, and because legs are
+same-net copper they are never obstacles to one another.
+
+What that claims is narrow and worth stating exactly: every pad ends in one component, each leg is
+optimal for the obstacles present *at the time that leg was routed*, and the whole result is
+reproducible. It does not claim Steiner optimality, and it does not revisit an earlier leg once a
+later one is routed. The ordering policy is recorded in candidate identity as `component-mst-v1`, so
+a FLUTE-guided or learned topology can be added later as a new policy without changing the contract.
+
+Multi-pin legs seed from pad **cores** rather than pad centres. Requiring every pad centre to sit on
+one lattice is unworkable in practice: on this repository's own CopperTone board the largest grid
+step that puts all pads of a multi-pin net on one lattice is 5 um for six of the nine such nets,
+which is a 62-million-node lattice against a 500,000 ceiling. Seeding from cores removes the
+constraint for every pad but the anchor, and a round pad only offers usable core area because of the
+inscribed square described under same-net attachment. Two-pin nets keep centre seeding, so their
+geometry is unchanged.
+
+Budgets are shared across the whole tree rather than allocated per leg, because one candidate should
+honour one caller ceiling. Merge order and budget consumption are both deterministic, so budget
+exhaustion fails at a reproducible leg with reproducible counts. Any leg failing refuses the whole
+call: a partial tree is not a candidate, and emitting one would break the candidate invariant that a
+proposal has no unrouted connections.
+
+A committed `tree-star.kicad_pcb` fixture places four pads with no existing copper; the router
+returns a three-leg tree that KiCad 10.0.5 accepts with zero errors, warnings and unconnected items.
+That evidence is discriminating rather than merely green: rendering the same board with any single
+leg removed makes KiCad report an unconnected item.
+
 ## Measured coverage on a real board
 
 The polygon model is validated by exact synthetic geometry cases; the rectangular existing-copper
@@ -360,12 +397,17 @@ on this board, so KiCad agrees every net is fully connected. A regression test a
 together across all eleven nets.
 
 It is worth being precise about what this is not. Zero nets are *routed*: no copper has been proposed
-for CopperTone, and none is needed for the nets it can currently reason about. Connectivity analysis
-now spans nets of any width, but **routing** a multi-pin net is still unsupported — that separation
-is deliberate, because recognising an existing connection and choosing a Steiner topology for a new
-one are different problems. Behind them sit multilayer connectivity through vias, a freshness-bound
-fill authority, and a lattice that does not require the pad-centre delta to divide by the grid step;
-none is currently reached, because no net on this board still needs a route.
+for CopperTone, and none is needed for the nets it can currently reason about. Multi-pin **routing**
+now exists, and it changes nothing here — every net on this board is already routed by its designer,
+so there is no tree left to build. That is why the multi-pin slice is validated by purpose-built
+fixtures rather than by this board, and the roadmap's old framing of multi-pin routing as the single
+remaining contract for CopperTone was simply wrong.
+
+What this board actually still needs is **via-aware connectivity**. Its three unresolved nets all
+carry same-net vias, which are copper on another layer that this single-layer model cannot see, so
+their pads may well be connected through them while nothing here can show it. Behind that sit a
+freshness-bound fill authority and a lattice that does not require the pad-centre delta to divide by
+the grid step; neither is currently reached, because no net on this board still needs a route.
 
 Board IR handles a real two-layer audio board today, and the router still does not route one
 unaided. Attachment, polygon keepouts, and diagonal envelopes remain validated by purpose-built

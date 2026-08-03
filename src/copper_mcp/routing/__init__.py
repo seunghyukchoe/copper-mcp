@@ -8,6 +8,8 @@ from copper_mcp.routing.astar import (
     verify_candidate_id,
 )
 from copper_mcp.routing.contracts import (
+    COMPONENT_MST_ORDERING,
+    SINGLE_PATH_ORDERING,
     AStarSettings,
     CancellationCheck,
     RouteCandidate,
@@ -17,14 +19,17 @@ from copper_mcp.routing.contracts import (
     RouteFailureCode,
     RouteMetrics,
     RoutePatch,
+    RoutePath,
     RouteRequest,
     RouteResult,
     RoutingBackend,
 )
 
 __all__ = [
+    "COMPONENT_MST_ORDERING",
     "ROUTER_VERSION",
     "ROUTING_POLICY",
+    "SINGLE_PATH_ORDERING",
     "AStarRouter",
     "AStarSettings",
     "CancellationCheck",
@@ -35,6 +40,7 @@ __all__ = [
     "RouteFailureCode",
     "RouteMetrics",
     "RoutePatch",
+    "RoutePath",
     "RouteRequest",
     "RouteResult",
     "RoutingBackend",

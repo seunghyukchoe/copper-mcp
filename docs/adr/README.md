@@ -22,3 +22,4 @@ from the decision ledger.
 - [ADR-0016: Same-net attachment and partial-route completion](0016-same-net-attachment.md)
 - [ADR-0017: Conservative integer envelopes for diagonal foreign copper](0017-diagonal-segment-envelopes.md)
 - [ADR-0018: Chained integer squares as the core of diagonal attachment copper](0018-diagonal-attachment-cores.md)
+- [ADR-0019: Route multi-pin nets by deterministic component merging](0019-multi-pin-component-merging.md)

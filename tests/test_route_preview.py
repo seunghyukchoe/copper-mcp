@@ -173,7 +173,7 @@ def test_preview_routes_around_a_zone_outline_without_mutating_the_source(
     # centreline margin includes route half-width and the governing clearance.
     assert all(
         not (17_625_000 < point.x < 22_375_000 and 10_625_000 < point.y < 19_375_000)
-        for point in first.candidate.patch.vertices
+        for point in first.candidate.patch.paths[0].vertices
     )
     assert _entries(tmp_path) == before
 
@@ -243,7 +243,7 @@ def test_preview_routes_around_an_octagonal_keepout(tmp_path: Path) -> None:
     # net, so no second class clearance applies.
     assert all(
         not (16_625_000 < point.x < 23_375_000 and 10_625_000 < point.y < 19_375_000)
-        for point in first.candidate.patch.vertices
+        for point in first.candidate.patch.paths[0].vertices
     )
     assert first.to_dict() == second.to_dict()
     assert _entries(tmp_path) == before
@@ -262,7 +262,8 @@ def test_preview_routes_around_a_foreign_diagonal_segment(tmp_path: Path) -> Non
     # x=20 mm, so the previously refused board now detours instead.
     assert first.candidate.cost.bend_count > 0
     assert all(
-        point.y <= 15_000_000 or point.y >= 19_375_000 for point in first.candidate.patch.vertices
+        point.y <= 15_000_000 or point.y >= 19_375_000
+        for point in first.candidate.patch.paths[0].vertices
     )
     assert first.to_dict() == second.to_dict()
     assert _entries(tmp_path) == before
@@ -279,7 +280,7 @@ def test_preview_completes_a_partial_route_from_existing_copper(tmp_path: Path) 
     assert first.connection is None
     assert first.candidate is not None
     # The committed stub already spans x=10..20 mm, so only the remaining 10 mm is proposed.
-    assert first.candidate.patch.vertices == (
+    assert first.candidate.patch.paths[0].vertices == (
         PointNM(20_000_000, 15_000_000),
         PointNM(30_000_000, 15_000_000),
     )
@@ -300,7 +301,7 @@ def test_preview_completes_a_route_from_a_diagonal_stub(tmp_path: Path) -> None:
     assert first.candidate is not None
     # The stub runs diagonally from the start pad at (10, 15) to (16, 19); the proposal picks
     # it up at that far end and adds 18 mm instead of the 20 mm an empty board would need.
-    assert first.candidate.patch.vertices == (
+    assert first.candidate.patch.paths[0].vertices == (
         PointNM(16_000_000, 19_000_000),
         PointNM(16_000_000, 15_000_000),
         PointNM(30_000_000, 15_000_000),
@@ -722,7 +723,7 @@ def test_real_kicad_confirms_a_route_detoured_around_existing_copper(tmp_path: P
     assert preview.candidate.cost.bend_count > 0
     assert all(
         not (18_625_000 < point.x < 21_375_000 and 10_625_000 < point.y < 19_375_000)
-        for point in preview.candidate.patch.vertices
+        for point in preview.candidate.patch.paths[0].vertices
     )
     assert preview.drc_evidence is not None
     assert preview.drc_evidence.summary.error_count == 0
@@ -814,7 +815,7 @@ def test_real_kicad_confirms_a_route_completed_off_a_diagonal_stub(tmp_path: Pat
 
     assert preview.status is RoutePreviewStatus.ROUTED
     assert preview.candidate is not None
-    assert preview.candidate.patch.vertices[0] == PointNM(16_000_000, 19_000_000)
+    assert preview.candidate.patch.paths[0].vertices[0] == PointNM(16_000_000, 19_000_000)
     # This is the check that the under-approximating diagonal core is sound at the attachment
     # point: displacing the same proposal by 0.5 mm so it misses the stub end makes KiCad
     # report two `track_dangling` warnings and one unconnected item, so a clean report here is
@@ -846,7 +847,7 @@ def test_real_kicad_confirms_a_completed_partial_route(tmp_path: Path) -> None:
 
     assert preview.status is RoutePreviewStatus.ROUTED
     assert preview.candidate is not None
-    assert preview.candidate.patch.vertices == (
+    assert preview.candidate.patch.paths[0].vertices == (
         PointNM(20_000_000, 15_000_000),
         PointNM(30_000_000, 15_000_000),
     )
@@ -950,3 +951,54 @@ def test_coppertone_via_carrying_nets_stay_refused(net_name: str, tmp_path: Path
     assert preview.connection is None
     assert preview.diagnostic is not None
     assert preview.diagnostic.code is RouteFailureCode.INVALID_TWO_PIN_NET
+
+
+def test_preview_routes_a_four_pad_net_as_a_tree(tmp_path: Path) -> None:
+    settings = _copy_fixture(tmp_path, "tree-star.kicad_pcb")
+    before = _entries(tmp_path)
+
+    first = preview_route(_request(board="tree-star.kicad_pcb"), settings)
+    second = preview_route(_request(board="tree-star.kicad_pcb"), settings)
+
+    assert first.status is RoutePreviewStatus.ROUTED
+    assert first.candidate is not None
+    assert first.candidate.pad_count == 4
+    assert first.candidate.ordering_policy == "component-mst-v1"
+    # Four isolated pads are four components, so a spanning tree is exactly three merges.
+    assert len(first.candidate.patch.paths) == 3
+    document = first.to_dict()
+    assert len(document["candidate"]["patch"]["paths"]) == 3
+    assert document["candidate"]["pad_count"] == 4
+    assert first.to_dict() == second.to_dict()
+    assert _entries(tmp_path) == before
+
+
+@pytest.mark.skipif(
+    not REAL_KICAD_CLI.is_file(),
+    reason="requires a locally installed KiCad CLI",
+)
+def test_real_kicad_confirms_a_multi_pin_tree(tmp_path: Path) -> None:
+    settings = replace(
+        _copy_fixture(tmp_path, "tree-star.kicad_pcb"),
+        kicad_cli=REAL_KICAD_CLI,
+        max_drc_report_bytes=8 * 1024 * 1024,
+    )
+    before = _entries(tmp_path)
+
+    preview = preview_route(
+        _request(board="tree-star.kicad_pcb", include_drc=True),
+        settings,
+    )
+
+    assert preview.status is RoutePreviewStatus.ROUTED
+    assert preview.candidate is not None
+    assert len(preview.candidate.patch.paths) == 3
+    # Discriminating: rendering the same board with any one leg removed makes KiCad report an
+    # unconnected item, so a clean report here is evidence the tree really does connect the
+    # net rather than evidence that little copper was added.
+    assert preview.drc_evidence is not None
+    assert preview.drc_evidence.summary.error_count == 0
+    assert preview.drc_evidence.summary.warning_count == 0
+    assert preview.drc_evidence.summary.unconnected_count == 0
+    assert preview.drc_evidence.summary.passed is True
+    assert _entries(tmp_path) == before

@@ -20,6 +20,11 @@ _MAX_COST_TERM_NM = 1_000_000_000
 _MAX_OBSTACLES = 4_096
 _MAX_OBSTACLE_CHECKS = 10_000_000
 
+#: Ordering policy recorded by a candidate whose patch is a single path.
+SINGLE_PATH_ORDERING = "single-path"
+#: Deterministic minimum spanning tree over the net's initial connected components.
+COMPONENT_MST_ORDERING = "component-mst-v1"
+
 
 def _integer(name: str, value: int, *, minimum: int = 0, maximum: int = _JSON_SAFE_INTEGER) -> None:
     if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
@@ -96,18 +101,12 @@ class RouteRequest:
 
 
 @dataclass(frozen=True, slots=True)
-class RoutePatch:
-    """One unapplied, single-layer, orthogonal route geometry patch."""
+class RoutePath:
+    """One orthogonal polyline of a route patch."""
 
-    net_id: str
-    layer_id: str
-    width_nm: int
     vertices: tuple[PointNM, ...]
 
     def __post_init__(self) -> None:
-        _typed_id("net ID", self.net_id, "net:")
-        _typed_id("layer ID", self.layer_id, "layer:")
-        _integer("route width", self.width_nm, minimum=1)
         if (
             not isinstance(self.vertices, tuple)
             or len(self.vertices) < 2
@@ -122,6 +121,57 @@ class RoutePatch:
         ):
             if (first.x == middle.x == last.x) or (first.y == middle.y == last.y):
                 raise ValueError("route vertices must omit collinear interior points")
+
+    @property
+    def length_nm(self) -> int:
+        """Return the exact Manhattan length of this polyline."""
+
+        return sum(
+            abs(start.x - end.x) + abs(start.y - end.y) for start, end in pairwise(self.vertices)
+        )
+
+    @property
+    def bend_count(self) -> int:
+        """Return the number of direction changes, which is its interior vertex count."""
+
+        return len(self.vertices) - 2
+
+
+@dataclass(frozen=True, slots=True)
+class RoutePatch:
+    """One unapplied, single-layer, orthogonal route geometry patch of one or more paths.
+
+    A two-pin proposal carries exactly one path. A multi-pin proposal carries one path per
+    merged component, so a patch is a tree over the net rather than a bag of wires.
+    """
+
+    net_id: str
+    layer_id: str
+    width_nm: int
+    paths: tuple[RoutePath, ...]
+
+    def __post_init__(self) -> None:
+        _typed_id("net ID", self.net_id, "net:")
+        _typed_id("layer ID", self.layer_id, "layer:")
+        _integer("route width", self.width_nm, minimum=1)
+        if (
+            not isinstance(self.paths, tuple)
+            or not self.paths
+            or not all(isinstance(path, RoutePath) for path in self.paths)
+        ):
+            raise ValueError("a route patch must carry at least one route path")
+
+    @property
+    def length_nm(self) -> int:
+        """Return the exact Manhattan length of every path in the patch."""
+
+        return sum(path.length_nm for path in self.paths)
+
+    @property
+    def bend_count(self) -> int:
+        """Return the total direction changes across every path in the patch."""
+
+        return sum(path.bend_count for path in self.paths)
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,6 +242,8 @@ class RouteCandidate:
     router_version: str
     policy: str
     seed: int
+    pad_count: int = 2
+    ordering_policy: str = SINGLE_PATH_ORDERING
 
     def __post_init__(self) -> None:
         _digest("candidate ID", self.candidate_id)
@@ -208,13 +260,20 @@ class RouteCandidate:
             raise ValueError("candidate settings must be AStarSettings")
         _stable_name("router version", self.router_version)
         _stable_name("routing policy", self.policy)
+        _stable_name("ordering policy", self.ordering_policy)
         _integer("seed", self.seed)
+        _integer("pad count", self.pad_count, minimum=2)
+        # A tree over N components needs exactly N - 1 merges, and every pad beyond the first
+        # two can only be reached by one more path.
+        if len(self.patch.paths) > self.pad_count - 1:
+            raise ValueError("a candidate cannot carry more paths than its pads can require")
+        if self.pad_count == 2 and len(self.patch.paths) != 1:
+            raise ValueError("a two-pin candidate must carry exactly one path")
+        if self.pad_count == 2 and self.ordering_policy != SINGLE_PATH_ORDERING:
+            raise ValueError("a two-pin candidate has no ordering policy to record")
 
-        length_nm = sum(
-            abs(start.x - end.x) + abs(start.y - end.y)
-            for start, end in pairwise(self.patch.vertices)
-        )
-        bend_count = len(self.patch.vertices) - 2
+        length_nm = self.patch.length_nm
+        bend_count = self.patch.bend_count
         if self.cost.length_nm != length_nm or self.metrics.wire_length_nm != length_nm:
             raise ValueError("candidate length must match its exact patch geometry")
         if self.cost.bend_count != bend_count:
@@ -264,9 +323,9 @@ class RouteConnection:
         _typed_id("end pad ID", self.end_pad_id, "pad:")
         if self.start_pad_id == self.end_pad_id:
             raise ValueError("connected pads must be distinct")
-        _integer("attachment segments", self.attachment_segments, minimum=1)
+        _integer("attachment segments", self.attachment_segments)
         _integer("pad count", self.pad_count, minimum=2)
-        _integer("component objects", self.component_objects, minimum=3)
+        _integer("component objects", self.component_objects, minimum=2)
         _integer("connection obstacle checks", self.obstacle_checks)
         if self.component_objects != self.attachment_segments + self.pad_count:
             raise ValueError("a connected component must account for every pad and every segment")
