@@ -45,6 +45,10 @@ class Settings:
     max_drc_context_scan_seconds: int = 10
     max_route_preview_seconds: int = 30
     max_fill_vertices: int = 50_000
+    # Provisional: CopperTone's whole board is ~120 objects. Raise after measuring a genuinely
+    # dense board rather than guessing upward now.
+    max_scene_objects: int = 2_000
+    max_scene_vertices: int = 200_000
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -113,6 +117,18 @@ class Settings:
             3,
             1_000_000,
         )
+        max_scene_objects = _bounded_int(
+            "COPPER_MCP_MAX_SCENE_OBJECTS",
+            os.environ.get("COPPER_MCP_MAX_SCENE_OBJECTS", "2000"),
+            1,
+            200_000,
+        )
+        max_scene_vertices = _bounded_int(
+            "COPPER_MCP_MAX_SCENE_VERTICES",
+            os.environ.get("COPPER_MCP_MAX_SCENE_VERTICES", "200000"),
+            3,
+            5_000_000,
+        )
         return cls(
             workspace=workspace,
             transport=transport,
@@ -127,4 +143,6 @@ class Settings:
             max_drc_context_scan_seconds=max_drc_context_scan_seconds,
             max_route_preview_seconds=max_route_preview_seconds,
             max_fill_vertices=max_fill_vertices,
+            max_scene_objects=max_scene_objects,
+            max_scene_vertices=max_scene_vertices,
         )

@@ -645,3 +645,131 @@ def test_the_rotation_relation_would_have_caught_a_mirrored_quarter_turn() -> No
         and after[pad_id].center != PointNM(pad.center.y, width_nm - pad.center.x)
     ]
     assert mirrored == [], "the adapter is using the mirrored quarter turn"
+
+
+# --- Scene level ----------------------------------------------------------------------------
+
+
+SCENE_BOARD = FIXTURES / "circuit-scene-v0.1" / "scene-region.kicad_pcb"
+SCENE_BOARD_WIDTH_MM = 100.0
+
+
+def _scene_of(source: str, directory: Path, name: str) -> dict[str, Any]:
+    from copper_mcp.circuit_scene import observe_board_scene
+    from copper_mcp.config import Settings
+
+    board = directory / name
+    board.write_text(source, encoding="utf-8")
+    request = {
+        "board": name,
+        "constraints": {
+            "clearance_nm": 200_000,
+            "track_width_nm": 250_000,
+            "via_diameter_nm": 800_000,
+            "via_drill_nm": 400_000,
+        },
+        "region": {
+            "min_x_nm": -1_000_000_000,
+            "min_y_nm": -1_000_000_000,
+            "max_x_nm": 1_000_000_000,
+            "max_y_nm": 1_000_000_000,
+        },
+    }
+    return observe_board_scene(request, Settings(workspace=directory.resolve())).to_dict()
+
+
+def _scene_objects(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        item["ref_id"]: item
+        for partition in ("static", "mutable")
+        for items in document[partition].values()
+        for item in items
+    }
+
+
+def test_scene_geometry_turns_with_the_board_while_every_reference_holds_still(
+    tmp_path: Path,
+) -> None:
+    """The relation that makes ``ref_id`` worth handing to a model.
+
+    A scene is only useful as a naming surface if a reference survives the board moving. Turn
+    the board a quarter turn: every coordinate must be the image of the original under the same
+    turn, and every ``ref_id`` must be the one it was before. If ids tracked geometry instead of
+    identity, a model that observed a scene, reasoned about it, and then named an object would
+    be naming something else.
+    """
+
+    source = SCENE_BOARD.read_text(encoding="utf-8")
+    original = _scene_of(source, tmp_path, "original.kicad_pcb")
+    assert original["supported"], "the scene fixture must be a supported board to start with"
+
+    turned_source = _normalised_outline(
+        rotate_kicad_source(source, board_width_mm=SCENE_BOARD_WIDTH_MM)
+    )
+    turned = _scene_of(turned_source, tmp_path, "turned.kicad_pcb")
+    assert turned["supported"], "the turned board must still convert"
+
+    before = _scene_objects(original)
+    after = _scene_objects(turned)
+
+    # Identity is invariant. This is the whole point of the partition.
+    assert set(before) == set(after)
+    assert original["ref_stability"] == turned["ref_stability"]
+
+    width_nm = int(SCENE_BOARD_WIDTH_MM * 1_000_000)
+
+    def turn(point: list[int]) -> list[int]:
+        return [point[1], width_nm - point[0]]
+
+    point_fields = {"center_nm", "start_nm", "end_nm", "mid_nm"}
+    ring_fields = {"outer_nm", "boundary_nm"}
+    scalar_fields = {"width_nm", "diameter_nm", "drill_nm", "clearance_nm", "min_thickness_nm"}
+    checked = 0
+    for ref_id, item in before.items():
+        moved = after[ref_id]
+        assert moved["kind"] == item["kind"], ref_id
+        assert moved["layer_ids"] == item["layer_ids"], ref_id
+        for name, value in item["geometry"].items():
+            if name in point_fields:
+                assert moved["geometry"][name] == turn(value), (ref_id, name)
+                checked += 1
+            elif name in ring_fields:
+                # A ring may be reported from a different starting vertex, so compare the
+                # cyclic point *set*: a turn moves where the ring is, not which ring it is.
+                assert {tuple(turn(point)) for point in value} == {
+                    tuple(point) for point in moved["geometry"][name]
+                }, (ref_id, name)
+                checked += 1
+            elif name in scalar_fields:
+                # A rigid motion cannot change a width, a diameter or a clearance.
+                assert moved["geometry"][name] == value, (ref_id, name)
+
+    assert checked >= 6, "the relation must actually have compared some geometry"
+
+
+def test_the_scene_relation_would_catch_references_that_tracked_geometry(
+    tmp_path: Path,
+) -> None:
+    """Guard the guard: content-hashed ids would not survive the turn, and must be seen not to."""
+
+    import hashlib
+
+    source = SCENE_BOARD.read_text(encoding="utf-8")
+    original = _scene_of(source, tmp_path, "guard-original.kicad_pcb")
+    turned = _scene_of(
+        _normalised_outline(rotate_kicad_source(source, board_width_mm=SCENE_BOARD_WIDTH_MM)),
+        tmp_path,
+        "guard-turned.kicad_pcb",
+    )
+
+    def geometry_hash(item: dict[str, Any]) -> str:
+        payload = repr(sorted(item["geometry"].items())).encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()[:32]
+
+    before = {geometry_hash(item) for item in _scene_objects(original).values()}
+    after = {geometry_hash(item) for item in _scene_objects(turned).values()}
+    moved = before - after
+    assert moved, (
+        "the fixture has no geometry that a quarter turn changes, so the invariance of the "
+        "real ref_ids proves nothing"
+    )

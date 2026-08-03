@@ -73,6 +73,65 @@ class CliTests(unittest.TestCase):
         self.assertEqual(document["copper_layer_ids"], ["layer:B.Cu", "layer:F.Cu"])
         self.assertEqual(document["object_counts"]["pads"], 2)
 
+    def test_observe_scene_builds_a_bounding_box_request(self) -> None:
+        root = Path(__file__).parent / "fixtures" / "circuit-scene-v0.1"
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            result = main(
+                [
+                    "--workspace",
+                    str(root),
+                    "observe-scene",
+                    "scene-region.kicad_pcb",
+                    "--clearance-nm",
+                    "250000",
+                    "--track-width-nm",
+                    "250000",
+                    "--via-diameter-nm",
+                    "800000",
+                    "--via-drill-nm",
+                    "400000",
+                    "--region",
+                    "0",
+                    "0",
+                    "30000000",
+                    "30000000",
+                ]
+            )
+        self.assertEqual(result, 0)
+        document = json.loads(stdout.getvalue())
+        self.assertTrue(document["supported"])
+        self.assertEqual(document["region"]["source"], "explicit")
+        self.assertEqual(len(document["static"]["pads"]), 1)
+        self.assertEqual(document["annotations"], [])
+
+    def test_observe_scene_refuses_a_reference_region_without_a_radius(self) -> None:
+        """Argparse permits it, so the service boundary is what has to refuse it."""
+
+        root = Path(__file__).parent / "fixtures" / "circuit-scene-v0.1"
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = main(
+                [
+                    "--workspace",
+                    str(root),
+                    "observe-scene",
+                    "scene-region.kicad_pcb",
+                    "--clearance-nm",
+                    "250000",
+                    "--track-width-nm",
+                    "250000",
+                    "--via-diameter-nm",
+                    "800000",
+                    "--via-drill-nm",
+                    "400000",
+                    "--around-ref",
+                    "pad:kicad:00000000-0000-0000-0000-000000000000",
+                ]
+            )
+        self.assertEqual(result, 2)
+        self.assertIn("radius", stderr.getvalue())
+
     def test_preview_route_builds_a_validated_request(self) -> None:
         root = Path(__file__).parent / "fixtures" / "route-candidate"
         stdout = io.StringIO()

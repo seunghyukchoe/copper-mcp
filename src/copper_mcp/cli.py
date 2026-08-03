@@ -27,6 +27,7 @@ from copper_mcp.security import (
 from copper_mcp.tools import (
     inspect_board,
     inspect_board_ir,
+    observe_board_scene,
     preview_route,
     run_board_drc,
     server_info,
@@ -60,6 +61,35 @@ def _preview_request(args: argparse.Namespace) -> dict[str, Any]:
         "include_drc": args.drc,
         "constraints": _constraints(args),
         "settings": overrides,
+    }
+
+
+def _scene_request(args: argparse.Namespace) -> dict[str, Any]:
+    """Build a scene request from flags; the service still validates every field.
+
+    Only the two documented region forms are constructible here. Argparse rejects supplying
+    both, and the service independently rejects a mixed region, so a malformed window cannot
+    reach the reader through either path.
+    """
+
+    if args.around_ref is not None:
+        region: dict[str, Any] = {"around_ref_id": args.around_ref}
+        if args.radius_nm is not None:
+            region["radius_nm"] = args.radius_nm
+    else:
+        minimum_x, minimum_y, maximum_x, maximum_y = args.region
+        region = {
+            "min_x_nm": minimum_x,
+            "min_y_nm": minimum_y,
+            "max_x_nm": maximum_x,
+            "max_y_nm": maximum_y,
+        }
+    return {
+        "board": args.path,
+        "constraints": _constraints(args),
+        "region": region,
+        "layers": list(args.scene_layers or ()),
+        "include_annotations": args.include_annotations,
     }
 
 
@@ -109,6 +139,38 @@ def build_parser() -> argparse.ArgumentParser:
         "--drc",
         action="store_true",
         help="Bind the candidate to authoritative KiCad DRC evidence",
+    )
+
+    scene_parser = subparsers.add_parser(
+        "observe-scene",
+        help="Observe a region of a board as a bounded Circuit Scene without modifying it",
+    )
+    scene_parser.add_argument("path", help="Board path relative to the workspace")
+    for option in _CONSTRAINT_OPTIONS:
+        scene_parser.add_argument(f"--{option.replace('_', '-')}", type=int, required=True)
+    scene_region = scene_parser.add_mutually_exclusive_group(required=True)
+    scene_region.add_argument(
+        "--region",
+        nargs=4,
+        type=int,
+        metavar=("MIN_X_NM", "MIN_Y_NM", "MAX_X_NM", "MAX_Y_NM"),
+        help="Observation window in absolute board nanometres",
+    )
+    scene_region.add_argument("--around-ref", help="Observe around one object reference id")
+    scene_parser.add_argument(
+        "--radius-nm", type=int, default=None, help="Required with --around-ref"
+    )
+    scene_parser.add_argument(
+        "--layer",
+        action="append",
+        default=None,
+        dest="scene_layers",
+        help="Restrict to a copper layer; repeatable",
+    )
+    scene_parser.add_argument(
+        "--include-annotations",
+        action="store_true",
+        help="Also return board text, quarantined and marked untrusted",
     )
 
     validate_parser = subparsers.add_parser("validate-candidate", help="Validate candidate JSON")
@@ -163,6 +225,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if args.command == "preview-route":
             _json_dump(preview_route(_preview_request(args), settings))
+            return 0
+        if args.command == "observe-scene":
+            _json_dump(observe_board_scene(_scene_request(args), settings))
             return 0
         if args.command == "validate-candidate":
             _json_dump(candidate_from_dict(_load_candidate(args.path, settings)).to_dict())
