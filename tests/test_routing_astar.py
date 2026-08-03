@@ -22,6 +22,7 @@ from copper_mcp.board_ir import (
     Segment,
     SourceInfo,
     Via,
+    Zone,
     make_content,
     make_snapshot,
 )
@@ -85,6 +86,12 @@ def _snapshot(
     foreign_segment: tuple[int, int, int, int] | None = None,
     foreign_via: tuple[int, int] | None = None,
     own_via: bool = False,
+    foreign_zones: tuple[Ring, ...] = (),
+    foreign_zone_layer_id: str = LAYER_ID,
+    own_zone: Ring | None = None,
+    route_clearance_nm: int = 100,
+    other_clearance_nm: int = 100,
+    zone_clearance_nm: int = 100,
     existing_copper: bool = False,
     layer_kind: str = "signal",
     length_rule: bool = False,
@@ -92,13 +99,21 @@ def _snapshot(
     layer = Layer(id=LAYER_ID, name="F.Cu", index=0, kind=layer_kind)
     # Vias span two layers, so the back layer only exists when a fixture needs one.
     copper_layers: tuple[Layer, ...] = (layer,)
-    if foreign_via is not None or own_via:
+    if foreign_via is not None or own_via or foreign_zone_layer_id != LAYER_ID:
         copper_layers += (Layer(id="layer:B.Cu", name="B.Cu", index=1, kind="signal"),)
     net = Net(id=NET_ID, name="AUDIO")
     net_class = NetClass(
         id="class:audio",
         name="Audio",
-        clearance_nm=100,
+        clearance_nm=route_clearance_nm,
+        track_width_nm=200,
+        via_diameter_nm=600,
+        via_drill_nm=300,
+    )
+    other_net_class = NetClass(
+        id="class:power",
+        name="Power",
+        clearance_nm=other_clearance_nm,
         track_width_nm=200,
         via_diameter_nm=600,
         via_drill_nm=300,
@@ -183,10 +198,10 @@ def _snapshot(
         copper_layers=copper_layers,
         nets=(net, Net(id=OTHER_NET_ID, name="POWER")),
         constraints=ConstraintSet(
-            net_classes=(net_class,),
+            net_classes=(net_class, other_net_class),
             assignments=(
                 NetClassAssignment(net_id=NET_ID, net_class_id=net_class.id),
-                NetClassAssignment(net_id=OTHER_NET_ID, net_class_id=net_class.id),
+                NetClassAssignment(net_id=OTHER_NET_ID, net_class_id=other_net_class.id),
             ),
             length_rules=(
                 LengthRule(
@@ -202,6 +217,35 @@ def _snapshot(
         pads=tuple(pads),
         segments=segments,
         vias=vias,
+        zones=tuple(
+            Zone(
+                id=f"zone:foreign:{index:02d}",
+                net_id=OTHER_NET_ID,
+                layer_id=foreign_zone_layer_id,
+                boundary=boundary,
+                clearance_nm=zone_clearance_nm,
+                min_thickness_nm=100,
+                thermal_gap_nm=100,
+                thermal_bridge_width_nm=100,
+            )
+            for index, boundary in enumerate(foreign_zones)
+        )
+        + (
+            (
+                Zone(
+                    id="zone:own",
+                    net_id=NET_ID,
+                    layer_id=LAYER_ID,
+                    boundary=own_zone,
+                    clearance_nm=zone_clearance_nm,
+                    min_thickness_nm=100,
+                    thermal_gap_nm=100,
+                    thermal_bridge_width_nm=100,
+                ),
+            )
+            if own_zone is not None
+            else ()
+        ),
         keepouts=tuple(
             Keepout(
                 id=f"keepout:{index:02d}",
@@ -268,6 +312,7 @@ def test_straight_route_is_exact_replayable_and_content_addressed() -> None:
     second = _candidate(router.propose(snapshot, request))
 
     assert router.name == "orthogonal-a-star-v1"
+    assert first.router_version == "astar-grid/0.2.0"
     assert first == second
     assert first.patch.vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
     assert first.patch.width_nm == 200
@@ -717,3 +762,266 @@ def test_a_via_clear_of_the_route_does_not_force_a_detour() -> None:
     aside = _snapshot(foreign_via=(5_000, 8_000))
 
     assert _candidate(router.propose(aside, _request(aside))).cost.bend_count == 0
+
+
+def test_foreign_zone_produces_a_deterministic_detour_and_matches_the_oracle() -> None:
+    snapshot = _snapshot(foreign_zones=(_rectangle(4_000, 4_000, 6_000, 6_000),))
+    request = _request(snapshot)
+    router = AStarRouter()
+
+    first = _candidate(router.propose(snapshot, request))
+    second = _candidate(router.propose(snapshot, request))
+    oracle = run_dijkstra_oracle(snapshot, request)
+
+    assert first == second
+    assert first.patch.vertices == (
+        PointNM(1_000, 5_000),
+        PointNM(1_000, 7_000),
+        PointNM(9_000, 7_000),
+        PointNM(9_000, 5_000),
+    )
+    assert first.cost.length_nm == 12_000
+    assert first.cost.bend_count == 2
+    assert first.metrics.hard_internal_violations == 0
+    assert isinstance(oracle, DijkstraResult)
+    assert oracle.total_cost_nm == first.cost.total_cost_nm
+
+
+def test_concave_zone_is_not_replaced_by_its_bounding_box() -> None:
+    # The start is inside the U-shaped outline's bounding box but in its open notch.
+    # A rectangular approximation would reject the endpoint; the polygon leaves a
+    # 2,000 nm-wide corridor around the exact centreline.
+    notched = _ring(
+        (
+            (3_000, 2_000),
+            (7_000, 2_000),
+            (7_000, 8_000),
+            (6_000, 8_000),
+            (6_000, 3_000),
+            (4_000, 3_000),
+            (4_000, 8_000),
+            (3_000, 8_000),
+        )
+    )
+    snapshot = _snapshot(
+        start=(5_000, 5_000),
+        end=(5_000, 9_000),
+        foreign_zones=(notched,),
+    )
+
+    candidate = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    assert candidate.patch.vertices == (PointNM(5_000, 5_000), PointNM(5_000, 9_000))
+    assert candidate.cost.bend_count == 0
+
+
+def test_zone_collision_checks_the_complete_grid_edge() -> None:
+    snapshot = _snapshot(foreign_zones=(_rectangle(4_000, 4_000, 6_000, 6_000),))
+    request = _request(
+        snapshot,
+        settings=_settings(grid_step_nm=8_000, proximity_penalty_nm=0),
+    )
+
+    result = AStarRouter().propose(snapshot, request)
+
+    _assert_failure(result, RouteFailureCode.NO_PATH)
+
+
+def test_zone_exact_clearance_boundary_is_legal_and_one_nanometre_inside_is_not() -> None:
+    lower = _rectangle(3_000, 0, 7_000, 4_800)
+    exact_upper = _rectangle(3_000, 5_200, 7_000, 10_000)
+    inside_upper = _rectangle(3_000, 5_199, 7_000, 10_000)
+    exact = _snapshot(foreign_zones=(lower, exact_upper))
+    inside = _snapshot(foreign_zones=(lower, inside_upper))
+    settings = _settings(proximity_penalty_nm=0)
+    router = AStarRouter()
+
+    exact_route = _candidate(router.propose(exact, _request(exact, settings=settings)))
+    inside_result = router.propose(inside, _request(inside, settings=settings))
+
+    assert exact_route.patch.vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
+    _assert_failure(inside_result, RouteFailureCode.NO_PATH)
+
+
+@pytest.mark.parametrize(
+    ("route_clearance_nm", "other_clearance_nm", "zone_clearance_nm"),
+    ((300, 100, 100), (100, 300, 100), (100, 100, 300)),
+)
+def test_zone_uses_the_strictest_of_all_three_clearances(
+    route_clearance_nm: int,
+    other_clearance_nm: int,
+    zone_clearance_nm: int,
+) -> None:
+    exact = _snapshot(
+        foreign_zones=(_rectangle(4_000, 1_000, 6_000, 4_600),),
+        route_clearance_nm=route_clearance_nm,
+        other_clearance_nm=other_clearance_nm,
+        zone_clearance_nm=zone_clearance_nm,
+    )
+    inside = _snapshot(
+        foreign_zones=(_rectangle(4_000, 1_000, 6_000, 4_601),),
+        route_clearance_nm=route_clearance_nm,
+        other_clearance_nm=other_clearance_nm,
+        zone_clearance_nm=zone_clearance_nm,
+    )
+    settings = _settings(proximity_penalty_nm=0)
+    router = AStarRouter()
+
+    exact_route = _candidate(router.propose(exact, _request(exact, settings=settings)))
+    inside_route = _candidate(router.propose(inside, _request(inside, settings=settings)))
+
+    assert exact_route.cost.bend_count == 0
+    assert inside_route.cost.bend_count > 0
+
+
+def test_diagonal_zone_edge_uses_exact_rational_distance() -> None:
+    # The start is exactly 200 nm from the 3:4:5 edge A-B. Its perpendicular
+    # foot (4,840, 5,120) lies inside A-B, so this exercises the rational
+    # cross-product branch rather than an endpoint distance.
+    boundary = _ring(
+        (
+            (3_340, 3_120),
+            (6_340, 7_120),
+            (5_940, 7_420),
+            (2_940, 3_420),
+        )
+    )
+    exact = _snapshot(
+        start=(5_000, 5_000),
+        end=(5_000, 1_000),
+        foreign_zones=(boundary,),
+    )
+    one_nanometre_inside = _snapshot(
+        start=(5_000, 5_000),
+        end=(5_000, 1_000),
+        foreign_zones=(boundary,),
+        zone_clearance_nm=101,
+    )
+    settings = _settings(proximity_penalty_nm=0)
+    router = AStarRouter()
+
+    exact_route = _candidate(router.propose(exact, _request(exact, settings=settings)))
+    inside = router.propose(
+        one_nanometre_inside,
+        _request(one_nanometre_inside, settings=settings),
+    )
+
+    assert exact_route.patch.vertices == (PointNM(5_000, 5_000), PointNM(5_000, 1_000))
+    _assert_failure(inside, RouteFailureCode.NO_PATH)
+
+
+def test_same_net_zone_remains_partial_routing() -> None:
+    snapshot = _snapshot(own_zone=_rectangle(1_000, 1_000, 2_000, 2_000))
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+
+
+def test_zones_share_object_and_edge_relation_budgets() -> None:
+    router = AStarRouter()
+    two_zones = _snapshot(
+        foreign_zones=(
+            _rectangle(2_000, 1_000, 3_000, 2_000),
+            _rectangle(7_000, 8_000, 8_000, 9_000),
+        )
+    )
+    object_limited = router.propose(
+        two_zones,
+        _request(two_zones, settings=_settings(max_obstacles=1)),
+    )
+    _assert_failure(object_limited, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+
+    notched = _ring(
+        (
+            (3_000, 2_000),
+            (7_000, 2_000),
+            (7_000, 8_000),
+            (6_000, 8_000),
+            (6_000, 3_000),
+            (4_000, 3_000),
+            (4_000, 8_000),
+            (3_000, 8_000),
+        )
+    )
+    relation_limited_snapshot = _snapshot(
+        start=(5_000, 5_000),
+        end=(5_000, 9_000),
+        foreign_zones=(notched,),
+    )
+    relation_limited = router.propose(
+        relation_limited_snapshot,
+        _request(
+            relation_limited_snapshot,
+            settings=_settings(max_obstacle_checks=8),
+        ),
+    )
+
+    _assert_failure(relation_limited, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    assert relation_limited.diagnostic is not None
+    assert relation_limited.diagnostic.obstacle_checks == 8
+    assert relation_limited.diagnostic.expanded_states == 0
+
+
+def test_zone_on_another_layer_is_ignored() -> None:
+    clear = _snapshot()
+    other_layer = _snapshot(
+        foreign_zones=(_rectangle(4_000, 4_000, 6_000, 6_000),),
+        foreign_zone_layer_id="layer:B.Cu",
+    )
+    router = AStarRouter()
+
+    clear_route = _candidate(router.propose(clear, _request(clear)))
+    other_layer_route = _candidate(router.propose(other_layer, _request(other_layer)))
+
+    assert other_layer_route.patch.vertices == clear_route.patch.vertices
+    assert other_layer_route.cost == clear_route.cost
+
+
+def test_polygon_preparation_scan_observes_the_cancellation_cadence() -> None:
+    bottom = tuple((x, 1_000) for x in range(1_000, 5_001, 200))
+    right = tuple((5_000, y) for y in range(1_200, 5_001, 200))
+    top = tuple((x, 5_000) for x in range(4_800, 999, -200))
+    left = tuple((1_000, y) for y in range(4_800, 1_000, -200))
+    many_vertices = _ring(bottom + right + top + left)
+    snapshot = _snapshot(foreign_zones=(many_vertices,))
+    calls = 0
+
+    def cancel_on_first_relation_checkpoint() -> bool:
+        nonlocal calls
+        calls += 1
+        return calls >= 12
+
+    result = AStarRouter().propose(
+        snapshot,
+        _request(snapshot),
+        cancelled=cancel_on_first_relation_checkpoint,
+    )
+
+    _assert_failure(result, RouteFailureCode.CANCELLED)
+    assert result.diagnostic is not None
+    assert result.diagnostic.obstacle_checks == 64
+    assert result.diagnostic.expanded_states == 0
+    assert calls == 12
+
+
+@pytest.mark.parametrize("cancel_at", (10, 11))
+def test_zone_net_class_lookup_does_not_swallow_cancellation(cancel_at: int) -> None:
+    snapshot = _snapshot(
+        foreign_zones=(_rectangle(4_000, 4_000, 6_000, 6_000),),
+    )
+    calls = 0
+
+    def cancel_once() -> bool:
+        nonlocal calls
+        calls += 1
+        return calls == cancel_at
+
+    result = AStarRouter().propose(
+        snapshot,
+        _request(snapshot),
+        cancelled=cancel_once,
+    )
+
+    _assert_failure(result, RouteFailureCode.CANCELLED)
+    assert calls == cancel_at

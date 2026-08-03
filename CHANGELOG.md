@@ -8,17 +8,26 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Foreign-net solid zones on the selected layer are now conservative polygon boundary-envelope
+  obstacles instead of a blanket rejection. Concave and diagonal outlines use exact integer
+  containment, intersection, and rational squared-distance checks under the strictest routed class,
+  zone-net class, and zone clearance; bounds construction and every polygon relation consume the
+  existing obstacle-work budget. Same-net zones remain partial routing, cached KiCad fill is not
+  trusted, and CopperTone remains at zero of fourteen previewable `F.Cu` nets because nine are
+  multi-pin and all five two-pin nets already carry same-net copper. A committed `blocked-zone`
+  fixture verifies deterministic read-only adapter-to-preview routing without claiming fill-aware
+  KiCad DRC.
 - Through vias outside the routed net are now selected-layer obstacles built from their outer
   diameter, rather than a board-level rejection. A via on the routed net still fails closed as
-  partial routing. On the repository's own CopperTone board this moves the failure from "nine vias
-  reject everything" to per-net diagnostics; the board still previews zero of fourteen nets,
-  because zones and multi-pin nets remain unsupported.
+  partial routing. On the repository's own CopperTone board this moved the failure from "nine vias
+  reject everything" to per-net diagnostics; current re-measurement still previews zero of fourteen
+  nets because multi-pin and already-partially-routed nets remain unsupported.
 - Selected-layer pads and orthogonal segments outside the routed net are now exact rectangular
   routing obstacles instead of a hard rejection, so preview works on boards that already carry
   copper. Obstacles are inflated by the routed half-width plus the stricter of the routed and
   obstacle net-class clearances, round pad shapes over-approximate via their bounding box, and
-  arcs, zones, vias, off-axis rotations, diagonal segments, and partially routed nets still fail
-  closed. A committed blocked-pad fixture verifies the detour against real KiCad 10.0.5 DRC.
+  arcs, off-axis rotations, diagonal segments, and partially routed nets still fail closed. A
+  committed blocked-pad fixture verifies the detour against real KiCad 10.0.5 DRC.
 - Read-only Board IR inspection as the `inspect_board_ir` MCP tool and the `copper-mcp board-ir`
   command. It reports whether a board converts to the supported Board IR subset and describes its
   revision, snapshot and constraint digests, schema, units, copper layer identities, and object

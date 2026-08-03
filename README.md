@@ -42,9 +42,11 @@ The non-negotiable boundary is simple:
   aggregate KiCad summary without writing a candidate file into the source workspace.
 - Candidate-manifest validation and correctness-first comparison.
 - Bounded integer A* candidates for one two-pad net on a documented rectangular Board IR subset,
-  routing around existing foreign-net pads and orthogonal segments under exact integer clearance,
-  with independent lattice, search, and obstacle-work ceilings, plus replay-bound serialization to
-  new disposable KiCad bytes when every modeled source geometry object has a native UUID/tstamp.
+  routing around existing foreign-net pads, orthogonal segments, through vias, and conservative
+  solid-zone polygon envelopes under exact integer clearance, with independent lattice, search, and
+  obstacle-work ceilings, plus replay-bound serialization to new disposable KiCad bytes when every
+  modeled source geometry object has a native UUID/tstamp. Zone fill caches are not routing
+  authority, and same-net existing copper remains unsupported partial routing.
 - Read-only Board IR structural inspection that reports whether a board is representable by the
   supported subset, using counts and digests rather than geometry, names, or identities.
 - A bounded, non-mutating route preview over MCP and the CLI that validates an untrusted request,

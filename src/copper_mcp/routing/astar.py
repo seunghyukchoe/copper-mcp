@@ -18,6 +18,7 @@ from copper_mcp.board_ir import (
     PointNM,
     Ring,
     Segment,
+    Zone,
     verify_snapshot,
 )
 from copper_mcp.routing.contracts import (
@@ -33,7 +34,7 @@ from copper_mcp.routing.contracts import (
     RouteResult,
 )
 
-ROUTER_VERSION = "astar-grid/0.1.0"
+ROUTER_VERSION = "astar-grid/0.2.0"
 ROUTING_POLICY = "orthogonal-a-star-v1"
 _EMPTY_DIGEST = f"sha256:{'0' * 64}"
 
@@ -50,6 +51,16 @@ _NO_DIRECTION = len(_DIRECTIONS)
 
 
 @dataclass(frozen=True, slots=True)
+class _PolygonObstacle:
+    """One conservative solid-zone envelope with an exact Euclidean margin."""
+
+    zone_id: str
+    points: tuple[PointNM, ...]
+    bounds: _Rect
+    margin_nm: int
+
+
+@dataclass(frozen=True, slots=True)
 class _Problem:
     snapshot: BoardIRSnapshot
     request: RouteRequest
@@ -58,7 +69,8 @@ class _Problem:
     width_nm: int
     clearance_nm: int
     safe_board: _Rect
-    obstacles: tuple[_Rect, ...]
+    rect_obstacles: tuple[_Rect, ...]
+    polygon_obstacles: tuple[_PolygonObstacle, ...]
     min_ix: int
     max_ix: int
     min_iy: int
@@ -171,6 +183,171 @@ def _edge_enters_open_rectangle(start: PointNM, end: PointNM, rectangle: _Rect) 
     return min_x < start.x < max_x and max(start.y, end.y) > min_y and min(start.y, end.y) < max_y
 
 
+def _inflate_rectangle(rectangle: _Rect, margin_nm: int) -> _Rect:
+    min_x, min_y, max_x, max_y = rectangle
+    return (
+        min_x - margin_nm,
+        min_y - margin_nm,
+        max_x + margin_nm,
+        max_y + margin_nm,
+    )
+
+
+def _cross(first: PointNM, second: PointNM, third: PointNM) -> int:
+    return (second.x - first.x) * (third.y - first.y) - (second.y - first.y) * (third.x - first.x)
+
+
+def _on_segment(first: PointNM, point: PointNM, second: PointNM) -> bool:
+    return min(first.x, second.x) <= point.x <= max(first.x, second.x) and min(
+        first.y, second.y
+    ) <= point.y <= max(first.y, second.y)
+
+
+def _segments_intersect(
+    first_start: PointNM,
+    first_end: PointNM,
+    second_start: PointNM,
+    second_end: PointNM,
+) -> bool:
+    first_side_start = _cross(first_start, first_end, second_start)
+    first_side_end = _cross(first_start, first_end, second_end)
+    second_side_start = _cross(second_start, second_end, first_start)
+    second_side_end = _cross(second_start, second_end, first_end)
+    if first_side_start == 0 and _on_segment(first_start, second_start, first_end):
+        return True
+    if first_side_end == 0 and _on_segment(first_start, second_end, first_end):
+        return True
+    if second_side_start == 0 and _on_segment(second_start, first_start, second_end):
+        return True
+    if second_side_end == 0 and _on_segment(second_start, first_end, second_end):
+        return True
+    first_straddles = (first_side_start > 0 and first_side_end < 0) or (
+        first_side_start < 0 and first_side_end > 0
+    )
+    second_straddles = (second_side_start > 0 and second_side_end < 0) or (
+        second_side_start < 0 and second_side_end > 0
+    )
+    return first_straddles and second_straddles
+
+
+def _point_segment_distance_lt(
+    point: PointNM,
+    start: PointNM,
+    end: PointNM,
+    distance_nm: int,
+) -> bool:
+    """Compare exact squared distance without division, roots, or floating point."""
+
+    edge_x = end.x - start.x
+    edge_y = end.y - start.y
+    point_x = point.x - start.x
+    point_y = point.y - start.y
+    edge_length_sq = edge_x * edge_x + edge_y * edge_y
+    distance_sq = distance_nm * distance_nm
+    if edge_length_sq == 0:
+        return point_x * point_x + point_y * point_y < distance_sq
+    projection = point_x * edge_x + point_y * edge_y
+    if projection <= 0:
+        return point_x * point_x + point_y * point_y < distance_sq
+    if projection >= edge_length_sq:
+        end_x = point.x - end.x
+        end_y = point.y - end.y
+        return end_x * end_x + end_y * end_y < distance_sq
+    area = edge_x * point_y - edge_y * point_x
+    return area * area < distance_sq * edge_length_sq
+
+
+def _segments_distance_lt(
+    first_start: PointNM,
+    first_end: PointNM,
+    second_start: PointNM,
+    second_end: PointNM,
+    distance_nm: int,
+) -> bool:
+    if _segments_intersect(first_start, first_end, second_start, second_end):
+        return True
+    return (
+        _point_segment_distance_lt(first_start, second_start, second_end, distance_nm)
+        or _point_segment_distance_lt(first_end, second_start, second_end, distance_nm)
+        or _point_segment_distance_lt(second_start, first_start, first_end, distance_nm)
+        or _point_segment_distance_lt(second_end, first_start, first_end, distance_nm)
+    )
+
+
+def _ray_crosses_right(point: PointNM, start: PointNM, end: PointNM) -> bool:
+    if (start.y > point.y) == (end.y > point.y):
+        return False
+    return (_cross(start, end, point) > 0) == (end.y > start.y)
+
+
+def _polygon_bounds(points: tuple[PointNM, ...], work: _WorkBudget) -> _Rect:
+    min_x = max_x = points[0].x
+    min_y = max_y = points[0].y
+    for point in points:
+        work.obstacle_check()
+        min_x = min(min_x, point.x)
+        min_y = min(min_y, point.y)
+        max_x = max(max_x, point.x)
+        max_y = max(max_y, point.y)
+    return min_x, min_y, max_x, max_y
+
+
+def _polygon_obstacle_sort_key(
+    obstacle: _PolygonObstacle,
+) -> tuple[_Rect, int, str]:
+    return obstacle.bounds, obstacle.margin_nm, obstacle.zone_id
+
+
+def _edge_within_polygon_offset(
+    start: PointNM,
+    end: PointNM,
+    obstacle: _PolygonObstacle,
+    work: _WorkBudget,
+) -> bool:
+    work.obstacle_check()
+    if not _edge_enters_open_rectangle(
+        start,
+        end,
+        _inflate_rectangle(obstacle.bounds, obstacle.margin_nm),
+    ):
+        return False
+    start_inside = False
+    for index, edge_start in enumerate(obstacle.points):
+        work.obstacle_check()
+        edge_end = obstacle.points[(index + 1) % len(obstacle.points)]
+        if _segments_distance_lt(
+            start,
+            end,
+            edge_start,
+            edge_end,
+            obstacle.margin_nm,
+        ):
+            return True
+        if _ray_crosses_right(start, edge_start, edge_end):
+            start_inside = not start_inside
+    return start_inside
+
+
+def _point_within_polygon_offset(
+    point: PointNM,
+    obstacle: _PolygonObstacle,
+    distance_nm: int,
+    work: _WorkBudget,
+) -> bool:
+    work.obstacle_check()
+    if not _inside_open(point, _inflate_rectangle(obstacle.bounds, distance_nm)):
+        return False
+    inside = False
+    for index, edge_start in enumerate(obstacle.points):
+        work.obstacle_check()
+        edge_end = obstacle.points[(index + 1) % len(obstacle.points)]
+        if _point_segment_distance_lt(point, edge_start, edge_end, distance_nm):
+            return True
+        if _ray_crosses_right(point, edge_start, edge_end):
+            inside = not inside
+    return inside
+
+
 def _edge_is_legal(
     start: PointNM,
     end: PointNM,
@@ -179,9 +356,12 @@ def _edge_is_legal(
 ) -> bool:
     if not _inside_closed(start, problem.safe_board) or not _inside_closed(end, problem.safe_board):
         return False
-    for obstacle in problem.obstacles:
+    for obstacle in problem.rect_obstacles:
         work.obstacle_check()
         if _edge_enters_open_rectangle(start, end, obstacle):
+            return False
+    for polygon in problem.polygon_obstacles:
+        if _edge_within_polygon_offset(start, end, polygon, work):
             return False
     return True
 
@@ -191,12 +371,20 @@ def _proximity_step(point: PointNM, problem: _Problem, work: _WorkBudget) -> int
     min_x, min_y, max_x, max_y = problem.safe_board
     if min(point.x - min_x, max_x - point.x, point.y - min_y, max_y - point.y) < step:
         return 1
-    for obstacle in problem.obstacles:
+    for obstacle in problem.rect_obstacles:
         work.obstacle_check()
         obstacle_min_x, obstacle_min_y, obstacle_max_x, obstacle_max_y = obstacle
         dx = max(obstacle_min_x - point.x, 0, point.x - obstacle_max_x)
         dy = max(obstacle_min_y - point.y, 0, point.y - obstacle_max_y)
         if max(dx, dy) < step:
+            return 1
+    for polygon in problem.polygon_obstacles:
+        if _point_within_polygon_offset(
+            point,
+            polygon,
+            polygon.margin_nm + step,
+            work,
+        ):
             return 1
     return 0
 
@@ -244,8 +432,10 @@ def _net_clearance_nm(
         return None
     try:
         return _resolve_net_class(snapshot, net_id, work).clearance_nm
-    except _ExpectedFailureError:
-        return None
+    except _ExpectedFailureError as failure:
+        if failure.code is RouteFailureCode.INVALID_TWO_PIN_NET:
+            return None
+        raise
 
 
 def _pad_extent(pad: Pad) -> tuple[int, int] | None:
@@ -377,16 +567,20 @@ def _prepare(
         if arc.layer_id == request.layer_id:
             raise _fail(
                 RouteFailureCode.UNSUPPORTED_GEOMETRY,
-                "selected-layer arcs are outside the rectangular obstacle model",
+                "selected-layer arcs are outside the supported obstacle model",
             )
+    blocking_zones: list[Zone] = []
     for index, zone in enumerate(content.zones):
         if index % 64 == 0:
             work.checkpoint()
-        if zone.layer_id == request.layer_id:
+        if zone.layer_id != request.layer_id:
+            continue
+        if zone.net_id == request.net_id:
             raise _fail(
                 RouteFailureCode.UNSUPPORTED_GEOMETRY,
-                "selected-layer zones are outside the rectangular obstacle model",
+                "the selected net already carries a zone and is partially routed",
             )
+        blocking_zones.append(zone)
     for index, segment in enumerate(content.segments):
         if index % 64 == 0:
             work.checkpoint()
@@ -420,26 +614,22 @@ def _prepare(
     if safe_board[0] > safe_board[2] or safe_board[1] > safe_board[3]:
         raise _fail(RouteFailureCode.NO_PATH, "the routed width does not fit inside the board")
 
-    obstacles: list[_Rect] = []
+    rect_obstacles: list[_Rect] = []
+    polygon_obstacles: list[_PolygonObstacle] = []
 
-    def add_obstacle(rectangle: _Rect, clearance_nm: int) -> None:
-        """Inflate one exact rectangle by the route half-width plus the governing clearance."""
-
-        if len(obstacles) >= request.settings.max_obstacles:
+    def ensure_obstacle_capacity() -> None:
+        if len(rect_obstacles) + len(polygon_obstacles) >= request.settings.max_obstacles:
             raise _fail(
                 RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
                 "the selected-layer obstacle count exceeds the configured obstacle budget",
             )
+
+    def add_rect_obstacle(rectangle: _Rect, clearance_nm: int) -> None:
+        """Inflate one exact rectangle by the route half-width plus the governing clearance."""
+
+        ensure_obstacle_capacity()
         margin_nm = half_width_nm + clearance_nm
-        min_x, min_y, max_x, max_y = rectangle
-        obstacles.append(
-            (
-                min_x - margin_nm,
-                min_y - margin_nm,
-                max_x + margin_nm,
-                max_y + margin_nm,
-            )
-        )
+        rect_obstacles.append(_inflate_rectangle(rectangle, margin_nm))
 
     def governing_clearance_nm(net_id: str | None) -> int:
         """Use the stricter of the routed net's clearance and the obstacle net's clearance."""
@@ -460,7 +650,7 @@ def _prepare(
                 RouteFailureCode.UNSUPPORTED_GEOMETRY,
                 "a selected-layer track keepout is not an axis-aligned rectangle",
             )
-        add_obstacle(rectangle, net_class.clearance_nm)
+        add_rect_obstacle(rectangle, net_class.clearance_nm)
 
     for index, pad in enumerate(blocking_pads):
         if index % 64 == 0:
@@ -472,7 +662,7 @@ def _prepare(
                 "a selected-layer pad is rotated off axis and is not modeled exactly",
             )
         half_x_nm, half_y_nm = pad_extent
-        add_obstacle(
+        add_rect_obstacle(
             (
                 pad.center.x - half_x_nm,
                 pad.center.y - half_y_nm,
@@ -493,14 +683,14 @@ def _prepare(
                 RouteFailureCode.UNSUPPORTED_GEOMETRY,
                 "a selected-layer segment is diagonal and is not modeled exactly",
             )
-        add_obstacle(segment_extent, governing_clearance_nm(segment.net_id))
+        add_rect_obstacle(segment_extent, governing_clearance_nm(segment.net_id))
 
     for index, via in enumerate(content.vias):
         if index % 64 == 0:
             work.checkpoint()
         # Board IR v0.1 admits through vias only, so every via crosses the selected layer.
         half_span_nm = (via.diameter_nm + 1) // 2
-        add_obstacle(
+        add_rect_obstacle(
             (
                 via.center.x - half_span_nm,
                 via.center.y - half_span_nm,
@@ -508,6 +698,21 @@ def _prepare(
                 via.center.y + half_span_nm,
             ),
             governing_clearance_nm(via.net_id),
+        )
+
+    for index, zone in enumerate(blocking_zones):
+        if index % 64 == 0:
+            work.checkpoint()
+        ensure_obstacle_capacity()
+        points = zone.boundary.points
+        clearance_nm = max(governing_clearance_nm(zone.net_id), zone.clearance_nm)
+        polygon_obstacles.append(
+            _PolygonObstacle(
+                zone_id=zone.id,
+                points=points,
+                bounds=_polygon_bounds(points, work),
+                margin_nm=half_width_nm + clearance_nm,
+            )
         )
 
     step = request.settings.grid_step_nm
@@ -544,7 +749,8 @@ def _prepare(
         width_nm=net_class.track_width_nm,
         clearance_nm=net_class.clearance_nm,
         safe_board=safe_board,
-        obstacles=tuple(sorted(obstacles)),
+        rect_obstacles=tuple(sorted(rect_obstacles)),
+        polygon_obstacles=tuple(sorted(polygon_obstacles, key=_polygon_obstacle_sort_key)),
         min_ix=min_ix,
         max_ix=max_ix,
         min_iy=min_iy,
@@ -552,12 +758,29 @@ def _prepare(
         goal_ix=goal_ix,
         goal_iy=goal_iy,
     )
-    for obstacle in problem.obstacles:
+    for obstacle in problem.rect_obstacles:
         work.obstacle_check()
         if _inside_open(start_pad.center, obstacle) or _inside_open(end_pad.center, obstacle):
             raise _fail(
                 RouteFailureCode.NO_PATH,
-                "a route endpoint is blocked by a track keepout",
+                "a route endpoint is blocked by a selected-layer obstacle",
+                obstacle_checks=work.obstacle_checks,
+            )
+    for polygon in problem.polygon_obstacles:
+        if _point_within_polygon_offset(
+            start_pad.center,
+            polygon,
+            polygon.margin_nm,
+            work,
+        ) or _point_within_polygon_offset(
+            end_pad.center,
+            polygon,
+            polygon.margin_nm,
+            work,
+        ):
+            raise _fail(
+                RouteFailureCode.NO_PATH,
+                "a route endpoint is blocked by a selected-layer obstacle",
                 obstacle_checks=work.obstacle_checks,
             )
     work.checkpoint()

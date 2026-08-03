@@ -37,8 +37,11 @@ documentation, ledger updates, and benchmark evidence.
   - [ ] Durable routing jobs, candidate persistence, and export.
 - [x] Existing selected-layer copper as exact rectangular obstacles.
 - [x] Via obstacles on the selected layer, the first limit a real board hit.
-- [ ] Polygon zone obstacles; a bounding box is useless for a pour covering most of a board.
+- [x] Conservative polygon zone-boundary envelope obstacles with exact integer concave/diagonal
+  geometry and vertex-level work accounting.
+- [ ] Fill-aware zone routing with a freshness-bound KiCad refill/fill-digest authority contract.
 - [ ] Multi-pin nets, since most real nets have more than two pads.
+- [ ] Attachment to existing same-net copper and bounded partial-route completion.
 - [ ] Multilayer vias and keepouts.
 - [ ] Negotiated-congestion multi-net routing.
 - [ ] Incremental spatial index and bounded rip-up/reroute.

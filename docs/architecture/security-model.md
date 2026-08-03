@@ -63,6 +63,15 @@ return the candidate geometry and endpoint pad IDs it generated, so hosts that m
 generated copper to a model should not enable the tool; source board bytes and unrelated board
 objects are never returned.
 
+Selected-layer foreign zones are treated as conservative solid polygon envelopes, never as trusted
+cached fill. Each zone counts against the obstacle-object ceiling; vertex inspection, bounding-box
+pruning, and every exact polygon-edge relation count against the obstacle-check ceiling and inherit
+its 64-check cancellation cadence. The integer kernel uses no floating point or external geometry
+library, applies the strictest routed-net, zone-net, and zone clearance, and rejects same-net zones
+as partial routing. This can reject a route through a real fill void, but cannot use stale
+`filled_polygon` data to permit copper through an area the zone may occupy. Fill-aware routing stays
+blocked on a separately reviewed refill/freshness contract.
+
 Board IR inspection discloses only object counts, digests, units, and standard KiCad copper layer
 names. Coordinates, net names, pad and net identities, UUIDs, and source bytes are excluded, and a
 regression test asserts their absence from the serialized document. These controls do not make

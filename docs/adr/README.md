@@ -16,3 +16,4 @@ from the decision ledger.
 - [ADR-0010: Read-only Board IR inspection service](0010-board-ir-inspection-service.md)
 - [ADR-0011: Existing copper as exact rectangular obstacles](0011-existing-copper-obstacles.md)
 - [ADR-0012: Through vias as selected-layer obstacles](0012-via-obstacles.md)
+- [ADR-0013: Conservative polygon zone-boundary obstacles](0013-polygon-zone-obstacles.md)

@@ -152,6 +152,31 @@ def test_preview_does_not_touch_the_workspace(tmp_path: Path) -> None:
     assert _entries(tmp_path) == before
 
 
+def test_preview_routes_around_a_zone_outline_without_mutating_the_source(
+    tmp_path: Path,
+) -> None:
+    fixture = FIXTURE.parent / "blocked-zone.kicad_pcb"
+    board = tmp_path / fixture.name
+    board.write_bytes(fixture.read_bytes())
+    settings = Settings(workspace=tmp_path, max_drc_report_bytes=4096)
+    before = _entries(tmp_path)
+
+    first = preview_route(_request(board=fixture.name), settings)
+    second = preview_route(_request(board=fixture.name), settings)
+
+    assert first.status is RoutePreviewStatus.ROUTED
+    assert first.to_dict() == second.to_dict()
+    assert first.candidate is not None
+    assert first.candidate.cost.bend_count > 0
+    # The POWER zone spans x=18..22 mm and y=11..19 mm. Its 0.375 mm
+    # centreline margin includes route half-width and the governing clearance.
+    assert all(
+        not (17_625_000 < point.x < 22_375_000 and 10_625_000 < point.y < 19_375_000)
+        for point in first.candidate.patch.vertices
+    )
+    assert _entries(tmp_path) == before
+
+
 def test_preview_reports_a_diagnostic_instead_of_routing_off_grid(tmp_path: Path) -> None:
     _, settings = _workspace(tmp_path)
 

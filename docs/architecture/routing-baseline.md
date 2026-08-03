@@ -18,8 +18,8 @@ route multiple nets, run durable jobs, persist or export candidate boards, or ap
 | Connectivity | Exactly two pads belonging to the net; both accessible on the selected layer |
 | Constraints | One net-class width/clearance assignment; no selected-net length or differential-pair rule |
 | Board | One hole-free, axis-aligned rectangular outline |
-| Obstacles | Rectangular track keepouts, plus foreign-net pads, orthogonal segments, and through vias |
-| Existing geometry | No selected-layer arcs or zones, off-axis pads, diagonal segments, or copper already on the routed net |
+| Obstacles | Rectangular track keepouts; foreign-net pads, orthogonal segments, and through vias; conservative foreign-net solid-zone polygon envelopes |
+| Existing geometry | No selected-layer arcs, off-axis pads, diagonal segments, or copper already on the routed net, including same-net zones |
 | Search | Four-neighbour orthogonal grid; east, north, west, south expansion order |
 | Output | Immutable orthogonal `RoutePatch` tied to the unchanged snapshot digest |
 
@@ -48,10 +48,20 @@ v0.1 admits through vias only, so every via provably crosses the routed layer. D
 ignored because copper, not the hole, is what a track must clear. A via on the routed net is
 rejected as partial routing, exactly like a same-net segment.
 
+A foreign-net solid zone on the selected layer contributes its exact simple polygon as a
+conservative boundary envelope. The entire interior is treated as potentially occupied because
+Board IR deliberately does not make KiCad's derived `filled_polygon` cache authoritative. The open
+centreline margin is the routed half-width plus the maximum of routed-net class clearance,
+zone-net class clearance, and the zone's own clearance. Exact integer containment, inclusive segment
+intersection, and rational squared point-to-edge distance support concave and diagonal boundaries;
+the bounding box is only a pruning device. Exact offset equality is legal. A same-net zone remains
+unsupported partial routing, and useful routing through real fill voids requires a separate
+freshness-bound refill contract.
+
 Round pad and via shapes use their bounding box. That over-approximates only: it can refuse a route a
-rounder shape would allow, never permit a clearance violation. Arcs, zones, vias, off-axis pad
-rotations, diagonal segments, and a net that is already partially routed still fail closed, because
-a rectangle cannot represent them without lying. Every obstacle counts against `max_obstacles`.
+rounder shape would allow, never permit a clearance violation. Arcs, off-axis pad rotations,
+diagonal segments, and a net that is already partially routed still fail closed. Every obstacle,
+including one polygon zone regardless of vertex count, counts against `max_obstacles`.
 
 ## Objective and determinism
 
@@ -71,7 +81,9 @@ recorded in candidate identity for parity with future policies but does not rand
 `max_grid_nodes` bounds the position lattice before allocation, `max_expansions` bounds state search,
 `max_obstacles` caps selected-layer obstacles, and `max_obstacle_checks` directly bounds the otherwise
 multiplicative edge/proximity work. Cancellation is checked during preparation, between expansions,
-and at most every 64 obstacle checks during a long evaluation. Node-budget, obstacle-budget,
+and at most every 64 obstacle checks during a long evaluation. Polygon bounds construction charges
+each inspected vertex, and legality/proximity charge their pruning bound and every examined edge.
+Node-budget, obstacle-budget,
 search-budget, cancellation, unsupported constraint, unsupported geometry, stale revision, invalid
 snapshot/request, off-grid endpoint, and no-path outcomes remain distinct. Failure diagnostics carry
 deterministic expanded-state and obstacle-check counts.
@@ -179,27 +191,29 @@ disclosure; source board bytes and unrelated board objects are never returned.
 
 ## Measured coverage on a real board
 
-The obstacle model is validated on synthetic fixtures and on a purpose-built blocked-pad KiCad
-board, so it is worth stating plainly what it does *not* yet reach. Measured against the repository's
-own [CopperTone](../../hardware/coppertone-buffer/README.md) design at commit `87ec6f3`:
+The polygon model is validated by exact synthetic geometry cases; the rectangular existing-copper
+model also has a purpose-built blocked-pad KiCad DRC fixture. It is therefore worth stating plainly
+what neither yet reaches. Measured against the repository's own
+[CopperTone](../../hardware/coppertone-buffer/README.md) board source at SHA-256
+`3bcd01ec4942fccabfaf1c21bdae050a31a7bf99af7ab1bcb0dbb3d0aabcfb94`:
 
 | Stage | Result |
 |---|---|
 | Board IR conversion | Supported — 2 copper layers, 14 nets, 55 pads, 53 segments, 9 vias, 2 zones, 2 keepouts |
 | Nets previewable on `F.Cu` | 0 of 14 |
 
-Conversion is not the blocker; the router's contract is. After ADR-0012 made vias obstacles rather
-than a board-level veto, the remaining limits are per-net and precise:
+Conversion is not the blocker; the router's contract is. Re-measured after ADR-0013 removed the zone
+blanket rejection, the remaining limits are per-net and precise:
 
 - 9 of 14 nets have more than two `F.Cu` pads, the largest at twelve;
-- all 5 two-pin nets fail on the board's two `F.Cu` zones; and
-- 13 of 14 nets already carry `F.Cu` copper, because the board is fully routed.
+- all 5 two-pin nets already carry same-net `F.Cu` segments and fail as partial routing; and
+- the foreign GND zone boundary spans `(0.5, 0.5)`–`(51.5, 29.5)` mm, so its conservative envelope
+  would still cover nearly the whole board after partial-route support.
 
-Zones are the next blocker and need real polygon obstacles: a bounding box around a pour covering
-most of a board would make every route impossible while claiming to be conservative. So the honest
-summary is that Board IR handles a real two-layer audio board today, and the router does not route
-one. The ordering that follows — polygon zones, then multi-pin nets, then rip-up — is what the
-[roadmap](../roadmap.md) now reflects.
+The honest summary is unchanged: Board IR handles a real two-layer audio board today, and the router
+does not route one. The next useful steps are multi-pin routing, attachment to existing same-net
+copper, and a freshness-bound fill authority that can distinguish an outline from its current
+copper. The [roadmap](../roadmap.md) records those as separate contracts.
 
 ## Safety boundary
 
@@ -213,12 +227,16 @@ readiness, or hardware safety. Preview, persistence, and application require sep
 
 A committed `blocked-pad.kicad_pcb` fixture places a 2 mm x 8 mm foreign-net pad between the two
 endpoints. The router detours around it, and a KiCad 10.0.5 integration test asserts the resulting
-board reports zero DRC errors and zero unconnected items, so the obstacle model is checked against
-the authoritative tool rather than only against itself.
+board reports zero DRC errors and zero unconnected items, so that rectangular obstacle path is
+checked against the authoritative tool rather than only against itself. No zone-specific KiCad DRC
+claim is made: candidate DRC intentionally does not refill zones, and cached fill is not authority.
+The separate `blocked-zone.kicad_pcb` fixture exercises KiCad parsing through deterministic,
+read-only public preview and workspace-preservation checks, not authoritative zone-fill DRC.
 
 See [ADR-0006](../adr/0006-bounded-deterministic-astar.md),
 [ADR-0007](../adr/0007-disposable-kicad-candidate-snapshot.md),
 [ADR-0008](../adr/0008-candidate-bound-kicad-drc.md),
 [ADR-0009](../adr/0009-non-mutating-route-preview.md),
 [ADR-0011](../adr/0011-existing-copper-obstacles.md),
-[ADR-0012](../adr/0012-via-obstacles.md), and the [roadmap](../roadmap.md).
+[ADR-0012](../adr/0012-via-obstacles.md),
+[ADR-0013](../adr/0013-polygon-zone-obstacles.md), and the [roadmap](../roadmap.md).
