@@ -24,3 +24,14 @@
 
 Security reviews are required before adding remote authentication, provider integrations, uploaded
 files, persistent multi-user jobs, or candidate application.
+
+> **Amendment — 2026-08-03 (append-only correction):** SEC-004's row was edited in place by
+> PR #17 rather than superseded by a new dated entry, which the append-only convention forbids.
+> The row as first written in PR #13 read: *"Reviewed upstream major-version changes, pinned each
+> action to a full commit SHA, replaced the deprecated provenance wrapper with `actions/attest`,
+> and retained least-privilege job permissions"*, with the outcome *"CI, security, release,
+> labeler, CodeQL, and Scorecard workflows accepted pending current-main GitHub checks; future
+> minor/patch updates are grouped while majors remain isolated for review."* PR #17 replaced both
+> fields with the current text after the dry-run work landed. The current row is factually right
+> and is left standing; this note restores the history the in-place edit removed. Git history is
+> the authority for both versions.

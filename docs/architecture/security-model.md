@@ -7,6 +7,15 @@
 - MCP and model-provider credentials.
 - Candidate provenance and benchmark integrity.
 
+A known limitation, stated rather than implied: workspace reads check their deadline before and
+after, not *during*. Descriptors are opened non-blocking, which defeats a FIFO, and special files
+and symlinks are rejected outright — but `O_NONBLOCK` has no effect on a regular file, so a read
+from a stalled network or FUSE mount can block past any deadline this process set. Interrupting it
+would need a signal or a reader thread, and adding either to every read is a larger change than the
+risk warrants for a local-first tool. What bounds the exposure today is that sizes are checked
+before reading, KiCad subprocesses carry their own timeouts, and a stall is a hang rather than a
+wrong answer. A workspace on unreliable network storage is outside what this bound covers.
+
 Terminology used throughout: DRC evidence is an **attestation** — a statement about named subjects
 bound to their digests, refused when any binding fails — while release-ledger rows are **provenance**
 in the SLSA sense, and the ledgers as a whole are an append-only **transparency record** rather than

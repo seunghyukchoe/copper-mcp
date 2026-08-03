@@ -450,7 +450,12 @@ def preview_route(payload: Any, settings: Settings) -> RoutePreview:
                 ),
             )
         verified_fill = tuple(
-            VerifiedFill(net_id=island.net_id, layer_id=island.layer_id, points=island.points)
+            VerifiedFill(
+                net_id=island.net_id,
+                layer_id=island.layer_id,
+                points=island.points,
+                source_revision=fill_authority.source_revision,
+            )
             for island in islands
         )
 

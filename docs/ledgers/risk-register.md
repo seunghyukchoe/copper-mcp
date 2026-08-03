@@ -34,6 +34,7 @@
 | R-030 | A caller mutates an artifact object after insertion so the capability serves bytes that no longer match identity or aggregate byte accounting. | High | Medium | Snapshot exact immutable content, digest, and size into each store entry; use only stored size for quotas and eviction; verify stored digest against stored bytes on every read. | Mitigated / delivery |
 | R-031 | A release tag is created from a commit without version-specific notes or an explicit record that its full gate authorized tagging. | Medium | High | Require a dated changelog section matching the version and an append-only `Ready` release-authorization row naming the exact clean-`make check` commit; treat authorization, tag creation, artifact build, and publication as distinct states. | Mitigated / release governance |
 | R-032 | A silent coordinate-convention error in a source adapter places geometry plausibly but wrongly, so every downstream contract is exact about the wrong board. | Medium | High | The KiCad footprint quarter-turn map is pinned by a committed fixture whose expected pad positions are adjudicated by KiCad's own connectivity engine rather than by arithmetic in this repository; the adapter refuses footprint-local zones, footprint graphics on copper or Edge.Cuts, and non-orthogonal footprint transforms, so no other object class inherits the transform; a CopperTone test asserts no foreign track endpoint lies inside a foreign pad, which is the cross-check that exposed the original defect. | Mitigated / Board IR |
+| R-033 | The committed CopperTone board's mounting-hole rule areas were generated as octagons inscribed at the required 2.85 mm keep-out radius, so their edges sit 0.2169 mm inside the requirement and copper may legally approach closer than the constraint intends. | Low | Medium | The generator now circumscribes the octagon so edges hold the full radius; a dedicated test records that the committed board still carries the older inscribed keepout; regeneration is deferred to its own slice because new coordinates invalidate every measurement recorded against the board's current revision digest, and that slice must update the recording test and re-measure coverage in the same change. | Open / hardware |
 
 > **Amendment — 2026-08-03:** ADR-0008 and R-014 supersede R-011's “separate future
 > candidate-evidence contract” clause. The internal evidence boundary now exists; durable export,
@@ -56,3 +57,9 @@
 > commit. The later tag commit may differ only in `CHANGELOG.md` and the release ledger, preventing
 > the authorization record from becoming a self-referential SHA while keeping code and build inputs
 > identical.
+
+> **Amendment — 2026-08-03 (append-only correction):** R-004's row was edited in place by PR #17
+> rather than superseded by a new dated entry. As first written it read *"Minimal dependencies,
+> Dependabot, audit, CodeQL, attestations, future SHA pinning."* with status *"Open / release"*;
+> PR #17 rewrote the mitigation and moved the status to *"Mitigated / release"*. The current row
+> is factually right and is left standing; this note restores what the in-place edit removed.

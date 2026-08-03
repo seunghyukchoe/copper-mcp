@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -83,6 +84,7 @@ def test_a_stale_fill_authority_record_cannot_be_constructed() -> None:
     with pytest.raises(ValueError, match="match a fresh refill"):
         ZoneFillAuthority(
             source_revision=DIGEST,
+            context_revision=DIGEST,
             source_fill_digest=DIGEST,
             refilled_fill_digest=OTHER_DIGEST,
             kicad_version="10.0.5",
@@ -91,6 +93,7 @@ def test_a_stale_fill_authority_record_cannot_be_constructed() -> None:
         )
     intact = ZoneFillAuthority(
         source_revision=DIGEST,
+        context_revision=DIGEST,
         source_fill_digest=DIGEST,
         refilled_fill_digest=DIGEST,
         kicad_version="10.0.5",
@@ -163,3 +166,47 @@ def test_zone_fill_authority_requires_a_reachable_kicad(tmp_path: Path) -> None:
             "zone-fill-fresh.kicad_pcb",
             Settings(workspace=tmp_path, kicad_cli=tmp_path / "absent-kicad-cli"),
         )
+
+
+@pytest.mark.skipif(not REAL_KICAD_CLI.is_file(), reason="KiCad CLI is not installed")
+def test_project_rules_are_part_of_the_freshness_argument(tmp_path: Path) -> None:
+    """A pour computed under different clearances is a different pour.
+
+    Fill depends on net-class clearances, which live in the project file beside the board.
+    Refilling without that context recomputes a pour the board never had, so the comparison
+    would be between two boards that were never the same board. Here the project contradicts
+    the cached pour, and the authority must notice.
+    """
+
+    board = Path(__file__).parent.parent / "hardware" / "coppertone-buffer"
+    shutil.copy2(board / "coppertone-buffer.kicad_pcb", tmp_path / "b.kicad_pcb")
+    project = json.loads((board / "coppertone-buffer.kicad_pro").read_text(encoding="utf-8"))
+    for net_class in project["net_settings"]["classes"]:
+        net_class["clearance"] = 1.0
+    (tmp_path / "b.kicad_pro").write_text(json.dumps(project), encoding="utf-8")
+    settings = Settings(
+        workspace=tmp_path,
+        kicad_cli=REAL_KICAD_CLI,
+        max_drc_report_bytes=8 * 1024 * 1024,
+    )
+
+    with pytest.raises(ZoneFillStaleError):
+        run_zone_fill_authority("b.kicad_pcb", settings)
+
+
+@pytest.mark.skipif(not REAL_KICAD_CLI.is_file(), reason="KiCad CLI is not installed")
+def test_authority_records_the_context_it_was_computed_under(tmp_path: Path) -> None:
+    board = Path(__file__).parent.parent / "hardware" / "coppertone-buffer"
+    shutil.copy2(board / "coppertone-buffer.kicad_pcb", tmp_path / "b.kicad_pcb")
+    shutil.copy2(board / "coppertone-buffer.kicad_pro", tmp_path / "b.kicad_pro")
+    settings = Settings(
+        workspace=tmp_path,
+        kicad_cli=REAL_KICAD_CLI,
+        max_drc_report_bytes=8 * 1024 * 1024,
+    )
+
+    authority, _ = run_zone_fill_authority("b.kicad_pcb", settings)
+
+    assert authority.context_revision.startswith("sha256:")
+    assert authority.context_revision != authority.source_revision
+    assert authority.fill_polygon_count == 2

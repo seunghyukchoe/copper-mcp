@@ -863,6 +863,7 @@ class ZoneFillAuthority:
     """Evidence that a board's cached zone fill is what KiCad recomputes from it today."""
 
     source_revision: str
+    context_revision: str
     source_fill_digest: str
     refilled_fill_digest: str
     kicad_version: str
@@ -872,6 +873,7 @@ class ZoneFillAuthority:
     def __post_init__(self) -> None:
         for name, value in (
             ("source revision", self.source_revision),
+            ("context revision", self.context_revision),
             ("source fill digest", self.source_fill_digest),
             ("refilled fill digest", self.refilled_fill_digest),
         ):
@@ -895,6 +897,7 @@ class ZoneFillAuthority:
 
         return {
             "source_revision": self.source_revision,
+            "context_revision": self.context_revision,
             "source_fill_digest": self.source_fill_digest,
             "refilled_fill_digest": self.refilled_fill_digest,
             "kicad_version": self.kicad_version,
@@ -925,7 +928,14 @@ def run_zone_fill_authority(
         allowed_suffixes={".kicad_pcb"},
         max_bytes=settings.max_board_bytes,
     )
-    source = board.content
+    board_path = board.path
+    # Fill depends on net-class clearances and custom rules, which live beside the board rather
+    # than in it. Refilling without them recomputes a different pour and the freshness argument
+    # would compare two boards that were never the same board.
+    captured_context = _drc_context(board_path, settings, board)
+    board_relative = board_path.relative_to(settings.workspace.resolve(strict=True)).as_posix()
+    context_revision = _context_revision(captured_context)
+    source = captured_context[board_relative]
     source_revision = _revision(source)
     default_limits = ParseLimits()
     parse_limits = replace(
@@ -955,19 +965,25 @@ def run_zone_fill_authority(
             raise KiCadCliError("private KiCad fill directory could not be secured") from error
         # The board stays writable here precisely because `--save-board` must rewrite it; that
         # is only ever this disposable copy.
-        private_board = temporary_root / Path(requested_path).name
+        workspace_snapshot = temporary_root / "workspace"
         report_path = temporary_root / "fill-drc.json"
         private_state = temporary_root / "process-state"
         try:
-            private_board.write_bytes(source)
+            # The whole project context travels with the board, path-preserving, so KiCad
+            # resolves the same rules it would in the workspace. Unlike the DRC snapshot this
+            # tree stays writable, because `--save-board` has to rewrite the copy.
+            _write_drc_snapshot(captured_context, workspace_snapshot)
             child_environment = _private_kicad_environment(private_state)
         except OSError as error:
             raise KiCadCliError("private KiCad fill context could not be written") from error
+        private_board = (workspace_snapshot / board_relative).resolve(strict=True)
         command = [
             str(python_executable),
             "-I",
             str(bounded_exec),
-            str(settings.max_drc_report_bytes),
+            # The child writes both a report and a rewritten board, so the file ceiling has to
+            # admit the larger of the two rather than the report budget alone.
+            str(max(settings.max_drc_report_bytes, settings.max_board_bytes)),
             str(executable),
             "pcb",
             "drc",
@@ -1003,8 +1019,8 @@ def run_zone_fill_authority(
             raise KiCadCliError(f"KiCad zone refill failed with exit code {completed.returncode}")
         try:
             refilled_source = read_workspace_file(
-                temporary_root,
-                private_board.name,
+                workspace_snapshot,
+                board_relative,
                 allowed_suffixes={".kicad_pcb"},
                 max_bytes=settings.max_board_bytes,
             ).content
@@ -1024,15 +1040,16 @@ def run_zone_fill_authority(
             raise KiCadCliError(f"refilled zone fill could not be read: {error}") from error
 
     kicad_version = _report_kicad_version(report)
-    # The workspace board must be byte-identical afterwards: refill happened only on the copy.
-    recaptured = read_workspace_file(
-        settings.workspace,
-        requested_path,
-        allowed_suffixes={".kicad_pcb"},
-        max_bytes=settings.max_board_bytes,
-    ).content
-    if _revision(recaptured) != source_revision:
-        raise KiCadCliError("the workspace board changed while zone fill authority was running")
+    # The whole live context, not just the board, must be unchanged: a rule edited mid-run would
+    # mean the pour was compared against clearances that no longer apply.
+    try:
+        recaptured_context = _drc_context(board_path, settings)
+    except (KiCadCliError, OSError) as error:
+        raise KiCadCliError(
+            "the workspace context changed while zone fill authority was running"
+        ) from error
+    if _context_revision(recaptured_context) != context_revision:
+        raise KiCadCliError("the workspace context changed while zone fill authority was running")
 
     cached_digest = fill_digest(cached)
     refilled_digest = fill_digest(refilled)
@@ -1041,6 +1058,7 @@ def run_zone_fill_authority(
     return (
         ZoneFillAuthority(
             source_revision=source_revision,
+            context_revision=context_revision,
             source_fill_digest=cached_digest,
             refilled_fill_digest=refilled_digest,
             kicad_version=kicad_version,

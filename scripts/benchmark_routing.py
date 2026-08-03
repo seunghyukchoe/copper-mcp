@@ -307,7 +307,10 @@ def _astar_outcome(result: RouteResult) -> dict[str, Any]:
             "proximity_steps": candidate.cost.proximity_steps,
             "status": "ok",
             "total_cost_nm": candidate.cost.total_cost_nm,
-            "vertices": [{"x_nm": point.x, "y_nm": point.y} for point in candidate.patch.vertices],
+            "paths": [
+                [{"x_nm": point.x, "y_nm": point.y} for point in path.vertices]
+                for path in candidate.patch.paths
+            ],
             "wire_length_nm": candidate.metrics.wire_length_nm,
         }
     assert result.diagnostic is not None

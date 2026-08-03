@@ -132,6 +132,15 @@ PY
 }
 
 refresh_artifacts() {
+  # Recreate the generated trees from empty. "mkdir -p" alone leaves files from a previous
+  # export in place, and anything stale would be hashed into SHA256SUMS as if this run had
+  # produced it.
+  rm -rf \
+    "$demo_dir/validation" \
+    "$demo_dir/manufacturing/gerbers" \
+    "$demo_dir/manufacturing/drill" \
+    "$demo_dir/mechanical" \
+    "$demo_dir/media"
   mkdir -p \
     "$demo_dir/validation" \
     "$demo_dir/manufacturing/gerbers" \

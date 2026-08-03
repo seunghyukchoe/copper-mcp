@@ -13,7 +13,14 @@ import json
 from dataclasses import dataclass
 
 from copper_mcp.adapters.kicad_board_ir import net_id_for_name
-from copper_mcp.adapters.sexpr import SExpr, SExprError, atoms, children, parse_sexpr
+from copper_mcp.adapters.sexpr import (
+    SExpr,
+    SExprError,
+    atoms,
+    children,
+    is_quoted_atom,
+    parse_sexpr,
+)
 from copper_mcp.board_ir import ParseLimits, PointNM
 
 #: One nanometre expressed in the millimetre tokens KiCad writes.
@@ -97,13 +104,28 @@ def read_fill_islands(
     except SExprError as error:
         raise ZoneFillError("board source could not be parsed for zone fill") from error
 
+    # KiCad writes a net either as a quoted name or as a numeric code declared once at the root.
+    # Reading the code as if it were a name silently invents a net, which filters every island
+    # of the real one, so the declarations are resolved the same way the main adapter does.
+    declared: dict[str, str] = {}
+    for declaration in children(root, "net"):
+        values = atoms(declaration)
+        if len(values) == 2 and values[0].lstrip("-").isdigit():
+            declared[values[0]] = values[1]
+
     islands: list[FillIsland] = []
     remaining = max_vertices
     for zone in children(root, "zone"):
         net_values = atoms_of(zone, "net")
         if not net_values:
             continue
-        net_name = net_values[-1]
+        token = net_values[-1]
+        if token.lstrip("-").isdigit() and not is_quoted_atom(token):
+            if token not in declared:
+                raise ZoneFillError("a zone references an undeclared numeric net code")
+            net_name = declared[token]
+        else:
+            net_name = token
         for polygon in children(zone, "filled_polygon"):
             layer_values = atoms_of(polygon, "layer")
             if len(layer_values) != 1:

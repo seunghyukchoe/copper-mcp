@@ -67,9 +67,9 @@ net's class clearance, so a board mixing net classes cannot be routed to the loo
 
 A through via outside the routed net contributes the bounding box of its outer diameter; Board IR
 v0.1 admits through vias only, so every via provably crosses the routed layer. Drill diameter is
-ignored because copper, not the hole, is what a track must clear. A via on the routed net is still
-rejected as partial routing, because a layer change is not something this single-layer contract can
-model.
+ignored because copper, not the hole, is what a track must clear. A via on the routed net still
+refuses *routing*, because a layer change is not something this single-layer search can model, but
+it no longer hides the net: it is a connectivity joint, as described under vias below.
 
 A foreign-net solid zone on the selected layer contributes its exact simple polygon as a
 conservative boundary envelope. The entire interior is treated as potentially occupied because

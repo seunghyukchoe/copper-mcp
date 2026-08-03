@@ -114,6 +114,7 @@ def _snapshot(
     foreign_zones: tuple[Ring, ...] = (),
     foreign_zone_layer_id: str = LAYER_ID,
     own_zone: Ring | None = None,
+    own_zone_layer_id: str = LAYER_ID,
     route_clearance_nm: int = 100,
     other_clearance_nm: int = 100,
     zone_clearance_nm: int = 100,
@@ -281,7 +282,7 @@ def _snapshot(
                 Zone(
                     id="zone:own",
                     net_id=NET_ID,
-                    layer_id=LAYER_ID,
+                    layer_id=own_zone_layer_id,
                     boundary=own_zone,
                     clearance_nm=zone_clearance_nm,
                     min_thickness_nm=100,
@@ -1058,7 +1059,7 @@ def test_polygon_preparation_scan_observes_the_cancellation_cadence() -> None:
     def cancel_on_first_relation_checkpoint() -> bool:
         nonlocal calls
         calls += 1
-        return calls >= 13
+        return calls >= 12
 
     result = AStarRouter().propose(
         snapshot,
@@ -1070,7 +1071,7 @@ def test_polygon_preparation_scan_observes_the_cancellation_cadence() -> None:
     assert result.diagnostic is not None
     assert result.diagnostic.obstacle_checks == 64
     assert result.diagnostic.expanded_states == 0
-    assert calls == 13
+    assert calls == 12
 
 
 @pytest.mark.parametrize("cancel_at", (10, 11))
@@ -2359,3 +2360,136 @@ def test_a_same_net_zone_still_blocks_the_multilayer_claim() -> None:
     # A zone's fill is not trusted, so no connectivity claim is made whatever the vias show.
     _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
     assert result.connected is None
+
+
+def test_a_leg_that_grows_into_a_later_component_merges_instead_of_crashing() -> None:
+    """An earlier leg can reach copper a later merge was still scheduled to join.
+
+    Four pads in a line: whichever legs run first, the growing component can touch the pad a
+    subsequent merge was going to reach, so by that merge's turn the two are already one piece.
+    That is a merge that has happened, not an inconsistency, and it must not raise.
+    """
+
+    snapshot = _snapshot(
+        third_target=True,
+        own_segments=((1_000, 5_000, 9_000, 5_000), (5_000, 5_000, 5_000, 8_000)),
+    )
+    router = AStarRouter()
+    request = _request(snapshot)
+
+    first = router.propose(snapshot, request)
+    second = router.propose(snapshot, request)
+
+    assert first.terminal
+    assert first == second
+
+
+def test_a_tree_shares_one_expansion_ceiling_across_every_leg() -> None:
+    """A three-pad net must not be allowed three times the authorised search work."""
+
+    snapshot = _snapshot(third_target=True)
+    router = AStarRouter()
+    generous = _candidate(router.propose(snapshot, _request(snapshot)))
+    assert len(generous.patch.paths) == 2
+
+    # Enough for the first leg alone, not for both.
+    limited = _request(snapshot, settings=_settings(max_expansions=19))
+    first = router.propose(snapshot, limited)
+    second = router.propose(snapshot, limited)
+
+    _assert_failure(first, RouteFailureCode.SEARCH_BUDGET_EXCEEDED)
+    assert first.diagnostic is not None
+    assert first.diagnostic.expanded_states <= 19
+    assert first.diagnostic.expanded_states == second.diagnostic.expanded_states  # type: ignore[union-attr]
+    # Whatever the ceiling admits, a returned candidate never claims more than it.
+    assert generous.metrics.expanded_states <= generous.settings.max_expansions
+
+
+def test_a_multi_pin_pad_off_the_lattice_is_still_reached_through_its_core() -> None:
+    """The off-grid rule is a two-pin lattice rule and must not bind multi-pin legs.
+
+    With more than two pads no single grid step can divide every pad-centre delta at once, so
+    applying that rule to a wider net would refuse boards the search routes perfectly well.
+    """
+
+    router = AStarRouter()
+    # pad:03's centre is 500 nm off the 1,000 nm lattice anchored at pad:01, but its 400 nm
+    # pad core still covers a lattice node.
+    off_lattice = _snapshot(third_target=True)
+    content = off_lattice.content
+    moved = make_snapshot(
+        make_content(
+            source=content.source,
+            outline=content.outline,
+            copper_layers=content.copper_layers,
+            nets=content.nets,
+            constraints=content.constraints,
+            pads=tuple(
+                replace(pad, center=PointNM(pad.center.x + 100, pad.center.y + 100))
+                if pad.id == "pad:03"
+                else pad
+                for pad in content.pads
+            ),
+            segments=content.segments,
+            vias=content.vias,
+            arcs=content.arcs,
+            zones=content.zones,
+            keepouts=content.keepouts,
+        )
+    )
+
+    candidate = _candidate(router.propose(moved, _request(moved)))
+
+    assert candidate.pad_count == 3
+    assert len(candidate.patch.paths) == 2
+
+
+def test_verified_fill_from_another_board_is_refused() -> None:
+    """Fill proved against a different board must never be believed for this one."""
+
+    from copper_mcp.routing import VerifiedFill
+
+    snapshot = _snapshot(own_zone=_rectangle(1_000, 1_000, 2_000, 2_000))
+    foreign = VerifiedFill(
+        net_id=NET_ID,
+        layer_id=LAYER_ID,
+        points=(PointNM(0, 0), PointNM(9_999, 0), PointNM(9_999, 9_999)),
+        source_revision=OTHER_REVISION,
+    )
+
+    result = AStarRouter().propose(snapshot, _request(snapshot), verified_fill=(foreign,))
+
+    _assert_failure(result, RouteFailureCode.STALE_FILL)
+    assert result.diagnostic is not None
+    assert "different board revision" in result.diagnostic.message
+
+
+def test_the_multilayer_connectivity_model_shares_the_object_ceiling() -> None:
+    snapshot = _snapshot(
+        own_via=True,
+        own_segments=tuple((500 + index * 400, 500, 700 + index * 400, 500) for index in range(8)),
+    )
+
+    result = AStarRouter().propose(
+        snapshot, _request(snapshot, settings=_settings(max_obstacles=4))
+    )
+
+    _assert_failure(result, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    assert result.diagnostic is not None
+    assert "connectivity model" in result.diagnostic.message
+
+
+def test_a_same_net_zone_on_another_layer_also_blocks_the_claim() -> None:
+    """Connectivity is a multilayer question, so an unmodeled pour anywhere blocks it."""
+
+    snapshot = _snapshot(
+        own_via=True,
+        own_segments=((1_000, 5_000, 4_700, 5_000), (5_300, 5_000, 9_000, 5_000)),
+        own_zone=_rectangle(1_000, 1_000, 2_000, 2_000),
+        own_zone_layer_id="layer:B.Cu",
+    )
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    assert result.connected is None
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
