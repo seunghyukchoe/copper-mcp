@@ -149,8 +149,10 @@ Every outcome is one of three statuses. `routed` carries a candidate whose base 
 the previewed Board IR snapshot digest. `not_routed` carries exactly one typed, non-echoing
 diagnostic. `unsupported_board` carries bounded conversion diagnostic-code counts and no snapshot
 digest; any conversion diagnostic, including a warning, produces this status. A wall-clock deadline
-(`COPPER_MCP_MAX_ROUTE_PREVIEW_SECONDS`, default 30 s) is layered on the existing grid, expansion,
-obstacle, and obstacle-check ceilings and surfaces as the ordinary `cancelled` diagnostic; it never
+(`COPPER_MCP_MAX_ROUTE_PREVIEW_SECONDS`, default 30 s) starts at the operation boundary, before the
+board is resolved, read, or converted, and bounds the whole call rather than only the search. It is
+checked after conversion, consulted during search, and clamps the KiCad timeout for optional DRC to
+whatever budget remains. Exceeding it surfaces as the ordinary `cancelled` diagnostic, and it never
 participates in candidate identity.
 
 `include_drc` runs the candidate-bound authoritative path and returns the same aggregate, redacted

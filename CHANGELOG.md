@@ -13,9 +13,12 @@ All notable changes are documented here. The format follows
   constraints only from typed caller values, reads one workspace board read-only, and reports
   `routed`, `not_routed`, or `unsupported_board` with the candidate geometry, exact cost
   decomposition, and deterministic search metrics, one typed non-echoing diagnostic, or bounded
-  conversion diagnostic-code counts. A configurable wall-clock deadline bounds preview latency above
-  the existing integer ceilings, and `include_drc` binds the proposal to aggregate authoritative
-  KiCad DRC evidence or fails the call. Durable jobs, persistence, export, and apply stay deferred.
+  conversion diagnostic-code counts. A configurable wall-clock deadline starts at the operation
+  boundary and bounds the whole call — conversion, search, and the clamped KiCad timeout for
+  optional DRC — above the existing integer ceilings, and `include_drc` binds the proposal to
+  aggregate authoritative KiCad DRC evidence or fails the call. Rejected requests report an
+  unsupported-field count rather than echoing caller-supplied names. Durable jobs, persistence,
+  export, and apply stay deferred.
 - A bounded, integer-only, single-layer A* reference that produces content-addressed immutable
   two-pin candidates for a narrow rectangular Board IR subset, with exact boundary semantics,
   deterministic tie-breaking, preparation/search cancellation, independent grid/expansion/obstacle

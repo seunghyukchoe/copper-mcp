@@ -50,9 +50,11 @@ through MCP or CLI.
 
 The public `preview_route` surface adds no write path. Requests are validated before any file is
 read: unknown fields, non-integer or out-of-range budgets, booleans supplied as integers, control
-characters, oversized net names, and non-copper layer names are rejected, and routing constraints
-come only from typed caller values rather than from untrusted board content. A wall-clock deadline
-bounds preview latency above the existing grid, expansion, and obstacle ceilings. Unsupported boards
+characters, oversized net names, and non-copper layer names are rejected, rejections report counts
+rather than echoing caller-supplied field names, and routing constraints come only from typed caller
+values rather than from untrusted board content. A wall-clock deadline starts at the operation
+boundary and bounds the entire call — conversion, search, and the clamped KiCad timeout for optional
+DRC — above the existing grid, expansion, and obstacle ceilings. Unsupported boards
 return bounded diagnostic-code counts, not raw adapter text, and routing failures return typed
 non-echoing diagnostics. Authoritative DRC runs only when the caller opts in, still yields aggregate
 redacted evidence, and fails the call when the evidence is missing or does not bind. A preview does

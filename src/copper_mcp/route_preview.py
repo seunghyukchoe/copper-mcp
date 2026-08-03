@@ -33,6 +33,7 @@ from copper_mcp.routing import (
     AStarSettings,
     RouteCandidate,
     RouteDiagnostic,
+    RouteFailureCode,
     RouteRequest,
 )
 from copper_mcp.security import read_bounded_file, resolve_workspace_file
@@ -81,9 +82,14 @@ def _mapping(name: str, value: Any) -> dict[str, Any]:
 
 
 def _known_fields(name: str, payload: Mapping[str, Any], allowed: frozenset[str]) -> None:
-    unknown = sorted(set(payload) - allowed)
+    """Reject unsupported fields by count, never by echoing caller-controlled names."""
+
+    unknown = len(set(payload) - allowed)
     if unknown:
-        raise RoutePreviewError(f"{name} has unsupported fields: {', '.join(unknown)}")
+        raise RoutePreviewError(
+            f"{name} has {unknown} unsupported field(s); supported fields are: "
+            f"{', '.join(sorted(allowed))}"
+        )
 
 
 def _integer(name: str, value: Any, *, minimum: int, maximum: int) -> int:
@@ -359,11 +365,24 @@ class RoutePreview:
         }
 
 
+def _drc_settings(settings: Settings, deadline: float) -> Settings:
+    """Clamp the KiCad timeout so authoritative DRC cannot outlive the preview deadline."""
+
+    remaining = int(deadline - time.monotonic())
+    if remaining < 1:
+        raise RoutePreviewError("the preview deadline expired before authoritative DRC could run")
+    return replace(
+        settings,
+        kicad_timeout_seconds=min(settings.kicad_timeout_seconds, remaining),
+    )
+
+
 def preview_route(payload: Any, settings: Settings) -> RoutePreview:
     """Propose one deterministic candidate for a workspace board without mutating it."""
 
     if not isinstance(settings, Settings):
         raise RoutePreviewError("preview settings are malformed")
+    deadline = time.monotonic() + settings.max_route_preview_seconds
     request = parse_route_preview_request(payload)
 
     board_path = resolve_workspace_file(
@@ -397,7 +416,19 @@ def preview_route(payload: Any, settings: Settings) -> RoutePreview:
     if snapshot.content.source.revision != board_revision:
         raise RoutePreviewError("converted board revision is inconsistent with its source bytes")
 
-    deadline = time.monotonic() + settings.max_route_preview_seconds
+    if time.monotonic() >= deadline:
+        return RoutePreview(
+            status=RoutePreviewStatus.NOT_ROUTED,
+            board_path=relative_path,
+            board_revision=board_revision,
+            request=request,
+            snapshot_digest=snapshot.snapshot_digest,
+            diagnostic=RouteDiagnostic(
+                code=RouteFailureCode.CANCELLED,
+                message="the preview deadline expired during board conversion",
+            ),
+        )
+
     result = AStarRouter().propose(
         snapshot,
         RouteRequest(
@@ -421,7 +452,12 @@ def preview_route(payload: Any, settings: Settings) -> RoutePreview:
 
     evidence = None
     if request.include_drc:
-        evidence = run_route_candidate_drc(relative_path, result.candidate, profile, settings)
+        evidence = run_route_candidate_drc(
+            relative_path,
+            result.candidate,
+            profile,
+            _drc_settings(settings, deadline),
+        )
     return RoutePreview(
         status=RoutePreviewStatus.ROUTED,
         board_path=relative_path,

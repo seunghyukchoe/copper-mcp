@@ -5,6 +5,7 @@ import json
 import shutil
 import stat
 import subprocess
+import time
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -196,6 +197,73 @@ def test_preview_cancels_deterministically_at_the_configured_deadline(
     assert preview.status is RoutePreviewStatus.NOT_ROUTED
     assert preview.diagnostic is not None
     assert preview.diagnostic.code is RouteFailureCode.CANCELLED
+
+
+def test_preview_deadline_covers_conversion_not_only_the_search(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, settings = _workspace(tmp_path)
+    monkeypatch.setattr(route_preview, "time", _AdvancingClock())
+
+    preview = preview_route(_request(), replace(settings, max_route_preview_seconds=1))
+
+    assert preview.status is RoutePreviewStatus.NOT_ROUTED
+    assert preview.diagnostic is not None
+    assert preview.diagnostic.code is RouteFailureCode.CANCELLED
+    assert "conversion" in preview.diagnostic.message
+
+
+def test_preview_clamps_the_kicad_timeout_to_the_remaining_budget(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, settings = _workspace(tmp_path)
+    observed: dict[str, int] = {}
+
+    def capture(path: str, candidate: object, profile: object, drc_settings: Settings) -> object:
+        observed["timeout"] = drc_settings.kicad_timeout_seconds
+        raise KiCadCliError("stop after capturing the clamped budget")
+
+    monkeypatch.setattr(route_preview, "run_route_candidate_drc", capture)
+
+    with pytest.raises(KiCadCliError):
+        preview_route(
+            _request(include_drc=True),
+            replace(settings, kicad_timeout_seconds=120, max_route_preview_seconds=5),
+        )
+
+    assert 1 <= observed["timeout"] <= 5
+
+
+def test_drc_budget_refuses_to_start_once_the_deadline_is_spent(tmp_path: Path) -> None:
+    _, settings = _workspace(tmp_path)
+    spent = time.monotonic() - 1.0
+
+    with pytest.raises(RoutePreviewError, match="deadline expired"):
+        route_preview._drc_settings(settings, spent)
+
+
+def test_drc_budget_never_exceeds_the_configured_kicad_timeout(tmp_path: Path) -> None:
+    _, settings = _workspace(tmp_path)
+    generous = time.monotonic() + 10_000.0
+
+    clamped = route_preview._drc_settings(replace(settings, kicad_timeout_seconds=30), generous)
+
+    assert clamped.kicad_timeout_seconds == 30
+
+
+def test_preview_errors_never_echo_caller_supplied_field_names() -> None:
+    secret = "x" * 5000 + "-corporate-secret-net"
+
+    with pytest.raises(RoutePreviewError) as raised:
+        parse_route_preview_request(_request(**{secret: 1}))
+
+    message = str(raised.value)
+    assert secret not in message
+    assert "corporate-secret" not in message
+    assert len(message) < 500
+    assert "1 unsupported field" in message
 
 
 def test_preview_fails_closed_on_a_board_outside_the_supported_subset(tmp_path: Path) -> None:

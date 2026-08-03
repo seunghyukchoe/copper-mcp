@@ -26,7 +26,8 @@ The service:
 
 1. parses the untrusted request through a strict boundary that rejects unknown fields, non-integer
    or out-of-range budgets, booleans supplied as integers, control characters, oversized net names,
-   and any layer name outside the documented KiCad copper set;
+   and any layer name outside the documented KiCad copper set, reporting an unsupported-field count
+   rather than echoing caller-supplied names;
 2. builds the typed constraint profile from caller-supplied integer net-class values only, so board
    files never supply their own routing constraints;
 3. resolves and reads exactly one `.kicad_pcb` beneath the configured workspace through the existing
@@ -34,12 +35,13 @@ The service:
 4. converts those bytes through the fail-closed Board IR adapter and returns
    `unsupported_board` with bounded diagnostic-code counts whenever any conversion diagnostic is
    present, including warnings;
-5. runs the ADR-0006 router under a wall-clock deadline (`COPPER_MCP_MAX_ROUTE_PREVIEW_SECONDS`,
-   default 30 s) layered on top of the existing grid, expansion, obstacle, and obstacle-check
-   ceilings, and returns `not_routed` with one typed non-echoing diagnostic on any expected failure;
+5. bounds the whole call with a wall-clock deadline (`COPPER_MCP_MAX_ROUTE_PREVIEW_SECONDS`,
+   default 30 s) started at the operation boundary, layered on top of the existing grid,
+   expansion, obstacle, and obstacle-check ceilings, checked after conversion and during search;
    and
-6. binds ADR-0008 evidence only when the caller sets `include_drc`, and fails the whole call rather
-   than returning a candidate with missing or mismatched evidence.
+6. binds ADR-0008 evidence only when the caller sets `include_drc`, clamping the KiCad timeout to
+   the remaining deadline budget, and fails the whole call rather than returning a candidate with
+   missing or mismatched evidence.
 
 `RoutePreview` validates its own bindings: a routed preview must carry exactly one candidate whose
 base revision equals the previewed Board IR digest; an unrouted preview must carry exactly one
@@ -59,9 +61,10 @@ returns a detached plain dictionary.
   board's other nets, pads, copper, and bytes are still never returned.
 - Every unsupported board is reported as bounded diagnostic-code counts rather than raw adapter
   messages, so the narrow Board IR subset stays visible without echoing board content.
-- The wall-clock deadline makes preview latency bounded even when the integer work ceilings would
-  admit a long search, at the cost of a `cancelled` diagnostic that depends on host speed. Candidate
-  identity never depends on it.
+- The wall-clock deadline bounds total preview latency — conversion, search, and DRC — even when
+  the integer work ceilings would admit a long search, at the cost of a `cancelled` diagnostic
+  that depends on host speed. Candidate identity never depends on it. A deadline already spent when
+  requested DRC would start fails the call rather than running KiCad on borrowed time.
 - Preview implies nothing about durability. Nothing is stored, so a caller that wants the same
   candidate again must re-run the same request against the same board revision.
 
