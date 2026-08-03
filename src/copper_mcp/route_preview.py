@@ -172,11 +172,16 @@ def _candidate_to_dict(candidate: RouteCandidate) -> dict[str, Any]:
         "router_version": candidate.router_version,
         "policy": candidate.policy,
         "seed": candidate.seed,
+        "pad_count": candidate.pad_count,
+        "ordering_policy": candidate.ordering_policy,
         "patch": {
             "net_id": candidate.patch.net_id,
             "layer_id": candidate.patch.layer_id,
             "width_nm": candidate.patch.width_nm,
-            "vertices_nm": [[point.x, point.y] for point in candidate.patch.vertices],
+            "paths": [
+                {"vertices_nm": [[point.x, point.y] for point in path.vertices]}
+                for path in candidate.patch.paths
+            ],
         },
         "cost": {
             "length_nm": candidate.cost.length_nm,

@@ -106,7 +106,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(document["status"], "routed")
         self.assertEqual(document["request"]["settings"]["grid_step_nm"], 250000)
         self.assertIsNone(document["drc_evidence"])
-        self.assertEqual(len(document["candidate"]["patch"]["vertices_nm"]), 2)
+        self.assertEqual(len(document["candidate"]["patch"]["paths"][0]["vertices_nm"]), 2)
 
     def test_preview_route_reports_invalid_requests_without_a_traceback(self) -> None:
         root = Path(__file__).parent / "fixtures" / "route-candidate"

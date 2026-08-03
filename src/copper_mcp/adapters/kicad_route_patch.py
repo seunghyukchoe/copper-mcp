@@ -274,7 +274,7 @@ def render_kicad_candidate_board(
     if net is None or layer is None:
         raise KiCadRoutePatchError("candidate references an unknown net or copper layer")
 
-    edge_count = len(candidate.patch.vertices) - 1
+    edge_count = sum(len(path.vertices) - 1 for path in candidate.patch.paths)
     if _modeled_object_count(snapshot) + edge_count > limits.max_objects:
         raise KiCadRoutePatchError("rendered board exceeds the configured object budget")
 
@@ -294,7 +294,10 @@ def render_kicad_candidate_board(
     output_size = len(prefix) + len(separator) + len(suffix)
     if output_size > limits.max_input_bytes:
         raise KiCadRoutePatchError("rendered candidate board exceeds the input-byte budget")
-    for index, (start, end) in enumerate(pairwise(candidate.patch.vertices)):
+    # One running index across every path, so a tree's segment identities stay unique and
+    # reproducible in path-then-edge order.
+    edges = [edge for path in candidate.patch.paths for edge in pairwise(path.vertices)]
+    for index, (start, end) in enumerate(edges):
         native_uuid = _segment_uuid(candidate.candidate_id, index)
         if native_uuid in native_identities:
             raise KiCadRoutePatchError(

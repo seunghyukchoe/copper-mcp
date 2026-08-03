@@ -6,6 +6,56 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Multi-pin nets are routed, not just recognised. A net with more than two pads is spanned by a
+  deterministic minimum spanning tree over its connected components - edges weighted by the exact
+  integer rectilinear gap between component bounding boxes, ordered by `(gap, lower index, higher
+  index)` - and each MST edge is routed as one leg by the existing multi-source/multi-target search.
+  A routed leg's copper joins the merged component, so later legs may attach anywhere along it, and
+  same-net legs are never obstacles to one another. The ordering policy is recorded in the candidate
+  as `component-mst-v1`, which makes a better topology additive behind the same contract.
+  **Claimed**: every pad ends in one component, each leg is optimal for the obstacles present when
+  it was routed, and the result is exactly reproducible. **Not claimed**: Steiner optimality, or
+  optimality of the tree as a whole - an earlier leg is never revisited once a later one is routed.
+  Any leg failing refuses the whole call; a partial tree is not a candidate. A committed four-pad
+  `tree-star` fixture becomes a three-leg tree that real KiCad 10.0.5 accepts with zero errors,
+  warnings and unconnected items, and that check is discriminating because removing any one leg
+  makes KiCad report an unconnected item. **This slice is validated by fixtures, not by
+  CopperTone**: every net on that board is already routed by its designer, so multi-pin routing
+  changes nothing there, and what that board still needs is via-aware connectivity for its three
+  remaining nets. See [ADR-0019](docs/adr/0019-multi-pin-component-merging.md).
+
+### Changed
+
+- `RoutePatch` now carries a tuple of `RoutePath`s instead of a single vertex list, so one candidate
+  can describe a tree. `ROUTER_VERSION` advances to `astar-grid/0.4.0` and the preview response
+  carries `patch.paths[].vertices_nm` in place of `patch.vertices_nm`, plus `pad_count` and
+  `ordering_policy`. This is a breaking response change, taken deliberately while the project is
+  pre-1.0 rather than maintaining two candidate shapes forever. Two-pin proposals carry exactly one
+  path and the ordering policy `single-path`, and their geometry, cost and metrics are unchanged.
+- Multi-pin legs seed from pad cores rather than pad centres. Requiring every pad centre to sit on
+  one lattice is unworkable: on the repository's own CopperTone board the largest grid step putting
+  all pads of a multi-pin net on one lattice is 5 um for six of the nine such nets, which is a
+  62-million-node lattice against a 500,000 ceiling. Seeding from cores removes the constraint for
+  every pad but the anchor. Two-pin nets keep centre seeding, so their candidate identities are
+  unchanged apart from the version bump. Budgets are shared across the whole tree rather than per
+  leg, because one candidate should honour one ceiling; merge order and budget consumption are both
+  deterministic, so exhaustion fails at a reproducible leg with reproducible counts.
+
+### Fixed
+
+- A round pad's connectivity core was a zero-width bar through its centre. That is a legal subset of
+  the copper and was harmless while pads were only contact-tested, but it covers a lattice node only
+  when the pad centre happens to land on one, so a round pad could offer no attachment point at all.
+  Round pads now also contribute their largest inscribed axis-aligned square, of half side
+  `isqrt(r^2 // 2)`, alongside the original bar and its perpendicular twin - a strict enlargement,
+  since replacing the bar would have discarded the pad's extremes. Every rectangle contains the pad
+  centre, so a pad is never split into two components by its own decomposition. Measured across all
+  committed fixtures and every CopperTone net this changes no outcome and no candidate identity
+  today; it is what makes multi-pin pad-core seeding possible at all, taking CopperTone's multi-pin
+  pads from three nets with an unreachable pad at 250 um to none.
+
 ## [0.2.0] - 2026-08-03
 
 ### Added

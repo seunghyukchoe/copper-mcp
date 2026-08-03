@@ -190,7 +190,8 @@
         "layer",
         "seed",
         "expected_status",
-        "expected_diagnostic"
+        "expected_diagnostic",
+        "expected_pad_count"
       ],
       "properties": {
         "net": {
@@ -220,6 +221,11 @@
             "null"
           ],
           "maxLength": 100
+        },
+        "expected_pad_count": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 1000
         }
       },
       "allOf": [
@@ -347,6 +353,7 @@
             "enum": [
               "board-ir-inspection",
               "two-pin-route-preview",
+              "multi-pin-route-preview",
               "typed-route-refusal"
             ]
           }

@@ -78,6 +78,8 @@ def _check_route(
         candidate_id = candidate.get("candidate_id")
         if not isinstance(candidate_id, str) or not candidate_id:
             raise BenchmarkError(f"{fixture['id']}: routed result has no candidate_id")
+        if candidate.get("pad_count") != route["expected_pad_count"]:
+            raise BenchmarkError(f"{fixture['id']}: route pad count changed")
     elif candidate is not None:
         raise BenchmarkError(f"{fixture['id']}: refused route unexpectedly has a candidate")
 
@@ -89,8 +91,16 @@ def _observed_claims(
     claims: list[str] = []
     if inspection["supported"] is True:
         claims.append("board-ir-inspection")
-    if any(route["status"] == "routed" and route["candidate_id"] for route in routes):
+    if any(
+        route["status"] == "routed" and route["candidate_id"] and route["pad_count"] == 2
+        for route in routes
+    ):
         claims.append("two-pin-route-preview")
+    if any(
+        route["status"] == "routed" and route["candidate_id"] and (route["pad_count"] or 0) > 2
+        for route in routes
+    ):
+        claims.append("multi-pin-route-preview")
     if any(route["status"] != "routed" and route["diagnostic_code"] for route in routes):
         claims.append("typed-route-refusal")
     return claims
@@ -135,6 +145,11 @@ def _run_fixture(validated: ValidatedFixture) -> dict[str, Any]:
                     ),
                     "candidate_id": (
                         first_route["candidate"]["candidate_id"]
+                        if isinstance(first_route.get("candidate"), dict)
+                        else None
+                    ),
+                    "pad_count": (
+                        first_route["candidate"]["pad_count"]
                         if isinstance(first_route.get("candidate"), dict)
                         else None
                     ),

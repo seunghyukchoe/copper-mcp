@@ -96,10 +96,16 @@ def test_catalog_and_capability_run_are_valid_and_deterministic() -> None:
     assert all(reference["executed"] is False for reference in report["external_references"])
     fixtures = {fixture["fixture_id"]: fixture for fixture in report["fixtures"]}
     assert fixtures["rc-low-pass-routing-v1"]["inspection"]["supported"] is True
+    # All three nets now route: the two multi-pin ones as trees rather than as refusals.
     assert [route["status"] for route in fixtures["rc-low-pass-routing-v1"]["routes"]] == [
         "routed",
-        "not_routed",
-        "not_routed",
+        "routed",
+        "routed",
+    ]
+    assert [route["pad_count"] for route in fixtures["rc-low-pass-routing-v1"]["routes"]] == [
+        2,
+        3,
+        3,
     ]
     assert fixtures["coppertone-buffer-preview-v1"]["inspection"]["supported"] is True
 

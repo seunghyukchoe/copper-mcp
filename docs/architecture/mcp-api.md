@@ -51,7 +51,9 @@ is read. Every response carries a `status` of `routed`, `already_connected`, `no
 `unsupported_board`, the board revision, the Board IR snapshot digest when conversion succeeded, and
 the validated request. A routed response includes the candidate ID, endpoint pad IDs, integer
 geometry, exact cost decomposition, deterministic search metrics, and the resource ceilings that
-produced it. An unrouted response carries one typed, non-echoing diagnostic; an unsupported board
+produced it. Geometry is carried as `patch.paths`, a list of polylines: a two-pin proposal has one,
+and a multi-pin proposal has one per merged component, together forming a tree over the net. The
+response also reports `pad_count` and the `ordering_policy` that fixed the merge order. An unrouted response carries one typed, non-echoing diagnostic; an unsupported board
 carries bounded conversion diagnostic-code counts instead of raw adapter text.
 
 `already_connected` is a terminal success, not a failure: the two pads already share one copper

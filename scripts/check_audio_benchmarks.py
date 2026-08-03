@@ -188,8 +188,16 @@ def _expected_claims(fixture: dict[str, Any]) -> set[str]:
     if fixture["inspection"]["expected_supported"]:
         claims.add("board-ir-inspection")
     statuses = [route["expected_status"] for route in fixture["routes"]]
-    if "routed" in statuses:
+    if any(
+        route["expected_status"] == "routed" and route["expected_pad_count"] == 2
+        for route in fixture["routes"]
+    ):
         claims.add("two-pin-route-preview")
+    if any(
+        route["expected_status"] == "routed" and route["expected_pad_count"] > 2
+        for route in fixture["routes"]
+    ):
+        claims.add("multi-pin-route-preview")
     if any(status != "routed" for status in statuses):
         claims.add("typed-route-refusal")
     return claims

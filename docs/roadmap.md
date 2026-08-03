@@ -60,7 +60,13 @@ documentation, ledger updates, and benchmark evidence.
 - [ ] Multi-pin nets, since most real nets have more than two pads.
   - [x] Connectivity analysis for nets of any width, so an already-connected multi-pin net
     is recognised rather than refused.
-  - [ ] Routing a multi-pin net, which needs a Steiner topology rather than one path.
+  - [x] Routing a multi-pin net as a deterministic spanning tree over its components
+    (`component-mst-v1`); Steiner-optimal topology is explicitly not claimed.
+  - [ ] Steiner-quality topology (FLUTE-guided or learned ordering) behind the recorded
+    `ordering_policy` seam.
+- [ ] Via-aware connectivity, so a net joined through another layer is recognised rather than
+  refused. This, not Steiner routing, is what CopperTone still needs: its three unresolved nets
+  (`GND`, `VCC`, `L_OUT`) all carry same-net vias.
 - [x] Attachment to existing same-net copper and bounded partial-route completion.
 - [ ] Multilayer vias and keepouts.
 - [ ] Negotiated-congestion multi-net routing.

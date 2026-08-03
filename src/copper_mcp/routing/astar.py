@@ -24,6 +24,8 @@ from copper_mcp.board_ir import (
     verify_snapshot,
 )
 from copper_mcp.routing.contracts import (
+    COMPONENT_MST_ORDERING,
+    SINGLE_PATH_ORDERING,
     AStarSettings,
     CancellationCheck,
     RouteCandidate,
@@ -33,11 +35,12 @@ from copper_mcp.routing.contracts import (
     RouteFailureCode,
     RouteMetrics,
     RoutePatch,
+    RoutePath,
     RouteRequest,
     RouteResult,
 )
 
-ROUTER_VERSION = "astar-grid/0.3.0"
+ROUTER_VERSION = "astar-grid/0.4.0"
 ROUTING_POLICY = "orthogonal-a-star-v1"
 _EMPTY_DIGEST = f"sha256:{'0' * 64}"
 
@@ -81,6 +84,8 @@ class _Problem:
     max_iy: int
     goal_ix: int
     goal_iy: int
+    pad_count: int
+    components: tuple[tuple[_Rect, ...], ...]
     source_nodes: frozenset[_Node]
     target_nodes: frozenset[_Node]
     target_min_ix: int
@@ -652,6 +657,60 @@ def _pad_core_extent(pad: Pad) -> tuple[int, int] | None:
     return half_x_nm, half_y_nm - half_x_nm
 
 
+def _pad_cores(pad: Pad) -> tuple[_Rect, ...] | None:
+    """Return every rectangle used to model one pad's copper, or None when unmodeled.
+
+    Most shapes need a single rectangle. A round pad is the exception: its central rectangle
+    collapses to a zero-width bar through the centre, which is a legitimate subset of the
+    copper but covers a lattice node only when the pad centre happens to land on one. That is
+    harmless while pads are only contact-tested against neighbouring copper, and useless the
+    moment a pad has to *offer* attachment points to a search. A round pad therefore also
+    contributes its largest inscribed axis-aligned square, of half side ``isqrt(r^2 // 2)``,
+    which satisfies ``2 * s^2 <= r^2`` and so lies inside the disc by exact integer arithmetic.
+
+    The bar is kept alongside the square rather than replaced by it. The square is wider but
+    shorter, so replacing would discard the pad's extreme top and bottom and could lose a
+    contact the previous model found. Emitting both is a strict enlargement of what the pad
+    offers, and since every rectangle here contains the pad centre they all share one
+    component, so a pad is never split by its own decomposition.
+    """
+
+    extent = _pad_core_extent(pad)
+    if extent is None:
+        return None
+    half_x_nm, half_y_nm = extent
+    centre = pad.center
+    core = (
+        centre.x - half_x_nm,
+        centre.y - half_y_nm,
+        centre.x + half_x_nm,
+        centre.y + half_y_nm,
+    )
+    if half_x_nm != 0 and half_y_nm != 0:
+        return (core,)
+    # A degenerate bar means a round pad; give it real area in both axes as well. The bar runs
+    # along whichever axis is non-zero, so the perpendicular bar simply swaps the half extents.
+    radius_nm = max(half_x_nm, half_y_nm)
+    inscribed_nm = isqrt(radius_nm * radius_nm // 2)
+    if inscribed_nm < 1:
+        return (core,)
+    return (
+        core,
+        (
+            centre.x - half_y_nm,
+            centre.y - half_x_nm,
+            centre.x + half_y_nm,
+            centre.y + half_x_nm,
+        ),
+        (
+            centre.x - inscribed_nm,
+            centre.y - inscribed_nm,
+            centre.x + inscribed_nm,
+            centre.y + inscribed_nm,
+        ),
+    )
+
+
 def _rectangles_touch(first: _Rect, second: _Rect) -> bool:
     """Closed rectangle intersection; exact contact is an electrical connection."""
 
@@ -831,16 +890,21 @@ def _prepare(
     # needs no routing at all would be less honest than reporting that it is already connected.
     source_cores: tuple[_Rect, ...] = ()
     target_cores: tuple[_Rect, ...] = ()
-    if attachment_segments:
+    routable_components: tuple[tuple[_Rect, ...], ...] | None = None
+    # Two-pin nets skip the analysis when the net carries no copper, which keeps every board
+    # the router already accepted on its original path. A wider net always needs it, because
+    # its components are what routing merges.
+    if attachment_segments or not two_pin:
         if len(attachment_segments) > request.settings.max_obstacles:
             raise _fail(
                 RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
                 "the same-net attachment copper exceeds the configured obstacle budget",
             )
         pad_cores: list[_Rect] = []
+        pad_core_offsets: list[int] = []
         for pad in pads:
-            pad_core = _pad_core_extent(pad)
-            if pad_core is None:
+            pad_core_group = _pad_cores(pad)
+            if pad_core_group is None:
                 if not two_pin:
                     # Unmodeled pad geometry cannot support a connectivity claim, and a wider
                     # net has the pad-count refusal waiting for it below regardless.
@@ -849,15 +913,10 @@ def _prepare(
                     RouteFailureCode.UNSUPPORTED_GEOMETRY,
                     "a route endpoint pad is not modeled exactly for same-net attachment",
                 )
-            half_x_nm, half_y_nm = pad_core
-            pad_cores.append(
-                (
-                    pad.center.x - half_x_nm,
-                    pad.center.y - half_y_nm,
-                    pad.center.x + half_x_nm,
-                    pad.center.y + half_y_nm,
-                )
-            )
+            # Every rectangle of one pad contains that pad's centre, so they always share a
+            # component; recording where each pad's group starts is enough to read its root.
+            pad_core_offsets.append(len(pad_cores))
+            pad_cores.extend(pad_core_group)
         # An orthogonal track is one exact rectangle; a diagonal one is a chain of squares that
         # is provably inside it and provably self-connected, so both reduce to axis-aligned
         # rectangles the component model already understands.
@@ -875,11 +934,22 @@ def _prepare(
                 )
             core_list.extend(diagonal_cores)
         segment_cores = tuple(core_list)
-        if len(pad_cores) == len(pads):
+        if len(pad_core_offsets) == len(pads):
             roots = _component_roots(tuple(pad_cores) + segment_cores, work)
-            pad_roots = roots[: len(pads)]
+            pad_roots = tuple(roots[offset] for offset in pad_core_offsets)
             # Vias and zones on the routed net are copper this model cannot see, so a net that
             # carries them is never claimed connected however its segments happen to fall.
+            component_of_root: dict[int, list[int]] = {}
+            for offset, root in enumerate(roots):
+                component_of_root.setdefault(root, []).append(offset)
+            all_cores = tuple(pad_cores) + segment_cores
+            routable_components = tuple(
+                tuple(all_cores[index] for index in indices)
+                for _, indices in sorted(component_of_root.items())
+                # Only components that hold at least one pad have to be merged; stray copper
+                # that touches no pad of this net is neither an obstacle nor a destination.
+                if any(index in set(pad_core_offsets) for index in indices)
+            )
             if len(set(pad_roots)) == 1 and not same_net_via and not same_net_zone:
                 raise _AlreadyConnectedError(
                     start_pad_id=pads[0].id,
@@ -889,7 +959,7 @@ def _prepare(
                     obstacle_checks=work.obstacle_checks,
                 )
             if two_pin:
-                segment_roots = roots[2:]
+                segment_roots = roots[len(pad_cores) :]
                 source_cores = tuple(
                     core
                     for core, root in zip(segment_cores, segment_roots, strict=True)
@@ -901,12 +971,12 @@ def _prepare(
                     if root == pad_roots[1]
                 )
 
-    if not two_pin:
+    if not two_pin and (routable_components is None or same_net_via or same_net_zone):
         raise _fail(
             RouteFailureCode.INVALID_TWO_PIN_NET,
             "the selected net must resolve to exactly two pads on the selected layer",
         )
-    start_pad, end_pad = pads
+    start_pad, end_pad = pads[0], pads[-1]
 
     if len(content.outline) != 1 or content.outline[0].holes:
         raise _fail(
@@ -1139,6 +1209,8 @@ def _prepare(
         max_iy=max_iy,
         goal_ix=goal_ix,
         goal_iy=goal_iy,
+        pad_count=len(pads),
+        components=routable_components or (),
         source_nodes=frozenset(source_nodes),
         target_nodes=frozenset(target_nodes),
         target_min_ix=min(node[0] for node in target_nodes),
@@ -1235,9 +1307,14 @@ def _candidate_payload(candidate: RouteCandidate) -> dict[str, object]:
         "patch": {
             "layer_id": candidate.patch.layer_id,
             "net_id": candidate.patch.net_id,
-            "vertices": [{"x_nm": point.x, "y_nm": point.y} for point in candidate.patch.vertices],
+            "paths": [
+                [{"x_nm": point.x, "y_nm": point.y} for point in path.vertices]
+                for path in candidate.patch.paths
+            ],
             "width_nm": candidate.patch.width_nm,
         },
+        "ordering_policy": candidate.ordering_policy,
+        "pad_count": candidate.pad_count,
         "policy": candidate.policy,
         "router_version": candidate.router_version,
         "seed": candidate.seed,
@@ -1276,36 +1353,34 @@ def verify_candidate_id(candidate: RouteCandidate) -> bool:
     return True
 
 
+@dataclass(frozen=True, slots=True)
+class _Leg:
+    """One routed merge between two components, before it becomes part of a patch."""
+
+    vertices: tuple[PointNM, ...]
+    bend_count: int
+    proximity_steps: int
+    expanded_states: int
+    peak_frontier_states: int
+
+
 def _build_candidate(
     problem: _Problem,
-    points: tuple[PointNM, ...],
+    legs: tuple[_Leg, ...],
     *,
-    start_node: _Node,
-    end_node: _Node,
-    bend_count: int,
-    proximity_steps: int,
-    expanded_states: int,
-    peak_frontier_states: int,
+    pad_count: int,
+    ordering_policy: str,
     work: _WorkBudget,
 ) -> RouteCandidate:
-    compressed = _compress(points)
-    if (
-        start_node not in problem.source_nodes
-        or end_node not in problem.target_nodes
-        or compressed[0] != _point(problem, *start_node)
-        or compressed[-1] != _point(problem, *end_node)
-    ):
-        raise RuntimeError("internal route reconstruction left its attachment copper")
-    for start, end in pairwise(compressed):
-        if not _edge_is_legal(start, end, problem, work):
-            raise RuntimeError("internal route post-validation rejected generated geometry")
-
-    length_nm = sum(
-        abs(start.x - end.x) + abs(start.y - end.y) for start, end in pairwise(compressed)
-    )
-    if bend_count != len(compressed) - 2:
-        raise RuntimeError("internal route bend accounting is inconsistent")
     settings = problem.request.settings
+    paths = tuple(RoutePath(vertices=leg.vertices) for leg in legs)
+    length_nm = sum(path.length_nm for path in paths)
+    bend_count = sum(leg.bend_count for leg in legs)
+    proximity_steps = sum(leg.proximity_steps for leg in legs)
+    expanded_states = sum(leg.expanded_states for leg in legs)
+    peak_frontier_states = max(leg.peak_frontier_states for leg in legs)
+    if bend_count != sum(path.bend_count for path in paths):
+        raise RuntimeError("internal route bend accounting is inconsistent")
     cost = RouteCost(
         length_nm=length_nm,
         bend_count=bend_count,
@@ -1324,11 +1399,13 @@ def _build_candidate(
         base_revision=problem.snapshot.snapshot_digest,
         start_pad_id=problem.start_pad.id,
         end_pad_id=problem.end_pad.id,
+        pad_count=pad_count,
+        ordering_policy=ordering_policy,
         patch=RoutePatch(
             net_id=problem.request.net_id,
             layer_id=problem.request.layer_id,
             width_nm=problem.width_nm,
-            vertices=compressed,
+            paths=paths,
         ),
         cost=cost,
         metrics=RouteMetrics(
@@ -1360,7 +1437,7 @@ def _start_states(problem: _Problem) -> tuple[_State, ...]:
     )
 
 
-def _search(problem: _Problem, work: _WorkBudget) -> RouteCandidate:
+def _search(problem: _Problem, work: _WorkBudget) -> _Leg:
     settings = problem.request.settings
     start_states = _start_states(problem)
     start_state_set = frozenset(start_states)
@@ -1399,16 +1476,26 @@ def _search(problem: _Problem, work: _WorkBudget) -> RouteCandidate:
                 route_states.append(parents[route_states[-1]])
             route_states.reverse()
             points = tuple(_point(problem, item[0], item[1]) for item in route_states)
-            return _build_candidate(
-                problem,
-                points,
-                start_node=(route_states[0][0], route_states[0][1]),
-                end_node=(ix, iy),
+            compressed = _compress(points)
+            start_node = (route_states[0][0], route_states[0][1])
+            if (
+                start_node not in problem.source_nodes
+                or (ix, iy) not in problem.target_nodes
+                or compressed[0] != _point(problem, *start_node)
+                or compressed[-1] != _point(problem, ix, iy)
+            ):
+                raise RuntimeError("internal route reconstruction left its attachment copper")
+            for edge_start, edge_end in pairwise(compressed):
+                if not _edge_is_legal(edge_start, edge_end, problem, work):
+                    raise RuntimeError("internal route post-validation rejected generated geometry")
+            if bends != len(compressed) - 2:
+                raise RuntimeError("internal route bend accounting is inconsistent")
+            return _Leg(
+                vertices=compressed,
                 bend_count=bends,
                 proximity_steps=proximity_steps,
                 expanded_states=expanded_states,
                 peak_frontier_states=peak_frontier_states,
-                work=work,
             )
         if expanded_states >= settings.max_expansions:
             raise _fail(
@@ -1473,6 +1560,183 @@ def _search(problem: _Problem, work: _WorkBudget) -> RouteCandidate:
     )
 
 
+def _nodes_for_cores(
+    problem: _Problem, cores: tuple[_Rect, ...], work: _WorkBudget
+) -> frozenset[_Node]:
+    """Map every lattice node covered by a component's copper, by exact index range."""
+
+    step = problem.request.settings.grid_step_nm
+    anchor = problem.start_pad.center
+    nodes: set[_Node] = set()
+    for rectangle in cores:
+        work.obstacle_check()
+        low_ix = max(problem.min_ix, _ceil_div(rectangle[0] - anchor.x, step))
+        high_ix = min(problem.max_ix, (rectangle[2] - anchor.x) // step)
+        low_iy = max(problem.min_iy, _ceil_div(rectangle[1] - anchor.y, step))
+        high_iy = min(problem.max_iy, (rectangle[3] - anchor.y) // step)
+        for node_ix in range(low_ix, high_ix + 1):
+            for node_iy in range(low_iy, high_iy + 1):
+                work.obstacle_check()
+                nodes.add((node_ix, node_iy))
+    return frozenset(nodes)
+
+
+def _component_bounds(cores: tuple[_Rect, ...]) -> _Rect:
+    return (
+        min(core[0] for core in cores),
+        min(core[1] for core in cores),
+        max(core[2] for core in cores),
+        max(core[3] for core in cores),
+    )
+
+
+def _rectilinear_gap(first: _Rect, second: _Rect) -> int:
+    """Exact integer Manhattan gap between two axis-aligned bounding boxes."""
+
+    gap_x = max(second[0] - first[2], first[0] - second[2], 0)
+    gap_y = max(second[1] - first[3], first[1] - second[3], 0)
+    return gap_x + gap_y
+
+
+def _merge_order(
+    components: tuple[tuple[_Rect, ...], ...], work: _WorkBudget
+) -> tuple[tuple[int, int], ...]:
+    """Return the component pairs to merge, as a deterministic minimum spanning tree.
+
+    Edges are weighted by the exact rectilinear gap between component bounding boxes and
+    ordered by ``(gap, lower index, higher index)``, so the tree is a pure function of the
+    snapshot. This is a spanning tree over components, not a Steiner tree: it bounds total
+    added copper without claiming to minimise it.
+    """
+
+    bounds = [_component_bounds(cores) for cores in components]
+    edges: list[tuple[int, int, int]] = []
+    for first in range(len(components)):
+        for second in range(first + 1, len(components)):
+            work.obstacle_check()
+            edges.append((_rectilinear_gap(bounds[first], bounds[second]), first, second))
+    edges.sort()
+    parent = list(range(len(components)))
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    order: list[tuple[int, int]] = []
+    for _, first, second in edges:
+        left, right = find(first), find(second)
+        if left == right:
+            continue
+        parent[max(left, right)] = min(left, right)
+        order.append((first, second))
+    return tuple(order)
+
+
+def _emitted_cores(leg: _Leg, half_width_nm: int) -> tuple[_Rect, ...]:
+    """Return exact cores for one emitted leg, which is orthogonal by construction."""
+
+    cores: list[_Rect] = []
+    for start, end in pairwise(leg.vertices):
+        if start.y == end.y:
+            cores.append(
+                (
+                    min(start.x, end.x),
+                    start.y - half_width_nm,
+                    max(start.x, end.x),
+                    start.y + half_width_nm,
+                )
+            )
+        else:
+            cores.append(
+                (
+                    start.x - half_width_nm,
+                    min(start.y, end.y),
+                    start.x + half_width_nm,
+                    max(start.y, end.y),
+                )
+            )
+    return tuple(cores)
+
+
+def _route_tree(problem: _Problem, work: _WorkBudget) -> RouteCandidate:
+    """Merge the net's components one leg at a time until a single component remains."""
+
+    if problem.pad_count == 2:
+        return _build_candidate(
+            problem,
+            (_search(problem, work),),
+            pad_count=2,
+            ordering_policy=SINGLE_PATH_ORDERING,
+            work=work,
+        )
+
+    # Component index -> its copper. Merging rewrites both entries to the union, so the
+    # bookkeeping stays a plain dictionary keyed by the original indices.
+    groups: dict[int, tuple[_Rect, ...]] = dict(enumerate(problem.components))
+    parent = list(range(len(problem.components)))
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    half_width_nm = problem.width_nm // 2
+    legs: list[_Leg] = []
+    for first, second in _merge_order(problem.components, work):
+        left, right = find(first), find(second)
+        if left == right:
+            continue
+        source_cores, target_cores = groups[left], groups[right]
+        source_nodes = _nodes_for_cores(problem, source_cores, work)
+        target_nodes = _nodes_for_cores(problem, target_cores, work)
+        if not source_nodes or not target_nodes:
+            raise _fail(
+                RouteFailureCode.NO_PATH,
+                "a pad cannot be reached from the bounded routing lattice",
+                expanded_states=work.expanded_states,
+                obstacle_checks=work.obstacle_checks,
+            )
+        if source_nodes & target_nodes:
+            raise RuntimeError("internal component analysis produced overlapping components")
+        leg = _search(
+            replace(
+                problem,
+                source_nodes=source_nodes,
+                target_nodes=target_nodes,
+                target_min_ix=min(node[0] for node in target_nodes),
+                target_max_ix=max(node[0] for node in target_nodes),
+                target_min_iy=min(node[1] for node in target_nodes),
+                target_max_iy=max(node[1] for node in target_nodes),
+            ),
+            work,
+        )
+        # A leg that does not begin on the copper it claimed to leave would make the merge a
+        # fiction, so the emitted start is checked against the source component itself.
+        head = leg.vertices[0]
+        if not any(
+            core[0] <= head.x <= core[2] and core[1] <= head.y <= core[3] for core in source_cores
+        ):
+            raise RuntimeError("internal leg does not begin on its source component")
+        legs.append(leg)
+        merged = source_cores + target_cores + _emitted_cores(leg, half_width_nm)
+        winner, loser = min(left, right), max(left, right)
+        parent[loser] = winner
+        groups[winner] = merged
+        del groups[loser]
+    if len(groups) != 1:
+        raise RuntimeError("internal merge order left the net disconnected")
+    return _build_candidate(
+        problem,
+        tuple(legs),
+        pad_count=problem.pad_count,
+        ordering_policy=COMPONENT_MST_ORDERING,
+        work=work,
+    )
+
+
 def _validate_public_inputs(
     snapshot: object,
     request: object,
@@ -1518,7 +1782,7 @@ class AStarRouter:
         work = _WorkBudget(settings=checked_request.settings, cancelled=cancellation_check)
         try:
             problem = _prepare(checked_snapshot, checked_request, work)
-            return RouteResult(candidate=_search(problem, work))
+            return RouteResult(candidate=_route_tree(problem, work))
         except _AlreadyConnectedError as connection:
             return RouteResult(
                 connected=RouteConnection(
