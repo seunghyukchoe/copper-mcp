@@ -11,19 +11,30 @@
 MCP-based tools, and optional AI policy plugins.**
 
 > [!IMPORTANT]
-> CopperMCP `0.3.x` is an MVP-alpha. It provides secure board inspection,
-> authoritative read-only KiCad DRC summaries, stable manifests, candidate validation, MCP
-> contracts, a bounded non-mutating route preview, and bounded Circuit Intent delivery as
-> a deterministic KiCad schematic. The CLI may explicitly create one new schematic, and the
-> stdio-only MCP tool may create one short-lived artifact capability; neither path modifies a board.
+> CopperMCP `0.4.x` is an MVP-alpha. It provides secure board inspection, authoritative read-only
+> KiCad DRC summaries, stable manifests, candidate validation, MCP contracts, a bounded
+> non-mutating route preview, and bounded Circuit Intent delivery as a deterministic KiCad
+> schematic. The CLI may explicitly create one new schematic or one new board render, always at a
+> path that does not already exist; over stdio only, the schematic and render tools may each mint
+> one short-lived, non-enumerable artifact capability. No path modifies a board.
 >
-> `0.3` completes connectivity *recognition*: a net already joined by existing copper is now
-> identified as such across any pad count, through same-net vias between layers, and — with the
-> opt-in `include_fill_authority` flag — through poured zone copper whose cache KiCad has just
-> confirmed still matches the board. Routing itself grew from a single two-pin path to a
-> deterministic spanning tree over a net's components, which connects every pad but makes no
-> Steiner-optimality claim. A metamorphic test family checks that rotating, reflecting or
-> translating a whole board does not change what the router concludes.
+> `0.4` completes the *observation* surface and opens *placement*. A board can now be read as a
+> typed Circuit Scene — region-scoped, exact integer geometry, objects named by stable references,
+> and every string the board's author controls quarantined in a separate untrusted collection that
+> is off by default. An opt-in render turns the same board into a deterministic, digest-bound SVG
+> of its copper; two renders of an unchanged board are byte-identical, and silkscreen and
+> fabrication layers are excluded because KiCad embeds their text literally in the output.
+> Placement arrives as a typed intent language that cannot express an illegal result, judged by a
+> deterministic legalizer.
+>
+> What `0.4` does **not** do: nothing applies a placement or a route, there is no placement solver,
+> courtyard overlap is not modelled and is reported as such, and a placement candidate is not bound
+> to KiCad DRC evidence. Pad overlap is deliberately three-valued, so `inconclusive` means neither
+> clearance nor collision could be proven rather than that anything is wrong. Connectivity
+> *recognition* from `0.3` is unchanged: a net already joined by existing copper is identified
+> across any pad count, through same-net vias between layers, and — with the opt-in
+> `include_fill_authority` flag — through poured zone copper whose cache KiCad has just confirmed
+> still matches the board.
 
 ## Why this project exists
 
@@ -77,6 +88,31 @@ The non-negotiable boundary is simple:
   proposes one candidate under a wall-clock deadline, and optionally binds it to aggregate
   authoritative KiCad DRC evidence. It has no durable export, persistence, job, source mutation, or
   apply path.
+- Circuit Scene IR `0.1.0` observation over MCP and the CLI: a mandatory region — an exact
+  nanometre box or one object reference with a radius — returns full-precision integer geometry for
+  the objects that overlap it, split into `static` (outline, pads, keepouts, rules) and `mutable`
+  (segments, arcs, vias, zones) so code meaning to read only the givens cannot iterate over both.
+  Objects are named by the Board IR references they already carry, each declaring how durable that
+  reference is, and truncation against object, vertex and annotation ceilings is reported
+  explicitly rather than left to be inferred. Board text is off by default and, when requested,
+  appears only in a separately typed `annotations` collection whose trust field has exactly one
+  permitted value; net names never appear at all.
+- An opt-in deterministic board render delivered as an ephemeral MCP capability or written by the
+  CLI to a new workspace path. Two renders of an unchanged board are byte-identical after a named
+  `title-line-v1` canonicalization, the evidence records every input that changes the bytes, and a
+  truncated export is refused rather than digested. The render draws copper and the board outline
+  only; it is whole-board rather than region-scoped, and it is advisory — where it and the scene
+  disagree, the scene is authoritative.
+- A typed placement-intent contract and deterministic legalizer, surfaced as a non-mutating
+  placement preview over MCP and the CLI. Seven rule kinds name objects only by scene references
+  and carry exact integer parameters; the language has no way to state an absolute coordinate or to
+  permit an overlap, so every position in a response is derived by CopperMCP and snapped to an
+  explicit grid. A candidate is immutable, bound to both the board snapshot and the out-of-band
+  footprint grouping, and proves exactly three things: pad overlap, board-outline containment, and
+  keepout respect. Pad overlap is three-valued, courtyard overlap is reported as `not_modelled`
+  because Board IR carries no courtyard geometry, and `infeasible_constraints` is never conflated
+  with `budget_exhausted`. Nothing applies a placement, there is no solver, and a placement
+  candidate carries no KiCad DRC evidence.
 - MCP tools and a stable CLI over the same application services.
 - Professional CI, CodeQL, dependency auditing, release automation, issue forms, and project ledgers.
 

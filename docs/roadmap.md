@@ -15,7 +15,7 @@ documentation, ledger updates, and benchmark evidence.
   reference-only external source metadata.
 - [x] First public GitHub release.
 
-## M1 — KiCad inspection and validation (`0.3.x`, current)
+## M1 — KiCad inspection and validation (`0.4.x`, current)
 
 - [ ] Official `kicad-python` IPC plugin.
 - [x] Canonical Circuit Intent IR `0.1.0` and deterministic in-memory KiCad schematic generation
@@ -38,7 +38,7 @@ documentation, ledger updates, and benchmark evidence.
 
 ## M2 — Deterministic routing baseline
 
-- [ ] Single two-pin A* routing with exact connectivity.
+- [~] Single two-pin A* routing with exact connectivity.
   - [x] Candidate-only integer four-neighbour reference with exact revision binding, deterministic
     identity, rectangular keepouts, bounded search, and cancellation.
   - [x] Reproducible synthetic A*/Dijkstra completion and optimal-cost oracle baseline.
@@ -60,7 +60,7 @@ documentation, ledger updates, and benchmark evidence.
   when a fresh KiCad refill on a disposable copy reproduces it exactly.
 - [ ] Fill-aware zone *routing*, using verified fill as a tighter obstacle than the conservative
   boundary envelope. Connectivity uses exact fill today; the routing obstacle model does not.
-- [ ] Multi-pin nets, since most real nets have more than two pads.
+- [~] Multi-pin nets, since most real nets have more than two pads.
   - [x] Connectivity analysis for nets of any width, so an already-connected multi-pin net
     is recognised rather than refused.
   - [x] Routing a multi-pin net as a deterministic spanning tree over its components
@@ -91,8 +91,9 @@ documentation, ledger updates, and benchmark evidence.
 
 ## M4 — High-fidelity Circuit Scene and AI policy plugins
 
-Circuit Scene IR now covers both semantic and visual observation; the placement surface remains
-future work.
+Circuit Scene IR covers both semantic and visual observation, and placement has a public preview
+surface judged by a deterministic legalizer. What remains is applying a placement, solving for one,
+and the policy-plugin work.
 
 - [x] Versioned Circuit Scene IR for bounded semantic and visual observation. Semantic observation
   is `observe_board_scene` (Circuit Scene IR 0.1.0): region-scoped, exact integer geometry,
@@ -118,7 +119,9 @@ future work.
 - [ ] Heuristic policy baseline and trace dataset.
 - [ ] Typed net-ordering, corridor, and repair policy interface.
 - [ ] Optional local GNN/RL reference policy.
-- [ ] Prompt-injection and excessive-agency tests.
+- [~] Prompt-injection and excessive-agency tests. Board-author text is quarantined in the scene
+  and asserted absent by a whole-response grep against a hostile fixture, and every request
+  boundary has a hostile-input suite; a systematic excessive-agency evaluation is still missing.
 - [ ] Held-out project-family evaluation.
 
 ## M5 — Performance and physics
