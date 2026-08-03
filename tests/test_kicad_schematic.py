@@ -95,6 +95,41 @@ def test_render_embeds_only_private_non_board_symbols() -> None:
     assert "/Applications/" not in text
 
 
+def test_fixture_layout_separates_symbols_properties_and_pin_labels() -> None:
+    text = render_kicad_schematic(_snapshot()).content.decode("utf-8")
+    instances = {
+        kind: (float(x), float(y))
+        for kind, x, y in re.findall(
+            r'\(symbol\s+\(lib_id "CopperMCP:([CR])"\)\s+'
+            r"\(at ([0-9.]+) ([0-9.]+) 0\)",
+            text,
+        )
+    }
+    label_anchors = [
+        (name, float(x), float(y))
+        for name, x, y in re.findall(
+            r'\(global_label "([^"]+)"\s+\(shape [^)]+\)\s+'
+            r"\(at ([0-9.]+) ([0-9.]+) 0\)",
+            text,
+        )
+    ]
+
+    assert instances == {"C": (20.32, 20.32), "R": (45.72, 20.32)}
+    assert {name for name, _, _ in label_anchors} == {"AUDIO_IN", "AUDIO_OUT", "GND"}
+    assert len(label_anchors) == 4
+    for _, x, y in label_anchors:
+        center = instances["C"] if x == instances["C"][0] else instances["R"]
+        assert abs(y - center[1]) == pytest.approx(5.08)
+    assert '(property "Reference" "C1"\n      (at 22.86 19.05 0)' in text
+    assert '(property "Value" "100n"\n      (at 22.86 21.59 0)' in text
+    assert '(property "Reference" "R1"\n      (at 48.26 19.05 0)' in text
+    assert '(property "Value" "1k"\n      (at 48.26 21.59 0)' in text
+    assert text.count("(at 0 -5.08 90)") == 2
+    assert text.count("(at 0 5.08 270)") == 2
+    assert text.count("(length 3.302)") == 2
+    assert text.count("(length 4.572)") == 2
+
+
 def test_render_escapes_untrusted_title_and_component_values() -> None:
     original = _snapshot()
     components = (

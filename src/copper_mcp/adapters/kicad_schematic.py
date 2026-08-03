@@ -32,10 +32,10 @@ _DIGEST = re.compile(r"^sha256:[a-f0-9]{64}$")
 # KiCad's default 1.27 mm schematic grid expressed in hundredths of a millimetre.
 _X_ORIGIN = 2_032
 _Y_ORIGIN = 2_032
-_X_SPACING = 1_524
-_Y_SPACING = 1_143
-_COLUMNS = 12
-_PIN_OFFSET = 254
+_X_SPACING = 2_540
+_Y_SPACING = 1_524
+_COLUMNS = 9
+_PIN_OFFSET = 508
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,6 +153,7 @@ def _library_symbol(kind: ComponentKind) -> list[str]:
             "  )",
             ")",
         ]
+        pin_length = "3.302"
     else:
         library_id = "CopperMCP:C"
         unit_name = "C"
@@ -173,6 +174,7 @@ def _library_symbol(kind: ComponentKind) -> list[str]:
             "  )",
             ")",
         ]
+        pin_length = "4.572"
 
     lines = [f"(symbol {_quote(library_id)}", "  (pin_numbers (hide yes))"]
     lines.extend(["  (pin_names (offset 0.254) (hide yes))", "  (exclude_from_sim no)"])
@@ -191,14 +193,14 @@ def _library_symbol(kind: ComponentKind) -> list[str]:
             [
                 f'(symbol "{unit_name}_1_1"',
                 "  (pin passive line",
-                "    (at 0 -2.54 90)",
-                "    (length 0.762)",
+                "    (at 0 -5.08 90)",
+                f"    (length {pin_length})",
                 '    (name "~" (effects (font (size 1.27 1.27))))',
                 '    (number "1" (effects (font (size 1.27 1.27))))',
                 "  )",
                 "  (pin passive line",
-                "    (at 0 2.54 270)",
-                "    (length 0.762)",
+                "    (at 0 5.08 270)",
+                f"    (length {pin_length})",
                 '    (name "~" (effects (font (size 1.27 1.27))))',
                 '    (number "2" (effects (font (size 1.27 1.27))))',
                 "  )",
@@ -253,8 +255,8 @@ def _component_instance(
         ]
     )
     for property_lines in (
-        _instance_property("Reference", component.reference, x=x + 120, y=y - 100),
-        _instance_property("Value", component.value, x=x + 120, y=y + 100),
+        _instance_property("Reference", component.reference, x=x + 254, y=y - 127),
+        _instance_property("Value", component.value, x=x + 254, y=y + 127),
         _instance_property("Footprint", "", x=x, y=y, hidden=True),
         _instance_property("Datasheet", "~", x=x, y=y, hidden=True),
         _instance_property("Description", description, x=x, y=y, hidden=True),

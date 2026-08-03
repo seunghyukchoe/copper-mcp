@@ -120,6 +120,10 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- The deterministic passive-schematic layout now uses longer symbol leads, wider A4-aware
+  component spacing, and grid-aligned reference/value offsets. The RC fixture's pin labels,
+  component bodies, and visible properties no longer collide in the reviewed KiCad SVG. This is a
+  readability baseline, not general or AI-driven placement.
 - The tag-only publish job now passes its repository explicitly when creating a GitHub release, so
   it does not depend on a checkout in the isolated publish job.
 - Board IR construction now normalizes direct content before hashing, aligns runtime/schema limits,

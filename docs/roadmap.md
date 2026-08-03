@@ -22,6 +22,8 @@ documentation, ledger updates, and benchmark evidence.
   contract for a bounded two-pin passive subset.
 - [x] Bounded Circuit Intent build service, explicit create-new CLI schematic export, and
   stdio-only opaque MCP resource delivery with redacted verification metadata.
+- [x] Deterministic passive-layout readability baseline with wider grid placement, extended leads,
+  separated labels/properties, real KiCad SVG inspection, and a structural regression.
 - [x] Descriptor-anchored workspace reads and exact-lowercase create-only schematic output.
 - [ ] Schematic round trip, authoritative ERC, and source-to-board connectivity parity.
 - [x] Canonical Board IR v0.1 contract with integer units, typed constraints, strict codecs, and

@@ -37,7 +37,9 @@ content digest. The adapter:
 
 - embeds original CopperMCP resistor and capacitor symbols, so it performs no symbol-library or
   network lookup;
-- places components on exact 1.27 mm grid multiples;
+- places components on a nine-column, A4-aware grid with exact 1.27 mm multiples, 25.4 mm
+  horizontal and 15.24 mm vertical pitch, 5.08 mm pin-label clearance, and reference/value text
+  offset beyond the symbol body;
 - connects pins with deterministic local labels and emits the direction-shaped global label on
   every connection of a port-backed net;
 - emits structurally RFC 4122 version-4-compatible UUIDs derived from the intent digest and object
@@ -52,6 +54,11 @@ exported component-pin connectivity matches the source intent without changing t
 reviewed KiCad 10.0.5 run reduced ERC warnings from seven to four without changing the intended
 nets. The four remaining warnings are two isolated external-port labels and two missing
 private-library-configuration warnings; this is warning reduction, not an ERC-clean result.
+
+The spacing baseline is deliberately mechanical. It keeps the reviewed passive fixture's symbol
+bodies, pin labels, and visible properties distinct and keeps the 64-component schema ceiling on
+the A4 drawing area. It does not optimize signal flow, functional grouping, crossings, hierarchy,
+or aesthetics and must not be described as Circuit Scene observation or AI placement.
 
 The implementation follows KiCad's official
 [schematic file format](https://dev-docs.kicad.org/en/file-formats/sexpr-schematic/) and
