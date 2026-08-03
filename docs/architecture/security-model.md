@@ -6,6 +6,13 @@
 - Filesystem integrity and unsaved KiCad editor state.
 - MCP and model-provider credentials.
 - Candidate provenance and benchmark integrity.
+
+Terminology used throughout: DRC evidence is an **attestation** — a statement about named subjects
+bound to their digests, refused when any binding fails — while release-ledger rows are **provenance**
+in the SLSA sense, and the ledgers as a whole are an append-only **transparency record** rather than
+a cryptographic transparency log. There is no Merkle tree or signed checkpoint; Git history is the
+only integrity mechanism behind them. Emitting DRC evidence in the in-toto Statement envelope is
+future work, not a current property.
 - Compute budgets for routing and AI inference.
 
 ## Trust boundaries

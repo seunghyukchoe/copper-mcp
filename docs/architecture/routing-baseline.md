@@ -135,6 +135,19 @@ all and is refused with a distinct diagnostic. The chain is deliberately coarser
 squares reach about `0.7 * radius` — so attachment is possible only near sampled points, and the
 residual error is under-connection, never a claimed connection that does not exist.
 
+The standard way to decide connectivity is **exact shape intersection**: extraction and LVS engines
+such as Magic, and detailed routers such as TritonRoute, test the real copper shapes against one
+another and call any overlap a connection. This implementation deliberately diverges by testing
+*under-approximating* cores instead. The trade is asymmetric on purpose — an exact test is right in
+both directions, whereas a core can only ever miss a connection that exists, never invent one that
+does not, and a router that under-connects proposes redundant copper while one that over-connects
+claims a net is finished when it is open. The pad cores also play the role TritonRoute calls **pin
+access points**: the finite set of places a search may legally enter a pad. Everything here is exact
+integer arithmetic on nanometres, which sidesteps the floating-point robustness problem that
+Shewchuk's adaptive predicates and CGAL's exact-predicate kernels exist to solve; the cost is that
+every construction must be expressible in integers, which is why cores are inscribed rectangles
+rather than offset curves.
+
 Components are exact integer union-find over the two pad cores and every same-net segment core, with
 closed rectangle intersection as the connection test — exact contact counts. The lowest index always
 wins a union, so a component's root never depends on discovery order. Each pair comparison charges

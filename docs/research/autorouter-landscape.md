@@ -2,6 +2,15 @@
 
 **Snapshot date:** 2026-08-03
 
+> **Source verification, 2026-08-03.** An independent audit confirmed the pre-2026 literature cited
+> here (Hwang 1976, Takahashi-Matsuyama 1980, FLUTE, GeoSteiner, PathFinder, TritonRoute, Magic,
+> Shewchuk, CGAL, *Build Systems a la Carte*) and the licensing claims. Identifiers in the
+> `2512.*`, `2602.*`, `2605.*` and `2607.*` arXiv ranges post-date the audit tooling's knowledge
+> cutoff and **could not be confirmed**; they are recorded as reported, not as verified sources,
+> and nothing in this repository depends on them. Specifically unconfirmed: `2607.05915`
+> (PCBWorld), `2607.22761` (DRC-Aid), `2607.21850` (SCALE), `2605.15669` (Rule2DRC),
+> `2512.03594` (offline RL over cost weights), `2602.00510` (PCBSchemaGen).
+
 The practical market splits into three different products: interactive helpers,
 batch routers for an already placed board, and services that also attempt
 placement. Comparing them as if they solved the same problem overstates the

@@ -8,6 +8,22 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- A metamorphic test family over the routing pipeline: whole-board rotation by 90, 180 and 270
+  degrees, reflection across each axis, lattice-safe translation, and endpoint swap. Each relation
+  transforms a board and asserts that the router's conclusion travels with it - same result arm,
+  same diagnostic code, same connection counts, and identical length, bend, proximity and total
+  cost. Cost is a genuine invariant because the transformed board's legal path set is exactly the
+  image of the original's; exact vertex equality under the inverse transform is asserted only on
+  boards whose optimum is unique, because the expansion order and the `(iy, ix)` heap tie-break are
+  not rotation-equivariant and a different-but-equally-optimal route is a correct answer rather than
+  a defect. The rotation relations cover a board of rotated, non-square pads - the class that hid
+  the footprint-rotation defect - and a second relation works at the adapter level instead,
+  comparing `parse(rotate(board))` with `rotate(parse(board))` on the committed rotated-footprint
+  fixture. That is the relation the y-down defect would have failed, and it is checked to be
+  discriminating: all twelve pads match the correct quarter turn and none matches the mirrored one.
+  These relations answer the complement of a pseudo-oracle - not "is this answer right" but "is this
+  the same board" - and they need no KiCad.
+
 - Cached zone fill may now serve as connectivity evidence, but only against a fresh KiCad refill.
   KiCad refills a private disposable copy and the recomputed pour is compared with the board's
   cache; matching means the two are the same geometry, so there is no question which one a claim

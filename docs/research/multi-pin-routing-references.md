@@ -4,6 +4,15 @@ Literature and licensing survey for the multi-pin Steiner routing contract, gath
 (initial pass plus a deep 2022-2026 sweep). Concepts referenced here inform CopperMCP's own
 implementations; no external code is copied.
 
+> **Source verification, 2026-08-03.** An independent audit confirmed the pre-2026 literature cited
+> here (Hwang 1976, Takahashi-Matsuyama 1980, FLUTE, GeoSteiner, PathFinder, TritonRoute, Magic,
+> Shewchuk, CGAL, *Build Systems a la Carte*) and the licensing claims. Identifiers in the
+> `2512.*`, `2602.*`, `2605.*` and `2607.*` arXiv ranges post-date the audit tooling's knowledge
+> cutoff and **could not be confirmed**; they are recorded as reported, not as verified sources,
+> and nothing in this repository depends on them. Specifically unconfirmed: `2607.05915`
+> (PCBWorld), `2607.22761` (DRC-Aid), `2607.21850` (SCALE), `2605.15669` (Rule2DRC),
+> `2512.03594` (offline RL over cost weights), `2602.00510` (PCBSchemaGen).
+
 ## Licensing boundary
 
 - **freerouting** (Java push-and-shove autorouter) is **GPL-3.0**: concepts only, never code, in

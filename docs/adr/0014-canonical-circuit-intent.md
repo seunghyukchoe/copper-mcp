@@ -91,6 +91,17 @@ the logical meaning is unchanged and the adapter has independent fixtures and co
 - Claim ERC in the first slice: rejected until a bounded fixed-argument schematic CLI adapter and
   report contract receive their own tests and security review.
 
+## Prior art
+
+Choosing a typed JSON IR over KiCad S-expressions as the model-facing surface matches what the
+practice tools converged on independently: **tscircuit** (React-style components), **atopile** (a
+typed hardware description language) and **SKiDL** (circuits as Python) all put a checkable
+intermediate representation between the author and the netlist rather than having authors emit
+tool-native geometry. The generation literature runs the other way — **PCBSchemaGen**
+(arXiv 2602.00510, *unverified post-cutoff identifier*, recorded 2026-08-03) and the AnalogCoder
+line emit tool-native artifacts and validate afterwards. This ADR inverts that: validate the
+intent, then render deterministically, so an invalid circuit never becomes a file at all.
+
 ## References
 
 - [KiCad schematic file format](https://dev-docs.kicad.org/en/file-formats/sexpr-schematic/)

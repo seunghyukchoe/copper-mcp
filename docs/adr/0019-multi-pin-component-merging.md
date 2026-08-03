@@ -80,9 +80,30 @@ carry exactly one path and record the ordering policy `single-path`.
   that a proposal has no unrouted connections, and a partly connected net is not a proposal.
 - **Requiring every pad centre on one lattice**: rejected as measured above.
 
+## Prior art
+
+Growing a tree by repeatedly running a shortest-path search from the partial tree to the nearest
+remaining terminal is the **Takahashi-Matsuyama (1980)** Steiner heuristic; the per-leg
+multi-source search into the growing component is exactly that shape. This ADR diverges in one
+respect on purpose: Takahashi-Matsuyama re-evaluates which terminal is nearest as the tree grows,
+whereas the merge order here is fixed up front by a minimum spanning tree over components so that
+the sequence is a pure function of the snapshot. Determinism is worth more to this project than the
+marginal length a re-evaluating order would recover, and the ``ordering_policy`` field is the seam
+where a re-evaluating or topology-guided order can be added later without changing the contract.
+
+**Hwang (1976)** proves that a rectilinear minimum spanning tree is within 3/2 of the rectilinear
+Steiner minimal tree. That bound is cited here for orientation only and **does not transfer to this
+implementation**: it holds for a spanning tree over obstacle-free point terminals, whereas the MST
+here spans *components* by bounding-box gap and each leg is then routed around obstacles, which can
+make a routed leg arbitrarily longer than the gap that ordered it. No approximation ratio is claimed.
+
 ## References
 
 - [ADR-0016](0016-same-net-attachment.md)
 - [ADR-0018](0018-diagonal-attachment-cores.md)
 - [Multi-pin routing references](../research/multi-pin-routing-references.md)
+- Hwang, "On Steiner Minimal Trees with Rectilinear Distance", *SIAM Journal on Applied
+  Mathematics* 30(1) (1976) — the 3/2 rectilinear MST bound, for obstacle-free point terminals
+- Takahashi & Matsuyama, "An approximate solution for the Steiner problem in graphs",
+  *Mathematica Japonica* 24 (1980) — the grow-from-the-tree heuristic this resembles
 - [Deterministic A* routing baseline](../architecture/routing-baseline.md)

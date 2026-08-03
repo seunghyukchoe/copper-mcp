@@ -78,6 +78,9 @@ documentation, ledger updates, and benchmark evidence.
 - [ ] Incremental spatial index and bounded rip-up/reroute.
 - [ ] Benchmark comparison against established open baselines.
 
+- [ ] Emit candidate DRC evidence in the in-toto Statement envelope, so an attestation this
+  project already produces in substance is also machine-checkable by standard tooling.
+
 ## M3 — Safe candidate application
 
 - [ ] Durable routing jobs and cancellation.
