@@ -18,8 +18,8 @@ route multiple nets, run durable jobs, persist or export candidate boards, or ap
 | Connectivity | Exactly two pads belonging to the net; both accessible on the selected layer |
 | Constraints | One net-class width/clearance assignment; no selected-net length or differential-pair rule |
 | Board | One hole-free, axis-aligned rectangular outline |
-| Obstacles | Axis-aligned rectangular keepouts that prohibit tracks on the selected layer |
-| Existing geometry | No vias, selected-layer segments/arcs/zones, or additional selected-layer pads |
+| Obstacles | Rectangular track keepouts, plus foreign-net pads and orthogonal segments on the selected layer |
+| Existing geometry | No vias, selected-layer arcs or zones, off-axis pads, diagonal segments, or copper already on the routed net |
 | Search | Four-neighbour orthogonal grid; east, north, west, south expansion order |
 | Output | Immutable orthogonal `RoutePatch` tied to the unchanged snapshot digest |
 
@@ -37,9 +37,16 @@ half-width plus the selected net-class clearance. A centerline on the resulting 
 entering its open interior by one nanometre is not. Every complete grid edge is checked, not only its
 endpoints. These semantics are covered by exact-boundary and one-nanometre regression tests.
 
-Other pads and existing copper are currently rejected because approximating their clearance would
-create a false correctness claim. They will become obstacles only after the Board IR geometry model
-and differential tests can represent them exactly.
+Selected-layer copper outside the routed net is an obstacle rather than a rejection. A foreign pad
+contributes a rectangle centred on the pad, with its sizes swapped on a quarter turn; an orthogonal
+segment contributes the rectangle its centreline sweeps, grown by the ceiling of half its width.
+Each is inflated by the routed half-width plus the stricter of the routed net's and the obstacle
+net's class clearance, so a board mixing net classes cannot be routed to the looser rule.
+
+Round pad shapes use their bounding box. That over-approximates only: it can refuse a route a
+rounder shape would allow, never permit a clearance violation. Arcs, zones, vias, off-axis pad
+rotations, diagonal segments, and a net that is already partially routed still fail closed, because
+a rectangle cannot represent them without lying. Every obstacle counts against `max_obstacles`.
 
 ## Objective and determinism
 
@@ -57,7 +64,7 @@ wall clock, hash randomization, process memory, or floating-point value particip
 recorded in candidate identity for parity with future policies but does not randomize this baseline.
 
 `max_grid_nodes` bounds the position lattice before allocation, `max_expansions` bounds state search,
-`max_obstacles` caps selected track keepouts, and `max_obstacle_checks` directly bounds the otherwise
+`max_obstacles` caps selected-layer obstacles, and `max_obstacle_checks` directly bounds the otherwise
 multiplicative edge/proximity work. Cancellation is checked during preparation, between expansions,
 and at most every 64 obstacle checks during a long evaluation. Node-budget, obstacle-budget,
 search-budget, cancellation, unsupported constraint, unsupported geometry, stale revision, invalid
@@ -175,7 +182,13 @@ route.
 It says nothing about electrical behavior, SI/PI, EMC, thermal performance, DFM, fabrication
 readiness, or hardware safety. Preview, persistence, and application require separate contracts.
 
+A committed `blocked-pad.kicad_pcb` fixture places a 2 mm x 8 mm foreign-net pad between the two
+endpoints. The router detours around it, and a KiCad 10.0.5 integration test asserts the resulting
+board reports zero DRC errors and zero unconnected items, so the obstacle model is checked against
+the authoritative tool rather than only against itself.
+
 See [ADR-0006](../adr/0006-bounded-deterministic-astar.md),
 [ADR-0007](../adr/0007-disposable-kicad-candidate-snapshot.md),
 [ADR-0008](../adr/0008-candidate-bound-kicad-drc.md),
-[ADR-0009](../adr/0009-non-mutating-route-preview.md), and the [roadmap](../roadmap.md).
+[ADR-0009](../adr/0009-non-mutating-route-preview.md),
+[ADR-0011](../adr/0011-existing-copper-obstacles.md), and the [roadmap](../roadmap.md).

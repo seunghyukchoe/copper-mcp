@@ -12,6 +12,7 @@ from copper_mcp.board_ir.codec import decode_snapshot_json
 from copper_mcp.board_ir.diagnostics import ConversionResult, Diagnostic, Severity
 from copper_mcp.board_ir.limits import ParseLimits
 from copper_mcp.board_ir.types import (
+    UDEG_PER_DEGREE,
     Arc,
     BoardIRContent,
     BoardIRSnapshot,
@@ -44,6 +45,7 @@ from copper_mcp.board_ir.types import (
 from copper_mcp.board_ir.validation import BoardIRValidationError, validate_content
 
 __all__ = [
+    "UDEG_PER_DEGREE",
     "Arc",
     "BoardIRContent",
     "BoardIRSnapshot",

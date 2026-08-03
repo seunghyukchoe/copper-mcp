@@ -41,6 +41,7 @@ from copper_mcp.routing.oracle import DijkstraResult, run_dijkstra_oracle
 SOURCE_REVISION = f"sha256:{'a' * 64}"
 OTHER_REVISION = f"sha256:{'b' * 64}"
 LAYER_ID = "layer:F.Cu"
+OTHER_NET_ID = "net:power"
 NET_ID = "net:audio"
 
 
@@ -78,6 +79,9 @@ def _snapshot(
     include_end: bool = True,
     third_target: bool = False,
     extra_pad: bool = False,
+    blocking_pad: tuple[int, int] | None = None,
+    blocking_pad_rotation_udeg: int = 0,
+    foreign_segment: tuple[int, int, int, int] | None = None,
     existing_copper: bool = False,
     layer_kind: str = "signal",
     length_rule: bool = False,
@@ -99,8 +103,18 @@ def _snapshot(
         pads.append(_pad("pad:03", (5_000, 8_000)))
     if extra_pad:
         pads.append(_pad("pad:other", (5_000, 8_000), net_id=None))
-    segments = (
-        (
+    if blocking_pad is not None:
+        pads.append(
+            replace(
+                _pad("pad:blocker", blocking_pad, net_id=None),
+                rotation_udeg=blocking_pad_rotation_udeg,
+                size_x_nm=800,
+                size_y_nm=2_000,
+            )
+        )
+    segments: tuple[Segment, ...] = ()
+    if existing_copper:
+        segments += (
             Segment(
                 id="segment:existing",
                 net_id=NET_ID,
@@ -110,9 +124,17 @@ def _snapshot(
                 width_nm=200,
             ),
         )
-        if existing_copper
-        else ()
-    )
+    if foreign_segment is not None:
+        segments += (
+            Segment(
+                id="segment:foreign",
+                net_id=OTHER_NET_ID,
+                layer_id=LAYER_ID,
+                start=PointNM(foreign_segment[0], foreign_segment[1]),
+                end=PointNM(foreign_segment[2], foreign_segment[3]),
+                width_nm=200,
+            ),
+        )
     content = make_content(
         source=SourceInfo(
             format="test",
@@ -127,10 +149,13 @@ def _snapshot(
             ),
         ),
         copper_layers=(layer,),
-        nets=(net,),
+        nets=(net, Net(id=OTHER_NET_ID, name="POWER")),
         constraints=ConstraintSet(
             net_classes=(net_class,),
-            assignments=(NetClassAssignment(net_id=NET_ID, net_class_id=net_class.id),),
+            assignments=(
+                NetClassAssignment(net_id=NET_ID, net_class_id=net_class.id),
+                NetClassAssignment(net_id=OTHER_NET_ID, net_class_id=net_class.id),
+            ),
             length_rules=(
                 LengthRule(
                     id="rule:audio_length",
@@ -386,10 +411,6 @@ def test_revision_snapshot_net_grid_and_geometry_fail_closed() -> None:
     _assert_failure(
         router.propose(triangle, _request(triangle)), RouteFailureCode.UNSUPPORTED_GEOMETRY
     )
-    extra_pad = _snapshot(extra_pad=True)
-    _assert_failure(
-        router.propose(extra_pad, _request(extra_pad)), RouteFailureCode.UNSUPPORTED_GEOMETRY
-    )
     existing = _snapshot(existing_copper=True)
     _assert_failure(
         router.propose(existing, _request(existing)), RouteFailureCode.UNSUPPORTED_GEOMETRY
@@ -540,3 +561,92 @@ def test_obstacle_work_preparation_cancellation_and_public_types_are_bounded() -
         router.propose(one_obstacle, valid_request, cancelled=object()),  # type: ignore[arg-type]
         RouteFailureCode.INVALID_REQUEST,
     )
+
+
+def test_foreign_pads_become_exact_obstacles_instead_of_a_rejection() -> None:
+    router = AStarRouter()
+    clear = _snapshot()
+    blocked = _snapshot(blocking_pad=(5_000, 5_000))
+
+    straight = _candidate(router.propose(clear, _request(clear)))
+    detour = _candidate(router.propose(blocked, _request(blocked)))
+
+    assert straight.cost.bend_count == 0
+    assert detour.cost.bend_count > 0
+    assert detour.cost.total_cost_nm > straight.cost.total_cost_nm
+    assert detour.metrics.hard_internal_violations == 0
+    # The blocker spans x 4600..5400 and y 4000..6000; inflated by half width 100
+    # plus clearance 100 it forbids any centreline inside x 4500..5500, y 3900..6100.
+    assert all(
+        not (4_500 < point.x < 5_500 and 3_900 < point.y < 6_100) for point in detour.patch.vertices
+    )
+
+
+def test_foreign_segments_become_exact_obstacles() -> None:
+    router = AStarRouter()
+    blocked = _snapshot(foreign_segment=(5_000, 3_000, 5_000, 7_000))
+
+    detour = _candidate(router.propose(blocked, _request(blocked)))
+
+    assert detour.cost.bend_count > 0
+    assert all(
+        not (4_800 < point.x < 5_200 and 2_800 < point.y < 7_200) for point in detour.patch.vertices
+    )
+
+
+def test_obstacle_routes_agree_with_the_dijkstra_oracle() -> None:
+    router = AStarRouter()
+    for snapshot in (
+        _snapshot(blocking_pad=(5_000, 5_000)),
+        _snapshot(foreign_segment=(5_000, 3_000, 5_000, 7_000)),
+        _snapshot(blocking_pad=(3_000, 5_000), foreign_segment=(7_000, 3_000, 7_000, 7_000)),
+    ):
+        request = _request(snapshot)
+        candidate = _candidate(router.propose(snapshot, request))
+        oracle = run_dijkstra_oracle(snapshot, request)
+
+        assert isinstance(oracle, DijkstraResult)
+        assert oracle.total_cost_nm == candidate.cost.total_cost_nm
+
+
+def test_unmodeled_obstacle_geometry_still_fails_closed() -> None:
+    router = AStarRouter()
+
+    rotated = _snapshot(blocking_pad=(5_000, 5_000), blocking_pad_rotation_udeg=45_000_000)
+    _assert_failure(
+        router.propose(rotated, _request(rotated)), RouteFailureCode.UNSUPPORTED_GEOMETRY
+    )
+
+    diagonal = _snapshot(foreign_segment=(4_000, 4_000, 6_000, 6_000))
+    _assert_failure(
+        router.propose(diagonal, _request(diagonal)), RouteFailureCode.UNSUPPORTED_GEOMETRY
+    )
+
+    partially_routed = _snapshot(existing_copper=True)
+    _assert_failure(
+        router.propose(partially_routed, _request(partially_routed)),
+        RouteFailureCode.UNSUPPORTED_GEOMETRY,
+    )
+
+
+def test_quarter_turn_pads_swap_their_modeled_extents() -> None:
+    router = AStarRouter()
+    upright = _snapshot(blocking_pad=(5_000, 6_600))
+    turned = _snapshot(blocking_pad=(5_000, 6_600), blocking_pad_rotation_udeg=90_000_000)
+
+    # Upright the blocker is 800 x 2000 and spans y 5600..7600, clear of a straight route.
+    assert _candidate(router.propose(upright, _request(upright))).cost.bend_count == 0
+    # Rotated a quarter turn it becomes 2000 x 800 spanning y 6200..7000 — still clear.
+    assert _candidate(router.propose(turned, _request(turned))).cost.bend_count == 0
+
+    low = _snapshot(blocking_pad=(5_000, 5_500), blocking_pad_rotation_udeg=90_000_000)
+    assert _candidate(router.propose(low, _request(low))).cost.bend_count > 0
+
+
+def test_existing_copper_counts_against_the_obstacle_budget() -> None:
+    router = AStarRouter()
+    snapshot = _snapshot(blocking_pad=(5_000, 5_000), foreign_segment=(7_000, 3_000, 7_000, 7_000))
+
+    request = _request(snapshot, settings=_settings(max_obstacles=1))
+
+    _assert_failure(router.propose(snapshot, request), RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)

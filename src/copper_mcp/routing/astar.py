@@ -10,12 +10,14 @@ from itertools import pairwise
 from typing import TypeAlias, cast
 
 from copper_mcp.board_ir import (
+    UDEG_PER_DEGREE,
     BoardIRSnapshot,
     BoardIRValidationError,
     NetClass,
     Pad,
     PointNM,
     Ring,
+    Segment,
     verify_snapshot,
 )
 from copper_mcp.routing.contracts import (
@@ -227,6 +229,51 @@ def _resolve_net_class(snapshot: BoardIRSnapshot, net_id: str, work: _WorkBudget
     return net_class
 
 
+_QUARTER_ROTATION_UDEG = 90 * UDEG_PER_DEGREE
+_AXIS_ALIGNED_ROTATIONS_UDEG = frozenset(
+    {0, _QUARTER_ROTATION_UDEG, 2 * _QUARTER_ROTATION_UDEG, 3 * _QUARTER_ROTATION_UDEG}
+)
+
+
+def _net_clearance_nm(
+    snapshot: BoardIRSnapshot, net_id: str | None, work: _WorkBudget
+) -> int | None:
+    """Return one net's exact class clearance, or None when it has no assignment."""
+
+    if net_id is None:
+        return None
+    try:
+        return _resolve_net_class(snapshot, net_id, work).clearance_nm
+    except _ExpectedFailureError:
+        return None
+
+
+def _pad_extent(pad: Pad) -> tuple[int, int] | None:
+    """Return a pad's axis-aligned half extents, or None when it is not modeled exactly."""
+
+    if pad.rotation_udeg not in _AXIS_ALIGNED_ROTATIONS_UDEG:
+        return None
+    size_x, size_y = pad.size_x_nm, pad.size_y_nm
+    quarter_turns = pad.rotation_udeg // _QUARTER_ROTATION_UDEG
+    if quarter_turns % 2 == 1:
+        size_x, size_y = size_y, size_x
+    return (size_x + 1) // 2, (size_y + 1) // 2
+
+
+def _segment_extent(segment: Segment) -> _Rect | None:
+    """Return an orthogonal segment's covered rectangle, or None when it is diagonal."""
+
+    if segment.start.x != segment.end.x and segment.start.y != segment.end.y:
+        return None
+    half_width_nm = (segment.width_nm + 1) // 2
+    return (
+        min(segment.start.x, segment.end.x) - half_width_nm,
+        min(segment.start.y, segment.end.y) - half_width_nm,
+        max(segment.start.x, segment.end.x) + half_width_nm,
+        max(segment.start.y, segment.end.y) + half_width_nm,
+    )
+
+
 def _prepare(
     snapshot: BoardIRSnapshot,
     request: RouteRequest,
@@ -295,14 +342,14 @@ def _prepare(
             )
 
     target_pads: list[Pad] = []
-    has_additional_layer_pad = False
+    blocking_pads: list[Pad] = []
     for index, pad in enumerate(content.pads):
         if index % 64 == 0:
             work.checkpoint()
         if pad.net_id == request.net_id:
             target_pads.append(pad)
         elif request.layer_id in pad.layer_ids:
-            has_additional_layer_pad = True
+            blocking_pads.append(pad)
     pads = tuple(sorted(target_pads, key=lambda pad: pad.id))
     if len(pads) != 2 or any(request.layer_id not in pad.layer_ids for pad in pads):
         raise _fail(
@@ -316,39 +363,35 @@ def _prepare(
             "coincident route endpoints are outside the first-slice contract",
         )
 
-    if has_additional_layer_pad:
+    if content.vias:
         raise _fail(
             RouteFailureCode.UNSUPPORTED_GEOMETRY,
-            "additional pads on the selected layer require a future obstacle model",
+            "vias occupy every layer and are outside the single-layer obstacle model",
         )
-    has_existing_copper = bool(content.vias)
-    for index, segment in enumerate(content.segments):
-        if index % 64 == 0:
-            work.checkpoint()
-        if segment.layer_id == request.layer_id:
-            has_existing_copper = True
-            break
     for index, arc in enumerate(content.arcs):
-        if has_existing_copper:
-            break
         if index % 64 == 0:
             work.checkpoint()
         if arc.layer_id == request.layer_id:
-            has_existing_copper = True
-            break
+            raise _fail(
+                RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                "selected-layer arcs are outside the rectangular obstacle model",
+            )
     for index, zone in enumerate(content.zones):
-        if has_existing_copper:
-            break
         if index % 64 == 0:
             work.checkpoint()
         if zone.layer_id == request.layer_id:
-            has_existing_copper = True
-            break
-    if has_existing_copper:
-        raise _fail(
-            RouteFailureCode.UNSUPPORTED_GEOMETRY,
-            "existing selected-layer copper requires a future obstacle model",
-        )
+            raise _fail(
+                RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                "selected-layer zones are outside the rectangular obstacle model",
+            )
+    for index, segment in enumerate(content.segments):
+        if index % 64 == 0:
+            work.checkpoint()
+        if segment.layer_id == request.layer_id and segment.net_id == request.net_id:
+            raise _fail(
+                RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                "the selected net is already partially routed on the selected layer",
+            )
 
     if len(content.outline) != 1 or content.outline[0].holes:
         raise _fail(
@@ -374,33 +417,80 @@ def _prepare(
     if safe_board[0] > safe_board[2] or safe_board[1] > safe_board[3]:
         raise _fail(RouteFailureCode.NO_PATH, "the routed width does not fit inside the board")
 
-    inflation_nm = half_width_nm + net_class.clearance_nm
     obstacles: list[_Rect] = []
+
+    def add_obstacle(rectangle: _Rect, clearance_nm: int) -> None:
+        """Inflate one exact rectangle by the route half-width plus the governing clearance."""
+
+        if len(obstacles) >= request.settings.max_obstacles:
+            raise _fail(
+                RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+                "the selected-layer obstacle count exceeds the configured obstacle budget",
+            )
+        margin_nm = half_width_nm + clearance_nm
+        min_x, min_y, max_x, max_y = rectangle
+        obstacles.append(
+            (
+                min_x - margin_nm,
+                min_y - margin_nm,
+                max_x + margin_nm,
+                max_y + margin_nm,
+            )
+        )
+
+    def governing_clearance_nm(net_id: str | None) -> int:
+        """Use the stricter of the routed net's clearance and the obstacle net's clearance."""
+
+        other = _net_clearance_nm(snapshot, net_id, work)
+        if other is None:
+            return net_class.clearance_nm
+        return max(net_class.clearance_nm, other)
+
     for index, keepout in enumerate(content.keepouts):
         if index % 64 == 0:
             work.checkpoint()
         if request.layer_id not in keepout.layer_ids or not keepout.prohibit_tracks:
             continue
-        if len(obstacles) >= request.settings.max_obstacles:
-            raise _fail(
-                RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
-                "the selected-layer keepout count exceeds the configured obstacle budget",
-            )
         rectangle = _rectangle(keepout.boundary)
         if rectangle is None:
             raise _fail(
                 RouteFailureCode.UNSUPPORTED_GEOMETRY,
                 "a selected-layer track keepout is not an axis-aligned rectangle",
             )
-        min_x, min_y, max_x, max_y = rectangle
-        obstacles.append(
-            (
-                min_x - inflation_nm,
-                min_y - inflation_nm,
-                max_x + inflation_nm,
-                max_y + inflation_nm,
+        add_obstacle(rectangle, net_class.clearance_nm)
+
+    for index, pad in enumerate(blocking_pads):
+        if index % 64 == 0:
+            work.checkpoint()
+        pad_extent = _pad_extent(pad)
+        if pad_extent is None:
+            raise _fail(
+                RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                "a selected-layer pad is rotated off axis and is not modeled exactly",
             )
+        half_x_nm, half_y_nm = pad_extent
+        add_obstacle(
+            (
+                pad.center.x - half_x_nm,
+                pad.center.y - half_y_nm,
+                pad.center.x + half_x_nm,
+                pad.center.y + half_y_nm,
+            ),
+            governing_clearance_nm(pad.net_id),
         )
+
+    for index, segment in enumerate(content.segments):
+        if index % 64 == 0:
+            work.checkpoint()
+        if segment.layer_id != request.layer_id:
+            continue
+        segment_extent = _segment_extent(segment)
+        if segment_extent is None:
+            raise _fail(
+                RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                "a selected-layer segment is diagonal and is not modeled exactly",
+            )
+        add_obstacle(segment_extent, governing_clearance_nm(segment.net_id))
 
     step = request.settings.grid_step_nm
     delta_x = end_pad.center.x - start_pad.center.x

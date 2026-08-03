@@ -14,3 +14,4 @@ from the decision ledger.
 - [ADR-0008: Candidate-bound authoritative KiCad DRC evidence](0008-candidate-bound-kicad-drc.md)
 - [ADR-0009: Bounded non-mutating route preview](0009-non-mutating-route-preview.md)
 - [ADR-0010: Read-only Board IR inspection service](0010-board-ir-inspection-service.md)
+- [ADR-0011: Existing copper as exact rectangular obstacles](0011-existing-copper-obstacles.md)
