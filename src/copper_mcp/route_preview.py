@@ -14,7 +14,7 @@ import re
 import time
 from collections import Counter
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any
@@ -271,7 +271,7 @@ class RoutePreview:
     snapshot_digest: str | None = None
     candidate: RouteCandidate | None = None
     diagnostic: RouteDiagnostic | None = None
-    conversion_diagnostic_counts: Mapping[str, int] = MappingProxyType({})
+    conversion_diagnostic_counts: Mapping[str, int] = field(default_factory=dict)
     drc_evidence: RouteCandidateDrcEvidence | None = None
     schema_version: str = SCHEMA_VERSION
 
