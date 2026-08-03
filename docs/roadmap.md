@@ -35,6 +35,7 @@ documentation, ledger updates, and benchmark evidence.
   - [x] Bounded, non-mutating public route preview over MCP and the CLI, with opt-in authoritative
     candidate DRC evidence.
   - [ ] Durable routing jobs, candidate persistence, and export.
+- [x] Existing selected-layer copper as exact rectangular obstacles.
 - [ ] Multilayer vias and keepouts.
 - [ ] Negotiated-congestion multi-net routing.
 - [ ] Incremental spatial index and bounded rip-up/reroute.

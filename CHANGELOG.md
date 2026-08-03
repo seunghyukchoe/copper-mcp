@@ -8,6 +8,12 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Selected-layer pads and orthogonal segments outside the routed net are now exact rectangular
+  routing obstacles instead of a hard rejection, so preview works on boards that already carry
+  copper. Obstacles are inflated by the routed half-width plus the stricter of the routed and
+  obstacle net-class clearances, round pad shapes over-approximate via their bounding box, and
+  arcs, zones, vias, off-axis rotations, diagonal segments, and partially routed nets still fail
+  closed. A committed blocked-pad fixture verifies the detour against real KiCad 10.0.5 DRC.
 - Read-only Board IR inspection as the `inspect_board_ir` MCP tool and the `copper-mcp board-ir`
   command. It reports whether a board converts to the supported Board IR subset and describes its
   revision, snapshot and constraint digests, schema, units, copper layer identities, and object

@@ -474,3 +474,37 @@ def test_real_kicad_confirms_the_previewed_candidate_without_mutating_the_source
     assert preview.drc_evidence.summary.unconnected_count == 0
     assert preview.drc_evidence.summary.passed is True
     assert _entries(tmp_path) == before
+
+
+@pytest.mark.skipif(
+    not REAL_KICAD_CLI.is_file(),
+    reason="requires a locally installed KiCad CLI",
+)
+def test_real_kicad_confirms_a_route_detoured_around_existing_copper(tmp_path: Path) -> None:
+    board = tmp_path / "blocked-pad.kicad_pcb"
+    board.write_bytes((FIXTURE.parent / "blocked-pad.kicad_pcb").read_bytes())
+    settings = Settings(
+        workspace=tmp_path,
+        kicad_cli=REAL_KICAD_CLI,
+        max_drc_report_bytes=8 * 1024 * 1024,
+    )
+    before = _entries(tmp_path)
+
+    preview = preview_route(
+        _request(board="blocked-pad.kicad_pcb", include_drc=True),
+        settings,
+    )
+
+    assert preview.status is RoutePreviewStatus.ROUTED
+    assert preview.candidate is not None
+    # A straight route would cross the 2 mm x 8 mm POWER pad centred between the endpoints.
+    assert preview.candidate.cost.bend_count > 0
+    assert all(
+        not (18_625_000 < point.x < 21_375_000 and 10_625_000 < point.y < 19_375_000)
+        for point in preview.candidate.patch.vertices
+    )
+    assert preview.drc_evidence is not None
+    assert preview.drc_evidence.summary.error_count == 0
+    assert preview.drc_evidence.summary.unconnected_count == 0
+    assert preview.drc_evidence.summary.passed is True
+    assert _entries(tmp_path) == before
