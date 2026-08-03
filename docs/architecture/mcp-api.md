@@ -18,6 +18,7 @@
 | `run_board_drc` | Temporary report only | Fixed-argument KiCad DRC with a bounded, redacted summary. |
 | `inspect_board_ir` | None | Read-only Board IR conversion check and structural description. |
 | `observe_board_scene` | None, or a process-local render artifact when `include_render` is set | Bounded, region-scoped semantic scene of one board, with board text quarantined. |
+| `apply_candidate` | **Replaces the board file**; disabled by default | The only mutating tool. Requires an operator flag and a single-use token. Route patches only. |
 | `preview_placement` | None | Deterministic legality preview for a proposed footprint placement. Never applies, and carries no DRC evidence. |
 | `preview_route` | None, or a temporary report when `include_drc` is set | Bounded, non-mutating two-pin route proposal on the documented Board IR subset. |
 | `render_circuit_schematic` | Process-local artifact only; stdio only | Validate structured Circuit Intent, require deterministic replay, and issue one opaque schematic resource capability. |
@@ -225,14 +226,55 @@ it is non-destructive and performs no network access. Both the tool and dynamic 
 disabled for streamable HTTP until authenticated principals, session isolation, authorization, and
 per-principal quotas exist. Rendering over MCP never writes into the configured workspace.
 
-Candidate persistence, durable routing jobs, route/evidence resource exposure, export, and apply
-remain deferred to the planned routing-service contract.
+Candidate persistence, durable routing jobs, route/evidence resource exposure, and export remain
+deferred to the planned routing-service contract. Route-candidate apply is implemented and
+documented above; placement apply is not.
+
+`apply_candidate` is the only tool that changes a board, and it applies **route patches only**.
+It takes `board`, the `candidate` manifest from a preview, an `apply_token`,
+`expect_board_revision`, and `constraints`.
+
+Three independent things must all hold. The operator must have set `COPPER_MCP_ALLOW_APPLY=1`
+(exactly `"0"` or `"1"`; the tool stays listed when it is off and refuses with `apply_disabled`,
+so the capability is discoverable rather than mysteriously absent). The caller must present an
+`apply_token` that `preview_route` issued - via `include_apply_token` - for exactly this
+candidate, board revision and path; it is verified against a key held only in this process, so
+tokens do not survive a server restart, and it is checked **before** the board is read or parsed
+so an unauthorized caller cannot make the tool do expensive work. A token is issued only when
+apply is enabled and only for a board the append-only engine can actually apply to. And the board
+must not be open in KiCad: a `~name.lck` sibling is a hard refusal naming the file, never removed,
+because pcbnew has no external-change watcher and would silently overwrite the applied board on
+its next save; it is re-checked under the lock immediately before the write.
+
+The board digest and the Board IR snapshot digest are compared before the splice, and the file
+digest is re-checked **under an exclusive lock held across the swap and the rename** immediately
+before publication - so two applies from the same base serialise and the loser refuses rather
+than clobbering the winner. A mismatch returns `stale_candidate` and is **never auto-refreshed**.
+Before anything is written, a timestamped pre-apply copy is created in a `.copper-mcp-backups/`
+subdirectory (not beside the board, where it would itself be an apply target), kept to a bounded
+count, and its path returned in `backup_path` - **that copy is the undo**, restored by copying it
+back. It is not a KiCad undo step. KiCad's own `-bak` files are never touched.
+
+Publication is an atomic replace that preserves the board's permission bits. A failure *before*
+the rename leaves the board untouched and is a clean refusal; a failure *after* it means the
+board is already changed, and that is reported truthfully as **`applied_but_unverified`** with
+the real new revision rather than as "nothing changed". In that case a *guarded* rollback runs -
+it restores the pre-apply bytes only if the file still holds exactly what this apply wrote, so a
+concurrent writer's newer bytes are never clobbered. The `verification` matrix reports byte
+preservation, a fail-closed reparse and Board IR equality as `passed`, and reports
+`kicad_opened_board` and `drc_after_apply` as `not_run` - an applied board carries no DRC
+evidence. Failure codes are `invalid_request`, `apply_disabled`, `invalid_token`,
+`token_expired`, `token_already_used`, `stale_candidate`, `backup_failed`, `kicad_open`,
+`unsupported_board`, `unsafe_filesystem`, `splice_assertion_failed` and
+`apply_verification_failed`. The tool's annotations say `destructiveHint: true` and
+`readOnlyHint: false` truthfully, but they are advisory client hints and enforce nothing.
+
+Nothing applies a placement, and there is no merge, lock override, IPC apply or batch apply.
 
 ## Planned tools
 
 `analyze_routability`, `start_routing`, `get_routing_job`, `cancel_routing_job`,
-`validate_route_candidate`, `explain_routing_failure`, `export_candidate`, and finally a separately
-authorized `apply_candidate`.
+`validate_route_candidate`, `explain_routing_failure`, and `export_candidate`.
 
 Routing jobs will always have ordinary start/get/cancel tools. MCP Tasks may map onto the same job
 records when both peers advertise support; Tasks will not become the only compatibility path.

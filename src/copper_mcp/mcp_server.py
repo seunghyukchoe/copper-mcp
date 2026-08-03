@@ -22,9 +22,11 @@ from mcp.types import (
 )
 
 from copper_mcp import __version__
+from copper_mcp.apply.tokens import ApplyTokenAuthority
 from copper_mcp.circuit_intent_service import KICAD_SCHEMATIC_MIME_TYPE
 from copper_mcp.config import Settings
 from copper_mcp.mcp_contracts import (
+    ApplyCandidateToolResponse,
     CircuitIntentToolContent,
     CircuitSceneToolResponse,
     CircuitSchematicToolResponse,
@@ -41,6 +43,7 @@ from copper_mcp.schematic_artifacts import (
     SchematicArtifactStore,
     SchematicArtifactUnavailableError,
 )
+from copper_mcp.tools import apply_candidate as apply_candidate_service
 from copper_mcp.tools import compare_candidates as compare_candidates_service
 from copper_mcp.tools import inspect_board as inspect_board_service
 from copper_mcp.tools import inspect_board_ir as inspect_board_ir_service
@@ -55,6 +58,9 @@ from copper_mcp.tools import validate_candidate as validate_candidate_service
 _SETTINGS = Settings.from_env()
 _SCHEMATIC_ARTIFACTS = SchematicArtifactStore()
 _SCENE_RENDERS = SceneRenderStore()
+#: Apply tokens are signed with a key that exists only in this process, so restarting the
+#: server invalidates every outstanding token. That is intended for a short-lived confirmation.
+_APPLY_TOKENS = ApplyTokenAuthority()
 SCENE_RENDER_MIME_TYPE = "image/svg+xml"
 
 
@@ -129,9 +135,13 @@ def inspect_board_ir(request: dict[str, Any]) -> dict[str, Any]:
 
 @mcp.tool()
 def preview_route(request: dict[str, Any]) -> dict[str, Any]:
-    """Preview one deterministic two-pin route candidate without modifying any file."""
+    """Preview one deterministic two-pin route candidate without modifying any file.
 
-    return preview_route_service(request, _SETTINGS)
+    Setting ``include_apply_token`` additionally returns a single-use token authorizing
+    ``apply_candidate`` for exactly this candidate, board revision and path.
+    """
+
+    return preview_route_service(request, _SETTINGS, _APPLY_TOKENS)
 
 
 @mcp.tool(
@@ -240,6 +250,46 @@ def preview_placement(request: dict[str, Any]) -> PlacementPreviewToolResponse:
     # no capability handle to resolve. Workspace confinement is what bounds the disclosure.
     return PlacementPreviewToolResponse.model_validate(
         preview_placement_service(request, _SETTINGS)
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        # Truthful, and advisory only. These describe the operation to a client so it can warn
+        # a user; they enforce nothing. Authorization is the operator flag plus the single-use
+        # token, both checked server-side.
+        read_only_hint=False,
+        destructive_hint=True,
+        idempotent_hint=False,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def apply_candidate(request: dict[str, Any]) -> ApplyCandidateToolResponse:
+    """Apply a previewed route candidate to a board, replacing the file on disk.
+
+    **This is the only tool that changes a board.** It is disabled unless the operator set
+    `COPPER_MCP_ALLOW_APPLY=1`, and it additionally requires an `apply_token` issued by
+    `preview_route` for this exact candidate, board revision and path. A model cannot enable
+    the flag or mint a token.
+
+    `request` takes `board`, `candidate` (the manifest from the preview), `apply_token`,
+    `expect_board_revision` (the board digest the caller previewed), and `constraints`.
+
+    The board must not be open in KiCad: a lockfile beside it is a hard refusal, because
+    pcbnew has no external-change watcher and would silently overwrite the applied board on
+    its next save. Before anything is written, a timestamped pre-apply copy is created beside
+    the board and its path is returned - **that copy is the undo**, restored by copying it
+    back. This is not a KiCad undo step.
+
+    Only additive route patches are applied. Nothing here applies a placement, and the applied
+    board carries no DRC evidence: the reported verification covers byte preservation, a
+    fail-closed reparse, and Board IR equality, and says `not_run` for anything involving
+    KiCad.
+    """
+
+    return ApplyCandidateToolResponse.model_validate(
+        apply_candidate_service(request, _SETTINGS, _APPLY_TOKENS)
     )
 
 

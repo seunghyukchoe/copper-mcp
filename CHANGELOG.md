@@ -6,6 +6,99 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- Candidate apply now holds an **exclusive `flock` across the compare-and-swap and the rename**,
+  closing a confirmed concurrency hole: two applies from the same base both passed the checks and
+  one silently destroyed the other. The board's digest is re-verified under the held lock
+  immediately before the rename, so the second apply sees the first's bytes and refuses. The
+  earlier docstring claimed a lock that did not exist; the lock is now real and the claim true.
+- The post-publish rollback is now **guarded**: it restores the pre-apply bytes only if the file
+  still holds exactly what the apply wrote. The likeliest cause of a verification failure is a
+  concurrent writer, so the previous unconditional restore was itself the data loss it was meant
+  to prevent - a KiCad save landing after publication would have been overwritten by the "safety
+  net". A third party's newer write is now left intact.
+- A failure *after* the rename is reported truthfully as a new `applied_but_unverified` status
+  with the real post-apply revision, never as a refusal claiming "nothing changed". Previously the
+  four post-rename failure sites (directory fsync, re-read, parent-identity checks) mapped to a
+  refusal with a null after-revision while the board was already mutated, making
+  `board_revision_before` a stale lie.
+- The KiCad lockfile is **re-checked under the lock immediately before the write**, not only
+  seconds earlier. A GUI opened between the up-front check and the write would otherwise have its
+  next save silently overwrite the applied board.
+- An uncaught `KiCadRoutePatchError` no longer escapes the destructive tool on a legal board.
+  A board whose outline carries a derived rather than native identity is rejected as a typed
+  `splice_assertion_failed` refusal, and `preview_route` no longer mints an apply token for a
+  board the append-only engine could never apply to - or when apply is disabled.
+- The apply token is verified **before** the board is read and parsed, and the candidate geometry
+  in a manifest is bounded before any of it is materialised, so an unauthorized or oversized
+  request cannot drive the expensive pre-authorisation work.
+- Consumed apply-token nonces are swept by **expiry rather than a count cap**. A FIFO cap could
+  evict a still-valid nonce and re-enable a replay, and the documented undo restores the exact
+  revision that nonce was bound to.
+
+### Changed
+
+- Applied and backup files now keep the board's own **permission bits** instead of collapsing to
+  `0600`, so group and CI readability and hard links survive an apply.
+- Pre-apply copies are written into a `.copper-mcp-backups/` subdirectory, not beside the board
+  where a `pre-apply.kicad_pcb` would itself be a valid apply target and cascade, and are pruned
+  to a bounded count per board so a preview→apply loop cannot exhaust the disk.
+- The `apply_disabled` refusal now reports the canonical workspace-relative path and no longer
+  synthesises a `sha256("")` digest for a board it never read; the refusal's revision is null.
+- `replace_workspace_file` gained the confinement-preserving lock, compare-and-swap, mode
+  preservation, and pre/post-rename failure split described above; `resolve_workspace_relative_path`
+  resolves a confined path without reading the file, for the pre-authorisation checks.
+
+
+### Added
+
+- `apply_candidate`: the first and only operation in this project that changes a user's board.
+  It applies **route patches only**, and three independent things must hold before a single byte
+  is written. The operator must have set `COPPER_MCP_ALLOW_APPLY=1` — matched as exactly `"0"` or
+  `"1"`, because `bool("false")` is `True` and a flag that enables board mutation must not be
+  switched on by an ambiguous spelling. Over MCP the caller must present a single-use token that
+  `preview_route` issued for exactly this candidate, board revision and path, verified with
+  `compare_digest` against an HMAC key that exists only inside the running process — so a model
+  cannot mint one, and outstanding tokens do not survive a restart. And KiCad must be closed: a
+  `~name.lck` sibling is a hard refusal that names the file and is **never removed**, because
+  pcbnew has no external-change watcher and would silently overwrite the applied board on its
+  next save.
+- Revision-race protection. The whole-file digest and the Board IR snapshot digest are compared
+  before the splice, and the file digest again immediately before publication; a mismatch returns
+  `stale_candidate` and is **never auto-refreshed**, because re-routing against copper the caller
+  has not seen would apply a proposal nobody approved.
+- A timestamped, content-addressed pre-apply copy written beside the board before anything is
+  replaced, with its path returned. **That copy is the undo, and restoring it is manual** — there
+  is no `undo_apply` tool and no journal, and it never appears in KiCad's undo stack. KiCad's own
+  `-bak` files are never read, written, or removed.
+- `replace_workspace_file`, the project's only clobbering primitive, placed beside
+  `create_workspace_file` so it inherits the same descriptor-anchored no-follow walk, symlink
+  refusal, and post-write read-back verification. It writes an `O_EXCL` temporary in the target's
+  own directory, `fsync`s it, renames over the name through a held directory descriptor, and
+  `fsync`s the directory. `os.rename` rather than `os.replace`: on POSIX both are the same
+  `renameat` syscall and both replace atomically, while `os.replace` does not accept `dir_fd` on
+  macOS and would have forfeited the descriptor anchoring.
+- Unsafe-filesystem refusal where it is cheaply detectable. `statvfs` names the filesystem on
+  macOS and the BSDs but not on Linux, so a negative result means *not detected*, never *known
+  safe* — which is why detection refuses rather than reassures.
+- `apply_candidate` stays **listed even when applying is disabled**, refusing with
+  `apply_disabled`. Hiding it would make the capability undiscoverable and invite retry loops; a
+  tool that vanishes when a flag is off looks like a broken server rather than a locked door. Its
+  annotations declare `destructiveHint: true` and `readOnlyHint: false` truthfully, but they are
+  advisory client hints and enforce nothing — authorization is the flag and the token.
+- A `copper-mcp apply-candidate` CLI command. It deliberately takes **no token**: the signing key
+  lives only in the issuing process, so a token from an earlier `preview-route` run could never
+  verify in a later `apply-candidate` run, and requiring one would be a flag satisfiable only by
+  a value the same process just invented. The CLI's authorization is the operator flag plus the
+  `--expect-board-revision` compare-and-swap the operator states explicitly.
+
+### Fixed
+
+- A failure while writing the pre-apply copy now returns a typed `backup_failed` refusal instead
+  of escaping as an uncaught `OSError`. Found by crash injection: no copy means no way back, so
+  the apply must stop rather than proceed without one.
+
 ### Added
 
 - A byte-preserving span-splice layer over the KiCad S-expression parser (`adapters/cst.py`):

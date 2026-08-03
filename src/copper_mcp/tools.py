@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from copper_mcp import __version__
+from copper_mcp.apply.service import apply_candidate as apply_candidate_service
 from copper_mcp.board_ir_service import summarize_board_ir
 from copper_mcp.circuit_intent_service import (
     CircuitSchematicBuild,
@@ -37,6 +38,7 @@ def server_info() -> dict[str, Any]:
             "region-scoped semantic Circuit Scene observation with quarantined board text",
             "opt-in deterministic digest-bound copper-only board rendering",
             "typed placement intent with deterministic legality preview (no apply, no DRC binding)",
+            "operator-gated, token-authorized route-candidate apply with atomic replacement",
             "non-mutating two-pin route preview on a documented Board IR subset",
             "bounded Circuit Intent validation and deterministic KiCad schematic rendering",
             "explicit create-only CLI schematic export and ephemeral stdio MCP artifact delivery",
@@ -49,7 +51,7 @@ def server_info() -> dict[str, Any]:
             "routing job lifecycle",
             "negotiated-congestion router",
             "immutable route patches",
-            "explicit candidate application",
+            "placement apply and post-placement observation",
         ],
     }
 
@@ -81,11 +83,15 @@ def inspect_board_ir(payload: dict[str, Any], settings: Settings | None = None) 
     return summarize_board_ir(payload, active_settings).to_dict()
 
 
-def preview_route(payload: dict[str, Any], settings: Settings | None = None) -> dict[str, Any]:
+def preview_route(
+    payload: dict[str, Any],
+    settings: Settings | None = None,
+    token_authority: Any = None,
+) -> dict[str, Any]:
     """Preview one deterministic two-pin candidate without writing or applying anything."""
 
     active_settings = settings or Settings.from_env()
-    return preview_route_candidate(payload, active_settings).to_dict()
+    return preview_route_candidate(payload, active_settings, token_authority).to_dict()
 
 
 def observe_board_scene_raw(
@@ -115,6 +121,17 @@ def preview_placement(payload: dict[str, Any], settings: Settings | None = None)
 
     active_settings = settings or Settings.from_env()
     return preview_placement_service(payload, active_settings).to_dict()
+
+
+def apply_candidate(
+    payload: dict[str, Any],
+    settings: Settings | None = None,
+    token_authority: Any = None,
+) -> dict[str, Any]:
+    """Apply one authorized route candidate to a workspace board."""
+
+    active_settings = settings or Settings.from_env()
+    return apply_candidate_service(payload, active_settings, token_authority).to_dict()
 
 
 def validate_candidate(payload: dict[str, Any]) -> dict[str, Any]:

@@ -113,6 +113,14 @@ The non-negotiable boundary is simple:
   because Board IR carries no courtyard geometry, and `infeasible_constraints` is never conflated
   with `budget_exhausted`. Nothing applies a placement, there is no solver, and a placement
   candidate carries no KiCad DRC evidence.
+- Operator-gated, token-authorized application of a route candidate to a board — the only
+  mutating operation in the project. Off by default behind an exact `COPPER_MCP_ALLOW_APPLY`
+  flag; over MCP it additionally needs a single-use token bound to the exact candidate, board
+  revision and path, verified against a key that exists only inside the running process. The
+  patch is spliced in so every untouched byte stays bit-identical, the board digest is
+  compared twice, a timestamped pre-apply copy is written first, and publication is an atomic
+  replace that is verified afterwards and rolled back if it fails. Route patches only: nothing
+  applies a placement, there is no merge, no lock override, and no batch apply.
 - MCP tools and a stable CLI over the same application services.
 - Professional CI, CodeQL, dependency auditing, release automation, issue forms, and project ledgers.
 
@@ -226,6 +234,29 @@ was taken under. The render draws copper and the board outline only - silkscreen
 layers are excluded because KiCad embeds their text literally in the SVG - and it covers the whole
 board rather than the requested region. It is an orientation aid: where it and the scene disagree,
 the scene is right.
+
+Apply a previewed route candidate to a board. **This is the only command that changes a board
+file**, it is disabled unless you opt in, and it applies route patches only:
+
+```bash
+COPPER_MCP_ALLOW_APPLY=1 copper-mcp --workspace /absolute/path/to/boards \
+  apply-candidate example.kicad_pcb \
+  --candidate preview.json --expect-board-revision sha256:... \
+  --clearance-nm 250000 --track-width-nm 250000 \
+  --via-diameter-nm 800000 --via-drill-nm 400000
+```
+
+Close KiCad first. A lockfile beside the board is a hard refusal that names the file and is
+never removed for you, because pcbnew has no external-change watcher and would silently
+overwrite the applied board the next time it saves. The board digest you pass as
+`--expect-board-revision` is compared before the edit and again immediately before the file is
+replaced; if anything moved, the apply is refused and **never silently re-routed**. A
+timestamped pre-apply copy is written beside the board first and its path returned — **that copy
+is the undo, and restoring it means copying it back yourself.** It is not a KiCad undo step, and
+KiCad's own `-bak` files are never touched. Over MCP the same operation additionally requires a
+single-use token issued by `preview_route`, so a model cannot apply anything you did not
+preview. An applied board carries no DRC evidence: what is verified is that every untouched byte
+is identical, that the result reparses, and that its Board IR is the original plus the patch.
 
 Validate a proposed footprint placement without modifying the board:
 
