@@ -172,6 +172,31 @@ The preview writes no file, creates no job, persists nothing, and applies no cop
 the integer geometry and endpoint pad IDs it generated, which is an intentional and documented
 disclosure; source board bytes and unrelated board objects are never returned.
 
+## Measured coverage on a real board
+
+The obstacle model is validated on synthetic fixtures and on a purpose-built blocked-pad KiCad
+board, so it is worth stating plainly what it does *not* yet reach. Measured against the repository's
+own [CopperTone](../../hardware/coppertone-buffer/README.md) design at commit `87ec6f3`:
+
+| Stage | Result |
+|---|---|
+| Board IR conversion | Supported — 2 copper layers, 14 nets, 55 pads, 53 segments, 9 vias, 2 zones, 2 keepouts |
+| Nets previewable on `F.Cu` | 0 of 14 |
+
+Conversion is not the blocker; the router's contract is. Four separate limits each independently
+disqualify this board:
+
+- 9 vias occupy every layer and are rejected before any net is considered;
+- 2 `F.Cu` zones are rejected, and a bounding box would be useless for a pour that covers most of the
+  board, so zones need real polygon obstacles rather than a rectangle;
+- 13 of 14 nets already carry `F.Cu` copper, because the board is fully routed; and
+- 9 of 14 nets have more than two `F.Cu` pads, with the largest at twelve.
+
+Five two-pin nets do exist, but all five are already routed. So the honest summary is that Board IR
+handles a real two-layer audio board today, and the router does not route one. The ordering that
+follows from this measurement — via obstacles, then zone polygons, then multi-pin nets, then rip-up —
+is what the [roadmap](../roadmap.md) now reflects.
+
 ## Safety boundary
 
 Zero `hard_internal_violations` means only that this implementation's supported-grid post-checks
