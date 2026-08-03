@@ -39,7 +39,14 @@ from copper_mcp.routing import (
     canonical_candidate_bytes,
     verify_candidate_id,
 )
-from copper_mcp.routing.astar import _prepare, _Problem, _WorkBudget
+from copper_mcp.routing.astar import (
+    _point_segment_distance_lt,
+    _prepare,
+    _Problem,
+    _ray_crosses_right,
+    _segment_envelope,
+    _WorkBudget,
+)
 from copper_mcp.routing.oracle import DijkstraResult, run_dijkstra_oracle
 
 SOURCE_REVISION = f"sha256:{'a' * 64}"
@@ -750,16 +757,14 @@ def test_unmodeled_obstacle_geometry_still_fails_closed() -> None:
         router.propose(rotated, _request(rotated)), RouteFailureCode.UNSUPPORTED_GEOMETRY
     )
 
-    diagonal = _snapshot(foreign_segment=(4_000, 4_000, 6_000, 6_000))
-    _assert_failure(
-        router.propose(diagonal, _request(diagonal)), RouteFailureCode.UNSUPPORTED_GEOMETRY
-    )
-
+    # A diagonal on the routed net is still refused: the connectivity model has to
+    # under-approximate copper, and there is no exact integer inner core for a diagonal yet.
+    # A foreign diagonal only has to be over-approximated, so it is an obstacle instead.
     own_diagonal = _snapshot(own_segments=((1_000, 5_000, 3_000, 7_000),))
-    _assert_failure(
-        router.propose(own_diagonal, _request(own_diagonal)),
-        RouteFailureCode.UNSUPPORTED_GEOMETRY,
-    )
+    result = router.propose(own_diagonal, _request(own_diagonal))
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert "on the routed net" in result.diagnostic.message
 
 
 def test_quarter_turn_pads_swap_their_modeled_extents() -> None:
@@ -1626,3 +1631,170 @@ def test_keepout_is_ignored_on_another_layer_or_without_track_prohibition() -> N
         candidate = _candidate(router.propose(snapshot, _request(snapshot)))
         assert candidate.patch.vertices == straight.patch.vertices
         assert candidate.cost == straight.cost
+
+
+@pytest.mark.parametrize(
+    "bounds",
+    [
+        (4_000, 4_000, 6_000, 6_000),
+        (6_000, 4_000, 4_000, 6_000),
+        (4_000, 6_000, 6_000, 4_000),
+        (6_000, 6_000, 4_000, 4_000),
+        (3_000, 4_500, 7_000, 5_500),
+        (4_500, 3_000, 5_500, 7_000),
+        (3_100, 4_700, 6_900, 5_300),
+    ],
+)
+def test_diagonal_segment_envelope_contains_the_exact_stadium(
+    bounds: tuple[int, int, int, int],
+) -> None:
+    """Exhaustively check the integer envelope is a superset of the true track shape."""
+
+    width_nm = 200
+    segment = Segment(
+        id="segment:probe",
+        net_id=OTHER_NET_ID,
+        layer_id=LAYER_ID,
+        start=PointNM(bounds[0], bounds[1]),
+        end=PointNM(bounds[2], bounds[3]),
+        width_nm=width_nm,
+    )
+    envelope = _segment_envelope(segment)
+    assert envelope is not None
+    assert len(envelope) == 6
+    assert len(set(envelope)) == 6
+    # A simple, non-degenerate hexagon, so the ray-crossing containment test is well defined.
+    assert Ring(envelope).points == envelope
+
+    radius_nm = (width_nm + 1) // 2
+    start, end = segment.start, segment.end
+    edge_x, edge_y = end.x - start.x, end.y - start.y
+    edge_length_sq = edge_x * edge_x + edge_y * edge_y
+    minimum_x = min(point.x for point in envelope)
+    maximum_x = max(point.x for point in envelope)
+    minimum_y = min(point.y for point in envelope)
+    maximum_y = max(point.y for point in envelope)
+
+    # Sample the stadium densely in exact integers: every lattice point within the envelope's
+    # bounding box whose squared distance to the centreline is at most the squared half width
+    # is real copper and must be inside the envelope.
+    checked = 0
+    for x in range(minimum_x, maximum_x + 1, 10):
+        for y in range(minimum_y, maximum_y + 1, 10):
+            point_x, point_y = x - start.x, y - start.y
+            projection = point_x * edge_x + point_y * edge_y
+            if projection <= 0:
+                distance_sq = point_x * point_x + point_y * point_y
+            elif projection >= edge_length_sq:
+                distance_sq = (x - end.x) ** 2 + (y - end.y) ** 2
+            else:
+                area = edge_x * point_y - edge_y * point_x
+                distance_sq = (area * area) // edge_length_sq
+            if distance_sq > radius_nm * radius_nm:
+                continue
+            checked += 1
+            assert _point_in_polygon(PointNM(x, y), envelope), (x, y)
+    assert checked > 100
+
+
+def _point_in_polygon(point: PointNM, polygon: tuple[PointNM, ...]) -> bool:
+    """Closed-region point-in-polygon using the router's own exact crossing predicate."""
+
+    inside = False
+    for index, edge_start in enumerate(polygon):
+        edge_end = polygon[(index + 1) % len(polygon)]
+        if _point_segment_distance_lt(point, edge_start, edge_end, 1):
+            return True
+        if _ray_crosses_right(point, edge_start, edge_end):
+            inside = not inside
+    return inside
+
+
+def test_foreign_diagonal_segment_detours_deterministically_and_matches_the_oracle() -> None:
+    snapshot = _snapshot(foreign_segment=(4_000, 3_000, 6_000, 7_000))
+    request = _request(snapshot)
+    router = AStarRouter()
+
+    first = _candidate(router.propose(snapshot, request))
+    second = _candidate(router.propose(snapshot, request))
+    oracle = run_dijkstra_oracle(snapshot, request)
+
+    assert first == second
+    assert canonical_candidate_bytes(first) == canonical_candidate_bytes(second)
+    assert first.cost.bend_count > 0
+    assert first.metrics.hard_internal_violations == 0
+    assert isinstance(oracle, DijkstraResult)
+    assert oracle.total_cost_nm == first.cost.total_cost_nm
+    assert oracle.bend_count == first.cost.bend_count
+    assert oracle.proximity_steps == first.cost.proximity_steps
+
+
+def test_forty_five_degree_foreign_segment_blocks_its_corridor() -> None:
+    # A 45 degree track from (3,000, 3,000) to (7,000, 7,000) crosses the straight y=5,000
+    # corridor at x=5,000, so the straight route must be refused and a detour found.
+    snapshot = _snapshot(foreign_segment=(3_000, 3_000, 7_000, 7_000))
+
+    candidate = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    assert candidate.cost.bend_count > 0
+    assert candidate.patch.vertices[0] == PointNM(1_000, 5_000)
+    assert candidate.patch.vertices[-1] == PointNM(9_000, 5_000)
+
+
+def test_foreign_diagonal_segment_uses_the_stricter_class_clearance() -> None:
+    router = AStarRouter()
+    lenient = _snapshot(foreign_segment=(4_000, 1_500, 6_000, 3_500), other_clearance_nm=100)
+    strict = _snapshot(foreign_segment=(4_000, 1_500, 6_000, 3_500), other_clearance_nm=2_000)
+    settings = _settings(proximity_penalty_nm=0)
+
+    lenient_route = _candidate(router.propose(lenient, _request(lenient, settings=settings)))
+    strict_route = _candidate(router.propose(strict, _request(strict, settings=settings)))
+
+    # The diagonal sits clear of the straight corridor under the lenient clearance and
+    # reaches into it once the obstacle net's own stricter class clearance governs.
+    assert lenient_route.cost.bend_count == 0
+    assert strict_route.cost.bend_count > 0
+
+
+def test_orthogonal_foreign_segments_keep_the_exact_rectangle_fast_path() -> None:
+    orthogonal = _snapshot(foreign_segment=(5_000, 3_000, 5_000, 7_000))
+    diagonal = _snapshot(foreign_segment=(4_000, 3_000, 6_000, 7_000))
+
+    orthogonal_problem = _problem_of(orthogonal, _request(orthogonal))
+    diagonal_problem = _problem_of(diagonal, _request(diagonal))
+
+    # Half width 100 plus clearance 100 inflates the swept rectangle with square corners.
+    assert orthogonal_problem.rect_obstacles == ((4_700, 2_700, 5_300, 7_300),)
+    assert orthogonal_problem.polygon_obstacles == ()
+    assert diagonal_problem.rect_obstacles == ()
+    assert len(diagonal_problem.polygon_obstacles) == 1
+    assert diagonal_problem.polygon_obstacles[0].margin_nm == 200
+    assert diagonal_problem.polygon_obstacles[0].source_id == "segment:foreign"
+    assert len(diagonal_problem.polygon_obstacles[0].points) == 6
+
+
+def test_foreign_diagonal_segments_share_the_object_and_relation_budgets() -> None:
+    router = AStarRouter()
+    snapshot = _snapshot(
+        foreign_segment=(4_000, 3_000, 6_000, 7_000),
+        keepouts=((-10_000, -10_000, -9_995, -9_995),),
+    )
+
+    object_limited = router.propose(
+        snapshot, _request(snapshot, settings=_settings(max_obstacles=1))
+    )
+    _assert_failure(object_limited, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+
+    relation_limited = router.propose(
+        snapshot, _request(snapshot, settings=_settings(max_obstacle_checks=3))
+    )
+    _assert_failure(relation_limited, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    assert relation_limited.diagnostic is not None
+    assert relation_limited.diagnostic.obstacle_checks == 3
+    assert relation_limited.diagnostic.expanded_states == 0
+
+
+def test_a_diagonal_foreign_segment_clear_of_the_route_does_not_force_a_detour() -> None:
+    aside = _snapshot(foreign_segment=(3_000, 8_000, 5_000, 9_500))
+
+    assert _candidate(AStarRouter().propose(aside, _request(aside))).cost.bend_count == 0

@@ -8,6 +8,24 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Diagonal selected-layer copper on a foreign net is now a conservative obstacle instead of a
+  board-level refusal. The envelope is the Minkowski sum of the track's centreline with an
+  axis-aligned square of its half width — the convex hull of the two squares at its endpoints —
+  which provably contains the real track because the swept disc is inscribed in the swept square,
+  and whose every vertex is an exact integer with no rounding rule to argue about. It is inflated
+  by the routed half width plus the stricter of the routed and obstacle net-class clearances,
+  exactly as the orthogonal path is, and charges one obstacle check per vertex against the same
+  budget and `max_obstacles` ceiling as zones and keepouts. The cost is over-approximating the
+  perpendicular extent by at most about 41%, worst at 45°, which can only refuse a route and never
+  permit a violation. Orthogonal foreign segments keep their exact swept-rectangle fast path, so no
+  board the router already accepted changes geometry or identity and `ROUTER_VERSION` does not move.
+  Diagonal copper on the *routed* net still fails closed with a distinct diagnostic: an obstacle may
+  be over-approximated, but attachment copper must be under-approximated or the router would claim
+  a connection the board does not have, and a diagonal has no exact integer inner core yet. A
+  committed `diagonal-blocker` fixture is verified against real KiCad 10.0.5 DRC and checked to be
+  discriminating — the straight route it replaces is reported as `tracks_crossing` — and the
+  envelope's superset property is covered by a test that samples the exact integer stadium across
+  seven orientations.
 - Selected-layer track keepouts are no longer required to be axis-aligned rectangles. A rule area
   with any simple polygon outline — including the octagonal mounting-hole areas KiCad emits, and
   concave outlines — becomes a conservative polygon envelope obstacle reusing the exact integer

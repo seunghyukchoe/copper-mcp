@@ -488,6 +488,44 @@ def _segment_extent(segment: Segment) -> _Rect | None:
     )
 
 
+def _segment_envelope(segment: Segment) -> tuple[PointNM, ...] | None:
+    """Return a conservative integer envelope of a diagonal track, or None when orthogonal.
+
+    A track is a stadium: every point within half its width of the centreline. Sweeping an
+    axis-aligned square of that half width along the centreline instead of a disc gives the
+    convex hull of the two squares at the endpoints, which contains the stadium because the
+    disc is inscribed in the square. Every vertex is therefore an exact integer with no
+    rounding step at all, and the envelope is provably a superset rather than an approximation
+    that happens to be close. The cost is over-approximating the perpendicular extent by at
+    most (sqrt(2) - 1) half widths, which can only refuse a route, never permit a violation.
+    """
+
+    start, end = segment.start, segment.end
+    if start.x == end.x or start.y == end.y:
+        return None
+    # Sweeping is symmetric, so orienting left-to-right leaves only two sign cases.
+    if start.x > end.x:
+        start, end = end, start
+    radius_nm = (segment.width_nm + 1) // 2
+    if start.y < end.y:
+        return (
+            PointNM(start.x - radius_nm, start.y - radius_nm),
+            PointNM(start.x + radius_nm, start.y - radius_nm),
+            PointNM(end.x + radius_nm, end.y - radius_nm),
+            PointNM(end.x + radius_nm, end.y + radius_nm),
+            PointNM(end.x - radius_nm, end.y + radius_nm),
+            PointNM(start.x - radius_nm, start.y + radius_nm),
+        )
+    return (
+        PointNM(start.x - radius_nm, start.y - radius_nm),
+        PointNM(end.x - radius_nm, end.y - radius_nm),
+        PointNM(end.x + radius_nm, end.y - radius_nm),
+        PointNM(end.x + radius_nm, end.y + radius_nm),
+        PointNM(start.x + radius_nm, start.y + radius_nm),
+        PointNM(start.x - radius_nm, start.y + radius_nm),
+    )
+
+
 def _segment_core_extent(segment: Segment) -> _Rect | None:
     """Return a rectangle strictly inside an orthogonal track, or None when it is diagonal.
 
@@ -865,12 +903,28 @@ def _prepare(
             # Classified above as attachment copper; the routed net never blocks itself.
             continue
         segment_extent = _segment_extent(segment)
-        if segment_extent is None:
+        if segment_extent is not None:
+            add_rect_obstacle(segment_extent, governing_clearance_nm(segment.net_id))
+            continue
+        # A diagonal foreign track is a conservative polygon envelope rather than a board-level
+        # refusal. The margin is the same rule the orthogonal path uses, and offsetting the
+        # envelope by it is a superset of offsetting the true stadium, because the envelope
+        # already contains the stadium.
+        envelope = _segment_envelope(segment)
+        if envelope is None:  # pragma: no cover - orthogonal is handled by the fast path above
             raise _fail(
                 RouteFailureCode.UNSUPPORTED_GEOMETRY,
-                "a selected-layer segment is diagonal and is not modeled exactly",
+                "a selected-layer segment is not modeled exactly",
             )
-        add_rect_obstacle(segment_extent, governing_clearance_nm(segment.net_id))
+        ensure_obstacle_capacity()
+        polygon_obstacles.append(
+            _PolygonObstacle(
+                source_id=segment.id,
+                points=envelope,
+                bounds=_polygon_bounds(envelope, work),
+                margin_nm=half_width_nm + governing_clearance_nm(segment.net_id),
+            )
+        )
 
     for index, via in enumerate(content.vias):
         if index % 64 == 0:

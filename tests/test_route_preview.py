@@ -249,6 +249,25 @@ def test_preview_routes_around_an_octagonal_keepout(tmp_path: Path) -> None:
     assert _entries(tmp_path) == before
 
 
+def test_preview_routes_around_a_foreign_diagonal_segment(tmp_path: Path) -> None:
+    settings = _copy_fixture(tmp_path, "diagonal-blocker.kicad_pcb")
+    before = _entries(tmp_path)
+
+    first = preview_route(_request(board="diagonal-blocker.kicad_pcb"), settings)
+    second = preview_route(_request(board="diagonal-blocker.kicad_pcb"), settings)
+
+    assert first.status is RoutePreviewStatus.ROUTED
+    assert first.candidate is not None
+    # The POWER diagonal runs (18, 11) to (22, 19) and crosses the straight corridor at
+    # x=20 mm, so the previously refused board now detours instead.
+    assert first.candidate.cost.bend_count > 0
+    assert all(
+        point.y <= 15_000_000 or point.y >= 19_375_000 for point in first.candidate.patch.vertices
+    )
+    assert first.to_dict() == second.to_dict()
+    assert _entries(tmp_path) == before
+
+
 def test_preview_completes_a_partial_route_from_existing_copper(tmp_path: Path) -> None:
     settings = _copy_fixture(tmp_path, "partial-route.kicad_pcb")
     before = _entries(tmp_path)
@@ -699,6 +718,38 @@ def test_real_kicad_confirms_a_route_detoured_around_existing_copper(tmp_path: P
     )
     assert preview.drc_evidence is not None
     assert preview.drc_evidence.summary.error_count == 0
+    assert preview.drc_evidence.summary.unconnected_count == 0
+    assert preview.drc_evidence.summary.passed is True
+    assert _entries(tmp_path) == before
+
+
+@pytest.mark.skipif(
+    not REAL_KICAD_CLI.is_file(),
+    reason="requires a locally installed KiCad CLI",
+)
+def test_real_kicad_confirms_a_route_detoured_around_a_foreign_diagonal(
+    tmp_path: Path,
+) -> None:
+    settings = replace(
+        _copy_fixture(tmp_path, "diagonal-blocker.kicad_pcb"),
+        kicad_cli=REAL_KICAD_CLI,
+        max_drc_report_bytes=8 * 1024 * 1024,
+    )
+    before = _entries(tmp_path)
+
+    preview = preview_route(
+        _request(board="diagonal-blocker.kicad_pcb", include_drc=True),
+        settings,
+    )
+
+    assert preview.status is RoutePreviewStatus.ROUTED
+    assert preview.candidate is not None
+    assert preview.candidate.cost.bend_count > 0
+    # A straight route across this board makes KiCad report `tracks_crossing` as an error, so
+    # a clean report is evidence the conservative envelope really did divert the route.
+    assert preview.drc_evidence is not None
+    assert preview.drc_evidence.summary.error_count == 0
+    assert preview.drc_evidence.summary.warning_count == 0
     assert preview.drc_evidence.summary.unconnected_count == 0
     assert preview.drc_evidence.summary.passed is True
     assert _entries(tmp_path) == before
