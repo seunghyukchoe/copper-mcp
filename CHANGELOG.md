@@ -6,30 +6,70 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
-### Added
-
-- `preview_placement`, the public surface for the placement legalizer, as an MCP tool over both
-  transports and a `copper-mcp preview-placement` CLI command. The response is a closed contract,
-  so the tool advertises a real `outputSchema` and returns populated `structuredContent`. Requests
-  are validated at the boundary before any file is read, refusals are typed and never echo the
-  rejected value, and the board is loaded through the same workspace confinement as
-  `preview_route`. Budgets - subjects, rules, checks and a deadline - come from configuration.
-  Rules and proposals are structured enough that flags would be a poor interface, so the CLI takes
-  them from an optional workspace-confined JSON document whose fields are restricted to `rules` and
-  `proposals`: the board, constraints and subjects always come from the flags, so the document
-  cannot redirect the request at a different board.
-- A transport-parity test asserting the tool returns byte-identical structured content over stdio
-  and streamable-HTTP, and a subprocess test asserting it is registered on a stateless HTTP server.
-  Unlike a render or a schematic artifact, a placement preview holds no capability handle, so there
-  is nothing a stateless deployment cannot resolve.
-
-### Changed
-
-- The capability inventory now lists placement preview as implemented and names DRC binding for
-  placement, apply, and post-placement observation as planned rather than done.
+## [0.4.0] - 2026-08-04
 
 ### Added
 
+- Circuit Scene IR 0.1.0 and the `observe_board_scene` tool: a bounded, region-scoped semantic
+  observation of one board, with a matching `copper-mcp observe-scene` CLI command. A caller states
+  a window - either an exact nanometre bounding box or one `around_ref_id` with a radius, never a
+  whole-board shorthand - and receives full-precision integer geometry for the objects that overlap
+  it. Objects arrive in two collections rather than behind a flag: `static` (outline, pads, keepouts,
+  rules) is what a proposal must take as given, and `mutable` (segments, arcs, vias, zones) is what
+  it may change, so code meaning to read only the givens cannot iterate over both by accident. Every
+  object is named by the Board IR identity it already carries, so a model can refer to what it saw
+  in a later call instead of repeating coordinates back, and each reference declares its own
+  durability as `native`, `content_derived` or `request_scoped` - with a scene-level summary - so a
+  caller knows in one place whether the references it is about to store will outlive an edit.
+  Object and vertex ceilings are charged as the scene is built and reported as an explicit
+  `ceiling_hit`, so a truncated scene can never be mistaken for a complete one. The whole of this
+  repository's own board is 123 objects and 41KB in 38ms, roughly 6% of the provisional 2,000-object
+  ceiling; region scoping cut that response eleven-fold with no change in wall time, because parsing
+  dominates, so the window is a context-budget economy rather than a server-cost one.
+- Quarantine for board-author-controlled text. Silkscreen, fabrication text and footprint properties
+  are off by default and, when explicitly requested, appear only in a separately typed `annotations`
+  collection whose `trust` field is a one-value literal - there is no vocabulary for a trusted
+  string, so no board can label its own text safe. Both the name and the value of each footprint
+  property are quarantined, because the name is as attacker-controlled as the value. Net names never
+  appear at any setting, since Board IR hashes them at conversion. The test for this is a
+  whole-response grep against a hostile fixture carrying prompt-injection strings in every
+  author-controlled slot, rather than a per-field assertion, because sanitisation defences fail by
+  leaking into the one field nobody audited.
+- A metamorphic relation over the scene: turn the board a quarter turn and every coordinate must be
+  the image of the original under that turn while every `ref_id` holds still. A companion guard
+  confirms the fixture actually contains geometry the turn changes, so the invariance of the
+  references proves something.
+- `observe_board_scene` advertises a real `outputSchema` and returns populated `structuredContent`,
+  because its handler returns a closed contract rather than a bare dictionary. A test pins the
+  contrast with the older `dict`-typed tools, which advertise a vacuous object schema - a gap in
+  those tools' typing rather than in the SDK.
+- An opt-in deterministic board render on `observe_board_scene` (`include_render`), with a matching
+  `copper-mcp observe-scene --render` CLI flag that writes the SVG to a create-only workspace path.
+  Two exports of an unchanged board are byte-identical after canonicalization: KiCad stamps the file
+  with a wall-clock timestamp and the output filename in a single `<title>` line, and the named
+  `title-line-v1` rule rewrites exactly that line and nothing else - measured as the entire delta
+  between two real exports taken three seconds apart, one line out of 5,603. Canonicalization is
+  idempotent and fails closed, so an export whose title line is missing or duplicated is refused
+  rather than digested unnormalized. Evidence records `normalized_digest`, `source_revision`,
+  `context_revision`, `kicad_version`, `layers`, `side`, `canonicalization` and `byte_count`,
+  because a digest alone cannot tell a caller whether two renders are comparable.
+- Copper-only rendering as a security control. The export draws `F.Cu`, `B.Cu` and `Edge.Cuts`
+  only, and this is not a presentation choice: measured against KiCad 10.0.5, an export including
+  silkscreen or fabrication layers embeds each board string **twice in literal, greppable form** -
+  once in a `<desc>` beside the stroked paths and once in an invisible `<text opacity="0">`. Text is
+  therefore not safely "drawn as paths", and filtering `<text>` after the fact would leave the
+  `<desc>` copy behind; excluding the layers is the only control that works. A hostile fixture whose
+  every author-controlled slot carries a marker is asserted absent from the render bytes, with a
+  companion test proving those same markers *do* leak when the layers are included.
+- Refusal on a truncated render. At the `max_render_bytes` ceiling (4 MiB default) KiCad does not
+  die on `SIGXFSZ` - it exits 0 having written a partial file, and the title line is near the top of
+  the document so it survives. The exit code, the title check and the digest would all have been
+  satisfied by half an SVG, so the canonicalizer now requires a complete document.
+- Delivery as an MCP `resource_link` annotated `audience: ["assistant"]`, from a bounded
+  process-local store holding at most 8 renders and 32 MiB, deliberately separate from the schematic
+  store so the two cannot evict each other. `include_render` is stdio-only because those bytes need
+  the process-local store, even though the semantic scene remains available over both transports;
+  only the flag is withdrawn off stdio, never the whole tool.
 - A typed placement-intent contract and a deterministic legalizer (`copper_mcp.placement`), the
   first half of the M4 placement surface. The intent language has seven rule kinds - proximity,
   alignment, symmetry, board edge, region keep-in/keep-out, discrete orientation and side - and is
@@ -75,6 +115,48 @@ All notable changes are documented here. The format follows
   every route bound to the same base revision. There is no MCP or CLI surface yet - the contract
   and legalizer land first so the rule vocabulary is exercised before it is published. A side
   change is refused as `unsupported_geometry` rather than mirrored approximately.
+- `preview_placement`, the public surface for the placement legalizer, as an MCP tool over both
+  transports and a `copper-mcp preview-placement` CLI command. The response is a closed contract,
+  so the tool advertises a real `outputSchema` and returns populated `structuredContent`. Requests
+  are validated at the boundary before any file is read, refusals are typed and never echo the
+  rejected value, and the board is loaded through the same workspace confinement as
+  `preview_route`. Budgets - subjects, rules, checks and a deadline - come from configuration.
+  Rules and proposals are structured enough that flags would be a poor interface, so the CLI takes
+  them from an optional workspace-confined JSON document whose fields are restricted to `rules` and
+  `proposals`: the board, constraints and subjects always come from the flags, so the document
+  cannot redirect the request at a different board.
+- A transport-parity test asserting the tool returns byte-identical structured content over stdio
+  and streamable-HTTP, and a subprocess test asserting it is registered on a stateless HTTP server.
+  Unlike a render or a schematic artifact, a placement preview holds no capability handle, so there
+  is nothing a stateless deployment cannot resolve.
+
+### Changed
+
+- Scene objects now report `locked`, so copper the board's author pinned is distinguishable from
+  copper a proposal may move. It is a field rather than a third partition: the static/mutable split
+  is by *kind* and is exhaustive, while lockedness is a per-object property its author can toggle
+  without changing what kind of thing the object is - a third collection would hide segments from
+  any consumer that walked only the two documented ones. Kinds with no such concept, an outline
+  contour or a net class, report `null` rather than `false`.
+- Scene pad geometry now carries `roundrect_radius_nm`, without which a rounded-rectangle pad could
+  not be reconstructed from the scene.
+- Scene truncation reports `annotations_returned` and `annotations_omitted` alongside the object
+  counts. `ceiling_hit` names the first ceiling reached; the two `*_omitted` counts are the
+  authoritative signal, because objects and annotations are charged against separate budgets and
+  both can truncate in a single response.
+- The schematic capability store's TTL, LRU, locking and digest-recheck logic moved into a shared
+  `BoundedArtifactStore` so the render store inherits the reviewed discipline rather than repeating
+  it. The schematic store keeps its exact public contract, including the cross-check of the
+  retained artifact object that catches post-insertion tampering, and its existing tests pass
+  unchanged as the regression proof.
+- `--black-and-white` is now forced on the render, for determinism rather than aesthetics: colour
+  output follows the active KiCad theme, and black-and-white output is byte-identical across themes.
+- KiCad renders against a **read-only** private snapshot, which is stricter than the zone-fill path.
+  Given a writable directory KiCad drops a `.kicad_prl` beside the input; the read-only snapshot
+  removes that side effect rather than relocating it, and a test asserts the workspace is unchanged
+  down to the board's inode and mtime.
+- The capability inventory now lists placement preview as implemented and names DRC binding for
+  placement, apply, and post-placement observation as planned rather than done.
 
 ### Fixed
 
@@ -122,98 +204,6 @@ All notable changes are documented here. The format follows
   contract advertises. The anchor and the radius are each in range but their sum need not be, so
   the window is clamped - losslessly, because every board coordinate is inside that range, so a
   window already covering it cannot select more by growing.
-
-### Added
-
-- An opt-in deterministic board render on `observe_board_scene` (`include_render`), with a matching
-  `copper-mcp observe-scene --render` CLI flag that writes the SVG to a create-only workspace path.
-  Two exports of an unchanged board are byte-identical after canonicalization: KiCad stamps the file
-  with a wall-clock timestamp and the output filename in a single `<title>` line, and the named
-  `title-line-v1` rule rewrites exactly that line and nothing else - measured as the entire delta
-  between two real exports taken three seconds apart, one line out of 5,603. Canonicalization is
-  idempotent and fails closed, so an export whose title line is missing or duplicated is refused
-  rather than digested unnormalized. Evidence records `normalized_digest`, `source_revision`,
-  `context_revision`, `kicad_version`, `layers`, `side`, `canonicalization` and `byte_count`,
-  because a digest alone cannot tell a caller whether two renders are comparable.
-- Copper-only rendering as a security control. The export draws `F.Cu`, `B.Cu` and `Edge.Cuts`
-  only, and this is not a presentation choice: measured against KiCad 10.0.5, an export including
-  silkscreen or fabrication layers embeds each board string **twice in literal, greppable form** -
-  once in a `<desc>` beside the stroked paths and once in an invisible `<text opacity="0">`. Text is
-  therefore not safely "drawn as paths", and filtering `<text>` after the fact would leave the
-  `<desc>` copy behind; excluding the layers is the only control that works. A hostile fixture whose
-  every author-controlled slot carries a marker is asserted absent from the render bytes, with a
-  companion test proving those same markers *do* leak when the layers are included.
-- Refusal on a truncated render. At the `max_render_bytes` ceiling (4 MiB default) KiCad does not
-  die on `SIGXFSZ` - it exits 0 having written a partial file, and the title line is near the top of
-  the document so it survives. The exit code, the title check and the digest would all have been
-  satisfied by half an SVG, so the canonicalizer now requires a complete document.
-- Delivery as an MCP `resource_link` annotated `audience: ["assistant"]`, from a bounded
-  process-local store holding at most 8 renders and 32 MiB, deliberately separate from the schematic
-  store so the two cannot evict each other. `include_render` is stdio-only because those bytes need
-  the process-local store, even though the semantic scene remains available over both transports;
-  only the flag is withdrawn off stdio, never the whole tool.
-
-### Changed
-
-- Scene objects now report `locked`, so copper the board's author pinned is distinguishable from
-  copper a proposal may move. It is a field rather than a third partition: the static/mutable split
-  is by *kind* and is exhaustive, while lockedness is a per-object property its author can toggle
-  without changing what kind of thing the object is - a third collection would hide segments from
-  any consumer that walked only the two documented ones. Kinds with no such concept, an outline
-  contour or a net class, report `null` rather than `false`.
-- Scene pad geometry now carries `roundrect_radius_nm`, without which a rounded-rectangle pad could
-  not be reconstructed from the scene.
-- Scene truncation reports `annotations_returned` and `annotations_omitted` alongside the object
-  counts. `ceiling_hit` names the first ceiling reached; the two `*_omitted` counts are the
-  authoritative signal, because objects and annotations are charged against separate budgets and
-  both can truncate in a single response.
-- The schematic capability store's TTL, LRU, locking and digest-recheck logic moved into a shared
-  `BoundedArtifactStore` so the render store inherits the reviewed discipline rather than repeating
-  it. The schematic store keeps its exact public contract, including the cross-check of the
-  retained artifact object that catches post-insertion tampering, and its existing tests pass
-  unchanged as the regression proof.
-- `--black-and-white` is now forced on the render, for determinism rather than aesthetics: colour
-  output follows the active KiCad theme, and black-and-white output is byte-identical across themes.
-- KiCad renders against a **read-only** private snapshot, which is stricter than the zone-fill path.
-  Given a writable directory KiCad drops a `.kicad_prl` beside the input; the read-only snapshot
-  removes that side effect rather than relocating it, and a test asserts the workspace is unchanged
-  down to the board's inode and mtime.
-
-### Added
-
-- Circuit Scene IR 0.1.0 and the `observe_board_scene` tool: a bounded, region-scoped semantic
-  observation of one board, with a matching `copper-mcp observe-scene` CLI command. A caller states
-  a window - either an exact nanometre bounding box or one `around_ref_id` with a radius, never a
-  whole-board shorthand - and receives full-precision integer geometry for the objects that overlap
-  it. Objects arrive in two collections rather than behind a flag: `static` (outline, pads, keepouts,
-  rules) is what a proposal must take as given, and `mutable` (segments, arcs, vias, zones) is what
-  it may change, so code meaning to read only the givens cannot iterate over both by accident. Every
-  object is named by the Board IR identity it already carries, so a model can refer to what it saw
-  in a later call instead of repeating coordinates back, and each reference declares its own
-  durability as `native`, `content_derived` or `request_scoped` - with a scene-level summary - so a
-  caller knows in one place whether the references it is about to store will outlive an edit.
-  Object and vertex ceilings are charged as the scene is built and reported as an explicit
-  `ceiling_hit`, so a truncated scene can never be mistaken for a complete one. The whole of this
-  repository's own board is 123 objects and 41KB in 38ms, roughly 6% of the provisional 2,000-object
-  ceiling; region scoping cut that response eleven-fold with no change in wall time, because parsing
-  dominates, so the window is a context-budget economy rather than a server-cost one.
-- Quarantine for board-author-controlled text. Silkscreen, fabrication text and footprint properties
-  are off by default and, when explicitly requested, appear only in a separately typed `annotations`
-  collection whose `trust` field is a one-value literal - there is no vocabulary for a trusted
-  string, so no board can label its own text safe. Both the name and the value of each footprint
-  property are quarantined, because the name is as attacker-controlled as the value. Net names never
-  appear at any setting, since Board IR hashes them at conversion. The test for this is a
-  whole-response grep against a hostile fixture carrying prompt-injection strings in every
-  author-controlled slot, rather than a per-field assertion, because sanitisation defences fail by
-  leaking into the one field nobody audited.
-- A metamorphic relation over the scene: turn the board a quarter turn and every coordinate must be
-  the image of the original under that turn while every `ref_id` holds still. A companion guard
-  confirms the fixture actually contains geometry the turn changes, so the invariance of the
-  references proves something.
-- `observe_board_scene` advertises a real `outputSchema` and returns populated `structuredContent`,
-  because its handler returns a closed contract rather than a bare dictionary. A test pins the
-  contrast with the older `dict`-typed tools, which advertise a vacuous object schema - a gap in
-  those tools' typing rather than in the SDK.
 
 ## [0.3.0] - 2026-08-04
 
@@ -660,7 +650,8 @@ All notable changes are documented here. The format follows
   lifetimes, timeouts, strict contract parsing, and before/after DRC-context revision checks.
 - The development dependency floor excludes pytest versions affected by `PYSEC-2026-1845`.
 
-[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/seunghyukchoe/copper-mcp/releases/tag/v0.1.0

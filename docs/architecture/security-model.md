@@ -58,9 +58,11 @@ future work, not a current property.
 
 ## Current controls
 
-The `0.3.x` board-facing surface remains non-mutating, including route preview. The one current
-durable write is an explicitly named, create-new schematic export; it cannot overwrite a board or
-existing file. Workspace files are captured through descriptor-anchored, no-follow path walks; the
+The `0.4.x` board-facing surface remains non-mutating, including route preview, scene observation
+and placement preview. The only durable writes are two explicitly named, create-new exports - a
+schematic and a board render - each refused if its path already exists, and neither able to
+overwrite a board. Board rendering additionally runs KiCad against a **read-only** private snapshot,
+so the exporter cannot write even the `.kicad_prl` it drops beside a writable input. Workspace files are captured through descriptor-anchored, no-follow path walks; the
 same final descriptor supplies type/size validation, bytes, and before/after mutation checks, so a
 validated pathname is never reopened for the operation. Network transport binds to loopback, secret
 patterns are scanned, and no AI provider is enabled. KiCad DRC runs with fixed arguments against a
