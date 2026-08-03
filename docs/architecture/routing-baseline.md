@@ -18,7 +18,7 @@ route multiple nets, run durable jobs, persist or export candidate boards, or ap
 | Connectivity | Exactly two pads belonging to the net; both accessible on the selected layer |
 | Constraints | One net-class width/clearance assignment; no selected-net length or differential-pair rule |
 | Board | One hole-free, axis-aligned rectangular outline |
-| Obstacles | Rectangular track keepouts; foreign-net pads, orthogonal segments, and through vias; conservative foreign-net solid-zone polygon envelopes |
+| Obstacles | Track keepouts of any simple polygon outline; foreign-net pads, orthogonal segments, and through vias; conservative foreign-net solid-zone polygon envelopes |
 | Attachment | Orthogonal same-net selected-layer segments, as connectable copper rather than obstacles |
 | Existing geometry | No selected-layer arcs, off-axis pads, or diagonal segments on any net; no same-net vias or zones |
 | Search | Four-neighbour orthogonal grid; east, north, west, south expansion order; multi-source and multi-target when same-net copper is present |
@@ -37,6 +37,26 @@ The board is inset by the ceiling of half the route width. Track keepouts are ex
 half-width plus the selected net-class clearance. A centerline on the resulting boundary is legal;
 entering its open interior by one nanometre is not. Every complete grid edge is checked, not only its
 endpoints. These semantics are covered by exact-boundary and one-nanometre regression tests.
+
+A keepout carries no net and no clearance of its own, so the routed net's class clearance is the
+only rule that can apply — there is no second value to be stricter than. That margin is also
+deliberately stricter than KiCad itself: KiCad's rule area prohibits tracks that *intersect* it and
+applies no clearance, so a track 0.2 mm outside the boundary passes KiCad DRC while this model
+demands the full half-width-plus-clearance offset. The error direction is refusing a route KiCad
+would accept, never proposing one it would reject.
+
+An axis-aligned rectangular keepout keeps its exact square-cornered inflation. A keepout with any
+other simple polygon outline — the octagons KiCad emits for mounting-hole rule areas, or a concave
+outline — becomes a `_PolygonObstacle` under the same conservative envelope model, exact integer
+containment, inclusive intersection, and rational squared-distance geometry the foreign-net zone
+envelopes use. The two paths are deliberately not unified: the polygon path offsets by Euclidean
+distance and therefore rounds corners, which would be a strictly looser obstacle for a rectangle
+than the exact square-cornered inflation, so rectangles keep the fast path and a regression test
+pins both the rectangle's inflated bounds and the polygon's margin. Board IR admits only
+`(polygon (pts (xy ...)))` outlines with at least three distinct vertices and non-zero area, so
+curved and multi-loop rule areas are already refused by the adapter and no keepout that reaches the
+router is unmodeled. Polygon-keepout bounds construction charges one obstacle check per inspected
+vertex, and each keepout counts against `max_obstacles` exactly like every other modeled object.
 
 Selected-layer copper outside the routed net is an obstacle rather than a rejection. A foreign pad
 contributes a rectangle centred on the pad, with its sizes swapped on a quarter turn; an orthogonal
@@ -254,33 +274,44 @@ what neither yet reaches. Measured against the repository's own
 | Board IR conversion | Supported — 2 copper layers, 14 nets, 55 pads, 53 segments, 9 vias, 2 zones, 2 keepouts |
 | Nets previewable on `F.Cu` | 0 of 14 |
 
-Conversion is not the blocker; the router's contract is.
+Conversion is not the blocker; the router's contract is. Two refusals have now been removed in
+succession — the same-net partial-routing veto (ADR-0016) and the rejection of non-rectangular
+track keepouts — and the coverage number has not moved either time. Each removal did reveal the
+next real blocker, which is the point of measuring rather than predicting.
 
-ADR-0016 removed the same-net partial-routing veto, and the honest result is that **the coverage
-number does not move**. It was worth measuring precisely why. The veto fired early in preparation,
-so it was masking every later refusal, and earlier releases credited it with more than it deserved.
-Re-measured with the veto gone:
+Re-measured per net with both removed:
 
-- 9 of 14 nets have more than two `F.Cu` pads, the largest at twelve, and still fail as
+- 9 of 14 nets have more than two `F.Cu` pads, the largest at twelve, and fail as
   `invalid_two_pin_net`;
-- 3 of the 5 two-pin nets — `9V_RAW`, `L_IN_RAW`, `R_IN_RAW` — carry diagonal same-net `F.Cu`
-  segments, which are still not modeled exactly;
-- the remaining 2, `L_ISO` and `R_ISO`, now pass same-net classification with one orthogonal stub
-  each and resolve into two components apiece, so they are genuinely attachable — and are then
-  refused by the board's two **octagonal** mounting-hole track keepouts, which are not axis-aligned
-  rectangles;
-- behind that, the foreign GND zone boundary spans `(0.5, 0.5)`–`(51.5, 29.5)` mm, and its
-  conservative envelope contains all four of those pad centres; and
-- behind that, both nets' pad-centre deltas are 2.1 mm by 3.6 mm, which is off grid at the default
-  250 µm step.
+- 3 of the 5 two-pin nets — `9V_RAW`, `L_IN_RAW`, `R_IN_RAW` — carry **diagonal same-net** `F.Cu`
+  segments and fail as unsupported routed-net geometry;
+- the remaining 2, `L_ISO` and `R_ISO`, pass same-net classification with one orthogonal stub each
+  and resolve into two components apiece, and the board's two octagonal mounting-hole keepouts are
+  now modeled rather than refused — so they now fail on **foreign-net diagonal segments** instead.
+  The board carries 30 diagonal `F.Cu` segments spread across 11 other nets.
 
-So the previous release note — "all five two-pin nets already carry same-net copper" — was true but
-misleading, because removing that one rule reveals four further contracts standing between this
-board and a routed net. The honest summary is unchanged: Board IR handles a real two-layer audio
-board today, and the router does not route one. Attachment is validated instead by purpose-built
-fixtures whose KiCad DRC evidence is real. The next useful steps are multi-pin routing,
-non-rectangular keepouts, and a freshness-bound fill authority that can distinguish an outline from
-its current copper. The [roadmap](../roadmap.md) records those as separate contracts.
+An earlier revision of this section predicted that octagonal keepouts would be followed by the zone
+envelope and then the grid step. That was wrong: foreign diagonal segments come first, and the
+ordering of the two after them is the other way round. The corrected chain is evidenced by peeling
+blockers one at a time from a scratch snapshot of `L_ISO` and `R_ISO`:
+
+| Snapshot | 250 µm grid step | 100 µm grid step |
+|---|---|---|
+| As committed | `unsupported_geometry` (foreign diagonal segment) | same |
+| Diagonal `F.Cu` segments removed | `off_grid` | `no_path` (GND zone envelope covers the pad centres) |
+| Diagonal segments and both GND zones removed | `off_grid` | **routed**, 4.8 mm, 1 bend |
+
+So the machinery this slice and the last one added does work on this board's real geometry: with
+the two unmodeled object classes taken out of the way, both nets route and attach to their existing
+stubs. What stands between CopperTone and a routed net is now precisely three things — exact
+diagonal-segment modeling, a freshness-bound fill authority that can distinguish a zone outline from
+its current copper, and either a grid step dividing the 2.1 mm by 3.6 mm pad delta or a lattice that
+does not require one — plus multi-pin routing for the other nine nets.
+
+The honest summary is unchanged: Board IR handles a real two-layer audio board today, and the router
+does not route one unaided. Attachment and polygon keepouts are validated instead by purpose-built
+fixtures whose KiCad DRC evidence is real. The [roadmap](../roadmap.md) records the remainder as
+separate contracts.
 
 ## Safety boundary
 
@@ -306,6 +337,12 @@ board reports zero errors, zero warnings, and zero unconnected items, so attachm
 checked against the authoritative tool rather than only against itself. The `connected-net` and
 `diagonal-stub` fixtures cover the already-connected outcome and the diagonal same-net refusal
 through the public preview and need no KiCad.
+
+A committed `octagon-keepout.kicad_pcb` fixture places an octagonal track rule area between the
+endpoints. The router detours around it, and a KiCad 10.0.5 integration test asserts zero errors,
+warnings, and unconnected items. That fixture is checked to be discriminating rather than merely
+green: a straight track through the same rule area makes KiCad report `items_not_allowed` as an
+error.
 
 See [ADR-0006](../adr/0006-bounded-deterministic-astar.md),
 [ADR-0007](../adr/0007-disposable-kicad-candidate-snapshot.md),

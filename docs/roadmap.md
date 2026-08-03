@@ -51,6 +51,8 @@ documentation, ledger updates, and benchmark evidence.
 - [x] Via obstacles on the selected layer, the first limit a real board hit.
 - [x] Conservative polygon zone-boundary envelope obstacles with exact integer concave/diagonal
   geometry and vertex-level work accounting.
+- [x] Non-rectangular selected-layer track keepouts, including the octagonal mounting-hole rule
+  areas KiCad emits, under that same envelope model.
 - [ ] Fill-aware zone routing with a freshness-bound KiCad refill/fill-digest authority contract.
 - [ ] Multi-pin nets, since most real nets have more than two pads.
 - [x] Attachment to existing same-net copper and bounded partial-route completion.

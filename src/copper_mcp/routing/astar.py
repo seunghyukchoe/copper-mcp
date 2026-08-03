@@ -55,9 +55,9 @@ _NO_DIRECTION = len(_DIRECTIONS)
 
 @dataclass(frozen=True, slots=True)
 class _PolygonObstacle:
-    """One conservative solid-zone envelope with an exact Euclidean margin."""
+    """One conservative polygon envelope, from a solid zone or a track keepout."""
 
-    zone_id: str
+    source_id: str
     points: tuple[PointNM, ...]
     bounds: _Rect
     margin_nm: int
@@ -314,7 +314,7 @@ def _polygon_bounds(points: tuple[PointNM, ...], work: _WorkBudget) -> _Rect:
 def _polygon_obstacle_sort_key(
     obstacle: _PolygonObstacle,
 ) -> tuple[_Rect, int, str]:
-    return obstacle.bounds, obstacle.margin_nm, obstacle.zone_id
+    return obstacle.bounds, obstacle.margin_nm, obstacle.source_id
 
 
 def _edge_within_polygon_offset(
@@ -440,6 +440,11 @@ _QUARTER_ROTATION_UDEG = 90 * UDEG_PER_DEGREE
 _AXIS_ALIGNED_ROTATIONS_UDEG = frozenset(
     {0, _QUARTER_ROTATION_UDEG, 2 * _QUARTER_ROTATION_UDEG, 3 * _QUARTER_ROTATION_UDEG}
 )
+# Pad shapes with an exact inscribed rectangle. Naming the set keeps the connectivity model
+# fail-closed for any shape Board IR gains later.
+_CORE_MODELED_PAD_SHAPES: frozenset[PadShape] = frozenset(
+    {PadShape.RECT, PadShape.ROUNDRECT, PadShape.CIRCLE, PadShape.OVAL}
+)
 
 
 def _net_clearance_nm(
@@ -515,6 +520,13 @@ def _pad_core_extent(pad: Pad) -> tuple[int, int] | None:
 
     if pad.rotation_udeg not in _AXIS_ALIGNED_ROTATIONS_UDEG:
         return None
+    # The supported shapes are screened once, against a named set rather than inline members,
+    # so a shape added to PadShape later fails closed here instead of silently reaching one of
+    # the formulas below. Keeping this guard first also leaves the final branch unconditional,
+    # which is what stops the tail being either an unreachable statement or a missing return
+    # depending on how exhaustively the checker narrows the enum.
+    if pad.shape not in _CORE_MODELED_PAD_SHAPES:
+        return None
     size_x, size_y = pad.size_x_nm, pad.size_y_nm
     if pad.rotation_udeg // _QUARTER_ROTATION_UDEG % 2 == 1:
         size_x, size_y = size_y, size_x
@@ -528,12 +540,11 @@ def _pad_core_extent(pad: Pad) -> tuple[int, int] | None:
         if radius_nm is None:
             return None
         return half_x_nm, half_y_nm - radius_nm
-    if pad.shape in {PadShape.CIRCLE, PadShape.OVAL}:
-        # A stadium contains its central rectangle; a circle degenerates to a centre line.
-        if half_x_nm >= half_y_nm:
-            return half_x_nm - half_y_nm, half_y_nm
-        return half_x_nm, half_y_nm - half_x_nm
-    return None
+    # CIRCLE and OVAL: a stadium contains its central rectangle, and a circle degenerates to
+    # a centre line, both of which are strictly inside the pad.
+    if half_x_nm >= half_y_nm:
+        return half_x_nm - half_y_nm, half_y_nm
+    return half_x_nm, half_y_nm - half_x_nm
 
 
 def _rectangles_touch(first: _Rect, second: _Rect) -> bool:
@@ -806,12 +817,24 @@ def _prepare(
         if request.layer_id not in keepout.layer_ids or not keepout.prohibit_tracks:
             continue
         rectangle = _rectangle(keepout.boundary)
-        if rectangle is None:
-            raise _fail(
-                RouteFailureCode.UNSUPPORTED_GEOMETRY,
-                "a selected-layer track keepout is not an axis-aligned rectangle",
+        if rectangle is not None:
+            # An axis-aligned rectangle keeps its exact square-cornered inflation. The polygon
+            # path offsets by Euclidean distance and so rounds corners, which would be a
+            # different — and looser — obstacle for the same board.
+            add_rect_obstacle(rectangle, net_class.clearance_nm)
+            continue
+        # A keepout carries no net, so there is no second class clearance to be stricter than:
+        # the routed net's own class clearance is the only rule that applies.
+        ensure_obstacle_capacity()
+        keepout_points = keepout.boundary.points
+        polygon_obstacles.append(
+            _PolygonObstacle(
+                source_id=keepout.id,
+                points=keepout_points,
+                bounds=_polygon_bounds(keepout_points, work),
+                margin_nm=half_width_nm + net_class.clearance_nm,
             )
-        add_rect_obstacle(rectangle, net_class.clearance_nm)
+        )
 
     for index, pad in enumerate(blocking_pads):
         if index % 64 == 0:
@@ -872,7 +895,7 @@ def _prepare(
         clearance_nm = max(governing_clearance_nm(zone.net_id), zone.clearance_nm)
         polygon_obstacles.append(
             _PolygonObstacle(
-                zone_id=zone.id,
+                source_id=zone.id,
                 points=points,
                 bounds=_polygon_bounds(points, work),
                 margin_nm=half_width_nm + clearance_nm,

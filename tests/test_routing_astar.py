@@ -86,6 +86,9 @@ def _snapshot(
     end: tuple[int, int] = (9_000, 5_000),
     outline: Ring | None = None,
     keepouts: tuple[tuple[int, int, int, int], ...] = (),
+    polygon_keepouts: tuple[Ring, ...] = (),
+    keepout_layer_id: str = LAYER_ID,
+    keepout_prohibits_tracks: bool = True,
     include_end: bool = True,
     third_target: bool = False,
     extra_pad: bool = False,
@@ -115,6 +118,7 @@ def _snapshot(
         or own_via
         or foreign_zone_layer_id != LAYER_ID
         or own_segment_layer_id != LAYER_ID
+        or keepout_layer_id != LAYER_ID
     ):
         copper_layers += (Layer(id="layer:B.Cu", name="B.Cu", index=1, kind="signal"),)
     net = Net(id=NET_ID, name="AUDIO")
@@ -285,6 +289,19 @@ def _snapshot(
                 prohibit_footprints=False,
             )
             for index, bounds in enumerate(keepouts)
+        )
+        + tuple(
+            Keepout(
+                id=f"keepout:polygon:{index:02d}",
+                layer_ids=(keepout_layer_id,),
+                boundary=boundary,
+                prohibit_tracks=keepout_prohibits_tracks,
+                prohibit_vias=True,
+                prohibit_pads=False,
+                prohibit_zones=False,
+                prohibit_footprints=False,
+            )
+            for index, boundary in enumerate(polygon_keepouts)
         ),
     )
     return make_snapshot(content)
@@ -1397,3 +1414,215 @@ def test_component_build_observes_the_cancellation_cadence() -> None:
     assert result.diagnostic.obstacle_checks == 64
     assert result.diagnostic.expanded_states == 0
     assert calls == 7
+
+
+def _octagon(center_x: int, center_y: int, radius: int, cut: int) -> Ring:
+    """Build an axis-aligned octagon, the shape KiCad uses for mounting-hole rule areas."""
+
+    return _ring(
+        (
+            (center_x - radius + cut, center_y - radius),
+            (center_x + radius - cut, center_y - radius),
+            (center_x + radius, center_y - radius + cut),
+            (center_x + radius, center_y + radius - cut),
+            (center_x + radius - cut, center_y + radius),
+            (center_x - radius + cut, center_y + radius),
+            (center_x - radius, center_y + radius - cut),
+            (center_x - radius, center_y - radius + cut),
+        )
+    )
+
+
+def test_octagonal_keepout_detours_deterministically_and_matches_the_oracle() -> None:
+    snapshot = _snapshot(polygon_keepouts=(_octagon(5_000, 5_000, 1_000, 300),))
+    request = _request(snapshot)
+    router = AStarRouter()
+
+    first = _candidate(router.propose(snapshot, request))
+    second = _candidate(router.propose(snapshot, request))
+    oracle = run_dijkstra_oracle(snapshot, request)
+
+    assert first == second
+    assert canonical_candidate_bytes(first) == canonical_candidate_bytes(second)
+    assert first.cost.bend_count > 0
+    assert first.metrics.hard_internal_violations == 0
+    # The octagon spans 4,000..6,000 on both axes; with half width 100 and clearance 100 no
+    # centreline may enter its 200 nm offset, so the straight y=5,000 corridor is closed.
+    assert all(
+        point.y != 5_000 or point.x <= 3_800 or point.x >= 6_200 for point in first.patch.vertices
+    )
+    assert isinstance(oracle, DijkstraResult)
+    assert oracle.total_cost_nm == first.cost.total_cost_nm
+    assert oracle.bend_count == first.cost.bend_count
+    assert oracle.proximity_steps == first.cost.proximity_steps
+
+
+def test_concave_keepout_is_not_replaced_by_its_bounding_box() -> None:
+    # The same U-shaped outline the zone model uses: the start sits inside the bounding box
+    # but in the open notch, so a rectangular approximation would refuse the endpoint.
+    notched = _ring(
+        (
+            (3_000, 2_000),
+            (7_000, 2_000),
+            (7_000, 8_000),
+            (6_000, 8_000),
+            (6_000, 3_000),
+            (4_000, 3_000),
+            (4_000, 8_000),
+            (3_000, 8_000),
+        )
+    )
+    snapshot = _snapshot(
+        start=(5_000, 5_000),
+        end=(5_000, 9_000),
+        polygon_keepouts=(notched,),
+    )
+
+    candidate = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    assert candidate.patch.vertices == (PointNM(5_000, 5_000), PointNM(5_000, 9_000))
+    assert candidate.cost.bend_count == 0
+
+
+def test_rectangular_keepout_keeps_the_exact_square_cornered_fast_path() -> None:
+    # A rectangle must not be re-routed through the polygon path: that offsets by Euclidean
+    # distance, which rounds the corners and is a strictly looser obstacle for the same board.
+    # Assert the model itself, not just an incidental route.
+    rectangular = _snapshot(keepouts=((4_000, 4_000, 6_000, 6_000),))
+    octagonal = _snapshot(polygon_keepouts=(_octagon(5_000, 5_000, 1_000, 300),))
+
+    rectangular_problem = _problem_of(rectangular, _request(rectangular))
+    octagonal_problem = _problem_of(octagonal, _request(octagonal))
+
+    # Half width 100 plus clearance 100 is a 200 nm margin applied with square corners, so the
+    # forbidden region reaches the full (6,200, 6,200) corner rather than a rounded 200 nm arc.
+    assert rectangular_problem.rect_obstacles == ((3_800, 3_800, 6_200, 6_200),)
+    assert rectangular_problem.polygon_obstacles == ()
+    assert octagonal_problem.rect_obstacles == ()
+    assert len(octagonal_problem.polygon_obstacles) == 1
+    assert octagonal_problem.polygon_obstacles[0].margin_nm == 200
+    assert octagonal_problem.polygon_obstacles[0].source_id == "keepout:polygon:00"
+
+
+def test_rectangular_keepout_routing_is_unchanged() -> None:
+    snapshot = _snapshot(keepouts=((4_000, 4_000, 6_000, 6_000),))
+
+    candidate = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    assert candidate.patch.vertices == (
+        PointNM(1_000, 5_000),
+        PointNM(1_000, 7_000),
+        PointNM(9_000, 7_000),
+        PointNM(9_000, 5_000),
+    )
+    assert candidate.cost.length_nm == 12_000
+    assert candidate.cost.bend_count == 2
+
+
+def test_polygon_keepout_uses_the_routed_class_clearance_exactly() -> None:
+    # A keepout carries no net, so only the routed class clearance applies. At clearance 100
+    # and half width 100 an octagon edge exactly 200 nm from the corridor is legal; one
+    # nanometre closer is not.
+    exact = _snapshot(
+        polygon_keepouts=(_octagon(5_000, 6_200, 1_000, 300),),
+        route_clearance_nm=100,
+    )
+    inside = _snapshot(
+        polygon_keepouts=(_octagon(5_000, 6_199, 1_000, 300),),
+        route_clearance_nm=100,
+    )
+    settings = _settings(proximity_penalty_nm=0)
+    router = AStarRouter()
+
+    exact_route = _candidate(router.propose(exact, _request(exact, settings=settings)))
+    inside_route = _candidate(router.propose(inside, _request(inside, settings=settings)))
+
+    assert exact_route.patch.vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
+    assert inside_route.cost.bend_count > 0
+
+
+def test_polygon_keepout_blocking_an_endpoint_returns_no_path() -> None:
+    snapshot = _snapshot(polygon_keepouts=(_octagon(1_000, 5_000, 1_000, 300),))
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.NO_PATH)
+
+
+def test_spanning_polygon_keepout_returns_no_path() -> None:
+    spanning = _ring(
+        ((4_500, -1_000), (5_500, -1_000), (5_800, 5_000), (5_500, 11_000), (4_500, 11_000))
+    )
+    snapshot = _snapshot(polygon_keepouts=(spanning,))
+    request = _request(snapshot)
+
+    astar = AStarRouter().propose(snapshot, request)
+    oracle = run_dijkstra_oracle(snapshot, request)
+
+    _assert_failure(astar, RouteFailureCode.NO_PATH)
+    assert oracle.diagnostic is not None
+    assert oracle.diagnostic.code is RouteFailureCode.NO_PATH
+
+
+def test_polygon_keepouts_share_the_object_and_relation_budgets() -> None:
+    router = AStarRouter()
+    two_keepouts = _snapshot(
+        polygon_keepouts=(
+            _octagon(2_500, 2_500, 500, 150),
+            _octagon(7_500, 7_500, 500, 150),
+        )
+    )
+    object_limited = router.propose(
+        two_keepouts, _request(two_keepouts, settings=_settings(max_obstacles=1))
+    )
+    _assert_failure(object_limited, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+
+    mixed = _snapshot(
+        keepouts=((-10_000, -10_000, -9_995, -9_995),),
+        polygon_keepouts=(_octagon(5_000, 5_000, 1_000, 300),),
+    )
+    mixed_limited = router.propose(mixed, _request(mixed, settings=_settings(max_obstacles=1)))
+    _assert_failure(mixed_limited, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+
+    relation_limited = router.propose(
+        two_keepouts, _request(two_keepouts, settings=_settings(max_obstacle_checks=4))
+    )
+    _assert_failure(relation_limited, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    assert relation_limited.diagnostic is not None
+    assert relation_limited.diagnostic.obstacle_checks == 4
+    assert relation_limited.diagnostic.expanded_states == 0
+
+
+def test_zone_and_keepout_polygons_share_one_deterministic_order() -> None:
+    # Both object classes now land in the same polygon list, so the sort key has to keep a
+    # stable total order across them. Their ID prefixes differ, so ties cannot occur.
+    snapshot = _snapshot(
+        polygon_keepouts=(_octagon(3_000, 5_000, 700, 200),),
+        foreign_zones=(_octagon(7_000, 5_000, 700, 200),),
+    )
+    request = _request(snapshot)
+
+    problem = _problem_of(snapshot, request)
+    first = _candidate(AStarRouter().propose(snapshot, request))
+    second = _candidate(AStarRouter().propose(snapshot, request))
+
+    assert [obstacle.source_id for obstacle in problem.polygon_obstacles] == [
+        "keepout:polygon:00",
+        "zone:foreign:00",
+    ]
+    assert first == second
+    assert first.cost.bend_count > 0
+
+
+def test_keepout_is_ignored_on_another_layer_or_without_track_prohibition() -> None:
+    router = AStarRouter()
+    clear = _snapshot()
+    blocking = _octagon(5_000, 5_000, 1_000, 300)
+    other_layer = _snapshot(polygon_keepouts=(blocking,), keepout_layer_id="layer:B.Cu")
+    vias_only = _snapshot(polygon_keepouts=(blocking,), keepout_prohibits_tracks=False)
+
+    straight = _candidate(router.propose(clear, _request(clear)))
+    for snapshot in (other_layer, vias_only):
+        candidate = _candidate(router.propose(snapshot, _request(snapshot)))
+        assert candidate.patch.vertices == straight.patch.vertices
+        assert candidate.cost == straight.cost

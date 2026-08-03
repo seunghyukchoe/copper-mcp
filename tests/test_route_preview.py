@@ -228,6 +228,27 @@ def test_already_connected_preview_skips_authoritative_drc(
     assert calls == 0
 
 
+def test_preview_routes_around_an_octagonal_keepout(tmp_path: Path) -> None:
+    settings = _copy_fixture(tmp_path, "octagon-keepout.kicad_pcb")
+    before = _entries(tmp_path)
+
+    first = preview_route(_request(board="octagon-keepout.kicad_pcb"), settings)
+    second = preview_route(_request(board="octagon-keepout.kicad_pcb"), settings)
+
+    assert first.status is RoutePreviewStatus.ROUTED
+    assert first.candidate is not None
+    assert first.candidate.cost.bend_count > 0
+    # The octagonal rule area spans x=17..23 mm and y=11..19 mm. Its 0.375 mm centreline
+    # margin is the route half width plus the routed class clearance; a keepout carries no
+    # net, so no second class clearance applies.
+    assert all(
+        not (16_625_000 < point.x < 23_375_000 and 10_625_000 < point.y < 19_375_000)
+        for point in first.candidate.patch.vertices
+    )
+    assert first.to_dict() == second.to_dict()
+    assert _entries(tmp_path) == before
+
+
 def test_preview_completes_a_partial_route_from_existing_copper(tmp_path: Path) -> None:
     settings = _copy_fixture(tmp_path, "partial-route.kicad_pcb")
     before = _entries(tmp_path)
@@ -678,6 +699,38 @@ def test_real_kicad_confirms_a_route_detoured_around_existing_copper(tmp_path: P
     )
     assert preview.drc_evidence is not None
     assert preview.drc_evidence.summary.error_count == 0
+    assert preview.drc_evidence.summary.unconnected_count == 0
+    assert preview.drc_evidence.summary.passed is True
+    assert _entries(tmp_path) == before
+
+
+@pytest.mark.skipif(
+    not REAL_KICAD_CLI.is_file(),
+    reason="requires a locally installed KiCad CLI",
+)
+def test_real_kicad_confirms_a_route_detoured_around_an_octagonal_keepout(
+    tmp_path: Path,
+) -> None:
+    settings = replace(
+        _copy_fixture(tmp_path, "octagon-keepout.kicad_pcb"),
+        kicad_cli=REAL_KICAD_CLI,
+        max_drc_report_bytes=8 * 1024 * 1024,
+    )
+    before = _entries(tmp_path)
+
+    preview = preview_route(
+        _request(board="octagon-keepout.kicad_pcb", include_drc=True),
+        settings,
+    )
+
+    assert preview.status is RoutePreviewStatus.ROUTED
+    assert preview.candidate is not None
+    assert preview.candidate.cost.bend_count > 0
+    # A straight route through this rule area makes KiCad report `items_not_allowed` as an
+    # error, so a clean report here is evidence the detour is real and not self-graded.
+    assert preview.drc_evidence is not None
+    assert preview.drc_evidence.summary.error_count == 0
+    assert preview.drc_evidence.summary.warning_count == 0
     assert preview.drc_evidence.summary.unconnected_count == 0
     assert preview.drc_evidence.summary.passed is True
     assert _entries(tmp_path) == before

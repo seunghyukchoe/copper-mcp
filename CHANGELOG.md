@@ -8,6 +8,21 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Selected-layer track keepouts are no longer required to be axis-aligned rectangles. A rule area
+  with any simple polygon outline — including the octagonal mounting-hole areas KiCad emits, and
+  concave outlines — becomes a conservative polygon envelope obstacle reusing the exact integer
+  containment, inclusive intersection, and rational squared-distance geometry already built for
+  foreign-net zone envelopes, with the same per-vertex work accounting and `max_obstacles` ceiling.
+  A keepout carries no net and no clearance of its own, so the routed net's class clearance is the
+  only rule that applies; that margin is deliberately stricter than KiCad, which prohibits only
+  tracks that intersect the area. Rectangular keepouts keep their existing exact square-cornered
+  inflation rather than being folded into the polygon path, because a Euclidean offset would round
+  their corners into a strictly looser obstacle — so candidate geometry and identity on every board
+  the router already accepted are unchanged and `ROUTER_VERSION` does not move. A committed
+  `octagon-keepout` fixture is verified against real KiCad 10.0.5 DRC, and checked to be
+  discriminating: a straight track through the same rule area is reported as `items_not_allowed`.
+  Board IR already refuses curved and multi-loop rule-area outlines, so no keepout reaching the
+  router is now unmodeled.
 - Orthogonal same-net copper on the selected layer is now attachment copper instead of a
   partial-routing veto, so a half-routed net completes from its stub rather than being refused.
   Connectivity uses a second rectangle model that deliberately errs opposite to the obstacle model:
@@ -28,11 +43,14 @@ All notable changes are documented here. The format follows
   equivalent empty board needs 20 mm, verified against real KiCad 10.0.5 DRC for zero errors,
   warnings, and unconnected items. Coverage on the repository's own CopperTone board is unchanged at
   zero of fourteen previewable `F.Cu` nets: removing the veto reveals that three of the five
-  two-pin nets carry diagonal same-net copper and the other two are blocked in turn by octagonal
-  mounting-hole keepouts, a board-wide `GND` zone envelope, and an off-grid pad-centre delta. This
-  is a contract improvement and an honesty correction, not a coverage improvement. Attaching
-  mid-stub rather than at a stub endpoint leaves copper with an unconnected end, which KiCad reports
-  as a `track_dangling` warning.
+  two-pin nets carry diagonal same-net copper, while the other two become genuinely attachable and
+  fail on the next unmodeled object instead. This is a contract improvement and an honesty
+  correction, not a coverage improvement. Attaching mid-stub rather than at a stub endpoint leaves
+  copper with an unconnected end, which KiCad reports as a `track_dangling` warning. (Corrected
+  while adding polygon keepouts above: this entry originally named octagonal keepouts, then the
+  `GND` zone envelope, then an off-grid pad delta as the remaining chain for those two nets. Direct
+  measurement shows foreign-net diagonal segments come first, and the last two are in the opposite
+  order. The architecture doc carries the evidenced chain.)
 - Canonical Circuit Intent IR `0.1.0` as a strict, immutable, content-addressed logical topology
   contract for two-pin resistors and non-polarized capacitors. A pure bounded adapter renders
   verified snapshots into byte-deterministic in-memory KiCad `20250114` schematics with original

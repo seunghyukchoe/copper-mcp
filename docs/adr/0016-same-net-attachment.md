@@ -4,6 +4,11 @@
 - Date: 2026-08-03
 - Owners: `@seunghyukchoe`
 - Related: Roadmap M2 "Attachment to existing same-net copper and bounded partial-route completion"
+- Correction: the final Consequences bullet lists the CopperTone blockers behind this change as
+  octagonal keepouts, then the `GND` zone envelope, then an off-grid pad delta. Only the first was
+  measured. Direct measurement after polygon keepouts landed shows foreign-net diagonal segments
+  come next, and the remaining two are in the opposite order. The evidenced chain lives in the
+  [routing baseline](../architecture/routing-baseline.md); the decision itself is unaffected.
 
 ## Context
 
