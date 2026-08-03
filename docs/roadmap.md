@@ -64,9 +64,11 @@ documentation, ledger updates, and benchmark evidence.
     (`component-mst-v1`); Steiner-optimal topology is explicitly not claimed.
   - [ ] Steiner-quality topology (FLUTE-guided or learned ordering) behind the recorded
     `ordering_policy` seam.
-- [ ] Via-aware connectivity, so a net joined through another layer is recognised rather than
-  refused. This, not Steiner routing, is what CopperTone still needs: its three unresolved nets
-  (`GND`, `VCC`, `L_OUT`) all carry same-net vias.
+- [x] Via-aware connectivity, so a net joined through another layer is recognised rather than
+  refused. On CopperTone this resolved `VCC` and `L_OUT`; `GND` remains refused because it carries a
+  same-net zone, whose fill is not trusted.
+- [ ] Routing *through* vias, which needs a layer-aware lattice, a via-insertion cost, and a
+  via-placement contract. Connectivity is multilayer today; path search is not.
 - [x] Attachment to existing same-net copper and bounded partial-route completion.
 - [ ] Multilayer vias and keepouts.
 - [ ] Negotiated-congestion multi-net routing.

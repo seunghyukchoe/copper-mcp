@@ -49,7 +49,9 @@ from copper_mcp.routing.astar import (
     _prepare,
     _Problem,
     _ray_crosses_right,
+    _rectangles_touch,
     _segment_envelope,
+    _via_cores,
     _WorkBudget,
 )
 from copper_mcp.routing.oracle import DijkstraResult, run_dijkstra_oracle
@@ -1056,7 +1058,7 @@ def test_polygon_preparation_scan_observes_the_cancellation_cadence() -> None:
     def cancel_on_first_relation_checkpoint() -> bool:
         nonlocal calls
         calls += 1
-        return calls >= 12
+        return calls >= 13
 
     result = AStarRouter().propose(
         snapshot,
@@ -1068,7 +1070,7 @@ def test_polygon_preparation_scan_observes_the_cancellation_cadence() -> None:
     assert result.diagnostic is not None
     assert result.diagnostic.obstacle_checks == 64
     assert result.diagnostic.expanded_states == 0
-    assert calls == 12
+    assert calls == 13
 
 
 @pytest.mark.parametrize("cancel_at", (10, 11))
@@ -1157,7 +1159,7 @@ def test_route_result_admits_exactly_one_terminal_arm() -> None:
         )
     with pytest.raises(ValueError, match="must be distinct"):
         replace(connection, end_pad_id="pad:01")
-    with pytest.raises(ValueError, match="every pad and every segment"):
+    with pytest.raises(ValueError, match="every pad, segment and via"):
         replace(connection, attachment_segments=2)
     assert RouteResult(connected=connection).terminal
     assert not RouteResult(connected=connection).ok
@@ -1507,7 +1509,7 @@ def test_component_build_observes_the_cancellation_cadence() -> None:
     def cancel_on_first_component_checkpoint() -> bool:
         nonlocal calls
         calls += 1
-        return calls >= 7
+        return calls >= 8
 
     result = AStarRouter().propose(
         snapshot,
@@ -1519,7 +1521,7 @@ def test_component_build_observes_the_cancellation_cadence() -> None:
     assert result.diagnostic is not None
     assert result.diagnostic.obstacle_checks == 64
     assert result.diagnostic.expanded_states == 0
-    assert calls == 7
+    assert calls == 8
 
 
 def _octagon(center_x: int, center_y: int, radius: int, cut: int) -> Ring:
@@ -2014,14 +2016,15 @@ def test_a_partly_connected_multi_pin_net_is_routed_as_a_tree() -> None:
     assert candidate.metrics.unrouted_connections == 0
 
 
-def test_a_multi_pin_net_carrying_a_via_is_never_claimed_connected() -> None:
-    # Every pad's copper meets, but a via is connectivity this model cannot see, so the net
-    # falls back to the pad-count refusal rather than a connection claim.
+def test_a_multi_pin_net_joined_through_a_via_is_recognised_across_layers() -> None:
+    # The via is copper on every layer, so it is a joint rather than a blind spot.
     snapshot = _snapshot(third_target=True, own_segments=(_SPINE, _BRANCH), own_via=True)
 
-    result = AStarRouter().propose(snapshot, _request(snapshot))
+    connection = _connection(AStarRouter().propose(snapshot, _request(snapshot)))
 
-    _assert_failure(result, RouteFailureCode.INVALID_TWO_PIN_NET)
+    assert connection.pad_count == 3
+    assert connection.vias == 1
+    assert connection.component_objects == connection.attachment_segments + 3 + 1
 
 
 def test_a_multi_pin_net_carrying_a_zone_is_never_claimed_connected() -> None:
@@ -2047,11 +2050,11 @@ def test_a_two_pin_net_still_names_its_via_and_zone_directly() -> None:
     via_result = router.propose(with_via, _request(with_via))
     zone_result = router.propose(with_zone, _request(with_zone))
 
-    _assert_failure(via_result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    # The via now joins the net rather than hiding it, so the connection is recognised.
+    assert _connection(via_result).vias == 1
+    # A zone still cannot prove connectivity, because its fill is not trusted.
     _assert_failure(zone_result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
-    assert via_result.diagnostic is not None
     assert zone_result.diagnostic is not None
-    assert "via" in via_result.diagnostic.message
     assert "zone" in zone_result.diagnostic.message
 
 
@@ -2236,3 +2239,123 @@ def test_two_pin_candidates_keep_a_single_path_and_no_ordering_policy() -> None:
     assert candidate.pad_count == 2
     assert len(candidate.patch.paths) == 1
     assert candidate.ordering_policy == "single-path"
+
+
+@pytest.mark.parametrize(
+    ("diameter_nm", "drill_nm"),
+    [(800_000, 400_000), (600_000, 300_000), (1_000_000, 500_000), (450_000, 250_000)],
+)
+def test_via_annulus_cores_are_inside_the_ring_and_clear_of_the_drill(
+    diameter_nm: int, drill_nm: int
+) -> None:
+    """Cores must be copper: inside the outer circle and outside the drilled hole."""
+
+    via = Via(
+        id="via:probe",
+        net_id=NET_ID,
+        center=PointNM(0, 0),
+        diameter_nm=diameter_nm,
+        drill_nm=drill_nm,
+        start_layer_id=LAYER_ID,
+        end_layer_id="layer:B.Cu",
+    )
+
+    cores = _via_cores(via)
+
+    assert cores is not None
+    assert len(cores) == 4
+    outer_nm = diameter_nm // 2
+    hole_nm = drill_nm // 2
+    for minimum_x, minimum_y, maximum_x, maximum_y in cores:
+        assert maximum_x > minimum_x and maximum_y > minimum_y
+        for corner_x, corner_y in (
+            (minimum_x, minimum_y),
+            (maximum_x, minimum_y),
+            (minimum_x, maximum_y),
+            (maximum_x, maximum_y),
+        ):
+            # Inside the outer copper circle.
+            assert corner_x * corner_x + corner_y * corner_y <= outer_nm * outer_nm
+        # Entirely clear of the drilled hole, which is not copper: the rectangle nearest the
+        # centre on each axis still starts outside the hole radius.
+        nearest_x = min(abs(minimum_x), abs(maximum_x)) if minimum_x * maximum_x > 0 else 0
+        nearest_y = min(abs(minimum_y), abs(maximum_y)) if minimum_y * maximum_y > 0 else 0
+        assert nearest_x * nearest_x + nearest_y * nearest_y >= hole_nm * hole_nm
+
+
+def test_a_via_core_never_covers_the_drill_hole_itself() -> None:
+    """Copper touching only the hole region must not count as touching the via."""
+
+    via = Via(
+        id="via:probe",
+        net_id=NET_ID,
+        center=PointNM(0, 0),
+        diameter_nm=800_000,
+        drill_nm=400_000,
+        start_layer_id=LAYER_ID,
+        end_layer_id="layer:B.Cu",
+    )
+    cores = _via_cores(via)
+    assert cores is not None
+
+    # A rectangle wholly inside the drilled hole is not copper and must touch no core.
+    hole_only = (-150_000, -150_000, 150_000, 150_000)
+    assert not any(_rectangles_touch(hole_only, core) for core in cores)
+    # A rectangle reaching the annulus does touch one.
+    reaching = (-150_000, -150_000, 250_000, 150_000)
+    assert any(_rectangles_touch(reaching, core) for core in cores)
+
+
+def test_a_via_joins_two_pieces_of_copper_that_do_not_touch_each_other() -> None:
+    # Two stubs stop short of one another but each reaches the via's annulus, so the via is
+    # what makes the net one component. Its ring spans 200..387 nm from the centre at (5,000).
+    snapshot = _snapshot(
+        own_via=True,
+        own_segments=((1_000, 5_000, 4_700, 5_000), (5_300, 5_000, 9_000, 5_000)),
+    )
+    router = AStarRouter()
+    request = _request(snapshot)
+
+    first = router.propose(snapshot, request)
+    connection = _connection(first)
+
+    assert first == router.propose(snapshot, request)
+    assert connection.vias == 1
+    assert connection.pad_count == 2
+    assert connection.attachment_segments == 2
+
+
+def test_without_the_via_those_same_two_stubs_are_not_connected() -> None:
+    snapshot = _snapshot(
+        own_segments=((1_000, 5_000, 4_700, 5_000), (5_300, 5_000, 9_000, 5_000)),
+    )
+
+    candidate = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    # The gap is real, so the router proposes copper to close it rather than claiming it shut.
+    assert candidate.cost.length_nm > 0
+
+
+def test_a_net_that_a_via_cannot_join_still_fails_closed() -> None:
+    # A via far from every piece of the net's copper joins nothing, so the claim is refused.
+    snapshot = _snapshot(own_via=True)
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert "via" in result.diagnostic.message
+
+
+def test_a_same_net_zone_still_blocks_the_multilayer_claim() -> None:
+    snapshot = _snapshot(
+        own_via=True,
+        own_segments=((1_000, 5_000, 4_700, 5_000), (5_300, 5_000, 9_000, 5_000)),
+        own_zone=_rectangle(1_000, 1_000, 2_000, 2_000),
+    )
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    # A zone's fill is not trusted, so no connectivity claim is made whatever the vias show.
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.connected is None

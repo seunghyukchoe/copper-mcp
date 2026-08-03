@@ -20,6 +20,7 @@ from copper_mcp.board_ir import (
     PointNM,
     Ring,
     Segment,
+    Via,
     Zone,
     verify_snapshot,
 )
@@ -110,6 +111,7 @@ class _AlreadyConnectedError(Exception):
     end_pad_id: str
     attachment_segments: int
     pad_count: int = 2
+    vias: int = 0
     obstacle_checks: int = 0
 
 
@@ -722,6 +724,121 @@ def _rectangles_touch(first: _Rect, second: _Rect) -> bool:
     )
 
 
+def _via_cores(via: Via) -> tuple[_Rect, ...] | None:
+    """Return rectangles provably inside a through via's annulus, or None when degenerate.
+
+    A via's copper is a ring: the drill hole in the middle is not copper, so the square
+    inscribed in the outer circle would claim the one region that certainly is not there.
+    The ring is covered instead by four axis-aligned rectangles, one on each side of the hole.
+
+    With outer radius ``R`` floored from the diameter and hole radius ``r`` taken as the
+    *ceiling* of half the drill, so the hole is over-stated and never encroached, the right
+    rectangle spans ``x`` in ``[r, a]`` and ``y`` in ``[-b, b]``. Its far corners are the only
+    points that can leave the disc, so ``a`` is chosen as ``isqrt(R^2 - b^2)``, which makes
+    ``a^2 + b^2 <= R^2`` by exact integer arithmetic. The other three are the same rectangle
+    rotated a quarter turn at a time.
+
+    The four are mutually disjoint for a real via, and that is expected: the annulus is one
+    piece of physical copper joined by a plated barrel, so a via's rectangles are unioned as an
+    atomic object rather than by rectangle overlap. Board IR admits through vias only and
+    validates that they span the complete copper stack, so a via joins every copper layer.
+    """
+
+    outer_nm = via.diameter_nm // 2
+    hole_nm = (via.drill_nm + 1) // 2
+    ring_nm = outer_nm - hole_nm
+    if ring_nm < 2:
+        return None
+    half_span_nm = ring_nm // 2
+    reach_nm = isqrt(outer_nm * outer_nm - half_span_nm * half_span_nm)
+    if reach_nm <= hole_nm:
+        return None
+    centre = via.center
+    return (
+        (centre.x + hole_nm, centre.y - half_span_nm, centre.x + reach_nm, centre.y + half_span_nm),
+        (centre.x - reach_nm, centre.y - half_span_nm, centre.x - hole_nm, centre.y + half_span_nm),
+        (centre.x - half_span_nm, centre.y + hole_nm, centre.x + half_span_nm, centre.y + reach_nm),
+        (centre.x - half_span_nm, centre.y - reach_nm, centre.x + half_span_nm, centre.y - hole_nm),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _CopperObject:
+    """One same-net copper object, with the layers it occupies and the cores it offers."""
+
+    layer_ids: frozenset[str]
+    cores: tuple[_Rect, ...]
+
+
+def _multilayer_via_count(
+    snapshot: BoardIRSnapshot,
+    request: RouteRequest,
+    pads: tuple[Pad, ...],
+    work: _WorkBudget,
+) -> int | None:
+    """Return the via count when every pad is provably joined across layers, else None.
+
+    Routing stays a single-layer contract, but *recognising* an existing connection does not
+    have to: a net whose pads meet through a back-layer detour is connected whether or not this
+    router could have built that detour. Objects are matched only when they share a layer, and
+    a through via shares every layer, which is exactly what makes it a joint.
+    """
+
+    content = snapshot.content
+    layer_ids = frozenset(layer.id for layer in content.copper_layers)
+    objects: list[_CopperObject] = []
+    pad_indices: list[int] = []
+    for pad in pads:
+        cores = _pad_cores(pad)
+        if cores is None:
+            return None
+        pad_indices.append(len(objects))
+        objects.append(_CopperObject(layer_ids=frozenset(pad.layer_ids), cores=cores))
+    for index, segment in enumerate(content.segments):
+        if index % 64 == 0:
+            work.checkpoint()
+        if segment.net_id != request.net_id:
+            continue
+        orthogonal = _segment_core_extent(segment)
+        cores = (orthogonal,) if orthogonal is not None else _diagonal_segment_cores(segment, work)
+        if cores is None:
+            return None
+        objects.append(_CopperObject(layer_ids=frozenset({segment.layer_id}), cores=tuple(cores)))
+    via_count = 0
+    for index, via in enumerate(content.vias):
+        if index % 64 == 0:
+            work.checkpoint()
+        if via.net_id != request.net_id:
+            continue
+        cores = _via_cores(via)
+        if cores is None:
+            return None
+        via_count += 1
+        objects.append(_CopperObject(layer_ids=layer_ids, cores=cores))
+
+    parent = list(range(len(objects)))
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    for first in range(len(objects)):
+        for second in range(first + 1, len(objects)):
+            work.obstacle_check()
+            left, right = objects[first], objects[second]
+            if not (left.layer_ids & right.layer_ids):
+                continue
+            if find(first) == find(second):
+                continue
+            if any(_rectangles_touch(one, other) for one in left.cores for other in right.cores):
+                parent[max(find(first), find(second))] = min(find(first), find(second))
+    if len({find(index) for index in pad_indices}) != 1:
+        return None
+    return via_count
+
+
 def _component_roots(rectangles: tuple[_Rect, ...], work: _WorkBudget) -> tuple[int, ...]:
     """Return each rectangle's exact component root with deterministic bounded union-find."""
 
@@ -840,18 +957,8 @@ def _prepare(
     # A via or a zone on the routed net is copper this model does not represent, so it can
     # neither be routed around nor counted as connectivity. A two-pin net says so directly; a
     # wider one is refused for its pad count instead, which is the more useful fact about it.
-    same_net_via = False
-    for index, via in enumerate(content.vias):
-        if index % 64 == 0:
-            work.checkpoint()
-        if via.net_id == request.net_id:
-            same_net_via = True
-            if two_pin:
-                raise _fail(
-                    RouteFailureCode.UNSUPPORTED_GEOMETRY,
-                    "the selected net already carries a via and is partially routed",
-                )
-            break
+    same_net_via = any(via.net_id == request.net_id for via in content.vias)
+    work.checkpoint()
     for index, arc in enumerate(content.arcs):
         if index % 64 == 0:
             work.checkpoint()
@@ -862,6 +969,30 @@ def _prepare(
             )
     blocking_zones: list[Zone] = []
     same_net_zone = False
+    same_net_zone_present = any(
+        zone.layer_id == request.layer_id and zone.net_id == request.net_id
+        for zone in content.zones
+    )
+    if same_net_via and not same_net_zone_present:
+        # Routing stays single-layer, but a net already joined through its vias needs no route
+        # at all, and refusing to look would report a problem the board does not have.
+        multilayer_vias = _multilayer_via_count(snapshot, request, pads, work)
+        if multilayer_vias is not None:
+            raise _AlreadyConnectedError(
+                start_pad_id=pads[0].id,
+                end_pad_id=pads[-1].id,
+                attachment_segments=sum(
+                    1 for segment in content.segments if segment.net_id == request.net_id
+                ),
+                pad_count=len(pads),
+                vias=multilayer_vias,
+                obstacle_checks=work.obstacle_checks,
+            )
+    if same_net_via and two_pin:
+        raise _fail(
+            RouteFailureCode.UNSUPPORTED_GEOMETRY,
+            "the selected net already carries a via and is partially routed",
+        )
     for index, zone in enumerate(content.zones):
         if index % 64 == 0:
             work.checkpoint()
@@ -1790,8 +1921,11 @@ class AStarRouter:
                     start_pad_id=connection.start_pad_id,
                     end_pad_id=connection.end_pad_id,
                     attachment_segments=connection.attachment_segments,
-                    component_objects=connection.attachment_segments + connection.pad_count,
+                    component_objects=(
+                        connection.attachment_segments + connection.pad_count + connection.vias
+                    ),
                     pad_count=connection.pad_count,
+                    vias=connection.vias,
                     obstacle_checks=connection.obstacle_checks,
                 )
             )

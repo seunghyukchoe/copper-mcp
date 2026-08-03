@@ -870,27 +870,30 @@ COPPERTONE_BOARD = (
 # The RAW nets are the ones whose copper includes diagonals; the wider ones only became
 # answerable once connectivity stopped being a two-pin-only question.
 COPPERTONE_CONNECTED_NETS = {
-    "9V_RAW": (2, 2),
-    "L_IN_RAW": (2, 3),
-    "R_IN_RAW": (2, 2),
-    "L_ISO": (2, 1),
-    "R_ISO": (2, 1),
-    "L_BUF": (3, 3),
-    "R_BUF": (3, 3),
-    "L_IN_BIASED": (3, 3),
-    "R_IN_BIASED": (3, 3),
-    "R_OUT": (3, 4),
-    "VREF": (7, 10),
+    "9V_RAW": (2, 2, 0),
+    "L_IN_RAW": (2, 3, 0),
+    "R_IN_RAW": (2, 2, 0),
+    "L_ISO": (2, 1, 0),
+    "R_ISO": (2, 1, 0),
+    "L_BUF": (3, 3, 0),
+    "R_BUF": (3, 3, 0),
+    "L_IN_BIASED": (3, 3, 0),
+    "R_IN_BIASED": (3, 3, 0),
+    "R_OUT": (3, 4, 0),
+    "VREF": (7, 10, 0),
+    # These two are joined across the back layer through their vias.
+    "L_OUT": (3, 7, 1),
+    "VCC": (6, 11, 2),
 }
-# Refused because they carry vias, which this model does not represent as connectivity.
-COPPERTONE_VIA_NETS = ("GND", "L_OUT", "VCC")
+# Refused because it carries a same-net zone, whose fill this model does not trust.
+COPPERTONE_VIA_NETS = ("GND",)
 
 
 @pytest.mark.parametrize(("net_name", "shape"), sorted(COPPERTONE_CONNECTED_NETS.items()))
 def test_coppertone_connected_nets_report_already_connected(
-    net_name: str, shape: tuple[int, int], tmp_path: Path
+    net_name: str, shape: tuple[int, int, int], tmp_path: Path
 ) -> None:
-    pad_count, segments = shape
+    pad_count, segments, vias = shape
     board = tmp_path / COPPERTONE_BOARD.name
     board.write_bytes(COPPERTONE_BOARD.read_bytes())
     settings = Settings(workspace=tmp_path, max_drc_report_bytes=4096)
@@ -904,7 +907,8 @@ def test_coppertone_connected_nets_report_already_connected(
     assert first.connection is not None
     assert first.connection.pad_count == pad_count
     assert first.connection.attachment_segments == segments
-    assert first.connection.component_objects == segments + pad_count
+    assert first.connection.vias == vias
+    assert first.connection.component_objects == segments + pad_count + vias
 
 
 @pytest.mark.skipif(
@@ -939,7 +943,7 @@ def test_real_kicad_corroborates_the_coppertone_already_connected_nets(tmp_path:
 
 @pytest.mark.parametrize("net_name", COPPERTONE_VIA_NETS)
 def test_coppertone_via_carrying_nets_stay_refused(net_name: str, tmp_path: Path) -> None:
-    """A via is copper this model cannot see, so those nets are never claimed connected."""
+    """A same-net zone cannot prove connectivity, so that net is never claimed connected."""
 
     board = tmp_path / COPPERTONE_BOARD.name
     board.write_bytes(COPPERTONE_BOARD.read_bytes())
@@ -1002,3 +1006,47 @@ def test_real_kicad_confirms_a_multi_pin_tree(tmp_path: Path) -> None:
     assert preview.drc_evidence.summary.unconnected_count == 0
     assert preview.drc_evidence.summary.passed is True
     assert _entries(tmp_path) == before
+
+
+def test_preview_recognises_a_net_joined_across_layers_through_vias(tmp_path: Path) -> None:
+    settings = _copy_fixture(tmp_path, "via-joint.kicad_pcb")
+    before = _entries(tmp_path)
+
+    first = preview_route(_request(board="via-joint.kicad_pcb"), settings)
+    second = preview_route(_request(board="via-joint.kicad_pcb"), settings)
+
+    assert first.status is RoutePreviewStatus.ALREADY_CONNECTED
+    assert first.connection is not None
+    # Front stub, back-layer detour, front stub: the two vias are what join them.
+    assert first.connection.vias == 2
+    assert first.connection.attachment_segments == 3
+    assert first.connection.pad_count == 2
+    assert first.to_dict()["connection"]["vias"] == 2
+    assert first.to_dict() == second.to_dict()
+    assert _entries(tmp_path) == before
+
+
+@pytest.mark.skipif(
+    not REAL_KICAD_CLI.is_file(),
+    reason="requires a locally installed KiCad CLI",
+)
+def test_real_kicad_corroborates_the_cross_layer_connection(tmp_path: Path) -> None:
+    """KiCad's connectivity engine is the evidence behind a multilayer claim.
+
+    Removing either the via or the back-layer stub from a scratch copy makes KiCad report an
+    unconnected item, so a zero-unconnected report on the intact board is positive evidence
+    that the via really is carrying the connection rather than the claim being vacuous.
+    """
+
+    settings = replace(
+        _copy_fixture(tmp_path, "via-joint.kicad_pcb"),
+        kicad_cli=REAL_KICAD_CLI,
+        max_drc_report_bytes=8 * 1024 * 1024,
+    )
+
+    summary = kicad_cli.run_board_drc("via-joint.kicad_pcb", settings)
+    preview = preview_route(_request(board="via-joint.kicad_pcb"), settings)
+
+    assert summary.unconnected_count == 0
+    assert summary.error_count == 0
+    assert preview.status is RoutePreviewStatus.ALREADY_CONNECTED

@@ -59,7 +59,9 @@ carries bounded conversion diagnostic-code counts instead of raw adapter text.
 `already_connected` is a terminal success, not a failure: the two pads already share one copper
 component on the selected layer, so there is nothing to propose. Its `connection` object carries the
 Board IR base revision it is bound to, both endpoint pad IDs, and integer counts of the attachment
-segments and component objects involved. It returns no geometry and no diagnostic, and the outcome
+segments, component objects, pads and vias involved. A non-zero `vias` count means the connection
+was established across copper layers through those vias, so the evidence is multilayer even though
+the request names a single layer. It returns no geometry and no diagnostic, and the outcome
 deliberately has no `RouteFailureCode`. Clients that switch exhaustively over the previous three
 statuses need a fourth branch.
 
