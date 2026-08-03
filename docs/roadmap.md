@@ -15,7 +15,7 @@ documentation, ledger updates, and benchmark evidence.
   reference-only external source metadata.
 - [x] First public GitHub release.
 
-## M1 — KiCad inspection and validation (`0.2.x`, current)
+## M1 — KiCad inspection and validation (`0.3.x`, current)
 
 - [ ] Official `kicad-python` IPC plugin.
 - [x] Canonical Circuit Intent IR `0.1.0` and deterministic in-memory KiCad schematic generation

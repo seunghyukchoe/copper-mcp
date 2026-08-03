@@ -11,11 +11,19 @@
 MCP-based tools, and optional AI policy plugins.**
 
 > [!IMPORTANT]
-> CopperMCP `0.2.x` is an MVP-alpha. It provides secure board inspection,
+> CopperMCP `0.3.x` is an MVP-alpha. It provides secure board inspection,
 > authoritative read-only KiCad DRC summaries, stable manifests, candidate validation, MCP
-> contracts, a narrow non-mutating two-pin A* route preview, and bounded Circuit Intent delivery as
+> contracts, a bounded non-mutating route preview, and bounded Circuit Intent delivery as
 > a deterministic KiCad schematic. The CLI may explicitly create one new schematic, and the
 > stdio-only MCP tool may create one short-lived artifact capability; neither path modifies a board.
+>
+> `0.3` completes connectivity *recognition*: a net already joined by existing copper is now
+> identified as such across any pad count, through same-net vias between layers, and — with the
+> opt-in `include_fill_authority` flag — through poured zone copper whose cache KiCad has just
+> confirmed still matches the board. Routing itself grew from a single two-pin path to a
+> deterministic spanning tree over a net's components, which connects every pad but makes no
+> Steiner-optimality claim. A metamorphic test family checks that rotating, reflecting or
+> translating a whole board does not change what the router concludes.
 
 ## Why this project exists
 
@@ -49,12 +57,20 @@ The non-negotiable boundary is simple:
   original KiCad bytes, private patched board, complete patched rule/library context, and strict
   aggregate KiCad summary without writing a candidate file into the source workspace.
 - Candidate-manifest validation and correctness-first comparison.
-- Bounded integer A* candidates for one two-pad net on a documented rectangular Board IR subset,
-  routing around existing foreign-net pads, orthogonal segments, through vias, and conservative
-  solid-zone polygon envelopes under exact integer clearance, with independent lattice, search, and
+- Bounded integer A* candidates on a documented rectangular Board IR subset. A two-pad net routes as
+  one path; a wider net routes as a deterministic spanning tree over its components, which connects
+  every pad without claiming Steiner optimality. Routing avoids existing foreign-net pads, segments
+  at any angle, through vias, rectangular and polygon track keepouts, and conservative solid-zone
+  polygon envelopes under exact integer clearance, with independent lattice, search, and
   obstacle-work ceilings, plus replay-bound serialization to new disposable KiCad bytes when every
-  modeled source geometry object has a native UUID/tstamp. Zone fill caches are not routing
-  authority, and same-net existing copper remains unsupported partial routing.
+  modeled source geometry object has a native UUID/tstamp. Same-net copper is attachment rather than
+  a refusal, so a partly routed net completes from what is already there. Zone fill is still not
+  routing authority: verified fill informs connectivity only, and the routing obstacle model
+  continues to use the conservative zone envelope.
+- Connectivity recognition for a net that is already joined: across any pad count, across layers
+  through same-net through vias, and — behind the opt-in `include_fill_authority` flag — through
+  poured zone copper, admitted only when a fresh KiCad refill on a private disposable copy
+  reproduces the board's cached fill exactly. A stale cache is refused rather than answered from.
 - Read-only Board IR structural inspection that reports whether a board is representable by the
   supported subset, using counts and digests rather than geometry, names, or identities.
 - A bounded, non-mutating route preview over MCP and the CLI that validates an untrusted request,
@@ -150,7 +166,7 @@ copper-mcp --workspace /absolute/path/to/boards board-ir example.kicad_pcb \
   --via-diameter-nm 800000 --via-drill-nm 400000
 ```
 
-Preview one two-pin route without modifying the board, then optionally validate it with KiCad:
+Preview one route without modifying the board, then optionally validate it with KiCad:
 
 ```bash
 copper-mcp --workspace /absolute/path/to/boards preview-route example.kicad_pcb \

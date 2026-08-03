@@ -58,7 +58,7 @@ future work, not a current property.
 
 ## Current controls
 
-The `0.2.x` board-facing surface remains non-mutating, including route preview. The one current
+The `0.3.x` board-facing surface remains non-mutating, including route preview. The one current
 durable write is an explicitly named, create-new schematic export; it cannot overwrite a board or
 existing file. Workspace files are captured through descriptor-anchored, no-follow path walks; the
 same final descriptor supplies type/size validation, bytes, and before/after mutation checks, so a
