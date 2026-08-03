@@ -23,6 +23,11 @@ from copper_mcp.request_boundary import (
 APPLY_VERSION = "0.1.0"
 _SHA256 = r"^sha256:[0-9a-f]{64}$"
 MAX_TOKEN_CHARACTERS = 512
+#: Caps on the candidate geometry carried in a manifest, enforced before anything is
+#: materialised so an unbounded manifest cannot force unbounded work ahead of authorisation.
+MAX_MANIFEST_PATHS = 4096
+MAX_MANIFEST_VERTICES = 100_000
+MAX_MANIFEST_FIELD_CHARACTERS = 256
 
 
 class ApplyRequestError(ValueError):
@@ -95,6 +100,7 @@ def parse_apply_request(payload: Any) -> ApplyRequest:
         if not re.fullmatch(_SHA256, revision):
             raise ApplyRequestError("expect_board_revision must be a sha256 digest")
         candidate = mapping("candidate", fields["candidate"])
+        _bound_manifest(candidate)
         return ApplyRequest(
             board=board_path(fields["board"]),
             candidate=candidate,
@@ -106,6 +112,41 @@ def parse_apply_request(payload: Any) -> ApplyRequest:
         raise
     except RequestError as error:
         raise ApplyRequestError(str(error)) from error
+
+
+def _bound_manifest(candidate: Mapping[str, Any]) -> None:
+    """Cap the geometry a manifest can carry, before any of it is materialised.
+
+    All of the pre-authorisation work - the board read, the IR parse, the candidate decode -
+    happens for whatever manifest a caller sends, so an unbounded manifest is an unbounded
+    workload handed to a destructive tool. The identity fields the token binds are also capped
+    here so they cannot be pathological strings.
+    """
+
+    for field_name in ("candidate_id", "base_revision"):
+        value = candidate.get(field_name)
+        if value is not None and (
+            not isinstance(value, str) or len(value) > MAX_MANIFEST_FIELD_CHARACTERS
+        ):
+            raise ApplyRequestError("a candidate identity field is malformed")
+    patch = candidate.get("patch")
+    if not isinstance(patch, Mapping):
+        return
+    paths = patch.get("paths")
+    if paths is None:
+        return
+    if not isinstance(paths, list | tuple) or len(paths) > MAX_MANIFEST_PATHS:
+        raise ApplyRequestError("the candidate carries too many route paths")
+    total = 0
+    for item in paths:
+        if not isinstance(item, Mapping):
+            raise ApplyRequestError("a route path is malformed")
+        vertices = item.get("vertices_nm")
+        if not isinstance(vertices, list | tuple):
+            raise ApplyRequestError("a route path is malformed")
+        total += len(vertices)
+        if total > MAX_MANIFEST_VERTICES:
+            raise ApplyRequestError("the candidate carries too many route vertices")
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,11 +162,22 @@ class ApplyDiagnostic:
 
 @dataclass(frozen=True, slots=True)
 class ApplyResult:
-    """Either a board that changed, or a typed reason why nothing did."""
+    """Either a board that changed, or a typed reason why nothing did.
+
+    Three statuses, because a destructive tool must never round its own outcome:
+
+    * ``applied`` - the rename happened and was verified. ``diagnostic`` is absent.
+    * ``refused`` - the board was **not** touched. ``board_revision_after`` is absent, because
+      there is no new revision, and ``board_revision_before`` may itself be absent when the
+      refusal came before the board was ever read (a disabled flag, a malformed request).
+    * ``applied_but_unverified`` - the rename happened but a later step could not be confirmed.
+      The board *is* changed, so ``board_revision_after`` is set truthfully and a diagnostic
+      explains what could not be verified. Reporting this as ``refused`` would be a lie.
+    """
 
     status: str
     board_path: str
-    board_revision_before: str
+    board_revision_before: str | None = None
     board_revision_after: str | None = None
     snapshot_digest_before: str | None = None
     base_revision: str | None = None
@@ -144,15 +196,27 @@ class ApplyResult:
             "conversion_diagnostic_counts",
             MappingProxyType(dict(self.conversion_diagnostic_counts)),
         )
-        if self.status not in {"applied", "refused"}:
+        if self.status not in {"applied", "refused", "applied_but_unverified"}:
             raise ApplyRequestError("an apply status is malformed")
-        applied = self.status == "applied"
-        if applied == (self.diagnostic is not None):
-            raise ApplyRequestError("an apply result carries exactly one of change or refusal")
-        if applied and (self.board_revision_after is None or self.verification is None):
-            raise ApplyRequestError("an applied board must report its new revision and evidence")
-        if applied and self.board_revision_after == self.board_revision_before:
-            raise ApplyRequestError("an applied board must differ from the board it replaced")
+        if self.status == "applied":
+            if self.diagnostic is not None:
+                raise ApplyRequestError("an applied board carries no diagnostic")
+            if self.board_revision_after is None or self.verification is None:
+                raise ApplyRequestError(
+                    "an applied board must report its new revision and evidence"
+                )
+            if self.board_revision_after == self.board_revision_before:
+                raise ApplyRequestError("an applied board must differ from the board it replaced")
+        elif self.status == "applied_but_unverified":
+            if self.diagnostic is None or self.board_revision_after is None:
+                raise ApplyRequestError(
+                    "an unverified apply must report both what changed and why it is unverified"
+                )
+        else:  # refused
+            if self.diagnostic is None:
+                raise ApplyRequestError("a refusal must carry a diagnostic")
+            if self.board_revision_after is not None:
+                raise ApplyRequestError("a refusal must not report a new revision")
 
     def to_dict(self) -> dict[str, Any]:
         return {

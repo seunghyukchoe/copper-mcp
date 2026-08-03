@@ -2,16 +2,39 @@
 
 from __future__ import annotations
 
+import fcntl
+import hashlib
 import os
 import secrets
 import stat
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from pathlib import Path
 
 
 class WorkspaceViolationError(ValueError):
     """Raised when a caller attempts to access data outside the configured workspace."""
+
+
+class WorkspaceStaleError(WorkspaceViolationError):
+    """Raised when the target's bytes no longer match the digest a replacement expected.
+
+    This is a *pre-rename* refusal: the target has not been touched, so a caller may report
+    it as "nothing changed" truthfully.
+    """
+
+
+class WorkspacePostRenameError(RuntimeError):
+    """Raised when a replacement fails *after* the rename has already happened.
+
+    The board has been changed at this point, so a caller must never report it as untouched.
+    Carries the digest of the bytes the rename published so the caller can decide whether to
+    roll back.
+    """
+
+    def __init__(self, message: str, published_revision: str) -> None:
+        super().__init__(message)
+        self.published_revision = published_revision
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,18 +294,32 @@ def replace_workspace_file(
     *,
     allowed_suffixes: Collection[str],
     max_bytes: int,
+    expect_digest: str | None = None,
+    precheck: Callable[[], None] | None = None,
 ) -> Path:
-    """Atomically replace one existing file beneath ``workspace``.
+    """Atomically replace one existing file beneath ``workspace``, under an exclusive lock.
 
     This is the only clobbering primitive in the project, so it inherits every check
-    ``create_workspace_file`` performs and adds the ones a replacement needs: the target must
-    already exist as a regular file, must not be a symlink, and its exact bytes are re-read
-    after the rename.
+    ``create_workspace_file`` performs and adds the ones a replacement needs.
 
-    Durability follows the standard sequence - write a private ``O_EXCL`` temporary in the
-    *target's own directory*, ``fsync`` it, rename it over the name, then ``fsync`` the
-    directory so the rename itself survives a crash. The rename gives name atomicity: a
-    concurrent reader sees either the old file or the new one, never a torn one.
+    The target is opened, an exclusive ``flock`` is taken on that descriptor, and the lock is
+    **held across the compare-and-swap and the rename**. Two replacements of the same file
+    therefore serialise: the loser blocks until the winner's rename completes, then sees the
+    winner's bytes under the swap and refuses rather than clobbering them.
+
+    * ``expect_digest`` - if given, the target's current bytes are re-read *under the lock,
+      immediately before the rename*, and the replacement is refused with ``WorkspaceStaleError``
+      unless they still hash to this value. This closes the window between an earlier read and
+      the rename.
+    * ``precheck`` - an optional callback run under the lock just before the rename. It may
+      raise to abort while the target is still untouched (the apply path uses it to re-check the
+      KiCad lockfile).
+
+    Failures are split by whether the rename has happened. Anything before it leaves the target
+    untouched and raises ``WorkspaceViolationError``/``WorkspaceStaleError``; anything after it
+    raises ``WorkspacePostRenameError``, because the board has already changed and must never be
+    reported as untouched. The replacement also copies the target's permission bits onto the new
+    file, so an applied board keeps the mode its author gave it rather than collapsing to 0600.
     """
 
     if (
@@ -340,21 +377,39 @@ def replace_workspace_file(
 
     temporary_name = f".copper-mcp-{secrets.token_hex(16)}.tmp"
     temporary_fd: int | None = None
+    lock_fd: int | None = None
+    renamed = False
+    published_revision = f"sha256:{hashlib.sha256(content).hexdigest()}"
     try:
         # The target must already be a regular file. Opening it with O_NOFOLLOW first is what
-        # stops a symlink planted at the name from redirecting the replacement elsewhere.
+        # stops a symlink planted at the name from redirecting the replacement elsewhere. The
+        # descriptor is then held, and flocked, for the whole critical section.
         try:
-            existing_fd = os.open(candidate.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory_fd)
+            lock_fd = os.open(candidate.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory_fd)
         except OSError as error:
             raise WorkspaceViolationError(
                 "replacement target must be an existing regular file"
             ) from error
-        try:
-            existing = os.fstat(existing_fd)
-            if not stat.S_ISREG(existing.st_mode):
-                raise WorkspaceViolationError("replacement target must be a regular file")
-        finally:
-            os.close(existing_fd)
+        existing = os.fstat(lock_fd)
+        if not stat.S_ISREG(existing.st_mode):
+            raise WorkspaceViolationError("replacement target must be a regular file")
+        target_mode = stat.S_IMODE(existing.st_mode)
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+
+        # Compare-and-swap under the lock. Re-read the *name* (not the held descriptor), so a
+        # concurrent rename that repointed the name at different bytes is caught here.
+        if expect_digest is not None:
+            current_fd = os.open(candidate.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory_fd)
+            try:
+                current = _read_all(current_fd, max_bytes)
+            finally:
+                os.close(current_fd)
+            if f"sha256:{hashlib.sha256(current).hexdigest()}" != expect_digest:
+                raise WorkspaceStaleError("the target changed since it was read for replacement")
+
+        if precheck is not None:
+            # Runs while the target is still untouched, so raising here refuses cleanly.
+            precheck()
 
         temporary_fd = os.open(temporary_name, file_flags, 0o600, dir_fd=directory_fd)
         written = 0
@@ -363,50 +418,107 @@ def replace_workspace_file(
             if count <= 0:
                 raise OSError("short output write")
             written += count
+        os.fchmod(temporary_fd, target_mode)
         os.fsync(temporary_fd)
         os.close(temporary_fd)
         temporary_fd = None
 
         os.rename(temporary_name, candidate.name, src_dir_fd=directory_fd, dst_dir_fd=directory_fd)
-        os.fsync(directory_fd)
+        renamed = True
 
-        final_fd = os.open(candidate.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory_fd)
+        # From here the board is changed; any failure is a post-rename condition.
         try:
-            chunks: list[bytes] = []
-            remaining = max_bytes + 1
-            while remaining > 0:
-                chunk = os.read(final_fd, min(64 * 1024, remaining))
-                if not chunk:
-                    break
-                chunks.append(chunk)
-                remaining -= len(chunk)
-            observed = b"".join(chunks)
-        finally:
-            os.close(final_fd)
-        if observed != content:
-            raise WorkspaceViolationError("replaced output verification failed")
-
-        stable_parent = root.joinpath(*relative_parent.parts)
-        try:
+            os.fsync(directory_fd)
+            final_fd = os.open(candidate.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory_fd)
+            try:
+                observed = _read_all(final_fd, max_bytes)
+            finally:
+                os.close(final_fd)
+            if observed != content:
+                raise WorkspacePostRenameError(
+                    "replaced output verification failed", published_revision
+                )
+            stable_parent = root.joinpath(*relative_parent.parts)
             resolved_parent = stable_parent.resolve(strict=True)
             resolved_parent.relative_to(root)
             visible_stat = stable_parent.stat(follow_symlinks=False)
             held_stat = os.fstat(directory_fd)
-        except (FileNotFoundError, OSError, RuntimeError, ValueError) as error:
-            raise WorkspaceViolationError("output parent changed during replacement") from error
-        if (
-            resolved_parent != stable_parent
-            or visible_stat.st_dev != held_stat.st_dev
-            or visible_stat.st_ino != held_stat.st_ino
-        ):
-            raise WorkspaceViolationError("output parent changed during replacement")
-        return stable_parent / candidate.name
+            if (
+                resolved_parent != stable_parent
+                or visible_stat.st_dev != held_stat.st_dev
+                or visible_stat.st_ino != held_stat.st_ino
+            ):
+                raise WorkspacePostRenameError(
+                    "output parent changed during replacement", published_revision
+                )
+            return stable_parent / candidate.name
+        except WorkspacePostRenameError:
+            raise
+        except (OSError, RuntimeError, ValueError) as error:
+            raise WorkspacePostRenameError(
+                "replacement could not be verified after the rename", published_revision
+            ) from error
     finally:
         if temporary_fd is not None:
             os.close(temporary_fd)
-        # A temporary that was never renamed must not survive a failure.
-        try:
-            os.unlink(temporary_name, dir_fd=directory_fd)
-        except FileNotFoundError:
-            pass
+        if not renamed:
+            # A temporary that was never renamed must not survive a failure.
+            try:
+                os.unlink(temporary_name, dir_fd=directory_fd)
+            except FileNotFoundError:
+                pass
+        if lock_fd is not None:
+            os.close(lock_fd)
         os.close(directory_fd)
+
+
+def _read_all(descriptor: int, max_bytes: int) -> bytes:
+    chunks: list[bytes] = []
+    remaining = max_bytes + 1
+    while remaining > 0:
+        chunk = os.read(descriptor, min(64 * 1024, remaining))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+def resolve_workspace_relative_path(
+    workspace: Path,
+    requested_path: str,
+    *,
+    allowed_suffixes: Collection[str] = (),
+) -> str:
+    """Resolve one confined path to its workspace-relative POSIX form without reading it.
+
+    A cheap counterpart to ``read_workspace_file`` for the cases that need the canonical path
+    but not the bytes - the apply path verifies a token before it reads a 64 MiB board, and it
+    needs the same relative path the preview bound the token to.
+    """
+
+    if (
+        not requested_path
+        or "\x00" in requested_path
+        or len(requested_path) > 4096
+        or requested_path.startswith("~")
+    ):
+        raise WorkspaceViolationError("path is malformed")
+    root = workspace.resolve(strict=True)
+    untrusted = Path(requested_path)
+    try:
+        relative = untrusted.relative_to(root) if untrusted.is_absolute() else untrusted
+    except ValueError as error:
+        raise WorkspaceViolationError("path must stay inside the configured workspace") from error
+    parts = relative.parts
+    if not parts or any(part in {"", ".", ".."} for part in parts):
+        raise WorkspaceViolationError("path must stay inside the configured workspace")
+    allowed = {suffix.lower() for suffix in allowed_suffixes}
+    if allowed and relative.suffix.lower() not in allowed:
+        raise WorkspaceViolationError("file type is not allowed")
+    resolved = (root / relative).resolve(strict=True)
+    try:
+        confined = resolved.relative_to(root)
+    except ValueError as error:
+        raise WorkspaceViolationError("path must stay inside the configured workspace") from error
+    return confined.as_posix()

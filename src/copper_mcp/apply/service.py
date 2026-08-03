@@ -3,26 +3,28 @@
 Everything here exists to make one operation safe, so the order of the checks is the design:
 
 1. **Opt in.** Refused unless the operator set the flag. A model cannot turn this on.
-2. **Authorize.** A single-use token this process issued for this exact candidate, board and
-   path. Enforced here, not by a tool annotation.
-3. **KiCad must be closed.** A ``~name.lck`` sibling is a hard refusal, never removed. pcbnew
-   has no external-change watcher, so a GUI holding the board open will silently overwrite
-   whatever we write when the user next saves.
-4. **Compare and swap, twice.** The board's bytes and its Board IR digest are checked before
-   the splice and again immediately before publishing, both under a held lock. A mismatch is
-   refused and **never auto-refreshed**: re-routing against copper the caller has not seen
-   would apply a proposal nobody approved.
-5. **Keep a way back.** A timestamped, content-addressed copy is written beside the board
-   before anything is replaced, and its path is returned. KiCad's own ``-bak`` files are never
-   touched or relied upon.
-6. **Publish atomically**, then verify. If verification fails, the backup is restored and the
-   failure is reported rather than left behind.
+2. **Authorize before the heavy work.** A single-use token this process issued for this exact
+   candidate, board revision and path is verified before the board is read or parsed, so an
+   unauthorized caller cannot make the tool do expensive work.
+3. **KiCad must be closed.** A ``~name.lck`` sibling is a hard refusal, never removed - checked
+   up front and **again under the lock** immediately before the write, because a GUI opened in
+   between would otherwise silently overwrite the applied board.
+4. **Compare and swap under an exclusive lock.** The board's bytes and its Board IR digest are
+   checked, and the final check plus the rename happen while an exclusive ``flock`` is held on
+   the board, so two applies from the same base serialise and the loser refuses instead of
+   clobbering the winner. A mismatch is **never auto-refreshed**.
+5. **Keep a way back.** A timestamped, content-addressed copy is written into a backups
+   subdirectory before anything is replaced, and its path is returned. KiCad's own ``-bak``
+   files are never touched.
+6. **Publish atomically**, then report truthfully. A failure before the rename leaves the board
+   untouched; a failure after it says so - the board is changed and is never reported otherwise.
 """
 
 from __future__ import annotations
 
 import hashlib
 import os
+import stat
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -31,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
+from copper_mcp.adapters.kicad_route_patch import KiCadRoutePatchError
 from copper_mcp.apply.contracts import (
     ApplyDiagnostic,
     ApplyFailureCode,
@@ -39,26 +42,42 @@ from copper_mcp.apply.contracts import (
     parse_apply_request,
 )
 from copper_mcp.apply.engine import ApplyEngineError, apply_route_candidate
-from copper_mcp.apply.tokens import ApplyBinding, ApplyTokenAuthority, ApplyTokenError
+from copper_mcp.apply.tokens import (
+    ApplyBinding,
+    ApplyTokenAuthority,
+    ApplyTokenError,
+)
 from copper_mcp.board_ir import NetClass, ParseLimits
 from copper_mcp.config import Settings
 from copper_mcp.request_boundary import NET_CLASS_ID, NET_CLASS_NAME
 from copper_mcp.routing.astar import ROUTER_VERSION
 from copper_mcp.routing.contracts import RouteCandidate
 from copper_mcp.security import (
+    WorkspacePostRenameError,
+    WorkspaceStaleError,
     WorkspaceViolationError,
+    create_workspace_file,
     read_workspace_file,
     replace_workspace_file,
+    resolve_workspace_relative_path,
 )
 
-#: Filesystems where `os.replace` and `fsync` do not carry their usual guarantees. Detected
+#: Filesystems where `os.rename` and `fsync` do not carry their usual guarantees. Detected
 #: where the platform makes it cheap; where it does not, the limitation is stated rather than
 #: guessed at.
 _UNSAFE_FILESYSTEMS = frozenset({"nfs", "smbfs", "afpfs", "webdav", "fusefs", "cifs", "ftp"})
+_BACKUPS_DIRNAME = ".copper-mcp-backups"
+#: Pre-apply copies kept per board before the oldest is pruned. Bounds a preview→apply loop
+#: that would otherwise fill the disk one backup at a time.
+MAX_BACKUPS_PER_BOARD = 16
 
 
 class ApplyServiceError(RuntimeError):
     """Raised only for conditions that cannot be expressed as a typed refusal."""
+
+
+class _LockfileAppearedError(RuntimeError):
+    """Raised by the under-lock precheck when the KiCad lockfile appeared mid-apply."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +86,7 @@ class _Board:
     absolute_path: Path
     content: bytes
     revision: str
+    mode: int
 
 
 def _revision(payload: bytes) -> str:
@@ -106,7 +126,8 @@ def _candidate_from_manifest(payload: Any) -> RouteCandidate:
 
     ``candidate_from_dict`` accepts a manifest at face value and cannot detect a forged
     identity, so it is deliberately not used. The engine recomputes the identity and replays
-    the geometry; this function only performs the structural decode.
+    the geometry; this function only performs the structural decode. The geometry it decodes
+    is already bounded by ``parse_apply_request``.
     """
 
     from copper_mcp.board_ir import PointNM
@@ -117,8 +138,6 @@ def _candidate_from_manifest(payload: Any) -> RouteCandidate:
         RoutePath,
     )
 
-    # A Mapping, not specifically a dict: the request boundary hands this over as a read-only
-    # MappingProxyType so the manifest cannot be mutated after validation.
     if not isinstance(payload, Mapping):
         raise ApplyEngineError("candidate manifest is malformed")
     try:
@@ -163,7 +182,7 @@ def _candidate_from_manifest(payload: Any) -> RouteCandidate:
 def _refuse(
     request: ApplyRequest | None,
     board_path: str,
-    board_revision: str,
+    board_revision: str | None,
     code: ApplyFailureCode,
     message: str,
     **extra: Any,
@@ -195,28 +214,56 @@ def apply_candidate(
 
     request = parse_apply_request(payload)
 
+    # Resolve the canonical path without reading the board, so a refusal names the same path
+    # every other refusal would and no digest is synthesised for a board we never read.
+    try:
+        relative_path = resolve_workspace_relative_path(
+            settings.workspace, request.board, allowed_suffixes={".kicad_pcb"}
+        )
+    except WorkspaceViolationError as error:
+        return _refuse(request, request.board, None, ApplyFailureCode.INVALID_REQUEST, str(error))
+
     if not settings.allow_apply:
         # The tool stays listed so a client can explain it; the capability is simply off.
         return _refuse(
             request,
-            request.board,
-            _revision(b""),
+            relative_path,
+            None,
             ApplyFailureCode.APPLY_DISABLED,
             "applying candidates is disabled; set COPPER_MCP_ALLOW_APPLY=1 to enable it",
         )
 
+    # Authorize before the heavy work. The token binds identity strings that are already
+    # bounded and the claimed board revision, none of which needs the board to be read.
+    binding = ApplyBinding(
+        candidate_id=str(request.candidate.get("candidate_id", "")),
+        base_revision=str(request.candidate.get("base_revision", "")),
+        board_revision=request.expect_board_revision,
+        relative_path=relative_path,
+    )
+    try:
+        verified = token_authority.verify(request.apply_token, binding)
+    except ApplyTokenError as error:
+        return _refuse(request, relative_path, None, ApplyFailureCode(error.code), str(error))
+
     board = _read_board(settings, request.board)
-    lock_path = lockfile_for(board.absolute_path)
-    if lock_path.exists():
+    if lockfile_for(board.absolute_path).exists():
         return _refuse(
             request,
             board.relative_path,
             board.revision,
             ApplyFailureCode.KICAD_OPEN,
-            (
-                "a KiCad lockfile is present, so the board may be open in the editor; "
-                f"close KiCad and remove {lock_path.name} if it is stale"
-            ),
+            _lockfile_message(board.absolute_path),
+        )
+
+    # First compare-and-swap, before any parsing: the caller must have previewed these bytes.
+    if board.revision != request.expect_board_revision:
+        return _refuse(
+            request,
+            board.relative_path,
+            board.revision,
+            ApplyFailureCode.STALE_CANDIDATE,
+            "the board changed since the preview; re-run the preview and review the result",
         )
 
     constraints = NetClass(id=NET_CLASS_ID, name=NET_CLASS_NAME, **request.constraints_payload())
@@ -245,33 +292,6 @@ def apply_candidate(
             str(error),
         )
 
-    binding = ApplyBinding(
-        candidate_id=candidate.candidate_id,
-        base_revision=candidate.base_revision,
-        board_revision=request.expect_board_revision,
-        relative_path=board.relative_path,
-    )
-    try:
-        nonce = token_authority.verify(request.apply_token, binding)
-    except ApplyTokenError as error:
-        return _refuse(
-            request,
-            board.relative_path,
-            board.revision,
-            ApplyFailureCode(error.code),
-            str(error),
-        )
-
-    # First compare-and-swap, before any work: the caller must have previewed these exact
-    # bytes and this exact Board IR.
-    if board.revision != request.expect_board_revision:
-        return _refuse(
-            request,
-            board.relative_path,
-            board.revision,
-            ApplyFailureCode.STALE_CANDIDATE,
-            "the board changed since the preview; re-run the preview and review the result",
-        )
     if snapshot.snapshot_digest != candidate.base_revision:
         return _refuse(
             request,
@@ -283,7 +303,10 @@ def apply_candidate(
 
     try:
         applied = apply_route_candidate(board.content, snapshot, candidate, profile, limits=limits)
-    except ApplyEngineError as error:
+    except (ApplyEngineError, KiCadRoutePatchError) as error:
+        # Both are the pure engine refusing to produce bytes. A KiCadRoutePatchError escaping
+        # here previously crashed the destructive tool on a legal board whose outline carried
+        # a derived rather than native identity.
         return _refuse(
             request,
             board.relative_path,
@@ -309,8 +332,7 @@ def apply_candidate(
         backup_path = _write_backup(settings, board, now)
     except (WorkspaceViolationError, OSError) as error:
         # The pre-apply copy is the only way back, so failing to write it must stop the apply
-        # rather than proceed without one. Found by crash injection: this previously escaped
-        # as an uncaught OSError instead of a typed refusal.
+        # rather than proceed without one.
         return _refuse(
             request,
             board.relative_path,
@@ -319,18 +341,11 @@ def apply_candidate(
             f"the pre-apply copy could not be written, so nothing was changed: {error}",
         )
 
-    # Second compare-and-swap, immediately before publishing. The window between the first
-    # check and here is where a GUI save or another process would land.
-    current = _read_board(settings, request.board)
-    if current.revision != board.revision:
-        return _refuse(
-            request,
-            board.relative_path,
-            board.revision,
-            ApplyFailureCode.STALE_CANDIDATE,
-            "the board changed while the candidate was being prepared",
-            backup_path=backup_path,
-        )
+    def _recheck_lockfile() -> None:
+        # Runs under the exclusive lock, immediately before the rename. A GUI opened between
+        # the first check and here would otherwise silently overwrite the applied board.
+        if lockfile_for(board.absolute_path).exists():
+            raise _LockfileAppearedError(board.absolute_path.name)
 
     try:
         replace_workspace_file(
@@ -339,8 +354,32 @@ def apply_candidate(
             applied.content,
             allowed_suffixes={".kicad_pcb"},
             max_bytes=settings.max_board_bytes,
+            expect_digest=board.revision,
+            precheck=_recheck_lockfile,
+        )
+    except _LockfileAppearedError:
+        return _refuse(
+            request,
+            board.relative_path,
+            board.revision,
+            ApplyFailureCode.KICAD_OPEN,
+            _lockfile_message(board.absolute_path),
+            backup_path=backup_path,
+        )
+    except WorkspaceStaleError:
+        # Caught under the lock, before the rename: the board is untouched.
+        return _refuse(
+            request,
+            board.relative_path,
+            board.revision,
+            ApplyFailureCode.STALE_CANDIDATE,
+            "the board changed while the candidate was being applied",
+            backup_path=backup_path,
         )
     except (WorkspaceViolationError, OSError) as error:
+        # A pre-rename replacement failure: everything after the rename is turned into a
+        # WorkspacePostRenameError by replace_workspace_file, so any plain OSError or workspace
+        # violation reaching here happened before the board was touched.
         return _refuse(
             request,
             board.relative_path,
@@ -349,23 +388,37 @@ def apply_candidate(
             f"the board could not be replaced safely: {error}",
             backup_path=backup_path,
         )
-
-    verified = _verify_after_publish(settings, request.board, applied.result_revision)
-    if not verified:
-        restored = _restore(settings, board)
-        return _refuse(
-            request,
-            board.relative_path,
-            board.revision,
-            ApplyFailureCode.APPLY_VERIFICATION_FAILED,
-            (
-                "the applied board did not verify after publication; "
-                + ("the original was restored" if restored else "restore the pre-apply copy")
-            ),
+    except WorkspacePostRenameError as error:
+        # The rename happened, so the board IS changed. Report that truthfully and attempt a
+        # guarded rollback that only touches the file if it still holds exactly our bytes.
+        restored = _guarded_restore(settings, board, error.published_revision)
+        return ApplyResult(
+            status="applied_but_unverified",
+            board_path=board.relative_path,
+            board_revision_before=board.revision,
+            board_revision_after=error.published_revision,
+            snapshot_digest_before=snapshot.snapshot_digest,
+            base_revision=candidate.base_revision,
+            candidate_id=candidate.candidate_id,
+            request=request,
             backup_path=backup_path,
+            bytes_added=applied.bytes_added,
+            segments_added=applied.segments_added,
+            diagnostic=ApplyDiagnostic(
+                code=ApplyFailureCode.APPLY_VERIFICATION_FAILED,
+                message=(
+                    "the board was written but could not be verified afterwards; "
+                    + (
+                        "the original was rolled back"
+                        if restored
+                        else "it now holds bytes we did not write, so it was left in place; "
+                        "restore the pre-apply copy if needed"
+                    )
+                ),
+            ),
         )
 
-    token_authority.consume(nonce)
+    token_authority.consume(verified)
     return ApplyResult(
         status="applied",
         board_path=board.relative_path,
@@ -382,6 +435,13 @@ def apply_candidate(
     )
 
 
+def _lockfile_message(board: Path) -> str:
+    return (
+        "a KiCad lockfile is present, so the board may be open in the editor; "
+        f"close KiCad and remove {lockfile_for(board).name} if it is stale"
+    )
+
+
 def _read_board(settings: Settings, requested: str) -> _Board:
     snapshot = read_workspace_file(
         settings.workspace,
@@ -390,29 +450,37 @@ def _read_board(settings: Settings, requested: str) -> _Board:
         max_bytes=settings.max_board_bytes,
     )
     root = settings.workspace.resolve(strict=True)
+    try:
+        mode = stat.S_IMODE(snapshot.path.stat(follow_symlinks=False).st_mode)
+    except OSError:
+        mode = 0o644
     return _Board(
         relative_path=snapshot.path.relative_to(root).as_posix(),
         absolute_path=snapshot.path,
         content=snapshot.content,
         revision=_revision(snapshot.content),
+        mode=mode,
     )
 
 
 def _write_backup(settings: Settings, board: _Board, now: Callable[[], float]) -> str:
-    """Write the pre-apply copy beside the board and return its workspace-relative path.
+    """Write the pre-apply copy into a backups subdirectory and return its relative path.
 
-    Timestamped and content-addressed so successive applies never collide and so a user can
-    tell which copy corresponds to which board state. KiCad's own ``-bak`` files are a
-    different mechanism owned by the editor and are never written, read, or removed here.
+    The copies go in ``.copper-mcp-backups/`` rather than beside the board so that a backup is
+    never itself a valid ``.kicad_pcb`` apply target - a cascading ``pre-apply.pre-apply`` name
+    otherwise appears. They are timestamped and content-addressed, kept to a bounded count per
+    board, and given the board's own permission bits. KiCad's ``-bak`` files are never touched.
     """
 
-    from copper_mcp.security import create_workspace_file
+    root = settings.workspace.resolve(strict=True)
+    backups_relative = (Path(board.relative_path).parent / _BACKUPS_DIRNAME).as_posix()
+    _ensure_backups_dir(root, backups_relative)
 
     stamp = datetime.fromtimestamp(now(), tz=UTC).strftime("%Y%m%dT%H%M%SZ")
     digest = board.revision.removeprefix("sha256:")[:16]
-    name = f"{board.absolute_path.name}.{stamp}.{digest}.pre-apply.kicad_pcb"
-    relative = (Path(board.relative_path).parent / name).as_posix()
-    root = settings.workspace.resolve(strict=True)
+    prefix = f"{board.absolute_path.name}."
+    name = f"{prefix}{stamp}.{digest}.pre-apply.kicad_pcb"
+    relative = f"{backups_relative}/{name}"
     try:
         created = create_workspace_file(
             settings.workspace,
@@ -422,10 +490,9 @@ def _write_backup(settings: Settings, board: _Board, now: Callable[[], float]) -
             max_bytes=settings.max_board_bytes,
         )
     except WorkspaceViolationError:
-        # A retry within the same second finds its own copy already there. The name carries
-        # the source digest, so an existing file under it is the same board state - reuse it
-        # after confirming that, rather than failing an apply over a backup that already
-        # exists or silently overwriting something that does not match.
+        # A retry within the same second finds its own copy already there. The name carries the
+        # source digest, so an existing file under it is the same board state - reuse it after
+        # confirming that, rather than failing an apply over a backup that is already correct.
         existing = read_workspace_file(
             settings.workspace,
             relative,
@@ -434,18 +501,59 @@ def _write_backup(settings: Settings, board: _Board, now: Callable[[], float]) -
         )
         if existing.content != board.content:
             raise
-        return existing.path.relative_to(root).as_posix()
+        created = existing.path
+    try:
+        created.chmod(board.mode)
+    except OSError:
+        pass
+    _prune_backups(root / backups_relative, prefix)
     return created.relative_to(root).as_posix()
 
 
-def _verify_after_publish(settings: Settings, requested: str, expected: str) -> bool:
+def _ensure_backups_dir(root: Path, backups_relative: str) -> None:
+    directory = root / backups_relative
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    # A symlink planted at the backups name would redirect copies outside the workspace;
+    # create_workspace_file's O_NOFOLLOW walk also rejects it, but refusing here is clearer.
+    if directory.is_symlink() or not directory.resolve(strict=True).is_relative_to(root):
+        raise WorkspaceViolationError("backups directory is not a real directory in the workspace")
+
+
+def _prune_backups(directory: Path, prefix: str) -> None:
     try:
-        return _read_board(settings, requested).revision == expected
+        copies = sorted(
+            item
+            for item in directory.iterdir()
+            if item.name.startswith(prefix)
+            and item.name.endswith(".pre-apply.kicad_pcb")
+            and not item.is_symlink()
+            and item.is_file()
+        )
+    except OSError:
+        return
+    # Names sort by their UTC timestamp, so the oldest are first. Keep the newest N.
+    for stale in copies[:-MAX_BACKUPS_PER_BOARD] if len(copies) > MAX_BACKUPS_PER_BOARD else []:
+        try:
+            stale.unlink()
+        except OSError:
+            continue
+
+
+def _guarded_restore(settings: Settings, board: _Board, published_revision: str) -> bool:
+    """Roll a board back to its pre-apply bytes, but only if it still holds *our* write.
+
+    The likeliest cause of a post-publish verification failure is a concurrent writer, so an
+    unconditional restore would be the data loss it is meant to prevent. The restore therefore
+    only runs when the on-disk digest still equals the bytes this apply published; if anything
+    else is there, a third party has written and the file is left alone.
+    """
+
+    try:
+        current = _read_board(settings, board.relative_path)
     except (WorkspaceViolationError, OSError):
         return False
-
-
-def _restore(settings: Settings, board: _Board) -> bool:
+    if current.revision != published_revision:
+        return False
     try:
         replace_workspace_file(
             settings.workspace,
@@ -453,10 +561,17 @@ def _restore(settings: Settings, board: _Board) -> bool:
             board.content,
             allowed_suffixes={".kicad_pcb"},
             max_bytes=settings.max_board_bytes,
+            expect_digest=published_revision,
         )
-    except (WorkspaceViolationError, OSError):
+    except (WorkspaceViolationError, WorkspacePostRenameError, OSError):
         return False
     return True
 
 
-__all__ = ["ApplyServiceError", "apply_candidate", "lockfile_for", "unsafe_filesystem"]
+__all__ = [
+    "MAX_BACKUPS_PER_BOARD",
+    "ApplyServiceError",
+    "apply_candidate",
+    "lockfile_for",
+    "unsafe_filesystem",
+]

@@ -113,28 +113,46 @@ is the design, and each one refuses rather than repairing.
 - **Operator opt-in.** `COPPER_MCP_ALLOW_APPLY` must be exactly `"0"` or `"1"`, default off.
   Exact membership rather than truthiness: `bool("false")` is `True`, and a flag that enables
   board mutation must never be switched on by an ambiguous spelling.
-- **A single-use token, enforced server-side.** Issued only by `preview_route`, only for a
-  routed candidate, and bound to `(candidate_id, base_revision, board_revision, relative_path)`
-  under an HMAC whose key exists only in this process. Verified with `compare_digest`; the
-  expiry sits inside the MAC so editing it fails. Single use comes from the binding itself - a
-  successful apply changes the board revision, so the token can never match again - with a
-  bounded consumed-nonce set on top to turn a replay into a precise `token_already_used`.
-  **Restarting the server invalidates outstanding tokens**, which is the right default for a
-  short-lived confirmation.
-- **A lockfile is a hard refusal.** A `~name.lck` sibling means a GUI may hold the board open,
-  and pcbnew has no external-change watcher, so a later save would silently overwrite the
-  applied board. The file is named in the error and **never removed** - stale locks are a known
-  KiCad bug, but deleting one is the operator's judgement, not ours.
-- **Compare and swap, twice.** The whole-file digest and the Board IR snapshot digest are
-  checked before the splice, and the file digest again immediately before publishing. A
-  mismatch is refused and **never auto-refreshed**.
-- **A pre-apply copy is written first**, timestamped and content-addressed beside the board,
-  with its path returned. If it cannot be written the apply stops: no copy means no way back.
-  KiCad's own `-bak` files are never read, written, or removed.
-- **Publication is atomic and then verified.** `replace_workspace_file` writes an `O_EXCL`
-  temporary in the target's own directory, `fsync`s it, renames over the name through a held
-  directory descriptor, and `fsync`s the directory. If post-publication verification fails, the
-  pre-apply copy is restored and `apply_verification_failed` is reported.
+- **A single-use token, enforced server-side.** Issued by `preview_route` only for a routed
+  candidate, only when apply is enabled, and only for a board the append-only engine could
+  actually apply to - a derived-identity board gets no token, because minting one for a board
+  the apply path would reject was how an uncaught crash reached the destructive tool. Bound to
+  `(candidate_id, base_revision, board_revision, relative_path)` under an HMAC whose key exists
+  only in this process and verified with `compare_digest`; the expiry sits inside the MAC so
+  editing it fails. Single use comes from the binding itself - a successful apply changes the
+  board revision, so the token can never match again - with a consumed-nonce set on top to turn
+  a replay into a precise `token_already_used`. That set is swept by **expiry, not by a count
+  cap**: evicting a still-valid nonce would re-enable a replay, and the documented undo restores
+  the exact revision that nonce was bound to. **Restarting the server invalidates outstanding
+  tokens**, which is the right default for a short-lived confirmation. The token is verified
+  *before* the board is read or parsed, so an unauthorized caller cannot make the tool do
+  expensive work, and the manifest geometry is bounded before any of it is materialised.
+- **A lockfile is a hard refusal, checked twice.** A `~name.lck` sibling means a GUI may hold
+  the board open, and pcbnew has no external-change watcher, so a later save would silently
+  overwrite the applied board. It is checked up front and **again under the exclusive lock,
+  immediately before the rename**, because a GUI opened in between would otherwise land on top
+  of the applied board. The file is named in the error and **never removed** - stale locks are a
+  known KiCad bug, but deleting one is the operator's judgement, not ours.
+- **Compare and swap under an exclusive lock.** The board is opened, an exclusive `flock` is
+  taken on that descriptor, and the lock is **held across the compare-and-swap and the rename**.
+  Under the lock the board's current bytes are re-read and refused unless they still hash to the
+  digest the caller previewed. Two applies from the same base therefore serialise: the loser
+  blocks until the winner's rename completes, then sees the winner's bytes under the swap and
+  refuses instead of clobbering them. A mismatch is **never auto-refreshed**.
+- **A pre-apply copy is written first**, timestamped and content-addressed, into a
+  `.copper-mcp-backups/` subdirectory - not beside the board, where a `pre-apply.kicad_pcb`
+  would itself be a valid apply target and cascade. Its path is returned; if it cannot be
+  written the apply stops, because no copy means no way back. Copies are kept to a bounded count
+  per board and carry the board's own permission bits. KiCad's `-bak` files are never touched.
+- **Publication is atomic, and failures are reported by whether the rename happened.**
+  `replace_workspace_file` writes an `O_EXCL` temporary in the target's own directory, copies
+  the target's mode onto it, `fsync`s it, renames over the name through a held directory
+  descriptor, and `fsync`s the directory. A failure *before* the rename leaves the board
+  untouched and is a clean refusal. A failure *after* it means the board is already changed:
+  that is reported as `applied_but_unverified` with the real new revision - never as "nothing
+  changed" - and a **guarded** rollback runs that restores the pre-apply bytes only if the file
+  still holds exactly what this apply wrote. If a concurrent writer has landed since, the file
+  is left alone rather than clobbered.
 - **Unsafe filesystems are refused where detectable.** `statvfs` names the filesystem on macOS
   and the BSDs but not on Linux, so a negative result means *not detected*, never *known safe* -
   which is why detection refuses rather than reassures.

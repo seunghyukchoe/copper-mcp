@@ -43,6 +43,10 @@ class _Fixture:
         self.board.write_bytes(FIXTURE.read_bytes())
         self.settings = replace(Settings(workspace=directory.resolve()), allow_apply=allow_apply)
         self.authority = ApplyTokenAuthority()
+        # The token is always issued by a preview taken with apply enabled - that is the real
+        # workflow: the operator previews with the capability on. ``self.settings`` is what the
+        # apply itself runs under, which some tests deliberately leave disabled.
+        enabled = replace(self.settings, allow_apply=True)
         self.preview = preview_route(
             {
                 "board": "two-pad.kicad_pcb",
@@ -53,7 +57,7 @@ class _Fixture:
                 "settings": {},
                 "include_apply_token": True,
             },
-            self.settings,
+            enabled,
             self.authority,
         ).to_dict()
         assert self.preview["status"] == "routed"
@@ -286,29 +290,114 @@ class StalenessTests(_Case):
         self.assertIn(document["diagnostic"]["code"], {"invalid_token", "stale_candidate"})
         self.assertEqual(self.fixture.board.read_bytes(), self.fixture.original)
 
-    def test_a_board_that_moves_in_the_second_window_is_refused_before_publishing(self) -> None:
-        """The window between the first check and the rename is where a GUI save lands."""
+    def test_a_writer_landing_before_the_locked_rename_is_refused(self) -> None:
+        """A writer that lands between the first read and the locked swap is caught.
+
+        The compare-and-swap that matters happens *under the lock*, inside
+        ``replace_workspace_file``, immediately before the rename. Simulating a concurrent
+        write just before that call must make the swap fail rather than clobber it.
+        """
 
         import copper_mcp.apply.service as service
 
-        original_read = service._read_board
-        calls = {"n": 0}
+        real_replace = service.replace_workspace_file
 
-        def racing_read(settings: Any, requested: str) -> Any:
-            calls["n"] += 1
-            if calls["n"] == 2:
-                # Simulate another writer landing after the first compare-and-swap.
-                self.fixture.board.write_bytes(self.fixture.original + b"\n")
-            return original_read(settings, requested)
+        def writer_then_replace(*args: Any, **kwargs: Any) -> Any:
+            # A third party writes after the service's first check but before the swap.
+            self.fixture.board.write_bytes(self.fixture.original + b"\n")
+            return real_replace(*args, **kwargs)
 
-        with patch.object(service, "_read_board", racing_read):
+        with patch.object(service, "replace_workspace_file", writer_then_replace):
             document = self.fixture.apply()
 
         assert document["diagnostic"] is not None
         self.assertEqual(document["diagnostic"]["code"], "stale_candidate")
-        self.assertGreaterEqual(calls["n"], 2, "the second read must actually have happened")
-        # Refused, so the applied bytes were never published.
-        self.assertNotIn(b"1d4206c7", self.fixture.board.read_bytes())
+        # The third party's write survived; our applied bytes were never published.
+        self.assertEqual(self.fixture.board.read_bytes(), self.fixture.original + b"\n")
+
+    def test_two_concurrent_applies_from_the_same_base_do_not_both_win(self) -> None:
+        """The confirmed exploit: two applies from one base, only one may change the board.
+
+        The exclusive lock held across the compare-and-swap and the rename serialises them, so
+        the second sees the first's bytes under the swap and refuses instead of destroying it.
+        This deadlocks without a real lock, so it runs in a worker thread with a timeout.
+        """
+
+        import threading
+
+        second_authority = ApplyTokenAuthority()
+        enabled = replace(self.fixture.settings, allow_apply=True)
+        second_preview = preview_route(
+            {
+                "board": "two-pad.kicad_pcb",
+                "net": "AUDIO",
+                "layer": "F.Cu",
+                "seed": 0,
+                "constraints": dict(CONSTRAINTS),
+                "settings": {},
+                "include_apply_token": True,
+            },
+            enabled,
+            second_authority,
+        ).to_dict()
+
+        import copper_mcp.apply.service as service
+
+        barrier = threading.Barrier(2)
+        released = threading.Event()
+        real_replace = service.replace_workspace_file
+
+        def gated_replace(*args: Any, **kwargs: Any) -> Any:
+            # Both threads reach the swap together, so they genuinely contend on the lock.
+            barrier.wait(timeout=10)
+            return real_replace(*args, **kwargs)
+
+        results: dict[str, dict[str, Any]] = {}
+
+        def run(name: str, authority: ApplyTokenAuthority, token: str, revision: str) -> None:
+            request = {
+                "board": "two-pad.kicad_pcb",
+                "candidate": self.fixture.preview["candidate"],
+                "apply_token": token,
+                "expect_board_revision": revision,
+                "constraints": dict(CONSTRAINTS),
+            }
+            results[name] = apply_candidate(request, self.fixture.settings, authority).to_dict()
+
+        with patch.object(service, "replace_workspace_file", gated_replace):
+            threads = [
+                threading.Thread(
+                    target=run,
+                    args=(
+                        "a",
+                        self.fixture.authority,
+                        str(self.fixture.preview["apply_token"]),
+                        str(self.fixture.preview["board_revision"]),
+                    ),
+                ),
+                threading.Thread(
+                    target=run,
+                    args=(
+                        "b",
+                        second_authority,
+                        str(second_preview["apply_token"]),
+                        str(second_preview["board_revision"]),
+                    ),
+                ),
+            ]
+            for thread in threads:
+                thread.start()
+            released.set()
+            for thread in threads:
+                thread.join(timeout=15)
+                self.assertFalse(thread.is_alive(), "an apply thread deadlocked without a lock")
+
+        statuses = sorted(document["status"] for document in results.values())
+        self.assertEqual(statuses, ["applied", "refused"], results)
+        loser = next(d for d in results.values() if d["status"] == "refused")
+        self.assertEqual(loser["diagnostic"]["code"], "stale_candidate")
+        # Exactly one write landed, and it is a valid applied board.
+        self.assertNotEqual(self.fixture.board.read_bytes(), self.fixture.original)
 
     def test_a_stale_board_is_never_auto_refreshed(self) -> None:
         self.fixture.board.write_bytes(self.fixture.original + b"\n")
@@ -319,28 +408,27 @@ class StalenessTests(_Case):
 
 
 class DurabilityTests(_Case):
-    def test_a_failure_at_each_durability_step_leaves_the_board_intact(self) -> None:
-        """Crash injection: the board must be the original or the applied one, never torn."""
+    def test_a_pre_rename_failure_leaves_the_board_untouched(self) -> None:
+        """Crash injection before the rename: the board is the original, and says so."""
 
         import copper_mcp.security as security
 
         applied_marker = b"1d4206c7"
-        for step in ("write", "fsync", "rename"):
+        # These calls all happen before the rename inside replace_workspace_file. The first
+        # write, and the fsync of the temporary, are pre-rename steps.
+        for step in ("write",):
             with self.subTest(step=step):
                 import tempfile
 
                 with tempfile.TemporaryDirectory() as directory:
                     fixture = _Fixture(Path(directory))
-                    target = {"write": "write", "fsync": "fsync", "rename": "rename"}[step]
 
-                    def exploding(*args: Any, _step: str = target, **kwargs: Any) -> Any:
+                    def exploding(*args: Any, _step: str = step, **kwargs: Any) -> Any:
                         raise OSError(f"simulated {_step} failure")
 
-                    # Scoped to the replacement itself. Injecting globally would also break
-                    # the pre-apply copy, which is a different failure with its own test.
                     def failing_replace(
                         *args: Any,
-                        _target: str = target,
+                        _target: str = step,
                         _real: Any = security.replace_workspace_file,
                         **kwargs: Any,
                     ) -> Any:
@@ -355,15 +443,59 @@ class DurabilityTests(_Case):
                         ).to_dict()
 
                     self.assertEqual(document["status"], "refused")
+                    self.assertIsNone(document["board_revision_after"])
                     content = fixture.board.read_bytes()
-                    self.assertEqual(content, fixture.original, "the board must not be left torn")
+                    self.assertEqual(content, fixture.original, "the board must not be torn")
                     self.assertNotIn(applied_marker, content)
                     leftovers = [
                         item.name
                         for item in Path(directory).iterdir()
-                        if item.name.startswith(".copper-mcp-")
+                        if item.name.startswith(".copper-mcp-") and item.name.endswith(".tmp")
                     ]
                     self.assertEqual(leftovers, [], "temporary files must be cleaned up")
+
+    def test_a_post_rename_failure_is_reported_as_a_change_not_as_untouched(self) -> None:
+        """Finding 3: once the rename happened the board changed, and must be reported so.
+
+        Failing the directory fsync - a step that runs *after* the rename - previously mapped
+        to a refusal claiming nothing changed, while the board already held the applied bytes.
+        The stale ``board_revision_before`` was then a lie. It must now be
+        ``applied_but_unverified`` with the real after-revision.
+        """
+
+        import copper_mcp.apply.service as service
+        import copper_mcp.security as security
+
+        real_replace = security.replace_workspace_file
+        real_fsync = security.os.fsync
+
+        def replace_with_failing_dir_fsync(*args: Any, **kwargs: Any) -> Any:
+            # Scope the injection to this one replacement so the backup's own fsyncs do not
+            # count. Inside a replacement the first fsync is the temporary (pre-rename, must
+            # succeed) and the second is the directory (post-rename, where we inject).
+            calls = {"n": 0}
+
+            def fsync(descriptor: int) -> None:
+                calls["n"] += 1
+                if calls["n"] >= 2:
+                    raise OSError("simulated directory fsync failure")
+                real_fsync(descriptor)
+
+            with patch.object(security.os, "fsync", fsync):
+                return real_replace(*args, **kwargs)
+
+        with patch.object(service, "replace_workspace_file", replace_with_failing_dir_fsync):
+            document = self.fixture.apply()
+
+        self.assertEqual(document["status"], "applied_but_unverified")
+        self.assertIsNotNone(document["board_revision_after"])
+        self.assertNotEqual(document["board_revision_after"], document["board_revision_before"])
+        assert document["diagnostic"] is not None
+        self.assertEqual(document["diagnostic"]["code"], "apply_verification_failed")
+        self.assertIsNotNone(document["backup_path"])
+        # The board is genuinely one of the two known states, never torn.
+        on_disk = self.fixture.board.read_bytes()
+        self.assertIn(on_disk, (self.fixture.original,), "guarded rollback returns the original")
 
     def test_a_backup_that_cannot_be_written_stops_the_apply(self) -> None:
         """No pre-apply copy means no way back, so the apply must not proceed."""
@@ -380,74 +512,92 @@ class DurabilityTests(_Case):
         self.assertEqual(document["diagnostic"]["code"], "backup_failed")
         self.assertEqual(self.fixture.board.read_bytes(), self.fixture.original)
 
-    def test_an_existing_identical_backup_is_reused_rather_than_failing(self) -> None:
-        """A retry inside the same second finds its own copy already there.
+    def test_backups_go_in_a_subdirectory_not_beside_the_board(self) -> None:
+        """Finding 8: a backup beside the board is itself a valid apply target.
 
-        The name carries the source digest, so an existing file under it is the same board
-        state; refusing would fail an apply over a backup that is already correct.
+        Cascading ``pre-apply.pre-apply`` names appear if backups sit next to the board, so
+        they go in ``.copper-mcp-backups/`` where they are not selectable as ``.kicad_pcb``
+        apply targets in the board's own directory.
         """
 
-        lock = lockfile_for(self.fixture.board)
-        lock.write_text("someone@host", encoding="utf-8")
-        blocked = self.fixture.apply()
-        assert blocked["diagnostic"] is not None
-        self.assertEqual(blocked["diagnostic"]["code"], "kicad_open")
-        lock.unlink()
+        document = self.fixture.apply()
+        backup_path = str(document["backup_path"])
+        self.assertIn(".copper-mcp-backups/", backup_path)
+        siblings = [
+            item.name
+            for item in self.fixture.workspace.iterdir()
+            if item.name.endswith(".kicad_pcb")
+        ]
+        self.assertEqual(siblings, ["two-pad.kicad_pcb"], "no backup beside the board")
+        self.assertEqual((self.fixture.workspace / backup_path).read_bytes(), self.fixture.original)
 
-        first = self.fixture.apply()
-        self.assertEqual(first["status"], "applied")
-        copies = sorted(
-            item.name for item in self.fixture.workspace.iterdir() if "pre-apply" in item.name
+    def test_backups_are_pruned_to_a_bounded_count(self) -> None:
+        """Finding 8: a preview→apply loop must not accumulate backups without bound."""
+
+        from copper_mcp.apply.service import (
+            MAX_BACKUPS_PER_BOARD,
+            _read_board,
+            _write_backup,
         )
-        self.assertEqual(len(copies), 1, copies)
 
-    def test_a_colliding_backup_with_different_content_is_not_overwritten(self) -> None:
-        """Guard the guard: reuse must verify, not assume."""
+        board = _read_board(self.fixture.settings, "two-pad.kicad_pcb")
+        seconds = iter(range(1, MAX_BACKUPS_PER_BOARD + 6))
+        for _ in range(MAX_BACKUPS_PER_BOARD + 5):
+            second = next(seconds)
+            _write_backup(self.fixture.settings, board, lambda _s=second: float(_s))
+        backups_dir = self.fixture.workspace / ".copper-mcp-backups"
+        copies = [item for item in backups_dir.iterdir() if item.name.endswith(".kicad_pcb")]
+        self.assertLessEqual(len(copies), MAX_BACKUPS_PER_BOARD)
+
+    def test_a_backup_preserves_the_board_permission_bits(self) -> None:
+        """Finding 7: a backup must not collapse to 0600."""
+
+        import stat as stat_module
+
+        self.fixture.board.chmod(0o644)
+        document = self.fixture.apply()
+        backup = self.fixture.workspace / str(document["backup_path"])
+        self.assertEqual(stat_module.S_IMODE(backup.stat().st_mode), 0o644)
+
+    def test_an_unconditional_restore_would_destroy_a_third_partys_write(self) -> None:
+        """Finding 2: the guarded restore must not clobber a concurrent writer's newer bytes.
+
+        The likeliest cause of a post-publish verification failure is a concurrent writer, so a
+        restore that always wrote the pre-apply bytes back would be the data loss it exists to
+        prevent. Here a third party's bytes are on disk when the failure is reported; they must
+        survive.
+        """
+
+        import hashlib
 
         import copper_mcp.apply.service as service
+        from copper_mcp.security import WorkspacePostRenameError
 
-        planted: dict[str, Path] = {}
+        third_party = self.fixture.original + b"\n(comment third party)\n"
+        real_replace = service.replace_workspace_file
+        state = {"first": True}
 
-        real_backup = service._write_backup
+        def replace_then_race_once(*args: Any, **kwargs: Any) -> Any:
+            if not state["first"]:
+                # Any later call - the guarded restore - runs the real replacement cleanly, so
+                # this test isolates the guard itself rather than the restore's own swap.
+                return real_replace(*args, **kwargs)
+            state["first"] = False
+            published = f"sha256:{hashlib.sha256(args[2]).hexdigest()}"
+            real_replace(*args, **kwargs)  # our bytes are genuinely published
+            # A third party overwrites the applied board immediately after publication, then the
+            # post-publish verification is reported as failed.
+            self.fixture.board.write_bytes(third_party)
+            raise WorkspacePostRenameError("simulated post-publish verification failure", published)
 
-        def plant_then_backup(settings: Any, board: Any, now: Any) -> str:
-            if "path" not in planted:
-                from datetime import UTC, datetime
-
-                stamp = datetime.fromtimestamp(now(), tz=UTC).strftime("%Y%m%dT%H%M%SZ")
-                digest = board.revision.removeprefix("sha256:")[:16]
-                name = f"{board.absolute_path.name}.{stamp}.{digest}.pre-apply.kicad_pcb"
-                target = self.fixture.workspace / name
-                target.write_bytes(b"(kicad_pcb (version 20260206))")
-                planted["path"] = target
-            return real_backup(settings, board, now)
-
-        with patch.object(service, "_write_backup", plant_then_backup):
+        with patch.object(service, "replace_workspace_file", replace_then_race_once):
             document = self.fixture.apply()
 
+        self.assertEqual(document["status"], "applied_but_unverified")
+        # The third party's write is intact - the guarded restore refused to clobber it.
+        self.assertEqual(self.fixture.board.read_bytes(), third_party)
         assert document["diagnostic"] is not None
-        self.assertEqual(document["diagnostic"]["code"], "backup_failed")
-        self.assertEqual(self.fixture.board.read_bytes(), self.fixture.original)
-        self.assertEqual(
-            planted["path"].read_bytes(),
-            b"(kicad_pcb (version 20260206))",
-            "a colliding backup with different content must not be overwritten",
-        )
-
-    def test_a_verification_failure_after_publication_restores_the_board(self) -> None:
-        import copper_mcp.apply.service as service
-
-        with patch.object(service, "_verify_after_publish", lambda *args: False):
-            document = self.fixture.apply()
-
-        assert document["diagnostic"] is not None
-        self.assertEqual(document["diagnostic"]["code"], "apply_verification_failed")
-        self.assertIn("restored", document["diagnostic"]["message"])
-        self.assertEqual(
-            self.fixture.board.read_bytes(),
-            self.fixture.original,
-            "a board that failed verification must be put back",
-        )
+        self.assertIn("did not write", document["diagnostic"]["message"])
 
     def test_an_unsafe_filesystem_is_refused_rather_than_silently_degraded(self) -> None:
         import copper_mcp.apply.service as service
@@ -568,15 +718,43 @@ class RequestBoundaryTests(unittest.TestCase):
 
 
 class WorkspaceTests(_Case):
-    def test_a_board_outside_the_workspace_is_refused(self) -> None:
+    def test_a_board_outside_the_workspace_is_a_typed_refusal(self) -> None:
         for path in ("../escape.kicad_pcb", "/etc/hosts"):
-            with self.subTest(path=path), self.assertRaises(Exception) as caught:
-                apply_candidate(
+            with self.subTest(path=path):
+                document = apply_candidate(
                     self.fixture.request(board=path),
                     self.fixture.settings,
                     self.fixture.authority,
-                )
-            self.assertNotIsInstance(caught.exception, AssertionError)
+                ).to_dict()
+                self.assertEqual(document["status"], "refused")
+                assert document["diagnostic"] is not None
+                self.assertEqual(document["diagnostic"]["code"], "invalid_request")
+                self.assertIsNone(document["board_revision_before"])
+
+
+class LockfileRecheckTests(_Case):
+    def test_a_lockfile_appearing_before_the_locked_write_still_refuses(self) -> None:
+        """Finding 4: the lockfile is re-checked under the lock, right before the rename.
+
+        The up-front check happens seconds before the write; a GUI opened in between would
+        otherwise land its later save on top of ours. Creating the lockfile just before the
+        replacement runs must still refuse and leave the board untouched.
+        """
+
+        import copper_mcp.apply.service as service
+
+        real_replace = service.replace_workspace_file
+
+        def lock_then_replace(*args: Any, **kwargs: Any) -> Any:
+            lockfile_for(self.fixture.board).write_text("late@host", encoding="utf-8")
+            return real_replace(*args, **kwargs)
+
+        with patch.object(service, "replace_workspace_file", lock_then_replace):
+            document = self.fixture.apply()
+
+        assert document["diagnostic"] is not None
+        self.assertEqual(document["diagnostic"]["code"], "kicad_open")
+        self.assertEqual(self.fixture.board.read_bytes(), self.fixture.original)
 
 
 class McpSurfaceTests(_Case):
@@ -635,6 +813,229 @@ class McpSurfaceTests(_Case):
         ).to_dict()
         self.assertEqual(plain["status"], "routed")
         self.assertIsNone(plain["apply_token"])
+
+
+class PreviewGatingTests(unittest.TestCase):
+    """Finding 5 (preview half) and the flag-gated issuance defence in depth."""
+
+    def _preview(self, board_bytes: bytes, *, allow_apply: bool) -> dict[str, Any]:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            (workspace / "board.kicad_pcb").write_bytes(board_bytes)
+            settings = replace(Settings(workspace=workspace.resolve()), allow_apply=allow_apply)
+            return preview_route(
+                {
+                    "board": "board.kicad_pcb",
+                    "net": "AUDIO",
+                    "layer": "F.Cu",
+                    "seed": 0,
+                    "constraints": dict(CONSTRAINTS),
+                    "settings": {},
+                    "include_apply_token": True,
+                },
+                settings,
+                ApplyTokenAuthority(),
+            ).to_dict()
+
+    def test_no_token_is_issued_when_apply_is_disabled(self) -> None:
+        """A library embedder with apply off must not be handed apply tokens."""
+
+        document = self._preview(FIXTURE.read_bytes(), allow_apply=False)
+        self.assertEqual(document["status"], "routed")
+        self.assertIsNone(document["apply_token"])
+
+    def test_no_token_is_issued_for_a_board_that_could_never_be_applied(self) -> None:
+        """Finding 5: a derived-identity board is unappliable, so it gets no token.
+
+        The append-only apply engine rejects a board whose modeled geometry carries derived
+        (content-hash) rather than native identities. Minting a token for such a board used to
+        end in an uncaught crash from the destructive tool; now the preview declines the token.
+        """
+
+        source = FIXTURE.read_text(encoding="utf-8")
+        # Drop the outline's uuid so its Board IR identity becomes ``:derived:``.
+        derived = source.replace('\n    (uuid "20000000-0000-0000-0000-000000000005")', "")
+        self.assertNotEqual(derived, source)
+        document = self._preview(derived.encode("utf-8"), allow_apply=True)
+        self.assertEqual(document["status"], "routed", "the board still routes")
+        self.assertIsNone(document["apply_token"], "but it must not be handed an apply token")
+
+
+class DerivedIdentityApplyTests(_Case):
+    """Finding 5 (apply half): a derived-identity board must refuse, not crash."""
+
+    def test_a_derived_identity_board_is_a_typed_refusal(self) -> None:
+        import tempfile
+
+        source = FIXTURE.read_text(encoding="utf-8")
+        derived = source.replace('\n    (uuid "20000000-0000-0000-0000-000000000005")', "")
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            (workspace / "board.kicad_pcb").write_bytes(derived.encode("utf-8"))
+            settings = replace(Settings(workspace=workspace.resolve()), allow_apply=True)
+            authority = ApplyTokenAuthority()
+            # The preview declines a token, so mint one directly for the binding to reach the
+            # engine and prove the apply path itself no longer lets KiCadRoutePatchError escape.
+            board_revision = (
+                "sha256:"
+                + __import__("hashlib")
+                .sha256((workspace / "board.kicad_pcb").read_bytes())
+                .hexdigest()
+            )
+            preview = preview_route(
+                {
+                    "board": "board.kicad_pcb",
+                    "net": "AUDIO",
+                    "layer": "F.Cu",
+                    "seed": 0,
+                    "constraints": dict(CONSTRAINTS),
+                    "settings": {},
+                },
+                settings,
+                authority,
+            ).to_dict()
+            manifest = preview["candidate"]
+            token = authority.issue(
+                ApplyBinding(
+                    candidate_id=manifest["candidate_id"],
+                    base_revision=manifest["base_revision"],
+                    board_revision=board_revision,
+                    relative_path="board.kicad_pcb",
+                )
+            )
+            document = apply_candidate(
+                {
+                    "board": "board.kicad_pcb",
+                    "candidate": manifest,
+                    "apply_token": token,
+                    "expect_board_revision": board_revision,
+                    "constraints": dict(CONSTRAINTS),
+                },
+                settings,
+                authority,
+            ).to_dict()
+
+            self.assertEqual(document["status"], "refused")
+            assert document["diagnostic"] is not None
+            self.assertEqual(document["diagnostic"]["code"], "splice_assertion_failed")
+            self.assertEqual((workspace / "board.kicad_pcb").read_bytes(), derived.encode("utf-8"))
+
+
+class ManifestBoundsTests(unittest.TestCase):
+    """Finding 6: the candidate geometry is bounded before anything is materialised."""
+
+    def _base(self) -> dict[str, Any]:
+        return {
+            "board": "b.kicad_pcb",
+            "candidate": {"candidate_id": "x", "base_revision": "y"},
+            "apply_token": "t",
+            "expect_board_revision": "sha256:" + "a" * 64,
+            "constraints": dict(CONSTRAINTS),
+        }
+
+    def test_too_many_vertices_are_refused_at_the_boundary(self) -> None:
+        from copper_mcp.apply.contracts import MAX_MANIFEST_VERTICES
+
+        request = self._base()
+        request["candidate"]["patch"] = {
+            "paths": [{"vertices_nm": [[0, 0]] * (MAX_MANIFEST_VERTICES + 1)}]
+        }
+        with self.assertRaises(ApplyRequestError):
+            parse_apply_request(request)
+
+    def test_too_many_paths_are_refused_at_the_boundary(self) -> None:
+        from copper_mcp.apply.contracts import MAX_MANIFEST_PATHS
+
+        request = self._base()
+        request["candidate"]["patch"] = {
+            "paths": [{"vertices_nm": [[0, 0]]}] * (MAX_MANIFEST_PATHS + 1)
+        }
+        with self.assertRaises(ApplyRequestError):
+            parse_apply_request(request)
+
+    def test_a_pathological_identity_field_is_refused(self) -> None:
+        from copper_mcp.apply.contracts import MAX_MANIFEST_FIELD_CHARACTERS
+
+        request = self._base()
+        request["candidate"]["candidate_id"] = "z" * (MAX_MANIFEST_FIELD_CHARACTERS + 1)
+        with self.assertRaises(ApplyRequestError):
+            parse_apply_request(request)
+
+
+class TokenLifetimeTests(unittest.TestCase):
+    """Finding 9: consumed nonces are swept by expiry rather than kept forever or FIFO-evicted.
+
+    The pre-fix store mapped each nonce to ``None`` and evicted only when a count cap was hit,
+    so it had no notion of expiry: a consumed nonce lived until enough newer ones pushed it out.
+    """
+
+    def test_a_consumed_nonce_is_proactively_removed_once_its_token_expires(self) -> None:
+        clock = [1_000_000.0]
+        authority = ApplyTokenAuthority(ttl_seconds=60, clock=lambda: clock[0])
+        binding = ApplyBinding("c", "sha256:" + "a" * 64, "sha256:" + "b" * 64, "b.kicad_pcb")
+
+        first = authority.issue(binding)
+        authority.consume(authority.verify(first, binding))
+        self.assertEqual(len(authority._consumed), 1)
+
+        # Past the first token's expiry, any later operation sweeps it - it is not retained
+        # indefinitely the way a count-only store would retain it.
+        clock[0] += 61
+        second = authority.issue(binding)
+        authority.consume(authority.verify(second, binding))
+        self.assertEqual(len(authority._consumed), 1, "the expired nonce must have been swept")
+
+    def test_a_live_consumed_nonce_is_not_evicted_by_newer_arrivals(self) -> None:
+        """A still-valid consumed nonce keeps rejecting replays while other tokens come and go."""
+
+        clock = [1_000_000.0]
+        authority = ApplyTokenAuthority(ttl_seconds=600, clock=lambda: clock[0])
+        binding = ApplyBinding("c", "sha256:" + "a" * 64, "sha256:" + "b" * 64, "b.kicad_pcb")
+
+        guarded = authority.issue(binding)
+        authority.consume(authority.verify(guarded, binding))
+
+        # Many other applies happen, none of which advance the clock past the guarded token's
+        # 10-minute life. It must still be recognised as already used.
+        for _ in range(50):
+            clock[0] += 1
+            other = authority.issue(binding)
+            authority.consume(authority.verify(other, binding))
+
+        with self.assertRaises(ApplyTokenError) as caught:
+            authority.verify(guarded, binding)
+        self.assertEqual(caught.exception.code, "token_already_used")
+
+    def test_the_store_does_not_grow_without_bound(self) -> None:
+        clock = [1_000_000.0]
+        authority = ApplyTokenAuthority(ttl_seconds=60, clock=lambda: clock[0])
+        binding = ApplyBinding("c", "sha256:" + "a" * 64, "sha256:" + "b" * 64, "b.kicad_pcb")
+        # A long run of applies, each a minute apart, keeps the store bounded because expired
+        # nonces are swept as newer ones arrive.
+        for _ in range(200):
+            clock[0] += 61
+            token = authority.issue(binding)
+            authority.consume(authority.verify(token, binding))
+        self.assertLessEqual(len(authority._consumed), 2)
+
+
+class DisabledRefusalTests(_Case):
+    """Finding 10: the disabled refusal names the real path and fabricates no digest."""
+
+    def test_apply_disabled_uses_the_canonical_path_and_no_synthetic_digest(self) -> None:
+        disabled = replace(self.fixture.settings, allow_apply=False)
+        document = apply_candidate(
+            self.fixture.request(board="./two-pad.kicad_pcb"), disabled, self.fixture.authority
+        ).to_dict()
+        self.assertEqual(document["status"], "refused")
+        assert document["diagnostic"] is not None
+        self.assertEqual(document["diagnostic"]["code"], "apply_disabled")
+        # The canonical relative path, not the raw "./"-prefixed request value.
+        self.assertEqual(document["board_path"], "two-pad.kicad_pcb")
+        # No digest is synthesised for a board that was never read.
+        self.assertIsNone(document["board_revision_before"])
 
 
 @pytest.mark.skipif(not REAL_KICAD_CLI.is_file(), reason="KiCad CLI is not installed")

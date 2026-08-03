@@ -602,10 +602,10 @@ class ApplyRequestEchoContract(_ClosedContract):
 class ApplyCandidateToolResponse(_ClosedContract):
     """Strict structured output contract for ``apply_candidate``."""
 
-    status: Literal["applied", "refused"]
+    status: Literal["applied", "refused", "applied_but_unverified"]
     apply_version: Literal["0.1.0"]
     board_path: str
-    board_revision_before: Digest
+    board_revision_before: Digest | None
     board_revision_after: Digest | None
     snapshot_digest_before: Digest | None
     base_revision: Digest | None

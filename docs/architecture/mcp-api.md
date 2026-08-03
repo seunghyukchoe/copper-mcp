@@ -239,18 +239,28 @@ Three independent things must all hold. The operator must have set `COPPER_MCP_A
 so the capability is discoverable rather than mysteriously absent). The caller must present an
 `apply_token` that `preview_route` issued - via `include_apply_token` - for exactly this
 candidate, board revision and path; it is verified against a key held only in this process, so
-tokens do not survive a server restart. And the board must not be open in KiCad: a `~name.lck`
-sibling is a hard refusal naming the file, never removed, because pcbnew has no external-change
-watcher and would silently overwrite the applied board on its next save.
+tokens do not survive a server restart, and it is checked **before** the board is read or parsed
+so an unauthorized caller cannot make the tool do expensive work. A token is issued only when
+apply is enabled and only for a board the append-only engine can actually apply to. And the board
+must not be open in KiCad: a `~name.lck` sibling is a hard refusal naming the file, never removed,
+because pcbnew has no external-change watcher and would silently overwrite the applied board on
+its next save; it is re-checked under the lock immediately before the write.
 
 The board digest and the Board IR snapshot digest are compared before the splice, and the file
-digest again immediately before publication. A mismatch returns `stale_candidate` and is
-**never auto-refreshed**. Before anything is written, a timestamped pre-apply copy is created
-beside the board and its path returned in `backup_path` - **that copy is the undo**, restored by
-copying it back. It is not a KiCad undo step. KiCad's own `-bak` files are never touched.
+digest is re-checked **under an exclusive lock held across the swap and the rename** immediately
+before publication - so two applies from the same base serialise and the loser refuses rather
+than clobbering the winner. A mismatch returns `stale_candidate` and is **never auto-refreshed**.
+Before anything is written, a timestamped pre-apply copy is created in a `.copper-mcp-backups/`
+subdirectory (not beside the board, where it would itself be an apply target), kept to a bounded
+count, and its path returned in `backup_path` - **that copy is the undo**, restored by copying it
+back. It is not a KiCad undo step. KiCad's own `-bak` files are never touched.
 
-Publication is an atomic replace that is verified afterwards; on failure the pre-apply copy is
-restored and `apply_verification_failed` is reported. The `verification` matrix reports byte
+Publication is an atomic replace that preserves the board's permission bits. A failure *before*
+the rename leaves the board untouched and is a clean refusal; a failure *after* it means the
+board is already changed, and that is reported truthfully as **`applied_but_unverified`** with
+the real new revision rather than as "nothing changed". In that case a *guarded* rollback runs -
+it restores the pre-apply bytes only if the file still holds exactly what this apply wrote, so a
+concurrent writer's newer bytes are never clobbered. The `verification` matrix reports byte
 preservation, a fail-closed reparse and Board IR equality as `passed`, and reports
 `kicad_opened_board` and `drc_after_apply` as `not_run` - an applied board carries no DRC
 evidence. Failure codes are `invalid_request`, `apply_disabled`, `invalid_token`,

@@ -400,6 +400,26 @@ def _drc_settings(settings: Settings, deadline: float) -> Settings:
     )
 
 
+def _board_is_appliable(snapshot: Any) -> bool:
+    """Whether the append-only apply engine could ever apply a candidate to this board.
+
+    Applying inserts segments carrying deterministic native identities, and refuses a board
+    whose modeled geometry already uses derived (content-hash) identities. Checking that here
+    means a preview never hands out an apply token the apply path would immediately reject.
+    """
+
+    from copper_mcp.adapters.kicad_route_patch import (
+        KiCadRoutePatchError,
+        _require_native_geometry_identities,
+    )
+
+    try:
+        _require_native_geometry_identities(snapshot)
+    except KiCadRoutePatchError:
+        return False
+    return True
+
+
 def preview_route(
     payload: Any,
     settings: Settings,
@@ -532,9 +552,18 @@ def preview_route(
             _drc_settings(settings, deadline),
         )
     apply_token = None
-    if request.include_apply_token and token_authority is not None:
-        # Issued only for a routed candidate, and bound to the four things that make an apply
-        # unambiguous: which candidate, which Board IR snapshot, which file bytes, which path.
+    if (
+        request.include_apply_token
+        and token_authority is not None
+        and settings.allow_apply
+        and _board_is_appliable(snapshot)
+    ):
+        # Issued only for a routed candidate on an *appliable* board, when apply is enabled.
+        # Gating on the flag stops a library embedder minting tokens with apply off, and gating
+        # on appliability stops a token being minted for a board whose derived geometry
+        # identities the append-only apply engine would reject - which used to surface as an
+        # uncaught crash from the destructive tool. The token is bound to the four things that
+        # make an apply unambiguous: which candidate, which snapshot, which bytes, which path.
         apply_token = token_authority.issue(
             ApplyBinding(
                 candidate_id=result.candidate.candidate_id,

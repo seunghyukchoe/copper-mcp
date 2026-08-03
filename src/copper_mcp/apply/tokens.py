@@ -56,6 +56,14 @@ class ApplyTokenError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class VerifiedToken:
+    """A token that passed verification but has not yet been consumed."""
+
+    identifier: str
+    expires_at: int
+
+
+@dataclass(frozen=True, slots=True)
 class ApplyBinding:
     """What a token authorizes. Every field participates in the MAC."""
 
@@ -98,10 +106,28 @@ class ApplyTokenAuthority:
         self._ttl = ttl_seconds
         self._max_consumed = max_consumed
         self._clock: Callable[[], float] = clock if callable(clock) else time.time
-        self._consumed: OrderedDict[str, None] = OrderedDict()
+        # Nonce -> the moment its token expires. A consumed nonce only needs to be remembered
+        # until then: past its own expiry the token is refused by the expiry check anyway, so
+        # keeping the nonce longer buys nothing.
+        self._consumed: OrderedDict[str, int] = OrderedDict()
 
     def _now(self) -> int:
         return int(self._clock())
+
+    def _sweep(self, now: int) -> None:
+        """Drop every nonce whose token has expired.
+
+        Eviction is expiry-driven, not count-driven. A FIFO cap keyed on count could evict a
+        nonce whose token is still valid, re-enabling a replay - and the documented undo (copy
+        the pre-apply file back) restores the exact revision that token was bound to, so a
+        replayable token there is a real second write.
+        """
+
+        for nonce, expires_at in list(self._consumed.items()):
+            if now >= expires_at:
+                del self._consumed[nonce]
+            else:
+                break
 
     def issue(self, binding: ApplyBinding) -> str:
         """Mint one token for exactly this binding."""
@@ -114,8 +140,8 @@ class ApplyTokenAuthority:
         raw = nonce + expires_at.to_bytes(8, "big") + mac
         return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
-    def verify(self, token: str, binding: ApplyBinding) -> str:
-        """Verify a token against its binding and return its nonce, or raise.
+    def verify(self, token: str, binding: ApplyBinding) -> VerifiedToken:
+        """Verify a token against its binding and return it unconsumed, or raise.
 
         Verification does not consume. Consumption happens only once the apply has actually
         succeeded, so a refusal for an unrelated reason - a stale board, a present lockfile -
@@ -144,18 +170,26 @@ class ApplyTokenAuthority:
             )
         # Expiry is checked after the MAC so an attacker cannot learn anything from an
         # unauthenticated field, and the expiry itself is inside the MAC so editing it fails.
-        if self._now() >= expires_at:
+        now = self._now()
+        if now >= expires_at:
             raise ApplyTokenError("token_expired", "apply token has expired")
+        self._sweep(now)
         identifier = base64.urlsafe_b64encode(nonce).decode("ascii")
         if identifier in self._consumed:
             raise ApplyTokenError("token_already_used", "apply token has already been used")
-        return identifier
+        return VerifiedToken(identifier=identifier, expires_at=expires_at)
 
-    def consume(self, identifier: str) -> None:
-        """Record a token as spent. Bounded, and oldest-first when the bound is reached."""
+    def consume(self, verified: VerifiedToken) -> None:
+        """Record a token as spent until its own token would have expired.
 
-        self._consumed[identifier] = None
-        self._consumed.move_to_end(identifier)
+        A hard count cap remains as a memory backstop against a flood of distinct tokens, but
+        the primary lifetime is the token's own expiry, swept in ``verify``.
+        """
+
+        now = self._now()
+        self._sweep(now)
+        self._consumed[verified.identifier] = verified.expires_at
+        self._consumed.move_to_end(verified.identifier)
         while len(self._consumed) > self._max_consumed:
             self._consumed.popitem(last=False)
 
@@ -166,4 +200,5 @@ __all__ = [
     "ApplyBinding",
     "ApplyTokenAuthority",
     "ApplyTokenError",
+    "VerifiedToken",
 ]

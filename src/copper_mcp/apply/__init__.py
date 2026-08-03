@@ -29,6 +29,7 @@ from copper_mcp.apply.tokens import (
     ApplyBinding,
     ApplyTokenAuthority,
     ApplyTokenError,
+    VerifiedToken,
 )
 
 __all__ = [
@@ -44,6 +45,7 @@ __all__ = [
     "ApplyTokenAuthority",
     "ApplyTokenError",
     "ApplyVerification",
+    "VerifiedToken",
     "apply_candidate",
     "apply_route_candidate",
     "lockfile_for",
