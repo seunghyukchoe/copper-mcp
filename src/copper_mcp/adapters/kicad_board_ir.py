@@ -734,11 +734,22 @@ class _Converter:
         return (rotation_udeg // quarter) % 4
 
     def _transform(self, local: PointNM, origin: PointNM, turn: int, locator: str) -> PointNM:
+        """Place one footprint-local point using KiCad's own rotation convention.
+
+        KiCad stores board coordinates with y increasing downward while its ``(at x y angle)``
+        angle is counter-clockwise *on screen*, so a positive angle is clockwise in the raw
+        stored coordinates: ``x' = x cos t + y sin t`` and ``y' = -x sin t + y cos t``. A
+        quarter turn is therefore ``(x, y) -> (y, -x)``, not the ``(-y, x)`` that a y-up
+        reading would give. The two disagree by a mirror, which silently swaps the pads of
+        every rotated two-pad footprint, so the table below is pinned by tests derived from
+        KiCad's own connectivity engine rather than from this reasoning.
+        """
+
         rotated = (
             local,
-            PointNM(-local.y, local.x),
-            PointNM(-local.x, -local.y),
             PointNM(local.y, -local.x),
+            PointNM(-local.x, -local.y),
+            PointNM(-local.y, local.x),
         )[turn]
         x = origin.x + rotated.x
         y = origin.y + rotated.y

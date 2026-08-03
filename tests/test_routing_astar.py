@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import random
 from dataclasses import replace
+from itertools import pairwise
 
 import pytest
 
@@ -22,6 +24,7 @@ from copper_mcp.board_ir import (
     Segment,
     SourceInfo,
     Via,
+    Zone,
     make_content,
     make_snapshot,
 )
@@ -29,6 +32,7 @@ from copper_mcp.routing import (
     AStarRouter,
     AStarSettings,
     RouteCandidate,
+    RouteConnection,
     RouteDiagnostic,
     RouteFailureCode,
     RoutePatch,
@@ -36,6 +40,15 @@ from copper_mcp.routing import (
     RouteResult,
     canonical_candidate_bytes,
     verify_candidate_id,
+)
+from copper_mcp.routing.astar import (
+    _diagonal_segment_cores,
+    _point_segment_distance_lt,
+    _prepare,
+    _Problem,
+    _ray_crosses_right,
+    _segment_envelope,
+    _WorkBudget,
 )
 from copper_mcp.routing.oracle import DijkstraResult, run_dijkstra_oracle
 
@@ -54,12 +67,18 @@ def _rectangle(min_x: int, min_y: int, max_x: int, max_y: int) -> Ring:
     return _ring(((min_x, min_y), (max_x, min_y), (max_x, max_y), (min_x, max_y)))
 
 
-def _pad(identifier: str, center: tuple[int, int], *, net_id: str | None = NET_ID) -> Pad:
+def _pad(
+    identifier: str,
+    center: tuple[int, int],
+    *,
+    net_id: str | None = NET_ID,
+    rotation_udeg: int = 0,
+) -> Pad:
     return Pad(
         id=identifier,
         net_id=net_id,
         center=PointNM(*center),
-        rotation_udeg=0,
+        rotation_udeg=rotation_udeg,
         shape=PadShape.RECT,
         kind=PadKind.SMD,
         size_x_nm=400,
@@ -77,6 +96,9 @@ def _snapshot(
     end: tuple[int, int] = (9_000, 5_000),
     outline: Ring | None = None,
     keepouts: tuple[tuple[int, int, int, int], ...] = (),
+    polygon_keepouts: tuple[Ring, ...] = (),
+    keepout_layer_id: str = LAYER_ID,
+    keepout_prohibits_tracks: bool = True,
     include_end: bool = True,
     third_target: bool = False,
     extra_pad: bool = False,
@@ -85,25 +107,49 @@ def _snapshot(
     foreign_segment: tuple[int, int, int, int] | None = None,
     foreign_via: tuple[int, int] | None = None,
     own_via: bool = False,
+    foreign_zones: tuple[Ring, ...] = (),
+    foreign_zone_layer_id: str = LAYER_ID,
+    own_zone: Ring | None = None,
+    route_clearance_nm: int = 100,
+    other_clearance_nm: int = 100,
+    zone_clearance_nm: int = 100,
     existing_copper: bool = False,
+    own_segments: tuple[tuple[int, int, int, int], ...] = (),
+    own_segment_layer_id: str = LAYER_ID,
+    own_segment_width_nm: int = 200,
+    start_pad_rotation_udeg: int = 0,
     layer_kind: str = "signal",
     length_rule: bool = False,
 ) -> BoardIRSnapshot:
     layer = Layer(id=LAYER_ID, name="F.Cu", index=0, kind=layer_kind)
     # Vias span two layers, so the back layer only exists when a fixture needs one.
     copper_layers: tuple[Layer, ...] = (layer,)
-    if foreign_via is not None or own_via:
+    if (
+        foreign_via is not None
+        or own_via
+        or foreign_zone_layer_id != LAYER_ID
+        or own_segment_layer_id != LAYER_ID
+        or keepout_layer_id != LAYER_ID
+    ):
         copper_layers += (Layer(id="layer:B.Cu", name="B.Cu", index=1, kind="signal"),)
     net = Net(id=NET_ID, name="AUDIO")
     net_class = NetClass(
         id="class:audio",
         name="Audio",
-        clearance_nm=100,
+        clearance_nm=route_clearance_nm,
         track_width_nm=200,
         via_diameter_nm=600,
         via_drill_nm=300,
     )
-    pads = [_pad("pad:01", start)]
+    other_net_class = NetClass(
+        id="class:power",
+        name="Power",
+        clearance_nm=other_clearance_nm,
+        track_width_nm=200,
+        via_diameter_nm=600,
+        via_drill_nm=300,
+    )
+    pads = [_pad("pad:01", start, rotation_udeg=start_pad_rotation_udeg)]
     if include_end:
         pads.append(_pad("pad:02", end))
     if third_target:
@@ -131,6 +177,17 @@ def _snapshot(
                 width_nm=200,
             ),
         )
+    segments += tuple(
+        Segment(
+            id=f"segment:own:{index:02d}",
+            net_id=NET_ID,
+            layer_id=own_segment_layer_id,
+            start=PointNM(bounds[0], bounds[1]),
+            end=PointNM(bounds[2], bounds[3]),
+            width_nm=own_segment_width_nm,
+        )
+        for index, bounds in enumerate(own_segments)
+    )
     if foreign_segment is not None:
         segments += (
             Segment(
@@ -183,10 +240,10 @@ def _snapshot(
         copper_layers=copper_layers,
         nets=(net, Net(id=OTHER_NET_ID, name="POWER")),
         constraints=ConstraintSet(
-            net_classes=(net_class,),
+            net_classes=(net_class, other_net_class),
             assignments=(
                 NetClassAssignment(net_id=NET_ID, net_class_id=net_class.id),
-                NetClassAssignment(net_id=OTHER_NET_ID, net_class_id=net_class.id),
+                NetClassAssignment(net_id=OTHER_NET_ID, net_class_id=other_net_class.id),
             ),
             length_rules=(
                 LengthRule(
@@ -202,6 +259,35 @@ def _snapshot(
         pads=tuple(pads),
         segments=segments,
         vias=vias,
+        zones=tuple(
+            Zone(
+                id=f"zone:foreign:{index:02d}",
+                net_id=OTHER_NET_ID,
+                layer_id=foreign_zone_layer_id,
+                boundary=boundary,
+                clearance_nm=zone_clearance_nm,
+                min_thickness_nm=100,
+                thermal_gap_nm=100,
+                thermal_bridge_width_nm=100,
+            )
+            for index, boundary in enumerate(foreign_zones)
+        )
+        + (
+            (
+                Zone(
+                    id="zone:own",
+                    net_id=NET_ID,
+                    layer_id=LAYER_ID,
+                    boundary=own_zone,
+                    clearance_nm=zone_clearance_nm,
+                    min_thickness_nm=100,
+                    thermal_gap_nm=100,
+                    thermal_bridge_width_nm=100,
+                ),
+            )
+            if own_zone is not None
+            else ()
+        ),
         keepouts=tuple(
             Keepout(
                 id=f"keepout:{index:02d}",
@@ -214,6 +300,19 @@ def _snapshot(
                 prohibit_footprints=False,
             )
             for index, bounds in enumerate(keepouts)
+        )
+        + tuple(
+            Keepout(
+                id=f"keepout:polygon:{index:02d}",
+                layer_ids=(keepout_layer_id,),
+                boundary=boundary,
+                prohibit_tracks=keepout_prohibits_tracks,
+                prohibit_vias=True,
+                prohibit_pads=False,
+                prohibit_zones=False,
+                prohibit_footprints=False,
+            )
+            for index, boundary in enumerate(polygon_keepouts)
         ),
     )
     return make_snapshot(content)
@@ -254,9 +353,24 @@ def _candidate(result: RouteResult) -> RouteCandidate:
 
 def _assert_failure(result: RouteResult, code: RouteFailureCode) -> None:
     assert not result.ok
+    assert not result.terminal
     assert result.candidate is None
+    assert result.connected is None
     assert result.diagnostic is not None
     assert result.diagnostic.code is code
+
+
+def _connection(result: RouteResult) -> RouteConnection:
+    assert not result.ok
+    assert result.terminal
+    assert result.candidate is None
+    assert result.diagnostic is None
+    assert result.connected is not None
+    return result.connected
+
+
+def _problem_of(snapshot: BoardIRSnapshot, request: RouteRequest) -> _Problem:
+    return _prepare(snapshot, request, _WorkBudget(settings=request.settings, cancelled=None))
 
 
 def test_straight_route_is_exact_replayable_and_content_addressed() -> None:
@@ -268,6 +382,7 @@ def test_straight_route_is_exact_replayable_and_content_addressed() -> None:
     second = _candidate(router.propose(snapshot, request))
 
     assert router.name == "orthogonal-a-star-v1"
+    assert first.router_version == "astar-grid/0.3.0"
     assert first == second
     assert first.patch.vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
     assert first.patch.width_nm == 200
@@ -443,10 +558,6 @@ def test_revision_snapshot_net_grid_and_geometry_fail_closed() -> None:
     triangle = _snapshot(outline=_ring(((0, 0), (10_000, 0), (0, 10_000))))
     _assert_failure(
         router.propose(triangle, _request(triangle)), RouteFailureCode.UNSUPPORTED_GEOMETRY
-    )
-    existing = _snapshot(existing_copper=True)
-    _assert_failure(
-        router.propose(existing, _request(existing)), RouteFailureCode.UNSUPPORTED_GEOMETRY
     )
     _assert_failure(
         router.propose(snapshot, _request(snapshot, layer_id="layer:B.Cu")),
@@ -650,16 +761,13 @@ def test_unmodeled_obstacle_geometry_still_fails_closed() -> None:
         router.propose(rotated, _request(rotated)), RouteFailureCode.UNSUPPORTED_GEOMETRY
     )
 
-    diagonal = _snapshot(foreign_segment=(4_000, 4_000, 6_000, 6_000))
-    _assert_failure(
-        router.propose(diagonal, _request(diagonal)), RouteFailureCode.UNSUPPORTED_GEOMETRY
-    )
-
-    partially_routed = _snapshot(existing_copper=True)
-    _assert_failure(
-        router.propose(partially_routed, _request(partially_routed)),
-        RouteFailureCode.UNSUPPORTED_GEOMETRY,
-    )
+    # A via on the routed net is the remaining same-net refusal: a layer change is not
+    # something this single-layer contract can model, however the copper is shaped.
+    own_via = _snapshot(own_via=True)
+    result = router.propose(own_via, _request(own_via))
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert "via" in result.diagnostic.message
 
 
 def test_quarter_turn_pads_swap_their_modeled_extents() -> None:
@@ -717,3 +825,1231 @@ def test_a_via_clear_of_the_route_does_not_force_a_detour() -> None:
     aside = _snapshot(foreign_via=(5_000, 8_000))
 
     assert _candidate(router.propose(aside, _request(aside))).cost.bend_count == 0
+
+
+def test_foreign_zone_produces_a_deterministic_detour_and_matches_the_oracle() -> None:
+    snapshot = _snapshot(foreign_zones=(_rectangle(4_000, 4_000, 6_000, 6_000),))
+    request = _request(snapshot)
+    router = AStarRouter()
+
+    first = _candidate(router.propose(snapshot, request))
+    second = _candidate(router.propose(snapshot, request))
+    oracle = run_dijkstra_oracle(snapshot, request)
+
+    assert first == second
+    assert first.patch.vertices == (
+        PointNM(1_000, 5_000),
+        PointNM(1_000, 7_000),
+        PointNM(9_000, 7_000),
+        PointNM(9_000, 5_000),
+    )
+    assert first.cost.length_nm == 12_000
+    assert first.cost.bend_count == 2
+    assert first.metrics.hard_internal_violations == 0
+    assert isinstance(oracle, DijkstraResult)
+    assert oracle.total_cost_nm == first.cost.total_cost_nm
+
+
+def test_concave_zone_is_not_replaced_by_its_bounding_box() -> None:
+    # The start is inside the U-shaped outline's bounding box but in its open notch.
+    # A rectangular approximation would reject the endpoint; the polygon leaves a
+    # 2,000 nm-wide corridor around the exact centreline.
+    notched = _ring(
+        (
+            (3_000, 2_000),
+            (7_000, 2_000),
+            (7_000, 8_000),
+            (6_000, 8_000),
+            (6_000, 3_000),
+            (4_000, 3_000),
+            (4_000, 8_000),
+            (3_000, 8_000),
+        )
+    )
+    snapshot = _snapshot(
+        start=(5_000, 5_000),
+        end=(5_000, 9_000),
+        foreign_zones=(notched,),
+    )
+
+    candidate = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    assert candidate.patch.vertices == (PointNM(5_000, 5_000), PointNM(5_000, 9_000))
+    assert candidate.cost.bend_count == 0
+
+
+def test_zone_collision_checks_the_complete_grid_edge() -> None:
+    snapshot = _snapshot(foreign_zones=(_rectangle(4_000, 4_000, 6_000, 6_000),))
+    request = _request(
+        snapshot,
+        settings=_settings(grid_step_nm=8_000, proximity_penalty_nm=0),
+    )
+
+    result = AStarRouter().propose(snapshot, request)
+
+    _assert_failure(result, RouteFailureCode.NO_PATH)
+
+
+def test_zone_exact_clearance_boundary_is_legal_and_one_nanometre_inside_is_not() -> None:
+    lower = _rectangle(3_000, 0, 7_000, 4_800)
+    exact_upper = _rectangle(3_000, 5_200, 7_000, 10_000)
+    inside_upper = _rectangle(3_000, 5_199, 7_000, 10_000)
+    exact = _snapshot(foreign_zones=(lower, exact_upper))
+    inside = _snapshot(foreign_zones=(lower, inside_upper))
+    settings = _settings(proximity_penalty_nm=0)
+    router = AStarRouter()
+
+    exact_route = _candidate(router.propose(exact, _request(exact, settings=settings)))
+    inside_result = router.propose(inside, _request(inside, settings=settings))
+
+    assert exact_route.patch.vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
+    _assert_failure(inside_result, RouteFailureCode.NO_PATH)
+
+
+@pytest.mark.parametrize(
+    ("route_clearance_nm", "other_clearance_nm", "zone_clearance_nm"),
+    ((300, 100, 100), (100, 300, 100), (100, 100, 300)),
+)
+def test_zone_uses_the_strictest_of_all_three_clearances(
+    route_clearance_nm: int,
+    other_clearance_nm: int,
+    zone_clearance_nm: int,
+) -> None:
+    exact = _snapshot(
+        foreign_zones=(_rectangle(4_000, 1_000, 6_000, 4_600),),
+        route_clearance_nm=route_clearance_nm,
+        other_clearance_nm=other_clearance_nm,
+        zone_clearance_nm=zone_clearance_nm,
+    )
+    inside = _snapshot(
+        foreign_zones=(_rectangle(4_000, 1_000, 6_000, 4_601),),
+        route_clearance_nm=route_clearance_nm,
+        other_clearance_nm=other_clearance_nm,
+        zone_clearance_nm=zone_clearance_nm,
+    )
+    settings = _settings(proximity_penalty_nm=0)
+    router = AStarRouter()
+
+    exact_route = _candidate(router.propose(exact, _request(exact, settings=settings)))
+    inside_route = _candidate(router.propose(inside, _request(inside, settings=settings)))
+
+    assert exact_route.cost.bend_count == 0
+    assert inside_route.cost.bend_count > 0
+
+
+def test_diagonal_zone_edge_uses_exact_rational_distance() -> None:
+    # The start is exactly 200 nm from the 3:4:5 edge A-B. Its perpendicular
+    # foot (4,840, 5,120) lies inside A-B, so this exercises the rational
+    # cross-product branch rather than an endpoint distance.
+    boundary = _ring(
+        (
+            (3_340, 3_120),
+            (6_340, 7_120),
+            (5_940, 7_420),
+            (2_940, 3_420),
+        )
+    )
+    exact = _snapshot(
+        start=(5_000, 5_000),
+        end=(5_000, 1_000),
+        foreign_zones=(boundary,),
+    )
+    one_nanometre_inside = _snapshot(
+        start=(5_000, 5_000),
+        end=(5_000, 1_000),
+        foreign_zones=(boundary,),
+        zone_clearance_nm=101,
+    )
+    settings = _settings(proximity_penalty_nm=0)
+    router = AStarRouter()
+
+    exact_route = _candidate(router.propose(exact, _request(exact, settings=settings)))
+    inside = router.propose(
+        one_nanometre_inside,
+        _request(one_nanometre_inside, settings=settings),
+    )
+
+    assert exact_route.patch.vertices == (PointNM(5_000, 5_000), PointNM(5_000, 1_000))
+    _assert_failure(inside, RouteFailureCode.NO_PATH)
+
+
+def test_same_net_zone_remains_partial_routing() -> None:
+    snapshot = _snapshot(own_zone=_rectangle(1_000, 1_000, 2_000, 2_000))
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+
+
+def test_zones_share_object_and_edge_relation_budgets() -> None:
+    router = AStarRouter()
+    two_zones = _snapshot(
+        foreign_zones=(
+            _rectangle(2_000, 1_000, 3_000, 2_000),
+            _rectangle(7_000, 8_000, 8_000, 9_000),
+        )
+    )
+    object_limited = router.propose(
+        two_zones,
+        _request(two_zones, settings=_settings(max_obstacles=1)),
+    )
+    _assert_failure(object_limited, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+
+    notched = _ring(
+        (
+            (3_000, 2_000),
+            (7_000, 2_000),
+            (7_000, 8_000),
+            (6_000, 8_000),
+            (6_000, 3_000),
+            (4_000, 3_000),
+            (4_000, 8_000),
+            (3_000, 8_000),
+        )
+    )
+    relation_limited_snapshot = _snapshot(
+        start=(5_000, 5_000),
+        end=(5_000, 9_000),
+        foreign_zones=(notched,),
+    )
+    relation_limited = router.propose(
+        relation_limited_snapshot,
+        _request(
+            relation_limited_snapshot,
+            settings=_settings(max_obstacle_checks=8),
+        ),
+    )
+
+    _assert_failure(relation_limited, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    assert relation_limited.diagnostic is not None
+    assert relation_limited.diagnostic.obstacle_checks == 8
+    assert relation_limited.diagnostic.expanded_states == 0
+
+
+def test_zone_on_another_layer_is_ignored() -> None:
+    clear = _snapshot()
+    other_layer = _snapshot(
+        foreign_zones=(_rectangle(4_000, 4_000, 6_000, 6_000),),
+        foreign_zone_layer_id="layer:B.Cu",
+    )
+    router = AStarRouter()
+
+    clear_route = _candidate(router.propose(clear, _request(clear)))
+    other_layer_route = _candidate(router.propose(other_layer, _request(other_layer)))
+
+    assert other_layer_route.patch.vertices == clear_route.patch.vertices
+    assert other_layer_route.cost == clear_route.cost
+
+
+def test_polygon_preparation_scan_observes_the_cancellation_cadence() -> None:
+    bottom = tuple((x, 1_000) for x in range(1_000, 5_001, 200))
+    right = tuple((5_000, y) for y in range(1_200, 5_001, 200))
+    top = tuple((x, 5_000) for x in range(4_800, 999, -200))
+    left = tuple((1_000, y) for y in range(4_800, 1_000, -200))
+    many_vertices = _ring(bottom + right + top + left)
+    snapshot = _snapshot(foreign_zones=(many_vertices,))
+    calls = 0
+
+    def cancel_on_first_relation_checkpoint() -> bool:
+        nonlocal calls
+        calls += 1
+        return calls >= 12
+
+    result = AStarRouter().propose(
+        snapshot,
+        _request(snapshot),
+        cancelled=cancel_on_first_relation_checkpoint,
+    )
+
+    _assert_failure(result, RouteFailureCode.CANCELLED)
+    assert result.diagnostic is not None
+    assert result.diagnostic.obstacle_checks == 64
+    assert result.diagnostic.expanded_states == 0
+    assert calls == 12
+
+
+@pytest.mark.parametrize("cancel_at", (10, 11))
+def test_zone_net_class_lookup_does_not_swallow_cancellation(cancel_at: int) -> None:
+    snapshot = _snapshot(
+        foreign_zones=(_rectangle(4_000, 4_000, 6_000, 6_000),),
+    )
+    calls = 0
+
+    def cancel_once() -> bool:
+        nonlocal calls
+        calls += 1
+        return calls == cancel_at
+
+    result = AStarRouter().propose(
+        snapshot,
+        _request(snapshot),
+        cancelled=cancel_once,
+    )
+
+    _assert_failure(result, RouteFailureCode.CANCELLED)
+    assert calls == cancel_at
+
+
+def test_same_net_stub_is_attachment_copper_not_a_veto() -> None:
+    router = AStarRouter()
+    clear = _snapshot()
+    stubbed = _snapshot(existing_copper=True)
+
+    full = _candidate(router.propose(clear, _request(clear)))
+    completion = _candidate(router.propose(stubbed, _request(stubbed)))
+
+    # The stub reaches x=2,000, so the router only has to add the remaining 7,000 nm.
+    assert full.patch.vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
+    assert completion.patch.vertices == (PointNM(2_000, 5_000), PointNM(9_000, 5_000))
+    assert completion.cost.length_nm == 7_000
+    assert completion.cost.bend_count == 0
+    assert completion.metrics.hard_internal_violations == 0
+    assert completion.metrics.unrouted_connections == 0
+    assert completion.start_pad_id == full.start_pad_id
+    assert completion.end_pad_id == full.end_pad_id
+
+
+def test_same_net_segment_joining_both_pads_reports_already_connected() -> None:
+    snapshot = _snapshot(own_segments=((1_000, 5_000, 9_000, 5_000),))
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+    connection = _connection(result)
+
+    assert connection.base_revision == snapshot.snapshot_digest
+    assert connection.start_pad_id == "pad:01"
+    assert connection.end_pad_id == "pad:02"
+    assert connection.attachment_segments == 1
+    assert connection.component_objects == 3
+    assert connection.obstacle_checks > 0
+
+
+def test_already_connected_nets_agree_with_the_dijkstra_oracle() -> None:
+    snapshot = _snapshot(own_segments=((1_000, 5_000, 9_000, 5_000),))
+
+    oracle = run_dijkstra_oracle(snapshot, _request(snapshot))
+
+    assert oracle.ok
+    assert oracle.total_cost_nm == 0
+    assert oracle.bend_count == 0
+    assert oracle.proximity_steps == 0
+
+
+def test_route_result_admits_exactly_one_terminal_arm() -> None:
+    connection = RouteConnection(
+        base_revision=SOURCE_REVISION,
+        start_pad_id="pad:01",
+        end_pad_id="pad:02",
+        attachment_segments=1,
+        component_objects=3,
+    )
+    snapshot = _snapshot()
+    candidate = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    with pytest.raises(ValueError, match="exactly one"):
+        RouteResult(candidate=candidate, connected=connection)
+    with pytest.raises(ValueError, match="exactly one"):
+        RouteResult(
+            connected=connection,
+            diagnostic=RouteDiagnostic(code=RouteFailureCode.NO_PATH, message="no path"),
+        )
+    with pytest.raises(ValueError, match="must be distinct"):
+        replace(connection, end_pad_id="pad:01")
+    with pytest.raises(ValueError, match="every pad and every segment"):
+        replace(connection, attachment_segments=2)
+    assert RouteResult(connected=connection).terminal
+    assert not RouteResult(connected=connection).ok
+
+
+def test_diagonal_same_net_segment_is_attachment_copper() -> None:
+    router = AStarRouter()
+    clear = _snapshot()
+    stubbed = _snapshot(own_segments=((1_000, 5_000, 4_000, 6_000),))
+
+    full = _candidate(router.propose(clear, _request(clear)))
+    completion = _candidate(router.propose(stubbed, _request(stubbed)))
+
+    assert full.patch.vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
+    assert full.cost.length_nm == 8_000
+    # The chain's last square is centred exactly on the stub's far endpoint, so the search may
+    # start there and only has to add the remaining 6,000 nm.
+    assert completion.patch.vertices == (
+        PointNM(4_000, 6_000),
+        PointNM(4_000, 5_000),
+        PointNM(9_000, 5_000),
+    )
+    assert completion.cost.length_nm == 6_000
+    assert completion.cost.bend_count == 1
+    assert completion.metrics.unrouted_connections == 0
+
+
+def test_diagonal_attachment_chain_seeds_every_covered_lattice_node() -> None:
+    # A chain square is centred on each sampled centreline point, so a diagonal crossing
+    # several lattice nodes offers all of them as attachment points, not just its endpoints.
+    snapshot = _snapshot(own_segments=((1_000, 5_000, 3_000, 7_000),))
+
+    problem = _problem_of(snapshot, _request(snapshot))
+
+    assert problem.source_nodes == {(0, 0), (1, 1), (2, 2)}
+    assert problem.target_nodes == {(8, 0)}
+
+
+def test_a_diagonal_segment_joining_both_pads_reports_already_connected() -> None:
+    # One diagonal running corner to corner between the two pads: nothing to route.
+    snapshot = _snapshot(
+        start=(1_000, 1_000),
+        end=(9_000, 9_000),
+        own_segments=((1_000, 1_000, 9_000, 9_000),),
+    )
+
+    connection = _connection(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    assert connection.attachment_segments == 1
+    assert connection.component_objects == 3
+
+
+def test_diagonal_attachment_is_deterministic_and_matches_the_oracle() -> None:
+    snapshot = _snapshot(
+        own_segments=((1_000, 5_000, 4_000, 6_000), (7_000, 3_000, 9_000, 5_000)),
+        keepouts=((5_000, 4_000, 6_000, 6_000),),
+    )
+    request = _request(snapshot)
+    router = AStarRouter()
+
+    first = _candidate(router.propose(snapshot, request))
+    second = _candidate(router.propose(snapshot, request))
+    oracle = run_dijkstra_oracle(snapshot, request)
+
+    assert first == second
+    assert canonical_candidate_bytes(first) == canonical_candidate_bytes(second)
+    assert isinstance(oracle, DijkstraResult)
+    assert oracle.total_cost_nm == first.cost.total_cost_nm
+    assert oracle.bend_count == first.cost.bend_count
+    assert oracle.proximity_steps == first.cost.proximity_steps
+
+
+def test_diagonal_core_chain_is_independent_of_stored_endpoint_order() -> None:
+    work = _WorkBudget(settings=_settings(), cancelled=None)
+    forward = Segment(
+        id="segment:own:forward",
+        net_id=NET_ID,
+        layer_id=LAYER_ID,
+        start=PointNM(1_000, 5_000),
+        end=PointNM(4_000, 6_000),
+        width_nm=200,
+    )
+    reversed_segment = replace(forward, start=forward.end, end=forward.start)
+
+    assert _diagonal_segment_cores(forward, work) == _diagonal_segment_cores(reversed_segment, work)
+
+
+def test_a_diagonal_too_narrow_to_model_fails_closed() -> None:
+    snapshot = _snapshot(own_segments=((1_000, 5_000, 4_000, 6_000),), own_segment_width_nm=4)
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert "too narrow" in result.diagnostic.message
+
+
+def test_diagonal_core_chain_charges_the_obstacle_check_budget() -> None:
+    # A long diagonal needs many squares, and each one charges the shared budget.
+    snapshot = _snapshot(own_segments=((1_000, 1_000, 9_000, 9_000),))
+
+    result = AStarRouter().propose(
+        snapshot, _request(snapshot, settings=_settings(max_obstacle_checks=5))
+    )
+
+    _assert_failure(result, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    assert result.diagnostic is not None
+    assert result.diagnostic.obstacle_checks == 5
+    assert result.diagnostic.expanded_states == 0
+
+
+def test_same_net_via_and_zone_remain_partial_routing_beside_a_stub() -> None:
+    router = AStarRouter()
+    with_via = _snapshot(own_segments=((1_000, 5_000, 2_000, 5_000),), own_via=True)
+    with_zone = _snapshot(
+        own_segments=((1_000, 5_000, 2_000, 5_000),),
+        own_zone=_rectangle(1_000, 1_000, 2_000, 2_000),
+    )
+
+    _assert_failure(
+        router.propose(with_via, _request(with_via)), RouteFailureCode.UNSUPPORTED_GEOMETRY
+    )
+    _assert_failure(
+        router.propose(with_zone, _request(with_zone)), RouteFailureCode.UNSUPPORTED_GEOMETRY
+    )
+
+
+def test_off_axis_routed_pad_fails_closed_only_when_attachment_copper_exists() -> None:
+    router = AStarRouter()
+    rotated = _snapshot(start_pad_rotation_udeg=45_000_000)
+    rotated_with_stub = _snapshot(
+        start_pad_rotation_udeg=45_000_000,
+        own_segments=((1_000, 5_000, 2_000, 5_000),),
+    )
+
+    # Without same-net copper no connectivity question arises, so the pad centre still routes.
+    assert _candidate(router.propose(rotated, _request(rotated))).cost.bend_count == 0
+    result = router.propose(rotated_with_stub, _request(rotated_with_stub))
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert "route endpoint pad" in result.diagnostic.message
+
+
+@pytest.mark.parametrize(
+    ("stub_end_x", "expected_vertices", "expected_length_nm"),
+    [
+        # The end-pad core starts at x=8,800; a stub reaching it exactly is connected copper.
+        (8_800, (PointNM(1_000, 5_000), PointNM(5_000, 5_000)), 4_000),
+        # One nanometre short it is an isolated component, neither obstacle nor attachment.
+        (8_799, (PointNM(1_000, 5_000), PointNM(9_000, 5_000)), 8_000),
+    ],
+)
+def test_component_contact_is_exact_and_touching_counts(
+    stub_end_x: int,
+    expected_vertices: tuple[PointNM, ...],
+    expected_length_nm: int,
+) -> None:
+    snapshot = _snapshot(own_segments=((5_000, 5_000, stub_end_x, 5_000),))
+
+    candidate = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    assert candidate.patch.vertices == expected_vertices
+    assert candidate.cost.length_nm == expected_length_nm
+
+
+def test_attachment_copper_is_never_an_obstacle() -> None:
+    router = AStarRouter()
+    clear = _snapshot()
+    crossed = _snapshot(own_segments=((5_000, 3_000, 5_000, 7_000),))
+
+    straight = _candidate(router.propose(clear, _request(clear)))
+    crossing = _candidate(router.propose(crossed, _request(crossed)))
+
+    # The identical foreign segment forces a detour; on the routed net it is not an obstacle.
+    assert crossing.patch.vertices == straight.patch.vertices
+    assert crossing.cost == straight.cost
+
+
+def test_multi_target_search_is_deterministic_and_matches_the_oracle() -> None:
+    snapshot = _snapshot(
+        own_segments=(
+            (1_000, 5_000, 2_000, 5_000),
+            (8_000, 5_000, 9_000, 5_000),
+            (8_000, 5_000, 8_000, 6_000),
+        )
+    )
+    request = _request(snapshot)
+    router = AStarRouter()
+
+    first = _candidate(router.propose(snapshot, request))
+    second = _candidate(router.propose(snapshot, request))
+    oracle = run_dijkstra_oracle(snapshot, request)
+
+    assert first == second
+    assert canonical_candidate_bytes(first) == canonical_candidate_bytes(second)
+    assert first.patch.vertices == (PointNM(2_000, 5_000), PointNM(8_000, 5_000))
+    assert first.cost.length_nm == 6_000
+    assert first.cost.bend_count == 0
+    assert isinstance(oracle, DijkstraResult)
+    assert oracle.total_cost_nm == first.cost.total_cost_nm
+    assert oracle.bend_count == first.cost.bend_count
+    assert oracle.proximity_steps == first.cost.proximity_steps
+
+
+@pytest.mark.parametrize(
+    ("own_segments", "keepouts"),
+    [
+        (((1_000, 5_000, 2_000, 5_000),), ()),
+        (((1_000, 5_000, 2_000, 5_000),), ((4_000, 4_000, 6_000, 6_000),)),
+        (((8_000, 5_000, 9_000, 5_000),), ((4_000, 4_000, 6_000, 6_000),)),
+        (
+            ((1_000, 5_000, 1_000, 7_000), (8_000, 5_000, 9_000, 5_000)),
+            ((4_000, 4_000, 6_000, 6_000),),
+        ),
+        (((1_000, 5_000, 2_000, 5_000),), ((4_500, -1_000, 5_500, 11_000),)),
+    ],
+)
+def test_multi_target_heuristic_stays_admissible(
+    own_segments: tuple[tuple[int, int, int, int], ...],
+    keepouts: tuple[tuple[int, int, int, int], ...],
+) -> None:
+    snapshot = _snapshot(own_segments=own_segments, keepouts=keepouts)
+    request = _request(snapshot)
+
+    astar = AStarRouter().propose(snapshot, request)
+    oracle = run_dijkstra_oracle(snapshot, request)
+
+    assert astar.ok is oracle.ok
+    if astar.candidate is None:
+        assert oracle.diagnostic is not None
+        assert astar.diagnostic is not None
+        assert astar.diagnostic.code is oracle.diagnostic.code
+        return
+    assert oracle.total_cost_nm == astar.candidate.cost.total_cost_nm
+    assert oracle.bend_count == astar.candidate.cost.bend_count
+    assert oracle.proximity_steps == astar.candidate.cost.proximity_steps
+
+
+def test_seed_and_target_nodes_are_disjoint_and_inside_the_lattice() -> None:
+    snapshot = _snapshot(
+        own_segments=(
+            (1_000, 5_000, 2_000, 5_000),
+            (8_000, 5_000, 9_000, 5_000),
+        )
+    )
+
+    problem = _problem_of(snapshot, _request(snapshot))
+
+    assert problem.source_nodes & problem.target_nodes == frozenset()
+    assert (0, 0) in problem.source_nodes
+    assert (problem.goal_ix, problem.goal_iy) in problem.target_nodes
+    assert problem.source_nodes == {(0, 0), (1, 0)}
+    assert problem.target_nodes == {(7, 0), (8, 0)}
+    assert problem.target_min_ix == 7
+    assert problem.target_max_ix == 8
+    assert problem.target_min_iy == problem.target_max_iy == 0
+    for node_ix, node_iy in problem.source_nodes | problem.target_nodes:
+        assert problem.min_ix <= node_ix <= problem.max_ix
+        assert problem.min_iy <= node_iy <= problem.max_iy
+
+
+def test_same_net_copper_on_another_layer_is_neither_attachment_nor_obstacle() -> None:
+    router = AStarRouter()
+    clear = _snapshot()
+    # A back-layer stub that would join both pads if the layer filter were wrong.
+    other_layer = _snapshot(
+        own_segments=((1_000, 5_000, 9_000, 5_000),),
+        own_segment_layer_id="layer:B.Cu",
+    )
+
+    straight = _candidate(router.propose(clear, _request(clear)))
+    unaffected = _candidate(router.propose(other_layer, _request(other_layer)))
+
+    assert unaffected.patch.vertices == straight.patch.vertices
+    assert unaffected.cost == straight.cost
+
+
+def test_attachment_copper_outside_the_lattice_is_clamped() -> None:
+    # The stub touches the start pad but runs far below the board, so its covered index
+    # range has to be clamped rather than producing nodes outside the lattice.
+    snapshot = _snapshot(own_segments=((1_000, 5_000, 1_000, -20_000),))
+    request = _request(snapshot)
+
+    problem = _problem_of(snapshot, request)
+    candidate = _candidate(AStarRouter().propose(snapshot, request))
+
+    assert problem.source_nodes == {(0, 0), (0, -1), (0, -2), (0, -3), (0, -4)}
+    for _, node_iy in problem.source_nodes:
+        assert node_iy >= problem.min_iy
+    assert candidate.patch.vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
+
+
+def test_attachment_copper_shares_the_obstacle_object_budget() -> None:
+    router = AStarRouter()
+    stub_and_keepout = _snapshot(
+        own_segments=((1_000, 5_000, 2_000, 5_000),),
+        keepouts=((-10_000, -10_000, -9_995, -9_995),),
+    )
+    two_stubs = _snapshot(
+        own_segments=(
+            (1_000, 5_000, 2_000, 5_000),
+            (8_000, 5_000, 9_000, 5_000),
+        )
+    )
+
+    shared = router.propose(
+        stub_and_keepout, _request(stub_and_keepout, settings=_settings(max_obstacles=1))
+    )
+    _assert_failure(shared, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+
+    attachment_only = router.propose(
+        two_stubs, _request(two_stubs, settings=_settings(max_obstacles=1))
+    )
+    _assert_failure(attachment_only, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    assert attachment_only.diagnostic is not None
+    assert "attachment copper" in attachment_only.diagnostic.message
+
+
+def test_component_build_respects_the_obstacle_check_budget() -> None:
+    snapshot = _snapshot(
+        own_segments=(
+            (1_000, 5_000, 2_000, 5_000),
+            (4_000, 1_000, 5_000, 1_000),
+            (7_000, 8_000, 8_000, 8_000),
+        )
+    )
+
+    result = AStarRouter().propose(
+        snapshot,
+        _request(snapshot, settings=_settings(max_obstacle_checks=4)),
+    )
+
+    _assert_failure(result, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    assert result.diagnostic is not None
+    assert result.diagnostic.obstacle_checks == 4
+    assert result.diagnostic.expanded_states == 0
+
+
+def test_component_build_observes_the_cancellation_cadence() -> None:
+    # Eleven stubs plus two pads make thirteen rectangles and seventy-eight exact pair
+    # comparisons, so the union-find crosses the sixty-fourth obstacle-check checkpoint.
+    snapshot = _snapshot(
+        own_segments=tuple((500 + index * 500, 500, 700 + index * 500, 500) for index in range(11))
+    )
+    calls = 0
+
+    def cancel_on_first_component_checkpoint() -> bool:
+        nonlocal calls
+        calls += 1
+        return calls >= 7
+
+    result = AStarRouter().propose(
+        snapshot,
+        _request(snapshot),
+        cancelled=cancel_on_first_component_checkpoint,
+    )
+
+    _assert_failure(result, RouteFailureCode.CANCELLED)
+    assert result.diagnostic is not None
+    assert result.diagnostic.obstacle_checks == 64
+    assert result.diagnostic.expanded_states == 0
+    assert calls == 7
+
+
+def _octagon(center_x: int, center_y: int, radius: int, cut: int) -> Ring:
+    """Build an axis-aligned octagon, the shape KiCad uses for mounting-hole rule areas."""
+
+    return _ring(
+        (
+            (center_x - radius + cut, center_y - radius),
+            (center_x + radius - cut, center_y - radius),
+            (center_x + radius, center_y - radius + cut),
+            (center_x + radius, center_y + radius - cut),
+            (center_x + radius - cut, center_y + radius),
+            (center_x - radius + cut, center_y + radius),
+            (center_x - radius, center_y + radius - cut),
+            (center_x - radius, center_y - radius + cut),
+        )
+    )
+
+
+def test_octagonal_keepout_detours_deterministically_and_matches_the_oracle() -> None:
+    snapshot = _snapshot(polygon_keepouts=(_octagon(5_000, 5_000, 1_000, 300),))
+    request = _request(snapshot)
+    router = AStarRouter()
+
+    first = _candidate(router.propose(snapshot, request))
+    second = _candidate(router.propose(snapshot, request))
+    oracle = run_dijkstra_oracle(snapshot, request)
+
+    assert first == second
+    assert canonical_candidate_bytes(first) == canonical_candidate_bytes(second)
+    assert first.cost.bend_count > 0
+    assert first.metrics.hard_internal_violations == 0
+    # The octagon spans 4,000..6,000 on both axes; with half width 100 and clearance 100 no
+    # centreline may enter its 200 nm offset, so the straight y=5,000 corridor is closed.
+    assert all(
+        point.y != 5_000 or point.x <= 3_800 or point.x >= 6_200 for point in first.patch.vertices
+    )
+    assert isinstance(oracle, DijkstraResult)
+    assert oracle.total_cost_nm == first.cost.total_cost_nm
+    assert oracle.bend_count == first.cost.bend_count
+    assert oracle.proximity_steps == first.cost.proximity_steps
+
+
+def test_concave_keepout_is_not_replaced_by_its_bounding_box() -> None:
+    # The same U-shaped outline the zone model uses: the start sits inside the bounding box
+    # but in the open notch, so a rectangular approximation would refuse the endpoint.
+    notched = _ring(
+        (
+            (3_000, 2_000),
+            (7_000, 2_000),
+            (7_000, 8_000),
+            (6_000, 8_000),
+            (6_000, 3_000),
+            (4_000, 3_000),
+            (4_000, 8_000),
+            (3_000, 8_000),
+        )
+    )
+    snapshot = _snapshot(
+        start=(5_000, 5_000),
+        end=(5_000, 9_000),
+        polygon_keepouts=(notched,),
+    )
+
+    candidate = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    assert candidate.patch.vertices == (PointNM(5_000, 5_000), PointNM(5_000, 9_000))
+    assert candidate.cost.bend_count == 0
+
+
+def test_rectangular_keepout_keeps_the_exact_square_cornered_fast_path() -> None:
+    # A rectangle must not be re-routed through the polygon path: that offsets by Euclidean
+    # distance, which rounds the corners and is a strictly looser obstacle for the same board.
+    # Assert the model itself, not just an incidental route.
+    rectangular = _snapshot(keepouts=((4_000, 4_000, 6_000, 6_000),))
+    octagonal = _snapshot(polygon_keepouts=(_octagon(5_000, 5_000, 1_000, 300),))
+
+    rectangular_problem = _problem_of(rectangular, _request(rectangular))
+    octagonal_problem = _problem_of(octagonal, _request(octagonal))
+
+    # Half width 100 plus clearance 100 is a 200 nm margin applied with square corners, so the
+    # forbidden region reaches the full (6,200, 6,200) corner rather than a rounded 200 nm arc.
+    assert rectangular_problem.rect_obstacles == ((3_800, 3_800, 6_200, 6_200),)
+    assert rectangular_problem.polygon_obstacles == ()
+    assert octagonal_problem.rect_obstacles == ()
+    assert len(octagonal_problem.polygon_obstacles) == 1
+    assert octagonal_problem.polygon_obstacles[0].margin_nm == 200
+    assert octagonal_problem.polygon_obstacles[0].source_id == "keepout:polygon:00"
+
+
+def test_rectangular_keepout_routing_is_unchanged() -> None:
+    snapshot = _snapshot(keepouts=((4_000, 4_000, 6_000, 6_000),))
+
+    candidate = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    assert candidate.patch.vertices == (
+        PointNM(1_000, 5_000),
+        PointNM(1_000, 7_000),
+        PointNM(9_000, 7_000),
+        PointNM(9_000, 5_000),
+    )
+    assert candidate.cost.length_nm == 12_000
+    assert candidate.cost.bend_count == 2
+
+
+def test_polygon_keepout_uses_the_routed_class_clearance_exactly() -> None:
+    # A keepout carries no net, so only the routed class clearance applies. At clearance 100
+    # and half width 100 an octagon edge exactly 200 nm from the corridor is legal; one
+    # nanometre closer is not.
+    exact = _snapshot(
+        polygon_keepouts=(_octagon(5_000, 6_200, 1_000, 300),),
+        route_clearance_nm=100,
+    )
+    inside = _snapshot(
+        polygon_keepouts=(_octagon(5_000, 6_199, 1_000, 300),),
+        route_clearance_nm=100,
+    )
+    settings = _settings(proximity_penalty_nm=0)
+    router = AStarRouter()
+
+    exact_route = _candidate(router.propose(exact, _request(exact, settings=settings)))
+    inside_route = _candidate(router.propose(inside, _request(inside, settings=settings)))
+
+    assert exact_route.patch.vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
+    assert inside_route.cost.bend_count > 0
+
+
+def test_polygon_keepout_blocking_an_endpoint_returns_no_path() -> None:
+    snapshot = _snapshot(polygon_keepouts=(_octagon(1_000, 5_000, 1_000, 300),))
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.NO_PATH)
+
+
+def test_spanning_polygon_keepout_returns_no_path() -> None:
+    spanning = _ring(
+        ((4_500, -1_000), (5_500, -1_000), (5_800, 5_000), (5_500, 11_000), (4_500, 11_000))
+    )
+    snapshot = _snapshot(polygon_keepouts=(spanning,))
+    request = _request(snapshot)
+
+    astar = AStarRouter().propose(snapshot, request)
+    oracle = run_dijkstra_oracle(snapshot, request)
+
+    _assert_failure(astar, RouteFailureCode.NO_PATH)
+    assert oracle.diagnostic is not None
+    assert oracle.diagnostic.code is RouteFailureCode.NO_PATH
+
+
+def test_polygon_keepouts_share_the_object_and_relation_budgets() -> None:
+    router = AStarRouter()
+    two_keepouts = _snapshot(
+        polygon_keepouts=(
+            _octagon(2_500, 2_500, 500, 150),
+            _octagon(7_500, 7_500, 500, 150),
+        )
+    )
+    object_limited = router.propose(
+        two_keepouts, _request(two_keepouts, settings=_settings(max_obstacles=1))
+    )
+    _assert_failure(object_limited, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+
+    mixed = _snapshot(
+        keepouts=((-10_000, -10_000, -9_995, -9_995),),
+        polygon_keepouts=(_octagon(5_000, 5_000, 1_000, 300),),
+    )
+    mixed_limited = router.propose(mixed, _request(mixed, settings=_settings(max_obstacles=1)))
+    _assert_failure(mixed_limited, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+
+    relation_limited = router.propose(
+        two_keepouts, _request(two_keepouts, settings=_settings(max_obstacle_checks=4))
+    )
+    _assert_failure(relation_limited, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    assert relation_limited.diagnostic is not None
+    assert relation_limited.diagnostic.obstacle_checks == 4
+    assert relation_limited.diagnostic.expanded_states == 0
+
+
+def test_zone_and_keepout_polygons_share_one_deterministic_order() -> None:
+    # Both object classes now land in the same polygon list, so the sort key has to keep a
+    # stable total order across them. Their ID prefixes differ, so ties cannot occur.
+    snapshot = _snapshot(
+        polygon_keepouts=(_octagon(3_000, 5_000, 700, 200),),
+        foreign_zones=(_octagon(7_000, 5_000, 700, 200),),
+    )
+    request = _request(snapshot)
+
+    problem = _problem_of(snapshot, request)
+    first = _candidate(AStarRouter().propose(snapshot, request))
+    second = _candidate(AStarRouter().propose(snapshot, request))
+
+    assert [obstacle.source_id for obstacle in problem.polygon_obstacles] == [
+        "keepout:polygon:00",
+        "zone:foreign:00",
+    ]
+    assert first == second
+    assert first.cost.bend_count > 0
+
+
+def test_keepout_is_ignored_on_another_layer_or_without_track_prohibition() -> None:
+    router = AStarRouter()
+    clear = _snapshot()
+    blocking = _octagon(5_000, 5_000, 1_000, 300)
+    other_layer = _snapshot(polygon_keepouts=(blocking,), keepout_layer_id="layer:B.Cu")
+    vias_only = _snapshot(polygon_keepouts=(blocking,), keepout_prohibits_tracks=False)
+
+    straight = _candidate(router.propose(clear, _request(clear)))
+    for snapshot in (other_layer, vias_only):
+        candidate = _candidate(router.propose(snapshot, _request(snapshot)))
+        assert candidate.patch.vertices == straight.patch.vertices
+        assert candidate.cost == straight.cost
+
+
+@pytest.mark.parametrize(
+    "bounds",
+    [
+        (4_000, 4_000, 6_000, 6_000),
+        (6_000, 4_000, 4_000, 6_000),
+        (4_000, 6_000, 6_000, 4_000),
+        (6_000, 6_000, 4_000, 4_000),
+        (3_000, 4_500, 7_000, 5_500),
+        (4_500, 3_000, 5_500, 7_000),
+        (3_100, 4_700, 6_900, 5_300),
+    ],
+)
+def test_diagonal_segment_envelope_contains_the_exact_stadium(
+    bounds: tuple[int, int, int, int],
+) -> None:
+    """Exhaustively check the integer envelope is a superset of the true track shape."""
+
+    width_nm = 200
+    segment = Segment(
+        id="segment:probe",
+        net_id=OTHER_NET_ID,
+        layer_id=LAYER_ID,
+        start=PointNM(bounds[0], bounds[1]),
+        end=PointNM(bounds[2], bounds[3]),
+        width_nm=width_nm,
+    )
+    envelope = _segment_envelope(segment)
+    assert envelope is not None
+    assert len(envelope) == 6
+    assert len(set(envelope)) == 6
+    # A simple, non-degenerate hexagon, so the ray-crossing containment test is well defined.
+    assert Ring(envelope).points == envelope
+
+    radius_nm = (width_nm + 1) // 2
+    start, end = segment.start, segment.end
+    edge_x, edge_y = end.x - start.x, end.y - start.y
+    edge_length_sq = edge_x * edge_x + edge_y * edge_y
+    minimum_x = min(point.x for point in envelope)
+    maximum_x = max(point.x for point in envelope)
+    minimum_y = min(point.y for point in envelope)
+    maximum_y = max(point.y for point in envelope)
+
+    # Sample the stadium densely in exact integers: every lattice point within the envelope's
+    # bounding box whose squared distance to the centreline is at most the squared half width
+    # is real copper and must be inside the envelope.
+    checked = 0
+    for x in range(minimum_x, maximum_x + 1, 10):
+        for y in range(minimum_y, maximum_y + 1, 10):
+            point_x, point_y = x - start.x, y - start.y
+            projection = point_x * edge_x + point_y * edge_y
+            if projection <= 0:
+                distance_sq = point_x * point_x + point_y * point_y
+            elif projection >= edge_length_sq:
+                distance_sq = (x - end.x) ** 2 + (y - end.y) ** 2
+            else:
+                area = edge_x * point_y - edge_y * point_x
+                distance_sq = (area * area) // edge_length_sq
+            if distance_sq > radius_nm * radius_nm:
+                continue
+            checked += 1
+            assert _point_in_polygon(PointNM(x, y), envelope), (x, y)
+    assert checked > 100
+
+
+def _point_in_polygon(point: PointNM, polygon: tuple[PointNM, ...]) -> bool:
+    """Closed-region point-in-polygon using the router's own exact crossing predicate."""
+
+    inside = False
+    for index, edge_start in enumerate(polygon):
+        edge_end = polygon[(index + 1) % len(polygon)]
+        if _point_segment_distance_lt(point, edge_start, edge_end, 1):
+            return True
+        if _ray_crosses_right(point, edge_start, edge_end):
+            inside = not inside
+    return inside
+
+
+def test_foreign_diagonal_segment_detours_deterministically_and_matches_the_oracle() -> None:
+    snapshot = _snapshot(foreign_segment=(4_000, 3_000, 6_000, 7_000))
+    request = _request(snapshot)
+    router = AStarRouter()
+
+    first = _candidate(router.propose(snapshot, request))
+    second = _candidate(router.propose(snapshot, request))
+    oracle = run_dijkstra_oracle(snapshot, request)
+
+    assert first == second
+    assert canonical_candidate_bytes(first) == canonical_candidate_bytes(second)
+    assert first.cost.bend_count > 0
+    assert first.metrics.hard_internal_violations == 0
+    assert isinstance(oracle, DijkstraResult)
+    assert oracle.total_cost_nm == first.cost.total_cost_nm
+    assert oracle.bend_count == first.cost.bend_count
+    assert oracle.proximity_steps == first.cost.proximity_steps
+
+
+def test_forty_five_degree_foreign_segment_blocks_its_corridor() -> None:
+    # A 45 degree track from (3,000, 3,000) to (7,000, 7,000) crosses the straight y=5,000
+    # corridor at x=5,000, so the straight route must be refused and a detour found.
+    snapshot = _snapshot(foreign_segment=(3_000, 3_000, 7_000, 7_000))
+
+    candidate = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    assert candidate.cost.bend_count > 0
+    assert candidate.patch.vertices[0] == PointNM(1_000, 5_000)
+    assert candidate.patch.vertices[-1] == PointNM(9_000, 5_000)
+
+
+def test_foreign_diagonal_segment_uses_the_stricter_class_clearance() -> None:
+    router = AStarRouter()
+    lenient = _snapshot(foreign_segment=(4_000, 1_500, 6_000, 3_500), other_clearance_nm=100)
+    strict = _snapshot(foreign_segment=(4_000, 1_500, 6_000, 3_500), other_clearance_nm=2_000)
+    settings = _settings(proximity_penalty_nm=0)
+
+    lenient_route = _candidate(router.propose(lenient, _request(lenient, settings=settings)))
+    strict_route = _candidate(router.propose(strict, _request(strict, settings=settings)))
+
+    # The diagonal sits clear of the straight corridor under the lenient clearance and
+    # reaches into it once the obstacle net's own stricter class clearance governs.
+    assert lenient_route.cost.bend_count == 0
+    assert strict_route.cost.bend_count > 0
+
+
+def test_orthogonal_foreign_segments_keep_the_exact_rectangle_fast_path() -> None:
+    orthogonal = _snapshot(foreign_segment=(5_000, 3_000, 5_000, 7_000))
+    diagonal = _snapshot(foreign_segment=(4_000, 3_000, 6_000, 7_000))
+
+    orthogonal_problem = _problem_of(orthogonal, _request(orthogonal))
+    diagonal_problem = _problem_of(diagonal, _request(diagonal))
+
+    # Half width 100 plus clearance 100 inflates the swept rectangle with square corners.
+    assert orthogonal_problem.rect_obstacles == ((4_700, 2_700, 5_300, 7_300),)
+    assert orthogonal_problem.polygon_obstacles == ()
+    assert diagonal_problem.rect_obstacles == ()
+    assert len(diagonal_problem.polygon_obstacles) == 1
+    assert diagonal_problem.polygon_obstacles[0].margin_nm == 200
+    assert diagonal_problem.polygon_obstacles[0].source_id == "segment:foreign"
+    assert len(diagonal_problem.polygon_obstacles[0].points) == 6
+
+
+def test_foreign_diagonal_segments_share_the_object_and_relation_budgets() -> None:
+    router = AStarRouter()
+    snapshot = _snapshot(
+        foreign_segment=(4_000, 3_000, 6_000, 7_000),
+        keepouts=((-10_000, -10_000, -9_995, -9_995),),
+    )
+
+    object_limited = router.propose(
+        snapshot, _request(snapshot, settings=_settings(max_obstacles=1))
+    )
+    _assert_failure(object_limited, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+
+    relation_limited = router.propose(
+        snapshot, _request(snapshot, settings=_settings(max_obstacle_checks=3))
+    )
+    _assert_failure(relation_limited, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    assert relation_limited.diagnostic is not None
+    assert relation_limited.diagnostic.obstacle_checks == 3
+    assert relation_limited.diagnostic.expanded_states == 0
+
+
+def test_a_diagonal_foreign_segment_clear_of_the_route_does_not_force_a_detour() -> None:
+    aside = _snapshot(foreign_segment=(3_000, 8_000, 5_000, 9_500))
+
+    assert _candidate(AStarRouter().propose(aside, _request(aside))).cost.bend_count == 0
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3, 4])
+def test_diagonal_core_chain_is_inside_the_track_and_self_connected(seed: int) -> None:
+    """Every square is real copper and touches its neighbour, in exact integer arithmetic.
+
+    These are the two properties the component model relies on. The subset half is what stops
+    the router claiming an electrical connection the board does not have; the overlap half is
+    what makes a chain behave as one piece of copper rather than a dotted line.
+    """
+
+    # Reproducible sampling of the geometry space; nothing here is security relevant.
+    generator = random.Random(seed)  # noqa: S311
+    work = _WorkBudget(settings=_settings(max_obstacle_checks=10_000_000), cancelled=None)
+    checked_squares = 0
+
+    for _ in range(60):
+        start_x = generator.randint(-50_000, 50_000)
+        start_y = generator.randint(-50_000, 50_000)
+        end_x = start_x + generator.choice([-1, 1]) * generator.randint(1, 2_000_000)
+        end_y = start_y + generator.choice([-1, 1]) * generator.randint(1, 2_000_000)
+        width_nm = generator.choice([63_500, 100_000, 150_000, 200_000, 250_000, 400_000])
+        segment = Segment(
+            id="segment:probe",
+            net_id=NET_ID,
+            layer_id=LAYER_ID,
+            start=PointNM(start_x, start_y),
+            end=PointNM(end_x, end_y),
+            width_nm=width_nm,
+        )
+        cores = _diagonal_segment_cores(segment, work)
+        assert cores is not None
+
+        radius_nm = width_nm // 2
+        edge_x, edge_y = end_x - start_x, end_y - start_y
+        edge_length_sq = edge_x * edge_x + edge_y * edge_y
+
+        for minimum_x, minimum_y, maximum_x, maximum_y in cores:
+            # A square is convex, so containment of its four corners implies containment of
+            # every point in it.
+            for corner_x, corner_y in (
+                (minimum_x, minimum_y),
+                (maximum_x, minimum_y),
+                (minimum_x, maximum_y),
+                (maximum_x, maximum_y),
+            ):
+                point_x, point_y = corner_x - start_x, corner_y - start_y
+                projection = point_x * edge_x + point_y * edge_y
+                if projection <= 0:
+                    distance_sq = point_x * point_x + point_y * point_y
+                elif projection >= edge_length_sq:
+                    distance_sq = (corner_x - end_x) ** 2 + (corner_y - end_y) ** 2
+                else:
+                    area = edge_x * point_y - edge_y * point_x
+                    distance_sq = (area * area) // edge_length_sq
+                assert distance_sq <= radius_nm * radius_nm
+            checked_squares += 1
+
+        for previous, following in pairwise(cores):
+            assert previous[0] <= following[2]
+            assert following[0] <= previous[2]
+            assert previous[1] <= following[3]
+            assert following[1] <= previous[3]
+
+        # The chain reaches both solder points, which is what lets it attach to pads.
+        canonical_start, canonical_end = sorted(
+            [(start_x, start_y), (end_x, end_y)],
+        )
+        assert (cores[0][0] + cores[0][2]) // 2 == canonical_start[0]
+        assert (cores[0][1] + cores[0][3]) // 2 == canonical_start[1]
+        assert (cores[-1][0] + cores[-1][2]) // 2 == canonical_end[0]
+        assert (cores[-1][1] + cores[-1][3]) // 2 == canonical_end[1]
+
+    assert checked_squares > 200
+
+
+# Three pads: pad:01 at (1,000, 5,000), pad:02 at (9,000, 5,000), pad:03 at (5,000, 8,000).
+_SPINE = (1_000, 5_000, 9_000, 5_000)
+_BRANCH = (5_000, 5_000, 5_000, 8_000)
+
+
+def test_a_fully_connected_multi_pin_net_reports_already_connected() -> None:
+    snapshot = _snapshot(third_target=True, own_segments=(_SPINE, _BRANCH))
+    request = _request(snapshot)
+    router = AStarRouter()
+
+    first = router.propose(snapshot, request)
+    connection = _connection(first)
+
+    assert first == router.propose(snapshot, request)
+    assert connection.pad_count == 3
+    assert connection.attachment_segments == 2
+    assert connection.component_objects == 5
+    # The bounding pair of the lexicographically sorted pads, not a route.
+    assert connection.start_pad_id == "pad:01"
+    assert connection.end_pad_id == "pad:03"
+
+
+def test_a_partly_connected_multi_pin_net_is_still_refused_for_its_pad_count() -> None:
+    # The spine joins pad:01 and pad:02 but nothing reaches pad:03.
+    snapshot = _snapshot(third_target=True, own_segments=(_SPINE,))
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.INVALID_TWO_PIN_NET)
+    assert result.diagnostic is not None
+    assert "exactly two pads" in result.diagnostic.message
+
+
+def test_a_multi_pin_net_carrying_a_via_is_never_claimed_connected() -> None:
+    # Every pad's copper meets, but a via is connectivity this model cannot see, so the net
+    # falls back to the pad-count refusal rather than a connection claim.
+    snapshot = _snapshot(third_target=True, own_segments=(_SPINE, _BRANCH), own_via=True)
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.INVALID_TWO_PIN_NET)
+
+
+def test_a_multi_pin_net_carrying_a_zone_is_never_claimed_connected() -> None:
+    snapshot = _snapshot(
+        third_target=True,
+        own_segments=(_SPINE, _BRANCH),
+        own_zone=_rectangle(1_000, 1_000, 2_000, 2_000),
+    )
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.INVALID_TWO_PIN_NET)
+
+
+def test_a_two_pin_net_still_names_its_via_and_zone_directly() -> None:
+    router = AStarRouter()
+    with_via = _snapshot(own_segments=((1_000, 5_000, 9_000, 5_000),), own_via=True)
+    with_zone = _snapshot(
+        own_segments=((1_000, 5_000, 9_000, 5_000),),
+        own_zone=_rectangle(1_000, 1_000, 2_000, 2_000),
+    )
+
+    via_result = router.propose(with_via, _request(with_via))
+    zone_result = router.propose(with_zone, _request(with_zone))
+
+    _assert_failure(via_result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    _assert_failure(zone_result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert via_result.diagnostic is not None
+    assert zone_result.diagnostic is not None
+    assert "via" in via_result.diagnostic.message
+    assert "zone" in zone_result.diagnostic.message
+
+
+def test_a_multi_pin_net_without_same_net_copper_is_refused() -> None:
+    snapshot = _snapshot(third_target=True)
+
+    _assert_failure(
+        AStarRouter().propose(snapshot, _request(snapshot)),
+        RouteFailureCode.INVALID_TWO_PIN_NET,
+    )

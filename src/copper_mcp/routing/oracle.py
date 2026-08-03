@@ -15,6 +15,7 @@ from copper_mcp.board_ir import BoardIRSnapshot
 from copper_mcp.routing.astar import (
     _DIRECTIONS,
     _NO_DIRECTION,
+    _AlreadyConnectedError,
     _edge_is_legal,
     _ExpectedFailureError,
     _fail,
@@ -23,6 +24,7 @@ from copper_mcp.routing.astar import (
     _Problem,
     _proximity_step,
     _Score,
+    _start_states,
     _State,
     _WorkBudget,
 )
@@ -103,22 +105,26 @@ def _search_dijkstra(problem: _Problem, work: _WorkBudget) -> DijkstraResult:
     """Run uniform-cost search over the prepared A* state graph."""
 
     settings = problem.request.settings
-    start: _State = (0, 0, _NO_DIRECTION)
+    start_states = _start_states(problem)
     start_score: _Score = (0, 0, 0)
-    best: dict[_State, _Score] = {start: start_score}
-    frontier: list[tuple[int, int, int, int, int, int, int, _State]] = [
-        (0, 0, 0, 0, 0, _NO_DIRECTION, 0, start)
-    ]
+    best: dict[_State, _Score] = dict.fromkeys(start_states, start_score)
+    frontier: list[tuple[int, int, int, int, int, int, int, _State]] = []
     counter = 0
+    for state in start_states:
+        heapq.heappush(
+            frontier,
+            (0, 0, 0, state[1], state[0], _NO_DIRECTION, counter, state),
+        )
+        counter += 1
     expanded_states = 0
-    peak_frontier_states = 1
+    peak_frontier_states = len(start_states)
 
     while frontier:
         work.checkpoint()
         g_cost, bends, proximity_steps, iy, ix, direction, _, state = heapq.heappop(frontier)
         if best.get(state) != (g_cost, bends, proximity_steps):
             continue
-        if (ix, iy) == (problem.goal_ix, problem.goal_iy):
+        if (ix, iy) in problem.target_nodes:
             return DijkstraResult(
                 total_cost_nm=g_cost,
                 bend_count=bends,
@@ -209,5 +215,16 @@ def run_dijkstra_oracle(
     try:
         problem = _prepare(snapshot, request, work)
         return _search_dijkstra(problem, work)
+    except _AlreadyConnectedError:
+        # Adding no copper is the exact optimum once both pads share one component. The single
+        # frontier entry records the trivial start state that uniform-cost search would pop.
+        return DijkstraResult(
+            total_cost_nm=0,
+            bend_count=0,
+            proximity_steps=0,
+            expanded_states=0,
+            peak_frontier_states=1,
+            obstacle_checks=work.obstacle_checks,
+        )
     except _ExpectedFailureError as failure:
         return _failure_result(failure)

@@ -1,6 +1,7 @@
 PYTHON ?= python3
 
-.PHONY: install install-dev test lint format typecheck security build check benchmark-routing clean
+.PHONY: install install-dev test lint format typecheck security build check \
+	check-audio-benchmarks check-circuit-intents benchmark-audio benchmark-routing clean
 
 install:
 	$(PYTHON) -m pip install -e .
@@ -15,6 +16,8 @@ lint:
 	$(PYTHON) -m ruff check .
 	$(PYTHON) scripts/check_version.py
 	$(PYTHON) scripts/check_ledgers.py
+	$(PYTHON) scripts/check_audio_benchmarks.py
+	PYTHONPATH=src $(PYTHON) scripts/check_circuit_intents.py
 
 format:
 	$(PYTHON) -m ruff format .
@@ -34,6 +37,15 @@ check: lint typecheck test security build
 
 benchmark-routing:
 	PYTHONPATH=src $(PYTHON) scripts/benchmark_routing.py --iterations 7 --warmups 2
+
+check-audio-benchmarks:
+	$(PYTHON) scripts/check_audio_benchmarks.py
+
+check-circuit-intents:
+	PYTHONPATH=src $(PYTHON) scripts/check_circuit_intents.py
+
+benchmark-audio: check-audio-benchmarks
+	PYTHONPATH=src $(PYTHON) scripts/run_audio_benchmarks.py
 
 clean:
 	$(PYTHON) -c "import shutil; [shutil.rmtree(p, ignore_errors=True) for p in ['build', 'dist', '.coverage', 'htmlcov', '.mypy_cache', '.pytest_cache', '.ruff_cache']]"

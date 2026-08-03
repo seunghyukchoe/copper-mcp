@@ -30,7 +30,7 @@ from copper_mcp.request_boundary import (
     net_class_constraints,
     required_fields,
 )
-from copper_mcp.security import read_bounded_file, resolve_workspace_file
+from copper_mcp.security import read_workspace_file
 
 _REQUIRED_FIELDS = ("board", "constraints")
 _OBJECT_COLLECTIONS = (
@@ -195,14 +195,14 @@ def summarize_board_ir(payload: Any, settings: Settings) -> BoardIrSummary:
         raise BoardIrError("Board IR settings are malformed")
     request = parse_board_ir_request(payload)
 
-    board_file = resolve_workspace_file(
+    board = read_workspace_file(
         settings.workspace,
         request.board,
         allowed_suffixes={".kicad_pcb"},
         max_bytes=settings.max_board_bytes,
     )
-    relative_path = board_file.relative_to(settings.workspace.resolve(strict=True)).as_posix()
-    source = read_bounded_file(board_file, max_bytes=settings.max_board_bytes)
+    relative_path = board.path.relative_to(settings.workspace.resolve(strict=True)).as_posix()
+    source = board.content
     board_revision = f"sha256:{hashlib.sha256(source).hexdigest()}"
 
     default_limits = ParseLimits()

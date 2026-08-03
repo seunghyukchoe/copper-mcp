@@ -2,12 +2,24 @@ from __future__ import annotations
 
 import io
 import json
+import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+from jsonschema import Draft202012Validator
+
+from copper_mcp.circuit_intent_service import build_schematic_from_snapshot_json
 from copper_mcp.cli import main
+
+ROOT = Path(__file__).resolve().parents[1]
+CIRCUIT_FIXTURE = ROOT / "benchmarks" / "audio" / "fixtures" / "rc-low-pass-intent-v1.json"
+
+
+def _file_state(path: Path) -> tuple[bytes, int, int, int]:
+    stat = path.stat()
+    return path.read_bytes(), stat.st_ino, stat.st_size, stat.st_mtime_ns
 
 
 class CliTests(unittest.TestCase):
@@ -122,6 +134,201 @@ class CliTests(unittest.TestCase):
             )
         self.assertEqual(result, 2)
         self.assertIn("copper layer", stderr.getvalue())
+
+    def test_render_schematic_creates_one_exact_new_file_with_redacted_json(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            source = workspace / "intent.json"
+            output = workspace / "generated.kicad_sch"
+            source.write_bytes(CIRCUIT_FIXTURE.read_bytes())
+            source_before = _file_state(source)
+            expected = build_schematic_from_snapshot_json(source_before[0])
+            stdout = io.StringIO()
+
+            with redirect_stdout(stdout):
+                result = main(
+                    [
+                        "--workspace",
+                        str(workspace),
+                        "render-schematic",
+                        source.name,
+                        "--output",
+                        output.name,
+                    ]
+                )
+
+            self.assertEqual(result, 0)
+            self.assertEqual(output.read_bytes(), expected.artifact.content)
+            self.assertEqual(_file_state(source), source_before)
+            self.assertEqual(
+                {path.name for path in workspace.iterdir()},
+                {source.name, output.name},
+            )
+            document = json.loads(stdout.getvalue())
+            expected_document = expected.to_dict()
+            expected_document["export"] = {
+                "created": True,
+                "output_path": output.name,
+            }
+            self.assertEqual(document, expected_document)
+            build_schema = json.loads(
+                (ROOT / "schemas" / "circuit-schematic-build" / "0.1.0.schema.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            Draft202012Validator.check_schema(build_schema)
+            Draft202012Validator(build_schema).validate(document)
+            serialized = json.dumps(document, sort_keys=True)
+            for private_value in (
+                "AUDIO_IN",
+                "AUDIO_OUT",
+                "GND",
+                "100n",
+                "1k",
+                "component:c-filter",
+                "(kicad_sch",
+            ):
+                self.assertNotIn(private_value, serialized)
+
+    def test_render_schematic_refuses_to_overwrite_an_existing_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            source = workspace / "intent.json"
+            output = workspace / "existing.kicad_sch"
+            source.write_bytes(CIRCUIT_FIXTURE.read_bytes())
+            output.write_bytes(b"user-owned schematic")
+            source_before = _file_state(source)
+            output_before = _file_state(output)
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                result = main(
+                    [
+                        "--workspace",
+                        str(workspace),
+                        "render-schematic",
+                        source.name,
+                        "--output",
+                        output.name,
+                    ]
+                )
+
+            self.assertEqual(result, 2)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertEqual(_file_state(source), source_before)
+            self.assertEqual(_file_state(output), output_before)
+
+    def test_render_schematic_rejects_uppercase_output_suffix(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            source = workspace / "intent.json"
+            output = workspace / "generated.KICAD_SCH"
+            source.write_bytes(CIRCUIT_FIXTURE.read_bytes())
+            source_before = _file_state(source)
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                result = main(
+                    [
+                        "--workspace",
+                        str(workspace),
+                        "render-schematic",
+                        source.name,
+                        "--output",
+                        output.name,
+                    ]
+                )
+
+            self.assertEqual(result, 2)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertFalse(output.exists())
+            self.assertEqual(_file_state(source), source_before)
+
+    def test_render_schematic_rejects_output_traversal_and_wrong_suffix(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            workspace = base / "workspace"
+            workspace.mkdir()
+            source = workspace / "intent.json"
+            source.write_bytes(CIRCUIT_FIXTURE.read_bytes())
+            source_before = _file_state(source)
+
+            for requested_output in ("../escaped.kicad_sch", "wrong-extension.txt"):
+                with self.subTest(output=requested_output):
+                    stderr = io.StringIO()
+                    with redirect_stderr(stderr):
+                        result = main(
+                            [
+                                "--workspace",
+                                str(workspace),
+                                "render-schematic",
+                                source.name,
+                                "--output",
+                                requested_output,
+                            ]
+                        )
+                    self.assertEqual(result, 2)
+
+            self.assertFalse((base / "escaped.kicad_sch").exists())
+            self.assertFalse((workspace / "wrong-extension.txt").exists())
+            self.assertEqual(_file_state(source), source_before)
+
+    def test_render_schematic_rejects_a_symlinked_output_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            workspace = base / "workspace"
+            outside = base / "outside"
+            workspace.mkdir()
+            outside.mkdir()
+            source = workspace / "intent.json"
+            source.write_bytes(CIRCUIT_FIXTURE.read_bytes())
+            source_before = _file_state(source)
+            (workspace / "linked").symlink_to(outside, target_is_directory=True)
+            stderr = io.StringIO()
+
+            with redirect_stderr(stderr):
+                result = main(
+                    [
+                        "--workspace",
+                        str(workspace),
+                        "render-schematic",
+                        source.name,
+                        "--output",
+                        "linked/escaped.kicad_sch",
+                    ]
+                )
+
+            self.assertEqual(result, 2)
+            self.assertFalse((outside / "escaped.kicad_sch").exists())
+            self.assertEqual(_file_state(source), source_before)
+
+    def test_render_schematic_leaves_no_output_for_invalid_intent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            source = workspace / "invalid.json"
+            output = workspace / "must-not-exist.kicad_sch"
+            source.write_text('{"content":{"title":"SECRET_CIRCUIT"}}', encoding="utf-8")
+            source_before = _file_state(source)
+            stderr = io.StringIO()
+
+            with redirect_stderr(stderr):
+                result = main(
+                    [
+                        "--workspace",
+                        str(workspace),
+                        "render-schematic",
+                        source.name,
+                        "--output",
+                        output.name,
+                    ]
+                )
+
+            self.assertEqual(result, 2)
+            self.assertFalse(output.exists())
+            self.assertEqual(_file_state(source), source_before)
+            self.assertNotIn("SECRET_CIRCUIT", stderr.getvalue())
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import signal
 import subprocess
@@ -61,6 +62,14 @@ class KiCadCliTests(unittest.TestCase):
         self.board.write_text("(kicad_pcb (version 20240108))", encoding="utf-8")
         self.settings = Settings(workspace=self.workspace, max_drc_report_bytes=1024)
 
+    def _write_local_footprint_table(self) -> str:
+        table = (
+            '(fp_lib_table (version 7) (lib (name "Local") (type "KiCad") '
+            '(uri "${KIPRJMOD}/local.pretty") (options "") (descr "")))'
+        )
+        (self.workspace / "fp-lib-table").write_text(table, encoding="utf-8")
+        return table
+
     def _completed_run(
         self,
         report: dict[str, object] | bytes,
@@ -78,6 +87,29 @@ class KiCadCliTests(unittest.TestCase):
             self.assertEqual(Path(command[-1]).name, self.board.name)
             self.assertNotEqual(Path(command[-1]).parent, self.workspace)
             report_path = Path(command[command.index("--output") + 1])
+            environment = kwargs["env"]
+            self.assertIsInstance(environment, dict)
+            assert isinstance(environment, dict)
+            self.assertEqual(environment["PATH"], os.defpath)
+            self.assertEqual(environment["LANG"], "C")
+            self.assertEqual(environment["LC_ALL"], "C")
+            self.assertEqual(Path(kwargs["cwd"]), Path(environment["TMPDIR"]))
+            self.assertTrue(Path(kwargs["cwd"]).is_dir())
+            private_root = Path(environment["HOME"]).parent
+            for name in (
+                "HOME",
+                "KICAD_CONFIG_HOME",
+                "KICAD_DOCUMENTS_HOME",
+                "XDG_CONFIG_HOME",
+                "XDG_CACHE_HOME",
+                "XDG_DATA_HOME",
+                "XDG_STATE_HOME",
+                "XDG_RUNTIME_DIR",
+                "TMPDIR",
+            ):
+                Path(environment[name]).relative_to(private_root)
+            self.assertNotIn("COPPER_MCP_TEST_SECRET", environment)
+            self.assertNotIn("KICAD_USER_TEMPLATE_DIR", environment)
             if isinstance(report, bytes):
                 report_path.write_bytes(report)
             else:
@@ -200,6 +232,62 @@ class KiCadCliTests(unittest.TestCase):
                         with self.assertRaises(KiCadCliError):
                             run_board_drc(self.board.name, self.settings)
 
+    def test_rejects_duplicate_nonfinite_and_deep_report_json(self) -> None:
+        valid = json.dumps(drc_report(), separators=(",", ":"))
+        duplicate = valid.replace(
+            '"$schema":',
+            '"source":"SECRET_DUPLICATE_SOURCE","$schema":',
+            1,
+        ).encode()
+        nonfinite_report = drc_report()
+        nonfinite_report["unknown_metric"] = float("nan")
+        deeply_nested_report = drc_report()
+        nested: object = "leaf"
+        for _ in range(70):
+            nested = [nested]
+        deeply_nested_report["unknown_nested"] = nested
+
+        for name, report in (
+            ("duplicate key", duplicate),
+            ("non-finite number", nonfinite_report),
+            ("excessive depth", deeply_nested_report),
+        ):
+            with self.subTest(name=name):
+                with patch(
+                    "copper_mcp.kicad_cli.discover_kicad_cli",
+                    return_value=Path("/trusted/kicad-cli"),
+                ):
+                    with patch(
+                        "copper_mcp.kicad_cli.subprocess.run",
+                        side_effect=self._completed_run(report),
+                    ):
+                        with self.assertRaises(KiCadCliError) as raised:
+                            run_board_drc(self.board.name, self.settings)
+                self.assertNotIn("SECRET_DUPLICATE_SOURCE", str(raised.exception))
+
+    def test_rejects_unknown_child_side_effect_in_private_snapshot(self) -> None:
+        def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            snapshot_root = Path(command[-1]).parent
+            snapshot_root.chmod(0o700)
+            unexpected = snapshot_root / "unexpected.kicad_prl"
+            unexpected.write_text(
+                "private side effect",
+                encoding="utf-8",
+            )
+            unexpected.chmod(0o400)
+            snapshot_root.chmod(0o500)
+            report_path = Path(command[command.index("--output") + 1])
+            report_path.write_text(json.dumps(drc_report()), encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0)
+
+        with patch(
+            "copper_mcp.kicad_cli.discover_kicad_cli",
+            return_value=Path("/trusted/kicad-cli"),
+        ):
+            with patch("copper_mcp.kicad_cli.subprocess.run", side_effect=run):
+                with self.assertRaisesRegex(KiCadCliError, "unknown side effect"):
+                    run_board_drc(self.board.name, self.settings)
+
     def test_rejects_incomplete_or_inconsistent_report_contract(self) -> None:
         cases: list[tuple[str, dict[str, object]]] = []
         missing_date = drc_report()
@@ -248,6 +336,45 @@ class KiCadCliTests(unittest.TestCase):
                 with self.assertRaisesRegex(KiCadCliError, "configured limit"):
                     run_board_drc(self.board.name, self.settings)
 
+    def test_rejects_symlinked_report_without_reading_its_target(self) -> None:
+        outside = self.workspace / "outside-report.json"
+        outside.write_text(
+            json.dumps(
+                drc_report(
+                    violations=[finding("clearance", "error", description="SECRET_REPORT_TARGET")]
+                )
+            ),
+            encoding="utf-8",
+        )
+
+        def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            report_path = Path(command[command.index("--output") + 1])
+            report_path.symlink_to(outside)
+            return subprocess.CompletedProcess(command, 0)
+
+        with patch(
+            "copper_mcp.kicad_cli.discover_kicad_cli", return_value=Path("/trusted/kicad-cli")
+        ):
+            with patch("copper_mcp.kicad_cli.subprocess.run", side_effect=run):
+                with self.assertRaisesRegex(KiCadCliError, "configured limit") as raised:
+                    run_board_drc(self.board.name, self.settings)
+        self.assertNotIn("SECRET_REPORT_TARGET", str(raised.exception))
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "FIFOs are not available")
+    def test_rejects_fifo_report_without_blocking_on_it(self) -> None:
+        def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            report_path = Path(command[command.index("--output") + 1])
+            os.mkfifo(report_path, mode=0o600)
+            return subprocess.CompletedProcess(command, 0)
+
+        with patch(
+            "copper_mcp.kicad_cli.discover_kicad_cli",
+            return_value=Path("/trusted/kicad-cli"),
+        ):
+            with patch("copper_mcp.kicad_cli.subprocess.run", side_effect=run):
+                with self.assertRaisesRegex(KiCadCliError, "configured limit"):
+                    run_board_drc(self.board.name, self.settings)
+
     def test_rejects_process_file_limit_signal(self) -> None:
         with patch(
             "copper_mcp.kicad_cli.discover_kicad_cli", return_value=Path("/trusted/kicad-cli")
@@ -270,6 +397,45 @@ class KiCadCliTests(unittest.TestCase):
                 with self.assertRaisesRegex(KiCadCliError, "timed out"):
                     run_board_drc(self.board.name, self.settings)
 
+    def test_child_environment_does_not_inherit_secrets_or_kicad_overrides(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "COPPER_MCP_TEST_SECRET": "must-not-reach-kicad",
+                "KICAD_USER_TEMPLATE_DIR": "/private/live/templates",
+            },
+        ):
+            with patch(
+                "copper_mcp.kicad_cli.discover_kicad_cli",
+                return_value=Path("/trusted/kicad-cli"),
+            ):
+                with patch(
+                    "copper_mcp.kicad_cli.subprocess.run",
+                    side_effect=self._completed_run(drc_report()),
+                ) as mocked_run:
+                    run_board_drc(self.board.name, self.settings)
+
+        environment = mocked_run.call_args.kwargs["env"]
+        self.assertNotIn("COPPER_MCP_TEST_SECRET", environment)
+        self.assertNotIn("KICAD_USER_TEMPLATE_DIR", environment)
+
+    def test_rejects_oversized_private_kicad_side_effect(self) -> None:
+        def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            environment = kwargs["env"]
+            assert isinstance(environment, dict)
+            config = Path(environment["KICAD_CONFIG_HOME"])
+            (config / "oversized.json").write_bytes(b"x" * 1025)
+            report_path = Path(command[command.index("--output") + 1])
+            report_path.write_text(json.dumps(drc_report()), encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0)
+
+        with patch(
+            "copper_mcp.kicad_cli.discover_kicad_cli", return_value=Path("/trusted/kicad-cli")
+        ):
+            with patch("copper_mcp.kicad_cli.subprocess.run", side_effect=run):
+                with self.assertRaisesRegex(KiCadCliError, "private KiCad state.*per-file"):
+                    run_board_drc(self.board.name, self.settings)
+
     def test_discards_result_when_board_changes(self) -> None:
         with patch(
             "copper_mcp.kicad_cli.discover_kicad_cli", return_value=Path("/trusted/kicad-cli")
@@ -284,8 +450,7 @@ class KiCadCliTests(unittest.TestCase):
     def test_snapshots_and_tracks_project_rule_context(self) -> None:
         rules = self.board.with_suffix(".kicad_dru")
         rules.write_text("(version 1)", encoding="utf-8")
-        library_table = self.workspace / "fp-lib-table"
-        library_table.write_text("(fp_lib_table)", encoding="utf-8")
+        library_table_text = self._write_local_footprint_table()
         footprint = self.workspace / "local.pretty" / "R.kicad_mod"
         footprint.parent.mkdir()
         footprint.write_text("(footprint R)", encoding="utf-8")
@@ -299,7 +464,7 @@ class KiCadCliTests(unittest.TestCase):
             )
             self.assertEqual(
                 (snapshot_board.parent / "fp-lib-table").read_text(encoding="utf-8"),
-                "(fp_lib_table)",
+                library_table_text,
             )
             self.assertEqual(
                 (snapshot_board.parent / "local.pretty" / "R.kicad_mod").read_text(
@@ -319,10 +484,71 @@ class KiCadCliTests(unittest.TestCase):
                 with self.assertRaisesRegex(KiCadCliError, "board or DRC rules changed"):
                     run_board_drc(self.board.name, self.settings)
 
+    def test_rejects_nonlocal_library_table_entries_before_starting_kicad(self) -> None:
+        library_table = self.workspace / "fp-lib-table"
+        cases = {
+            "absolute": "/private/vendor.pretty",
+            "environment variable": "${HOME}/vendor.pretty",
+            "remote": "https://example.invalid/vendor.pretty",
+            "plugin": "plugin://private/vendor.pretty",
+            "parent escape": "${KIPRJMOD}/../vendor.pretty",
+        }
+
+        for name, uri in cases.items():
+            with self.subTest(name=name):
+                library_table.write_text(
+                    "(fp_lib_table (version 7) "
+                    f'(lib (name "Untrusted") (type "KiCad") (uri "{uri}") '
+                    '(options "") (descr "")))',
+                    encoding="utf-8",
+                )
+                with patch("copper_mcp.kicad_cli.discover_kicad_cli") as mocked_discovery:
+                    with patch("copper_mcp.kicad_cli.subprocess.run") as mocked_run:
+                        with self.assertRaisesRegex(KiCadCliError, "library"):
+                            run_board_drc(self.board.name, self.settings)
+                mocked_discovery.assert_not_called()
+                mocked_run.assert_not_called()
+
+    def test_rejects_plugin_library_type_before_starting_kicad(self) -> None:
+        library_table = self.workspace / "fp-lib-table"
+        library_table.write_text(
+            '(fp_lib_table (version 7) (lib (name "Plugin") (type "Plugin") '
+            '(uri "local.pretty") (options "") (descr "")))',
+            encoding="utf-8",
+        )
+
+        with patch("copper_mcp.kicad_cli.discover_kicad_cli") as mocked_discovery:
+            with patch("copper_mcp.kicad_cli.subprocess.run") as mocked_run:
+                with self.assertRaisesRegex(KiCadCliError, "library"):
+                    run_board_drc(self.board.name, self.settings)
+        mocked_discovery.assert_not_called()
+        mocked_run.assert_not_called()
+
+    def test_rejects_flag_form_hidden_and_disabled_library_entries(self) -> None:
+        library_table = self.workspace / "fp-lib-table"
+        footprint = self.workspace / "local.pretty" / "R.kicad_mod"
+        footprint.parent.mkdir()
+        footprint.write_text("(footprint R)", encoding="utf-8")
+
+        for flag in ("(hidden)", "(disabled)", "(hidden yes)"):
+            with self.subTest(flag=flag):
+                library_table.write_text(
+                    '(fp_lib_table (version 7) (lib (name "Local") (type "KiCad") '
+                    f'(uri "${{KIPRJMOD}}/local.pretty") (options "") (descr "") {flag}))',
+                    encoding="utf-8",
+                )
+                with patch("copper_mcp.kicad_cli.discover_kicad_cli") as mocked_discovery:
+                    with patch("copper_mcp.kicad_cli.subprocess.run") as mocked_run:
+                        with self.assertRaisesRegex(KiCadCliError, "library"):
+                            run_board_drc(self.board.name, self.settings)
+                mocked_discovery.assert_not_called()
+                mocked_run.assert_not_called()
+
     def test_rejects_cumulative_context_before_starting_kicad(self) -> None:
         footprint = self.workspace / "local.pretty" / "R.kicad_mod"
         footprint.parent.mkdir()
         footprint.write_bytes(b"x" * 64)
+        self._write_local_footprint_table()
         settings = Settings(
             workspace=self.workspace,
             max_drc_context_bytes=self.board.stat().st_size + 32,
@@ -338,6 +564,7 @@ class KiCadCliTests(unittest.TestCase):
         library.mkdir()
         (library / "R1.kicad_mod").write_text("(footprint R1)", encoding="utf-8")
         (library / "R2.kicad_mod").write_text("(footprint R2)", encoding="utf-8")
+        self._write_local_footprint_table()
         settings = Settings(workspace=self.workspace, max_drc_context_files=2)
 
         with patch("copper_mcp.kicad_cli.subprocess.run") as mocked_run:
@@ -360,6 +587,10 @@ class KiCadCliTests(unittest.TestCase):
             discover_kicad_cli(settings)
 
     @unittest.skipUnless(REAL_KICAD_CLI.is_file(), "KiCad CLI is not installed")
+    @unittest.skipIf(
+        bool(os.environ.get("CODEX_SANDBOX")),
+        "managed macOS sandbox aborts KiCad PCB DRC before a report is produced",
+    )
     def test_real_kicad_drc_is_read_only(self) -> None:
         source = Path(__file__).parent / "fixtures" / "minimal.kicad_pcb"
         board = self.workspace / "minimal.kicad_pcb"

@@ -7,6 +7,7 @@ import heapq
 import json
 from dataclasses import dataclass, replace
 from itertools import pairwise
+from math import isqrt
 from typing import TypeAlias, cast
 
 from copper_mcp.board_ir import (
@@ -15,15 +16,18 @@ from copper_mcp.board_ir import (
     BoardIRValidationError,
     NetClass,
     Pad,
+    PadShape,
     PointNM,
     Ring,
     Segment,
+    Zone,
     verify_snapshot,
 )
 from copper_mcp.routing.contracts import (
     AStarSettings,
     CancellationCheck,
     RouteCandidate,
+    RouteConnection,
     RouteCost,
     RouteDiagnostic,
     RouteFailureCode,
@@ -33,11 +37,12 @@ from copper_mcp.routing.contracts import (
     RouteResult,
 )
 
-ROUTER_VERSION = "astar-grid/0.1.0"
+ROUTER_VERSION = "astar-grid/0.3.0"
 ROUTING_POLICY = "orthogonal-a-star-v1"
 _EMPTY_DIGEST = f"sha256:{'0' * 64}"
 
 _Rect: TypeAlias = tuple[int, int, int, int]
+_Node: TypeAlias = tuple[int, int]
 _State: TypeAlias = tuple[int, int, int]
 _Score: TypeAlias = tuple[int, int, int]
 _DIRECTIONS: tuple[tuple[int, int], ...] = (
@@ -50,6 +55,16 @@ _NO_DIRECTION = len(_DIRECTIONS)
 
 
 @dataclass(frozen=True, slots=True)
+class _PolygonObstacle:
+    """One conservative polygon envelope, from a solid zone or a track keepout."""
+
+    source_id: str
+    points: tuple[PointNM, ...]
+    bounds: _Rect
+    margin_nm: int
+
+
+@dataclass(frozen=True, slots=True)
 class _Problem:
     snapshot: BoardIRSnapshot
     request: RouteRequest
@@ -58,13 +73,20 @@ class _Problem:
     width_nm: int
     clearance_nm: int
     safe_board: _Rect
-    obstacles: tuple[_Rect, ...]
+    rect_obstacles: tuple[_Rect, ...]
+    polygon_obstacles: tuple[_PolygonObstacle, ...]
     min_ix: int
     max_ix: int
     min_iy: int
     max_iy: int
     goal_ix: int
     goal_iy: int
+    source_nodes: frozenset[_Node]
+    target_nodes: frozenset[_Node]
+    target_min_ix: int
+    target_max_ix: int
+    target_min_iy: int
+    target_max_iy: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +94,17 @@ class _ExpectedFailureError(Exception):
     code: RouteFailureCode
     message: str
     expanded_states: int = 0
+    obstacle_checks: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class _AlreadyConnectedError(Exception):
+    """Internal signal that the two pads already share one selected-layer component."""
+
+    start_pad_id: str
+    end_pad_id: str
+    attachment_segments: int
+    pad_count: int = 2
     obstacle_checks: int = 0
 
 
@@ -171,6 +204,171 @@ def _edge_enters_open_rectangle(start: PointNM, end: PointNM, rectangle: _Rect) 
     return min_x < start.x < max_x and max(start.y, end.y) > min_y and min(start.y, end.y) < max_y
 
 
+def _inflate_rectangle(rectangle: _Rect, margin_nm: int) -> _Rect:
+    min_x, min_y, max_x, max_y = rectangle
+    return (
+        min_x - margin_nm,
+        min_y - margin_nm,
+        max_x + margin_nm,
+        max_y + margin_nm,
+    )
+
+
+def _cross(first: PointNM, second: PointNM, third: PointNM) -> int:
+    return (second.x - first.x) * (third.y - first.y) - (second.y - first.y) * (third.x - first.x)
+
+
+def _on_segment(first: PointNM, point: PointNM, second: PointNM) -> bool:
+    return min(first.x, second.x) <= point.x <= max(first.x, second.x) and min(
+        first.y, second.y
+    ) <= point.y <= max(first.y, second.y)
+
+
+def _segments_intersect(
+    first_start: PointNM,
+    first_end: PointNM,
+    second_start: PointNM,
+    second_end: PointNM,
+) -> bool:
+    first_side_start = _cross(first_start, first_end, second_start)
+    first_side_end = _cross(first_start, first_end, second_end)
+    second_side_start = _cross(second_start, second_end, first_start)
+    second_side_end = _cross(second_start, second_end, first_end)
+    if first_side_start == 0 and _on_segment(first_start, second_start, first_end):
+        return True
+    if first_side_end == 0 and _on_segment(first_start, second_end, first_end):
+        return True
+    if second_side_start == 0 and _on_segment(second_start, first_start, second_end):
+        return True
+    if second_side_end == 0 and _on_segment(second_start, first_end, second_end):
+        return True
+    first_straddles = (first_side_start > 0 and first_side_end < 0) or (
+        first_side_start < 0 and first_side_end > 0
+    )
+    second_straddles = (second_side_start > 0 and second_side_end < 0) or (
+        second_side_start < 0 and second_side_end > 0
+    )
+    return first_straddles and second_straddles
+
+
+def _point_segment_distance_lt(
+    point: PointNM,
+    start: PointNM,
+    end: PointNM,
+    distance_nm: int,
+) -> bool:
+    """Compare exact squared distance without division, roots, or floating point."""
+
+    edge_x = end.x - start.x
+    edge_y = end.y - start.y
+    point_x = point.x - start.x
+    point_y = point.y - start.y
+    edge_length_sq = edge_x * edge_x + edge_y * edge_y
+    distance_sq = distance_nm * distance_nm
+    if edge_length_sq == 0:
+        return point_x * point_x + point_y * point_y < distance_sq
+    projection = point_x * edge_x + point_y * edge_y
+    if projection <= 0:
+        return point_x * point_x + point_y * point_y < distance_sq
+    if projection >= edge_length_sq:
+        end_x = point.x - end.x
+        end_y = point.y - end.y
+        return end_x * end_x + end_y * end_y < distance_sq
+    area = edge_x * point_y - edge_y * point_x
+    return area * area < distance_sq * edge_length_sq
+
+
+def _segments_distance_lt(
+    first_start: PointNM,
+    first_end: PointNM,
+    second_start: PointNM,
+    second_end: PointNM,
+    distance_nm: int,
+) -> bool:
+    if _segments_intersect(first_start, first_end, second_start, second_end):
+        return True
+    return (
+        _point_segment_distance_lt(first_start, second_start, second_end, distance_nm)
+        or _point_segment_distance_lt(first_end, second_start, second_end, distance_nm)
+        or _point_segment_distance_lt(second_start, first_start, first_end, distance_nm)
+        or _point_segment_distance_lt(second_end, first_start, first_end, distance_nm)
+    )
+
+
+def _ray_crosses_right(point: PointNM, start: PointNM, end: PointNM) -> bool:
+    if (start.y > point.y) == (end.y > point.y):
+        return False
+    return (_cross(start, end, point) > 0) == (end.y > start.y)
+
+
+def _polygon_bounds(points: tuple[PointNM, ...], work: _WorkBudget) -> _Rect:
+    min_x = max_x = points[0].x
+    min_y = max_y = points[0].y
+    for point in points:
+        work.obstacle_check()
+        min_x = min(min_x, point.x)
+        min_y = min(min_y, point.y)
+        max_x = max(max_x, point.x)
+        max_y = max(max_y, point.y)
+    return min_x, min_y, max_x, max_y
+
+
+def _polygon_obstacle_sort_key(
+    obstacle: _PolygonObstacle,
+) -> tuple[_Rect, int, str]:
+    return obstacle.bounds, obstacle.margin_nm, obstacle.source_id
+
+
+def _edge_within_polygon_offset(
+    start: PointNM,
+    end: PointNM,
+    obstacle: _PolygonObstacle,
+    work: _WorkBudget,
+) -> bool:
+    work.obstacle_check()
+    if not _edge_enters_open_rectangle(
+        start,
+        end,
+        _inflate_rectangle(obstacle.bounds, obstacle.margin_nm),
+    ):
+        return False
+    start_inside = False
+    for index, edge_start in enumerate(obstacle.points):
+        work.obstacle_check()
+        edge_end = obstacle.points[(index + 1) % len(obstacle.points)]
+        if _segments_distance_lt(
+            start,
+            end,
+            edge_start,
+            edge_end,
+            obstacle.margin_nm,
+        ):
+            return True
+        if _ray_crosses_right(start, edge_start, edge_end):
+            start_inside = not start_inside
+    return start_inside
+
+
+def _point_within_polygon_offset(
+    point: PointNM,
+    obstacle: _PolygonObstacle,
+    distance_nm: int,
+    work: _WorkBudget,
+) -> bool:
+    work.obstacle_check()
+    if not _inside_open(point, _inflate_rectangle(obstacle.bounds, distance_nm)):
+        return False
+    inside = False
+    for index, edge_start in enumerate(obstacle.points):
+        work.obstacle_check()
+        edge_end = obstacle.points[(index + 1) % len(obstacle.points)]
+        if _point_segment_distance_lt(point, edge_start, edge_end, distance_nm):
+            return True
+        if _ray_crosses_right(point, edge_start, edge_end):
+            inside = not inside
+    return inside
+
+
 def _edge_is_legal(
     start: PointNM,
     end: PointNM,
@@ -179,9 +377,12 @@ def _edge_is_legal(
 ) -> bool:
     if not _inside_closed(start, problem.safe_board) or not _inside_closed(end, problem.safe_board):
         return False
-    for obstacle in problem.obstacles:
+    for obstacle in problem.rect_obstacles:
         work.obstacle_check()
         if _edge_enters_open_rectangle(start, end, obstacle):
+            return False
+    for polygon in problem.polygon_obstacles:
+        if _edge_within_polygon_offset(start, end, polygon, work):
             return False
     return True
 
@@ -191,12 +392,20 @@ def _proximity_step(point: PointNM, problem: _Problem, work: _WorkBudget) -> int
     min_x, min_y, max_x, max_y = problem.safe_board
     if min(point.x - min_x, max_x - point.x, point.y - min_y, max_y - point.y) < step:
         return 1
-    for obstacle in problem.obstacles:
+    for obstacle in problem.rect_obstacles:
         work.obstacle_check()
         obstacle_min_x, obstacle_min_y, obstacle_max_x, obstacle_max_y = obstacle
         dx = max(obstacle_min_x - point.x, 0, point.x - obstacle_max_x)
         dy = max(obstacle_min_y - point.y, 0, point.y - obstacle_max_y)
         if max(dx, dy) < step:
+            return 1
+    for polygon in problem.polygon_obstacles:
+        if _point_within_polygon_offset(
+            point,
+            polygon,
+            polygon.margin_nm + step,
+            work,
+        ):
             return 1
     return 0
 
@@ -233,6 +442,15 @@ _QUARTER_ROTATION_UDEG = 90 * UDEG_PER_DEGREE
 _AXIS_ALIGNED_ROTATIONS_UDEG = frozenset(
     {0, _QUARTER_ROTATION_UDEG, 2 * _QUARTER_ROTATION_UDEG, 3 * _QUARTER_ROTATION_UDEG}
 )
+# Pad shapes with an exact inscribed rectangle. Naming the set keeps the connectivity model
+# fail-closed for any shape Board IR gains later.
+_CORE_MODELED_PAD_SHAPES: frozenset[PadShape] = frozenset(
+    {PadShape.RECT, PadShape.ROUNDRECT, PadShape.CIRCLE, PadShape.OVAL}
+)
+# Flooring a diagonal core centre onto the integer lattice moves it less than one nanometre on
+# each axis, so it stays within sqrt(2) of the exact centreline point. Two nanometres is the
+# smallest integer that covers that, and it is subtracted from the usable half width.
+_CORE_CENTRE_TOLERANCE_NM = 2
 
 
 def _net_clearance_nm(
@@ -244,8 +462,10 @@ def _net_clearance_nm(
         return None
     try:
         return _resolve_net_class(snapshot, net_id, work).clearance_nm
-    except _ExpectedFailureError:
-        return None
+    except _ExpectedFailureError as failure:
+        if failure.code is RouteFailureCode.INVALID_TWO_PIN_NET:
+            return None
+        raise
 
 
 def _pad_extent(pad: Pad) -> tuple[int, int] | None:
@@ -272,6 +492,199 @@ def _segment_extent(segment: Segment) -> _Rect | None:
         max(segment.start.x, segment.end.x) + half_width_nm,
         max(segment.start.y, segment.end.y) + half_width_nm,
     )
+
+
+def _segment_envelope(segment: Segment) -> tuple[PointNM, ...] | None:
+    """Return a conservative integer envelope of a diagonal track, or None when orthogonal.
+
+    A track is a stadium: every point within half its width of the centreline. Sweeping an
+    axis-aligned square of that half width along the centreline instead of a disc gives the
+    convex hull of the two squares at the endpoints, which contains the stadium because the
+    disc is inscribed in the square. Every vertex is therefore an exact integer with no
+    rounding step at all, and the envelope is provably a superset rather than an approximation
+    that happens to be close. The cost is over-approximating the perpendicular extent by at
+    most (sqrt(2) - 1) half widths, which can only refuse a route, never permit a violation.
+    """
+
+    start, end = segment.start, segment.end
+    if start.x == end.x or start.y == end.y:
+        return None
+    # Sweeping is symmetric, so orienting left-to-right leaves only two sign cases.
+    if start.x > end.x:
+        start, end = end, start
+    radius_nm = (segment.width_nm + 1) // 2
+    if start.y < end.y:
+        return (
+            PointNM(start.x - radius_nm, start.y - radius_nm),
+            PointNM(start.x + radius_nm, start.y - radius_nm),
+            PointNM(end.x + radius_nm, end.y - radius_nm),
+            PointNM(end.x + radius_nm, end.y + radius_nm),
+            PointNM(end.x - radius_nm, end.y + radius_nm),
+            PointNM(start.x - radius_nm, start.y + radius_nm),
+        )
+    return (
+        PointNM(start.x - radius_nm, start.y - radius_nm),
+        PointNM(end.x - radius_nm, end.y - radius_nm),
+        PointNM(end.x + radius_nm, end.y - radius_nm),
+        PointNM(end.x + radius_nm, end.y + radius_nm),
+        PointNM(start.x + radius_nm, start.y + radius_nm),
+        PointNM(start.x - radius_nm, start.y + radius_nm),
+    )
+
+
+def _segment_core_extent(segment: Segment) -> _Rect | None:
+    """Return a rectangle strictly inside an orthogonal track, or None when it is diagonal.
+
+    Obstacle rectangles over-approximate copper so a clearance can never be understated.
+    Connectivity must err the other way: claiming copper that is not there would assert an
+    electrical connection the board does not have. The centreline caps are therefore dropped
+    and the half width is floored, so the result is always a subset of the real stadium.
+    """
+
+    if segment.start.x != segment.end.x and segment.start.y != segment.end.y:
+        return None
+    half_width_nm = segment.width_nm // 2
+    if segment.start.y == segment.end.y:
+        return (
+            min(segment.start.x, segment.end.x),
+            segment.start.y - half_width_nm,
+            max(segment.start.x, segment.end.x),
+            segment.start.y + half_width_nm,
+        )
+    return (
+        segment.start.x - half_width_nm,
+        min(segment.start.y, segment.end.y),
+        segment.start.x + half_width_nm,
+        max(segment.start.y, segment.end.y),
+    )
+
+
+def _diagonal_segment_cores(segment: Segment, work: _WorkBudget) -> tuple[_Rect, ...] | None:
+    """Return a connected chain of squares strictly inside a diagonal track, or None.
+
+    The component model is axis-aligned, and a diagonal track is not; the answer is to cover it
+    with axis-aligned squares that are each provably inside it and that provably overlap their
+    neighbour, so the chain is one connected piece of real copper. Everything below is exact
+    integer arithmetic, and every rounding step is toward the track's interior.
+
+    Let ``radius`` be the floored half width, so the real copper contains every point within
+    ``radius`` of the centreline. Centres are placed at ``start + (delta * i) // steps`` for
+    ``i`` in ``0..steps``. Flooring each axis moves a centre less than one nanometre per axis
+    off the exact point of the segment it approximates, so a centre is within ``sqrt(2) < 2``
+    of the segment; ``_CORE_CENTRE_TOLERANCE_NM`` absorbs that. A square of half side ``s``
+    centred there reaches at most ``s * sqrt(2)`` further, and distance to a set obeys the
+    triangle inequality, so every point of the square is within ``2 + s * sqrt(2)`` of the
+    segment. Choosing ``s`` with ``2 * s^2 <= (radius - 2)^2`` makes that at most ``radius``,
+    which is the subset property. ``steps`` is chosen so consecutive centres differ by at most
+    ``2 * s`` on each axis, which is exactly when two closed squares of half side ``s`` still
+    touch, giving the overlap property. ``i = 0`` and ``i = steps`` land exactly on the
+    endpoints, so the chain reaches the pads a diagonal stub is soldered to.
+
+    Endpoints are canonically ordered first, so a segment recorded in either direction yields
+    the identical chain, and squares are returned in ascending ``i``.
+    """
+
+    start, end = segment.start, segment.end
+    if start.x == end.x or start.y == end.y:
+        return None
+    if (start.x, start.y) > (end.x, end.y):
+        start, end = end, start
+    radius_nm = segment.width_nm // 2
+    if radius_nm <= _CORE_CENTRE_TOLERANCE_NM:
+        return None
+    reach_nm = radius_nm - _CORE_CENTRE_TOLERANCE_NM
+    half_side_nm = isqrt(reach_nm * reach_nm // 2)
+    if half_side_nm < 1:
+        return None
+    delta_x = end.x - start.x
+    delta_y = end.y - start.y
+    span_nm = 2 * half_side_nm
+    steps = max(
+        _ceil_div(abs(delta_x), span_nm),
+        _ceil_div(abs(delta_y), span_nm),
+        1,
+    )
+    cores: list[_Rect] = []
+    for index in range(steps + 1):
+        work.obstacle_check()
+        centre_x = start.x + (delta_x * index) // steps
+        centre_y = start.y + (delta_y * index) // steps
+        cores.append(
+            (
+                centre_x - half_side_nm,
+                centre_y - half_side_nm,
+                centre_x + half_side_nm,
+                centre_y + half_side_nm,
+            )
+        )
+    return tuple(cores)
+
+
+def _pad_core_extent(pad: Pad) -> tuple[int, int] | None:
+    """Return half extents of a rectangle strictly inside the pad, or None when unmodeled."""
+
+    if pad.rotation_udeg not in _AXIS_ALIGNED_ROTATIONS_UDEG:
+        return None
+    # The supported shapes are screened once, against a named set rather than inline members,
+    # so a shape added to PadShape later fails closed here instead of silently reaching one of
+    # the formulas below. Keeping this guard first also leaves the final branch unconditional,
+    # which is what stops the tail being either an unreachable statement or a missing return
+    # depending on how exhaustively the checker narrows the enum.
+    if pad.shape not in _CORE_MODELED_PAD_SHAPES:
+        return None
+    size_x, size_y = pad.size_x_nm, pad.size_y_nm
+    if pad.rotation_udeg // _QUARTER_ROTATION_UDEG % 2 == 1:
+        size_x, size_y = size_y, size_x
+    half_x_nm, half_y_nm = size_x // 2, size_y // 2
+    if pad.shape is PadShape.RECT:
+        return half_x_nm, half_y_nm
+    if pad.shape is PadShape.ROUNDRECT:
+        # Board IR guarantees 2 * radius <= min(size_x, size_y), so this stays non-negative
+        # and spans the full pad width across its middle band.
+        radius_nm = pad.roundrect_radius_nm
+        if radius_nm is None:
+            return None
+        return half_x_nm, half_y_nm - radius_nm
+    # CIRCLE and OVAL: a stadium contains its central rectangle, and a circle degenerates to
+    # a centre line, both of which are strictly inside the pad.
+    if half_x_nm >= half_y_nm:
+        return half_x_nm - half_y_nm, half_y_nm
+    return half_x_nm, half_y_nm - half_x_nm
+
+
+def _rectangles_touch(first: _Rect, second: _Rect) -> bool:
+    """Closed rectangle intersection; exact contact is an electrical connection."""
+
+    return (
+        first[0] <= second[2]
+        and second[0] <= first[2]
+        and first[1] <= second[3]
+        and second[1] <= first[3]
+    )
+
+
+def _component_roots(rectangles: tuple[_Rect, ...], work: _WorkBudget) -> tuple[int, ...]:
+    """Return each rectangle's exact component root with deterministic bounded union-find."""
+
+    parent = list(range(len(rectangles)))
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    for first in range(len(rectangles)):
+        for second in range(first + 1, len(rectangles)):
+            work.obstacle_check()
+            if not _rectangles_touch(rectangles[first], rectangles[second]):
+                continue
+            left, right = find(first), find(second)
+            if left != right:
+                # The lowest index always wins, so a component's root never depends on
+                # discovery order and stays reproducible across runs.
+                parent[max(left, right)] = min(left, right)
+    return tuple(find(index) for index in range(len(rectangles)))
 
 
 def _prepare(
@@ -351,50 +764,149 @@ def _prepare(
         elif request.layer_id in pad.layer_ids:
             blocking_pads.append(pad)
     pads = tuple(sorted(target_pads, key=lambda pad: pad.id))
-    if len(pads) != 2 or any(request.layer_id not in pad.layer_ids for pad in pads):
+    # A net wider than two pads cannot be routed, but it can still be recognised as already
+    # connected, so the pad-count refusal is deferred until after connectivity is decided.
+    two_pin = len(pads) == 2
+    if len(pads) < 2 or any(request.layer_id not in pad.layer_ids for pad in pads):
         raise _fail(
             RouteFailureCode.INVALID_TWO_PIN_NET,
             "the selected net must resolve to exactly two pads on the selected layer",
         )
-    start_pad, end_pad = pads
-    if start_pad.center == end_pad.center:
+    if two_pin and pads[0].center == pads[1].center:
         raise _fail(
             RouteFailureCode.UNSUPPORTED_GEOMETRY,
             "coincident route endpoints are outside the first-slice contract",
         )
 
+    # A via or a zone on the routed net is copper this model does not represent, so it can
+    # neither be routed around nor counted as connectivity. A two-pin net says so directly; a
+    # wider one is refused for its pad count instead, which is the more useful fact about it.
+    same_net_via = False
     for index, via in enumerate(content.vias):
         if index % 64 == 0:
             work.checkpoint()
         if via.net_id == request.net_id:
-            raise _fail(
-                RouteFailureCode.UNSUPPORTED_GEOMETRY,
-                "the selected net already carries a via and is partially routed",
-            )
+            same_net_via = True
+            if two_pin:
+                raise _fail(
+                    RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                    "the selected net already carries a via and is partially routed",
+                )
+            break
     for index, arc in enumerate(content.arcs):
         if index % 64 == 0:
             work.checkpoint()
         if arc.layer_id == request.layer_id:
             raise _fail(
                 RouteFailureCode.UNSUPPORTED_GEOMETRY,
-                "selected-layer arcs are outside the rectangular obstacle model",
+                "selected-layer arcs are outside the supported obstacle model",
             )
+    blocking_zones: list[Zone] = []
+    same_net_zone = False
     for index, zone in enumerate(content.zones):
         if index % 64 == 0:
             work.checkpoint()
-        if zone.layer_id == request.layer_id:
-            raise _fail(
-                RouteFailureCode.UNSUPPORTED_GEOMETRY,
-                "selected-layer zones are outside the rectangular obstacle model",
-            )
+        if zone.layer_id != request.layer_id:
+            continue
+        if zone.net_id == request.net_id:
+            same_net_zone = True
+            if two_pin:
+                raise _fail(
+                    RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                    "the selected net already carries a zone and is partially routed",
+                )
+            continue
+        blocking_zones.append(zone)
+    attachment_segments: list[Segment] = []
     for index, segment in enumerate(content.segments):
         if index % 64 == 0:
             work.checkpoint()
-        if segment.layer_id == request.layer_id and segment.net_id == request.net_id:
+        if segment.layer_id != request.layer_id or segment.net_id != request.net_id:
+            continue
+        attachment_segments.append(segment)
+
+    # Connectivity depends only on exactly modeled pad and same-net segment geometry, so it is
+    # decided here rather than after the outline, keepout, and obstacle model. Nothing later in
+    # preparation can change the answer, and reporting an unsupported outline for a net that
+    # needs no routing at all would be less honest than reporting that it is already connected.
+    source_cores: tuple[_Rect, ...] = ()
+    target_cores: tuple[_Rect, ...] = ()
+    if attachment_segments:
+        if len(attachment_segments) > request.settings.max_obstacles:
             raise _fail(
-                RouteFailureCode.UNSUPPORTED_GEOMETRY,
-                "the selected net is already partially routed on the selected layer",
+                RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+                "the same-net attachment copper exceeds the configured obstacle budget",
             )
+        pad_cores: list[_Rect] = []
+        for pad in pads:
+            pad_core = _pad_core_extent(pad)
+            if pad_core is None:
+                if not two_pin:
+                    # Unmodeled pad geometry cannot support a connectivity claim, and a wider
+                    # net has the pad-count refusal waiting for it below regardless.
+                    break
+                raise _fail(
+                    RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                    "a route endpoint pad is not modeled exactly for same-net attachment",
+                )
+            half_x_nm, half_y_nm = pad_core
+            pad_cores.append(
+                (
+                    pad.center.x - half_x_nm,
+                    pad.center.y - half_y_nm,
+                    pad.center.x + half_x_nm,
+                    pad.center.y + half_y_nm,
+                )
+            )
+        # An orthogonal track is one exact rectangle; a diagonal one is a chain of squares that
+        # is provably inside it and provably self-connected, so both reduce to axis-aligned
+        # rectangles the component model already understands.
+        core_list: list[_Rect] = []
+        for segment in attachment_segments:
+            orthogonal_core = _segment_core_extent(segment)
+            if orthogonal_core is not None:
+                core_list.append(orthogonal_core)
+                continue
+            diagonal_cores = _diagonal_segment_cores(segment, work)
+            if diagonal_cores is None:
+                raise _fail(
+                    RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                    "a selected-layer track on the routed net is too narrow to model exactly",
+                )
+            core_list.extend(diagonal_cores)
+        segment_cores = tuple(core_list)
+        if len(pad_cores) == len(pads):
+            roots = _component_roots(tuple(pad_cores) + segment_cores, work)
+            pad_roots = roots[: len(pads)]
+            # Vias and zones on the routed net are copper this model cannot see, so a net that
+            # carries them is never claimed connected however its segments happen to fall.
+            if len(set(pad_roots)) == 1 and not same_net_via and not same_net_zone:
+                raise _AlreadyConnectedError(
+                    start_pad_id=pads[0].id,
+                    end_pad_id=pads[-1].id,
+                    attachment_segments=len(attachment_segments),
+                    pad_count=len(pads),
+                    obstacle_checks=work.obstacle_checks,
+                )
+            if two_pin:
+                segment_roots = roots[2:]
+                source_cores = tuple(
+                    core
+                    for core, root in zip(segment_cores, segment_roots, strict=True)
+                    if root == pad_roots[0]
+                )
+                target_cores = tuple(
+                    core
+                    for core, root in zip(segment_cores, segment_roots, strict=True)
+                    if root == pad_roots[1]
+                )
+
+    if not two_pin:
+        raise _fail(
+            RouteFailureCode.INVALID_TWO_PIN_NET,
+            "the selected net must resolve to exactly two pads on the selected layer",
+        )
+    start_pad, end_pad = pads
 
     if len(content.outline) != 1 or content.outline[0].holes:
         raise _fail(
@@ -420,26 +932,25 @@ def _prepare(
     if safe_board[0] > safe_board[2] or safe_board[1] > safe_board[3]:
         raise _fail(RouteFailureCode.NO_PATH, "the routed width does not fit inside the board")
 
-    obstacles: list[_Rect] = []
+    rect_obstacles: list[_Rect] = []
+    polygon_obstacles: list[_PolygonObstacle] = []
 
-    def add_obstacle(rectangle: _Rect, clearance_nm: int) -> None:
-        """Inflate one exact rectangle by the route half-width plus the governing clearance."""
-
-        if len(obstacles) >= request.settings.max_obstacles:
+    def ensure_obstacle_capacity() -> None:
+        # Same-net attachment copper is a modeled selected-layer object too, so it shares the
+        # object ceiling with every obstacle rather than escaping it.
+        modeled = len(attachment_segments) + len(rect_obstacles) + len(polygon_obstacles)
+        if modeled >= request.settings.max_obstacles:
             raise _fail(
                 RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
                 "the selected-layer obstacle count exceeds the configured obstacle budget",
             )
+
+    def add_rect_obstacle(rectangle: _Rect, clearance_nm: int) -> None:
+        """Inflate one exact rectangle by the route half-width plus the governing clearance."""
+
+        ensure_obstacle_capacity()
         margin_nm = half_width_nm + clearance_nm
-        min_x, min_y, max_x, max_y = rectangle
-        obstacles.append(
-            (
-                min_x - margin_nm,
-                min_y - margin_nm,
-                max_x + margin_nm,
-                max_y + margin_nm,
-            )
-        )
+        rect_obstacles.append(_inflate_rectangle(rectangle, margin_nm))
 
     def governing_clearance_nm(net_id: str | None) -> int:
         """Use the stricter of the routed net's clearance and the obstacle net's clearance."""
@@ -455,12 +966,24 @@ def _prepare(
         if request.layer_id not in keepout.layer_ids or not keepout.prohibit_tracks:
             continue
         rectangle = _rectangle(keepout.boundary)
-        if rectangle is None:
-            raise _fail(
-                RouteFailureCode.UNSUPPORTED_GEOMETRY,
-                "a selected-layer track keepout is not an axis-aligned rectangle",
+        if rectangle is not None:
+            # An axis-aligned rectangle keeps its exact square-cornered inflation. The polygon
+            # path offsets by Euclidean distance and so rounds corners, which would be a
+            # different — and looser — obstacle for the same board.
+            add_rect_obstacle(rectangle, net_class.clearance_nm)
+            continue
+        # A keepout carries no net, so there is no second class clearance to be stricter than:
+        # the routed net's own class clearance is the only rule that applies.
+        ensure_obstacle_capacity()
+        keepout_points = keepout.boundary.points
+        polygon_obstacles.append(
+            _PolygonObstacle(
+                source_id=keepout.id,
+                points=keepout_points,
+                bounds=_polygon_bounds(keepout_points, work),
+                margin_nm=half_width_nm + net_class.clearance_nm,
             )
-        add_obstacle(rectangle, net_class.clearance_nm)
+        )
 
     for index, pad in enumerate(blocking_pads):
         if index % 64 == 0:
@@ -472,7 +995,7 @@ def _prepare(
                 "a selected-layer pad is rotated off axis and is not modeled exactly",
             )
         half_x_nm, half_y_nm = pad_extent
-        add_obstacle(
+        add_rect_obstacle(
             (
                 pad.center.x - half_x_nm,
                 pad.center.y - half_y_nm,
@@ -487,20 +1010,39 @@ def _prepare(
             work.checkpoint()
         if segment.layer_id != request.layer_id:
             continue
+        if segment.net_id == request.net_id:
+            # Classified above as attachment copper; the routed net never blocks itself.
+            continue
         segment_extent = _segment_extent(segment)
-        if segment_extent is None:
+        if segment_extent is not None:
+            add_rect_obstacle(segment_extent, governing_clearance_nm(segment.net_id))
+            continue
+        # A diagonal foreign track is a conservative polygon envelope rather than a board-level
+        # refusal. The margin is the same rule the orthogonal path uses, and offsetting the
+        # envelope by it is a superset of offsetting the true stadium, because the envelope
+        # already contains the stadium.
+        envelope = _segment_envelope(segment)
+        if envelope is None:  # pragma: no cover - orthogonal is handled by the fast path above
             raise _fail(
                 RouteFailureCode.UNSUPPORTED_GEOMETRY,
-                "a selected-layer segment is diagonal and is not modeled exactly",
+                "a selected-layer segment is not modeled exactly",
             )
-        add_obstacle(segment_extent, governing_clearance_nm(segment.net_id))
+        ensure_obstacle_capacity()
+        polygon_obstacles.append(
+            _PolygonObstacle(
+                source_id=segment.id,
+                points=envelope,
+                bounds=_polygon_bounds(envelope, work),
+                margin_nm=half_width_nm + governing_clearance_nm(segment.net_id),
+            )
+        )
 
     for index, via in enumerate(content.vias):
         if index % 64 == 0:
             work.checkpoint()
         # Board IR v0.1 admits through vias only, so every via crosses the selected layer.
         half_span_nm = (via.diameter_nm + 1) // 2
-        add_obstacle(
+        add_rect_obstacle(
             (
                 via.center.x - half_span_nm,
                 via.center.y - half_span_nm,
@@ -508,6 +1050,21 @@ def _prepare(
                 via.center.y + half_span_nm,
             ),
             governing_clearance_nm(via.net_id),
+        )
+
+    for index, zone in enumerate(blocking_zones):
+        if index % 64 == 0:
+            work.checkpoint()
+        ensure_obstacle_capacity()
+        points = zone.boundary.points
+        clearance_nm = max(governing_clearance_nm(zone.net_id), zone.clearance_nm)
+        polygon_obstacles.append(
+            _PolygonObstacle(
+                source_id=zone.id,
+                points=points,
+                bounds=_polygon_bounds(points, work),
+                margin_nm=half_width_nm + clearance_nm,
+            )
         )
 
     step = request.settings.grid_step_nm
@@ -536,6 +1093,36 @@ def _prepare(
             "the bounded routing lattice exceeds the configured node budget",
         )
 
+    def attachment_nodes(rectangle: _Rect) -> tuple[_Node, ...]:
+        """Enumerate the lattice nodes one attachment rectangle covers, by index range.
+
+        Scanning the lattice and testing every rectangle would cost the node budget times the
+        obstacle budget. Solving the covered index range directly costs one charge per
+        rectangle plus one per emitted node, so the seed set stays bounded by the same
+        obstacle-check budget as every other geometric relation.
+        """
+
+        work.obstacle_check()
+        low_ix = max(min_ix, _ceil_div(rectangle[0] - start_pad.center.x, step))
+        high_ix = min(max_ix, (rectangle[2] - start_pad.center.x) // step)
+        low_iy = max(min_iy, _ceil_div(rectangle[1] - start_pad.center.y, step))
+        high_iy = min(max_iy, (rectangle[3] - start_pad.center.y) // step)
+        nodes: list[_Node] = []
+        for node_ix in range(low_ix, high_ix + 1):
+            for node_iy in range(low_iy, high_iy + 1):
+                work.obstacle_check()
+                nodes.append((node_ix, node_iy))
+        return tuple(nodes)
+
+    # Pads contribute only their centre node. Their cores decide connectivity, but seeding from
+    # every node beneath a pad would change the geometry of every board that routes today.
+    source_nodes: set[_Node] = {(0, 0)}
+    for rectangle in source_cores:
+        source_nodes.update(attachment_nodes(rectangle))
+    target_nodes: set[_Node] = {(goal_ix, goal_iy)}
+    for rectangle in target_cores:
+        target_nodes.update(attachment_nodes(rectangle))
+
     problem = _Problem(
         snapshot=snapshot,
         request=request,
@@ -544,20 +1131,44 @@ def _prepare(
         width_nm=net_class.track_width_nm,
         clearance_nm=net_class.clearance_nm,
         safe_board=safe_board,
-        obstacles=tuple(sorted(obstacles)),
+        rect_obstacles=tuple(sorted(rect_obstacles)),
+        polygon_obstacles=tuple(sorted(polygon_obstacles, key=_polygon_obstacle_sort_key)),
         min_ix=min_ix,
         max_ix=max_ix,
         min_iy=min_iy,
         max_iy=max_iy,
         goal_ix=goal_ix,
         goal_iy=goal_iy,
+        source_nodes=frozenset(source_nodes),
+        target_nodes=frozenset(target_nodes),
+        target_min_ix=min(node[0] for node in target_nodes),
+        target_max_ix=max(node[0] for node in target_nodes),
+        target_min_iy=min(node[1] for node in target_nodes),
+        target_max_iy=max(node[1] for node in target_nodes),
     )
-    for obstacle in problem.obstacles:
+    for obstacle in problem.rect_obstacles:
         work.obstacle_check()
         if _inside_open(start_pad.center, obstacle) or _inside_open(end_pad.center, obstacle):
             raise _fail(
                 RouteFailureCode.NO_PATH,
-                "a route endpoint is blocked by a track keepout",
+                "a route endpoint is blocked by a selected-layer obstacle",
+                obstacle_checks=work.obstacle_checks,
+            )
+    for polygon in problem.polygon_obstacles:
+        if _point_within_polygon_offset(
+            start_pad.center,
+            polygon,
+            polygon.margin_nm,
+            work,
+        ) or _point_within_polygon_offset(
+            end_pad.center,
+            polygon,
+            polygon.margin_nm,
+            work,
+        ):
+            raise _fail(
+                RouteFailureCode.NO_PATH,
+                "a route endpoint is blocked by a selected-layer obstacle",
                 obstacle_checks=work.obstacle_checks,
             )
     work.checkpoint()
@@ -573,9 +1184,18 @@ def _point(problem: _Problem, ix: int, iy: int) -> PointNM:
 
 
 def _heuristic(problem: _Problem, ix: int, iy: int) -> int:
-    return (
-        abs(problem.goal_ix - ix) + abs(problem.goal_iy - iy)
-    ) * problem.request.settings.grid_step_nm
+    """Return the Manhattan distance to the target bounding box, in nanometres.
+
+    Every target node lies inside that box, so this never exceeds the Manhattan distance to
+    the nearest target; each grid edge costs at least one grid step and the bend and proximity
+    terms are non-negative, so the estimate stays admissible. One unit step changes it by at
+    most one step, so it is also consistent and no state is ever reopened. With a single
+    target the box is degenerate and this is exactly the original two-pin heuristic.
+    """
+
+    delta_ix = max(problem.target_min_ix - ix, 0, ix - problem.target_max_ix)
+    delta_iy = max(problem.target_min_iy - iy, 0, iy - problem.target_max_iy)
+    return (delta_ix + delta_iy) * problem.request.settings.grid_step_nm
 
 
 def _compress(points: tuple[PointNM, ...]) -> tuple[PointNM, ...]:
@@ -660,6 +1280,8 @@ def _build_candidate(
     problem: _Problem,
     points: tuple[PointNM, ...],
     *,
+    start_node: _Node,
+    end_node: _Node,
     bend_count: int,
     proximity_steps: int,
     expanded_states: int,
@@ -667,8 +1289,13 @@ def _build_candidate(
     work: _WorkBudget,
 ) -> RouteCandidate:
     compressed = _compress(points)
-    if compressed[0] != problem.start_pad.center or compressed[-1] != problem.end_pad.center:
-        raise RuntimeError("internal route reconstruction changed its endpoints")
+    if (
+        start_node not in problem.source_nodes
+        or end_node not in problem.target_nodes
+        or compressed[0] != _point(problem, *start_node)
+        or compressed[-1] != _point(problem, *end_node)
+    ):
+        raise RuntimeError("internal route reconstruction left its attachment copper")
     for start, end in pairwise(compressed):
         if not _edge_is_legal(start, end, problem, work):
             raise RuntimeError("internal route post-validation rejected generated geometry")
@@ -724,35 +1351,59 @@ def _build_candidate(
     return candidate
 
 
+def _start_states(problem: _Problem) -> tuple[_State, ...]:
+    """Return every seed state in the heap's own ordering, so counters stay reproducible."""
+
+    return tuple(
+        (node[0], node[1], _NO_DIRECTION)
+        for node in sorted(problem.source_nodes, key=lambda node: (node[1], node[0]))
+    )
+
+
 def _search(problem: _Problem, work: _WorkBudget) -> RouteCandidate:
     settings = problem.request.settings
-    start: _State = (0, 0, _NO_DIRECTION)
+    start_states = _start_states(problem)
+    start_state_set = frozenset(start_states)
     start_score: _Score = (0, 0, 0)
-    best: dict[_State, _Score] = {start: start_score}
+    best: dict[_State, _Score] = dict.fromkeys(start_states, start_score)
     parents: dict[_State, _State] = {}
     frontier: list[tuple[int, int, int, int, int, int, int, int, _State]] = []
     counter = 0
-    heapq.heappush(
-        frontier,
-        (_heuristic(problem, 0, 0), 0, 0, 0, 0, 0, _NO_DIRECTION, counter, start),
-    )
+    for state in start_states:
+        heapq.heappush(
+            frontier,
+            (
+                _heuristic(problem, state[0], state[1]),
+                0,
+                0,
+                0,
+                state[1],
+                state[0],
+                _NO_DIRECTION,
+                counter,
+                state,
+            ),
+        )
+        counter += 1
     expanded_states = 0
-    peak_frontier_states = 1
+    peak_frontier_states = len(start_states)
 
     while frontier:
         work.checkpoint()
         _, g_cost, bends, proximity_steps, iy, ix, direction, _, state = heapq.heappop(frontier)
         if best.get(state) != (g_cost, bends, proximity_steps):
             continue
-        if (ix, iy) == (problem.goal_ix, problem.goal_iy):
+        if (ix, iy) in problem.target_nodes:
             route_states = [state]
-            while route_states[-1] != start:
+            while route_states[-1] not in start_state_set:
                 route_states.append(parents[route_states[-1]])
             route_states.reverse()
             points = tuple(_point(problem, item[0], item[1]) for item in route_states)
             return _build_candidate(
                 problem,
                 points,
+                start_node=(route_states[0][0], route_states[0][1]),
+                end_node=(ix, iy),
                 bend_count=bends,
                 proximity_steps=proximity_steps,
                 expanded_states=expanded_states,
@@ -858,7 +1509,7 @@ class AStarRouter:
         *,
         cancelled: CancellationCheck | None = None,
     ) -> RouteResult:
-        """Return an unapplied candidate or a stable, non-echoing expected failure."""
+        """Return an unapplied candidate, an already-connected record, or an expected failure."""
 
         validated = _validate_public_inputs(snapshot, request, cancelled)
         if isinstance(validated, RouteResult):
@@ -868,5 +1519,17 @@ class AStarRouter:
         try:
             problem = _prepare(checked_snapshot, checked_request, work)
             return RouteResult(candidate=_search(problem, work))
+        except _AlreadyConnectedError as connection:
+            return RouteResult(
+                connected=RouteConnection(
+                    base_revision=checked_snapshot.snapshot_digest,
+                    start_pad_id=connection.start_pad_id,
+                    end_pad_id=connection.end_pad_id,
+                    attachment_segments=connection.attachment_segments,
+                    component_objects=connection.attachment_segments + connection.pad_count,
+                    pad_count=connection.pad_count,
+                    obstacle_checks=connection.obstacle_checks,
+                )
+            )
         except _ExpectedFailureError as failure:
             return _result_failure(failure)

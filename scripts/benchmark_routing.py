@@ -34,6 +34,7 @@ from copper_mcp.board_ir import (
     PadShape,
     PointNM,
     Ring,
+    Segment,
     SourceInfo,
     make_content,
     make_snapshot,
@@ -49,7 +50,7 @@ LAYER_ID = "layer:F.Cu"
 NET_ID = "net:audio"
 SOURCE_REVISION = f"sha256:{'c' * 64}"
 FIXTURE_LICENSE = "Apache-2.0"
-BENCHMARK_NAME = "two-pin-astar-dijkstra-synthetic-v1"
+BENCHMARK_NAME = "two-pin-astar-dijkstra-synthetic-v2"
 SCRIPT_PATH = Path("scripts/benchmark_routing.py")
 
 T = TypeVar("T")
@@ -151,7 +152,10 @@ def _settings() -> AStarSettings:
     )
 
 
-def _snapshot(keepouts: tuple[tuple[int, int, int, int], ...]) -> BoardIRSnapshot:
+def _snapshot(
+    keepouts: tuple[tuple[int, int, int, int], ...],
+    own_segments: tuple[tuple[int, int, int, int], ...] = (),
+) -> BoardIRSnapshot:
     net_class = NetClass(
         id="class:audio",
         name="Audio",
@@ -184,6 +188,17 @@ def _snapshot(keepouts: tuple[tuple[int, int, int, int], ...]) -> BoardIRSnapsho
                 _pad("pad:01", (1_000, 5_000)),
                 _pad("pad:02", (9_000, 5_000)),
             ),
+            segments=tuple(
+                Segment(
+                    id=f"segment:own:{index:02d}",
+                    net_id=NET_ID,
+                    layer_id=LAYER_ID,
+                    start=PointNM(bounds[0], bounds[1]),
+                    end=PointNM(bounds[2], bounds[3]),
+                    width_nm=200,
+                )
+                for index, bounds in enumerate(own_segments)
+            ),
             keepouts=tuple(
                 Keepout(
                     id=f"keepout:{index:02d}",
@@ -206,8 +221,9 @@ def _fixture(
     description: str,
     keepouts: tuple[tuple[int, int, int, int], ...],
     expected_status: str,
+    own_segments: tuple[tuple[int, int, int, int], ...] = (),
 ) -> Fixture:
-    snapshot = _snapshot(keepouts)
+    snapshot = _snapshot(keepouts, own_segments)
     return Fixture(
         name=name,
         description=description,
@@ -246,6 +262,16 @@ def _fixtures() -> tuple[Fixture, ...]:
             "A spanning keepout makes the bounded lattice intentionally unroutable.",
             ((4_500, -1_000, 5_500, 11_000),),
             "no_path",
+        ),
+        _fixture(
+            "attachment",
+            "Same-net stubs at both ends exercise multi-source and multi-target search.",
+            ((4_000, 4_000, 6_000, 6_000),),
+            "ok",
+            own_segments=(
+                (1_000, 5_000, 2_000, 5_000),
+                (8_000, 5_000, 9_000, 5_000),
+            ),
         ),
     )
 

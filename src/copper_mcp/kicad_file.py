@@ -12,7 +12,7 @@ import re
 
 from copper_mcp.config import Settings
 from copper_mcp.models import BoardCounts, BoardManifest
-from copper_mcp.security import read_bounded_file, resolve_workspace_file
+from copper_mcp.security import read_workspace_file
 
 _VERSION_RE = re.compile(r"\(version\s+(\d+)\)")
 _GENERATOR_RE = re.compile(r'\(generator\s+(?:"([^"]+)"|([^\s\)]+))\)')
@@ -42,13 +42,14 @@ def _first_match(pattern: re.Pattern[str], text: str) -> str | None:
 def inspect_kicad_board(requested_path: str, settings: Settings) -> BoardManifest:
     """Create a content-addressed manifest for one board inside the workspace."""
 
-    board_path = resolve_workspace_file(
+    board = read_workspace_file(
         settings.workspace,
         requested_path,
         allowed_suffixes={".kicad_pcb"},
         max_bytes=settings.max_board_bytes,
     )
-    payload = read_bounded_file(board_path, max_bytes=settings.max_board_bytes)
+    board_path = board.path
+    payload = board.content
     try:
         text = payload.decode("utf-8")
     except UnicodeDecodeError as error:
@@ -90,10 +91,10 @@ def load_json_file(
 ) -> bytes:
     """Read a bounded JSON artifact from the configured workspace."""
 
-    artifact = resolve_workspace_file(
+    artifact = read_workspace_file(
         settings.workspace,
         requested_path,
         allowed_suffixes={".json"},
         max_bytes=max_bytes,
     )
-    return read_bounded_file(artifact, max_bytes=max_bytes)
+    return artifact.content

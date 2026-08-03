@@ -18,10 +18,11 @@ route multiple nets, run durable jobs, persist or export candidate boards, or ap
 | Connectivity | Exactly two pads belonging to the net; both accessible on the selected layer |
 | Constraints | One net-class width/clearance assignment; no selected-net length or differential-pair rule |
 | Board | One hole-free, axis-aligned rectangular outline |
-| Obstacles | Rectangular track keepouts, plus foreign-net pads, orthogonal segments, and through vias |
-| Existing geometry | No selected-layer arcs or zones, off-axis pads, diagonal segments, or copper already on the routed net |
-| Search | Four-neighbour orthogonal grid; east, north, west, south expansion order |
-| Output | Immutable orthogonal `RoutePatch` tied to the unchanged snapshot digest |
+| Obstacles | Track keepouts of any simple polygon outline; foreign-net pads, segments at any angle, and through vias; conservative foreign-net solid-zone polygon envelopes |
+| Attachment | Same-net selected-layer segments at any angle, as connectable copper rather than obstacles |
+| Existing geometry | No selected-layer arcs or off-axis pads; no same-net vias or zones |
+| Search | Four-neighbour orthogonal grid; east, north, west, south expansion order; multi-source and multi-target when same-net copper is present |
+| Output | Immutable orthogonal `RoutePatch` tied to the unchanged snapshot digest, or a typed already-connected record |
 
 Anything outside this matrix returns a typed diagnostic. Unsupported objects and selected-net
 constraints are never silently ignored.
@@ -37,6 +38,26 @@ half-width plus the selected net-class clearance. A centerline on the resulting 
 entering its open interior by one nanometre is not. Every complete grid edge is checked, not only its
 endpoints. These semantics are covered by exact-boundary and one-nanometre regression tests.
 
+A keepout carries no net and no clearance of its own, so the routed net's class clearance is the
+only rule that can apply — there is no second value to be stricter than. That margin is also
+deliberately stricter than KiCad itself: KiCad's rule area prohibits tracks that *intersect* it and
+applies no clearance, so a track 0.2 mm outside the boundary passes KiCad DRC while this model
+demands the full half-width-plus-clearance offset. The error direction is refusing a route KiCad
+would accept, never proposing one it would reject.
+
+An axis-aligned rectangular keepout keeps its exact square-cornered inflation. A keepout with any
+other simple polygon outline — the octagons KiCad emits for mounting-hole rule areas, or a concave
+outline — becomes a `_PolygonObstacle` under the same conservative envelope model, exact integer
+containment, inclusive intersection, and rational squared-distance geometry the foreign-net zone
+envelopes use. The two paths are deliberately not unified: the polygon path offsets by Euclidean
+distance and therefore rounds corners, which would be a strictly looser obstacle for a rectangle
+than the exact square-cornered inflation, so rectangles keep the fast path and a regression test
+pins both the rectangle's inflated bounds and the polygon's margin. Board IR admits only
+`(polygon (pts (xy ...)))` outlines with at least three distinct vertices and non-zero area, so
+curved and multi-loop rule areas are already refused by the adapter and no keepout that reaches the
+router is unmodeled. Polygon-keepout bounds construction charges one obstacle check per inspected
+vertex, and each keepout counts against `max_obstacles` exactly like every other modeled object.
+
 Selected-layer copper outside the routed net is an obstacle rather than a rejection. A foreign pad
 contributes a rectangle centred on the pad, with its sizes swapped on a quarter turn; an orthogonal
 segment contributes the rectangle its centreline sweeps, grown by the ceiling of half its width.
@@ -45,13 +66,119 @@ net's class clearance, so a board mixing net classes cannot be routed to the loo
 
 A through via outside the routed net contributes the bounding box of its outer diameter; Board IR
 v0.1 admits through vias only, so every via provably crosses the routed layer. Drill diameter is
-ignored because copper, not the hole, is what a track must clear. A via on the routed net is
-rejected as partial routing, exactly like a same-net segment.
+ignored because copper, not the hole, is what a track must clear. A via on the routed net is still
+rejected as partial routing, because a layer change is not something this single-layer contract can
+model.
+
+A foreign-net solid zone on the selected layer contributes its exact simple polygon as a
+conservative boundary envelope. The entire interior is treated as potentially occupied because
+Board IR deliberately does not make KiCad's derived `filled_polygon` cache authoritative. The open
+centreline margin is the routed half-width plus the maximum of routed-net class clearance,
+zone-net class clearance, and the zone's own clearance. Exact integer containment, inclusive segment
+intersection, and rational squared point-to-edge distance support concave and diagonal boundaries;
+the bounding box is only a pruning device. Exact offset equality is legal. A same-net zone remains
+unsupported, because a conservative envelope cannot say which part of it is actually filled copper,
+and useful routing through real fill voids requires a separate freshness-bound refill contract.
 
 Round pad and via shapes use their bounding box. That over-approximates only: it can refuse a route a
-rounder shape would allow, never permit a clearance violation. Arcs, zones, vias, off-axis pad
-rotations, diagonal segments, and a net that is already partially routed still fail closed, because
-a rectangle cannot represent them without lying. Every obstacle counts against `max_obstacles`.
+rounder shape would allow, never permit a clearance violation. Arcs, off-axis pad rotations, and
+diagonal segments *on the routed net* still fail closed. Every obstacle, including one polygon zone
+regardless of vertex count, counts against `max_obstacles`, and so does every same-net attachment
+segment.
+
+A foreign-net segment at any angle is an obstacle rather than a refusal. An orthogonal one keeps the
+exact swept-rectangle fast path. A diagonal one contributes a conservative six-vertex envelope: the
+Minkowski sum of its centreline with an axis-aligned square of its half width, which is the convex
+hull of the two squares at its endpoints. Because the true track is the centreline swept with a
+*disc* of that half width, and the disc is inscribed in the square, the envelope provably contains
+the track — and every vertex is an exact integer with no rounding step anywhere, rather than a
+float offset rounded outward and argued about afterwards. The price is over-approximating the
+perpendicular extent by at most `(sqrt(2) - 1)` half widths, roughly 41%, which can only refuse a
+route and never permit a violation. Offsetting that envelope by the routed half-width plus the
+stricter of the two class clearances is a superset of offsetting the true stadium by the same
+margin, so the inflation rule is identical to the orthogonal path. Diagonal envelopes charge one
+obstacle check per vertex and count against `max_obstacles` like any other object.
+
+Diagonal copper on the *routed* net is handled by the mirror-image construction, described under
+same-net attachment below. The direction of error differs because the purpose differs: an obstacle
+is over-approximated, attachment copper is under-approximated.
+
+## Same-net attachment
+
+A same-net segment on the selected layer is attachment copper: never an obstacle, and a legal place
+for the proposal to begin or end. Deciding that requires a second rectangle model that errs the
+opposite way from the obstacle model. Obstacle rectangles over-approximate copper so a clearance is
+never understated; connectivity rectangles under-approximate it, because claiming copper that is not
+there would assert an electrical connection the board does not have.
+
+A track's connectivity core drops its round end caps and floors the half width. A pad's core is the
+largest axis-aligned rectangle provably inside its shape: the whole rectangle for `rect`, inset by
+the corner radius for `roundrect`, the central band for `oval`, and a centre line for `circle`.
+Every core is a subset of real copper, so overlapping cores prove overlapping copper, while the
+residual error can only fail to notice a connection.
+
+A diagonal track has no single axis-aligned inner rectangle, so it contributes a **chain of squares**
+instead. Centres are placed at `start + (delta * i) // steps`; flooring moves a centre less than a
+nanometre per axis off the exact centreline point, so it stays within `sqrt(2) < 2` of the track, and
+a two-nanometre tolerance is subtracted from the usable half width to absorb that. The square half
+side `s` then satisfies `2 * s^2 <= (radius - 2)^2`, which by the triangle inequality on
+distance-to-a-set puts every point of every square inside the real copper. `steps` is chosen so
+consecutive centres differ by at most `2 * s` per axis, which is exactly when two closed squares of
+that size still touch — so the chain is one connected component by construction. The first and last
+squares are centred exactly on the track's endpoints, which is what lets a diagonal stub reach the
+pad it is soldered to and be picked up at its far end. Endpoints are canonically ordered first, so a
+track recorded in either direction produces the identical chain, and squares are emitted in ascending
+order. Each square charges the obstacle-check budget as it is generated, so a track too long for the
+budget fails closed; one whose floored half width does not exceed the tolerance cannot be modelled at
+all and is refused with a distinct diagnostic. The chain is deliberately coarser than the copper —
+squares reach about `0.7 * radius` — so attachment is possible only near sampled points, and the
+residual error is under-connection, never a claimed connection that does not exist.
+
+Components are exact integer union-find over the two pad cores and every same-net segment core, with
+closed rectangle intersection as the connection test — exact contact counts. The lowest index always
+wins a union, so a component's root never depends on discovery order. Each pair comparison charges
+the obstacle-check budget, so the every-64-checks cancellation cadence applies unchanged.
+
+Connectivity is asked of nets of any width. When every pad of the net lands in one component the
+router returns a typed `RouteConnection` instead of a candidate, whatever the pad count; its
+`pad_count` field distinguishes the cases, and its `start_pad_id`/`end_pad_id` are the
+lexicographically first and last pads, which bound the set rather than naming a route. Routing a
+multi-pin net remains unsupported: a net that is not fully connected and has more than two pads gets
+the unchanged `invalid_two_pin_net` refusal. A net carrying a same-net via or zone is never claimed
+connected, because that copper is not represented here; a two-pin net names the via or zone
+directly, while a wider one is refused for its pad count, which is the more useful fact about it.
+
+If both pads land in one component the router returns a typed `RouteConnection` instead of a
+candidate: the net is already connected on the selected layer and there is nothing to route. That is
+a terminal success, not a `RouteFailureCode`. Otherwise the search is seeded from every lattice node
+the source component's segment cores cover and terminates on any node the target component's cores
+cover; a rectangle's covered index range is solved directly rather than by scanning the lattice, and
+each emitted node charges the obstacle budget. Pads contribute only their centre node, so a board
+without same-net copper produces byte-identical geometry to the single-source contract.
+
+Because two components cannot both contain the same node without having been unioned, the seed and
+target sets are provably disjoint and the emitted patch always has at least one edge. The heuristic
+becomes the Manhattan distance to the target bounding box: every target lies inside that box, every
+grid edge costs at least one step, and the bend and proximity terms are non-negative, so it stays
+admissible; one unit step changes it by at most one step, so it stays consistent. With a single
+target the box is degenerate and the estimate is exactly the original two-pin heuristic.
+
+The candidate remains new segments only. Attachment is geometric overlap with existing same-net
+copper, which KiCad accepts for the same net; the committed `partial-route.kicad_pcb` fixture is
+checked against KiCad 10.0.5 for zero errors, warnings, and unconnected items. When the cheapest
+attachment is mid-stub rather than at a stub endpoint, the leftover tail is copper with an
+unconnected end and KiCad reports `track_dangling` at warning severity — not a hard-correctness
+failure, but a real quality consequence. A same-net via, a same-net zone, and an endpoint pad whose
+shape is not modeled exactly all still fail closed. The component analysis is skipped entirely when
+the net carries no same-net selected-layer segment, so two overlapping same-net pads with no track
+between them are still routed redundantly.
+
+That `track_dangling` behaviour is also what makes the diagonal fixture's DRC evidence mean
+something. The committed `diagonal-stub.kicad_pcb` carries a stub running diagonally from one pad to
+`(16, 19)`; the router picks it up at that far end and adds 18 mm where an empty board needs 20 mm,
+and KiCad reports nothing. Displacing the same proposal by 0.5 mm so it misses the stub end produces
+two `track_dangling` warnings and one unconnected item, so a clean report is positive evidence that
+the under-approximating chain put the attachment point on real copper rather than merely near it.
 
 ## Objective and determinism
 
@@ -71,7 +198,9 @@ recorded in candidate identity for parity with future policies but does not rand
 `max_grid_nodes` bounds the position lattice before allocation, `max_expansions` bounds state search,
 `max_obstacles` caps selected-layer obstacles, and `max_obstacle_checks` directly bounds the otherwise
 multiplicative edge/proximity work. Cancellation is checked during preparation, between expansions,
-and at most every 64 obstacle checks during a long evaluation. Node-budget, obstacle-budget,
+and at most every 64 obstacle checks during a long evaluation. Polygon bounds construction charges
+each inspected vertex, and legality/proximity charge their pruning bound and every examined edge.
+Node-budget, obstacle-budget,
 search-budget, cancellation, unsupported constraint, unsupported geometry, stale revision, invalid
 snapshot/request, off-grid endpoint, and no-path outcomes remain distinct. Failure diagnostics carry
 deterministic expanded-state and obstacle-check counts.
@@ -81,8 +210,10 @@ deterministic expanded-state and obstacle-check counts.
 `routing/oracle.py` provides a benchmark-only Dijkstra oracle that sets the heuristic to zero while
 reusing the exact bounded preparation, edge-legality, proximity, and additive-cost evaluators. It
 returns only an optimal cost or typed diagnostic—never a route patch—and is intentionally excluded
-from the supported routing API. Tests compare A* and Dijkstra completion, total cost, bends, and
-proximity steps on straight, detour, exact-clearance, and no-path cases.
+from the supported routing API. It shares the same seeding and termination sets, so multi-source and
+multi-target searches stay comparable, and reports exact optimal cost zero for an already-connected
+net. Tests compare A* and Dijkstra completion, total cost, bends, and proximity steps on straight,
+detour, exact-clearance, attachment, and no-path cases.
 
 `scripts/benchmark_routing.py` repeats those generated fixtures, verifies deterministic outcomes,
 and emits content-addressed JSON with raw timing and incremental-memory samples. The tiny synthetic
@@ -157,10 +288,13 @@ net names, and non-copper layer names are rejected before any file is read. Rout
 only from the caller, never from untrusted board content, so a board file cannot widen its own
 clearance.
 
-Every outcome is one of three statuses. `routed` carries a candidate whose base revision must equal
-the previewed Board IR snapshot digest. `not_routed` carries exactly one typed, non-echoing
-diagnostic. `unsupported_board` carries bounded conversion diagnostic-code counts and no snapshot
-digest; any conversion diagnostic, including a warning, produces this status. A wall-clock deadline
+Every outcome is one of four statuses. `routed` carries a candidate whose base revision must equal
+the previewed Board IR snapshot digest. `already_connected` carries a `RouteConnection` bound to the
+same digest, naming both endpoint pads and counting the attachment segments and component objects;
+it is a terminal success with nothing to propose, not a failure. `not_routed` carries exactly one
+typed, non-echoing diagnostic. `unsupported_board` carries bounded conversion diagnostic-code counts
+and no snapshot digest; any conversion diagnostic, including a warning, produces this status. A
+wall-clock deadline
 (`COPPER_MCP_MAX_ROUTE_PREVIEW_SECONDS`, default 30 s) starts at the operation boundary, before the
 board is resolved, read, or converted, and bounds the whole call rather than only the search. It is
 checked after conversion, consulted during search, and clamps the KiCad timeout for optional DRC to
@@ -170,7 +304,8 @@ participates in candidate identity.
 `include_drc` runs the candidate-bound authoritative path and returns the same aggregate, redacted
 `DrcSummary` plus the candidate, source, patched-board, and patched-context revisions. A missing
 KiCad CLI or non-binding evidence fails the whole call rather than returning an unverified
-candidate. `RoutePreview` revalidates all of these bindings on construction and serializes to a
+candidate. On an `already_connected` net the flag is skipped rather than failed: that rule protects
+a proposal, and no copper is being proposed. `RoutePreview` revalidates all of these bindings on construction and serializes to a
 detached plain dictionary.
 
 The preview writes no file, creates no job, persists nothing, and applies no copper. It does return
@@ -179,27 +314,63 @@ disclosure; source board bytes and unrelated board objects are never returned.
 
 ## Measured coverage on a real board
 
-The obstacle model is validated on synthetic fixtures and on a purpose-built blocked-pad KiCad
-board, so it is worth stating plainly what it does *not* yet reach. Measured against the repository's
-own [CopperTone](../../hardware/coppertone-buffer/README.md) design at commit `87ec6f3`:
+The polygon model is validated by exact synthetic geometry cases; the rectangular existing-copper
+model also has a purpose-built blocked-pad KiCad DRC fixture. It is therefore worth stating plainly
+what neither yet reaches. Measured against the repository's own
+[CopperTone](../../hardware/coppertone-buffer/README.md) board source at SHA-256
+`3bcd01ec4942fccabfaf1c21bdae050a31a7bf99af7ab1bcb0dbb3d0aabcfb94`:
 
 | Stage | Result |
 |---|---|
 | Board IR conversion | Supported — 2 copper layers, 14 nets, 55 pads, 53 segments, 9 vias, 2 zones, 2 keepouts |
-| Nets previewable on `F.Cu` | 0 of 14 |
+| Nets reaching a terminal outcome on `F.Cu` | 11 of 14, all `already_connected` |
+| Nets routed on `F.Cu` | 0 of 14 |
 
-Conversion is not the blocker; the router's contract is. After ADR-0012 made vias obstacles rather
-than a board-level veto, the remaining limits are per-net and precise:
+Conversion is not the blocker; the router's contract is. Six refusals have been removed in
+succession — the same-net partial-routing veto (ADR-0016), non-rectangular track keepouts,
+foreign-net diagonal segments (ADR-0017), a mirrored footprint-rotation defect in the adapter,
+diagonal copper on the routed net (ADR-0018), and the assumption that connectivity is only a
+two-pin question. The first three moved nothing. The fourth moved the number, because it was not a
+router limitation at all: pads on every rotated footprint were placed at their mirror image, so the
+router was being asked about a board that did not exist. The fifth resolved the rest of the two-pin
+surface, and the sixth extended the same analysis to nets of any width.
 
-- 9 of 14 nets have more than two `F.Cu` pads, the largest at twelve;
-- all 5 two-pin nets fail on the board's two `F.Cu` zones; and
-- 13 of 14 nets already carry `F.Cu` copper, because the board is fully routed.
+Measured per net at the default 250 µm grid step, twice, with identical results:
 
-Zones are the next blocker and need real polygon obstacles: a bounding box around a pour covering
-most of a board would make every route impossible while claiming to be conservative. So the honest
-summary is that Board IR handles a real two-layer audio board today, and the router does not route
-one. The ordering that follows — polygon zones, then multi-pin nets, then rip-up — is what the
-[roadmap](../roadmap.md) now reflects.
+| Nets | Outcome |
+|---|---|
+| 5 of 14 — `9V_RAW`, `L_IN_RAW`, `R_IN_RAW`, `L_ISO`, `R_ISO` | **`already_connected`**, two pads each |
+| 6 of 14 — `L_BUF`, `R_BUF`, `L_IN_BIASED`, `R_IN_BIASED`, `R_OUT`, `VREF` | **`already_connected`**, three to seven pads each |
+| 3 of 14 — `GND`, `VCC`, `L_OUT` | `invalid_two_pin_net`; each carries same-net vias |
+
+Every net on this board is one the designer already routed, and the router now recognises eleven of
+the fourteen. The widest is `VREF` at seven pads joined by ten segments. There is nothing to route on
+any of them, and saying so is the correct answer rather than a consolation prize.
+
+The three refusals are honest rather than incidental. `GND`, `VCC` and `L_OUT` carry same-net vias,
+and a via is copper on another layer that this single-layer model does not represent. Their pads may
+well be connected through it, but nothing here can show that, so the router declines to claim it and
+falls back to the pad-count refusal — which is also true, since routing a multi-pin net remains
+unsupported. `GND` additionally carries a same-net zone, which is refused for the same reason.
+
+The claim is bound to authoritative evidence, though not the usual kind: an already-connected
+preview emits no candidate, so candidate-bound DRC has nothing to replay. The available
+authoritative check is the board-level one — `kicad-cli pcb drc` reports **zero unconnected items**
+on this board, so KiCad agrees every net is fully connected. A regression test asserts both halves
+together across all eleven nets.
+
+It is worth being precise about what this is not. Zero nets are *routed*: no copper has been proposed
+for CopperTone, and none is needed for the nets it can currently reason about. Connectivity analysis
+now spans nets of any width, but **routing** a multi-pin net is still unsupported — that separation
+is deliberate, because recognising an existing connection and choosing a Steiner topology for a new
+one are different problems. Behind them sit multilayer connectivity through vias, a freshness-bound
+fill authority, and a lattice that does not require the pad-centre delta to divide by the grid step;
+none is currently reached, because no net on this board still needs a route.
+
+Board IR handles a real two-layer audio board today, and the router still does not route one
+unaided. Attachment, polygon keepouts, and diagonal envelopes remain validated by purpose-built
+fixtures whose KiCad DRC evidence is real and which are checked to be discriminating. The
+[roadmap](../roadmap.md) records the remainder as separate contracts.
 
 ## Safety boundary
 
@@ -213,12 +384,39 @@ readiness, or hardware safety. Preview, persistence, and application require sep
 
 A committed `blocked-pad.kicad_pcb` fixture places a 2 mm x 8 mm foreign-net pad between the two
 endpoints. The router detours around it, and a KiCad 10.0.5 integration test asserts the resulting
-board reports zero DRC errors and zero unconnected items, so the obstacle model is checked against
-the authoritative tool rather than only against itself.
+board reports zero DRC errors and zero unconnected items, so that rectangular obstacle path is
+checked against the authoritative tool rather than only against itself. No zone-specific KiCad DRC
+claim is made: candidate DRC intentionally does not refill zones, and cached fill is not authority.
+The separate `blocked-zone.kicad_pcb` fixture exercises KiCad parsing through deterministic,
+read-only public preview and workspace-preservation checks, not authoritative zone-fill DRC.
+
+A committed `partial-route.kicad_pcb` fixture carries a same-net stub across half the gap; the
+router proposes only the remaining 10 mm, and a KiCad 10.0.5 integration test asserts the patched
+board reports zero errors, zero warnings, and zero unconnected items, so attachment copper is
+checked against the authoritative tool rather than only against itself. The `diagonal-stub.kicad_pcb`
+fixture does the same for a stub that leaves its pad diagonally, and carries its own KiCad
+integration test. The `connected-net` fixture covers the already-connected outcome through the
+public preview and needs no KiCad.
+
+A committed `octagon-keepout.kicad_pcb` fixture places an octagonal track rule area between the
+endpoints. The router detours around it, and a KiCad 10.0.5 integration test asserts zero errors,
+warnings, and unconnected items. That fixture is checked to be discriminating rather than merely
+green: a straight track through the same rule area makes KiCad report `items_not_allowed` as an
+error.
+
+A committed `diagonal-blocker.kicad_pcb` fixture runs a foreign `POWER` track diagonally across the
+straight corridor between the endpoints. The router detours, and a KiCad 10.0.5 integration test
+asserts zero errors, warnings, and unconnected items. It is discriminating in the same way: the
+straight route the router used to be unable to consider makes KiCad report `tracks_crossing` as an
+error. The envelope's superset property is separately covered by a test that samples the exact
+integer stadium across seven orientations and requires every copper point to fall inside the
+envelope.
 
 See [ADR-0006](../adr/0006-bounded-deterministic-astar.md),
 [ADR-0007](../adr/0007-disposable-kicad-candidate-snapshot.md),
 [ADR-0008](../adr/0008-candidate-bound-kicad-drc.md),
 [ADR-0009](../adr/0009-non-mutating-route-preview.md),
 [ADR-0011](../adr/0011-existing-copper-obstacles.md),
-[ADR-0012](../adr/0012-via-obstacles.md), and the [roadmap](../roadmap.md).
+[ADR-0012](../adr/0012-via-obstacles.md),
+[ADR-0013](../adr/0013-polygon-zone-obstacles.md),
+[ADR-0016](../adr/0016-same-net-attachment.md), and the [roadmap](../roadmap.md).

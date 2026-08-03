@@ -5,16 +5,17 @@
 [![Release](https://img.shields.io/github/v/release/seunghyukchoe/copper-mcp)](https://github.com/seunghyukchoe/copper-mcp/releases/latest)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
-[![Status](https://img.shields.io/badge/status-pre--alpha-orange.svg)](docs/roadmap.md)
+[![Status](https://img.shields.io/badge/status-MVP--alpha-blue.svg)](docs/roadmap.md)
 
 **CopperMCP is a local-first, open-source PCB automation platform designed for deterministic routing,
 MCP-based tools, and optional AI policy plugins.**
 
 > [!IMPORTANT]
-> CopperMCP is pre-alpha. The current `0.1.x` foundation provides secure board inspection,
+> CopperMCP `0.2.x` is an MVP-alpha. It provides secure board inspection,
 > authoritative read-only KiCad DRC summaries, stable manifests, candidate validation, MCP
-> contracts, and a narrow non-mutating two-pin A* route preview. It does not modify production
-> boards.
+> contracts, a narrow non-mutating two-pin A* route preview, and bounded Circuit Intent delivery as
+> a deterministic KiCad schematic. The CLI may explicitly create one new schematic, and the
+> stdio-only MCP tool may create one short-lived artifact capability; neither path modifies a board.
 
 ## Why this project exists
 
@@ -36,15 +37,24 @@ The non-negotiable boundary is simple:
 - SHA-256 board revisions and versioned JSON schemas.
 - Immutable Board IR `0.1.0` with exact integer units, typed constraints, canonical digests, and a
   bounded fail-closed converter for a documented KiCad subset.
+- Immutable Circuit Intent IR `0.1.0` for bounded two-pin resistor/capacitor topology, with a strict
+  codec, canonical content digest, and deterministic in-memory KiCad `20250114` schematic renderer
+  using original embedded symbols. The shared build service validates and normalizes structured
+  content and requires two byte-identical renders. The CLI can explicitly create one new
+  workspace-confined `.kicad_sch`; stdio MCP returns redacted build metadata plus an opaque,
+  15-minute access capability rather than schematic bytes in normal tool output. Expiry makes the
+  capability unreadable; it is not a secure memory-erasure promise.
 - Fixed-argument KiCad CLI DRC with source, time, size, schema, and stale-context guards.
 - Internal candidate-bound DRC evidence tying an exact replayed candidate to its Board IR base,
   original KiCad bytes, private patched board, complete patched rule/library context, and strict
   aggregate KiCad summary without writing a candidate file into the source workspace.
 - Candidate-manifest validation and correctness-first comparison.
 - Bounded integer A* candidates for one two-pad net on a documented rectangular Board IR subset,
-  routing around existing foreign-net pads and orthogonal segments under exact integer clearance,
-  with independent lattice, search, and obstacle-work ceilings, plus replay-bound serialization to
-  new disposable KiCad bytes when every modeled source geometry object has a native UUID/tstamp.
+  routing around existing foreign-net pads, orthogonal segments, through vias, and conservative
+  solid-zone polygon envelopes under exact integer clearance, with independent lattice, search, and
+  obstacle-work ceilings, plus replay-bound serialization to new disposable KiCad bytes when every
+  modeled source geometry object has a native UUID/tstamp. Zone fill caches are not routing
+  authority, and same-net existing copper remains unsupported partial routing.
 - Read-only Board IR structural inspection that reports whether a board is representable by the
   supported subset, using counts and digests rather than geometry, names, or identities.
 - A bounded, non-mutating route preview over MCP and the CLI that validates an untrusted request,
@@ -79,6 +89,21 @@ PathFinder-style negotiated congestion, conflict-aware parallelism, bounded exac
 kernels, and optional typed ML policy hooks. Deterministic code and KiCad validation remain the
 authority for every copper result.
 
+The [audio circuit benchmark intake](docs/research/audio-circuit-benchmarks.md) also turns public DIY
+catalogs into reference-only challenge categories without copying their circuits. A checked,
+network-free corpus runs original or explicitly open artifacts through the same Board IR and route
+preview services used by MCP. A separate independently authored RC intent fixture now exercises
+canonical logical topology and deterministic KiCad schematic rendering. It still records ERC,
+source-to-board parity, value selection, board generation, electrical validation, and fabrication
+readiness as missing capabilities rather than inferring them.
+
+The longer-term MCP north star is a versioned **Circuit Scene IR** that joins semantic circuit
+meaning with bounded visual observation. Models may propose placement intent and compare immutable
+placement previews or candidates; deterministic code remains responsible for snapping,
+connectivity, clearance, provenance, validation, and any separately authorized apply. Direct AI
+mutation of KiCad files or live editor state is not part of this architecture. Circuit Scene IR,
+placement preview/candidates, and placement apply are a north star and do not exist today.
+
 ## Quick start
 
 Prerequisites: Python 3.11 or newer.
@@ -105,12 +130,17 @@ copper-mcp --workspace /absolute/path/to/boards drc example.kicad_pcb
 
 The DRC adapter never accepts arbitrary KiCad flags and never requests zone refill or board save.
 It mirrors the board, matching project/rule files, and workspace-local KiCad library assets into a
-private snapshot; bounds that snapshot cumulatively; limits report growth in the child process; and
-rejects results when any captured context changes during execution. Context discovery also has file
-count and wall-clock ceilings, and the pre-run byte snapshot is released before KiCad starts. Keep
-KiCad projects and their project-relative libraries self-contained below the configured workspace.
-DRC-clean is not a substitute for electrical, signal-integrity, manufacturability, or hardware
-review.
+private snapshot through descriptor-anchored, no-symlink reads. File-table dependencies are accepted
+only when they remain inside that snapshot; environment-expanded, absolute, remote, and plugin URIs
+are rejected before KiCad starts. The child runs from a private working directory and is isolated
+from the invoking user's global configuration and environment. Snapshot bytes and child side
+effects are bounded cumulatively, report growth is limited in the child process, and results are
+discarded when captured context changes. Context discovery also has file-count and wall-clock
+ceilings, and the pre-run byte snapshot is released before KiCad starts. Keep KiCad projects
+self-contained below the configured workspace, with any libraries referenced as project-relative
+`${KIPRJMOD}/` paths from an `fp-lib-table` or `sym-lib-table` beside the board file. No other
+library location is read, and design-block library entries are rejected. DRC-clean is not a
+substitute for electrical, signal-integrity, manufacturability, or hardware review.
 
 Check whether a board is representable by the supported Board IR subset:
 
@@ -134,6 +164,24 @@ documented Board IR subset and the two-pad single-layer routing case; anything e
 diagnostic or bounded conversion-code counts. The response contains the geometry CopperMCP
 generated, so hosts that must not disclose generated copper to a model should not enable the
 `preview_route` tool.
+
+Build a deterministic schematic from a strict Circuit Intent snapshot. This is the only current
+durable schematic operation, and the output must be a new path inside the configured workspace:
+
+```bash
+mkdir -p /absolute/path/to/boards/artifacts  # artifacts/ is ignored by this repository
+copper-mcp --workspace /absolute/path/to/boards render-schematic \
+  intent/rc-low-pass.json --output artifacts/rc-low-pass.kicad_sch
+```
+
+The service records topology, digest, provenance, and deterministic-replay checks as passed. It does
+not run KiCad on each build and reports KiCad parsing, ERC, and schematic-to-board parity as
+`not_run`; electrical validation is also `not_run`, and board readiness is false. The CLI refuses
+traversal, symlinks, a suffix other than exact lowercase `.kicad_sch`, and any existing output
+rather than silently overwriting it. The input is captured from one held descriptor, and output
+creation stays anchored to a held workspace-directory descriptor. Schematic-to-board conversion,
+footprint assignment, and placement remain manual; the generated schematic is not automatically
+connected to the board-preview workflow.
 
 Start the local MCP server over standard input/output:
 
@@ -161,13 +209,21 @@ Example MCP client configuration:
 Never place provider keys or proprietary board contents in committed MCP configuration. See
 [`.env.example`](.env.example) and the [security policy](SECURITY.md).
 
+On stdio, `render_circuit_schematic` accepts validated structured Circuit Intent content and returns
+redacted metadata plus a non-enumerable `pcb://artifacts/schematic/...` capability. Its exact bytes
+are accessible for at most 15 minutes in a 16-entry, 16 MiB process-local store. Expired entries are
+removed lazily on later store activity or process exit, so expiry blocks access but does not promise
+immediate memory erasure. Fetching the resource reveals the schematic topology, so hosts decide
+whether to save it locally or disclose it to a model. Schematic artifact tools and resources are
+disabled over streamable HTTP in this MVP.
+
 ## Architecture
 
 ```text
 KiCad IPC / board files        MCP clients / CLI
            \                       /
             \                     /
-             Board IR + services
+      versioned IRs + services
                       |
            deterministic router contract
                       |
@@ -189,6 +245,7 @@ this boundary.
 - [Project charter](docs/project-charter.md)
 - [Architecture](docs/architecture/overview.md)
 - [Board IR and KiCad adapter contract](docs/architecture/board-ir.md)
+- [Circuit Intent IR and KiCad schematic contract](docs/architecture/circuit-intent.md)
 - [Deterministic A* baseline](docs/architecture/routing-baseline.md)
 - [MCP contract](docs/architecture/mcp-api.md)
 - [Security and threat model](docs/architecture/security-model.md)

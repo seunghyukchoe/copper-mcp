@@ -65,6 +65,13 @@ board. The schema is the field-level reference.
 
 - Coordinates and dimensions use integer nanometres. Angles use integer microdegrees normalized to
   `[0, 360,000,000)`.
+- Board IR keeps KiCad's coordinate frame verbatim: y increases downward, while a footprint's
+  `(at x y angle)` angle is counter-clockwise *on screen*. A positive quarter turn therefore maps a
+  footprint-local point `(x, y)` to `(y, -x)`, not `(-y, x)`. The two differ by a mirror and agree at
+  0 and 180 degrees, so an error here is invisible on half of all boards; the KiCad adapter's map is
+  pinned by a fixture whose expected pad positions are adjudicated by KiCad's own connectivity
+  engine. Pad `rotation_udeg` is the sum of the footprint and pad angles, which is a rotation
+  composition and so carries no coordinate-frame sign.
 - Integers are capped at `2^53 - 1` in magnitude so JSON consumers do not lose precision. Positive
   widths, diameters, and drills cannot be zero; typed non-negative values may be zero.
 - Millimetre/degree source tokens use ordinary decimal notation and must convert exactly. There is no

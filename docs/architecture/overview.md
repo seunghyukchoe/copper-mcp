@@ -7,7 +7,7 @@ CopperMCP separates the stable deterministic domain from transports and experime
 ```text
 adapters (CLI, MCP, KiCad, files)
                  |
-application services and versioned Board IR
+application services and versioned logical/physical IRs
                  |
 routing contracts + deterministic validation
                  |
@@ -26,13 +26,17 @@ revision.
 | Component | Responsibility |
 |---|---|
 | `config.py` | Validate process settings and establish the workspace boundary. |
-| `security.py` | Resolve, constrain, and size-limit untrusted filesystem inputs. |
+| `security.py` | Descriptor-anchor bounded workspace reads and create-only outputs without following path-component symlinks. |
 | `models.py` | Stable board and candidate contract models. |
 | `kicad_file.py` | Read-only MVP inspection; never used to write geometry. |
 | `board_ir/` | Canonical integer board snapshots, strict codec, geometry validation, and digests. |
+| `circuit_ir/` | Canonical logical topology snapshots, strict codec, semantic validation, and digests. |
 | `adapters/kicad_board_ir.py` | Bounded, read-only conversion of the documented KiCad subset. |
 | `adapters/kicad_route_patch.py` | Pure replay-bound serialization to new disposable KiCad bytes. |
-| `kicad_cli.py` | Fixed-argument ordinary and candidate-bound DRC over private context snapshots. |
+| `adapters/kicad_schematic.py` | Pure deterministic rendering of the Circuit Intent subset to new in-memory KiCad schematic bytes. |
+| `circuit_intent_service.py` | Validate or normalize Circuit Intent and require byte-identical double rendering before delivery. |
+| `schematic_artifacts.py` | Bounded process-local capability store for stdio schematic resource delivery. |
+| `kicad_cli.py` | Fixed-argument ordinary and candidate-bound DRC over private snapshots, confined file-table dependencies, environment/state roots, and working directory. |
 | `tools.py` | Pure application services shared by adapters. |
 | `routing/contracts.py` | Exact candidate, cost, settings, result, and backend-neutral contracts. |
 | `routing/astar.py` | Bounded integer two-pin A* reference; candidate-only and fail-closed. |
@@ -56,6 +60,33 @@ or apply path is implemented. See
 [ADR-0008](../adr/0008-candidate-bound-kicad-drc.md),
 [ADR-0009](../adr/0009-non-mutating-route-preview.md), and
 [ADR-0010](../adr/0010-board-ir-inspection-service.md).
+
+Circuit Intent IR `0.1.0` is a separate logical contract for a bounded two-pin passive subset. Its
+pure adapter produces a new content-addressed KiCad schematic derivative with embedded original
+symbols, empty footprints, and no board eligibility. A protocol-independent service validates and
+normalizes the logical content, renders twice, and returns a redacted build record. The CLI may
+explicitly create one new workspace schematic without overwrite; the stdio-only MCP adapter returns
+the same metadata plus one opaque, expiring resource capability. Neither delivery path performs a
+per-build KiCad parse, ERC, electrical validation, or schematic-to-board parity check. Capability
+access expires after 15 minutes, but expired bytes are reclaimed lazily on later store activity or
+process exit; no secure memory-erasure claim is made. See the
+[Circuit Intent and schematic contract](circuit-intent.md) and
+[ADR-0014](../adr/0014-canonical-circuit-intent.md), and
+[ADR-0015](../adr/0015-bounded-circuit-schematic-delivery.md).
+
+## High-fidelity circuit perception and placement north star
+
+The long-term perception contract is a versioned **Circuit Scene IR** that combines semantic circuit
+intent with a bounded visual description suitable for MCP observation. It will not expose an
+unbounded screen stream or make pixels authoritative. A model may use that scene to propose typed
+placement intent and compare immutable placement previews or candidates. Deterministic services
+remain responsible for identity, snapping, connectivity, clearance, rule evaluation, provenance,
+and revision binding.
+
+Any eventual placement or routing apply stays a separate, explicit, revision-checked operation.
+Models never write KiCad syntax, mutate a live editor, or bypass candidate validation. This is a
+north star rather than a current placement, board-generation, or editor-control capability; Circuit
+Scene IR and its placement surfaces have not been implemented.
 
 ## Candidate lifecycle
 
