@@ -112,6 +112,7 @@ class _AlreadyConnectedError(Exception):
     attachment_segments: int
     pad_count: int = 2
     vias: int = 0
+    fill_polygons: int = 0
     obstacle_checks: int = 0
 
 
@@ -763,11 +764,66 @@ def _via_cores(via: Via) -> tuple[_Rect, ...] | None:
 
 
 @dataclass(frozen=True, slots=True)
+class VerifiedFill:
+    """One island of poured copper the caller has already bound to freshness evidence.
+
+    The router never reads or refills a board; it accepts fill only as evidence someone else
+    proved current, which keeps KiCad execution out of the search and out of Board IR.
+
+    ``source_revision`` is the board the evidence was established against, and preparation
+    refuses fill whose revision does not match the snapshot in hand. This is not a defence
+    against a caller determined to lie — an in-process caller can always construct whatever it
+    likes — but it does turn the realistic mistake, handing the router a pour proved on some
+    other board or an earlier revision of this one, from a silent wrong answer into a refusal.
+    """
+
+    net_id: str
+    layer_id: str
+    points: tuple[PointNM, ...]
+    source_revision: str
+
+
+@dataclass(frozen=True, slots=True)
 class _CopperObject:
-    """One same-net copper object, with the layers it occupies and the cores it offers."""
+    """One same-net copper object, with the layers it occupies and the shape it offers.
+
+    Most objects are covered by under-approximating rectangles. A verified fill island is
+    carried as its exact polygon instead, because once freshness-bound it is KiCad's own
+    authority on where that copper is rather than something this module has to approximate.
+    """
 
     layer_ids: frozenset[str]
-    cores: tuple[_Rect, ...]
+    cores: tuple[_Rect, ...] = ()
+    polygon: tuple[PointNM, ...] = ()
+
+
+def _polygon_touches_rect(points: tuple[PointNM, ...], rectangle: _Rect, work: _WorkBudget) -> bool:
+    """Exact integer contact between a filled polygon and one axis-aligned rectangle."""
+
+    minimum_x, minimum_y, maximum_x, maximum_y = rectangle
+    corners = (
+        PointNM(minimum_x, minimum_y),
+        PointNM(maximum_x, minimum_y),
+        PointNM(maximum_x, maximum_y),
+        PointNM(minimum_x, maximum_y),
+    )
+    for index, edge_start in enumerate(points):
+        work.obstacle_check()
+        edge_end = points[(index + 1) % len(points)]
+        if _inside_closed(edge_start, rectangle):
+            return True
+        for corner_index in range(4):
+            if _segments_intersect(
+                corners[corner_index], corners[(corner_index + 1) % 4], edge_start, edge_end
+            ):
+                return True
+    # No edge crossed and no vertex landed inside, so containment is the only way left.
+    inside = False
+    for index, edge_start in enumerate(points):
+        work.obstacle_check()
+        if _ray_crosses_right(corners[0], edge_start, points[(index + 1) % len(points)]):
+            inside = not inside
+    return inside
 
 
 def _multilayer_via_count(
@@ -775,8 +831,9 @@ def _multilayer_via_count(
     request: RouteRequest,
     pads: tuple[Pad, ...],
     work: _WorkBudget,
-) -> int | None:
-    """Return the via count when every pad is provably joined across layers, else None.
+    verified_fill: tuple[VerifiedFill, ...] = (),
+) -> tuple[int, int] | None:
+    """Return via and fill-island counts when every pad is provably joined, else None.
 
     Routing stays a single-layer contract, but *recognising* an existing connection does not
     have to: a net whose pads meet through a back-layer detour is connected whether or not this
@@ -788,12 +845,23 @@ def _multilayer_via_count(
     layer_ids = frozenset(layer.id for layer in content.copper_layers)
     objects: list[_CopperObject] = []
     pad_indices: list[int] = []
+
+    def admit(copper: _CopperObject) -> None:
+        """Count every modeled object against the same ceiling the obstacle model uses."""
+
+        if len(objects) >= request.settings.max_obstacles:
+            raise _fail(
+                RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+                "the same-net connectivity model exceeds the configured obstacle budget",
+            )
+        objects.append(copper)
+
     for pad in pads:
         cores = _pad_cores(pad)
         if cores is None:
             return None
         pad_indices.append(len(objects))
-        objects.append(_CopperObject(layer_ids=frozenset(pad.layer_ids), cores=cores))
+        admit(_CopperObject(layer_ids=frozenset(pad.layer_ids), cores=cores))
     for index, segment in enumerate(content.segments):
         if index % 64 == 0:
             work.checkpoint()
@@ -803,7 +871,7 @@ def _multilayer_via_count(
         cores = (orthogonal,) if orthogonal is not None else _diagonal_segment_cores(segment, work)
         if cores is None:
             return None
-        objects.append(_CopperObject(layer_ids=frozenset({segment.layer_id}), cores=tuple(cores)))
+        admit(_CopperObject(layer_ids=frozenset({segment.layer_id}), cores=tuple(cores)))
     via_count = 0
     for index, via in enumerate(content.vias):
         if index % 64 == 0:
@@ -814,7 +882,25 @@ def _multilayer_via_count(
         if cores is None:
             return None
         via_count += 1
-        objects.append(_CopperObject(layer_ids=layer_ids, cores=cores))
+        admit(_CopperObject(layer_ids=layer_ids, cores=cores))
+    fill_count = 0
+    for island in verified_fill:
+        work.checkpoint()
+        if island.net_id != request.net_id:
+            continue
+        fill_count += 1
+        admit(_CopperObject(layer_ids=frozenset({island.layer_id}), polygon=island.points))
+
+    def touching(left: _CopperObject, right: _CopperObject) -> bool:
+        if left.polygon and right.polygon:
+            # KiCad emits one node per connected region, so two distinct islands of the same
+            # net on the same layer are disjoint by construction.
+            return False
+        if left.polygon:
+            return any(_polygon_touches_rect(left.polygon, core, work) for core in right.cores)
+        if right.polygon:
+            return any(_polygon_touches_rect(right.polygon, core, work) for core in left.cores)
+        return any(_rectangles_touch(one, other) for one in left.cores for other in right.cores)
 
     parent = list(range(len(objects)))
 
@@ -832,11 +918,11 @@ def _multilayer_via_count(
                 continue
             if find(first) == find(second):
                 continue
-            if any(_rectangles_touch(one, other) for one in left.cores for other in right.cores):
+            if touching(left, right):
                 parent[max(find(first), find(second))] = min(find(first), find(second))
     if len({find(index) for index in pad_indices}) != 1:
         return None
-    return via_count
+    return via_count, fill_count
 
 
 def _component_roots(rectangles: tuple[_Rect, ...], work: _WorkBudget) -> tuple[int, ...]:
@@ -867,6 +953,7 @@ def _prepare(
     snapshot: BoardIRSnapshot,
     request: RouteRequest,
     work: _WorkBudget,
+    verified_fill: tuple[VerifiedFill, ...] = (),
 ) -> _Problem:
     work.checkpoint()
     try:
@@ -969,15 +1056,36 @@ def _prepare(
             )
     blocking_zones: list[Zone] = []
     same_net_zone = False
-    same_net_zone_present = any(
-        zone.layer_id == request.layer_id and zone.net_id == request.net_id
-        for zone in content.zones
+    # A same-net zone anywhere in the stack is unmodeled copper, and connectivity is a
+    # multilayer question, so a pour on the back layer can carry a connection just as a front
+    # one can. The gate therefore covers every copper layer, and is lifted only for a layer
+    # whose pour arrives as verified fill.
+    verified_fill_layers = frozenset(
+        island.layer_id for island in verified_fill if island.net_id == request.net_id
     )
-    if same_net_via and not same_net_zone_present:
-        # Routing stays single-layer, but a net already joined through its vias needs no route
-        # at all, and refusing to look would report a problem the board does not have.
-        multilayer_vias = _multilayer_via_count(snapshot, request, pads, work)
-        if multilayer_vias is not None:
+    ungoverned_zone_layers = frozenset(
+        zone.layer_id
+        for zone in content.zones
+        if zone.net_id == request.net_id and zone.layer_id not in verified_fill_layers
+    )
+    same_net_zone_present = bool(ungoverned_zone_layers)
+    # A same-net zone normally blocks any claim, because a cached fill may not describe the
+    # board around it. Verified fill is the exception: the caller has already proved this
+    # board's cache is what KiCad recomputes from it, so the poured copper counts as evidence.
+    for island in verified_fill:
+        if island.source_revision != content.source.revision:
+            raise _fail(
+                RouteFailureCode.STALE_FILL,
+                "verified zone fill was established against a different board revision",
+            )
+    net_fill = tuple(island for island in verified_fill if island.net_id == request.net_id)
+    if (same_net_via or net_fill) and not same_net_zone_present:
+        # Routing stays single-layer, but a net already joined through its vias or its poured
+        # copper needs no route at all, and refusing to look would report a problem the board
+        # does not have.
+        multilayer = _multilayer_via_count(snapshot, request, pads, work, net_fill)
+        if multilayer is not None:
+            multilayer_vias, multilayer_fill = multilayer
             raise _AlreadyConnectedError(
                 start_pad_id=pads[0].id,
                 end_pad_id=pads[-1].id,
@@ -986,6 +1094,7 @@ def _prepare(
                 ),
                 pad_count=len(pads),
                 vias=multilayer_vias,
+                fill_polygons=multilayer_fill,
                 obstacle_checks=work.obstacle_checks,
             )
     if same_net_via and two_pin:
@@ -1153,10 +1262,27 @@ def _prepare(
         margin_nm = half_width_nm + clearance_nm
         rect_obstacles.append(_inflate_rectangle(rectangle, margin_nm))
 
+    # Resolving a clearance per obstacle rescans the assignment and class tuples every time,
+    # which is quadratic in board size and metered only for cancellation. The mapping is fixed
+    # for the whole request, so it is built once here and charged once.
+    clearance_by_net: dict[str, int] = {}
+    class_clearance = {item.id: item.clearance_nm for item in content.constraints.net_classes}
+    for index, assignment in enumerate(content.constraints.assignments):
+        if index % 64 == 0:
+            work.checkpoint()
+        resolved = class_clearance.get(assignment.net_class_id)
+        if resolved is not None:
+            clearance_by_net[assignment.net_id] = resolved
+    # Copper on no net still has to be cleared by something. The widest class on the board is
+    # the only choice that cannot under-inflate, and over-inflation only ever refuses a route.
+    widest_clearance_nm = max([net_class.clearance_nm, *class_clearance.values()])
+
     def governing_clearance_nm(net_id: str | None) -> int:
         """Use the stricter of the routed net's clearance and the obstacle net's clearance."""
 
-        other = _net_clearance_nm(snapshot, net_id, work)
+        if net_id is None:
+            return widest_clearance_nm
+        other = clearance_by_net.get(net_id)
         if other is None:
             return net_class.clearance_nm
         return max(net_class.clearance_nm, other)
@@ -1271,7 +1397,11 @@ def _prepare(
     step = request.settings.grid_step_nm
     delta_x = end_pad.center.x - start_pad.center.x
     delta_y = end_pad.center.y - start_pad.center.y
-    if delta_x % step != 0 or delta_y % step != 0:
+    # A two-pin route joins pad centres, so both must sit on the lattice anchored at the first.
+    # Multi-pin legs reach a pad through the lattice nodes its core covers instead, so requiring
+    # the centres to divide would refuse boards the search can route perfectly well — and would
+    # be unsatisfiable in practice, since the divisor has to serve every pad at once.
+    if two_pin and (delta_x % step != 0 or delta_y % step != 0):
         raise _fail(
             RouteFailureCode.OFF_GRID,
             "the pad-center delta is not divisible by the requested grid step",
@@ -1284,7 +1414,7 @@ def _prepare(
     goal_iy = delta_y // step
     if not (min_ix <= 0 <= max_ix and min_iy <= 0 <= max_iy):
         raise _fail(RouteFailureCode.NO_PATH, "the start pad cannot contain the routed width")
-    if not (min_ix <= goal_ix <= max_ix and min_iy <= goal_iy <= max_iy):
+    if two_pin and not (min_ix <= goal_ix <= max_ix and min_iy <= goal_iy <= max_iy):
         raise _fail(RouteFailureCode.NO_PATH, "the end pad cannot contain the routed width")
 
     grid_nodes = (max_ix - min_ix + 1) * (max_iy - min_iy + 1)
@@ -1595,6 +1725,9 @@ def _search(problem: _Problem, work: _WorkBudget) -> _Leg:
         counter += 1
     expanded_states = 0
     peak_frontier_states = len(start_states)
+    # Every leg draws on one ceiling, because the caller authorised one candidate's worth of
+    # work rather than one leg's worth per component.
+    already_spent = work.expanded_states
 
     while frontier:
         work.checkpoint()
@@ -1628,15 +1761,15 @@ def _search(problem: _Problem, work: _WorkBudget) -> _Leg:
                 expanded_states=expanded_states,
                 peak_frontier_states=peak_frontier_states,
             )
-        if expanded_states >= settings.max_expansions:
+        if already_spent + expanded_states >= settings.max_expansions:
             raise _fail(
                 RouteFailureCode.SEARCH_BUDGET_EXCEEDED,
                 "the A* search reached its configured expansion budget",
-                expanded_states=expanded_states,
+                expanded_states=already_spent + expanded_states,
                 obstacle_checks=work.obstacle_checks,
             )
         expanded_states += 1
-        work.expanded_states = expanded_states
+        work.expanded_states = already_spent + expanded_states
 
         current = _point(problem, ix, iy)
         for next_direction, (delta_ix, delta_iy) in enumerate(_DIRECTIONS):
@@ -1831,7 +1964,15 @@ def _route_tree(problem: _Problem, work: _WorkBudget) -> RouteCandidate:
                 obstacle_checks=work.obstacle_checks,
             )
         if source_nodes & target_nodes:
-            raise RuntimeError("internal component analysis produced overlapping components")
+            # An earlier leg can grow into copper that a later merge was still scheduled to
+            # reach, so the two components already touch by the time their turn arrives. That
+            # is a merge that has happened, not an inconsistency: absorb it and move on.
+            merged_early = source_cores + target_cores
+            winner_early, loser_early = min(left, right), max(left, right)
+            parent[loser_early] = winner_early
+            groups[winner_early] = merged_early
+            del groups[loser_early]
+            continue
         leg = _search(
             replace(
                 problem,
@@ -1903,8 +2044,14 @@ class AStarRouter:
         request: RouteRequest,
         *,
         cancelled: CancellationCheck | None = None,
+        verified_fill: tuple[VerifiedFill, ...] = (),
     ) -> RouteResult:
-        """Return an unapplied candidate, an already-connected record, or an expected failure."""
+        """Return an unapplied candidate, an already-connected record, or an expected failure.
+
+        ``verified_fill`` is poured copper a caller has already bound to freshness evidence.
+        The router never reads a board or runs KiCad, so fill it was not handed is fill that
+        does not exist as far as any claim here is concerned.
+        """
 
         validated = _validate_public_inputs(snapshot, request, cancelled)
         if isinstance(validated, RouteResult):
@@ -1912,7 +2059,7 @@ class AStarRouter:
         checked_snapshot, checked_request, cancellation_check = validated
         work = _WorkBudget(settings=checked_request.settings, cancelled=cancellation_check)
         try:
-            problem = _prepare(checked_snapshot, checked_request, work)
+            problem = _prepare(checked_snapshot, checked_request, work, verified_fill)
             return RouteResult(candidate=_route_tree(problem, work))
         except _AlreadyConnectedError as connection:
             return RouteResult(
@@ -1922,10 +2069,14 @@ class AStarRouter:
                     end_pad_id=connection.end_pad_id,
                     attachment_segments=connection.attachment_segments,
                     component_objects=(
-                        connection.attachment_segments + connection.pad_count + connection.vias
+                        connection.attachment_segments
+                        + connection.pad_count
+                        + connection.vias
+                        + connection.fill_polygons
                     ),
                     pad_count=connection.pad_count,
                     vias=connection.vias,
+                    fill_polygons=connection.fill_polygons,
                     obstacle_checks=connection.obstacle_checks,
                 )
             )

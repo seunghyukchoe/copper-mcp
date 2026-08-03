@@ -65,6 +65,13 @@ the request names a single layer. It returns no geometry and no diagnostic, and 
 deliberately has no `RouteFailureCode`. Clients that switch exhaustively over the previous three
 statuses need a fourth branch.
 
+Setting `include_fill_authority` allows poured zone copper to count as connectivity evidence. KiCad
+refills a private disposable copy and the recomputed pour must reproduce the board's cache exactly;
+matching returns the claim with a `fill_authority` record carrying both digests, the KiCad version
+and the island and vertex counts, while a mismatch is refused with the typed `stale_fill` diagnostic
+rather than answering from either version. The workspace board is never refilled. The flag is opt-in
+because it spawns KiCad, and it changes nothing for a board without zones on the requested net.
+
 Setting `include_drc` binds the proposal to candidate-bound authoritative KiCad DRC evidence, which
 returns the same aggregate, redacted summary as `run_board_drc` plus the candidate, source, patched
 board, and patched context revisions. The call fails rather than returning a candidate whose

@@ -4,6 +4,7 @@ from copper_mcp.routing.astar import (
     ROUTER_VERSION,
     ROUTING_POLICY,
     AStarRouter,
+    VerifiedFill,
     canonical_candidate_bytes,
     verify_candidate_id,
 )
@@ -44,6 +45,7 @@ __all__ = [
     "RouteRequest",
     "RouteResult",
     "RoutingBackend",
+    "VerifiedFill",
     "canonical_candidate_bytes",
     "verify_candidate_id",
 ]

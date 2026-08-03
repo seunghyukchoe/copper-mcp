@@ -406,8 +406,16 @@ def via(x: float, y: float, net: str, *, size: float = 0.8, drill: float = 0.4) 
     )
 
 
+#: Radius of the copper-free region a mounting hole requires, in millimetres.
+KEEPOUT_RADIUS_MM = 2.85
+
+
 def keepout(cx: float, cy: float) -> str:
-    r = 2.85
+    # An octagon whose *vertices* sit on the required radius has its edges pulled inward by
+    # cos(22.5 degrees), leaving about 0.22 mm of the required keep-out area unprotected. The
+    # polygon has to circumscribe the circle instead, so the edge midpoints land on the radius
+    # and every point within it is covered.
+    r = KEEPOUT_RADIUS_MM / math.cos(math.radians(22.5))
     points = []
     for index in range(8):
         angle = math.radians(22.5 + index * 45)

@@ -56,7 +56,10 @@ documentation, ledger updates, and benchmark evidence.
 - [x] Diagonal foreign-net copper as conservative exact-integer swept-square envelopes.
 - [x] Diagonal copper on the routed net as attachment copper, using a chain of exact integer squares
   that is provably inside the track and provably self-connected.
-- [ ] Fill-aware zone routing with a freshness-bound KiCad refill/fill-digest authority contract.
+- [x] Freshness-bound zone fill authority: cached fill is admitted as connectivity evidence only
+  when a fresh KiCad refill on a disposable copy reproduces it exactly.
+- [ ] Fill-aware zone *routing*, using verified fill as a tighter obstacle than the conservative
+  boundary envelope. Connectivity uses exact fill today; the routing obstacle model does not.
 - [ ] Multi-pin nets, since most real nets have more than two pads.
   - [x] Connectivity analysis for nets of any width, so an already-connected multi-pin net
     is recognised rather than refused.
@@ -74,6 +77,9 @@ documentation, ledger updates, and benchmark evidence.
 - [ ] Negotiated-congestion multi-net routing.
 - [ ] Incremental spatial index and bounded rip-up/reroute.
 - [ ] Benchmark comparison against established open baselines.
+
+- [ ] Emit candidate DRC evidence in the in-toto Statement envelope, so an attestation this
+  project already produces in substance is also machine-checkable by standard tooling.
 
 ## M3 — Safe candidate application
 

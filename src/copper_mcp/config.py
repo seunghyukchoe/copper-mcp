@@ -44,6 +44,7 @@ class Settings:
     max_drc_context_files: int = 10_000
     max_drc_context_scan_seconds: int = 10
     max_route_preview_seconds: int = 30
+    max_fill_vertices: int = 50_000
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -106,6 +107,12 @@ class Settings:
             1,
             600,
         )
+        max_fill_vertices = _bounded_int(
+            "COPPER_MCP_MAX_FILL_VERTICES",
+            os.environ.get("COPPER_MCP_MAX_FILL_VERTICES", "50000"),
+            3,
+            1_000_000,
+        )
         return cls(
             workspace=workspace,
             transport=transport,
@@ -119,4 +126,5 @@ class Settings:
             max_drc_context_files=max_drc_context_files,
             max_drc_context_scan_seconds=max_drc_context_scan_seconds,
             max_route_preview_seconds=max_route_preview_seconds,
+            max_fill_vertices=max_fill_vertices,
         )

@@ -8,6 +8,43 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- A metamorphic test family over the routing pipeline: whole-board rotation by 90, 180 and 270
+  degrees, reflection across each axis, lattice-safe translation, and endpoint swap. Each relation
+  transforms a board and asserts that the router's conclusion travels with it - same result arm,
+  same diagnostic code, same connection counts, and identical length, bend, proximity and total
+  cost. Cost is a genuine invariant because the transformed board's legal path set is exactly the
+  image of the original's; exact vertex equality under the inverse transform is asserted only on
+  boards whose optimum is unique, because the expansion order and the `(iy, ix)` heap tie-break are
+  not rotation-equivariant and a different-but-equally-optimal route is a correct answer rather than
+  a defect. The rotation relations cover a board of rotated, non-square pads - the class that hid
+  the footprint-rotation defect - and a second relation works at the adapter level instead,
+  comparing `parse(rotate(board))` with `rotate(parse(board))` on the committed rotated-footprint
+  fixture. That is the relation the y-down defect would have failed, and it is checked to be
+  discriminating: all twelve pads match the correct quarter turn and none matches the mirrored one.
+  These relations answer the complement of a pseudo-oracle - not "is this answer right" but "is this
+  the same board" - and they need no KiCad.
+
+- Cached zone fill may now serve as connectivity evidence, but only against a fresh KiCad refill.
+  KiCad refills a private disposable copy and the recomputed pour is compared with the board's
+  cache; matching means the two are the same geometry, so there is no question which one a claim
+  describes, and a mismatch is a typed `stale_fill` refusal rather than a silent preference for
+  either version. Comparison is over canonical geometry - islands sorted and digested by layer, net
+  and exact integer vertices - because KiCad rewrites and reorders a board wholesale on save, so a
+  byte diff of the file says nothing about whether the fill changed. An **island** is the unit
+  rather than a zone: verified empirically against a board authored to force two disjoint regions,
+  KiCad 10.0.5 emits one `filled_polygon` node per connected region, so copper touching different
+  islands is not connected and a committed fixture pins that. `ZoneFillAuthority` refuses
+  construction when its digests differ, so a stale record cannot exist to be misread. The workspace
+  board is never refilled: `--refill-zones --save-board` reaches only the disposable copy, the three
+  existing negative assertions still hold, and the source is recaptured and compared afterwards.
+  The whole path is opt-in through `include_fill_authority`, because it spawns KiCad and must never
+  happen implicitly. Fill stays out of Board IR, so snapshots and their digests are unchanged and
+  the router never fetches evidence itself. Scope is connectivity only; using exact fill as a
+  tighter routing obstacle would change routed geometry on every zoned board and needs its own
+  measurement. On the repository's own CopperTone board this resolves `GND`, taking recognition to
+  **14 of 14** - joined by two fill islands and six vias - while without the flag it still refuses,
+  which is the honest default. See [ADR-0021](docs/adr/0021-zone-fill-authority.md).
+
 - A same-net through via is now a connectivity joint rather than a blanket veto, so a net already
   joined across copper layers reports `already_connected` instead of being refused. Routing is
   unchanged and stays single-layer: a net that still needs new copper while carrying a via keeps its
@@ -49,6 +86,10 @@ All notable changes are documented here. The format follows
   remaining nets. See [ADR-0019](docs/adr/0019-multi-pin-component-merging.md).
 
 ### Changed
+
+- The mypy floor is raised to `>=2.3,<3`, matching the version CI runs and the one pinned in the
+  development environment. Newer mypy narrows exhaustive enum branches differently, so a single
+  supported generation removes a class of version-skew failure that had to be checked by hand.
 
 - `RoutePatch` now carries a tuple of `RoutePath`s instead of a single vertex list, so one candidate
   can describe a tree. `ROUTER_VERSION` advances to `astar-grid/0.4.0` and the preview response
