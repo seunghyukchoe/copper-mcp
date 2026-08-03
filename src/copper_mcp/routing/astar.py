@@ -112,6 +112,7 @@ class _AlreadyConnectedError(Exception):
     attachment_segments: int
     pad_count: int = 2
     vias: int = 0
+    fill_polygons: int = 0
     obstacle_checks: int = 0
 
 
@@ -763,11 +764,59 @@ def _via_cores(via: Via) -> tuple[_Rect, ...] | None:
 
 
 @dataclass(frozen=True, slots=True)
+class VerifiedFill:
+    """One island of poured copper the caller has already bound to freshness evidence.
+
+    The router never reads or refills a board; it accepts fill only as evidence someone else
+    proved current, which keeps KiCad execution out of the search and out of Board IR.
+    """
+
+    net_id: str
+    layer_id: str
+    points: tuple[PointNM, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class _CopperObject:
-    """One same-net copper object, with the layers it occupies and the cores it offers."""
+    """One same-net copper object, with the layers it occupies and the shape it offers.
+
+    Most objects are covered by under-approximating rectangles. A verified fill island is
+    carried as its exact polygon instead, because once freshness-bound it is KiCad's own
+    authority on where that copper is rather than something this module has to approximate.
+    """
 
     layer_ids: frozenset[str]
-    cores: tuple[_Rect, ...]
+    cores: tuple[_Rect, ...] = ()
+    polygon: tuple[PointNM, ...] = ()
+
+
+def _polygon_touches_rect(points: tuple[PointNM, ...], rectangle: _Rect, work: _WorkBudget) -> bool:
+    """Exact integer contact between a filled polygon and one axis-aligned rectangle."""
+
+    minimum_x, minimum_y, maximum_x, maximum_y = rectangle
+    corners = (
+        PointNM(minimum_x, minimum_y),
+        PointNM(maximum_x, minimum_y),
+        PointNM(maximum_x, maximum_y),
+        PointNM(minimum_x, maximum_y),
+    )
+    for index, edge_start in enumerate(points):
+        work.obstacle_check()
+        edge_end = points[(index + 1) % len(points)]
+        if _inside_closed(edge_start, rectangle):
+            return True
+        for corner_index in range(4):
+            if _segments_intersect(
+                corners[corner_index], corners[(corner_index + 1) % 4], edge_start, edge_end
+            ):
+                return True
+    # No edge crossed and no vertex landed inside, so containment is the only way left.
+    inside = False
+    for index, edge_start in enumerate(points):
+        work.obstacle_check()
+        if _ray_crosses_right(corners[0], edge_start, points[(index + 1) % len(points)]):
+            inside = not inside
+    return inside
 
 
 def _multilayer_via_count(
@@ -775,8 +824,9 @@ def _multilayer_via_count(
     request: RouteRequest,
     pads: tuple[Pad, ...],
     work: _WorkBudget,
-) -> int | None:
-    """Return the via count when every pad is provably joined across layers, else None.
+    verified_fill: tuple[VerifiedFill, ...] = (),
+) -> tuple[int, int] | None:
+    """Return via and fill-island counts when every pad is provably joined, else None.
 
     Routing stays a single-layer contract, but *recognising* an existing connection does not
     have to: a net whose pads meet through a back-layer detour is connected whether or not this
@@ -815,6 +865,24 @@ def _multilayer_via_count(
             return None
         via_count += 1
         objects.append(_CopperObject(layer_ids=layer_ids, cores=cores))
+    fill_count = 0
+    for island in verified_fill:
+        work.checkpoint()
+        if island.net_id != request.net_id:
+            continue
+        fill_count += 1
+        objects.append(_CopperObject(layer_ids=frozenset({island.layer_id}), polygon=island.points))
+
+    def touching(left: _CopperObject, right: _CopperObject) -> bool:
+        if left.polygon and right.polygon:
+            # KiCad emits one node per connected region, so two distinct islands of the same
+            # net on the same layer are disjoint by construction.
+            return False
+        if left.polygon:
+            return any(_polygon_touches_rect(left.polygon, core, work) for core in right.cores)
+        if right.polygon:
+            return any(_polygon_touches_rect(right.polygon, core, work) for core in left.cores)
+        return any(_rectangles_touch(one, other) for one in left.cores for other in right.cores)
 
     parent = list(range(len(objects)))
 
@@ -832,11 +900,11 @@ def _multilayer_via_count(
                 continue
             if find(first) == find(second):
                 continue
-            if any(_rectangles_touch(one, other) for one in left.cores for other in right.cores):
+            if touching(left, right):
                 parent[max(find(first), find(second))] = min(find(first), find(second))
     if len({find(index) for index in pad_indices}) != 1:
         return None
-    return via_count
+    return via_count, fill_count
 
 
 def _component_roots(rectangles: tuple[_Rect, ...], work: _WorkBudget) -> tuple[int, ...]:
@@ -867,6 +935,7 @@ def _prepare(
     snapshot: BoardIRSnapshot,
     request: RouteRequest,
     work: _WorkBudget,
+    verified_fill: tuple[VerifiedFill, ...] = (),
 ) -> _Problem:
     work.checkpoint()
     try:
@@ -973,11 +1042,17 @@ def _prepare(
         zone.layer_id == request.layer_id and zone.net_id == request.net_id
         for zone in content.zones
     )
-    if same_net_via and not same_net_zone_present:
-        # Routing stays single-layer, but a net already joined through its vias needs no route
-        # at all, and refusing to look would report a problem the board does not have.
-        multilayer_vias = _multilayer_via_count(snapshot, request, pads, work)
-        if multilayer_vias is not None:
+    # A same-net zone normally blocks any claim, because a cached fill may not describe the
+    # board around it. Verified fill is the exception: the caller has already proved this
+    # board's cache is what KiCad recomputes from it, so the poured copper counts as evidence.
+    net_fill = tuple(island for island in verified_fill if island.net_id == request.net_id)
+    if (same_net_via or net_fill) and (not same_net_zone_present or net_fill):
+        # Routing stays single-layer, but a net already joined through its vias or its poured
+        # copper needs no route at all, and refusing to look would report a problem the board
+        # does not have.
+        multilayer = _multilayer_via_count(snapshot, request, pads, work, net_fill)
+        if multilayer is not None:
+            multilayer_vias, multilayer_fill = multilayer
             raise _AlreadyConnectedError(
                 start_pad_id=pads[0].id,
                 end_pad_id=pads[-1].id,
@@ -986,6 +1061,7 @@ def _prepare(
                 ),
                 pad_count=len(pads),
                 vias=multilayer_vias,
+                fill_polygons=multilayer_fill,
                 obstacle_checks=work.obstacle_checks,
             )
     if same_net_via and two_pin:
@@ -1903,8 +1979,14 @@ class AStarRouter:
         request: RouteRequest,
         *,
         cancelled: CancellationCheck | None = None,
+        verified_fill: tuple[VerifiedFill, ...] = (),
     ) -> RouteResult:
-        """Return an unapplied candidate, an already-connected record, or an expected failure."""
+        """Return an unapplied candidate, an already-connected record, or an expected failure.
+
+        ``verified_fill`` is poured copper a caller has already bound to freshness evidence.
+        The router never reads a board or runs KiCad, so fill it was not handed is fill that
+        does not exist as far as any claim here is concerned.
+        """
 
         validated = _validate_public_inputs(snapshot, request, cancelled)
         if isinstance(validated, RouteResult):
@@ -1912,7 +1994,7 @@ class AStarRouter:
         checked_snapshot, checked_request, cancellation_check = validated
         work = _WorkBudget(settings=checked_request.settings, cancelled=cancellation_check)
         try:
-            problem = _prepare(checked_snapshot, checked_request, work)
+            problem = _prepare(checked_snapshot, checked_request, work, verified_fill)
             return RouteResult(candidate=_route_tree(problem, work))
         except _AlreadyConnectedError as connection:
             return RouteResult(
@@ -1922,10 +2004,14 @@ class AStarRouter:
                     end_pad_id=connection.end_pad_id,
                     attachment_segments=connection.attachment_segments,
                     component_objects=(
-                        connection.attachment_segments + connection.pad_count + connection.vias
+                        connection.attachment_segments
+                        + connection.pad_count
+                        + connection.vias
+                        + connection.fill_polygons
                     ),
                     pad_count=connection.pad_count,
                     vias=connection.vias,
+                    fill_polygons=connection.fill_polygons,
                     obstacle_checks=connection.obstacle_checks,
                 )
             )

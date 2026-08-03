@@ -26,7 +26,13 @@ from copper_mcp.adapters import (
 )
 from copper_mcp.board_ir import NetClass, ParseLimits
 from copper_mcp.config import Settings
-from copper_mcp.kicad_cli import RouteCandidateDrcEvidence, run_route_candidate_drc
+from copper_mcp.kicad_cli import (
+    RouteCandidateDrcEvidence,
+    ZoneFillAuthority,
+    ZoneFillStaleError,
+    run_route_candidate_drc,
+    run_zone_fill_authority,
+)
 from copper_mcp.models import SCHEMA_VERSION
 from copper_mcp.request_boundary import (
     CONSTRAINT_FIELDS,
@@ -50,13 +56,14 @@ from copper_mcp.routing import (
     RouteDiagnostic,
     RouteFailureCode,
     RouteRequest,
+    VerifiedFill,
 )
 from copper_mcp.security import read_workspace_file
 
 _SHA256_ID = re.compile(r"^sha256:[a-f0-9]{64}$")
 _MAX_NET_NAME_CHARACTERS = 255
 _REQUIRED_FIELDS = ("board", "net", "layer", "constraints")
-_OPTIONAL_FIELDS = ("seed", "settings", "include_drc")
+_OPTIONAL_FIELDS = ("seed", "settings", "include_drc", "include_fill_authority")
 _SETTINGS_FIELDS = tuple(AStarSettings.__dataclass_fields__)
 
 
@@ -84,6 +91,7 @@ class RoutePreviewRequest:
     settings: AStarSettings
     seed: int
     include_drc: bool
+    include_fill_authority: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.constraints, NetClass):
@@ -91,6 +99,7 @@ class RoutePreviewRequest:
         if not isinstance(self.settings, AStarSettings):
             raise RoutePreviewError("settings must be typed router settings")
         boolean("include_drc", self.include_drc)
+        boolean("include_fill_authority", self.include_fill_authority)
         integer("seed", self.seed, minimum=0, maximum=MAX_JSON_SAFE_INTEGER)
         board_path(self.board)
         text("net", self.net, maximum=_MAX_NET_NAME_CHARACTERS)
@@ -123,6 +132,7 @@ class RoutePreviewRequest:
             "layer": self.layer,
             "seed": self.seed,
             "include_drc": self.include_drc,
+            "include_fill_authority": self.include_fill_authority,
             "constraints": {field: getattr(self.constraints, field) for field in CONSTRAINT_FIELDS},
             "settings": {field: getattr(self.settings, field) for field in _SETTINGS_FIELDS},
         }
@@ -156,6 +166,9 @@ def parse_route_preview_request(payload: Any) -> RoutePreviewRequest:
             settings=_settings(fields.get("settings", {})),
             seed=integer("seed", fields.get("seed", 0), minimum=0, maximum=MAX_JSON_SAFE_INTEGER),
             include_drc=boolean("include_drc", fields.get("include_drc", False)),
+            include_fill_authority=boolean(
+                "include_fill_authority", fields.get("include_fill_authority", False)
+            ),
         )
     except RoutePreviewError:
         raise
@@ -216,6 +229,7 @@ class RoutePreview:
     snapshot_digest: str | None = None
     candidate: RouteCandidate | None = None
     connection: RouteConnection | None = None
+    fill_authority: ZoneFillAuthority | None = None
     diagnostic: RouteDiagnostic | None = None
     conversion_diagnostic_counts: Mapping[str, int] = field(default_factory=dict)
     drc_evidence: RouteCandidateDrcEvidence | None = None
@@ -326,6 +340,7 @@ class RoutePreview:
                     "component_objects": self.connection.component_objects,
                     "pad_count": self.connection.pad_count,
                     "vias": self.connection.vias,
+                    "fill_polygons": self.connection.fill_polygons,
                     "obstacle_checks": self.connection.obstacle_checks,
                 }
             ),
@@ -341,6 +356,9 @@ class RoutePreview:
             ),
             "conversion_diagnostic_counts": dict(self.conversion_diagnostic_counts),
             "drc_evidence": (None if self.drc_evidence is None else self.drc_evidence.to_dict()),
+            "fill_authority": (
+                None if self.fill_authority is None else self.fill_authority.to_dict()
+            ),
         }
 
 
@@ -408,6 +426,34 @@ def preview_route(payload: Any, settings: Settings) -> RoutePreview:
             ),
         )
 
+    verified_fill: tuple[VerifiedFill, ...] = ()
+    fill_authority: ZoneFillAuthority | None = None
+    if request.include_fill_authority and any(
+        zone.net_id == request.net_id for zone in snapshot.content.zones
+    ):
+        # Poured copper may only be believed when KiCad has just confirmed the board's cache
+        # still describes it. Refill happens on a private disposable copy, never here.
+        try:
+            fill_authority, islands = run_zone_fill_authority(
+                relative_path, _drc_settings(settings, deadline)
+            )
+        except ZoneFillStaleError:
+            return RoutePreview(
+                status=RoutePreviewStatus.NOT_ROUTED,
+                board_path=relative_path,
+                board_revision=board_revision,
+                request=request,
+                snapshot_digest=snapshot.snapshot_digest,
+                diagnostic=RouteDiagnostic(
+                    code=RouteFailureCode.STALE_FILL,
+                    message="the board's cached zone fill does not match a fresh KiCad refill",
+                ),
+            )
+        verified_fill = tuple(
+            VerifiedFill(net_id=island.net_id, layer_id=island.layer_id, points=island.points)
+            for island in islands
+        )
+
     result = AStarRouter().propose(
         snapshot,
         RouteRequest(
@@ -418,6 +464,7 @@ def preview_route(payload: Any, settings: Settings) -> RoutePreview:
             settings=request.settings,
         ),
         cancelled=lambda: time.monotonic() >= deadline,
+        verified_fill=verified_fill,
     )
     if result.connected is not None:
         # There is no candidate to bind evidence to, so `include_drc` is skipped rather than
@@ -429,6 +476,7 @@ def preview_route(payload: Any, settings: Settings) -> RoutePreview:
             request=request,
             snapshot_digest=snapshot.snapshot_digest,
             connection=result.connected,
+            fill_authority=fill_authority if result.connected.fill_polygons else None,
         )
     if result.candidate is None:
         return RoutePreview(

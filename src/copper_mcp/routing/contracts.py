@@ -308,7 +308,9 @@ class RouteConnection:
     bound the set rather than naming a route, because a connected net has no route to name.
     ``pad_count`` is what tells the two apart. A non-zero ``vias`` means the connection was
     established across copper layers through those vias, so the evidence is multilayer even
-    though the request names one layer.
+    though the request names one layer. A non-zero ``fill_polygons`` means poured zone copper
+    carried part of the connection, which is only ever admitted alongside freshness evidence
+    that the board's cached fill is what KiCad recomputes from it today.
     """
 
     base_revision: str
@@ -318,6 +320,7 @@ class RouteConnection:
     component_objects: int
     pad_count: int = 2
     vias: int = 0
+    fill_polygons: int = 0
     obstacle_checks: int = 0
 
     def __post_init__(self) -> None:
@@ -329,10 +332,15 @@ class RouteConnection:
         _integer("attachment segments", self.attachment_segments)
         _integer("pad count", self.pad_count, minimum=2)
         _integer("via count", self.vias)
+        _integer("fill polygon count", self.fill_polygons)
         _integer("component objects", self.component_objects, minimum=2)
         _integer("connection obstacle checks", self.obstacle_checks)
-        if self.component_objects != self.attachment_segments + self.pad_count + self.vias:
-            raise ValueError("a connected component must account for every pad, segment and via")
+        if self.component_objects != (
+            self.attachment_segments + self.pad_count + self.vias + self.fill_polygons
+        ):
+            raise ValueError(
+                "a connected component must account for every pad, segment, via and fill island"
+            )
 
 
 class RouteFailureCode(StrEnum):
@@ -349,6 +357,7 @@ class RouteFailureCode(StrEnum):
     OBSTACLE_BUDGET_EXCEEDED = "obstacle_budget_exceeded"
     SEARCH_BUDGET_EXCEEDED = "search_budget_exceeded"
     CANCELLED = "cancelled"
+    STALE_FILL = "stale_fill"
     NO_PATH = "no_path"
 
 

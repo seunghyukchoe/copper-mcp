@@ -502,6 +502,7 @@ def test_request_normalization_exposes_only_validated_fields() -> None:
         "layer",
         "seed",
         "include_drc",
+        "include_fill_authority",
         "constraints",
         "settings",
     }
@@ -1050,3 +1051,102 @@ def test_real_kicad_corroborates_the_cross_layer_connection(tmp_path: Path) -> N
     assert summary.unconnected_count == 0
     assert summary.error_count == 0
     assert preview.status is RoutePreviewStatus.ALREADY_CONNECTED
+
+
+@pytest.mark.skipif(
+    not REAL_KICAD_CLI.is_file(),
+    reason="requires a locally installed KiCad CLI",
+)
+@pytest.mark.parametrize(
+    ("fixture", "expected"),
+    [
+        # Poured copper joins the two pads, but only once KiCad has confirmed the cache.
+        ("zone-fill-fresh", "connected"),
+        # The cache was left behind after the board changed, so nothing may be believed.
+        ("zone-fill-stale", "stale"),
+        # Two disjoint islands: touching different pours proves nothing.
+        ("zone-fill-islands", "refused"),
+    ],
+)
+def test_real_kicad_zone_fill_authority_outcomes(
+    fixture: str, expected: str, tmp_path: Path
+) -> None:
+    settings = replace(
+        _copy_fixture(tmp_path, f"{fixture}.kicad_pcb"),
+        kicad_cli=REAL_KICAD_CLI,
+        max_drc_report_bytes=8 * 1024 * 1024,
+    )
+    before = _entries(tmp_path)
+
+    preview = preview_route(
+        _request(board=f"{fixture}.kicad_pcb", net="GND", include_fill_authority=True),
+        settings,
+    )
+
+    if expected == "connected":
+        assert preview.status is RoutePreviewStatus.ALREADY_CONNECTED
+        assert preview.connection is not None
+        assert preview.connection.fill_polygons == 1
+        assert preview.fill_authority is not None
+        assert preview.fill_authority.kicad_version.startswith("10.")
+        assert preview.to_dict()["fill_authority"]["fill_vertex_count"] == 148
+    elif expected == "stale":
+        assert preview.status is RoutePreviewStatus.NOT_ROUTED
+        assert preview.diagnostic is not None
+        assert preview.diagnostic.code is RouteFailureCode.STALE_FILL
+        assert preview.fill_authority is None
+    else:
+        assert preview.status is RoutePreviewStatus.NOT_ROUTED
+        assert preview.connection is None
+    assert _entries(tmp_path) == before
+
+
+@pytest.mark.skipif(
+    not REAL_KICAD_CLI.is_file(),
+    reason="requires a locally installed KiCad CLI",
+)
+def test_zone_fill_authority_is_opt_in(tmp_path: Path) -> None:
+    """No implicit KiCad execution: without the flag the zone still vetoes the claim."""
+
+    settings = replace(
+        _copy_fixture(tmp_path, "zone-fill-fresh.kicad_pcb"),
+        kicad_cli=REAL_KICAD_CLI,
+        max_drc_report_bytes=8 * 1024 * 1024,
+    )
+
+    preview = preview_route(_request(board="zone-fill-fresh.kicad_pcb", net="GND"), settings)
+
+    assert preview.status is RoutePreviewStatus.NOT_ROUTED
+    assert preview.connection is None
+    assert preview.fill_authority is None
+
+
+@pytest.mark.skipif(
+    not REAL_KICAD_CLI.is_file(),
+    reason="requires a locally installed KiCad CLI",
+)
+def test_real_kicad_resolves_coppertone_gnd_only_with_fill_authority(tmp_path: Path) -> None:
+    board = tmp_path / COPPERTONE_BOARD.name
+    board.write_bytes(COPPERTONE_BOARD.read_bytes())
+    before = board.read_bytes()
+    settings = Settings(
+        workspace=tmp_path,
+        kicad_cli=REAL_KICAD_CLI,
+        max_drc_report_bytes=8 * 1024 * 1024,
+    )
+
+    without = preview_route(_request(board=COPPERTONE_BOARD.name, net="GND"), settings)
+    with_authority = preview_route(
+        _request(board=COPPERTONE_BOARD.name, net="GND", include_fill_authority=True),
+        settings,
+    )
+
+    assert without.status is RoutePreviewStatus.NOT_ROUTED
+    assert with_authority.status is RoutePreviewStatus.ALREADY_CONNECTED
+    assert with_authority.connection is not None
+    assert with_authority.connection.pad_count == 12
+    assert with_authority.connection.vias == 6
+    assert with_authority.connection.fill_polygons == 2
+    assert with_authority.fill_authority is not None
+    assert with_authority.fill_authority.fill_vertex_count == 4_314
+    assert board.read_bytes() == before

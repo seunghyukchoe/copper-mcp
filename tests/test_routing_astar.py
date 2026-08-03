@@ -1159,7 +1159,7 @@ def test_route_result_admits_exactly_one_terminal_arm() -> None:
         )
     with pytest.raises(ValueError, match="must be distinct"):
         replace(connection, end_pad_id="pad:01")
-    with pytest.raises(ValueError, match="every pad, segment and via"):
+    with pytest.raises(ValueError, match="every pad, segment, via and fill island"):
         replace(connection, attachment_segments=2)
     assert RouteResult(connected=connection).terminal
     assert not RouteResult(connected=connection).ok

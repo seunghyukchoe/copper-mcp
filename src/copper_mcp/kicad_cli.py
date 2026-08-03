@@ -35,6 +35,12 @@ from copper_mcp.security import (
     WorkspaceViolationError,
     read_workspace_file,
 )
+from copper_mcp.zone_fill import (
+    FillIsland,
+    ZoneFillError,
+    fill_digest,
+    read_fill_islands,
+)
 
 KICAD_DRC_SCHEMA = "https://schemas.kicad.org/drc.v1.json"
 _MACOS_KICAD_CLI = Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli")
@@ -850,6 +856,212 @@ def _run_captured_drc(
         drc_context_revision=drc_context_revision,
         expected_source=Path(board_relative).name,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class ZoneFillAuthority:
+    """Evidence that a board's cached zone fill is what KiCad recomputes from it today."""
+
+    source_revision: str
+    source_fill_digest: str
+    refilled_fill_digest: str
+    kicad_version: str
+    fill_polygon_count: int
+    fill_vertex_count: int
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("source revision", self.source_revision),
+            ("source fill digest", self.source_fill_digest),
+            ("refilled fill digest", self.refilled_fill_digest),
+        ):
+            if not _SHA256_ID.fullmatch(value):
+                raise ValueError(f"{name} must be content-addressed with sha256")
+        # A stale record must be impossible to construct, so freshness is a type invariant
+        # rather than a flag a caller could forget to read.
+        if self.source_fill_digest != self.refilled_fill_digest:
+            raise ValueError("zone fill authority requires the cache to match a fresh refill")
+        if not isinstance(self.kicad_version, str) or not self.kicad_version:
+            raise ValueError("zone fill authority must record its KiCad version")
+        for name, count in (
+            ("fill polygon count", self.fill_polygon_count),
+            ("fill vertex count", self.fill_vertex_count),
+        ):
+            if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+                raise ValueError(f"{name} must be a non-negative integer")
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a detached plain dictionary of this evidence."""
+
+        return {
+            "source_revision": self.source_revision,
+            "source_fill_digest": self.source_fill_digest,
+            "refilled_fill_digest": self.refilled_fill_digest,
+            "kicad_version": self.kicad_version,
+            "fill_polygon_count": self.fill_polygon_count,
+            "fill_vertex_count": self.fill_vertex_count,
+        }
+
+
+class ZoneFillStaleError(KiCadCliError):
+    """Raised when a board's cached zone fill disagrees with a fresh KiCad refill."""
+
+
+def run_zone_fill_authority(
+    requested_path: str,
+    settings: Settings,
+) -> tuple[ZoneFillAuthority, tuple[FillIsland, ...]]:
+    """Prove a board's cached fill is fresh, and return it for use as connectivity evidence.
+
+    KiCad is asked to refill on a private disposable copy and save the result there. The
+    workspace board is never passed ``--refill-zones``; every other DRC path in this module
+    deliberately omits it, and that stays true. Comparison is over canonical fill geometry
+    rather than file bytes, because KiCad rewrites and reorders a board wholesale on save.
+    """
+
+    board = read_workspace_file(
+        settings.workspace,
+        requested_path,
+        allowed_suffixes={".kicad_pcb"},
+        max_bytes=settings.max_board_bytes,
+    )
+    source = board.content
+    source_revision = _revision(source)
+    default_limits = ParseLimits()
+    parse_limits = replace(
+        default_limits,
+        max_input_bytes=min(default_limits.max_input_bytes, settings.max_board_bytes),
+    )
+    try:
+        cached = read_fill_islands(
+            source, max_vertices=settings.max_fill_vertices, limits=parse_limits
+        )
+    except ZoneFillError as error:
+        raise KiCadCliError(f"cached zone fill could not be read: {error}") from error
+
+    executable = discover_kicad_cli(settings)
+    if os.name != "posix":
+        raise KiCadCliError("bounded KiCad execution is unsupported on this platform")
+    python_executable = _validated_executable(Path(sys.executable))
+    bounded_exec = _BOUNDED_EXEC.resolve(strict=True)
+    if python_executable is None or not bounded_exec.is_file():
+        raise KiCadCliError("bounded KiCad execution helper is unavailable")
+
+    with tempfile.TemporaryDirectory(prefix="copper-mcp-fill-") as temporary_directory:
+        temporary_root = Path(temporary_directory)
+        try:
+            temporary_root.chmod(0o700)
+        except OSError as error:
+            raise KiCadCliError("private KiCad fill directory could not be secured") from error
+        # The board stays writable here precisely because `--save-board` must rewrite it; that
+        # is only ever this disposable copy.
+        private_board = temporary_root / Path(requested_path).name
+        report_path = temporary_root / "fill-drc.json"
+        private_state = temporary_root / "process-state"
+        try:
+            private_board.write_bytes(source)
+            child_environment = _private_kicad_environment(private_state)
+        except OSError as error:
+            raise KiCadCliError("private KiCad fill context could not be written") from error
+        command = [
+            str(python_executable),
+            "-I",
+            str(bounded_exec),
+            str(settings.max_drc_report_bytes),
+            str(executable),
+            "pcb",
+            "drc",
+            "--format",
+            "json",
+            "--units",
+            "mm",
+            "--severity-all",
+            "--refill-zones",
+            "--save-board",
+            "--output",
+            str(report_path),
+            str(private_board),
+        ]
+        try:
+            completed = subprocess.run(  # noqa: S603
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                shell=False,
+                timeout=settings.kicad_timeout_seconds,
+                env=child_environment,
+                cwd=child_environment["TMPDIR"],
+            )
+        except subprocess.TimeoutExpired as error:
+            raise KiCadCliError("KiCad zone refill timed out") from error
+        _validate_private_kicad_state(private_state, settings)
+        if completed.returncode == -signal.SIGXFSZ:
+            raise KiCadCliError("KiCad zone refill report exceeds the configured limit")
+        if completed.returncode not in _ACCEPTED_DRC_RETURN_CODES:
+            raise KiCadCliError(f"KiCad zone refill failed with exit code {completed.returncode}")
+        try:
+            refilled_source = read_workspace_file(
+                temporary_root,
+                private_board.name,
+                allowed_suffixes={".kicad_pcb"},
+                max_bytes=settings.max_board_bytes,
+            ).content
+            report = read_workspace_file(
+                temporary_root,
+                report_path.name,
+                allowed_suffixes={".json"},
+                max_bytes=settings.max_drc_report_bytes,
+            ).content
+        except (FileNotFoundError, WorkspaceViolationError) as error:
+            raise KiCadCliError("KiCad zone refill did not produce a readable result") from error
+        try:
+            refilled = read_fill_islands(
+                refilled_source, max_vertices=settings.max_fill_vertices, limits=parse_limits
+            )
+        except ZoneFillError as error:
+            raise KiCadCliError(f"refilled zone fill could not be read: {error}") from error
+
+    kicad_version = _report_kicad_version(report)
+    # The workspace board must be byte-identical afterwards: refill happened only on the copy.
+    recaptured = read_workspace_file(
+        settings.workspace,
+        requested_path,
+        allowed_suffixes={".kicad_pcb"},
+        max_bytes=settings.max_board_bytes,
+    ).content
+    if _revision(recaptured) != source_revision:
+        raise KiCadCliError("the workspace board changed while zone fill authority was running")
+
+    cached_digest = fill_digest(cached)
+    refilled_digest = fill_digest(refilled)
+    if cached_digest != refilled_digest:
+        raise ZoneFillStaleError("the board's cached zone fill does not match a fresh KiCad refill")
+    return (
+        ZoneFillAuthority(
+            source_revision=source_revision,
+            source_fill_digest=cached_digest,
+            refilled_fill_digest=refilled_digest,
+            kicad_version=kicad_version,
+            fill_polygon_count=len(cached),
+            fill_vertex_count=sum(len(island.points) for island in cached),
+        ),
+        cached,
+    )
+
+
+def _report_kicad_version(report: bytes) -> str:
+    """Read the KiCad version out of a DRC report without trusting anything else in it."""
+
+    try:
+        document = json.loads(report.decode("utf-8", errors="strict"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise KiCadCliError("KiCad zone refill report is not valid UTF-8 JSON") from error
+    version = document.get("kicad_version") if isinstance(document, dict) else None
+    if not isinstance(version, str) or not 1 <= len(version) <= 64:
+        raise KiCadCliError("KiCad zone refill report has no usable version")
+    return version
 
 
 def run_board_drc(requested_path: str, settings: Settings) -> DrcSummary:

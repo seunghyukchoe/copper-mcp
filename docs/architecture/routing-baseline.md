@@ -313,6 +313,40 @@ The preview writes no file, creates no job, persists nothing, and applies no cop
 the integer geometry and endpoint pad IDs it generated, which is an intentional and documented
 disclosure; source board bytes and unrelated board objects are never returned.
 
+## Zone fill as connectivity evidence
+
+A `filled_polygon` node records where KiCad poured copper at some past moment, and nothing in the
+file says whether it still matches the board around it. Board IR therefore discards it, and a
+same-net zone vetoes any connectivity claim by default. That default is lifted only by evidence: with
+`include_fill_authority`, KiCad refills a private disposable copy and the recomputed pour must
+reproduce the board's cache exactly. Matching means the two *are* the same geometry, so there is no
+ambiguity about which one the claim describes; a mismatch is the typed `stale_fill` refusal, and
+neither version is silently preferred.
+
+The comparison is over canonical geometry rather than file bytes, because KiCad rewrites and
+reorders a board wholesale on save — a byte diff says nothing about whether the fill changed.
+Islands are sorted and digested by layer, net and exact integer vertices, and the digest sorts its
+input rather than trusting it to arrive canonical.
+
+An **island** is the unit, not a zone. Verified against a board authored to force two disjoint
+regions, KiCad 10.0.5 emits one `filled_polygon` node per connected region rather than one node per
+zone stitched together by keyhole seams. Copper touching *different* islands is therefore not
+connected, and the committed `zone-fill-islands.kicad_pcb` fixture exists to keep that honest.
+
+Freshness is a constructor invariant: `ZoneFillAuthority` refuses to exist when its two digests
+differ, so a stale record cannot be built and then misread. The workspace board is never refilled —
+`--refill-zones --save-board` reaches only the disposable copy, every other DRC path in this
+repository omits those flags, and the source is recaptured and compared afterwards. Fill never
+enters Board IR: the router accepts verified islands as a parameter and never fetches them, so
+snapshots and their digests are unchanged and KiCad execution stays out of the search.
+
+Once freshness-bound, the pour is KiCad's own authority on where that copper is, so contact testing
+uses the polygon itself with exact integer geometry. Pad and track cores stay under-approximating;
+only the pour is exact. Reading is bounded by `max_fill_vertices`, default 50,000; CopperTone's pour
+is 4,314 vertices across two layers. Scope is deliberately connectivity only — using verified fill
+as a tighter routing *obstacle* than the conservative boundary envelope would change routed geometry
+on every zoned board and needs its own measurement.
+
 ## Multi-pin trees
 
 A net with more than two pads is routed by sequential component merging. Connectivity analysis
@@ -360,7 +394,7 @@ what neither yet reaches. Measured against the repository's own
 | Stage | Result |
 |---|---|
 | Board IR conversion | Supported — 2 copper layers, 14 nets, 55 pads, 53 segments, 9 vias, 2 zones, 2 keepouts |
-| Nets reaching a terminal outcome on `F.Cu` | 13 of 14, all `already_connected` |
+| Nets reaching a terminal outcome on `F.Cu` | 14 of 14, all `already_connected` (`GND` needs `include_fill_authority`) |
 | Nets routed on `F.Cu` | 0 of 14 |
 
 Conversion is not the blocker; the router's contract is. Six refusals have been removed in
@@ -379,7 +413,7 @@ Measured per net at the default 250 µm grid step, twice, with identical results
 | 5 of 14 — `9V_RAW`, `L_IN_RAW`, `R_IN_RAW`, `L_ISO`, `R_ISO` | **`already_connected`**, two pads each |
 | 6 of 14 — `L_BUF`, `R_BUF`, `L_IN_BIASED`, `R_IN_BIASED`, `R_OUT`, `VREF` | **`already_connected`**, three to seven pads each |
 | 2 of 14 — `VCC`, `L_OUT` | **`already_connected`** across layers, through two vias and one via respectively |
-| 1 of 14 — `GND` | `invalid_two_pin_net`; it carries a same-net zone, so its connectivity cannot be proved |
+| 1 of 14 — `GND` | **`already_connected`** through two fill islands and six vias, **only with `include_fill_authority`**; refused without it |
 
 Every net on this board is one the designer already routed, and the router now recognises eleven of
 the fourteen. The widest is `VREF` at seven pads joined by ten segments. There is nothing to route on
@@ -404,10 +438,12 @@ so there is no tree left to build. That is why the multi-pin slice is validated 
 fixtures rather than by this board, and the roadmap's old framing of multi-pin routing as the single
 remaining contract for CopperTone was simply wrong.
 
-Via-aware connectivity has since resolved two of the three: `VCC` and `L_OUT` are joined across the
-back layer through their vias, and the router now says so. `GND` remains refused, and honestly — it
-carries a same-net zone, and a stale or unfilled zone cannot prove connectivity, so the one net left
-is blocked by a fill-authority contract rather than by anything about vias.
+Via-aware connectivity resolved two of the three, and the zone fill authority resolved the last:
+`VCC` and `L_OUT` are joined across the back layer through their vias, and `GND`'s twelve pads are
+joined by its ground pour. Every net on this board is now recognised — but `GND` only when the
+caller passes `include_fill_authority`, because believing a pour costs a KiCad refill and a claim
+that the board's cached fill is what KiCad recomputes from it today. Without that flag `GND` is
+still refused, which is the honest default rather than a regression.
 
 Behind that sit routing *through* vias, which needs a layer-aware lattice this router does not have,
 and a lattice that does not require the pad-centre delta to divide by the grid step; neither is
