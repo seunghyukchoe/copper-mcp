@@ -42,6 +42,7 @@ live revision before it can release the synchronous connection.
 | `tools.py` | Pure application services shared by adapters. |
 | `routing/contracts.py` | Exact candidate, cost, settings, result, and backend-neutral contracts. |
 | `routing/astar.py` | Bounded integer two-pin A* reference; candidate-only and fail-closed. |
+| `routing/layered_astar.py` | Internal abstract two-layer A* oracle; not a Board IR or KiCad candidate surface. |
 | `request_boundary.py` | Shared untrusted-request validation primitives for every public service. |
 | `board_ir_service.py` | Read-only Board IR conversion check and structural description. |
 | `circuit_scene.py` | Bounded, region-scoped Board IR observation with typed references and quarantined author text. |
@@ -125,6 +126,12 @@ poses and owned absolute pad angles, preserves padless mechanical footprints and
 bytes, and reparses the disposable result against the expected Board IR transform. This is a
 candidate derivative only: placement DRC, live compare-and-swap, KiCad undo, and post-action
 observation remain separate gates.
+
+The internal layered search seam now exercises the first maze-level primitive needed for
+via-capable routing: a bounded `(x, y, layer)` lattice with explicit positive-cost transitions.
+It remains abstract cell geometry and is intentionally not exported or mapped to Board IR; the
+production route contract stays single-layer until width/clearance, via rules, source-preserving
+segment/via serialization, round-trip checks, and KiCad DRC are implemented together.
 
 ## Candidate lifecycle
 

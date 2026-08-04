@@ -458,9 +458,12 @@ caller passes `include_fill_authority`, because believing a pour costs a KiCad r
 that the board's cached fill is what KiCad recomputes from it today. Without that flag `GND` is
 still refused, which is the honest default rather than a regression.
 
-Behind that sit routing *through* vias, which needs a layer-aware lattice this router does not have,
-and a lattice that does not require the pad-centre delta to divide by the grid step; neither is
-currently reached, because no net on this board still needs a route.
+Behind that sit routing *through* vias, which needs Board IR-bound layer-aware geometry this router
+does not yet have. An internal abstract two-layer A* oracle now exercises the maze-level primitive
+with explicit via transitions and deterministic budgets, but it does not model nanometre trace
+width/clearance, via annuli/drills, keepouts, net ownership, or KiCad serialization/DRC. The
+production route contract therefore remains single-layer, and no net on this board still needs a
+route.
 
 Board IR handles a real two-layer audio board today, and the router still does not route one
 unaided. Attachment, polygon keepouts, and diagonal envelopes remain validated by purpose-built

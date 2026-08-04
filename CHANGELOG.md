@@ -75,6 +75,11 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Added an internal, non-public two-layer A* search oracle with explicit via transitions,
+  deterministic tie-breaking, per-layer cell obstacles, cancellation, and bounded resource
+  accounting. It is algorithmic evidence toward via-capable routing only; it does not produce
+  Board IR/KiCad candidates, change existing single-layer candidate IDs, or claim DRC validity.
+
 - The KiCad IPC plugin README now documents the required copy into KiCad's configured PCB plugin
   discovery directory. Installing `copper-mcp[kicad]` alone does not register the hardware-side
   manifest or action, and the plugin remains intentionally outside the Python wheel.
