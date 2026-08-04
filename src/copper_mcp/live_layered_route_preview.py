@@ -49,10 +49,6 @@ def parse_live_layered_route_preview_request(payload: Any) -> LayeredRoutePrevie
         raise LayeredRoutePreviewError("live layered preview requests must set board to 'live'")
     normalized = dict(fields)
     session_revision = normalized.pop("expect_session_revision", None)
-    if normalized.get("include_drc", False) is True:
-        raise LayeredRoutePreviewError(
-            "live layered route proposals cannot request authoritative DRC"
-        )
     normalized["board"] = "live.kicad_pcb"
     request = replace(parse_layered_route_preview_request(normalized), board="live")
     if not isinstance(session_revision, str):

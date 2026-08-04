@@ -116,6 +116,9 @@ documentation, ledger updates, and benchmark evidence.
   - [x] Structural candidate verification and endpoint-via avoidance now gate the internal
     serializer; exact padstack treatment, edge/hole clearance, refill, and fabrication evidence
     remain open.
+  - [x] Live `preview_live_layered_route` proposal over the exact byte-confirmed KiCad IPC
+    snapshot, with a redacted `KICAD_API_TOKEN` session CAS and file-oracle equality benchmark;
+    real GUI, DRC, serializer, and apply evidence remain open.
 - [~] Board IR-bound two-layer proposal adapter: exact grid attachment, conservative foreign
   copper/zone/pad envelopes, separate track/via keepouts, immutable candidate digests, and
   fail-closed stale/off-grid/unsupported diagnostics are benchmarked in B-018. Source-preserving

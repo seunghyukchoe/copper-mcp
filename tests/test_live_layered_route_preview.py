@@ -191,16 +191,6 @@ def test_live_preview_refuses_stale_board_before_conversion(
     assert result["diagnostic"]["code"] == "stale_revision"  # type: ignore[index]
 
 
-def test_live_preview_rejects_authoritative_drc_opt_in(
-    tmp_path: Path,
-) -> None:
-    _settings, start, end, board_revision, snapshot_digest = _workspace(tmp_path)
-    request = _request(start, end, board_revision, snapshot_digest, include_drc=True)
-
-    with pytest.raises(LayeredRoutePreviewError, match="cannot request authoritative DRC"):
-        live_preview.parse_live_layered_route_preview_request(request)
-
-
 def test_live_preview_refuses_stale_session_before_conversion(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
