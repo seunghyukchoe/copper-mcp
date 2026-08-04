@@ -192,3 +192,16 @@ not routing-quality or throughput claims.
 | Metrics | Deterministic replays 10/10; median end-to-end capture/convert/route latency 3,606,646 ns; board revision `sha256:5f88ebcf52cf8f1548990bdbdc1c52ac7a30f39c013366f79b161ec15e1caae2`; snapshot/candidate base `sha256:e57e679dc80e2d413c59c186db4ff520a5dc526bb025fde32f3b9eaa8d1e469f`; candidate `sha256:befda305388c5e9d7e46f9ca859af1cf3876d2132cd20c427a292b573bfe9a81`; stale board/snapshot refusals 1/1; forbidden action refusal 1/1 with zero IPC calls; raw source, DRC evidence, fill authority, and apply token all `false` |
 | Artifact | [`2026-08-04-live-route-proposal.json`](../../benchmarks/results/mcp/2026-08-04-live-route-proposal.json) |
 | Interpretation | This proves the read-only observe-to-propose contract over one exact fake IPC snapshot. It does not establish live GUI-session success, live editor mutation, DRC, placement, electrical behavior, fabrication readiness, or throughput on real boards. |
+
+### B-014 — Revision-bound live placement proposal
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:cad3f2e51065ebc8f2ad0df810d084694c09abaae1d613b2ef3e0c13edaf5535` |
+| Date and commit | 2026-08-04 14:02:13 UTC; `707dfbe12119ef8550879393fbe1e2af8d26f190`; tracked tree clean, two untracked files (this artifact before commit and the pre-existing user handoff) |
+| Environment | Apple arm64 CPU; no accelerator; 38,654,705,664 physical bytes; macOS 26.5.2; Python 3.12.13; `mcp` 2.0.0; `pydantic` 2.13.4; `kicad-python` not installed; KiCad IPC server disabled and not invoked |
+| Dataset | Committed `placement-legal.kicad_pcb`; the same bytes feed the file-backed placement oracle and fake IPC client; one ref-anchored offset proposal; no external or proprietary board |
+| Configuration | `kicad-ipc-live-placement-v1`; ten replays; fake official-client transport; fixture SHA-256 `4396686c92d63969b8c9282530d85b3a220ee38cfc23f16966eacb689e80add3`; script SHA-256 `43674c8bb35cfe30242bea5046585e5a302d14cc98839df040fb515950e42393`; CPU-only |
+| Metrics | Deterministic replays 10/10; median end-to-end capture/convert/legalize latency 1,266,333 ns; status `previewed`; candidate `sha256:d8a4cf178732c626c806826792ffdd475e8d29a99c747420f8998f510c621d86`; candidate equality and canonical bytes equality with file oracle `true/true`; stale board/snapshot refusals 1/1; forbidden action refusal 1/1 with zero IPC calls; mutating IPC calls `0`; raw source, DRC, fill, and apply authority all `false` |
+| Artifact | [`2026-08-04-live-placement-proposal.json`](../../benchmarks/results/mcp/2026-08-04-live-placement-proposal.json) |
+| Interpretation | This proves the revision-bound read-only observe-to-place proposal over one exact fake IPC snapshot. It does not establish live GUI-session success, KiCad placement mutation, single-undo behavior, DRC, ERC, electrical validation, fabrication readiness, or throughput on real boards. |
