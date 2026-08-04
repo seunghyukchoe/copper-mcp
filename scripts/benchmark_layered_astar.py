@@ -195,7 +195,7 @@ def _run(repetitions: int) -> dict[str, Any]:
             "script_sha256": hashlib.sha256((ROOT / SCRIPT_PATH).read_bytes()).hexdigest(),
             "repetitions_per_case": repetitions,
             "case_count": len(cases),
-            "seeded_differential": "dijkstra-v1",
+            "differential": "dijkstra-v1",
             "fixture_set": "four-fixed-5x5-v1",
         },
         "metrics": {
