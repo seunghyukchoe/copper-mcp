@@ -153,3 +153,16 @@ not routing-quality or throughput claims.
 | Metrics | Deterministic replays 10/10; median observation latency 25,874.5 ns; board digest `sha256:f2fa39e641c1dfa6ca0f649fd49b46971cb205c42bfec0b33ff6354f3e7813cc`; serialized-source counts `nets=1`, all other categories `0`; false-version default refusals 1; future-version default refusals 1; TCP endpoint refusals 1; raw board/object content returned `false/false`; source-bound counts `true` |
 | Artifact | [`2026-08-04-kicad-ipc-review-fix.json`](../../benchmarks/results/mcp/2026-08-04-kicad-ipc-review-fix.json) |
 | Interpretation | Corrective replacement for the B-008 implementation evidence after review findings: false version results fail closed, counts are tied to one serialization and a byte-identical confirmation, and the redaction metric is computed from identifiable private-object markers in the actual JSON response. It remains a fake-client contract baseline; it does not establish a live KiCad session, API compatibility with the installed GUI, placement, routing, DRC, ERC, electrical behavior, fabrication readiness, or hard pre-allocation memory guarantees. |
+
+### B-011 — Live Circuit Scene malformed-request preflight
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:e79370ca790206d7bdde7f69a0cd4a4dc9d535928b8db0c2e6b9ebc5e7e9e73c` |
+| Date and commit | 2026-08-04 12:53:00 UTC; `2e4b5d30c6e9515ee6553bd81bbb1078eef7e6f6`; tracked tree clean, two untracked files (the pre-existing user handoff and the output artifact at measurement time) |
+| Environment | Apple arm64 CPU; no accelerator; 38,654,705,664 physical bytes; macOS 26.5.2; Python 3.12.13; `mcp` 2.0.0; `pydantic` 2.13.4; `kicad-python` not installed; KiCad IPC server disabled and not invoked |
+| Dataset | Committed `scene-region.kicad_pcb` Circuit Scene fixture, SHA-256 `c69298f27512becfe4b765b99e75628426711103837ab04f4ea424cc48580a1c`; deterministic fake official-client serialization; no external or proprietary board; no train/test split |
+| Configuration | `kicad-ipc-live-scene-v1`; ten valid replays plus one malformed-constraint request; source script SHA-256 `3ab61e242525fef9db8f6487280592f6b88d8c6dc68f8182cad5cd7d78057a4e`; CPU-only |
+| Metrics | Deterministic valid replays 10/10; median end-to-end capture/convert latency 3,840,021 ns; scene version `0.2.0`; objects returned 10; stale board/snapshot refusals 1/1; malformed request refusal 1/1; IPC client calls for malformed request `0`; raw source returned `false` |
+| Artifact | [`2026-08-04-live-scene-preflight.json`](../../benchmarks/results/mcp/2026-08-04-live-scene-preflight.json) |
+| Interpretation | This isolates an application-boundary denial-of-service guard: a malformed live-scene request is rejected before any fake KiCad client is opened, while valid revision-bound scene behavior remains deterministic. It does not establish a live GUI session, placement/routing authority, DRC, ERC, electrical behavior, fabrication readiness, or real-session resource behavior. |
