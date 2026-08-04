@@ -1,0 +1,26 @@
+{
+  "benchmark": "kicad-front-back-footprint-observation-v1",
+  "environment": {
+    "kicad": "10.0.5",
+    "python": "3.12.13"
+  },
+  "fixture": "tests/fixtures/board-ir-v0.2/footprint-front-back-pose.kicad_pcb",
+  "metrics": {
+    "back_footprints_observed": 1,
+    "front_back_pad_pose_match": true,
+    "front_footprints_observed": 1,
+    "gui_flip_save_claim": false,
+    "kicad_drc_unconnected": 0,
+    "kicad_drc_violations": 0,
+    "rectangular_courtyard_match": true,
+    "second_mirror_applied": false
+  },
+  "not_claimed": [
+    "GUI flip-save serialization",
+    "general courtyard topology",
+    "placement apply"
+  ],
+  "run_id": "sha256:671a5f6e40d372e8071cffa1f541564a09c2425fede44977bacbfdc1120db87a",
+  "schema": "copper-mcp/benchmark/kicad-front-back-footprint-observation/v1",
+  "source_commit": "e7fefc9"
+}

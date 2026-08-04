@@ -622,3 +622,29 @@ historical evidence; these runs were generated from the clean implementation com
 | Metrics | Omitted DRC calls `0`; requested calls `1`; candidate/source CAS binding `true`; clean signal `true`; warning-only `clean=false` while hard-gate `passed=true`; malformed authority refused `true`; source unchanged `true`; workspace mutations `0` |
 | Artifact | [`2026-08-05-layered-drc-hardening.json`](../../benchmarks/results/routing/2026-08-05-layered-drc-hardening.json) |
 | Interpretation | This closes a presentation-boundary ambiguity: warning/exclusion findings remain machine-visible but cannot be represented as clean, and malformed or unbound authority cannot cross the MCP response boundary. It is not KiCad quality, whole-board DRC, fabrication, electrical, or FreeRouting evidence. |
+
+#### B-039 — bounded KiCad schematic component/connectivity parity
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:15acd84f6920e3464e85338ca6eec9f4eded230e5a2bf57e377fb3d248c39d98` |
+| Date and commit | 2026-08-05; source commit `e7fefc9` |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad 10.0.5 export used by the integration fixture |
+| Dataset | [`rc-low-pass-v1.kicadxml`](../../tests/fixtures/kicad-schematic/rc-low-pass-v1.kicadxml), replayed against the canonical CopperMCP schematic fixture |
+| Configuration | `copper-mcp/benchmark/kicad-schematic-parity/v1`; exact source replay, format-E XML component/pin/net-node comparison, bounded malformed/DTD/unknown-structure cases |
+| Metrics | Component parity `passed` for `2` components; connectivity parity `passed` for `3` nets and `4` connections; four hostile-input budget/structure refusals; deterministic source replay `passed` |
+| Artifact | [`2026-08-05-kicad-schematic-parity.json`](../../benchmarks/results/schematic/2026-08-05-kicad-schematic-parity.json) |
+| Interpretation | This is a reusable source/connectivity oracle for the bounded passive subset. It does not establish authoritative ERC, schematic-to-PCB parity, electrical correctness, broader symbol/library coverage, or fabrication readiness. |
+
+#### B-040 — bounded front/back footprint observation and KiCad DRC oracle
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:671a5f6e40d372e8071cffa1f541564a09c2425fede44977bacbfdc1120db87a` |
+| Date and commit | 2026-08-05; source commit `e7fefc9` |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad 10.0.5 headless CLI DRC |
+| Dataset | [`footprint-front-back-pose.kicad_pcb`](../../tests/fixtures/board-ir-v0.2/footprint-front-back-pose.kicad_pcb), one asymmetric `F.Cu` and one asymmetric `B.Cu` footprint with matching rectangular courtyards |
+| Configuration | `copper-mcp/benchmark/kicad-front-back-footprint-observation/v1`; Board IR parse, native identity/side/pad/courtyard assertions, and `kicad-cli pcb drc --format json --severity-all --exit-code-violations` |
+| Metrics | Front footprints observed `1`; back footprints observed `1`; pad/courtyard pose match `true`; second mirror applied `false`; KiCad violations `0`; unconnected items `0` |
+| Artifact | [`2026-08-05-kicad-front-back-footprint-observation.json`](../../benchmarks/results/placement/2026-08-05-kicad-front-back-footprint-observation.json) |
+| Interpretation | This expands read-only observation to the narrow front/back rectangular-courtyard subset and pins a valid source/CLI DRC oracle. It is not a GUI flip-save round-trip, general courtyard topology, side-aware placement legality, apply, or FreeRouting result. |
