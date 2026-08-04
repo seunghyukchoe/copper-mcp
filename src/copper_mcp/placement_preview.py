@@ -15,6 +15,11 @@ from dataclasses import replace
 from typing import Any
 
 from copper_mcp.adapters import parse_kicad_bytes
+from copper_mcp.adapters.kicad_placement_patch import (
+    KiCadPlacementPatchError,
+    render_kicad_placement_candidate_board,
+)
+from copper_mcp.apply.tokens import ApplyBinding, ApplyTokenAuthority
 from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
 from copper_mcp.kicad_ipc import capture_live_board
@@ -31,7 +36,11 @@ from copper_mcp.placement.view import PlacementViewError
 from copper_mcp.security import read_workspace_file
 
 
-def preview_placement(payload: Any, settings: Settings) -> PlacementResult:
+def preview_placement(
+    payload: Any,
+    settings: Settings,
+    token_authority: ApplyTokenAuthority | None = None,
+) -> PlacementResult:
     """Validate one placement proposal against a workspace board without mutating it."""
 
     if not isinstance(settings, Settings):
@@ -53,7 +62,14 @@ def preview_placement(payload: Any, settings: Settings) -> PlacementResult:
     source = board.content
     board_revision = f"sha256:{hashlib.sha256(source).hexdigest()}"
 
-    return _preview_placement_source(intent, source, relative_path, board_revision, settings)
+    return _preview_placement_source(
+        intent,
+        source,
+        relative_path,
+        board_revision,
+        settings,
+        token_authority=token_authority,
+    )
 
 
 def _preview_placement_source(
@@ -62,6 +78,8 @@ def _preview_placement_source(
     relative_path: str,
     board_revision: str,
     settings: Settings,
+    *,
+    token_authority: ApplyTokenAuthority | None = None,
 ) -> PlacementResult:
     """Run the deterministic placement pipeline over one already-bound source."""
 
@@ -136,7 +154,7 @@ def _preview_placement_source(
             ),
         )
 
-    return evaluate_placement(
+    result = evaluate_placement(
         intent,
         snapshot,
         view,
@@ -144,6 +162,39 @@ def _preview_placement_source(
         deadline_seconds=float(settings.max_placement_seconds),
         board_path=relative_path,
     )
+    if (
+        result.status == "previewed"
+        and result.candidate is not None
+        and intent.include_apply_token
+        and settings.allow_apply
+        and isinstance(token_authority, ApplyTokenAuthority)
+        and any(item.moved for item in result.candidate.placements)
+    ):
+        # The capability is minted only after the same pure replay used by placement DRC accepts
+        # the source. A legalizer candidate outside the current source-preserving subset remains
+        # previewable, but cannot accidentally receive a token that the apply path must refuse.
+        try:
+            render_kicad_placement_candidate_board(
+                source,
+                snapshot,
+                result.candidate,
+                intent.profile(),
+                limits=limits,
+            )
+        except KiCadPlacementPatchError:
+            pass
+        else:
+            token = token_authority.issue(
+                ApplyBinding(
+                    candidate_id=result.candidate.candidate_id,
+                    base_revision=result.candidate.base_revision,
+                    board_revision=board_revision,
+                    relative_path=relative_path,
+                    operation="placement",
+                )
+            )
+            result = replace(result, apply_token=token)
+    return result
 
 
 def preview_live_placement(
@@ -191,6 +242,7 @@ def preview_live_placement(
         "live",
         board_revision,
         settings,
+        token_authority=None,
     )
     if (
         intent.expect_snapshot_digest is not None

@@ -5,7 +5,13 @@ from __future__ import annotations
 from typing import Any
 
 from copper_mcp import __version__
-from copper_mcp.apply.service import apply_candidate as apply_candidate_service
+from copper_mcp.apply.service import (
+    apply_candidate as apply_candidate_service,
+)
+from copper_mcp.apply.service import (
+    apply_placement_candidate as apply_placement_candidate_service,
+)
+from copper_mcp.apply.tokens import ApplyTokenAuthority
 from copper_mcp.board_ir_service import summarize_board_ir
 from copper_mcp.circuit_intent_service import (
     CircuitSchematicBuild,
@@ -56,8 +62,10 @@ def server_info() -> dict[str, Any]:
             "read-only Board IR structural inspection",
             "region-scoped semantic Circuit Scene observation with quarantined board text",
             "opt-in deterministic digest-bound copper-only board rendering",
-            "typed placement intent with deterministic legality preview (no apply, no DRC binding)",
+            "typed placement intent with deterministic legality preview and optional apply "
+            "authority",
             "operator-gated, token-authorized route-candidate apply with atomic replacement",
+            "operator-gated, token-authorized bounded placement apply with atomic replacement",
             "non-mutating two-pin route preview on a documented Board IR subset",
             "bounded Circuit Intent validation and deterministic KiCad schematic rendering",
             "explicit create-only CLI schematic export and ephemeral stdio MCP artifact delivery",
@@ -75,13 +83,11 @@ def server_info() -> dict[str, Any]:
         "planned": [
             "region-scoped and human-facing board rendering",
             "authoritative KiCad DRC binding for placement candidates",
-            "explicit placement apply and post-placement observation",
+            "post-placement observation and live editor action compare-and-swap",
             "live placement/routing action compare-and-swap over KiCad IPC",
             "MCP Tasks negotiated progressive enhancement",
             "multilayer generalization beyond the two-signal subset",
             "negotiated-congestion router",
-            "immutable route patches",
-            "placement apply and post-placement observation",
         ],
     }
 
@@ -252,11 +258,15 @@ def observe_live_board_scene(
     return observe_live_board_scene_raw(payload, settings).to_dict()
 
 
-def preview_placement(payload: dict[str, Any], settings: Settings | None = None) -> dict[str, Any]:
+def preview_placement(
+    payload: dict[str, Any],
+    settings: Settings | None = None,
+    token_authority: ApplyTokenAuthority | None = None,
+) -> dict[str, Any]:
     """Validate one placement proposal against a workspace board without modifying it."""
 
     active_settings = settings or Settings.from_env()
-    return preview_placement_service(payload, active_settings).to_dict()
+    return preview_placement_service(payload, active_settings, token_authority).to_dict()
 
 
 def preview_live_placement_raw(
@@ -292,6 +302,17 @@ def apply_candidate(
 
     active_settings = settings or Settings.from_env()
     return apply_candidate_service(payload, active_settings, token_authority).to_dict()
+
+
+def apply_placement_candidate(
+    payload: dict[str, Any],
+    settings: Settings | None = None,
+    token_authority: Any = None,
+) -> dict[str, Any]:
+    """Apply one separately authorized bounded placement candidate to a workspace board."""
+
+    active_settings = settings or Settings.from_env()
+    return apply_placement_candidate_service(payload, active_settings, token_authority).to_dict()
 
 
 def validate_candidate(payload: dict[str, Any]) -> dict[str, Any]:

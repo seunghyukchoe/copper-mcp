@@ -738,6 +738,7 @@ def preview_route(
                 base_revision=result.candidate.base_revision,
                 board_revision=board_revision,
                 relative_path=relative_path,
+                operation="route",
             )
         )
     return RoutePreview(

@@ -60,11 +60,11 @@ supported synthetic Board IR inputs. The pure adapter can serialize an exact rep
 memory, an internal service binds that private derivative to strict aggregate KiCad DRC evidence,
 `preview_route` exposes that pipeline as a bounded, non-mutating public proposal, and
 `inspect_board_ir` reports whether a board is representable at all. The separately authorized,
-default-off `apply_candidate` surface applies replay-verified route patches only. An internal,
-bounded SQLite routing-job ledger now persists redacted revision-safe records, but it does not
-execute work, retain candidate geometry, expose an MCP task handle, or grant export authority. No
-durable candidate export, raw Board IR MCP resource, route/evidence resource, ordinary routing-job
-tools, placement apply, or live-editor apply path is implemented. The live IPC observer and
+default-off `apply_candidate` and `apply_placement_candidate` surfaces apply replay-verified route
+patches and a bounded placement-pose subset respectively. An internal, bounded SQLite routing-job
+ledger now persists redacted revision-safe records, but it does not execute work, retain candidate
+geometry, expose an MCP task handle, or grant export authority. No durable candidate export, raw
+Board IR MCP resource, route/evidence resource, or live-editor apply path is implemented. The live IPC observer and
 `observe_live_board_scene` bridge are read-only and do not change this mutation boundary; live
 route/placement action authority is not implemented. See
 [Board IR and KiCad adapter contracts](board-ir.md),
@@ -129,16 +129,18 @@ without a second mirror. The placement derivative remains deliberately stricter:
 with unsupported topology and back-side edits failing closed. A locked footprint cannot be moved.
 `courtyard_overlap` is exact for the bounded rectangular Board IR subset: same-side rings return
 `proven_clear` or `violated`, while front/back rings are evaluated independently. Unsupported
-topology fails closed before the view exists. Placement apply remains deferred. Models never write
-KiCad syntax, mutate a live editor, or bypass deterministic candidate validation and explicit
-revision-checked authorization.
+topology fails closed before the view exists. File-backed placement apply now exists as a separate,
+default-off, placement-token-scoped operation for the front-side orthogonal source-preserving
+subset; models never write KiCad syntax, mutate a live editor, or bypass deterministic candidate
+validation and explicit revision-checked authorization.
 
 An internal placement projection now follows the route adapter's source-preserving pattern for
 the supported front-side, orthogonal, unfilled-courtyard subset. It splices only changed footprint
 poses and owned absolute pad angles, preserves padless mechanical footprints and all unrelated
 bytes, and reparses the disposable result against the expected Board IR transform. This is a
-candidate derivative only: placement DRC, live compare-and-swap, KiCad undo, and post-action
-observation remain separate gates.
+candidate derivative and bounded apply input: placement DRC is private, while side flips, live
+compare-and-swap, KiCad undo, general source fidelity, and post-action observation remain separate
+gates.
 
 The internal layered search seam now has a narrow Board IR-bound proposal adapter in addition to
 the abstract maze oracle: it resolves integer width/clearance/via geometry, conservative foreign
@@ -160,8 +162,8 @@ endpoint-via geometry until padstack treatment is represented. See [ADR-0036](..
 7. Recheck the live board revision.
 8. Apply one approved patch through a separate, explicitly authorized, revision-checked operation.
 
-No candidate-building lifecycle stage may mutate the base snapshot. The current route apply writes a
-recoverable pre-apply copy but is not a KiCad undo transaction; placement apply does not exist. See
+No candidate-building lifecycle stage may mutate the base snapshot. Route and bounded placement
+apply write recoverable pre-apply copies but are not KiCad undo transactions. See
 [ADR-0001](../adr/0001-candidate-first.md).
 
 ## Performance evolution

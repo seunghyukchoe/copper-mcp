@@ -29,6 +29,7 @@ from copper_mcp.request_boundary import (
     MAX_JSON_SAFE_INTEGER,
     RequestError,
     board_path,
+    boolean,
     integer,
     known_fields,
     mapping,
@@ -244,6 +245,9 @@ class PlacementIntent:
     placement_grid_nm: int = 1_000
     expect_board_revision: str | None = None
     expect_snapshot_digest: str | None = None
+    #: Explicit capability request. A token is issued only by the file-backed preview when the
+    #: operator has enabled apply and the pure placement replay accepts the candidate.
+    include_apply_token: bool = False
 
     def profile(self) -> KiCadConstraintProfile:
         """The constraint profile this intent's board must be converted under."""
@@ -267,6 +271,7 @@ class PlacementIntent:
             },
             "expect_board_revision": self.expect_board_revision,
             "expect_snapshot_digest": self.expect_snapshot_digest,
+            "include_apply_token": self.include_apply_token,
         }
 
     def __post_init__(self) -> None:
@@ -276,6 +281,8 @@ class PlacementIntent:
             raise PlacementError("placement subjects must be distinct")
         if self.placement_grid_nm < 1:
             raise PlacementError("a placement grid must be positive")
+        if type(self.include_apply_token) is not bool:
+            raise PlacementError("include_apply_token must be boolean")
         for name, revision in (
             ("expect_board_revision", self.expect_board_revision),
             ("expect_snapshot_digest", self.expect_snapshot_digest),
@@ -301,6 +308,7 @@ _OPTIONAL_FIELDS = (
     "placement_grid_nm",
     "expect_board_revision",
     "expect_snapshot_digest",
+    "include_apply_token",
 )
 
 
@@ -487,6 +495,11 @@ def parse_placement_intent(
             board = board_path(board_value)
         expected_board_revision = fields.get("expect_board_revision")
         expected_snapshot_digest = fields.get("expect_snapshot_digest")
+        include_apply_token = boolean(
+            "include_apply_token", fields.get("include_apply_token", False)
+        )
+        if allow_live and include_apply_token:
+            raise PlacementError("live placement proposals cannot request apply authority")
         if require_revisions and (
             expected_board_revision is None or expected_snapshot_digest is None
         ):
@@ -515,6 +528,7 @@ def parse_placement_intent(
             ),
             expect_board_revision=expected_board_revision,
             expect_snapshot_digest=expected_snapshot_digest,
+            include_apply_token=include_apply_token,
         )
     except PlacementError:
         raise
@@ -739,6 +753,7 @@ class PlacementResult:
     snapshot_digest: str | None = None
     candidate: PlacementCandidate | None = None
     diagnostic: PlacementDiagnostic | None = None
+    apply_token: str | None = None
     conversion_diagnostic_counts: Mapping[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -751,6 +766,13 @@ class PlacementResult:
             raise PlacementError("a placement status is malformed")
         if (self.candidate is None) == (self.diagnostic is None):
             raise PlacementError("a placement result carries exactly one of candidate or refusal")
+        if self.apply_token is not None:
+            if not isinstance(self.apply_token, str) or not 1 <= len(self.apply_token) <= 512:
+                raise PlacementError("placement apply token is malformed")
+            if self.status != "previewed" or self.candidate is None:
+                raise PlacementError("placement apply authority requires a candidate")
+            if self.request is None or not self.request.include_apply_token:
+                raise PlacementError("placement apply authority was not requested")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -762,6 +784,7 @@ class PlacementResult:
             "snapshot_digest": self.snapshot_digest,
             "candidate": None if self.candidate is None else self.candidate.to_dict(),
             "diagnostic": None if self.diagnostic is None else self.diagnostic.to_dict(),
+            "apply_token": self.apply_token,
             "conversion_diagnostic_counts": dict(self.conversion_diagnostic_counts),
         }
 

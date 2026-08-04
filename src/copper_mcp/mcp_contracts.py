@@ -1540,6 +1540,7 @@ class PlacementRequestEchoContract(_ClosedContract):
     constraints: dict[str, int]
     expect_board_revision: Digest | None = None
     expect_snapshot_digest: Digest | None = None
+    include_apply_token: bool = False
 
 
 class PlacementRuleInputContract(_ClosedContract):
@@ -1621,6 +1622,7 @@ class PlacementPreviewToolResponse(_ClosedContract):
     request: PlacementRequestEchoContract | None
     candidate: PlacementCandidateContract | None
     diagnostic: PlacementDiagnosticContract | None
+    apply_token: Annotated[str, Field(min_length=1, max_length=512)] | None = None
     conversion_diagnostic_counts: dict[str, int]
 
 
@@ -1687,6 +1689,35 @@ class ApplyCandidateToolResponse(_ClosedContract):
     conversion_diagnostic_counts: dict[str, int]
 
 
+class PlacementApplyRequestEchoContract(_ClosedContract):
+    """The validated placement apply request; its capability token is never echoed."""
+
+    board: str
+    expect_board_revision: Digest
+    candidate_id: Digest
+    constraints: dict[str, int]
+
+
+class PlacementApplyToolResponse(_ClosedContract):
+    """Strict structured output contract for the bounded placement apply tool."""
+
+    status: Literal["applied", "refused", "applied_but_unverified"]
+    placement_apply_version: Literal["0.1.0"]
+    board_path: str
+    board_revision_before: Digest | None
+    board_revision_after: Digest | None
+    snapshot_digest_before: Digest | None
+    base_revision: Digest | None
+    candidate_id: Digest | None
+    request: PlacementApplyRequestEchoContract | None
+    backup_path: str | None
+    bytes_changed: Annotated[int, Field(ge=0)]
+    footprints_moved: Annotated[int, Field(ge=0)]
+    verification: ApplyVerificationContract | None
+    diagnostic: ApplyDiagnosticContract | None
+    conversion_diagnostic_counts: dict[str, int]
+
+
 __all__ = [
     "ApplyCandidateToolResponse",
     "CircuitIntentContentContract",
@@ -1698,6 +1729,7 @@ __all__ = [
     "LiveEditorContextToolRequest",
     "LiveEditorContextToolResponse",
     "LivePlacementToolRequest",
+    "PlacementApplyToolResponse",
     "RoutePreviewToolRequest",
     "RoutePreviewToolResponse",
     "RoutingCandidateExportToolRequest",

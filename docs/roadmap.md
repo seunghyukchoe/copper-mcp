@@ -177,9 +177,12 @@ documentation, ledger updates, and benchmark evidence.
   restores manually and never appears in KiCad's undo stack. A real single-undo transaction
   needs the IPC API, deferred because it mutates an in-memory document whose state cannot be
   bound to a file digest.
-- [ ] Placement apply. Board IR 0.2 now models the identity, pose, pad ownership, lock, and supported
-  courtyard geometry needed for observation, but a faithful edit still needs properties, text,
-  fabrication graphics, library identity, and 3D-model pose plus an exact rewrite oracle.
+- [~] Placement apply. `apply_placement_candidate` is now separately authorized from route apply:
+  file-backed previews may explicitly request a placement-scoped single-use token, and the pure
+  source-preserving replay plus atomic file service applies front-side orthogonal footprints with
+  native identity and supported rectangular `F.CrtYd` syntax. Unsupported properties/text/
+  fabrication graphics/library identity/3D-model pose, side flips, post-apply DRC/scene evidence,
+  and live IPC mutation remain fail-closed open gates.
 
 ## M4 — High-fidelity Circuit Scene and AI policy plugins
 
@@ -205,7 +208,8 @@ and the policy-plugin work.
   dual-digest-bound `PlacementCandidate` and the `preview_placement` MCP tool and CLI command are
   implemented. A locked footprint cannot be moved. `preview_live_placement` adds the same
   candidate-only pipeline over a byte-confirmed active KiCad snapshot; it requires both scene
-  digests and never writes or grants apply authority. Nothing applies a placement.
+  digests and never writes or grants apply authority. File-backed placement apply is tracked as a
+  separately authorized gate below; live placement remains proposal-only.
 - [~] Authoritative KiCad DRC binding for placement candidates. The narrow internal
   source-preserving serializer covers front-side, orthogonal, unfilled-courtyard footprints and
   reparses its disposable result; `run_placement_candidate_drc` now binds that exact replay to a
@@ -222,7 +226,9 @@ and the policy-plugin work.
   adapter now observes bounded `F.Cu`/`B.Cu` footprints with rectangular courtyards and a real
   KiCad CLI DRC fixture; GUI-authored flip serialization, line-chain/polygon topology, and the
   no-second-mirror claim remain open until a live desktop oracle is available.
-- [ ] Separately authorized placement apply; direct AI mutation of KiCad remains prohibited.
+- [~] Separately authorized placement apply; direct AI mutation of KiCad remains prohibited. The
+  bounded file-level surface is implemented and measured, while general footprint fidelity,
+  post-placement observation, and live-editor action CAS remain open.
 - [ ] Heuristic policy baseline and trace dataset.
 - [ ] Typed net-ordering, corridor, and repair policy interface.
 - [ ] Optional local GNN/RL reference policy.

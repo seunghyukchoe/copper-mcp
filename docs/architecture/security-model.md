@@ -37,7 +37,7 @@ remote transport remain future work, not current properties.
 | Router → KiCad | Candidate/source/context misbinding, stale state, unsafe copper | Exact replay, immutable multi-revision evidence, live-context recheck, private candidate snapshot, separate apply authorization |
 | Routing job ledger/worker/manifest/export → local SQLite | Board/prompt leakage, stale-worker overwrite, guessed or expired handles, tampered geometry, unbounded retention | Deep-frozen closed request envelopes and redacted manifests only, source/snapshot and candidate CAS binding, content-addressed idempotent specs/manifests/exports, SQLite transactions plus `job_id`/revision guards, bounded payload/count/TTL, single-worker CAS lease, cooperative cancellation, stale-lease recovery, explicit caller-context authorization, content-address verification on read, uniform unknown/expired errors; no board bytes, remote auth, apply authority, or MCP Tasks claim |
 | MCP input → preview | Unbounded search, unsupported-subset confusion, geometry disclosure, unverified candidates, stale fill provenance | Strict typed request parsing, caller-supplied constraints, wall-clock deadline over integer ceilings, fail-closed conversion with code-only diagnostics, freshness-bound opt-in fill authority with typed routing-effect provenance, opt-in authoritative DRC that fails closed, no write or job side effect |
-| Board IR scene → placement preview | Proprietary geometry disclosure, cross-revision subject confusion, truncated detail mistaken for complete geometry, unsupported courtyards treated as legal, locked-footprint movement | Region and object/detail ceilings, typed reference durability, quarantined author text, source/snapshot revision equality, fail-closed footprint conversion, exact same-side rectangular-courtyard check, locked-move refusal, no placement apply |
+| Board IR scene → placement preview/apply | Proprietary geometry disclosure, cross-revision subject confusion, truncated detail mistaken for complete geometry, unsupported courtyards treated as legal, locked-footprint movement, unauthorized file mutation | Region and object/detail ceilings, typed reference durability, quarantined author text, source/snapshot revision equality, fail-closed footprint conversion, exact same-side rectangular-courtyard check, locked-move refusal, explicit placement-scoped token, operator opt-in, lockfile refusal, double CAS, backup, atomic replacement |
 | Benchmark catalog → offline runner | Licence laundering, fabricated capability claims, copied third-party circuits, path/symlink escape, artifact substitution or replacement races, hidden network intake | Reference-only source records, no downloader, strict bounded schema, single-read validation snapshot, repository-confined paths, artifact and licence hashes, evidence-derived claims, explicit safety/derivation fields, original or separately open fixtures only |
 | Circuit Intent → schematic renderer | Malformed or oversized model topology, reference confusion, incomplete connectivity, S-expression injection, output amplification, false electrical/PCB claims | Strict bounded codec, typed IDs, complete-pin validation, canonical digest, escaped strings, original embedded symbols, deterministic 1 MB pure renderer, empty footprints, `on_board=no`, explicit non-claims |
 | MCP schematic build → artifact resource | Proprietary topology in model context, guessable capability, cross-client disclosure, unbounded retention, digest used as authorization, TTL mistaken for secure erasure | Redacted tool result, independent 256-bit opaque token, stdio-only process-local store, no listing/logging/persistence, 15-minute access expiry with documented lazy reclamation, 16-entry/16 MiB limits, 1 MB (1,000,000 bytes) artifact limit, uniform unavailable error, digest recheck |
@@ -177,7 +177,9 @@ projected from the same Board IR snapshot, and the supplied source bytes must ma
 revision. AI output remains typed placement intent, a locked footprint cannot be moved, and
 `courtyard_overlap` is `proven_clear` or `violated` for the exact same-side rectangular-courtyard
 subset; front/back courtyards are independent and unsupported topology fails before evaluation.
-Direct model-generated KiCad mutation and placement apply remain prohibited.
+Direct model-generated KiCad mutation remains prohibited. The bounded file-level placement apply
+tool is separately operator-gated and placement-token-scoped; unsupported source constructs and
+live IPC mutation still fail closed.
 
 MCP schematic delivery validates a closed outer wrapper, closed Circuit Intent content, and closed
 structured output. Scalars, lists, and extra fields at those boundaries fail without echoing the
@@ -207,8 +209,8 @@ release.
 
 ## Security acceptance for future placement mutation
 
-Placement apply remains blocked until Board IR can preserve and replay every source span affected by
-a pose edit, including the currently omitted author text, fabrication graphics, library identity,
-properties, and 3D-model pose. It additionally needs explicit authorization, revision-race tests,
-transaction or recoverable-undo behavior, complete audit metadata, KiCad verification,
-cancellation tests, and a dedicated security-ledger review.
+General placement mutation remains blocked until Board IR can preserve and replay every source span
+affected by a pose edit, including the currently omitted author text, fabrication graphics, library
+identity, properties, and 3D-model pose. The bounded front-side orthogonal subset now has explicit
+authorization, revision-race tests, recoverable-undo behavior, audit metadata, and a dedicated
+security review; KiCad post-apply verification, cancellation, and live IPC action remain open.

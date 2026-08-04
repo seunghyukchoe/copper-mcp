@@ -44,6 +44,7 @@ from copper_mcp.mcp_contracts import (
     LiveLayeredRoutePreviewToolRequest,
     LivePlacementToolRequest,
     LiveRoutePreviewToolRequest,
+    PlacementApplyToolResponse,
     PlacementPreviewToolResponse,
     RoutePreviewToolRequest,
     RoutePreviewToolResponse,
@@ -80,6 +81,7 @@ from copper_mcp.schematic_artifacts import (
     SchematicArtifactUnavailableError,
 )
 from copper_mcp.tools import apply_candidate as apply_candidate_service
+from copper_mcp.tools import apply_placement_candidate as apply_placement_candidate_service
 from copper_mcp.tools import compare_candidates as compare_candidates_service
 from copper_mcp.tools import inspect_board as inspect_board_service
 from copper_mcp.tools import inspect_board_ir as inspect_board_ir_service
@@ -692,7 +694,7 @@ def preview_placement(request: dict[str, Any]) -> PlacementPreviewToolResponse:
     # Both transports, like preview_route: one self-contained response, no server-side state,
     # no capability handle to resolve. Workspace confinement is what bounds the disclosure.
     return PlacementPreviewToolResponse.model_validate(
-        preview_placement_service(request, _SETTINGS)
+        preview_placement_service(request, _SETTINGS, _APPLY_TOKENS)
     )
 
 
@@ -733,6 +735,29 @@ def apply_candidate(request: dict[str, Any]) -> ApplyCandidateToolResponse:
 
     return ApplyCandidateToolResponse.model_validate(
         apply_candidate_service(request, _SETTINGS, _APPLY_TOKENS)
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=True,
+        idempotent_hint=False,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def apply_placement_candidate(request: dict[str, Any]) -> PlacementApplyToolResponse:
+    """Apply a separately authorized bounded placement candidate to a board file.
+
+    The operation is disabled unless ``COPPER_MCP_ALLOW_APPLY=1`` and requires a placement-
+    scoped, single-use token issued by ``preview_placement`` with ``include_apply_token: true``.
+    Only the source-preserving front-side orthogonal footprint subset is admitted; unsupported
+    properties, side changes, and geometry refuse before any write.
+    """
+
+    return PlacementApplyToolResponse.model_validate(
+        apply_placement_candidate_service(request, _SETTINGS, _APPLY_TOKENS)
     )
 
 

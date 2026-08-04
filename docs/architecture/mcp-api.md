@@ -29,8 +29,9 @@
 | `export_routing_candidate` | None | Explicitly disclose one immutable candidate geometry only after job and caller-context authorization succeed. |
 | `preview_live_placement` | None | Revision-bound, ref-anchored placement proposal over one active KiCad IPC snapshot; never writes, runs DRC, or grants apply authority. |
 | `inspect_live_editor_context` | None | Revision-bound active layer and bounded native selection references from the KiCad IPC editor; never reads raw selection text or mutates the editor. |
-| `apply_candidate` | **Replaces the board file**; disabled by default | The only mutating tool. Requires an operator flag and a single-use token. Route patches only. |
-| `preview_placement` | None | Deterministic legality preview for a proposed footprint placement. Never applies, and carries no DRC evidence. |
+| `apply_candidate` | **Replaces the board file**; disabled by default | Separately authorized route-patch mutation. Requires an operator flag and a route-scoped single-use token. |
+| `apply_placement_candidate` | **Replaces the board file**; disabled by default | Separately authorized bounded placement-pose mutation. Requires an operator flag and a placement-scoped single-use token. |
+| `preview_placement` | None, or a short-lived placement capability when explicitly requested | Deterministic legality preview for a proposed footprint placement. It never writes or runs DRC; `include_apply_token: true` may request a placement token for the supported replay subset. |
 | `preview_route` | None, or a temporary report when `include_drc` is set | Bounded, non-mutating two-pin route proposal on the documented Board IR subset. |
 | `render_circuit_schematic` | Process-local artifact only; stdio only | Validate structured Circuit Intent, require deterministic replay, and issue one opaque schematic resource capability. |
 | `validate_candidate` | None | Validate and normalize candidate metadata. |
@@ -182,7 +183,8 @@ the scene's `board_revision` into this read, then use `context_digest` for subse
 
 `preview_placement` takes one request object with a workspace-relative `board`, integer
 `constraints`, and `subjects` - the footprint references a proposal may move - plus optional
-`rules`, `proposals` and `placement_grid_nm`. Rules come in seven kinds (proximity, alignment,
+`rules`, `proposals`, `placement_grid_nm`, and the explicit `include_apply_token` capability
+request. Rules come in seven kinds (proximity, alignment,
 symmetry, edge, region, orientation, side) and name objects only by references a scene already
 returned. Proposals are anchored the same way, as an offset from another object's edge or
 centre; there is no field anywhere in the language that accepts an absolute coordinate, so every
@@ -214,14 +216,25 @@ A proposal that would move a footprint whose Board IR `locked` field is true is 
 `unsupported_geometry` before a candidate is issued. Unlocking or applying that move is never
 implicit.
 
-**The public tool never applies a placement and does not return KiCad DRC evidence.** A separate
+**The public preview never applies a placement and does not return KiCad DRC evidence.** A separate
 internal `run_placement_candidate_drc` gate can bind the supported candidate subset to a private,
 disposable KiCad replay; that evidence is not exposed through `preview_placement` or live
-placement. What the public tool claims is exactly what the deterministic legalizer proved. Moving a footprint moves its pads,
-so a placement candidate invalidates any route candidate bound to the same base revision, and
-observing a scene after a hypothetical placement is not supported. Like `preview_route`, the tool
-is exposed over both transports: the response is self-contained, retains no server-side state and
-holds no capability handle, so workspace confinement is what bounds the disclosure.
+placement. What the public tool claims is exactly what the deterministic legalizer proved. A
+file-backed preview may explicitly request a short-lived placement-scoped apply token; the token
+is issued only when the operator has enabled apply and the same pure source-preserving replay
+accepts the candidate. Moving a footprint moves its pads, so a placement candidate invalidates
+any route candidate bound to the same base revision, and observing a scene after a hypothetical
+placement is not supported. Live placement never grants apply authority.
+
+`apply_placement_candidate` is the separately authorized file-level mutation surface for that
+narrow replay subset. It takes `board`, the `candidate` manifest from a preview,
+`apply_token`, `expect_board_revision`, and `constraints`. The token is operation-domain bound to
+placement, so a route token cannot cross the boundary. The service applies the same lockfile,
+double-CAS, pre-apply backup, atomic replacement, and truthful post-publication result contract
+as route apply. It refuses side flips, locked footprints, unsupported properties/text/fabrication
+graphics/library identity/3D-model pose, derived identities, and no-op candidates before a
+replacement. Its response reports `footprints_moved` and `bytes_changed`; KiCad-open and DRC
+stages remain `not_run` until independently verified.
 
 `preview_route` takes one request object with a workspace-relative `board`, a copper `layer` name,
 integer `constraints` for the applied net class, and **exactly one** net selector. `net` is the
@@ -377,12 +390,14 @@ This is an ordinary MCP job API, not a claim of MCP Tasks compatibility. The cur
 (`io.modelcontextprotocol/tasks`) requires per-request capability negotiation, durable creation
 before returning a task handle, and a polymorphic result (`tasks/get`, `tasks/update`, and
 `tasks/cancel`). CopperMCP will add that adapter only after a pinned client matrix and task-handle
-authorization contract. Route-candidate apply is implemented and documented above; placement apply
-is not.
+authorization contract. Route-candidate and bounded placement apply are implemented and documented
+above; general placement fidelity and post-action observation remain open.
 
-`apply_candidate` is the only tool that changes a board, and it applies **route patches only**.
-It takes `board`, the `candidate` manifest from a preview, an `apply_token`,
-`expect_board_revision`, and `constraints`.
+`apply_candidate` changes a board only for **route patches**. The separate
+`apply_placement_candidate` tool is the corresponding bounded placement-pose mutation and has its
+own operation-scoped token. Both take a preview candidate, an `apply_token`, an expected board
+revision, and the same constraint profile; neither accepts model-generated copper or bypasses the
+deterministic replay gate.
 
 Three independent things must all hold. The operator must have set `COPPER_MCP_ALLOW_APPLY=1`
 (exactly `"0"` or `"1"`; the tool stays listed when it is off and refuses with `apply_disabled`,
@@ -419,7 +434,7 @@ evidence. Failure codes are `invalid_request`, `apply_disabled`, `invalid_token`
 `apply_verification_failed`. The tool's annotations say `destructiveHint: true` and
 `readOnlyHint: false` truthfully, but they are advisory client hints and enforce nothing.
 
-Nothing applies a placement, and there is no merge, lock override, IPC apply or batch apply.
+There is no merge, lock override, IPC apply, batch apply, or post-placement scene observation.
 
 ## Planned tools
 

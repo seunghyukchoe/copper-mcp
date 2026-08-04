@@ -1,4 +1,4 @@
-# Codex handoff — CopperMCP
+# Codex handoff — CopperMCP (updated 2026-08-05)
 
 You are picking up CopperMCP. This document is the fast path for the Codex agent that continues the
 work. Read `docs/HANDOFF.md` for the full state; read `AGENTS.md` for the repository contract you
@@ -7,12 +7,16 @@ do first.
 
 ## Right now
 
-- Default branch `main` is at the project's last released posture (`v0.4.0` plus the merged
-  `apply_candidate` capability). Working branch `feat/board-ir-v0-2-footprints` (PR #47) carries
-  **Board IR 0.2 with footprint modelling** — the single dependency the whole roadmap was waiting
-  on. Merge it before starting new work if it is not already on `main`.
-- 888 tests pass; `make check` is green; KiCad 10.0.5 is required for the real-KiCad nodes.
-- No work is in flight. The task list is clear.
+- Default branch `main` remains the project's last released posture (`v0.4.0` plus the merged
+  `apply_candidate` capability). Working branch `codex/live-route-proposal` carries the stacked
+  Board IR/placement observation and bounded placement-apply slices; read GitHub for exact PR
+  heads and checks before integration.
+- The placement-apply slice is implemented behind an explicit placement-scoped token and the
+  operator gate. The supported file-level subset is front-side, orthogonal, native-identity,
+  rectangular-courtyard pose replay with CAS, lock refusal, backup, and atomic replacement.
+- Focused placement-apply tests, Ruff, and strict mypy pass; several existing real-KiCad tests may
+  be unavailable on hosts where the managed KiCad process aborts, and must be reported rather than
+  silently treated as green.
 
 ## The one rule that matters most
 
@@ -53,8 +57,9 @@ thing to watch for.
 
 ## Destructive capability is different
 
-`apply_candidate` is the only surface that writes to a user's file. It is **default-off**
-(`COPPER_MCP_ALLOW_APPLY`). When you extend anything that writes, deletes, or authorizes:
+`apply_candidate` and `apply_placement_candidate` are the only surfaces that write to a user's file.
+They are **default-off** (`COPPER_MCP_ALLOW_APPLY`). When you extend anything that writes, deletes,
+or authorizes:
 
 - Run a **dedicated adversarial review** on the diff, separate from the normal gate. The apply PR's
   adversarial pass found eleven real defects — including a lock that was documented but did not
@@ -67,23 +72,20 @@ thing to watch for.
 
 ## What to build next, in order
 
-1. **Merge Board IR 0.2 (PR #47)** if not already on `main`. It unblocks the three items below.
-2. **Placement apply.** Now possible: with footprints modelled, a pose edit can be verified against
-   Board IR, so the assertion that made it unverifiable no longer holds. This is the natural next
-   capability — extend the apply engine (`src/copper_mcp/apply/`) from routes to placements, reusing
-   the CST splice, the token flow, and the lock/CAS machinery. Placement patches edit poses in
-   place rather than appending, so the "untouched bytes identical" assertion becomes "only the
-   named footprint's pose nodes changed" — design that assertion carefully.
-3. **Courtyard legality** in the placement legalizer, now that courtyard geometry exists in the IR.
-   Flip `courtyard_overlap` from its `not_modelled` literal to a real three-valued check.
-4. **A board that actually needs routing.** The single most important empirical gap: every net on
+1. **Close placement apply's remaining gates.** Add fidelity for author/fabrication/library/
+   property/3D-model nodes, post-placement DRC/scene verification, undo semantics, and live-editor
+   CAS as independently authorized slices.
+2. **Generalize courtyard legality and side-aware placement.** Add line-chain/polygon/arc topology,
+   configurable clearance, and safe side-flip source oracles before widening mutation support.
+3. **A board that actually needs routing.** The single most important empirical gap: every net on
    the reference board was already routed by its designer, so the router has recognized coverage
    but never *produced* new copper on a real board. Author or adopt one, measure honestly, record
    it in `docs/architecture/routing-baseline.md`.
 5. **IPC apply (v0.2 of the apply arc).** `kicad-python`'s `begin_commit`/`push_commit` gives a
    real single-undo-step transaction into a running KiCad. See `docs/research/safe-apply-references.md`
    for the constraints — the hard part is binding an in-memory document to a file digest.
-6. **`v0.5.0` release** once apply has soaked.
+6. **`v0.5.0` release** once both apply surfaces have soaked and the release ledger names a green
+   source commit.
 
 ## KiCad facts that will bite you if you forget them
 
@@ -114,11 +116,11 @@ Each is load-bearing somewhere in the code; rediscovering them costs hours.
 - A **Codex review remediation routine** runs every two hours against open PRs
   (`trig_01WkyDsdY8wmEfu1Pm2WwtfP`). It cannot claim KiCad-verified results (no KiCad in the cloud
   sandbox) and only sees open PRs, so sweep for post-merge comments manually.
-- Development is published on X as `@studiodawol` with evidence-bound posts. Continue only if you
-  intend to keep the honesty bar — real numbers, stated limitations.
+- External social posting is paused by maintainer instruction. Keep updates in GitHub issues, pull
+  requests, ledgers, and release notes unless posting is explicitly re-authorized.
 
 ## Start here
 
-Read `docs/HANDOFF.md` §2 (invariants) and §5 (next steps), `AGENTS.md`, and `ADR-0024`/`ADR-0025`
-(placement and apply, the two active frontiers). Then merge PR #47 and begin placement apply. The
-architecture is proven end-to-end; what remains is breadth, not a missing pillar.
+Read `docs/HANDOFF.md` §2 (invariants) and §5 (next steps), `AGENTS.md`, and ADR-0059. Check the
+stacked PR chain and hosted review state before changing public contracts. Protected-main merges
+require direct maintainer approval; do not merge them implicitly.

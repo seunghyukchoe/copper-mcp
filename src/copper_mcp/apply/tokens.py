@@ -71,6 +71,13 @@ class ApplyBinding:
     base_revision: str
     board_revision: str
     relative_path: str
+    #: Operation domain separation prevents a capability issued for one mutation kind from
+    #: being replayed against another tool, even if their candidate digests ever collide.
+    operation: str = "route"
+
+    def __post_init__(self) -> None:
+        if self.operation not in {"route", "placement"}:
+            raise ApplyTokenError("invalid_token", "apply operation is unsupported")
 
     def payload(self, expires_at: int) -> bytes:
         # Length-prefixed so no two different bindings can serialize to the same bytes by
@@ -80,6 +87,7 @@ class ApplyBinding:
             self.base_revision.encode("utf-8"),
             self.board_revision.encode("utf-8"),
             self.relative_path.encode("utf-8"),
+            self.operation.encode("ascii"),
             str(expires_at).encode("ascii"),
         )
         joined = b"".join(len(part).to_bytes(4, "big") + part for part in parts)

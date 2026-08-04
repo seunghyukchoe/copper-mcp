@@ -8,6 +8,14 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added a separately authorized `apply_placement_candidate` MCP capability for the bounded
+  front-side, orthogonal, source-preserving footprint subset. File-backed previews issue a
+  placement-scoped single-use token only when the exact replay accepts the candidate; the apply
+  path uses operator opt-in, lockfile refusal, double CAS, a recoverable pre-apply copy, atomic
+  replacement, and a typed `footprints_moved`/`bytes_changed` result. Side flips, unsupported
+  footprint properties/graphics/library/3D-model syntax, no-op candidates, live IPC mutation, and
+  post-placement DRC remain fail-closed under ADR-0059.
+
 - Added deterministic same-side courtyard legality to placement previews for the Board IR v0.2
   rectangular subset. The legalizer transforms proposed poses, checks exact integer rectangle
   overlap, treats front/back courtyards independently, and refuses overlapping candidates; custom

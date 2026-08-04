@@ -417,6 +417,7 @@ class McpSurfaceTests(unittest.TestCase):
                 "candidate",
                 "diagnostic",
                 "conversion_diagnostic_counts",
+                "apply_token",
             },
         )
 

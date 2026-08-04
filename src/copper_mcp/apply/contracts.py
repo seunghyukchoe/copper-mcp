@@ -21,6 +21,7 @@ from copper_mcp.request_boundary import (
 )
 
 APPLY_VERSION = "0.1.0"
+PLACEMENT_APPLY_VERSION = "0.1.0"
 _SHA256 = r"^sha256:[0-9a-f]{64}$"
 MAX_TOKEN_CHARACTERS = 512
 #: Caps on the candidate geometry carried in a manifest, enforced before anything is
@@ -28,6 +29,8 @@ MAX_TOKEN_CHARACTERS = 512
 MAX_MANIFEST_PATHS = 4096
 MAX_MANIFEST_VERTICES = 100_000
 MAX_MANIFEST_FIELD_CHARACTERS = 256
+MAX_MANIFEST_PLACEMENTS = 4_096
+MAX_MANIFEST_RULE_RESULTS = 16_384
 
 
 class ApplyRequestError(ValueError):
@@ -84,6 +87,33 @@ class ApplyRequest:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class PlacementApplyRequest:
+    """One validated, separately authorized placement-apply request."""
+
+    board: str
+    candidate: Mapping[str, Any]
+    apply_token: str
+    expect_board_revision: str
+    constraints: Any
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "candidate", MappingProxyType(dict(self.candidate)))
+
+    def constraints_payload(self) -> dict[str, int]:
+        return {name: getattr(self.constraints, name) for name in CONSTRAINT_FIELDS}
+
+    def to_dict(self) -> dict[str, Any]:
+        """Echo the validated request without ever returning its capability token."""
+
+        return {
+            "board": self.board,
+            "expect_board_revision": self.expect_board_revision,
+            "candidate_id": str(self.candidate.get("candidate_id", "")),
+            "constraints": self.constraints_payload(),
+        }
+
+
 _REQUIRED = ("board", "candidate", "apply_token", "expect_board_revision", "constraints")
 
 
@@ -114,7 +144,34 @@ def parse_apply_request(payload: Any) -> ApplyRequest:
         raise ApplyRequestError(str(error)) from error
 
 
-def _bound_manifest(candidate: Mapping[str, Any]) -> None:
+def parse_placement_apply_request(payload: Any) -> PlacementApplyRequest:
+    """Validate a placement apply request before any board bytes are read."""
+
+    import re
+
+    try:
+        fields = mapping("request", payload)
+        known_fields("request", fields, frozenset(_REQUIRED))
+        required_fields("request", fields, _REQUIRED)
+        revision = text("expect_board_revision", fields["expect_board_revision"], maximum=128)
+        if not re.fullmatch(_SHA256, revision):
+            raise ApplyRequestError("expect_board_revision must be a sha256 digest")
+        candidate = mapping("candidate", fields["candidate"])
+        _bound_manifest(candidate, placement=True)
+        return PlacementApplyRequest(
+            board=board_path(fields["board"]),
+            candidate=candidate,
+            apply_token=text("apply_token", fields["apply_token"], maximum=MAX_TOKEN_CHARACTERS),
+            expect_board_revision=revision,
+            constraints=net_class_constraints(fields["constraints"]),
+        )
+    except ApplyRequestError:
+        raise
+    except RequestError as error:
+        raise ApplyRequestError(str(error)) from error
+
+
+def _bound_manifest(candidate: Mapping[str, Any], *, placement: bool = False) -> None:
     """Cap the geometry a manifest can carry, before any of it is materialised.
 
     All of the pre-authorisation work - the board read, the IR parse, the candidate decode -
@@ -129,6 +186,82 @@ def _bound_manifest(candidate: Mapping[str, Any]) -> None:
             not isinstance(value, str) or len(value) > MAX_MANIFEST_FIELD_CHARACTERS
         ):
             raise ApplyRequestError("a candidate identity field is malformed")
+    if placement:
+        known_fields(
+            "placement candidate",
+            candidate,
+            frozenset(
+                {
+                    "candidate_id",
+                    "base_revision",
+                    "view_revision",
+                    "placement_version",
+                    "ordering_policy",
+                    "placement_grid_nm",
+                    "placements",
+                    "evidence",
+                }
+            ),
+        )
+        for field_name in ("view_revision", "placement_version", "ordering_policy"):
+            value = candidate.get(field_name)
+            if not isinstance(value, str) or len(value) > MAX_MANIFEST_FIELD_CHARACTERS:
+                raise ApplyRequestError("a placement candidate field is malformed")
+        placements = candidate.get("placements")
+        if not isinstance(placements, list | tuple) or len(placements) > MAX_MANIFEST_PLACEMENTS:
+            raise ApplyRequestError("the placement candidate carries too many footprints")
+        total_rules = 0
+        for item in placements:
+            if not isinstance(item, Mapping):
+                raise ApplyRequestError("a placement entry is malformed")
+            known_fields(
+                "placement entry",
+                item,
+                frozenset({"ref_id", "origin_nm", "orientation_udeg", "side", "moved"}),
+            )
+            ref_id = item.get("ref_id")
+            if not isinstance(ref_id, str) or len(ref_id) > MAX_MANIFEST_FIELD_CHARACTERS:
+                raise ApplyRequestError("a placement reference is malformed")
+        evidence = candidate.get("evidence")
+        if not isinstance(evidence, Mapping):
+            raise ApplyRequestError("placement evidence is malformed")
+        known_fields(
+            "placement evidence",
+            evidence,
+            frozenset({"rule_results", "legality", "checks_used", "inconclusive_pairs"}),
+        )
+        rule_results = evidence.get("rule_results")
+        if not isinstance(rule_results, list | tuple) or len(rule_results) > (
+            MAX_MANIFEST_RULE_RESULTS
+        ):
+            raise ApplyRequestError("the placement candidate carries too many rule results")
+        legality = evidence.get("legality")
+        if not isinstance(legality, Mapping):
+            raise ApplyRequestError("placement legality evidence is malformed")
+        known_fields(
+            "placement legality",
+            legality,
+            frozenset(
+                {"pad_overlap", "outline_containment", "keepout_respect", "courtyard_overlap"}
+            ),
+        )
+        for item in rule_results:
+            if not isinstance(item, Mapping):
+                raise ApplyRequestError("placement rule evidence is malformed")
+            known_fields(
+                "placement rule evidence",
+                item,
+                frozenset({"rule_index", "kind", "status", "residual_nm"}),
+            )
+            for field_name in ("kind", "status"):
+                value = item.get(field_name)
+                if not isinstance(value, str) or len(value) > MAX_MANIFEST_FIELD_CHARACTERS:
+                    raise ApplyRequestError("placement rule evidence is malformed")
+        total_rules += len(rule_results)
+        if total_rules > MAX_MANIFEST_RULE_RESULTS:
+            raise ApplyRequestError("the placement candidate carries too many rule results")
+        return
+
     patch = candidate.get("patch")
     if not isinstance(patch, Mapping):
         return
@@ -238,12 +371,83 @@ class ApplyResult:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class PlacementApplyResult:
+    """Result vocabulary for the separately authorized placement mutation surface."""
+
+    status: str
+    board_path: str
+    board_revision_before: str | None = None
+    board_revision_after: str | None = None
+    snapshot_digest_before: str | None = None
+    base_revision: str | None = None
+    candidate_id: str | None = None
+    request: PlacementApplyRequest | None = None
+    backup_path: str | None = None
+    bytes_changed: int = 0
+    footprints_moved: int = 0
+    verification: ApplyVerification | None = None
+    diagnostic: ApplyDiagnostic | None = None
+    conversion_diagnostic_counts: Mapping[str, int] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "conversion_diagnostic_counts",
+            MappingProxyType(dict(self.conversion_diagnostic_counts)),
+        )
+        if self.status not in {"applied", "refused", "applied_but_unverified"}:
+            raise ApplyRequestError("a placement apply status is malformed")
+        if self.bytes_changed < 0 or self.footprints_moved < 0:
+            raise ApplyRequestError("placement apply metrics must be non-negative")
+        if self.status == "applied":
+            if self.diagnostic is not None or self.verification is None:
+                raise ApplyRequestError("an applied placement carries no diagnostic")
+            if self.board_revision_after is None:
+                raise ApplyRequestError("an applied placement must report its new revision")
+            if self.board_revision_after == self.board_revision_before:
+                raise ApplyRequestError("an applied placement must differ from its source")
+            if self.footprints_moved < 1:
+                raise ApplyRequestError("an applied placement must move a footprint")
+        elif self.status == "applied_but_unverified":
+            if self.diagnostic is None or self.board_revision_after is None:
+                raise ApplyRequestError(
+                    "an unverified placement apply must report what changed and why"
+                )
+        else:
+            if self.diagnostic is None or self.board_revision_after is not None:
+                raise ApplyRequestError("a placement refusal must report no new revision")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "placement_apply_version": PLACEMENT_APPLY_VERSION,
+            "board_path": self.board_path,
+            "board_revision_before": self.board_revision_before,
+            "board_revision_after": self.board_revision_after,
+            "snapshot_digest_before": self.snapshot_digest_before,
+            "base_revision": self.base_revision,
+            "candidate_id": self.candidate_id,
+            "request": None if self.request is None else self.request.to_dict(),
+            "backup_path": self.backup_path,
+            "bytes_changed": self.bytes_changed,
+            "footprints_moved": self.footprints_moved,
+            "verification": None if self.verification is None else self.verification.to_dict(),
+            "diagnostic": None if self.diagnostic is None else self.diagnostic.to_dict(),
+            "conversion_diagnostic_counts": dict(self.conversion_diagnostic_counts),
+        }
+
+
 __all__ = [
     "APPLY_VERSION",
+    "PLACEMENT_APPLY_VERSION",
     "ApplyDiagnostic",
     "ApplyFailureCode",
     "ApplyRequest",
     "ApplyRequestError",
     "ApplyResult",
+    "PlacementApplyRequest",
+    "PlacementApplyResult",
     "parse_apply_request",
+    "parse_placement_apply_request",
 ]
