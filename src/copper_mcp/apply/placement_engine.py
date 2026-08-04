@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
-from copper_mcp.adapters import KiCadConstraintProfile
+from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.adapters.kicad_placement_patch import (
     KiCadPlacementPatchError,
     render_kicad_placement_candidate_board,
@@ -110,4 +110,42 @@ def apply_placement_candidate(
     )
 
 
-__all__ = ["AppliedPlacementBoard", "apply_placement_candidate"]
+def verify_published_placement_board(
+    published: bytes,
+    source: bytes,
+    snapshot: BoardIRSnapshot,
+    candidate: PlacementCandidate,
+    profile: KiCadConstraintProfile,
+    *,
+    limits: ParseLimits | None = None,
+) -> None:
+    """Prove that bytes read after publication are the authorized placement result.
+
+    The pure renderer establishes the exact Board IR transformation from ``source`` and
+    ``candidate``.  This check deliberately renders it again, compares the actual published
+    bytes, and reparses those actual bytes.  It therefore cannot mistake a successful rename
+    for a successful placement if another writer changed the board immediately afterwards.
+    """
+
+    if not isinstance(published, bytes):
+        raise ApplyEngineError("published board must be immutable bytes")
+    limits = limits or ParseLimits()
+    try:
+        expected = render_kicad_placement_candidate_board(
+            source, snapshot, candidate, profile, limits=limits
+        )
+    except (ValueError, KiCadPlacementPatchError) as error:
+        raise ApplyEngineError(str(error)) from error
+    if published != expected:
+        raise ApplyEngineError("published placement board differs from the verified output")
+
+    conversion = parse_kicad_bytes(published, profile, limits)
+    if conversion.snapshot is None or conversion.diagnostics:
+        raise ApplyEngineError("published placement board failed Board IR round-trip parsing")
+
+
+__all__ = [
+    "AppliedPlacementBoard",
+    "apply_placement_candidate",
+    "verify_published_placement_board",
+]

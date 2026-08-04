@@ -47,6 +47,7 @@ from copper_mcp.apply.contracts import (
 )
 from copper_mcp.apply.engine import ApplyEngineError, apply_route_candidate
 from copper_mcp.apply.placement_engine import apply_placement_candidate as apply_placement_bytes
+from copper_mcp.apply.placement_engine import verify_published_placement_board
 from copper_mcp.apply.tokens import (
     ApplyBinding,
     ApplyTokenAuthority,
@@ -809,6 +810,49 @@ def apply_placement_candidate(
                 code=ApplyFailureCode.APPLY_VERIFICATION_FAILED,
                 message=(
                     "the board was written but could not be verified afterwards; "
+                    + (
+                        "the original was rolled back"
+                        if restored
+                        else "it now holds bytes we did not write, so it was left in place; "
+                        "restore the pre-apply copy if needed"
+                    )
+                ),
+            ),
+        )
+
+    published_revision = applied.result_revision
+    try:
+        published = _read_board(settings, board.relative_path)
+        published_revision = published.revision
+        verify_published_placement_board(
+            published.content,
+            board.content,
+            snapshot,
+            candidate,
+            profile,
+            limits=limits,
+        )
+    except (ApplyEngineError, WorkspaceViolationError, OSError):
+        # Never roll back bytes merely because they were observed after our rename: they may
+        # belong to a concurrent writer.  Restoration is allowed only if the board still holds
+        # the exact output this operation published.
+        restored = _guarded_restore(settings, board, applied.result_revision)
+        return PlacementApplyResult(
+            status="applied_but_unverified",
+            board_path=board.relative_path,
+            board_revision_before=board.revision,
+            board_revision_after=published_revision,
+            snapshot_digest_before=snapshot.snapshot_digest,
+            base_revision=candidate.base_revision,
+            candidate_id=candidate.candidate_id,
+            request=request,
+            backup_path=backup_path,
+            bytes_changed=applied.bytes_changed,
+            footprints_moved=applied.footprints_moved,
+            diagnostic=ApplyDiagnostic(
+                code=ApplyFailureCode.APPLY_VERIFICATION_FAILED,
+                message=(
+                    "the placement board was written but failed post-publication verification; "
                     + (
                         "the original was rolled back"
                         if restored
