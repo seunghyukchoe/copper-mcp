@@ -16,6 +16,7 @@ from copper_mcp.circuit_scene import observe_board_scene as observe_scene
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import run_board_drc as run_kicad_board_drc
 from copper_mcp.kicad_file import inspect_kicad_board
+from copper_mcp.kicad_ipc import inspect_live_board as inspect_live_kicad_board
 from copper_mcp.models import candidate_from_dict, rank_candidates
 from copper_mcp.placement_preview import preview_placement as preview_placement_service
 from copper_mcp.route_preview import preview_route as preview_route_candidate
@@ -42,12 +43,13 @@ def server_info() -> dict[str, Any]:
             "non-mutating two-pin route preview on a documented Board IR subset",
             "bounded Circuit Intent validation and deterministic KiCad schematic rendering",
             "explicit create-only CLI schematic export and ephemeral stdio MCP artifact delivery",
+            "read-only live KiCad IPC board observation (optional kicad-python)",
         ],
         "planned": [
             "region-scoped and human-facing board rendering",
             "authoritative KiCad DRC binding for placement candidates",
             "explicit placement apply and post-placement observation",
-            "KiCad IPC adapter",
+            "live Circuit Scene binding over KiCad IPC",
             "routing job lifecycle",
             "negotiated-congestion router",
             "immutable route patches",
@@ -74,6 +76,12 @@ def run_board_drc(path: str, settings: Settings | None = None) -> dict[str, Any]
 
     active_settings = settings or Settings.from_env()
     return run_kicad_board_drc(path, active_settings).to_dict()
+
+
+def inspect_live_board(settings: Settings | None = None) -> dict[str, Any]:
+    """Observe one open KiCad PCB through the optional local IPC adapter."""
+
+    return inspect_live_kicad_board(settings).to_dict()
 
 
 def inspect_board_ir(payload: dict[str, Any], settings: Settings | None = None) -> dict[str, Any]:

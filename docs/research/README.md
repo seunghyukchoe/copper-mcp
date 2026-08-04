@@ -20,6 +20,8 @@ that every product feature, price, or repository release will remain current.
 - [Circuit Scene to route action closure](./scene-action-closure-references.md) reproduces the
   opaque-reference integration failure, defines the revision-bound MCP contract, and records its
   exact hidden-name equivalence oracle and limitations.
+- [KiCad IPC observer references](./kicad-ipc-references.md) records the official socket,
+  plugin, version, and `kicad-python` boundaries behind the redacted live-board observer.
 
 ## Terms used in this review
 

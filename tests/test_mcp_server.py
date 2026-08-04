@@ -90,6 +90,7 @@ class McpServerTests(unittest.TestCase):
                 "compare_candidates",
                 "inspect_board",
                 "inspect_board_ir",
+                "inspect_live_board",
                 "observe_board_scene",
                 "preview_placement",
                 "preview_route",
@@ -99,6 +100,40 @@ class McpServerTests(unittest.TestCase):
                 "validate_candidate",
             },
         )
+
+    def test_live_observer_advertises_closed_read_only_output(self) -> None:
+        tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
+        live = tools["inspect_live_board"]
+        self.assertEqual(live.input_schema["type"], "object")
+        self.assertEqual(live.input_schema["properties"], {})
+        self.assertIsNotNone(live.output_schema)
+        assert isinstance(live.output_schema, dict)
+        self.assertIs(live.output_schema["additionalProperties"], False)
+        self.assertEqual(live.output_schema["properties"]["source"]["const"], "kicad-ipc-live")
+        self.assertEqual(live.output_schema["properties"]["read_only"]["const"], True)
+        assert live.annotations is not None
+        self.assertIs(live.annotations.read_only_hint, True)
+        self.assertIs(live.annotations.destructive_hint, False)
+        self.assertIs(live.annotations.idempotent_hint, True)
+        self.assertIs(live.annotations.open_world_hint, False)
+
+    def test_live_observer_returns_typed_redacted_content(self) -> None:
+        payload = {
+            "schema_version": "0.1.0",
+            "source": "kicad-ipc-live",
+            "kicad_version": "10.0.5",
+            "api_version": "10.0.5",
+            "compatibility": "compatible",
+            "board_digest": "sha256:" + "a" * 64,
+            "board_bytes": 128,
+            "object_counts": {"nets": 2, "pads": 4},
+            "socket_kind": "default-local-ipc",
+            "read_only": True,
+        }
+        with patch.object(_server, "inspect_live_board_service", return_value=payload):
+            result = asyncio.run(_server.mcp.call_tool("inspect_live_board", {}))
+        self.assertFalse(result.is_error)
+        self.assertEqual(result.structured_content, payload)
 
     def test_render_tool_declares_structured_content_and_security_annotations(self) -> None:
         tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}

@@ -130,6 +130,9 @@ The non-negotiable boundary is simple:
   replace that is verified afterwards and rolled back if it fails. Route patches only: nothing
   applies a placement, there is no merge, no lock override, and no batch apply.
 - MCP tools and a stable CLI over the same application services.
+- An optional official `kicad-python` IPC observer and KiCad PCB-editor plugin that report only a
+  live board digest, version compatibility, and bounded object counts; they never mutate KiCad or
+  expose board text, net names, UUIDs, or geometry.
 - Professional CI, CodeQL, dependency auditing, release automation, issue forms, and project ledgers.
 
 See the [roadmap](docs/roadmap.md) for routing and KiCad IPC milestones.
@@ -170,7 +173,8 @@ meaning with bounded visual observation. Models may propose placement intent and
 placement previews or candidates; deterministic code remains responsible for snapping,
 connectivity, clearance, provenance, validation, and any separately authorized apply. Direct AI
 mutation of KiCad files or live editor state is not part of this architecture. Circuit Scene IR,
-placement preview/candidates, and placement apply are a north star and do not exist today.
+placement preview/candidates, and the read-only live IPC observer now exist; placement apply,
+live-scene binding, and direct AI mutation remain future work.
 
 ## Quick start
 
@@ -182,6 +186,21 @@ source .venv/bin/activate
 python -m pip install -e ".[dev,security]"
 make check
 ```
+
+To inspect a running KiCad PCB Editor through the official local IPC binding, install the optional
+extra and enable KiCad's IPC server in the editor preferences:
+
+```bash
+python -m pip install -e ".[kicad]"
+export COPPER_MCP_WORKSPACE=/absolute/path/to/boards
+copper-mcp-server
+```
+
+Call the read-only MCP tool `inspect_live_board`. It returns a SHA-256 digest, numeric KiCad/API
+versions, byte count, and bounded object counts. KiCad 9/10 requires a running GUI session, and
+the tool refuses a newer KiCad than the installed `kicad-python` binding by default. A live digest
+is not yet a Circuit Scene revision or route/placement authority; file-backed revision checks stay
+in force.
 
 Inspect a board without modifying it:
 

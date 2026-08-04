@@ -30,6 +30,7 @@ from copper_mcp.mcp_contracts import (
     CircuitIntentToolContent,
     CircuitSceneToolResponse,
     CircuitSchematicToolResponse,
+    LiveBoardObservationToolResponse,
     PlacementPreviewToolResponse,
     RoutePreviewToolRequest,
     RoutePreviewToolResponse,
@@ -49,6 +50,7 @@ from copper_mcp.tools import apply_candidate as apply_candidate_service
 from copper_mcp.tools import compare_candidates as compare_candidates_service
 from copper_mcp.tools import inspect_board as inspect_board_service
 from copper_mcp.tools import inspect_board_ir as inspect_board_ir_service
+from copper_mcp.tools import inspect_live_board as inspect_live_board_service
 from copper_mcp.tools import observe_board_scene_raw as observe_board_scene_service_raw
 from copper_mcp.tools import preview_placement as preview_placement_service
 from copper_mcp.tools import preview_route as preview_route_service
@@ -128,6 +130,28 @@ def run_board_drc(path: str) -> dict[str, Any]:
     """Run fixed-argument KiCad DRC and return a privacy-preserving summary."""
 
     return run_board_drc_service(path, _SETTINGS)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def inspect_live_board() -> LiveBoardObservationToolResponse:
+    """Observe the first open KiCad PCB through a local, read-only IPC session.
+
+    Requires the optional ``kicad-python`` package and a running KiCad PCB Editor
+    with its IPC server enabled. Only versions, a board digest, byte count, and
+    bounded object counts are returned; board text, net names, UUIDs, and geometry
+    are intentionally withheld until a live snapshot can carry Circuit Scene's
+    revision contract.
+    """
+
+    return LiveBoardObservationToolResponse.model_validate(inspect_live_board_service(_SETTINGS))
 
 
 @mcp.tool()

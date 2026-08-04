@@ -17,6 +17,7 @@
 | `inspect_board` | None | Bounded read-only inspection inside the configured workspace. |
 | `run_board_drc` | Temporary report only | Fixed-argument KiCad DRC with a bounded, redacted summary. |
 | `inspect_board_ir` | None | Read-only Board IR conversion check and structural description. |
+| `inspect_live_board` | None | Optional `kicad-python` IPC observation of the first open PCB; returns only numeric versions, a SHA-256 digest, byte count, and bounded object counts. |
 | `observe_board_scene` | None, or a process-local render artifact when `include_render` is set | Bounded, region-scoped semantic scene of one board, with board text quarantined. |
 | `apply_candidate` | **Replaces the board file**; disabled by default | The only mutating tool. Requires an operator flag and a single-use token. Route patches only. |
 | `preview_placement` | None | Deterministic legality preview for a proposed footprint placement. Never applies, and carries no DRC evidence. |
@@ -45,6 +46,14 @@ returns the board revision, snapshot and constraint digests, Board IR schema and
 layer identities, and per-collection object counts, or bounded conversion diagnostic-code counts
 when the board is outside the subset. It never returns coordinates, net names, pad or net
 identities, UUIDs, or source bytes.
+
+`inspect_live_board` is a separate, no-argument read-only probe for an already-running KiCad PCB
+Editor. It lazily loads the optional official `kicad-python` binding, accepts only KiCad's local
+IPC socket, checks the binding/API version, and returns a redacted `kicad-ipc-live` record with a
+board digest and bounded object counts. It never returns the live serialization, net names, UUIDs,
+coordinates, or tokens. KiCad 9/10 requires a GUI session with the IPC server enabled; a future
+KiCad version is refused by default. This record does not yet act as a Circuit Scene snapshot or
+route/placement authority.
 
 `observe_board_scene` takes one request object with a workspace-relative `board`, integer
 `constraints`, a mandatory `region`, and optional `layers` and `include_annotations`. The region is
@@ -314,7 +323,8 @@ The planned Circuit Scene IR will add bounded semantic and visual observation pl
 intent. Models may request immutable placement previews/candidates; deterministic services own
 snapping, connectivity, clearance, provenance, and validation, and any eventual apply remains a
 separate explicit capability. Direct model-authored KiCad mutation is never an MCP shortcut. This is
-a high-fidelity north star; no Circuit Scene IR or placement tool is implemented today.
+a high-fidelity north star; live-scene binding, placement apply, and autonomous policy remain
+unimplemented.
 
 ## Compatibility
 

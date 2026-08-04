@@ -201,6 +201,27 @@ class CircuitSchematicToolResponse(_ClosedContract):
     verification: SchematicVerificationContract
 
 
+class LiveBoardObservationToolResponse(_ClosedContract):
+    """Redacted, read-only summary returned by the optional KiCad IPC observer."""
+
+    schema_version: Literal["0.1.0"]
+    source: Literal["kicad-ipc-live"]
+    kicad_version: Annotated[str, Field(pattern=r"^\d+\.\d+\.\d+$")]
+    api_version: Annotated[str, Field(pattern=r"^\d+\.\d+\.\d+$")]
+    compatibility: Literal["compatible", "future_api_unverified"]
+    board_digest: Digest
+    board_bytes: Annotated[int, Field(ge=1, le=64 * 1024 * 1024)]
+    object_counts: Annotated[
+        dict[
+            Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")],
+            Annotated[int, Field(ge=0, le=1_000_000)],
+        ],
+        Field(max_length=32),
+    ]
+    socket_kind: Literal["default-local-ipc", "configured-local-ipc"]
+    read_only: Literal[True]
+
+
 RefId = Annotated[str, Field(pattern=r"^[a-z_]+:[a-z]+(:[0-9a-zA-Z:._-]{1,128})?$")]
 LayerId = Annotated[str, Field(pattern=r"^layer:[A-Za-z0-9_.\-]{1,64}$")]
 LayerName = Annotated[str, Field(pattern=r"^[A-Za-z0-9_.\-]{1,64}$")]

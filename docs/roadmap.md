@@ -17,7 +17,11 @@ documentation, ledger updates, and benchmark evidence.
 
 ## M1 — KiCad inspection and validation (`0.4.x`, current)
 
-- [ ] Official `kicad-python` IPC plugin.
+- [x] Official `kicad-python` IPC plugin and redacted live-board observer. The optional
+  `inspect_live_board` MCP tool and `hardware/kicad-ipc-plugin` action use only local KiCad IPC,
+  refuse future binding versions by default, and return a digest plus bounded counts without
+  board text, net names, UUIDs, or geometry. Live editor-to-Circuit-Scene binding remains a
+  separate item.
 - [x] Canonical Circuit Intent IR `0.1.0` and deterministic in-memory KiCad schematic generation
   contract for a bounded two-pin passive subset.
 - [x] Bounded Circuit Intent build service, explicit create-new CLI schematic export, and
@@ -26,6 +30,8 @@ documentation, ledger updates, and benchmark evidence.
   separated labels/properties, real KiCad SVG inspection, and a structural regression.
 - [x] Descriptor-anchored workspace reads and exact-lowercase create-only schematic output.
 - [ ] Schematic round trip, authoritative ERC, and source-to-board connectivity parity.
+- [ ] Live KiCad IPC snapshot to Circuit Scene revision binding, with a real running-editor
+  oracle and stale-session refusal before placement or routing.
 - [x] Canonical Board IR v0.2 contract with integer units, typed constraints, strict codecs,
   content digests, first-class footprint pose/side/lock/pad ownership, and bounded rectangular
   courtyard rings. The immutable v0.1 schema remains as legacy compatibility evidence.
