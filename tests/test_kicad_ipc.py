@@ -11,6 +11,7 @@ from copper_mcp.circuit_scene import CircuitSceneError, observe_live_board_scene
 from copper_mcp.config import Settings
 from copper_mcp.kicad_ipc import (
     KicadIpcConfigurationError,
+    KicadIpcConnectionError,
     KicadIpcPayloadError,
     KicadIpcUnavailableError,
     KicadIpcVersionError,
@@ -111,8 +112,9 @@ class KicadIpcTests(unittest.TestCase):
         self.assertEqual(
             first.board_digest, f"sha256:{hashlib.sha256(_Board().source.encode()).hexdigest()}"
         )
-        self.assertEqual(first.object_counts["pads"], 3)
-        self.assertEqual(first.object_counts["tracks"], 4)
+        self.assertEqual(first.object_counts["nets"], 1)
+        self.assertEqual(first.object_counts["pads"], 0)
+        self.assertEqual(first.object_counts["tracks"], 0)
         self.assertEqual(first.socket_kind, "default-local-ipc")
         self.assertNotIn("PROMPT", repr(first.to_dict()))
         self.assertEqual(calls, [{"timeout_ms": 2000}, {"timeout_ms": 2000}])
@@ -145,6 +147,58 @@ class KicadIpcTests(unittest.TestCase):
 
         observation = inspect_live_board(_settings(), client_factory=factory, allow_future_api=True)
         self.assertEqual(observation.compatibility, "future_api_unverified")
+
+    def test_false_version_check_is_fail_closed(self) -> None:
+        class FalseVersionKiCad(_KiCad):
+            def check_version(self) -> bool:
+                return False
+
+        with self.assertRaises(KicadIpcVersionError):
+            inspect_live_board(_settings(), client_factory=lambda **_: FalseVersionKiCad())
+
+    def test_object_counts_follow_serialized_revision_not_mutable_getters(self) -> None:
+        source = (
+            '(kicad_pcb (net 1 "N") (footprint "F" (pad "1")) (segment) (via) '
+            '(zone) (gr_rect) (gr_text "label") (dimension) (group))'
+        )
+        observation = inspect_live_board(
+            _settings(),
+            client_factory=lambda **_: _KiCad(board=_Board(source=source)),
+        )
+        self.assertEqual(
+            observation.object_counts,
+            {
+                "dimensions": 1,
+                "footprints": 1,
+                "groups": 1,
+                "nets": 1,
+                "pads": 1,
+                "shapes": 1,
+                "text": 1,
+                "tracks": 1,
+                "vias": 1,
+                "zones": 1,
+            },
+        )
+
+    def test_malformed_serialization_is_refused(self) -> None:
+        with self.assertRaises(KicadIpcPayloadError):
+            inspect_live_board(
+                _settings(),
+                client_factory=lambda **_: _KiCad(board=_Board(source="not-a-board")),
+            )
+
+    def test_board_revision_change_during_count_confirmation_is_refused(self) -> None:
+        class ChangingBoard(_Board):
+            reads = 0
+
+            def get_as_string(self) -> str:
+                self.reads += 1
+                return self.source if self.reads == 1 else self.source + " "
+
+        board = ChangingBoard()
+        with self.assertRaises(KicadIpcConnectionError):
+            inspect_live_board(_settings(), client_factory=lambda **_: _KiCad(board=board))
 
     def test_oversized_live_snapshot_is_refused(self) -> None:
         board = _Board(source="x" * 32)

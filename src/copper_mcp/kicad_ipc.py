@@ -14,10 +14,12 @@ import hashlib
 import importlib
 import os
 import platform
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, replace
 from typing import Any, Protocol, cast
 
+from copper_mcp.adapters.sexpr import SExpr, SExprError, parse_sexpr
+from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
 
 IPC_SCHEMA_VERSION = "0.1.0"
@@ -25,18 +27,19 @@ _DEFAULT_TIMEOUT_MS = 2_000
 _MAX_TIMEOUT_MS = 10_000
 _MAX_SOCKET_CHARS = 4_096
 _MAX_IPC_ITEMS = 1_000_000
-_COUNT_METHODS = (
-    ("nets", "get_nets"),
-    ("footprints", "get_footprints"),
-    ("pads", "get_pads"),
-    ("tracks", "get_tracks"),
-    ("vias", "get_vias"),
-    ("zones", "get_zones"),
-    ("shapes", "get_shapes"),
-    ("text", "get_text"),
-    ("dimensions", "get_dimensions"),
-    ("groups", "get_groups"),
+_COUNT_NAMES = (
+    "nets",
+    "footprints",
+    "pads",
+    "tracks",
+    "vias",
+    "zones",
+    "shapes",
+    "text",
+    "dimensions",
+    "groups",
 )
+_SHAPE_HEADS = {"gr_line", "gr_rect", "gr_arc", "gr_poly", "gr_curve"}
 
 
 class KicadIpcError(RuntimeError):
@@ -133,24 +136,58 @@ def _load_kicad_factory() -> Callable[..., _KiCadLike]:
     return cast(Callable[..., _KiCadLike], factory)
 
 
-def _count_items(board: _BoardLike) -> dict[str, int]:
-    counts: dict[str, int] = {}
-    for name, method_name in _COUNT_METHODS:
-        method = getattr(board, method_name, None)
-        if not callable(method):
-            raise KicadIpcConnectionError("the KiCad board API is missing an observation method")
-        try:
-            items = method()
-        except Exception as error:  # pragma: no cover - exercised by the real binding
-            raise KicadIpcConnectionError(
-                "KiCad rejected a read-only observation request"
-            ) from error
-        if not isinstance(items, Sequence) or isinstance(items, str | bytes | bytearray):
-            raise KicadIpcConnectionError("KiCad returned an invalid item collection")
-        count = len(items)
-        if not 0 <= count <= _MAX_IPC_ITEMS:
-            raise KicadIpcPayloadError("KiCad item collection exceeds the observation budget")
-        counts[name] = count
+def _count_serialized_items(source: bytes, max_bytes: int) -> dict[str, int]:
+    """Count objects from the captured serialization, not mutable live collections.
+
+    KiCad's IPC API does not expose a count-only or max-items request. Calling ten collection
+    getters would materialize unbounded responses and could mix revisions while a GUI saves.
+    Counting the already-captured bytes keeps the summary tied to one revision and charges the
+    parser against the same input/token/node ceilings used by the Board IR boundary.
+    """
+
+    limits = replace(
+        ParseLimits(),
+        max_input_bytes=min(max_bytes, 64 * 1024 * 1024),
+        max_tokens=2_000_000,
+        max_nodes=1_000_000,
+    )
+    try:
+        root = parse_sexpr(source, limits)
+    except SExprError as error:
+        raise KicadIpcPayloadError(
+            "KiCad board serialization is not a bounded S-expression"
+        ) from error
+    counts = dict.fromkeys(_COUNT_NAMES, 0)
+    stack: list[SExpr] = [root]
+    while stack:
+        expression = stack.pop()
+        head = expression.head
+        name: str | None = None
+        if head == "net":
+            name = "nets"
+        elif head == "footprint":
+            name = "footprints"
+        elif head == "pad":
+            name = "pads"
+        elif head in {"segment", "arc"}:
+            name = "tracks"
+        elif head == "via":
+            name = "vias"
+        elif head == "zone":
+            name = "zones"
+        elif head in _SHAPE_HEADS:
+            name = "shapes"
+        elif head in {"gr_text", "fp_text"}:
+            name = "text"
+        elif head == "dimension":
+            name = "dimensions"
+        elif head == "group":
+            name = "groups"
+        if name is not None:
+            counts[name] += 1
+            if counts[name] > _MAX_IPC_ITEMS:
+                raise KicadIpcPayloadError("serialized object count exceeds the observation budget")
+        stack.extend(item for item in expression.items if isinstance(item, SExpr))
     return counts
 
 
@@ -269,7 +306,7 @@ def capture_live_board(
         api_version = _version_string(client.get_api_version())
         compatibility = "compatible"
         try:
-            client.check_version()
+            version_ok = client.check_version()
         except Exception as error:
             if error.__class__.__name__ != "FutureVersionError":
                 raise KicadIpcVersionError("KiCad IPC version validation failed") from error
@@ -278,6 +315,9 @@ def capture_live_board(
                     "connected KiCad is newer than the installed kicad-python API"
                 ) from error
             compatibility = "future_api_unverified"
+        else:
+            if version_ok is not True:
+                raise KicadIpcVersionError("KiCad IPC version validation was inconclusive")
         board = client.get_board()
         source = board.get_as_string()
     except KicadIpcError:
@@ -294,7 +334,17 @@ def capture_live_board(
     if not 1 <= len(source_bytes) <= min(active_settings.max_board_bytes, 64 * 1024 * 1024):
         raise KicadIpcPayloadError("KiCad board snapshot exceeds the observation budget")
 
-    counts = _count_items(board)
+    max_bytes = min(active_settings.max_board_bytes, 64 * 1024 * 1024)
+    counts = _count_serialized_items(source_bytes, max_bytes)
+    try:
+        confirmation = board.get_as_string()
+        confirmation_bytes = confirmation.encode("utf-8", errors="strict")
+    except Exception as error:  # pragma: no cover - exercised by the real binding
+        raise KicadIpcConnectionError(
+            "KiCad changed before observation could be confirmed"
+        ) from error
+    if confirmation_bytes != source_bytes:
+        raise KicadIpcConnectionError("KiCad board changed during observation")
     observation = LiveBoardObservation(
         kicad_version=kicad_version,
         api_version=api_version,

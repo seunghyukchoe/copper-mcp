@@ -23,10 +23,18 @@
 ## Implemented boundary
 
 `copper_mcp.kicad_ipc.inspect_live_board` loads `kipy` lazily, normalizes a bounded local socket,
-checks versions, hashes the live board serialization, and counts board objects. The MCP response
-is deliberately redacted and typed. `hardware/kicad-ipc-plugin/plugin.json` is validated against
-the official KiCad API plugin schema shape and exposes the same read-only action for a KiCad PCB
-Editor session.
+checks versions, hashes the live board serialization, and counts board objects from that same
+serialization. It then requests a second serialization and refuses if the bytes changed during
+observation. The MCP response is deliberately redacted and typed. `hardware/kicad-ipc-plugin/plugin.json`
+is validated against the official KiCad API plugin schema shape and exposes the same read-only
+action for a KiCad PCB Editor session.
+
+The wrapper's `get_as_string` call is synchronous and returns a complete string before Python can
+measure it; no count-only or streaming request is exposed. This is a residual allocation risk,
+not a claim of a hard pre-allocation ceiling. The adapter refuses an oversized response as soon
+as it returns, avoids ten additional collection materializations, and applies bounded
+S-expression input/token/node limits while deriving counts. An isolated worker is still required
+for a hard memory boundary around an untrusted or remote session.
 
 The B-008 benchmark uses a fake `KiCad` client so CI measures deterministic behavior without
 requiring a GUI, token, or global KiCad setting. The current desktop KiCad IPC server was observed

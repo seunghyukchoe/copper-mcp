@@ -18,6 +18,12 @@ All notable changes are documented here. The format follows
   byte count, object counts, and the socket kind; socket paths, tokens, board text, names, UUIDs,
   and geometry never cross the MCP boundary. The bundled KiCad plugin exposes the same read-only
   surface and does not mutate an open document.
+- KiCad IPC version validation now fails closed when the official binding returns a false result.
+  Observer counts come from the captured serialization rather than mutable per-object getters,
+  and a second serialization must match before the revision is accepted. The wrapper still
+  allocates its complete response before Python can enforce the size ceiling; this residual API
+  limitation is documented, while bounded parsing and removal of extra collection materialization
+  reduce avoidable memory exposure.
 - Scene-selected routes now require both the observed board revision and Board IR snapshot digest.
   Stale source bytes are refused before Board IR conversion, while a stale snapshot is refused
   immediately after it; neither can reach route search, fill authority, DRC, or apply-token
@@ -60,6 +66,10 @@ All notable changes are documented here. The format follows
   revision that nonce was bound to.
 
 ### Changed
+
+- The KiCad IPC plugin README now documents the required copy into KiCad's configured PCB plugin
+  discovery directory. Installing `copper-mcp[kicad]` alone does not register the hardware-side
+  manifest or action, and the plugin remains intentionally outside the Python wheel.
 
 - `preview_route` accepts exactly one net selector: the existing private KiCad `net` name or a
   Circuit Scene `net_ref_id`. The MCP tool now advertises a closed two-variant input schema and a

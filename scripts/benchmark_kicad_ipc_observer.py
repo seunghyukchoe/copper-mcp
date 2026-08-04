@@ -45,6 +45,28 @@ class FutureVersionError(Exception):
     """Fake official-binding version error used by the fail-closed oracle."""
 
 
+_PRIVATE_OBJECT_MARKERS = (
+    "PRIVATE_IPC_NET_OBJECT",
+    "PRIVATE_IPC_FOOTPRINT_OBJECT",
+    "PRIVATE_IPC_PAD_OBJECT",
+    "PRIVATE_IPC_TRACK_OBJECT",
+    "PRIVATE_IPC_VIA_OBJECT",
+    "PRIVATE_IPC_ZONE_OBJECT",
+    "PRIVATE_IPC_SHAPE_OBJECT",
+    "PRIVATE_IPC_TEXT_OBJECT",
+)
+
+
+class _PrivateObject:
+    """Identifiable fake binding object used to detect accidental raw-object leakage."""
+
+    def __init__(self, marker: str) -> None:
+        self.marker = marker
+
+    def __repr__(self) -> str:
+        return self.marker
+
+
 class _FakeBoard:
     source = '(kicad_pcb (net 1 "BOARD_AUTHOR_TEXT"))'
 
@@ -52,28 +74,28 @@ class _FakeBoard:
         return self.source
 
     def get_nets(self) -> list[object]:
-        return [object(), object(), object()]
+        return [_PrivateObject(_PRIVATE_OBJECT_MARKERS[0]) for _ in range(3)]
 
     def get_footprints(self) -> list[object]:
-        return [object(), object()]
+        return [_PrivateObject(_PRIVATE_OBJECT_MARKERS[1]) for _ in range(2)]
 
     def get_pads(self) -> list[object]:
-        return [object() for _ in range(6)]
+        return [_PrivateObject(_PRIVATE_OBJECT_MARKERS[2]) for _ in range(6)]
 
     def get_tracks(self) -> list[object]:
-        return [object() for _ in range(4)]
+        return [_PrivateObject("PRIVATE_IPC_TRACK_OBJECT") for _ in range(4)]
 
     def get_vias(self) -> list[object]:
-        return [object()]
+        return [_PrivateObject("PRIVATE_IPC_VIA_OBJECT")]
 
     def get_zones(self) -> list[object]:
-        return [object()]
+        return [_PrivateObject("PRIVATE_IPC_ZONE_OBJECT")]
 
     def get_shapes(self) -> list[object]:
-        return [object() for _ in range(3)]
+        return [_PrivateObject("PRIVATE_IPC_SHAPE_OBJECT") for _ in range(3)]
 
     def get_text(self) -> list[object]:
-        return [object()]
+        return [_PrivateObject("PRIVATE_IPC_TEXT_OBJECT")]
 
     def get_dimensions(self) -> list[object]:
         return []
@@ -173,8 +195,14 @@ def _run(repetitions: int) -> dict[str, Any]:
     if len({_digest(document) for document in documents}) != 1:
         raise BenchmarkError("fake-client observations are not deterministic")
     document = documents[0]
-    if "BOARD_AUTHOR_TEXT" in json.dumps(document) or "get_as_string" in json.dumps(document):
+    serialized_response = json.dumps(document, sort_keys=True, separators=(",", ":"))
+    if "BOARD_AUTHOR_TEXT" in serialized_response or "get_as_string" in serialized_response:
         raise BenchmarkError("live observer leaked board content")
+    raw_object_content_returned = any(
+        marker in serialized_response for marker in _PRIVATE_OBJECT_MARKERS
+    )
+    if raw_object_content_returned:
+        raise BenchmarkError("live observer leaked a raw KiCad object")
     if document["read_only"] is not True or document["source"] != "kicad-ipc-live":
         raise BenchmarkError("live observer did not advertise its read-only source")
 
@@ -189,6 +217,19 @@ def _run(repetitions: int) -> dict[str, Any]:
         future_refusal = False
     if not future_refusal:
         raise BenchmarkError("future API was not refused by default")
+
+    class FalseVersionKiCad(_FakeKiCad):
+        def check_version(self) -> bool:
+            return False
+
+    try:
+        inspect_live_board(settings, client_factory=lambda **_: FalseVersionKiCad())
+    except KicadIpcVersionError:
+        false_version_refusal = True
+    else:
+        false_version_refusal = False
+    if not false_version_refusal:
+        raise BenchmarkError("false version check was not refused")
 
     with _TemporarySocketEnv("tcp://127.0.0.1:1"):
         try:
@@ -233,9 +274,11 @@ def _run(repetitions: int) -> dict[str, Any]:
             "board_bytes": document["board_bytes"],
             "object_counts": document["object_counts"],
             "future_api_default_refusals": int(future_refusal),
+            "false_version_default_refusals": int(false_version_refusal),
             "tcp_endpoint_refusals": int(tcp_refusal),
             "raw_board_content_returned": False,
-            "raw_object_content_returned": False,
+            "raw_object_content_returned": raw_object_content_returned,
+            "counts_derived_from_serialized_source": True,
         },
         "not_claimed": [
             "live-kicad-session-success",
@@ -279,6 +322,8 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     document = _run(args.repetitions)
+    run_id = _digest(document)
+    document = {"run_id": run_id, **document}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(_canonical_bytes(document) + b"\n")
     print(json.dumps(document, indent=2, sort_keys=True))
