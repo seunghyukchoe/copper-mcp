@@ -29,6 +29,7 @@ from copper_mcp.routing.jobs import (
     RoutingJobFailureCode,
     RoutingJobKind,
     RoutingJobLimits,
+    RoutingJobNotFoundError,
     RoutingJobSpec,
     RoutingJobStateError,
     RoutingJobStatus,
@@ -286,6 +287,35 @@ def test_executor_cancellation_exception_acknowledges_requested_cancel(tmp_path:
 
         result = worker.execute(spec.job_id, executor)
         assert result.status is RoutingJobStatus.CANCELLED
+
+
+def test_expired_cancelled_job_clears_worker_lease(tmp_path: Path) -> None:
+    _, spec = _candidate_and_spec()
+    clock = _FakeClock(0)
+    with RoutingJobStore(tmp_path / "cancelled-expired.sqlite3", ttl_ms=5) as store:
+        store.create(spec, now_ms=clock.now())
+        worker = RoutingJobWorker(
+            store,
+            limits=WorkerLimits(lease_ms=100),
+            clock=clock.now,
+        )
+
+        def executor(_probe: CancellationProbe) -> LayeredRouteCandidate:
+            lease = worker.active_lease
+            assert lease is not None
+            store.request_cancel(spec.job_id, expected_revision=lease.revision, now_ms=1)
+            clock.now_ms = 10
+            raise RoutingJobCancelledError()
+
+        with pytest.raises(RoutingJobNotFoundError):
+            worker.execute(spec.job_id, executor)
+        assert worker.active_lease is None
+
+        # The expired row can be recreated under the same content-addressed job ID, and this
+        # worker is no longer stranded behind the old in-memory claim.
+        store.create(spec, now_ms=11)
+        clock.now_ms = 11
+        assert worker.claim(spec.job_id).job_id == spec.job_id
 
 
 def test_probe_wait_uses_injected_clock_and_sleep(tmp_path: Path) -> None:

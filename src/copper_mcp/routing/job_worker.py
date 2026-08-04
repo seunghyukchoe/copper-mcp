@@ -319,21 +319,24 @@ class RoutingJobWorker:
         return completed
 
     def _resolve_publish_race(self, lease: RoutingJobLease) -> RoutingJobRecord:
-        record = self._store.get(lease.job_id, now_ms=self._now())
-        if record.status is RoutingJobStatus.CANCEL_REQUESTED:
-            result = self._store.acknowledge_cancel(
-                lease.job_id,
-                expected_revision=record.revision,
-                now_ms=self._now(),
-            )
+        try:
+            record = self._store.get(lease.job_id, now_ms=self._now())
+            if record.status is RoutingJobStatus.CANCEL_REQUESTED:
+                return self._store.acknowledge_cancel(
+                    lease.job_id,
+                    expected_revision=record.revision,
+                    now_ms=self._now(),
+                )
+            raise RoutingJobConflictError("routing candidate publication lost its CAS race")
+        finally:
+            # A race loser may also discover that the job expired between publication and lookup.
+            # Clear the in-memory lease even when the durable row is already gone, otherwise this
+            # worker remains permanently unavailable for later jobs.
             self._active = None
-            return result
-        self._active = None
-        raise RoutingJobConflictError("routing candidate publication lost its CAS race")
 
     def _cancel_or_expire(self, lease: RoutingJobLease) -> RoutingJobRecord:
-        record = self._store.get(lease.job_id, now_ms=self._now())
         try:
+            record = self._store.get(lease.job_id, now_ms=self._now())
             if self._now() >= lease.expires_at_ms:
                 if record.status is RoutingJobStatus.RUNNING:
                     result = self._store.fail(

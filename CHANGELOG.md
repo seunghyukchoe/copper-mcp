@@ -79,6 +79,10 @@ All notable changes are documented here. The format follows
   read-only miss. The boundary remains redacted and bounded; no routing or mutation authority is
   added.
 
+- Routing workers now clear their in-memory lease even when an expired job disappears during
+  cancellation acknowledgement or publish-race resolution. This prevents a worker from being
+  stranded after a bounded store miss and adds no retry or mutation authority.
+
 - Closed the latest routing review-bot boundary gaps: public scene references now carry only
   content-derived net identifiers; live IPC capture carries one cooperative operation deadline;
   job failures persist fixed typed diagnostics; candidate completion and manifests bind request
