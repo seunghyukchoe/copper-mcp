@@ -1,5 +1,5 @@
 {
-  "date_utc": "2026-08-04T22:45:32+00:00",
+  "date_utc": "2026-08-04T23:03:03+00:00",
   "environment": {
     "platform": "macOS-26.5.2-arm64-arm-64bit",
     "python": "3.12.13"
@@ -20,8 +20,8 @@
     "whole_board_drc_claim": false,
     "workspace_mutations": 0
   },
-  "run_id": "sha256:398b17f57e8525808e6ce3c3247327c76acd0155eb0d6f9679085cc3c3544c65",
+  "run_id": "sha256:c89e42b4a5a11861bb43f784ed18ca66251d994054a66319901ee989863da5ab",
   "schema": "copper-mcp/benchmark/layered-drc-preview/v1",
   "script": "scripts/benchmark_layered_drc_preview.py",
-  "source_commit": "896c88d9405cfed469d60d45e1b80fd9bdfad2ad"
+  "source_commit": "0c5b2a97c59a52e43f0ed48ca384267b6cc1f6d7"
 }

@@ -614,8 +614,8 @@ historical evidence; these runs were generated from the clean implementation com
 
 | Field | Recorded evidence |
 |---|---|
-| Run ID | `sha256:398b17f57e8525808e6ce3c3247327c76acd0155eb0d6f9679085cc3c3544c65` |
-| Date and commit | 2026-08-05; source commit `896c88d9405cfed469d60d45e1b80fd9bdfad2ad` before this uncommitted hardening slice |
+| Run ID | `sha256:c89e42b4a5a11861bb43f784ed18ca66251d994054a66319901ee989863da5ab` |
+| Date and commit | 2026-08-05; source commit `0c5b2a97c59a52e43f0ed48ca384267b6cc1f6d7` |
 | Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad not invoked by the benchmark |
 | Dataset | `tests/fixtures/route-candidate/two-pad.kicad_pcb`, fixture digest `sha256:5f88ebcf52cf8f1548990bdbdc1c52ac7a30f39c013366f79b161ec15e1caae2` |
 | Configuration | `copper-mcp/benchmark/layered-drc-preview/v1`; omitted-flag replay, clean fake authority, warning-only fake authority, and malformed authority through public `preview_layered_route` |
