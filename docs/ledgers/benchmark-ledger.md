@@ -74,6 +74,19 @@ not routing-quality or throughput claims.
 | Artifact | [`2026-08-04-coppertone-cffb67d.json`](../../benchmarks/results/board-ir/2026-08-04-coppertone-cffb67d.json) |
 | Interpretation | Current-contract replacement for B-002 after Board IR 0.2 made 26 footprint poses, pad ownership relationships, lock states, and supported courtyard geometry first-class snapshot content, changing the snapshot digest to `sha256:a3803f87e8c70f300c49f9c3a6f5167a4ad629ebc96a8878aed548591a37c79e`. B-001 and B-002 remain historical evidence. Instrumentation, one-host noise, and changed canonical work make this unsuitable as a general speedup claim. No routing, DRC, SI/PI, audio, DFM, cross-host, or fabricated-board conclusion may be drawn. |
 
+### B-006 — Placement 0.2 KiCad 10.0.5 courtyard oracle
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:4b9becb978c6af8669abbf56111de8ad26445d08e7d787c0e1b59c8a33e1e841` |
+| Date and commit | 2026-08-04 10:48:01 UTC; `2846cb757052f334e4446f28353d4833d1c3c4cd`; clean tracked tree, with one unrelated user-owned untracked handoff excluded before output |
+| Environment | Apple M3 Pro arm64 CPU; no accelerator; 38,654,705,664 physical bytes; macOS 26.5.2; Python 3.12.13; KiCad CLI 10.0.5 |
+| Dataset | Nine deterministic Apache-2.0 synthetic same-side rectangular relationship boards plus twelve deterministic Apache-2.0 tiny-cache boards generated in memory by the benchmark; no external boards, exclusions, network input, or train/test split; each tiny case repeated five times |
+| Configuration | Placement `0.2.0`; `kicad-10.0.5-rect-cache-v1`; generator SHA-256 `d5cde6ef3fa42d5d70236c47505d987bfcab61fe354b048cd67127796d0a626e`; 2,000,000 placement checks and 10-second placement deadline; fixed KiCad argv and 180-second per-run timeout in isolated state; `missing_courtyard` explicitly set to Error for the tiny matrix; CPU-only; no model, seed, training, or stochastic search |
+| Metrics | Placement 0.1 determinate coverage 0/9 → Placement 0.2 coverage 9/9; expected agreement 9/9; KiCad agreement 9/9; zero false positives and zero false negatives on the main matrix; tiny-cache agreement 12/12 with all five repetitions per case and zero unexpected violation types or unconnected items. Per-invocation KiCad runtime is recorded in the artifact but is not a performance claim; peak memory was not measured. Routing completion, hard route DRC, unrouted connections, vias, and length are not applicable; cleanup is not applicable because no candidate was applied. |
+| Artifact | [`2026-08-04-kicad-10.0.5-2846cb7.json`](../../benchmarks/results/placement/2026-08-04-kicad-10.0.5-2846cb7.json), file SHA-256 `0e912433ed51dd393314c49c86e9425c4c0cc71bf99c5aa7055e9dd3fee97d84` |
+| Interpretation | This is an exact compatibility result for the pinned rectangular, orthogonal, zero-clearance policy and the enumerated boundary matrix. It is not evidence for custom positive/negative `courtyard_clearance`, missing-courtyard approval, general/mixed/back-side topology, a full placement DRC binding, routing, apply, throughput, memory scaling, electrical/audio behavior, DFM, fabrication, or general equivalence with KiCad. The 10,051 nm per-axis floor is a conservative supported-subset gate around the reproduced orientation-sensitive tiny-cache band. |
+
 ## Routing correctness baselines
 
 ### B-003 — Synthetic two-pin A*/Dijkstra optimal-cost comparison

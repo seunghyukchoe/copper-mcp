@@ -1,0 +1,586 @@
+{
+  "benchmark": "placement-kicad-courtyard-oracle-v1",
+  "cases": [
+    {
+      "case": "disjoint_1mm",
+      "checks_used": 18,
+      "copper_collision": false,
+      "expected_collision": false,
+      "kicad_collision": false,
+      "kicad_courtyard_violations": 0,
+      "kicad_elapsed_ns": 527183375,
+      "second_origin_x_nm": 31000000,
+      "source_sha256": "ccd17cbbaa6dcdb99681ca276de385687d1d77569fd9ada0de29d5f88c4656bd"
+    },
+    {
+      "case": "gap_1nm",
+      "checks_used": 18,
+      "copper_collision": false,
+      "expected_collision": false,
+      "kicad_collision": false,
+      "kicad_courtyard_violations": 0,
+      "kicad_elapsed_ns": 381338334,
+      "second_origin_x_nm": 30000001,
+      "source_sha256": "780ea7a9e979ea0080128c10553f50d216f36f35671376a02a82e2a157dca69a"
+    },
+    {
+      "case": "edge_touch",
+      "checks_used": 18,
+      "copper_collision": false,
+      "expected_collision": false,
+      "kicad_collision": false,
+      "kicad_courtyard_violations": 0,
+      "kicad_elapsed_ns": 363728792,
+      "second_origin_x_nm": 30000000,
+      "source_sha256": "a94b7fdfa3526891034a9c5a767948ca8eabc1f8bc9454e816dc1654a0fece06"
+    },
+    {
+      "case": "penetration_1nm",
+      "checks_used": 18,
+      "copper_collision": false,
+      "expected_collision": false,
+      "kicad_collision": false,
+      "kicad_courtyard_violations": 0,
+      "kicad_elapsed_ns": 386002875,
+      "second_origin_x_nm": 29999999,
+      "source_sha256": "eee867b5faedd04410832aa726cd8d4cf68804be1340ad7066f5db3b0488c17c"
+    },
+    {
+      "case": "penetration_9999nm",
+      "checks_used": 18,
+      "copper_collision": false,
+      "expected_collision": false,
+      "kicad_collision": false,
+      "kicad_courtyard_violations": 0,
+      "kicad_elapsed_ns": 350940209,
+      "second_origin_x_nm": 29990001,
+      "source_sha256": "d20db5b1bb02bebd6c80c74c5d172a9b16252ca95fbd1e5d87df65d48308535b"
+    },
+    {
+      "case": "penetration_10000nm",
+      "checks_used": 19,
+      "copper_collision": true,
+      "expected_collision": true,
+      "kicad_collision": true,
+      "kicad_courtyard_violations": 1,
+      "kicad_elapsed_ns": 448839750,
+      "second_origin_x_nm": 29990000,
+      "source_sha256": "45d5c73beb9a9c718a7db338621af0497c021499578145332d3ec07ca5be236c"
+    },
+    {
+      "case": "penetration_10001nm",
+      "checks_used": 19,
+      "copper_collision": true,
+      "expected_collision": true,
+      "kicad_collision": true,
+      "kicad_courtyard_violations": 1,
+      "kicad_elapsed_ns": 438102250,
+      "second_origin_x_nm": 29989999,
+      "source_sha256": "d51fef12d8a7d6445b59a29e60a9d17367aed18983420c09f1965a3b2aeecff9"
+    },
+    {
+      "case": "overlap_1mm",
+      "checks_used": 19,
+      "copper_collision": true,
+      "expected_collision": true,
+      "kicad_collision": true,
+      "kicad_courtyard_violations": 1,
+      "kicad_elapsed_ns": 415607709,
+      "second_origin_x_nm": 29000000,
+      "source_sha256": "537e31eacaff5fadde7e6096c1aaa13814f1cec486c9a2717da4f2480960269e"
+    },
+    {
+      "case": "coincident",
+      "checks_used": 19,
+      "copper_collision": true,
+      "expected_collision": true,
+      "kicad_collision": true,
+      "kicad_courtyard_violations": 1,
+      "kicad_elapsed_ns": 434504250,
+      "second_origin_x_nm": 20000000,
+      "source_sha256": "3ad7d8bda993b0ce85b83cba949e9f7aa9143ca5a65ad00cce6e0d275ed4fa1f"
+    }
+  ],
+  "commit": "2846cb757052f334e4446f28353d4833d1c3c4cd",
+  "courtyard_policy": "kicad-10.0.5-rect-cache-v1",
+  "environment": {
+    "accelerator": "none (CPU-only)",
+    "kicad_cli": "/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli",
+    "kicad_version": "10.0.5",
+    "machine": "arm64",
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "git": {
+    "tracked_dirty": false,
+    "untracked_file_count_before_output": 1
+  },
+  "metrics": {
+    "baseline_determinate_cases_placement_0_1": 0,
+    "current_determinate_cases": 9,
+    "expected_matches": 9,
+    "false_negatives_vs_kicad": 0,
+    "false_positives_vs_kicad": 0,
+    "kicad_matches": 9,
+    "tiny_cache_case_matches": 12,
+    "tiny_cache_repetitions_per_case": 5,
+    "tiny_cache_total_cases": 12,
+    "total_cases": 9
+  },
+  "placement_version": "0.2.0",
+  "recorded_at_utc": "2026-08-04T10:48:01+00:00",
+  "run_id": "sha256:4b9becb978c6af8669abbf56111de8ad26445d08e7d787c0e1b59c8a33e1e841",
+  "script_sha256": "d5cde6ef3fa42d5d70236c47505d987bfcab61fe354b048cd67127796d0a626e",
+  "tiny_cache_cases": [
+    {
+      "case": "tiny_square_1nm",
+      "expected_violation_types": [
+        "missing_courtyard",
+        "missing_courtyard"
+      ],
+      "height_nm": 1,
+      "kicad_elapsed_ns": [
+        438502292,
+        441407750,
+        422444625,
+        431807125,
+        431212000
+      ],
+      "observed_violation_types": [
+        [
+          "missing_courtyard",
+          "missing_courtyard"
+        ],
+        [
+          "missing_courtyard",
+          "missing_courtyard"
+        ],
+        [
+          "missing_courtyard",
+          "missing_courtyard"
+        ],
+        [
+          "missing_courtyard",
+          "missing_courtyard"
+        ],
+        [
+          "missing_courtyard",
+          "missing_courtyard"
+        ]
+      ],
+      "repetitions": 5,
+      "source_sha256": "c36852526da4a6b3012a7bcda02283608a9d3027f1483293f32ea47909a34cb2",
+      "unconnected_items": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "width_nm": 1
+    },
+    {
+      "case": "tiny_square_10000nm",
+      "expected_violation_types": [
+        "missing_courtyard",
+        "missing_courtyard"
+      ],
+      "height_nm": 10000,
+      "kicad_elapsed_ns": [
+        416100791,
+        527383667,
+        449315250,
+        424744709,
+        426541959
+      ],
+      "observed_violation_types": [
+        [
+          "missing_courtyard",
+          "missing_courtyard"
+        ],
+        [
+          "missing_courtyard",
+          "missing_courtyard"
+        ],
+        [
+          "missing_courtyard",
+          "missing_courtyard"
+        ],
+        [
+          "missing_courtyard",
+          "missing_courtyard"
+        ],
+        [
+          "missing_courtyard",
+          "missing_courtyard"
+        ]
+      ],
+      "repetitions": 5,
+      "source_sha256": "4ff277313f638a15becfcab955a7ee8430a1ec40f2f889e1344008f08adf7fd1",
+      "unconnected_items": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "width_nm": 10000
+    },
+    {
+      "case": "tiny_square_10001nm",
+      "expected_violation_types": [],
+      "height_nm": 10001,
+      "kicad_elapsed_ns": [
+        354369250,
+        376189333,
+        367238417,
+        367040208,
+        370079458
+      ],
+      "observed_violation_types": [
+        [],
+        [],
+        [],
+        [],
+        []
+      ],
+      "repetitions": 5,
+      "source_sha256": "ff8f7a7405a50a5f9ee740a4d6e80577e7966bf3b236c96a0bebc4fa449da744",
+      "unconnected_items": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "width_nm": 10001
+    },
+    {
+      "case": "tiny_square_10050nm",
+      "expected_violation_types": [],
+      "height_nm": 10050,
+      "kicad_elapsed_ns": [
+        369615792,
+        369562250,
+        364750958,
+        357854125,
+        365701417
+      ],
+      "observed_violation_types": [
+        [],
+        [],
+        [],
+        [],
+        []
+      ],
+      "repetitions": 5,
+      "source_sha256": "55a173ddc778bb004dba21863ebe93e03bd5ba50ec1b8bd8cca590cfdbd3b314",
+      "unconnected_items": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "width_nm": 10050
+    },
+    {
+      "case": "tiny_square_10051nm",
+      "expected_violation_types": [
+        "courtyards_overlap"
+      ],
+      "height_nm": 10051,
+      "kicad_elapsed_ns": [
+        466813458,
+        443844500,
+        423329375,
+        426805792,
+        427096291
+      ],
+      "observed_violation_types": [
+        [
+          "courtyards_overlap"
+        ],
+        [
+          "courtyards_overlap"
+        ],
+        [
+          "courtyards_overlap"
+        ],
+        [
+          "courtyards_overlap"
+        ],
+        [
+          "courtyards_overlap"
+        ]
+      ],
+      "repetitions": 5,
+      "source_sha256": "98ec3878b9424bb40e017fa7bf791ce5e5478e0e33cb0884b83c1912a3490ee0",
+      "unconnected_items": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "width_nm": 10051
+    },
+    {
+      "case": "tiny_xshort_10050nm",
+      "expected_violation_types": [],
+      "height_nm": 1000000,
+      "kicad_elapsed_ns": [
+        364326750,
+        362934583,
+        350327125,
+        367818000,
+        365473375
+      ],
+      "observed_violation_types": [
+        [],
+        [],
+        [],
+        [],
+        []
+      ],
+      "repetitions": 5,
+      "source_sha256": "05486e95e837bb62920a10cd9180ca39615be2745392fcffa0ada5625dab314b",
+      "unconnected_items": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "width_nm": 10050
+    },
+    {
+      "case": "tiny_xshort_10051nm",
+      "expected_violation_types": [
+        "courtyards_overlap"
+      ],
+      "height_nm": 1000000,
+      "kicad_elapsed_ns": [
+        411007083,
+        478163417,
+        449432333,
+        437209291,
+        459993542
+      ],
+      "observed_violation_types": [
+        [
+          "courtyards_overlap"
+        ],
+        [
+          "courtyards_overlap"
+        ],
+        [
+          "courtyards_overlap"
+        ],
+        [
+          "courtyards_overlap"
+        ],
+        [
+          "courtyards_overlap"
+        ]
+      ],
+      "repetitions": 5,
+      "source_sha256": "eb4eaca71fe12a031c24fbbe957289388ecc5d6c163feda1511133b9da32c7bd",
+      "unconnected_items": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "width_nm": 10051
+    },
+    {
+      "case": "tiny_yshort_10000nm",
+      "expected_violation_types": [
+        "missing_courtyard",
+        "missing_courtyard"
+      ],
+      "height_nm": 10000,
+      "kicad_elapsed_ns": [
+        441482083,
+        426818750,
+        412930334,
+        414472500,
+        429812792
+      ],
+      "observed_violation_types": [
+        [
+          "missing_courtyard",
+          "missing_courtyard"
+        ],
+        [
+          "missing_courtyard",
+          "missing_courtyard"
+        ],
+        [
+          "missing_courtyard",
+          "missing_courtyard"
+        ],
+        [
+          "missing_courtyard",
+          "missing_courtyard"
+        ],
+        [
+          "missing_courtyard",
+          "missing_courtyard"
+        ]
+      ],
+      "repetitions": 5,
+      "source_sha256": "9f2328743f4a5ee9be89a6fc129ef561856927ba15d849739a8a3f89ea2e7a44",
+      "unconnected_items": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "width_nm": 1000000
+    },
+    {
+      "case": "tiny_yshort_10001nm",
+      "expected_violation_types": [],
+      "height_nm": 10001,
+      "kicad_elapsed_ns": [
+        357385833,
+        368006916,
+        356577458,
+        367877417,
+        365631709
+      ],
+      "observed_violation_types": [
+        [],
+        [],
+        [],
+        [],
+        []
+      ],
+      "repetitions": 5,
+      "source_sha256": "6f43deb00fcd6f7b30f371a48af944265b7b171d4dad61017dc7fc0c7f4122ac",
+      "unconnected_items": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "width_nm": 1000000
+    },
+    {
+      "case": "tiny_yshort_10031nm",
+      "expected_violation_types": [],
+      "height_nm": 10031,
+      "kicad_elapsed_ns": [
+        357513292,
+        356708334,
+        409806250,
+        380042375,
+        369790375
+      ],
+      "observed_violation_types": [
+        [],
+        [],
+        [],
+        [],
+        []
+      ],
+      "repetitions": 5,
+      "source_sha256": "83d0634d194f5062844e3367c5d43f66a5504e39100b1a082dc322abb382a1a0",
+      "unconnected_items": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "width_nm": 1000000
+    },
+    {
+      "case": "tiny_yshort_10037nm",
+      "expected_violation_types": [
+        "courtyards_overlap"
+      ],
+      "height_nm": 10037,
+      "kicad_elapsed_ns": [
+        428067667,
+        413295583,
+        513418583,
+        447755542,
+        416902708
+      ],
+      "observed_violation_types": [
+        [
+          "courtyards_overlap"
+        ],
+        [
+          "courtyards_overlap"
+        ],
+        [
+          "courtyards_overlap"
+        ],
+        [
+          "courtyards_overlap"
+        ],
+        [
+          "courtyards_overlap"
+        ]
+      ],
+      "repetitions": 5,
+      "source_sha256": "318aba5b0748f92f1a64311cbfe5aa81f502bf6f7a9ed83dbd02f6de1d5390d5",
+      "unconnected_items": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "width_nm": 1000000
+    },
+    {
+      "case": "tiny_yshort_10051nm",
+      "expected_violation_types": [
+        "courtyards_overlap"
+      ],
+      "height_nm": 10051,
+      "kicad_elapsed_ns": [
+        434628042,
+        430793708,
+        415298625,
+        416781583,
+        422860500
+      ],
+      "observed_violation_types": [
+        [
+          "courtyards_overlap"
+        ],
+        [
+          "courtyards_overlap"
+        ],
+        [
+          "courtyards_overlap"
+        ],
+        [
+          "courtyards_overlap"
+        ],
+        [
+          "courtyards_overlap"
+        ]
+      ],
+      "repetitions": 5,
+      "source_sha256": "04f8b0525f7351adecbd9bbdab4408c94633af0641bfbe29120d9dbc106f1f47",
+      "unconnected_items": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "width_nm": 1000000
+    }
+  ]
+}
