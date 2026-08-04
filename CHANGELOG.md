@@ -23,7 +23,8 @@ All notable changes are documented here. The format follows
   surface and does not mutate an open document.
 - KiCad IPC version validation now fails closed when the official binding returns a false result.
   Observer counts come from the captured serialization rather than mutable per-object getters,
-  and a second serialization must match before the revision is accepted. The wrapper still
+  count only direct board-level net declarations, include circular graphics, and require a second
+  serialization to match before the revision is accepted. The wrapper still
   allocates its complete response before Python can enforce the size ceiling; this residual API
   limitation is documented, while bounded parsing and removal of extra collection materialization
   reduce avoidable memory exposure.

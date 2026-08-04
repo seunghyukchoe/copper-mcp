@@ -39,7 +39,7 @@ _COUNT_NAMES = (
     "dimensions",
     "groups",
 )
-_SHAPE_HEADS = {"gr_line", "gr_rect", "gr_arc", "gr_poly", "gr_curve"}
+_SHAPE_HEADS = {"gr_line", "gr_rect", "gr_arc", "gr_poly", "gr_curve", "gr_circle"}
 
 
 class KicadIpcError(RuntimeError):
@@ -158,12 +158,12 @@ def _count_serialized_items(source: bytes, max_bytes: int) -> dict[str, int]:
             "KiCad board serialization is not a bounded S-expression"
         ) from error
     counts = dict.fromkeys(_COUNT_NAMES, 0)
-    stack: list[SExpr] = [root]
+    stack: list[tuple[SExpr, bool]] = [(root, False)]
     while stack:
-        expression = stack.pop()
+        expression, is_top_level_child = stack.pop()
         head = expression.head
         name: str | None = None
-        if head == "net":
+        if head == "net" and is_top_level_child:
             name = "nets"
         elif head == "footprint":
             name = "footprints"
@@ -187,7 +187,9 @@ def _count_serialized_items(source: bytes, max_bytes: int) -> dict[str, int]:
             counts[name] += 1
             if counts[name] > _MAX_IPC_ITEMS:
                 raise KicadIpcPayloadError("serialized object count exceeds the observation budget")
-        stack.extend(item for item in expression.items if isinstance(item, SExpr))
+        stack.extend(
+            (item, expression is root) for item in expression.items if isinstance(item, SExpr)
+        )
     return counts
 
 

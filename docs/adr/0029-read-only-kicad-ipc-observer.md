@@ -26,8 +26,9 @@ Add `copper_mcp.kicad_ipc.inspect_live_board` and the read-only MCP tool `inspec
 The adapter lazily imports the optional `kicad-python` package, accepts only local IPC endpoints,
 uses a bounded request timeout, checks the binding version against KiCad, and obtains one live
 board serialization. Object counts are derived from that captured serialization rather than ten
-mutable collection getters, then a second serialization must match byte-for-byte before the
-summary is returned. The response contains only numeric versions, a SHA-256 board digest, byte
+mutable collection getters, with net declarations restricted to direct board children and all
+supported graphical primitives classified consistently. A second serialization must match
+byte-for-byte before the summary is returned. The response contains only numeric versions, a SHA-256 board digest, byte
 count, object counts, endpoint class, and explicit read-only/source markers. It never returns the
 serialized board or board-controlled strings.
 

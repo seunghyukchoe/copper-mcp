@@ -68,7 +68,10 @@ class _PrivateObject:
 
 
 class _FakeBoard:
-    source = '(kicad_pcb (net 1 "BOARD_AUTHOR_TEXT"))'
+    source = (
+        '(kicad_pcb (net 1 "BOARD_AUTHOR_TEXT") '
+        '(footprint "F" (pad "1" (net 1 "BOARD_AUTHOR_TEXT"))) (gr_circle))'
+    )
 
     def get_as_string(self) -> str:
         return self.source
@@ -205,6 +208,8 @@ def _run(repetitions: int) -> dict[str, Any]:
         raise BenchmarkError("live observer leaked a raw KiCad object")
     if document["read_only"] is not True or document["source"] != "kicad-ipc-live":
         raise BenchmarkError("live observer did not advertise its read-only source")
+    if document["object_counts"]["nets"] != 1 or document["object_counts"]["shapes"] != 1:
+        raise BenchmarkError("serialized top-level object counts are incorrect")
 
     def future_factory(**_: object) -> _FakeKiCad:
         return _FakeKiCad(future=True)

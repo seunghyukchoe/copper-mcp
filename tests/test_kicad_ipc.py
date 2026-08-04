@@ -158,8 +158,9 @@ class KicadIpcTests(unittest.TestCase):
 
     def test_object_counts_follow_serialized_revision_not_mutable_getters(self) -> None:
         source = (
-            '(kicad_pcb (net 1 "N") (footprint "F" (pad "1")) (segment) (via) '
-            '(zone) (gr_rect) (gr_text "label") (dimension) (group))'
+            '(kicad_pcb (net 1 "N") (footprint "F" (pad "1" (net 1 "N"))) '
+            '(segment) (via) (zone) (gr_rect) (gr_circle) (gr_text "label") '
+            "(dimension) (group))"
         )
         observation = inspect_live_board(
             _settings(),
@@ -173,7 +174,7 @@ class KicadIpcTests(unittest.TestCase):
                 "groups": 1,
                 "nets": 1,
                 "pads": 1,
-                "shapes": 1,
+                "shapes": 2,
                 "text": 1,
                 "tracks": 1,
                 "vias": 1,
