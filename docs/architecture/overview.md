@@ -89,6 +89,14 @@ and quarantined board-author text keep the observation explicit; an optional nor
 an advisory orientation aid, never geometry authority. It does not yet join Board IR with logical
 Circuit Intent, so that semantic fusion remains a north star rather than a current claim.
 
+Observed net identities are directly actionable by `preview_route`: the caller copies a scene
+`net_id` together with that scene's board revision and snapshot digest, and the router uses the
+identity without exposing or reconstructing the private KiCad net name. Both revisions are checked
+before candidate work, so a stale observation cannot silently route against unseen state. The MCP
+surface advertises this as an exclusive, closed request union and returns a fully typed structured
+result. This closes one observation-to-action edge; it does not yet provide a live-editor observer,
+policy solver, or autonomous whole-board loop.
+
 Placement preview resolves its subjects from the same Board IR snapshot and refuses source bytes
 whose revision does not match. The current KiCad footprint subset is deliberately strict: front
 side, orthogonal rotations, and unfilled `fp_rect` geometry on matching `F.CrtYd`; unsupported

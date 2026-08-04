@@ -7,15 +7,19 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
+from jsonschema import Draft202012Validator
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ResourceLink
 
 import copper_mcp.mcp_server as _server
+from copper_mcp.adapters import net_id_for_name
+from copper_mcp.apply.tokens import ApplyTokenAuthority
 from copper_mcp.circuit_intent_service import build_schematic_from_content
 from copper_mcp.mcp_server import mcp
 from copper_mcp.scene_render import SceneRenderStore
@@ -382,13 +386,6 @@ class SceneToolSurfaceTests(unittest.TestCase):
         self.assertIn("annotations", schema["properties"])
         self.assertIn("truncation", schema["properties"])
 
-        # Contrast with a dict-returning tool: the SDK emits a schema either way, but only a
-        # typed return makes it say anything. This is a gap in those tools, not in the SDK.
-        tools = asyncio.run(mcp.list_tools())
-        loose = next(tool for tool in tools if tool.name == "preview_route")
-        assert isinstance(loose.output_schema, dict)
-        self.assertNotIn("properties", loose.output_schema)
-
     def test_the_scene_tool_is_annotated_read_only(self) -> None:
         scene = self._tool()
         self.assertIsNotNone(scene.annotations)
@@ -439,7 +436,433 @@ class SceneToolSurfaceTests(unittest.TestCase):
         self.assertEqual(structured["annotations"], [])
 
 
+class RouteToolSurfaceTests(unittest.TestCase):
+    """Circuit Scene references must remain actionable across the actual MCP boundary."""
+
+    def _tool(self) -> object:
+        tools = asyncio.run(mcp.list_tools())
+        return next(tool for tool in tools if tool.name == "preview_route")
+
+    def test_route_tool_advertises_exclusive_closed_selectors_and_closed_output(self) -> None:
+        route = self._tool()
+        self.assertIs(route.input_schema["additionalProperties"], False)
+        request_schema = route.input_schema["properties"]["request"]
+        variants = request_schema["anyOf"]
+        self.assertEqual(len(variants), 2)
+        by_name = next(variant for variant in variants if "net" in variant["properties"])
+        by_reference = next(
+            variant for variant in variants if "net_ref_id" in variant["properties"]
+        )
+        self.assertIs(by_name["additionalProperties"], False)
+        self.assertIs(by_reference["additionalProperties"], False)
+        self.assertNotIn("net_ref_id", by_name["properties"])
+        self.assertNotIn("net", by_reference["properties"])
+        self.assertEqual(
+            {
+                "board",
+                "layer",
+                "constraints",
+                "net_ref_id",
+                "expect_board_revision",
+                "expect_snapshot_digest",
+            },
+            set(by_reference["required"]),
+        )
+        constraints_schema = by_reference["properties"]["constraints"]
+        self.assertIn(
+            "strictly smaller",
+            constraints_schema["properties"]["via_drill_nm"]["description"],
+        )
+
+        output = route.output_schema
+        assert isinstance(output, dict)
+        definitions = output["$defs"]
+        assert isinstance(definitions, dict)
+        response_fields = {
+            "schema_version",
+            "status",
+            "board_path",
+            "board_revision",
+            "snapshot_digest",
+            "request",
+            "candidate",
+            "connection",
+            "diagnostic",
+            "conversion_diagnostic_counts",
+            "drc_evidence",
+            "apply_token",
+            "fill_authority",
+        }
+        response_variants = [_resolve_local_ref(output, variant) for variant in output["anyOf"]]
+        self.assertEqual(len(response_variants), 5)
+        for variant in response_variants:
+            _assert_closed_object(variant, response_fields)
+        self.assertEqual(
+            sorted(variant["properties"]["status"]["const"] for variant in response_variants),
+            [
+                "already_connected",
+                "not_routed",
+                "not_routed",
+                "routed",
+                "unsupported_board",
+            ],
+        )
+        _assert_closed_object(
+            definitions["RouteCandidateContract"],
+            {
+                "candidate_id",
+                "base_revision",
+                "start_pad_id",
+                "end_pad_id",
+                "router_version",
+                "policy",
+                "seed",
+                "pad_count",
+                "ordering_policy",
+                "patch",
+                "cost",
+                "metrics",
+                "settings",
+            },
+        )
+        _assert_closed_object(
+            definitions["RoutePatchContract"], {"net_id", "layer_id", "width_nm", "paths"}
+        )
+
+    def test_route_tool_is_annotated_read_only(self) -> None:
+        route = self._tool()
+        self.assertIsNotNone(route.annotations)
+        assert route.annotations is not None
+        self.assertIs(route.annotations.read_only_hint, True)
+        self.assertIs(route.annotations.destructive_hint, False)
+        # The route geometry is deterministic, but include_apply_token may mint a fresh
+        # destructive capability, so the tool-level annotation must be conservative.
+        self.assertIs(route.annotations.idempotent_hint, False)
+        self.assertIs(route.annotations.open_world_hint, False)
+
+    def test_route_tool_rejects_invalid_unicode_without_leaking_an_internal_error(self) -> None:
+        constraints = {
+            "clearance_nm": 250_000,
+            "track_width_nm": 250_000,
+            "via_diameter_nm": 800_000,
+            "via_drill_nm": 400_000,
+        }
+        for field, value in (
+            ("board", "bad\ud800board.kicad_pcb"),
+            ("net", "bad\ud800net"),
+        ):
+            request = {
+                "board": "board.kicad_pcb",
+                "net": "AUDIO",
+                "layer": "F.Cu",
+                "constraints": constraints,
+            }
+            request[field] = value
+            with self.subTest(field=field), self.assertRaises(ToolError) as caught:
+                asyncio.run(mcp.call_tool("preview_route", {"request": request}))
+            message = str(caught.exception)
+            self.assertIn("valid Unicode", message)
+            self.assertNotIn("UnicodeEncodeError", message)
+
+    def test_observed_audio_net_routes_by_reference_with_hidden_name_equivalence(self) -> None:
+        board = ROOT / "benchmarks" / "audio" / "fixtures" / "rc-low-pass-routing-v1.kicad_pcb"
+        constraints = {
+            "clearance_nm": 250_000,
+            "track_width_nm": 250_000,
+            "via_diameter_nm": 800_000,
+            "via_drill_nm": 400_000,
+        }
+        settings = replace(_server._SETTINGS, workspace=board.parent.resolve())
+        before = board.read_bytes()
+        with patch.object(_server, "_SETTINGS", settings):
+            scene_result = asyncio.run(
+                mcp.call_tool(
+                    "observe_board_scene",
+                    {
+                        "request": {
+                            "board": board.name,
+                            "constraints": constraints,
+                            "region": {
+                                "min_x_nm": 0,
+                                "min_y_nm": 0,
+                                "max_x_nm": 100_000_000,
+                                "max_y_nm": 100_000_000,
+                            },
+                        }
+                    },
+                )
+            )
+            scene = scene_result.structured_content
+            assert isinstance(scene, dict)
+            target_ref = net_id_for_name("AUDIO_IN")
+            observed_refs = {pad["geometry"]["net_id"] for pad in scene["static"]["pads"]}
+            self.assertIn(target_ref, observed_refs)
+            reference_result = asyncio.run(
+                mcp.call_tool(
+                    "preview_route",
+                    {
+                        "request": {
+                            "board": board.name,
+                            "net_ref_id": target_ref,
+                            "expect_board_revision": scene["board_revision"],
+                            "expect_snapshot_digest": scene["snapshot_digest"],
+                            "layer": "F.Cu",
+                            "constraints": constraints,
+                            "seed": 23,
+                        }
+                    },
+                )
+            )
+            oracle_result = asyncio.run(
+                mcp.call_tool(
+                    "preview_route",
+                    {
+                        "request": {
+                            "board": board.name,
+                            "net": "AUDIO_IN",
+                            "layer": "F.Cu",
+                            "constraints": constraints,
+                            "seed": 23,
+                        }
+                    },
+                )
+            )
+            stale_result = asyncio.run(
+                mcp.call_tool(
+                    "preview_route",
+                    {
+                        "request": {
+                            "board": board.name,
+                            "net_ref_id": target_ref,
+                            "expect_board_revision": f"sha256:{'0' * 64}",
+                            "expect_snapshot_digest": scene["snapshot_digest"],
+                            "layer": "F.Cu",
+                            "constraints": constraints,
+                            "seed": 23,
+                        }
+                    },
+                )
+            )
+
+        self.assertFalse(reference_result.is_error)
+        referenced = reference_result.structured_content
+        oracle = oracle_result.structured_content
+        assert isinstance(referenced, dict)
+        assert isinstance(oracle, dict)
+        self.assertEqual(referenced["status"], "routed")
+        self.assertEqual(referenced["candidate"], oracle["candidate"])
+        self.assertEqual(referenced["candidate"]["patch"]["net_id"], target_ref)
+        self.assertNotIn("net", referenced["request"])
+        self.assertEqual(referenced["request"]["net_ref_id"], target_ref)
+        stale = stale_result.structured_content
+        assert isinstance(stale, dict)
+        self.assertEqual(stale["status"], "not_routed")
+        self.assertEqual(stale["diagnostic"]["code"], "stale_revision")
+        self.assertIsNone(stale["snapshot_digest"])
+        output_schema = self._tool().output_schema
+        assert isinstance(output_schema, dict)
+        self.assertFalse(list(Draft202012Validator(output_schema).iter_errors(referenced)))
+        contradictory = json.loads(json.dumps(referenced))
+        contradictory["status"] = "unsupported_board"
+        self.assertTrue(list(Draft202012Validator(output_schema).iter_errors(contradictory)))
+        self.assertEqual(board.read_bytes(), before)
+
+    def test_route_mcp_validates_connected_and_unsupported_status_variants(self) -> None:
+        fixture_root = ROOT / "tests" / "fixtures" / "route-candidate"
+        constraints = {
+            "clearance_nm": 250_000,
+            "track_width_nm": 250_000,
+            "via_diameter_nm": 800_000,
+            "via_drill_nm": 400_000,
+        }
+        settings = replace(_server._SETTINGS, workspace=fixture_root.resolve())
+        with patch.object(_server, "_SETTINGS", settings):
+            connected_result = asyncio.run(
+                mcp.call_tool(
+                    "preview_route",
+                    {
+                        "request": {
+                            "board": "connected-net.kicad_pcb",
+                            "net": "AUDIO",
+                            "layer": "F.Cu",
+                            "constraints": constraints,
+                        }
+                    },
+                )
+            )
+        connected = connected_result.structured_content
+        assert isinstance(connected, dict)
+        self.assertEqual(connected["status"], "already_connected")
+        self.assertIsNotNone(connected["connection"])
+
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            unsupported = (
+                (fixture_root / "two-pad.kicad_pcb")
+                .read_bytes()
+                .replace(b'(layer "Edge.Cuts")', b'(layer "F.SilkS")')
+            )
+            (workspace / "unsupported.kicad_pcb").write_bytes(unsupported)
+            settings = replace(_server._SETTINGS, workspace=workspace.resolve())
+            with patch.object(_server, "_SETTINGS", settings):
+                unsupported_result = asyncio.run(
+                    mcp.call_tool(
+                        "preview_route",
+                        {
+                            "request": {
+                                "board": "unsupported.kicad_pcb",
+                                "net": "AUDIO",
+                                "layer": "F.Cu",
+                                "constraints": constraints,
+                            }
+                        },
+                    )
+                )
+        unsupported_document = unsupported_result.structured_content
+        assert isinstance(unsupported_document, dict)
+        self.assertEqual(unsupported_document["status"], "unsupported_board")
+        self.assertTrue(unsupported_document["conversion_diagnostic_counts"])
+
+    def test_apply_token_calls_are_capability_minting_not_idempotent(self) -> None:
+        fixture_root = ROOT / "tests" / "fixtures" / "route-candidate"
+        constraints = {
+            "clearance_nm": 250_000,
+            "track_width_nm": 250_000,
+            "via_diameter_nm": 800_000,
+            "via_drill_nm": 400_000,
+        }
+        settings = replace(
+            _server._SETTINGS,
+            workspace=fixture_root.resolve(),
+            allow_apply=True,
+        )
+        arguments = {
+            "request": {
+                "board": "two-pad.kicad_pcb",
+                "net": "AUDIO",
+                "layer": "F.Cu",
+                "constraints": constraints,
+                "include_apply_token": True,
+            }
+        }
+        with (
+            patch.object(_server, "_SETTINGS", settings),
+            patch.object(_server, "_APPLY_TOKENS", ApplyTokenAuthority()),
+        ):
+            first_result = asyncio.run(mcp.call_tool("preview_route", arguments))
+            second_result = asyncio.run(mcp.call_tool("preview_route", arguments))
+
+        first = first_result.structured_content
+        second = second_result.structured_content
+        assert isinstance(first, dict)
+        assert isinstance(second, dict)
+        self.assertEqual(first["candidate"], second["candidate"])
+        self.assertIsNotNone(first["apply_token"])
+        self.assertIsNotNone(second["apply_token"])
+        self.assertNotEqual(first["apply_token"], second["apply_token"])
+
+    def test_route_relational_constraint_is_documented_and_enforced(self) -> None:
+        with self.assertRaises(ToolError) as caught:
+            asyncio.run(
+                mcp.call_tool(
+                    "preview_route",
+                    {
+                        "request": {
+                            "board": "board.kicad_pcb",
+                            "net": "AUDIO",
+                            "layer": "F.Cu",
+                            "constraints": {
+                                "clearance_nm": 250_000,
+                                "track_width_nm": 250_000,
+                                "via_diameter_nm": 400_000,
+                                "via_drill_nm": 400_000,
+                            },
+                        }
+                    },
+                )
+            )
+        self.assertIn("constraints are invalid", str(caught.exception))
+
+    def test_unknown_route_wrapper_fields_are_rejected_without_echo(self) -> None:
+        secret = "SECRET_ROUTE_WRAPPER"
+        with self.assertRaises(ToolError) as caught:
+            asyncio.run(mcp.call_tool("preview_route", {"request": {}, secret: 1}))
+        self.assertNotIn(secret, str(caught.exception))
+
+
 REAL_KICAD_CLI = Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli")
+
+
+@unittest.skipUnless(REAL_KICAD_CLI.is_file(), "KiCad CLI is not installed")
+class RouteRealKiCadOutputTests(unittest.TestCase):
+    """Status-specific MCP output must retain authoritative KiCad evidence."""
+
+    def setUp(self) -> None:
+        self.root = ROOT / "tests" / "fixtures" / "route-candidate"
+        self.constraints = {
+            "clearance_nm": 250_000,
+            "track_width_nm": 250_000,
+            "via_diameter_nm": 800_000,
+            "via_drill_nm": 400_000,
+        }
+        self.settings = replace(
+            _server._SETTINGS,
+            workspace=self.root.resolve(),
+            kicad_cli=REAL_KICAD_CLI,
+            max_drc_report_bytes=8 * 1024 * 1024,
+        )
+
+    def test_routed_variant_carries_candidate_bound_drc(self) -> None:
+        board = self.root / "two-pad.kicad_pcb"
+        before = board.read_bytes()
+        with patch.object(_server, "_SETTINGS", self.settings):
+            result = asyncio.run(
+                mcp.call_tool(
+                    "preview_route",
+                    {
+                        "request": {
+                            "board": board.name,
+                            "net": "AUDIO",
+                            "layer": "F.Cu",
+                            "constraints": self.constraints,
+                            "include_drc": True,
+                        }
+                    },
+                )
+            )
+        document = result.structured_content
+        assert isinstance(document, dict)
+        self.assertEqual(document["status"], "routed")
+        self.assertEqual(
+            document["drc_evidence"]["candidate_id"],
+            document["candidate"]["candidate_id"],
+        )
+        self.assertEqual(board.read_bytes(), before)
+
+    def test_connected_variant_carries_fresh_fill_authority(self) -> None:
+        board = self.root / "zone-fill-fresh.kicad_pcb"
+        before = board.read_bytes()
+        with patch.object(_server, "_SETTINGS", self.settings):
+            result = asyncio.run(
+                mcp.call_tool(
+                    "preview_route",
+                    {
+                        "request": {
+                            "board": board.name,
+                            "net": "GND",
+                            "layer": "F.Cu",
+                            "constraints": self.constraints,
+                            "include_fill_authority": True,
+                        }
+                    },
+                )
+            )
+        document = result.structured_content
+        assert isinstance(document, dict)
+        self.assertEqual(document["status"], "already_connected")
+        self.assertGreater(document["connection"]["fill_polygons"], 0)
+        self.assertEqual(document["fill_authority"]["source_revision"], document["board_revision"])
+        self.assertEqual(board.read_bytes(), before)
 
 
 class SceneRenderDeliveryTests(unittest.TestCase):

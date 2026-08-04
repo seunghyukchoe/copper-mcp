@@ -120,6 +120,11 @@ and the policy-plugin work.
   observation is the opt-in `include_render` flag: a deterministic, digest-bound, copper-only SVG
   delivered as an ephemeral capability, subordinate to the scene by construction and whole-board
   rather than region-scoped. A human-facing thumbnail remains unimplemented.
+- [x] Referentially closed Scene-to-route MCP edge. `preview_route` accepts an observed opaque net
+  reference without requiring the hidden KiCad net name, binds it to both scene revisions, refuses
+  stale captures before candidate work, and advertises closed input/output schemas. B-007 measures
+  0/3 actionable references through the former name-only shape versus 3/3 through the reference
+  shape, with exact candidate equality to the hidden-name oracle on one licensed audio fixture.
 - [x] Typed placement-intent contract and immutable placement preview/candidates. The seven-rule
   intent language, the revision-bound Board IR footprint view, the deterministic legalizer, the
   dual-digest-bound `PlacementCandidate` and the `preview_placement` MCP tool and CLI command are

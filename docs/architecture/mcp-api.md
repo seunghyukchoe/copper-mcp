@@ -168,13 +168,27 @@ observing a scene after a hypothetical placement is not supported. Like `preview
 is exposed over both transports: the response is self-contained, retains no server-side state and
 holds no capability handle, so workspace confinement is what bounds the disclosure.
 
-`preview_route` takes one request object with a workspace-relative `board`, a KiCad `net` name, a
-copper `layer` name, integer `constraints` for the applied net class, and optional `seed`,
-`settings`, and `include_drc` fields. Unknown fields, non-integer or out-of-range budgets, booleans
-supplied as integers, control characters, and unsupported layer names are rejected before any file
-is read. Every response carries a `status` of `routed`, `already_connected`, `not_routed`, or
-`unsupported_board`, the board revision, the Board IR snapshot digest when conversion succeeded, and
-the validated request. A routed response includes the candidate ID, endpoint pad IDs, integer
+`preview_route` takes one request object with a workspace-relative `board`, a copper `layer` name,
+integer `constraints` for the applied net class, and **exactly one** net selector. `net` is the
+compatibility selector for a caller that already knows the KiCad net name. `net_ref_id` is the
+normal AI path: it is copied from Circuit Scene and requires that response's `board_revision` and
+`snapshot_digest` as `expect_board_revision` and `expect_snapshot_digest`. The reference is used
+directly rather than hashed as another name. A board-revision mismatch returns `stale_revision`
+before Board IR conversion and carries a null `snapshot_digest`; a snapshot mismatch is checked
+immediately after conversion. Both precede route search, zone-fill authority, DRC, and apply-token
+issuance. Raw names remain supported but are not required for a scene-to-route workflow.
+
+Optional `seed`, `settings`, `include_drc`, `include_fill_authority`, and `include_apply_token`
+fields control only the documented bounded work. Unknown fields, selector ambiguity, missing
+reference preconditions, non-integer or out-of-range budgets, booleans supplied as integers, control
+characters, and unsupported layer names are rejected through the non-echoing request boundary.
+The MCP tool advertises a closed two-variant input schema and a closed five-variant output union;
+each status fixes which of candidate, connection, diagnostic, conversion counts, DRC, fill, and
+token evidence may be non-null. Successful results are published as protocol `structuredContent`.
+Every response carries a
+`status` of `routed`, `already_connected`, `not_routed`, or `unsupported_board`, the board revision,
+the Board IR snapshot digest when conversion succeeded, and the validated request. A routed
+response includes the candidate ID, endpoint pad IDs, integer
 geometry, exact cost decomposition, deterministic search metrics, and the resource ceilings that
 produced it. Geometry is carried as `patch.paths`, a list of polylines: a two-pin proposal has one,
 and a multi-pin proposal has one per merged component, together forming a tree over the net. The

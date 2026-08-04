@@ -1,6 +1,6 @@
 # PCB autorouting research
 
-**Snapshot date:** 2026-08-03
+**Snapshot date:** 2026-08-04
 
 This package surveys current PCB autorouters and turns the evidence into an
 implementation direction for CopperMCP. It is a research snapshot, not a claim
@@ -17,6 +17,9 @@ that every product feature, price, or repository release will remain current.
 - [Audio circuit benchmark intake](./audio-circuit-benchmarks.md) records why public DIY catalogs
   are reference-only and defines a licence-aware, original-fixture capability ladder for MCP-shared
   board inspection/routing tests plus MCP-independent Circuit Intent and schematic-rendering checks.
+- [Circuit Scene to route action closure](./scene-action-closure-references.md) reproduces the
+  opaque-reference integration failure, defines the revision-bound MCP contract, and records its
+  exact hidden-name equivalence oracle and limitations.
 
 ## Terms used in this review
 

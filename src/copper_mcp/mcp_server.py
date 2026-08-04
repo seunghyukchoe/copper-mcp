@@ -31,6 +31,8 @@ from copper_mcp.mcp_contracts import (
     CircuitSceneToolResponse,
     CircuitSchematicToolResponse,
     PlacementPreviewToolResponse,
+    RoutePreviewToolRequest,
+    RoutePreviewToolResponse,
 )
 from copper_mcp.scene_render import (
     SCENE_RENDER_URI_TEMPLATE,
@@ -68,12 +70,12 @@ class CopperMCPServer(MCPServer[None]):
     """MCP server with a private-value-safe schematic argument boundary."""
 
     async def list_tools(self) -> list[Tool]:
-        """Advertise the schematic wrapper as a closed argument object."""
+        """Advertise private-value-safe structured wrappers as closed argument objects."""
 
         listed = await super().list_tools()
         result: list[Tool] = []
         for tool in listed:
-            if tool.name != "render_circuit_schematic":
+            if tool.name not in {"preview_route", "render_circuit_schematic"}:
                 result.append(tool)
                 continue
             schema = dict(tool.input_schema)
@@ -87,10 +89,12 @@ class CopperMCPServer(MCPServer[None]):
         arguments: dict[str, Any],
         context: Context[None, Any] | None = None,
     ) -> CallToolResult | InputRequiredResult:
-        """Reject unknown schematic wrapper fields before echoing validation can run."""
+        """Reject unknown structured wrapper fields before echoing validation can run."""
 
         if name == "render_circuit_schematic" and set(arguments) != {"content"}:
             raise ToolError("schematic tool arguments are malformed")
+        if name == "preview_route" and set(arguments) != {"request"}:
+            raise ToolError("route tool arguments are malformed")
         return await super().call_tool(name, arguments, context)
 
 
@@ -133,15 +137,31 @@ def inspect_board_ir(request: dict[str, Any]) -> dict[str, Any]:
     return inspect_board_ir_service(request, _SETTINGS)
 
 
-@mcp.tool()
-def preview_route(request: dict[str, Any]) -> dict[str, Any]:
-    """Preview one deterministic two-pin route candidate without modifying any file.
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=False,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def preview_route(request: RoutePreviewToolRequest) -> RoutePreviewToolResponse:
+    """Preview one deterministic route candidate without modifying any file.
+
+    Select exactly one net either by the compatibility ``net`` field (a KiCad net name the
+    caller already knows), or by ``net_ref_id`` copied from Circuit Scene. A reference call
+    must also copy that scene's ``board_revision`` and ``snapshot_digest`` into
+    ``expect_board_revision`` and ``expect_snapshot_digest``; a changed board or constraint
+    snapshot returns ``stale_revision`` before routing.
 
     Setting ``include_apply_token`` additionally returns a single-use token authorizing
     ``apply_candidate`` for exactly this candidate, board revision and path.
     """
 
-    return preview_route_service(request, _SETTINGS, _APPLY_TOKENS)
+    return RoutePreviewToolResponse.model_validate(
+        preview_route_service(request, _SETTINGS, _APPLY_TOKENS)
+    )
 
 
 @mcp.tool(

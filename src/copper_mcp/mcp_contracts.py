@@ -12,7 +12,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema
+from pydantic import BaseModel, ConfigDict, Field, RootModel, WithJsonSchema
 
 
 class _ClosedContract(BaseModel):
@@ -204,7 +204,10 @@ class CircuitSchematicToolResponse(_ClosedContract):
 RefId = Annotated[str, Field(pattern=r"^[a-z_]+:[a-z]+(:[0-9a-zA-Z:._-]{1,128})?$")]
 LayerId = Annotated[str, Field(pattern=r"^layer:[A-Za-z0-9_.\-]{1,64}$")]
 LayerName = Annotated[str, Field(pattern=r"^[A-Za-z0-9_.\-]{1,64}$")]
-NetRefId = Annotated[str, Field(pattern=r"^net:[a-z]+:[0-9a-zA-Z._-]{1,128}$")]
+NetRefId = Annotated[
+    str,
+    Field(max_length=164, pattern=r"^net:[a-z]+:[0-9a-zA-Z._-]{1,128}$"),
+]
 PadRefId = Annotated[str, Field(pattern=r"^pad:[0-9a-zA-Z:._-]{1,160}$")]
 RefStability = Literal["native", "content_derived", "request_scoped"]
 
@@ -214,6 +217,101 @@ Nanometres = Annotated[int, Field(ge=-(2**53 - 1), le=2**53 - 1)]
 PointArray = Annotated[list[Nanometres], Field(min_length=2, max_length=2)]
 Ring = Annotated[list[PointArray], Field(min_length=3, max_length=4096)]
 PositiveNanometres = Annotated[int, Field(gt=0, le=2**53 - 1)]
+NonNegativeInteger = Annotated[int, Field(ge=0, le=2**53 - 1)]
+
+
+class RouteConstraintsContract(_ClosedContract):
+    """Caller-supplied net class used for conversion and routing."""
+
+    clearance_nm: Annotated[int, Field(ge=0, le=1_000_000_000)]
+    track_width_nm: Annotated[int, Field(ge=1, le=1_000_000_000)]
+    via_diameter_nm: Annotated[
+        int,
+        Field(ge=1, le=1_000_000_000, description="Must be greater than via_drill_nm."),
+    ]
+    via_drill_nm: Annotated[
+        int,
+        Field(
+            ge=1,
+            le=1_000_000_000,
+            description=(
+                "Must be strictly smaller than via_diameter_nm; this relational invariant is "
+                "enforced by the non-echoing runtime boundary."
+            ),
+        ),
+    ]
+
+
+class RouteSettingsContract(_ClosedContract):
+    """Exact optional policy and work ceilings of the deterministic A* backend."""
+
+    grid_step_nm: Annotated[int, Field(ge=1, le=1_000_000_000)] = 250_000
+    bend_penalty_nm: Annotated[int, Field(ge=0, le=1_000_000_000)] = 500_000
+    proximity_penalty_nm: Annotated[int, Field(ge=0, le=1_000_000_000)] = 50_000
+    max_grid_nodes: Annotated[int, Field(ge=1, le=500_000)] = 250_000
+    max_expansions: Annotated[int, Field(ge=1, le=1_000_000)] = 100_000
+    max_obstacles: Annotated[int, Field(ge=1, le=4_096)] = 256
+    max_obstacle_checks: Annotated[int, Field(ge=1, le=10_000_000)] = 2_000_000
+
+
+class _RouteRequestCommonContract(_ClosedContract):
+    """Fields shared by the compatibility and scene-reference selectors."""
+
+    board: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=4096,
+            pattern=r"^[^\u0000-\u001f\u007f]+$",
+        ),
+    ]
+    layer: Annotated[
+        str,
+        Field(pattern=r"^(?:F\.Cu|B\.Cu|In(?:[1-9]|[12][0-9]|3[0-2])\.Cu)$"),
+    ]
+    constraints: RouteConstraintsContract
+    seed: NonNegativeInteger = 0
+    settings: RouteSettingsContract = Field(default_factory=RouteSettingsContract)
+    include_drc: bool = False
+    include_fill_authority: bool = False
+    include_apply_token: bool = False
+
+
+class RouteByNameRequestContract(_RouteRequestCommonContract):
+    """Compatibility selector for a caller that already knows the private KiCad net name."""
+
+    net: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=255,
+            pattern=r"^[^\u0000-\u001f\u007f]+$",
+        ),
+    ]
+    expect_board_revision: Digest | None = None
+    expect_snapshot_digest: Digest | None = None
+
+
+class RouteByReferenceRequestContract(_RouteRequestCommonContract):
+    """Revision-bound selector copied from a supported Circuit Scene response."""
+
+    net_ref_id: NetRefId
+    expect_board_revision: Digest
+    expect_snapshot_digest: Digest
+
+
+class RoutePreviewRequestSchemaContract(
+    RootModel[RouteByNameRequestContract | RouteByReferenceRequestContract]
+):
+    """Advertised exclusive route selector union."""
+
+
+# Runtime acceptance remains broad so the non-echoing application boundary handles malformed
+# values. The MCP schema is nevertheless exact and closed for clients that generate calls from it.
+RoutePreviewToolRequest = Annotated[
+    Any,
+    WithJsonSchema(_inline_json_schema(RoutePreviewRequestSchemaContract)),
+]
 
 
 class _SceneObjectContract(_ClosedContract):
@@ -468,6 +566,240 @@ class CircuitSceneToolResponse(_ClosedContract):
     conversion_diagnostic_counts: dict[str, int]
 
 
+class RoutePathContract(_ClosedContract):
+    """One exact orthogonal polyline in a proposed route tree."""
+
+    vertices_nm: Annotated[list[PointArray], Field(min_length=2, max_length=500_000)]
+
+
+class RoutePatchContract(_ClosedContract):
+    net_id: NetRefId
+    layer_id: LayerId
+    width_nm: Annotated[int, Field(ge=1, le=1_000_000_000)]
+    paths: Annotated[list[RoutePathContract], Field(min_length=1, max_length=100_000)]
+
+
+class RouteCostContract(_ClosedContract):
+    length_nm: NonNegativeInteger
+    bend_count: NonNegativeInteger
+    bend_cost_nm: NonNegativeInteger
+    proximity_steps: NonNegativeInteger
+    proximity_cost_nm: NonNegativeInteger
+    via_cost_nm: NonNegativeInteger
+    total_cost_nm: NonNegativeInteger
+
+
+class RouteMetricsContract(_ClosedContract):
+    hard_internal_violations: NonNegativeInteger
+    unrouted_connections: NonNegativeInteger
+    vias: NonNegativeInteger
+    wire_length_nm: NonNegativeInteger
+    expanded_states: NonNegativeInteger
+    peak_frontier_states: NonNegativeInteger
+    obstacle_checks: NonNegativeInteger
+
+
+class RouteCandidateContract(_ClosedContract):
+    """One immutable route proposal bound to the converted Board IR snapshot."""
+
+    candidate_id: Digest
+    base_revision: Digest
+    start_pad_id: PadRefId
+    end_pad_id: PadRefId
+    router_version: Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._/\-]{0,127}$")]
+    policy: Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._/\-]{0,127}$")]
+    seed: NonNegativeInteger
+    pad_count: Annotated[int, Field(ge=2, le=100_000)]
+    ordering_policy: Literal["single-path", "component-mst-v1"]
+    patch: RoutePatchContract
+    cost: RouteCostContract
+    metrics: RouteMetricsContract
+    settings: RouteSettingsContract
+
+
+class RouteConnectionContract(_ClosedContract):
+    """Evidence that every pad on the selected net already shares one component."""
+
+    base_revision: Digest
+    start_pad_id: PadRefId
+    end_pad_id: PadRefId
+    attachment_segments: NonNegativeInteger
+    component_objects: Annotated[int, Field(ge=2, le=2**53 - 1)]
+    pad_count: Annotated[int, Field(ge=2, le=100_000)]
+    vias: NonNegativeInteger
+    fill_polygons: NonNegativeInteger
+    obstacle_checks: NonNegativeInteger
+
+
+class RouteDiagnosticContract(_ClosedContract):
+    """One typed, bounded, non-echoing routing outcome."""
+
+    code: Literal[
+        "invalid_snapshot",
+        "invalid_request",
+        "stale_revision",
+        "invalid_two_pin_net",
+        "unsupported_constraint",
+        "unsupported_geometry",
+        "off_grid",
+        "grid_budget_exceeded",
+        "obstacle_budget_exceeded",
+        "search_budget_exceeded",
+        "cancelled",
+        "stale_fill",
+        "no_path",
+    ]
+    message: Annotated[str, Field(min_length=1, max_length=256)]
+    expanded_states: NonNegativeInteger
+    obstacle_checks: NonNegativeInteger
+
+
+class RouteDrcSummaryContract(_ClosedContract):
+    """Aggregate authoritative KiCad DRC evidence without board-private findings."""
+
+    base_revision: Digest
+    drc_context_revision: Digest
+    kicad_version: Annotated[
+        str,
+        Field(min_length=1, max_length=128, pattern=r"^[^\u0000-\u001f\u007f]+$"),
+    ]
+    drc_schema: Literal["https://schemas.kicad.org/drc.v1.json"]
+    coordinate_units: Literal["mm"]
+    error_count: NonNegativeInteger
+    warning_count: NonNegativeInteger
+    exclusion_count: NonNegativeInteger
+    ignored_check_count: NonNegativeInteger
+    unconnected_count: NonNegativeInteger
+    violation_type_counts: Annotated[dict[str, NonNegativeInteger], Field(max_length=1_000)]
+    passed: bool
+    schema_version: Literal["1.0"]
+
+
+class RouteCandidateDrcEvidenceContract(_ClosedContract):
+    candidate_id: Digest
+    candidate_base_revision: Digest
+    source_revision: Digest
+    patched_board_revision: Digest
+    patched_drc_context_revision: Digest
+    summary: RouteDrcSummaryContract
+
+
+class RouteFillAuthorityContract(_ClosedContract):
+    source_revision: Digest
+    context_revision: Digest
+    source_fill_digest: Digest
+    refilled_fill_digest: Digest
+    kicad_version: Annotated[
+        str,
+        Field(min_length=1, max_length=128, pattern=r"^[^\u0000-\u001f\u007f]+$"),
+    ]
+    fill_polygon_count: NonNegativeInteger
+    fill_vertex_count: NonNegativeInteger
+
+
+class _RoutePreviewResponseCommonContract(_ClosedContract):
+    """Fields shared by every mutually exclusive route outcome."""
+
+    schema_version: Literal["1.0"]
+    board_path: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=4096,
+            pattern=r"^[^\u0000-\u001f\u007f]+$",
+        ),
+    ]
+    board_revision: Digest
+    request: RouteByNameRequestContract | RouteByReferenceRequestContract
+
+
+EmptyRouteDiagnosticCounts = Annotated[
+    dict[str, NonNegativeInteger],
+    Field(max_length=0),
+]
+RouteDiagnosticCounts = Annotated[
+    dict[str, NonNegativeInteger],
+    Field(min_length=1, max_length=1_000),
+]
+RouteApplyToken = Annotated[str, Field(min_length=1, max_length=512)]
+
+
+class RoutedRoutePreviewContract(_RoutePreviewResponseCommonContract):
+    status: Literal["routed"]
+    snapshot_digest: Digest
+    candidate: RouteCandidateContract
+    connection: None
+    diagnostic: None
+    conversion_diagnostic_counts: EmptyRouteDiagnosticCounts
+    drc_evidence: RouteCandidateDrcEvidenceContract | None
+    apply_token: RouteApplyToken | None
+    fill_authority: None
+
+
+class ConnectedRoutePreviewContract(_RoutePreviewResponseCommonContract):
+    status: Literal["already_connected"]
+    snapshot_digest: Digest
+    candidate: None
+    connection: RouteConnectionContract
+    diagnostic: None
+    conversion_diagnostic_counts: EmptyRouteDiagnosticCounts
+    drc_evidence: None
+    apply_token: None
+    fill_authority: RouteFillAuthorityContract | None
+
+
+class NotRoutedRoutePreviewContract(_RoutePreviewResponseCommonContract):
+    status: Literal["not_routed"]
+    snapshot_digest: Digest
+    candidate: None
+    connection: None
+    diagnostic: RouteDiagnosticContract
+    conversion_diagnostic_counts: EmptyRouteDiagnosticCounts
+    drc_evidence: None
+    apply_token: None
+    fill_authority: None
+
+
+class StaleBeforeConversionDiagnosticContract(RouteDiagnosticContract):
+    code: Literal["stale_revision"]
+
+
+class StaleBeforeConversionRoutePreviewContract(_RoutePreviewResponseCommonContract):
+    status: Literal["not_routed"]
+    snapshot_digest: None
+    candidate: None
+    connection: None
+    diagnostic: StaleBeforeConversionDiagnosticContract
+    conversion_diagnostic_counts: EmptyRouteDiagnosticCounts
+    drc_evidence: None
+    apply_token: None
+    fill_authority: None
+
+
+class UnsupportedRoutePreviewContract(_RoutePreviewResponseCommonContract):
+    status: Literal["unsupported_board"]
+    snapshot_digest: None
+    candidate: None
+    connection: None
+    diagnostic: None
+    conversion_diagnostic_counts: RouteDiagnosticCounts
+    drc_evidence: None
+    apply_token: None
+    fill_authority: None
+
+
+class RoutePreviewToolResponse(
+    RootModel[
+        RoutedRoutePreviewContract
+        | ConnectedRoutePreviewContract
+        | NotRoutedRoutePreviewContract
+        | StaleBeforeConversionRoutePreviewContract
+        | UnsupportedRoutePreviewContract
+    ]
+):
+    """Strict status-specific structured output contract for ``preview_route``."""
+
+
 class PlacementRuleResultContract(_ClosedContract):
     """What one rule concluded, and by how much."""
 
@@ -641,5 +973,7 @@ __all__ = [
     "CircuitIntentToolContent",
     "CircuitSceneToolResponse",
     "CircuitSchematicToolResponse",
+    "RoutePreviewToolRequest",
+    "RoutePreviewToolResponse",
     "SceneRenderContract",
 ]

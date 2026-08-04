@@ -8,6 +8,11 @@ All notable changes are documented here. The format follows
 
 ### Security
 
+- Scene-selected routes now require both the observed board revision and Board IR snapshot digest.
+  Stale source bytes are refused before Board IR conversion, while a stale snapshot is refused
+  immediately after it; neither can reach route search, fill authority, DRC, or apply-token
+  issuance. Shared request text now also rejects invalid Unicode surrogates before path handling or
+  net hashing, and malformed MCP requests remain behind the fixed non-echoing application boundary.
 - Board IR 0.2 makes footprint ownership revision-bound and budgeted: footprints count against the
   object ceiling, courtyard vertices and intersection work use polygon ceilings, one footprint is
   capped at 64 courtyard rings before geometry allocation, and Circuit Scene charges serialized
@@ -46,6 +51,12 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- `preview_route` accepts exactly one net selector: the existing private KiCad `net` name or a
+  Circuit Scene `net_ref_id`. The MCP tool now advertises a closed two-variant input schema and a
+  complete closed, status-specific structured-output union instead of an open object; impossible
+  candidate/connection/diagnostic combinations are no longer advertised. Its annotation is
+  conservatively non-idempotent because `include_apply_token` can mint a fresh capability even when
+  the candidate geometry is deterministic.
 - The active Board IR writer and decoder now target exact `copper.board-ir` `0.2.0`. Historical 0.1
   schema and golden data stay immutable, while migration requires re-converting the original board
   because flattened 0.1 pads cannot recover trustworthy parent identity or pose. Snapshot digests
@@ -67,6 +78,10 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- A reproducible MCP observation-to-action benchmark over the licensed RC low-pass audio fixture.
+  It pins the former 0/3 actionable Scene references against 3/3 revision-bound references, exact
+  candidate equality with the hidden-name oracle, stale-reference refusal, deterministic replay,
+  closed schemas, and an identical final private-workspace file tree.
 - First-class immutable Board IR footprints with exact origin, normalized rotation, side, lock
   state, total pad ownership, and canonical board-frame rectangular courtyard rings. A compact
   KiCad fixture pins all four orthogonal transforms and passes KiCad 10.0.5 DRC with zero violations

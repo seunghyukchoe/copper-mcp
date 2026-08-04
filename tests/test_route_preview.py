@@ -334,6 +334,130 @@ def test_preview_reports_a_diagnostic_for_an_unknown_net(tmp_path: Path) -> None
     assert preview.diagnostic.code is RouteFailureCode.INVALID_TWO_PIN_NET
 
 
+def _reference_request(preview: RoutePreview, **overrides: Any) -> dict[str, Any]:
+    assert preview.candidate is not None
+    assert preview.snapshot_digest is not None
+    request = _request()
+    del request["net"]
+    request.update(
+        {
+            "net_ref_id": preview.candidate.patch.net_id,
+            "expect_board_revision": preview.board_revision,
+            "expect_snapshot_digest": preview.snapshot_digest,
+        }
+    )
+    request.update(overrides)
+    return request
+
+
+def test_scene_net_reference_routes_the_same_candidate_as_the_hidden_name(tmp_path: Path) -> None:
+    _, settings = _workspace(tmp_path)
+    named = preview_route(_request(), settings)
+
+    referenced = preview_route(_reference_request(named), settings)
+
+    assert referenced.status is RoutePreviewStatus.ROUTED
+    assert referenced.candidate == named.candidate
+    assert referenced.board_revision == named.board_revision
+    assert referenced.snapshot_digest == named.snapshot_digest
+    request_echo = referenced.to_dict()["request"]
+    assert request_echo["net_ref_id"] == referenced.candidate.patch.net_id
+    assert request_echo["expect_board_revision"] == named.board_revision
+    assert request_echo["expect_snapshot_digest"] == named.snapshot_digest
+    assert "net" not in request_echo
+
+
+@pytest.mark.parametrize("precondition", ["board", "snapshot"])
+def test_scene_net_reference_refuses_a_stale_observation(tmp_path: Path, precondition: str) -> None:
+    board, settings = _workspace(tmp_path)
+    named = preview_route(_request(), settings)
+    request = _reference_request(named)
+    if precondition == "board":
+        board.write_bytes(board.read_bytes() + b"\n")
+    else:
+        request["expect_snapshot_digest"] = f"sha256:{'0' * 64}"
+
+    preview = preview_route(request, settings)
+
+    assert preview.status is RoutePreviewStatus.NOT_ROUTED
+    assert preview.candidate is None
+    assert preview.diagnostic is not None
+    assert preview.diagnostic.code is RouteFailureCode.STALE_REVISION
+    assert (preview.snapshot_digest is None) is (precondition == "board")
+
+
+def test_stale_board_reference_refuses_before_board_ir_conversion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    board, settings = _workspace(tmp_path)
+    named = preview_route(_request(), settings)
+    board.write_bytes(board.read_bytes() + b"\n")
+
+    def unexpected_conversion(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("stale source bytes must be refused before conversion")
+
+    monkeypatch.setattr(route_preview, "parse_kicad_bytes", unexpected_conversion)
+    stale = preview_route(_reference_request(named), settings)
+
+    assert stale.status is RoutePreviewStatus.NOT_ROUTED
+    assert stale.snapshot_digest is None
+    assert stale.diagnostic is not None
+    assert stale.diagnostic.code is RouteFailureCode.STALE_REVISION
+
+
+def test_scene_net_reference_requires_both_revision_preconditions() -> None:
+    for missing in ("expect_board_revision", "expect_snapshot_digest"):
+        request = _request()
+        del request["net"]
+        request.update(
+            {
+                "net_ref_id": "net:name:0123456789abcdef0123456789abcdef",
+                "expect_board_revision": f"sha256:{'1' * 64}",
+                "expect_snapshot_digest": f"sha256:{'2' * 64}",
+            }
+        )
+        del request[missing]
+        with pytest.raises(RoutePreviewError, match="revision preconditions"):
+            parse_route_preview_request(request)
+
+
+def test_route_request_requires_exactly_one_name_or_scene_reference() -> None:
+    without_selector = _request()
+    del without_selector["net"]
+    with pytest.raises(RoutePreviewError, match="exactly one"):
+        parse_route_preview_request(without_selector)
+
+    with pytest.raises(RoutePreviewError, match="exactly one"):
+        parse_route_preview_request(
+            _request(net_ref_id="net:name:0123456789abcdef0123456789abcdef")
+        )
+
+
+@pytest.mark.parametrize(
+    "net_ref_id",
+    [
+        "AUDIO",
+        "net:",
+        "net:x",
+        "pad:kicad:01234567-89ab-cdef-0123-456789abcdef",
+        "net:name:x\n",
+    ],
+)
+def test_route_request_rejects_malformed_scene_net_references(net_ref_id: str) -> None:
+    request = _request()
+    del request["net"]
+    request.update(
+        {
+            "net_ref_id": net_ref_id,
+            "expect_board_revision": f"sha256:{'1' * 64}",
+            "expect_snapshot_digest": f"sha256:{'2' * 64}",
+        }
+    )
+
+    with pytest.raises(RoutePreviewError):
+        parse_route_preview_request(request)
+
+
 class _AdvancingClock:
     """A monotonic clock that always advances past any preview deadline."""
 
@@ -453,7 +577,9 @@ def test_preview_rejects_boards_outside_the_workspace(tmp_path: Path) -> None:
         {"net": "AUDIO", "layer": "F.Cu", "constraints": {}},
         _request(unexpected=1),
         _request(board=""),
+        _request(board="bad\ud800board.kicad_pcb"),
         _request(net="AUD\x00IO"),
+        _request(net="bad\ud800net"),
         _request(layer="F.Silkscreen"),
         _request(layer="F.Cu\n"),
         _request(seed=-1),
