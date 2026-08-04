@@ -300,3 +300,16 @@ result or a general performance comparison.
 | Metrics | Deterministic evidence 10/10; KiCad DRC pass 10/10; errors 0; warnings 0; unconnected items 0; ignored checks 5; source bytes/inode/mtime unchanged 10/10; workspace entries unchanged 10/10; patched board `sha256:c732d5abaccb2d4521005ef15122d1038ff02f96a752df24ff640b69970f842c`; patched context `sha256:a929034fa3e4ba7cfe9fcd2b5b0efd9c57b3d98566e691c24a74455229c7cc1c` |
 | Artifact | [`2026-08-05-layered-kicad-drc.json`](../../benchmarks/results/routing/2026-08-05-layered-kicad-drc.json) |
 | Interpretation | This is authoritative KiCad evidence for one replayed two-layer candidate and its captured context. It does not establish multilayer completion, filled-zone routing, negotiated congestion, whole-board completion, electrical behavior, fabrication readiness, or FreeRouting parity. |
+
+### B-021 — Fresh fill-aware routing corridor
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:cfd4c82d888e0ea0de38aac4eeab89409c6498b8d85266b7d17f4276177a3b5f` |
+| Date and commit | 2026-08-04 16:28:05 UTC; `d1bdfe07053e458fa7b9ee26b3659d94b78e8eef`; measured after the fill-aware routing commit |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
+| Dataset | Independently generated synthetic Board IR fixture `synthetic-fill-corridor-v1`: two AUDIO pads, one rectangular POWER zone, and a verified upper fill island leaving a lower corridor; no external or proprietary design data |
+| Configuration | `fill-aware-routing-v1`; ten replays each for conservative and freshness-verified modes; 1,000 nm grid; exact polygon obstacles; source-revision and matching-zone gates; CPU-only |
+| Metrics | Deterministic conservative 10/10; deterministic fill-aware 10/10; conservative wire length 14,000 nm; fill-aware wire length 8,000 nm; reduction 6,000 nm; matching zone required `true`; KiCad invocation `false`; DRC `false` |
+| Artifact | [`2026-08-05-fill-aware-routing.json`](../../benchmarks/results/routing/2026-08-05-fill-aware-routing.json) |
+| Interpretation | This measures a meaningful route-quality improvement in the internal bounded routing core. It does not establish fresh-fill behavior on a real KiCad board, whole-board completion, electrical correctness, fabrication readiness, or FreeRouting parity; the public routed-candidate provenance contract remains open. |
