@@ -609,7 +609,9 @@ class McpServerTests(unittest.TestCase):
         serialized = json.dumps(document, sort_keys=True).replace(
             resource_uri, "pcb://artifacts/schematic/<opaque>/circuit.kicad_sch"
         )
-        tool_text = "\n".join(block.text for block in result.content if block.type == "text")
+        tool_text = "\n".join(
+            block.text for block in result.content if block.type == "text"
+        ).replace(resource_uri, "pcb://artifacts/schematic/<opaque>/circuit.kicad_sch")
         for private_value in (
             "AUDIO_IN",
             "AUDIO_OUT",
