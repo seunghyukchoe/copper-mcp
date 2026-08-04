@@ -12,7 +12,7 @@
     "dsse_envelope_emitted": false,
     "kicad_invoked": false,
     "material_revision_binding": true,
-    "median_build_and_serialize_ns": 19875.0,
+    "median_build_and_serialize_ns": 19666.5,
     "redacted_payload": true,
     "repetitions": 128,
     "schema_valid": true,
@@ -26,7 +26,7 @@
     "provenance or fabrication readiness",
     "remote transport or persistence"
   ],
-  "run_id": "sha256:c70de01be5a259936c5c784c3e5b17141bdff8ab244c4006f09f85519a5ec933",
+  "run_id": "sha256:080405e99f54c88a643abd4d20219a8c415222270604aed66c1060a509e1543e",
   "schema": "copper-mcp/benchmark/drc-statement/v1",
-  "source_commit": "7facad8589eb788fae14a62d4146e957d7c54f0d"
+  "source_commit": "6b5c75e454db1a437bc947096bc61e0d4b7b9398"
 }

@@ -391,6 +391,7 @@ class LayeredBoardRouter:
             if (
                 isinstance(request, LayeredRouteRequest)
                 and request.expected_revision is not None
+                and _digest(request.expected_revision)
                 and request.expected_revision != request.board_revision
             ):
                 return _diagnostic(LayeredRouteFailureCode.STALE_REVISION, malformed)

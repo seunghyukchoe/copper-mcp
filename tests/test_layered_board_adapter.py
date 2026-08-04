@@ -266,6 +266,16 @@ def test_malformed_request_is_not_misclassified_as_stale_without_expected_revisi
     assert result.diagnostic.code is LayeredRouteFailureCode.INVALID_REQUEST
 
 
+def test_malformed_expected_revision_is_invalid_even_when_it_differs() -> None:
+    snapshot = _two_layer_snapshot()
+    request = _request(snapshot, expected_revision="not-a-digest")
+
+    result = LayeredBoardRouter().propose(snapshot, request)
+
+    assert result.diagnostic is not None
+    assert result.diagnostic.code is LayeredRouteFailureCode.INVALID_REQUEST
+
+
 def test_malformed_layered_settings_fail_closed_before_physical_obstacle_budgeting() -> None:
     snapshot = _two_layer_snapshot()
     malformed = replace(LayeredAStarSettings(), max_obstacles="invalid")

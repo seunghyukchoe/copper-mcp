@@ -68,6 +68,10 @@ All notable changes are documented here. The format follows
 
 ### Security
 
+- Tightened the in-toto MCP contract so every resource descriptor has a required, closed nested
+  `sha256` digest object; `{}` and unknown digest algorithms now fail validation. B-034/B-035 were
+  replayed from the implementation commit and recorded as append-only current-contract evidence.
+
 - Layered serialization now refuses structurally disconnected, crossing, duplicate, stale, or
   endpoint-via candidates before rendering. The layered router reserves endpoint pad envelopes for
   tracks and blocks via transitions there, avoiding unsupported via-in-pad geometry without

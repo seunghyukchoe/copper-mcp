@@ -11,7 +11,7 @@
     "clean_drc_runs": 3,
     "context_binding": true,
     "kicad_version": "10.x",
-    "median_private_drc_ns": 846023417,
+    "median_private_drc_ns": 3088695417,
     "repetitions": 3,
     "source_bytes_inode_mtime_preserved": true,
     "workspace_mutations": 0
@@ -23,7 +23,7 @@
     "electrical or fabrication readiness",
     "FreeRouting parity"
   ],
-  "run_id": "sha256:3e1b4fa7abca5c934b5a86201bc121cd427ee6cbdc8b5fa8590890f93776410b",
+  "run_id": "sha256:7e72b2586d1d2208ce0972bd7b8077ac9c30901beec814ec2c633b62c115fa1a",
   "schema": "copper-mcp/benchmark/placement-candidate-drc/v1",
-  "source_commit": "7facad8589eb788fae14a62d4146e957d7c54f0d"
+  "source_commit": "6b5c75e454db1a437bc947096bc61e0d4b7b9398"
 }

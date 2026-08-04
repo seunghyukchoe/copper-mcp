@@ -495,3 +495,29 @@ result or a general performance comparison.
 | Metrics | Clean DRC `3/3`; candidate binding `true`; context binding `true`; source bytes/inode/mtime preserved `true`; workspace mutations `0`; median private DRC `846,023,417 ns` on this host |
 | Artifact | [`2026-08-05-placement-drc.json`](../../benchmarks/results/routing/2026-08-05-placement-drc.json) |
 | Interpretation | This establishes the narrow private placement evidence gate and source-preserving replay on one fixture. It does not establish back-side/non-rectangular coverage, public/live placement DRC, apply/undo, electrical/fabrication readiness, or FreeRouting parity. |
+
+#### B-034 replay — current schema-bound payload evidence
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:080405e99f54c88a643abd4d20219a8c415222270604aed66c1060a509e1543e` |
+| Date and commit | 2026-08-05; source commit `6b5c75e454db1a437bc947096bc61e0d4b7b9398`; tracked tree clean except the pre-existing user handoff file |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
+| Dataset | Same fixed content-addressed synthetic revisions and aggregate `DrcSummary` as B-034; no board bytes, geometry, net names, UUIDs, or external/private corpus |
+| Configuration | Same `copper-mcp/benchmark/drc-statement/v1`; 128 deterministic builds after the required nested digest contract fix; closed Pydantic validation; canonical compact UTF-8 serialization |
+| Metrics | Schema-valid `128/128`; deterministic bytes `true`; subject candidate binding `true`; material revision binding `true`; redacted payload `true`; Statement size `1,412` bytes; median build+serialize `19,666.5 ns`; signature count `0`; DSSE envelope `false`; KiCad invoked `false` |
+| Artifact | [`2026-08-05-drc-statement.json`](../../benchmarks/results/routing/2026-08-05-drc-statement.json) |
+| Interpretation | Current-contract replay superseding B-034's dirty-tree/pre-implementation provenance note. The nested digest object now requires exactly one `sha256` field. This remains payload-shape evidence only; it does not establish DSSE authentication, verifier coverage, provenance, whole-board DRC quality, electrical/fabrication readiness, remote transport, persistence, or FreeRouting parity. |
+
+#### B-035 replay — current implementation provenance
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:7e72b2586d1d2208ce0972bd7b8077ac9c30901beec814ec2c633b62c115fa1a` |
+| Date and commit | 2026-08-05; source commit `6b5c75e454db1a437bc947096bc61e0d4b7b9398`; tracked tree clean except the pre-existing user handoff file |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad CLI 10.x |
+| Dataset | Same independently authored `tests/fixtures/board-ir-v0.2/footprint-pose-courtyard.kicad_pcb`; two pad-owning front-side orthogonal footprints with unfilled rectangular courtyards |
+| Configuration | Same `copper-mcp/benchmark/placement-candidate-drc/v1`; three private disposable KiCad DRC replays from the implementation commit; fixed JSON report command with no refill/save; source/context CAS and aggregate-only evidence |
+| Metrics | Clean DRC `3/3`; candidate binding `true`; context binding `true`; source bytes/inode/mtime preserved `true`; workspace mutations `0`; median private DRC `3,088,695,417 ns` on this host |
+| Artifact | [`2026-08-05-placement-drc.json`](../../benchmarks/results/routing/2026-08-05-placement-drc.json) |
+| Interpretation | Current-contract replay superseding B-035's pre-implementation source commit. It establishes the narrow private placement evidence gate and source-preserving replay on one fixture. It does not establish back-side/non-rectangular coverage, public/live placement DRC, apply/undo, electrical/fabrication readiness, or FreeRouting parity. |
