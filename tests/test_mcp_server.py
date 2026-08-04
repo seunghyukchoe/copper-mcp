@@ -392,7 +392,12 @@ class McpServerTests(unittest.TestCase):
         self.assertNotIn(expected.artifact.artifact_digest, resource_uri)
         self.assertNotIn(expected.artifact.intent_digest, resource_uri)
 
-        serialized = json.dumps(document, sort_keys=True)
+        # The capability token is intentionally opaque, random, and not board content.  Remove
+        # only that token before scanning metadata so a coincidental substring such as ``1k``
+        # cannot make this privacy assertion flaky across CI runs.
+        serialized = json.dumps(document, sort_keys=True).replace(
+            resource_uri, "pcb://artifacts/schematic/<opaque>/circuit.kicad_sch"
+        )
         tool_text = "\n".join(block.text for block in result.content if block.type == "text")
         for private_value in (
             "AUDIO_IN",
