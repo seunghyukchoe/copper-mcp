@@ -391,3 +391,16 @@ result or a general performance comparison.
 | Metrics | Verified replays 10/10; deterministic candidate IDs `true`; 3 paths and 2 vias; disconnected geometry refused `true`; endpoint-via refused `true`; stale revision refused `true`; `physical_validation=not_modelled`; KiCad/DRC/serialization/apply `false` |
 | Artifact | [`2026-08-05-layered-candidate-verifier.json`](../../benchmarks/results/routing/2026-08-05-layered-candidate-verifier.json) |
 | Interpretation | This demonstrates a bounded structural gate before disposable layered serialization, including CAS/topology refusal and explicit physical-validation non-claim. It does not establish KiCad DRC, padstack/fabrication legality, whole-board completion, electrical behavior, live GUI compatibility, or FreeRouting parity. |
+
+### B-028 — Protocol-independent routing worker leases
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:4fa09cb8548ecde12ea7fd3958a372df4c5b5213469e55fb0af5b23170f7fd34` |
+| Date and commit | 2026-08-04 18:49:20 UTC; `4ab2c1a1a6db4ce0ced6be7aa07bb3f71b59650f`; measured after the worker/lease commit |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
+| Dataset | Independently authored `tests/fixtures/route-candidate/blocked-pad.kicad_pcb`; its Board IR candidate was used only as an in-memory executor result; no external or proprietary board data |
+| Configuration | `copper-mcp/benchmark/routing-job-worker/v1`; separate bounded SQLite stores for success, race, cancellation, recovery, and invalid-output probes; injected clocks; CPU-only |
+| Metrics | Successful completion `true`; deterministic candidate ID `true`; claim race one winner `true`; cancellation terminal `true`; expired lease recovered `true`; invalid candidate terminal `true`; redacted storage `true`; candidate persistence `false`; MCP Tasks `false` |
+| Artifact | [`2026-08-05-routing-job-worker.json`](../../benchmarks/results/routing/2026-08-05-routing-job-worker.json) |
+| Interpretation | This demonstrates local CAS-backed single-worker execution, cooperative cancellation, stale-lease terminalization, and safe invalid-output handling while preserving the redacted-store boundary. It does not establish request/result persistence, durable candidate export, authorization, MCP Tasks compatibility, KiCad DRC, electrical behavior, fabrication readiness, or FreeRouting parity. |
