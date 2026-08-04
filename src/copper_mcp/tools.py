@@ -18,6 +18,15 @@ from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import run_board_drc as run_kicad_board_drc
 from copper_mcp.kicad_file import inspect_kicad_board
 from copper_mcp.kicad_ipc import inspect_live_board as inspect_live_kicad_board
+from copper_mcp.live_editor_context import (
+    LiveEditorContext,
+)
+from copper_mcp.live_editor_context import (
+    inspect_live_editor_context as inspect_live_editor_context_service,
+)
+from copper_mcp.live_editor_context import (
+    inspect_live_editor_context_raw as inspect_live_editor_context_service_raw,
+)
 from copper_mcp.models import candidate_from_dict, rank_candidates
 from copper_mcp.placement.contracts import PlacementResult
 from copper_mcp.placement_preview import preview_live_placement as preview_live_placement_service
@@ -52,6 +61,7 @@ def server_info() -> dict[str, Any]:
             "revision-bound live KiCad IPC Circuit Scene observation (read-only)",
             "revision-bound live KiCad IPC route proposal (read-only)",
             "revision-bound live KiCad IPC placement proposal (read-only)",
+            "revision-bound live KiCad IPC editor context (read-only)",
         ],
         "planned": [
             "region-scoped and human-facing board rendering",
@@ -90,6 +100,31 @@ def inspect_live_board(settings: Settings | None = None) -> dict[str, Any]:
     """Observe one open KiCad PCB through the optional local IPC adapter."""
 
     return inspect_live_kicad_board(settings).to_dict()
+
+
+def inspect_live_editor_context_raw(
+    payload: dict[str, Any],
+    settings: Settings | None = None,
+    *,
+    client_factory: Any = None,
+) -> LiveEditorContext:
+    """Inspect active layer and native selection refs without board text or mutation."""
+
+    active_settings = settings or Settings.from_env()
+    return inspect_live_editor_context_service_raw(
+        payload,
+        active_settings,
+        client_factory=client_factory,
+    )
+
+
+def inspect_live_editor_context(
+    payload: dict[str, Any], settings: Settings | None = None
+) -> dict[str, Any]:
+    """Return a detached revision-bound live editor context."""
+
+    active_settings = settings or Settings.from_env()
+    return inspect_live_editor_context_service(payload, active_settings)
 
 
 def inspect_board_ir(payload: dict[str, Any], settings: Settings | None = None) -> dict[str, Any]:

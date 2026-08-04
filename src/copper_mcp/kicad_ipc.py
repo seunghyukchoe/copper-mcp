@@ -14,6 +14,7 @@ import hashlib
 import importlib
 import os
 import platform
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from typing import Any, Protocol, cast
@@ -40,6 +41,40 @@ _COUNT_NAMES = (
     "groups",
 )
 _SHAPE_HEADS = {"gr_line", "gr_rect", "gr_arc", "gr_poly", "gr_curve", "gr_circle"}
+_MAX_EDITOR_SELECTION = 256
+_LAYER_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+_UUID = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
+# The selection API returns wrappers, not board text.  Keep this allow-list deliberately
+# narrow: a future wrapper type must be mapped explicitly before it can become an AI-facing
+# reference, and unknown wrappers fail closed instead of leaking repr()/protobuf contents.
+_SELECTION_KINDS = {
+    "FootprintInstance": "footprint",
+    "Pad": "pad",
+    "Track": "segment",
+    "ArcTrack": "arc",
+    "Via": "via",
+    "Zone": "zone",
+    "BoardShape": "shape",
+    "BoardSegment": "shape",
+    "BoardArc": "shape",
+    "BoardBezier": "shape",
+    "BoardCircle": "shape",
+    "BoardRectangle": "shape",
+    "BoardPolygon": "shape",
+    "BoardText": "text",
+    "BoardTextBox": "text",
+    "Dimension": "dimension",
+    "AlignedDimension": "dimension",
+    "CenterDimension": "dimension",
+    "LeaderDimension": "dimension",
+    "OrthogonalDimension": "dimension",
+    "RadialDimension": "dimension",
+    "Group": "group",
+}
 
 
 class KicadIpcError(RuntimeError):
@@ -74,6 +109,14 @@ class _VersionLike(Protocol):
 
 class _BoardLike(Protocol):
     def get_as_string(self) -> str: ...
+
+
+class _EditorContextBoardLike(_BoardLike, Protocol):
+    def get_active_layer(self) -> int: ...
+
+    def get_layer_name(self, layer: int) -> str: ...
+
+    def get_selection(self) -> Any: ...
 
 
 class _KiCadLike(Protocol):
@@ -268,6 +311,178 @@ class LiveBoardSnapshot:
         digest = f"sha256:{hashlib.sha256(self.source).hexdigest()}"
         if digest != self.observation.board_digest:
             raise KicadIpcPayloadError("live board source digest is not bound to its observation")
+
+
+@dataclass(frozen=True, slots=True)
+class LiveEditorSelection:
+    """One native, type-qualified item reference from KiCad's current selection."""
+
+    ref_id: str
+    kind: str
+
+
+@dataclass(frozen=True, slots=True)
+class LiveEditorContextSnapshot:
+    """Read-only editor state captured from one confirmed board serialization."""
+
+    board_digest: str
+    board_bytes: int
+    active_layer_index: int
+    active_layer_name: str
+    selection: tuple[LiveEditorSelection, ...]
+
+    def __post_init__(self) -> None:
+        if not self.board_digest.startswith("sha256:") or len(self.board_digest) != 71:
+            raise KicadIpcPayloadError("live editor board digest is invalid")
+        if not 1 <= self.board_bytes <= 64 * 1024 * 1024:
+            raise KicadIpcPayloadError("live editor board size is outside the observation budget")
+        if (
+            not isinstance(self.active_layer_index, int)
+            or isinstance(self.active_layer_index, bool)
+            or not 0 <= self.active_layer_index <= 4095
+        ):
+            raise KicadIpcPayloadError("live editor active layer is invalid")
+        if not _LAYER_NAME.fullmatch(self.active_layer_name):
+            raise KicadIpcPayloadError("live editor active layer name is invalid")
+        if len(self.selection) > _MAX_EDITOR_SELECTION:
+            raise KicadIpcPayloadError("live editor selection exceeds the observation budget")
+        if (
+            tuple(sorted(self.selection, key=lambda item: (item.ref_id, item.kind)))
+            != self.selection
+        ):
+            raise KicadIpcPayloadError("live editor selection is not canonical")
+
+
+def _selection_identity(item: Any) -> LiveEditorSelection:
+    """Extract only a validated KiCad KIID from an official wrapper."""
+
+    class_name = type(item).__name__
+    kind = _SELECTION_KINDS.get(class_name)
+    if kind is None:
+        raise KicadIpcPayloadError("KiCad returned an unsupported selected item type")
+    try:
+        identifier = item.id
+        value = getattr(identifier, "value", identifier)
+    except Exception as error:  # pragma: no cover - exercised by the real binding
+        raise KicadIpcPayloadError("KiCad returned an unreadable selected item identity") from error
+    if not isinstance(value, str) or _UUID.fullmatch(value) is None:
+        raise KicadIpcPayloadError("KiCad returned an empty or malformed selected item identity")
+    return LiveEditorSelection(ref_id=f"{kind}:kicad:{value.lower()}", kind=kind)
+
+
+def _read_editor_selection(
+    board: _EditorContextBoardLike, max_selection: int
+) -> tuple[LiveEditorSelection, ...]:
+    """Read a bounded selection without calling KiCad's raw selection-string API."""
+
+    try:
+        selected = iter(board.get_selection())
+    except Exception as error:  # pragma: no cover - exercised by the real binding
+        raise KicadIpcConnectionError("KiCad editor selection observation failed") from error
+    result: list[LiveEditorSelection] = []
+    for item in selected:
+        if len(result) >= max_selection:
+            raise KicadIpcPayloadError("KiCad editor selection exceeds the observation budget")
+        result.append(_selection_identity(item))
+    return tuple(sorted(result, key=lambda item: (item.ref_id, item.kind)))
+
+
+def capture_live_editor_context(
+    settings: Settings | None = None,
+    *,
+    client_factory: Callable[..., _KiCadLike] | None = None,
+    allow_future_api: bool = False,
+    timeout_ms: int = _DEFAULT_TIMEOUT_MS,
+    max_selection: int = _MAX_EDITOR_SELECTION,
+) -> LiveEditorContextSnapshot:
+    """Capture the active layer and native selection against one stable live revision.
+
+    This uses the official ``Board.get_active_layer``, ``Board.get_layer_name`` and
+    ``Board.get_selection`` APIs.  It deliberately never calls ``get_selection_as_string``
+    or touches project/board mutation APIs.  The board serialization is confirmed before
+    returning so the context digest cannot be mistaken for a different editor revision.
+    """
+
+    active_settings = settings or Settings.from_env()
+    if not isinstance(active_settings, Settings):
+        raise KicadIpcConfigurationError("live editor settings are malformed")
+    if not 1 <= timeout_ms <= _MAX_TIMEOUT_MS:
+        raise KicadIpcConfigurationError("IPC timeout is outside the bounded range")
+    if not 1 <= max_selection <= _MAX_EDITOR_SELECTION:
+        raise KicadIpcConfigurationError("editor selection budget is outside the bounded range")
+
+    socket_path, _socket_kind_value = _socket_path()
+    factory = client_factory or _load_kicad_factory()
+    try:
+        if socket_path is None:
+            client = factory(timeout_ms=timeout_ms)
+        else:
+            client = factory(socket_path=socket_path, timeout_ms=timeout_ms)
+    except KicadIpcError:
+        raise
+    except Exception as error:  # pragma: no cover - exercised by the real binding
+        raise KicadIpcConnectionError("could not create a KiCad IPC client") from error
+
+    try:
+        _version_string(client.get_version())
+        _version_string(client.get_api_version())
+        try:
+            version_ok = client.check_version()
+        except Exception as error:
+            if error.__class__.__name__ != "FutureVersionError":
+                raise KicadIpcVersionError("KiCad IPC version validation failed") from error
+            if not allow_future_api:
+                raise KicadIpcVersionError(
+                    "connected KiCad is newer than the installed kicad-python API"
+                ) from error
+        else:
+            if version_ok is not True:
+                raise KicadIpcVersionError("KiCad IPC version validation was inconclusive")
+        board = cast(_EditorContextBoardLike, client.get_board())
+        source = board.get_as_string()
+        if not isinstance(source, str):
+            raise KicadIpcPayloadError("KiCad returned a non-text board snapshot")
+        source_bytes = source.encode("utf-8", errors="strict")
+        max_bytes = min(active_settings.max_board_bytes, 64 * 1024 * 1024)
+        if not 1 <= len(source_bytes) <= max_bytes:
+            raise KicadIpcPayloadError("KiCad board snapshot exceeds the observation budget")
+        active_index = board.get_active_layer()
+        active_name = board.get_layer_name(active_index)
+        if (
+            not isinstance(active_index, int)
+            or isinstance(active_index, bool)
+            or not 0 <= active_index <= 4095
+            or not isinstance(active_name, str)
+            or _LAYER_NAME.fullmatch(active_name) is None
+        ):
+            raise KicadIpcPayloadError("KiCad returned an invalid active layer")
+        selection = _read_editor_selection(board, max_selection)
+        # Read the context twice.  Selection and active-layer changes are editor state, not
+        # board bytes, so a stable board alone is insufficient for a compare-and-swap gate.
+        second_active_index = board.get_active_layer()
+        second_active_name = board.get_layer_name(second_active_index)
+        second_selection = _read_editor_selection(board, max_selection)
+        confirmation = board.get_as_string()
+        confirmation_bytes = confirmation.encode("utf-8", errors="strict")
+    except (KicadIpcError, UnicodeError):
+        raise
+    except Exception as error:  # pragma: no cover - exercised by the real binding
+        raise KicadIpcConnectionError("KiCad editor context observation failed") from error
+    if confirmation_bytes != source_bytes:
+        raise KicadIpcConnectionError("KiCad board changed during editor context observation")
+    if (active_index, active_name, selection) != (
+        second_active_index,
+        second_active_name,
+        second_selection,
+    ):
+        raise KicadIpcConnectionError("KiCad editor context changed during observation")
+    return LiveEditorContextSnapshot(
+        board_digest=f"sha256:{hashlib.sha256(source_bytes).hexdigest()}",
+        board_bytes=len(source_bytes),
+        active_layer_index=active_index,
+        active_layer_name=active_name,
+        selection=selection,
+    )
 
 
 def capture_live_board(

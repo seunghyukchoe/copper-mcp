@@ -205,3 +205,16 @@ not routing-quality or throughput claims.
 | Metrics | Deterministic replays 10/10; median end-to-end capture/convert/legalize latency 1,266,333 ns; status `previewed`; candidate `sha256:d8a4cf178732c626c806826792ffdd475e8d29a99c747420f8998f510c621d86`; candidate equality and canonical bytes equality with file oracle `true/true`; stale board/snapshot refusals 1/1; forbidden action refusal 1/1 with zero IPC calls; mutating IPC calls `0`; raw source, DRC, fill, and apply authority all `false` |
 | Artifact | [`2026-08-04-live-placement-proposal.json`](../../benchmarks/results/mcp/2026-08-04-live-placement-proposal.json) |
 | Interpretation | This proves the revision-bound read-only observe-to-place proposal over one exact fake IPC snapshot. It does not establish live GUI-session success, KiCad placement mutation, single-undo behavior, DRC, ERC, electrical validation, fabrication readiness, or throughput on real boards. |
+
+### B-015 — Revision-bound live editor context
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:7360e85432d0d9930730a9dc366c894778fad66db25d83e6e09f76c520b03470` |
+| Date and commit | 2026-08-04 14:19:01 UTC; `98b77ac5b453dd17f355125935125d4994e33dd6`; tracked tree dirty because this slice was measured before its evidence commit; new benchmark and artifact files present |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; `mcp` 2.0.0; `pydantic` 2.13.4; no KiCad process invoked; IPC server disabled |
+| Dataset | Deterministic in-memory fake official-client board serialization, active `F.Cu` layer, and two native UUID-bearing selection wrappers; no external or proprietary board; no train/test split |
+| Configuration | `kicad-ipc-live-editor-context-v1`; ten repetitions; fake `kicad-python` client; 256-item selection ceiling; source script SHA-256 `84f367b86b1bdb04e524302fa011b34709f9b1624ad1ad04dfadb5e00b43f249`; CPU-only |
+| Metrics | Deterministic replays 10/10; unique response digests 1; median capture latency 31,437 ns; selection count 2; stale board/context refusals 1/1; changing active layer changes context digest 1/1; mutating IPC calls 0; raw editor content returned `false` |
+| Artifact | [`2026-08-04-live-editor-context.json`](../../benchmarks/results/mcp/2026-08-04-live-editor-context.json) |
+| Interpretation | This proves only the bounded read-only editor-context contract over a fake client: active layer and typed native selection references are deterministic and stale/context changes fail closed. It does not establish live GUI compatibility, placement/routing mutation, DRC, ERC, electrical behavior, fabrication readiness, or performance generalization. |

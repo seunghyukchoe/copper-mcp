@@ -222,6 +222,22 @@ class LiveBoardObservationToolResponse(_ClosedContract):
     read_only: Literal[True]
 
 
+class LiveEditorContextRequestContract(_ClosedContract):
+    """Revision-bound request for the active KiCad editor layer and selection."""
+
+    board: Literal["live"]
+    expect_board_revision: Digest
+    expect_snapshot_digest: Digest
+    expect_context_digest: Digest | None = None
+    max_selection: Annotated[int, Field(ge=1, le=256)] = 256
+
+
+LiveEditorContextToolRequest = Annotated[
+    Any,
+    WithJsonSchema(_inline_json_schema(LiveEditorContextRequestContract)),
+]
+
+
 RefId = Annotated[str, Field(pattern=r"^[a-z_]+:[a-z]+(:[0-9a-zA-Z:._-]{1,128})?$")]
 LayerId = Annotated[str, Field(pattern=r"^layer:[A-Za-z0-9_.\-]{1,64}$")]
 LayerName = Annotated[str, Field(pattern=r"^[A-Za-z0-9_.\-]{1,64}$")]
@@ -231,6 +247,49 @@ NetRefId = Annotated[
 ]
 PadRefId = Annotated[str, Field(pattern=r"^pad:[0-9a-zA-Z:._-]{1,160}$")]
 RefStability = Literal["native", "content_derived", "request_scoped"]
+
+
+class LiveEditorLayerContract(_ClosedContract):
+    """Validated active-layer identity from the KiCad editor."""
+
+    id: LayerId
+    name: LayerName
+    index: Annotated[int, Field(ge=0, le=4095)]
+
+
+class LiveEditorSelectionContract(_ClosedContract):
+    """One native, type-qualified selection reference; no raw KiCad text."""
+
+    ref_id: RefId
+    kind: Literal[
+        "footprint",
+        "pad",
+        "segment",
+        "arc",
+        "via",
+        "zone",
+        "shape",
+        "text",
+        "dimension",
+        "group",
+    ]
+    ref_stability: Literal["native"]
+
+
+class LiveEditorContextToolResponse(_ClosedContract):
+    """Read-only active-layer and selection context bound to one live revision."""
+
+    schema_: Literal["copper.live-editor-context"] = Field(alias="schema")
+    schema_version: Literal["0.1.0"]
+    source: Literal["kicad-ipc-live"]
+    board_revision: Digest
+    snapshot_digest: Digest
+    context_digest: Digest
+    active_layer: LiveEditorLayerContract
+    selection: Annotated[list[LiveEditorSelectionContract], Field(max_length=256)]
+    selection_count: Annotated[int, Field(ge=0, le=256)]
+    read_only: Literal[True]
+
 
 #: Board coordinates are exact nanometres and never floats; the bound is the JSON-safe
 #: integer range, so a conforming client never has to round a scene coordinate.
@@ -1114,6 +1173,8 @@ __all__ = [
     "CircuitIntentToolContent",
     "CircuitSceneToolResponse",
     "CircuitSchematicToolResponse",
+    "LiveEditorContextToolRequest",
+    "LiveEditorContextToolResponse",
     "LivePlacementToolRequest",
     "RoutePreviewToolRequest",
     "RoutePreviewToolResponse",

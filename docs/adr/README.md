@@ -35,3 +35,4 @@ from the decision ledger.
 - [ADR-0030: Bind a bounded KiCad IPC snapshot to Circuit Scene](0030-live-ipc-circuit-scene-binding.md)
 - [ADR-0031: Keep live KiCad route proposals read-only and revision-bound](0031-live-ipc-route-proposal.md)
 - [ADR-0032: Keep live KiCad placement proposals read-only and revision-bound](0032-live-placement-proposal.md)
+- [ADR-0033: Keep live editor context read-only and revision-bound](0033-live-editor-context.md)

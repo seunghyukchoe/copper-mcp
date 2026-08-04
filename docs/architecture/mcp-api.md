@@ -21,6 +21,7 @@
 | `observe_board_scene` | None, or a process-local render artifact when `include_render` is set | Bounded, region-scoped semantic scene of one board, with board text quarantined. |
 | `observe_live_board_scene` | None | Bounded Circuit Scene `0.2.0` from the active KiCad IPC document; uses `board: "live"` and optional stale-digest compare values. |
 | `preview_live_placement` | None | Revision-bound, ref-anchored placement proposal over one active KiCad IPC snapshot; never writes, runs DRC, or grants apply authority. |
+| `inspect_live_editor_context` | None | Revision-bound active layer and bounded native selection references from the KiCad IPC editor; never reads raw selection text or mutates the editor. |
 | `apply_candidate` | **Replaces the board file**; disabled by default | The only mutating tool. Requires an operator flag and a single-use token. Route patches only. |
 | `preview_placement` | None | Deterministic legality preview for a proposed footprint placement. Never applies, and carries no DRC evidence. |
 | `preview_route` | None, or a temporary report when `include_drc` is set | Bounded, non-mutating two-pin route proposal on the documented Board IR subset. |
@@ -158,6 +159,16 @@ snapshot mismatch is refused before placement-view/legalizer work. The output us
 apply-token, or editor-write authority. The fake-client B-014 oracle covers candidate equality
 with the file-backed path, deterministic replay, stale preconditions, and zero mutating calls;
 it does not claim success against a running KiCad GUI session.
+
+`inspect_live_editor_context` requires `board: "live"` plus board and snapshot SHA-256
+preconditions. It reads only the official Board `get_active_layer()`, `get_layer_name()`, and
+`get_selection()` APIs, confirms the board and editor context twice, and returns a context digest
+for follow-up compare-and-swap calls. Only allow-listed wrapper types with a validated native KIID
+become typed refs (`pad:kicad:<uuid>`, `segment:kicad:<uuid>`, and similar); unknown, empty,
+malformed, or over-budget selections fail closed. The service never calls
+`get_selection_as_string()`, returns no board text, coordinates, net names, or tokens, and exposes
+no write, DRC, placement, or routing authority. The context snapshot digest intentionally aliases
+the confirmed serialization digest until a caller-supplied Board IR profile is introduced.
 
 `preview_placement` takes one request object with a workspace-relative `board`, integer
 `constraints`, and `subjects` - the footprint references a proposal may move - plus optional

@@ -91,6 +91,7 @@ class McpServerTests(unittest.TestCase):
                 "inspect_board",
                 "inspect_board_ir",
                 "inspect_live_board",
+                "inspect_live_editor_context",
                 "observe_board_scene",
                 "observe_live_board_scene",
                 "preview_placement",

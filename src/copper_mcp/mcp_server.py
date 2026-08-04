@@ -32,6 +32,8 @@ from copper_mcp.mcp_contracts import (
     CircuitSchematicToolResponse,
     LiveBoardObservationToolResponse,
     LiveCircuitSceneToolRequest,
+    LiveEditorContextToolRequest,
+    LiveEditorContextToolResponse,
     LivePlacementToolRequest,
     LiveRoutePreviewToolRequest,
     PlacementPreviewToolResponse,
@@ -54,6 +56,9 @@ from copper_mcp.tools import compare_candidates as compare_candidates_service
 from copper_mcp.tools import inspect_board as inspect_board_service
 from copper_mcp.tools import inspect_board_ir as inspect_board_ir_service
 from copper_mcp.tools import inspect_live_board as inspect_live_board_service
+from copper_mcp.tools import (
+    inspect_live_editor_context_raw as inspect_live_editor_context_service_raw,
+)
 from copper_mcp.tools import observe_board_scene_raw as observe_board_scene_service_raw
 from copper_mcp.tools import observe_live_board_scene_raw as observe_live_board_scene_service_raw
 from copper_mcp.tools import preview_live_placement_raw as preview_live_placement_service_raw
@@ -89,6 +94,7 @@ class CopperMCPServer(MCPServer[None]):
                 "render_circuit_schematic",
                 "observe_live_board_scene",
                 "preview_live_placement",
+                "inspect_live_editor_context",
             }:
                 result.append(tool)
                 continue
@@ -115,6 +121,8 @@ class CopperMCPServer(MCPServer[None]):
             raise ToolError("live scene tool arguments are malformed")
         if name == "preview_live_placement" and set(arguments) != {"request"}:
             raise ToolError("live placement tool arguments are malformed")
+        if name == "inspect_live_editor_context" and set(arguments) != {"request"}:
+            raise ToolError("live editor context tool arguments are malformed")
         return await super().call_tool(name, arguments, context)
 
 
@@ -195,6 +203,30 @@ def observe_live_board_scene(
 
     scene = observe_live_board_scene_service_raw(request, _SETTINGS)
     return CircuitSceneToolResponse.model_validate(scene.to_dict())
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def inspect_live_editor_context(
+    request: LiveEditorContextToolRequest,
+) -> LiveEditorContextToolResponse:
+    """Inspect the active layer and selected native item refs without mutation.
+
+    The request must carry the board and snapshot digests from a live scene/observation.
+    An optional context digest makes a follow-up compare-and-swap read fail closed if the
+    operator changes the selection or active layer.  No board text, coordinates, net names,
+    selection strings, project tokens, or write APIs are read or returned.
+    """
+
+    context = inspect_live_editor_context_service_raw(request, _SETTINGS)
+    return LiveEditorContextToolResponse.model_validate(context.to_dict())
 
 
 @mcp.tool()

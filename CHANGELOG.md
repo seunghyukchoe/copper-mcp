@@ -106,6 +106,11 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- `inspect_live_editor_context`, a read-only MCP surface for the active KiCad layer and bounded
+  native selection refs, bound to board/snapshot/context digests. The FreeRouting comparison note
+  documents its heuristic maze/rip-up architecture and a common-board benchmark protocol; no
+  general routing-quality superiority claim is made.
+
 - `preview_live_placement`, a deterministic placement proposal over one byte-confirmed active
   KiCad IPC snapshot. It reuses the file-backed legalizer and requires both Circuit Scene digests;
   B-014 records fake-client equality, replay, stale-precondition, and zero-mutation evidence.
@@ -175,6 +180,10 @@ All notable changes are documented here. The format follows
   `--expect-board-revision` compare-and-swap the operator states explicitly.
 
 ### Fixed
+
+- Added a revision-bound `inspect_live_editor_context` MCP surface that reports only KiCad's
+  active layer and bounded native selection references. Unknown/empty selections, raw selection
+  strings, and editor mutations are refused or never read.
 
 - A failure while writing the pre-apply copy now returns a typed `backup_failed` refusal instead
   of escaping as an uncaught `OSError`. Found by crash injection: no copy means no way back, so
