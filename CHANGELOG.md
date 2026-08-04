@@ -6,6 +6,14 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Added a transport-independent, revision-safe routing-job ledger. `RoutingJobStore` persists only
+  bounded redacted JSON records in SQLite, supports idempotent content-addressed creation,
+  compare-and-swap transitions, cooperative cancellation, restart rehydration, TTL/capacity
+  limits, and candidate ID/base-revision binding. It does not run background routing, persist
+  candidate geometry, expose MCP Tasks, export boards, or grant apply authority.
+
 ### Security
 
 - Added `preview_layered_route`, a loopback/file-backed, read-only MCP boundary that requires

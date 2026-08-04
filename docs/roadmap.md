@@ -58,7 +58,11 @@ documentation, ledger updates, and benchmark evidence.
   - [x] Internal candidate-bound authoritative KiCad DRC evidence over a private disposable board.
   - [x] Bounded, non-mutating public route preview over MCP and the CLI, with opt-in authoritative
     candidate DRC evidence.
-  - [ ] Durable routing jobs, candidate persistence, and export.
+  - [~] Durable routing jobs, candidate persistence, and export.
+    - [x] Transport-independent redacted job records with revision CAS, SQLite reopen, bounded
+      TTL/capacity, idempotent creation, and cooperative cancellation.
+    - [ ] Worker execution/leases, candidate persistence, durable export, and ordinary MCP
+      start/get/cancel tools.
 - [x] Existing selected-layer copper as exact rectangular obstacles.
 - [x] Via obstacles on the selected layer, the first limit a real board hit.
 - [x] Conservative polygon zone-boundary envelope obstacles with exact integer concave/diagonal
@@ -114,8 +118,10 @@ documentation, ledger updates, and benchmark evidence.
 
 ## M3 — Safe candidate application
 
-- [ ] Durable routing jobs and cancellation.
-- [ ] MCP Tasks progressive enhancement.
+- [~] Durable routing jobs and cancellation. The bounded internal ledger exists; worker leases,
+  ordinary MCP tools, and execution recovery remain open.
+- [ ] MCP Tasks progressive enhancement. The current protocol is an experimental extension and
+  remains deferred until a pinned client/server compatibility matrix exists.
 - [x] Immutable route patch format. A byte-preserving span-splice CST and a pure apply engine:
   given board bytes and a verified candidate they return the bytes an apply would write, proven
   by a three-part assertion (untouched bytes bit-identical, result reparses fail-closed,

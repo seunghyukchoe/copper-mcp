@@ -48,6 +48,7 @@ live revision before it can release the synchronous connection.
 | `circuit_scene.py` | Bounded, region-scoped Board IR observation with typed references and quarantined author text. |
 | `placement/` | Revision-bound footprint views, typed placement intent, and deterministic preview/legalization. |
 | `route_preview.py` | The public non-mutating route preview service. |
+| `routing/jobs.py` | Transport-independent revision-safe job records and a bounded SQLite ledger; no worker or MCP Tasks adapter. |
 | `mcp_server.py` | MCP tools/resources and transport configuration. |
 
 Board IR `0.2.0` is the domain and source-adapter foundation. It adds immutable footprint pose,
@@ -58,9 +59,11 @@ supported synthetic Board IR inputs. The pure adapter can serialize an exact rep
 memory, an internal service binds that private derivative to strict aggregate KiCad DRC evidence,
 `preview_route` exposes that pipeline as a bounded, non-mutating public proposal, and
 `inspect_board_ir` reports whether a board is representable at all. The separately authorized,
-default-off `apply_candidate` surface applies replay-verified route patches only. No durable
-candidate export, raw Board IR MCP resource, route/evidence resource, routing job, candidate
-persistence, placement apply, or live-editor apply path is implemented. The live IPC observer and
+default-off `apply_candidate` surface applies replay-verified route patches only. An internal,
+bounded SQLite routing-job ledger now persists redacted revision-safe records, but it does not
+execute work, retain candidate geometry, expose an MCP task handle, or grant export authority. No
+durable candidate export, raw Board IR MCP resource, route/evidence resource, ordinary routing-job
+tools, placement apply, or live-editor apply path is implemented. The live IPC observer and
 `observe_live_board_scene` bridge are read-only and do not change this mutation boundary; live
 route/placement action authority is not implemented. See
 [Board IR and KiCad adapter contracts](board-ir.md),

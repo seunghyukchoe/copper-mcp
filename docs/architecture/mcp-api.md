@@ -322,9 +322,12 @@ it is non-destructive and performs no network access. Both the tool and dynamic 
 disabled for streamable HTTP until authenticated principals, session isolation, authorization, and
 per-principal quotas exist. Rendering over MCP never writes into the configured workspace.
 
-Candidate persistence, durable routing jobs, route/evidence resource exposure, and export remain
-deferred to the planned routing-service contract. Route-candidate apply is implemented and
-documented above; placement apply is not.
+The internal `RoutingJobStore` now provides a bounded, transport-independent SQLite ledger for
+redacted job records and compare-and-swap lifecycle transitions. It does not run a worker, retain
+candidate geometry, expose a job resource, or grant export/apply authority. Candidate persistence,
+durable candidate export, route/evidence resource exposure, and ordinary `start_routing`,
+`get_routing_job`, and `cancel_routing_job` tools remain deferred to the planned routing-service
+contract. Route-candidate apply is implemented and documented above; placement apply is not.
 
 `apply_candidate` is the only tool that changes a board, and it applies **route patches only**.
 It takes `board`, the `candidate` manifest from a preview, an `apply_token`,
