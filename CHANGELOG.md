@@ -8,6 +8,13 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added a deterministic conservative spatial index to the A* and benchmark Dijkstra obstacle
+  hot path. Exact integer legality predicates remain authoritative, small/pathological boards
+  fall back to linear scans, and candidate identity advances to `astar-grid/0.6.0` with policy
+  `orthogonal-a-star-spatial-index-v1`. B-033 records differential route equivalence and the
+  fixture-bounded reduction in exact obstacle relations; no congestion, FreeRouting, DRC, or
+  fabrication claim is made.
+
 - Added opt-in candidate-bound authoritative KiCad DRC evidence to file-backed
   `preview_layered_route`. The closed response binds candidate, base, source, patched-board, and
   DRC-context revisions while returning only aggregate findings; live layered preview and durable

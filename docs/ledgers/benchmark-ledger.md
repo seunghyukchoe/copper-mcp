@@ -456,3 +456,16 @@ result or a general performance comparison.
 | Metrics | Omitted DRC calls `0`; requested DRC calls `1`; candidate/evidence binding `true`; source unchanged `true`; workspace mutations `0`; KiCad invoked `false`; whole-board DRC claim `false`; FreeRouting parity claim `false` |
 | Artifact | [`2026-08-05-layered-drc-preview.json`](../../benchmarks/results/routing/2026-08-05-layered-drc-preview.json) |
 | Interpretation | This measures the public opt-in/schema and provenance boundary, not KiCad DRC quality or timing. The real blocked-pad smoke uses KiCad 10.0.5 and records zero errors, warnings, and unconnected items with the same candidate/source/context binding; neither result establishes whole-board, fabrication, electrical, refill, general multilayer, or FreeRouting authority. |
+
+### B-033 — Conservative obstacle spatial-index differential
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:69702753f7a0436a53b92473911c95986eaab5ee5c9cfff47388f9e49b6405e1` |
+| Date and commit | 2026-08-05; source commit `9918236c7a6022e7bbaf44fd6ca0b27729b469ee` recorded before the spatial-index evidence commit |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
+| Dataset | Independently authored deterministic uniform-grid fixture: 512 conservative rectangle entries and 256 closed AABB queries; no board bytes, private designs, or external corpus |
+| Configuration | `copper-mcp/benchmark/routing-conservative-spatial-index-v1`; seven repetitions; exact closed-bound legacy relation scan versus immutable uniform-grid query; 256 deterministic exact-query replays |
+| Metrics | Legacy relation checks `131,072`; indexed relation checks `31`; reduction `99.9763%`; exact query matches `256/256`; indexed buckets `136`; median microbenchmark speedup `15.27x` on this host. Differential A*/Dijkstra route fixture: same geometry/cost/expanded states; A* exact checks `19,982 → 308`; low ceilings remain fail-closed while indexed work may complete under a ceiling the legacy scan would exhaust. |
+| Artifact | [`2026-08-05-spatial-index.json`](../../benchmarks/results/routing/2026-08-05-spatial-index.json) |
+| Interpretation | This is a conservative candidate-filter and resource-use result, not a whole-board scaling claim. It does not establish congestion/rip-up, FreeRouting parity, KiCad DRC, electrical behavior, fabrication readiness, or cross-host wall-clock performance. |

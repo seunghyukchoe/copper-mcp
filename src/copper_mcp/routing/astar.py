@@ -41,11 +41,13 @@ from copper_mcp.routing.contracts import (
     RouteRequest,
     RouteResult,
 )
+from copper_mcp.routing.spatial_index import ConservativeSpatialIndex, SpatialIndexEntry
 from copper_mcp.routing.steiner_ordering import batched_one_steiner_order
 
-ROUTER_VERSION = "astar-grid/0.5.0"
-ROUTING_POLICY = "orthogonal-a-star-v1"
+ROUTER_VERSION = "astar-grid/0.6.0"
+ROUTING_POLICY = "orthogonal-a-star-spatial-index-v1"
 _EMPTY_DIGEST = f"sha256:{'0' * 64}"
+_SPATIAL_INDEX_MIN_ENTRIES = 8
 
 _Rect: TypeAlias = tuple[int, int, int, int]
 _Node: TypeAlias = tuple[int, int]
@@ -81,6 +83,8 @@ class _Problem:
     safe_board: _Rect
     rect_obstacles: tuple[_Rect, ...]
     polygon_obstacles: tuple[_PolygonObstacle, ...]
+    rect_index: ConservativeSpatialIndex[_Rect]
+    polygon_index: ConservativeSpatialIndex[_PolygonObstacle]
     min_ix: int
     max_ix: int
     min_iy: int
@@ -221,6 +225,19 @@ def _inflate_rectangle(rectangle: _Rect, margin_nm: int) -> _Rect:
         min_y - margin_nm,
         max_x + margin_nm,
         max_y + margin_nm,
+    )
+
+
+def _point_bounds(first: PointNM, second: PointNM, padding_nm: int = 0) -> _Rect:
+    """Return a closed AABB for two points, conservatively padded in every direction."""
+
+    if isinstance(padding_nm, bool) or padding_nm < 0:
+        raise ValueError("point-bound padding must be a non-negative integer")
+    return (
+        min(first.x, second.x) - padding_nm,
+        min(first.y, second.y) - padding_nm,
+        max(first.x, second.x) + padding_nm,
+        max(first.y, second.y) + padding_nm,
     )
 
 
@@ -387,11 +404,13 @@ def _edge_is_legal(
 ) -> bool:
     if not _inside_closed(start, problem.safe_board) or not _inside_closed(end, problem.safe_board):
         return False
-    for obstacle in problem.rect_obstacles:
+    work.checkpoint()
+    edge_bounds = _point_bounds(start, end)
+    for obstacle in problem.rect_index.query(edge_bounds):
         work.obstacle_check()
         if _edge_enters_open_rectangle(start, end, obstacle):
             return False
-    for polygon in problem.polygon_obstacles:
+    for polygon in problem.polygon_index.query(edge_bounds):
         if _edge_within_polygon_offset(start, end, polygon, work):
             return False
     return True
@@ -402,14 +421,16 @@ def _proximity_step(point: PointNM, problem: _Problem, work: _WorkBudget) -> int
     min_x, min_y, max_x, max_y = problem.safe_board
     if min(point.x - min_x, max_x - point.x, point.y - min_y, max_y - point.y) < step:
         return 1
-    for obstacle in problem.rect_obstacles:
+    work.checkpoint()
+    proximity_bounds = (point.x - step, point.y - step, point.x + step, point.y + step)
+    for obstacle in problem.rect_index.query(proximity_bounds):
         work.obstacle_check()
         obstacle_min_x, obstacle_min_y, obstacle_max_x, obstacle_max_y = obstacle
         dx = max(obstacle_min_x - point.x, 0, point.x - obstacle_max_x)
         dy = max(obstacle_min_y - point.y, 0, point.y - obstacle_max_y)
         if max(dx, dy) < step:
             return 1
-    for polygon in problem.polygon_obstacles:
+    for polygon in problem.polygon_index.query(proximity_bounds):
         if _point_within_polygon_offset(
             point,
             polygon,
@@ -1505,6 +1526,32 @@ def _prepare(
     for rectangle in target_cores:
         target_nodes.update(attachment_nodes(rectangle))
 
+    rect_obstacle_tuple = tuple(sorted(rect_obstacles))
+    polygon_obstacle_tuple = tuple(sorted(polygon_obstacles, key=_polygon_obstacle_sort_key))
+    # Index bounds include one lattice step beyond the exact query envelope.  This is a safe
+    # superset for both edge legality and proximity scoring; exact predicates still decide.
+    rect_index = ConservativeSpatialIndex(
+        tuple(
+            SpatialIndexEntry(
+                ordinal=index,
+                bounds=_inflate_rectangle(rectangle, step),
+                value=rectangle,
+            )
+            for index, rectangle in enumerate(rect_obstacle_tuple)
+        ),
+        min_index_entries=_SPATIAL_INDEX_MIN_ENTRIES,
+    )
+    polygon_index = ConservativeSpatialIndex(
+        tuple(
+            SpatialIndexEntry(
+                ordinal=index,
+                bounds=_inflate_rectangle(polygon.bounds, polygon.margin_nm + step),
+                value=polygon,
+            )
+            for index, polygon in enumerate(polygon_obstacle_tuple)
+        ),
+        min_index_entries=_SPATIAL_INDEX_MIN_ENTRIES,
+    )
     problem = _Problem(
         snapshot=snapshot,
         request=request,
@@ -1513,8 +1560,10 @@ def _prepare(
         width_nm=net_class.track_width_nm,
         clearance_nm=net_class.clearance_nm,
         safe_board=safe_board,
-        rect_obstacles=tuple(sorted(rect_obstacles)),
-        polygon_obstacles=tuple(sorted(polygon_obstacles, key=_polygon_obstacle_sort_key)),
+        rect_obstacles=rect_obstacle_tuple,
+        polygon_obstacles=polygon_obstacle_tuple,
+        rect_index=rect_index,
+        polygon_index=polygon_index,
         min_ix=min_ix,
         max_ix=max_ix,
         min_iy=min_iy,

@@ -131,7 +131,10 @@ documentation, ledger updates, and benchmark evidence.
 - [x] Attachment to existing same-net copper and bounded partial-route completion.
 - [ ] Multilayer vias and keepouts.
 - [ ] Negotiated-congestion multi-net routing.
-- [ ] Incremental spatial index and bounded rip-up/reroute.
+- [~] Incremental spatial index and bounded rip-up/reroute.
+  - [x] Immutable conservative obstacle index for exact A*/Dijkstra query narrowing, with
+    canonical linear fallback, differential route tests, and B-033 evidence. Bounded rip-up /
+    reroute coordination remains open.
 - [ ] Benchmark comparison against established open baselines.
 
 - [ ] Emit candidate DRC evidence in the in-toto Statement envelope, so an attestation this

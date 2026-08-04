@@ -398,8 +398,8 @@ def test_straight_route_is_exact_replayable_and_content_addressed() -> None:
     first = _candidate(router.propose(snapshot, request))
     second = _candidate(router.propose(snapshot, request))
 
-    assert router.name == "orthogonal-a-star-v1"
-    assert first.router_version == "astar-grid/0.5.0"
+    assert router.name == "orthogonal-a-star-spatial-index-v1"
+    assert first.router_version == "astar-grid/0.6.0"
     assert first == second
     assert first.patch.paths[0].vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
     assert first.patch.width_nm == 200
