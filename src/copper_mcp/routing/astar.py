@@ -1305,6 +1305,17 @@ def _prepare(
             return net_class.clearance_nm
         return max(net_class.clearance_nm, other)
 
+    # A verified fill island is keyed by its net and layer rather than by a Board IR zone ID.
+    # There can be more than one zone for that pair, so use the strictest declared zone
+    # clearance.  This conservative association keeps a high-clearance zone from being
+    # under-modelled while remaining safe for older callers that only provide fill geometry.
+    zone_clearance_by_net_layer: dict[tuple[str, str], int] = {}
+    for zone in content.zones:
+        key = (zone.net_id, zone.layer_id)
+        zone_clearance_by_net_layer[key] = max(
+            zone_clearance_by_net_layer.get(key, 0), zone.clearance_nm
+        )
+
     for index, keepout in enumerate(content.keepouts):
         if index % 64 == 0:
             work.checkpoint()
@@ -1416,12 +1427,19 @@ def _prepare(
         if island.layer_id != request.layer_id or island.net_id == request.net_id:
             continue
         ensure_obstacle_capacity()
+        # The fill polygon is exact, but the route still has to respect both net-class
+        # clearance and the governing zone's own clearance.  Candidate half-width is retained
+        # here so the resulting obstacle is a conservative track-center exclusion envelope.
+        clearance_nm = max(
+            governing_clearance_nm(island.net_id),
+            zone_clearance_by_net_layer.get((island.net_id, island.layer_id), 0),
+        )
         polygon_obstacles.append(
             _PolygonObstacle(
                 source_id=f"fill:{island.net_id}:{island.layer_id}:{index}",
                 points=island.points,
                 bounds=_polygon_bounds(island.points, work),
-                margin_nm=half_width_nm + governing_clearance_nm(island.net_id),
+                margin_nm=half_width_nm + clearance_nm,
             )
         )
 

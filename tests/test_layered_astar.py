@@ -227,3 +227,18 @@ def test_obstacle_count_exhaustion_has_a_typed_budget_diagnostic() -> None:
 
     assert result.diagnostic is not None
     assert result.diagnostic.code is LayeredFailureCode.OBSTACLE_BUDGET_EXCEEDED
+
+
+def test_malformed_obstacle_is_invalid_before_obstacle_budget_is_reported() -> None:
+    result = route_layered(
+        _request(
+            obstacles=(
+                LayeredObstacle(0, 4, 4, 4, 4),
+                object(),  # type: ignore[tuple-item]
+            ),
+            settings=LayeredAStarSettings(max_obstacles=1),
+        )
+    )
+
+    assert result.diagnostic is not None
+    assert result.diagnostic.code is LayeredFailureCode.INVALID_REQUEST

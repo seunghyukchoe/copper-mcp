@@ -55,6 +55,15 @@ LAYERED_ROUTING_POLICY = "board-layered-a-star-v1"
 _EMPTY_DIGEST = f"sha256:{'0' * 64}"
 _MAX_SAFE_INT = (1 << 53) - 1
 
+# Keep these limits aligned with the pure layered planner.  The adapter validates settings before
+# deriving physical obstacles, so malformed values cannot reach arithmetic or budget comparisons
+# and escape the non-throwing result contract.
+_MAX_COST = 1_000_000_000
+_MAX_EXPANSIONS = 1_000_000
+_MAX_NODES = 500_000
+_MAX_OBSTACLES = 4_096
+_MAX_OBSTACLE_CHECKS = 10_000_000
+
 
 @dataclass(frozen=True, slots=True)
 class LayeredRouteRequest:
@@ -142,6 +151,21 @@ def _invalid_request(request: object) -> str | None:
     settings_obj: object = request.settings
     if not isinstance(settings_obj, LayeredAStarSettings):
         return "settings must be a LayeredAStarSettings value"
+    settings_limits: tuple[tuple[str, object, int], ...] = (
+        ("move cost", settings_obj.move_cost, _MAX_COST),
+        ("via cost", settings_obj.via_cost, _MAX_COST),
+        ("expansion budget", settings_obj.max_expansions, _MAX_EXPANSIONS),
+        ("node budget", settings_obj.max_nodes, _MAX_NODES),
+        ("obstacle budget", settings_obj.max_obstacles, _MAX_OBSTACLES),
+        ("obstacle-check budget", settings_obj.max_obstacle_checks, _MAX_OBSTACLE_CHECKS),
+    )
+    for setting_name, setting_value, setting_maximum in settings_limits:
+        if (
+            isinstance(setting_value, bool)
+            or not isinstance(setting_value, int)
+            or not 1 <= setting_value <= setting_maximum
+        ):
+            return f"{setting_name} must be a positive integer"
     return None
 
 
@@ -366,6 +390,7 @@ class LayeredBoardRouter:
         if malformed is not None:
             if (
                 isinstance(request, LayeredRouteRequest)
+                and request.expected_revision is not None
                 and request.expected_revision != request.board_revision
             ):
                 return _diagnostic(LayeredRouteFailureCode.STALE_REVISION, malformed)
@@ -582,7 +607,11 @@ class LayeredBoardRouter:
             clearance = max(
                 net_class.clearance_nm, clearance_by_net.get(segment.net_id, widest_clearance)
             )
-            add_obstacle(rectangle, layer_index[segment.layer_id], clearance)
+            add_obstacle(
+                rectangle,
+                layer_index[segment.layer_id],
+                half_width + clearance,
+            )
             add_obstacle(
                 rectangle,
                 layer_index[segment.layer_id],
@@ -603,8 +632,11 @@ class LayeredBoardRouter:
                 net_class.clearance_nm, clearance_by_net.get(via.net_id, widest_clearance)
             )
             for layer in range(2):
-                add_obstacle(rectangle, layer, clearance)
-                add_obstacle(rectangle, layer, clearance, via=True)
+                # The foreign via rectangle already contains its own radius. Inflate it by the
+                # candidate copper envelope as well: tracks need half-width clearance, while a
+                # candidate via transition needs the candidate via radius.
+                add_obstacle(rectangle, layer, half_width + clearance)
+                add_obstacle(rectangle, layer, via_half + clearance, via=True)
         for zone in snapshot.content.zones:
             if zone.net_id == request.net_id:
                 continue
@@ -619,7 +651,7 @@ class LayeredBoardRouter:
                 add_obstacle(
                     rectangle,
                     layer_index[zone.layer_id],
-                    max(net_class.clearance_nm, zone.clearance_nm),
+                    half_width + max(net_class.clearance_nm, zone.clearance_nm),
                 )
                 add_obstacle(
                     rectangle,

@@ -371,7 +371,9 @@ enters Board IR: the router accepts verified islands as a parameter and never fe
 snapshots and their digests are unchanged and KiCad execution stays out of the search.
 
 For a foreign net, a matching fresh island set replaces that zone's conservative outline on the
-selected layer; each island is then an exact polygon obstacle with the governing clearance. A fill
+selected layer; each island is then an exact polygon obstacle with the strictest governing
+zone/net clearance plus the candidate track half-width. When multiple zones share a net/layer, the
+strictest zone clearance is used because island records do not carry a zone identifier. A fill
 island without a matching Board IR zone, or with a different source revision, is refused before
 search.
 

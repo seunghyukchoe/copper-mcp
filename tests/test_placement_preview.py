@@ -138,6 +138,15 @@ class ServiceTests(unittest.TestCase):
         snapshot_digest = baseline["snapshot_digest"]
         assert snapshot_digest is not None
 
+        bound = _preview(
+            "placement-legal.kicad_pcb",
+            expect_board_revision=board_revision,
+            expect_snapshot_digest=snapshot_digest,
+        )
+        self.assertEqual(bound["status"], "previewed")
+        self.assertEqual(bound["board_revision"], board_revision)
+        self.assertEqual(bound["snapshot_digest"], snapshot_digest)
+
         stale_board = _preview(
             "placement-legal.kicad_pcb",
             expect_board_revision="sha256:" + "0" * 64,
@@ -156,6 +165,26 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(stale_snapshot["diagnostic"]["code"], "stale_revision")
         self.assertEqual(stale_snapshot["snapshot_digest"], snapshot_digest)
         self.assertIsNone(stale_snapshot["candidate"])
+
+    def test_stale_snapshot_is_rejected_before_building_placement_view(self) -> None:
+        baseline = _preview("placement-legal.kicad_pcb")
+        board_revision = baseline["board_revision"]
+
+        # A stale snapshot must be a cheap CAS refusal. In particular, the placement view can
+        # be expensive for large boards and must not be constructed before the digest check.
+        with patch(
+            "copper_mcp.placement_preview.build_placement_view",
+            side_effect=AssertionError("stale snapshot reached placement view"),
+        ):
+            result = _preview(
+                "placement-legal.kicad_pcb",
+                expect_board_revision=board_revision,
+                expect_snapshot_digest="sha256:" + "1" * 64,
+            )
+
+        self.assertEqual(result["status"], "refused")
+        assert result["diagnostic"] is not None
+        self.assertEqual(result["diagnostic"]["code"], "stale_revision")
 
     def test_a_subject_ceiling_is_enforced_at_the_boundary(self) -> None:
         with self.assertRaises(PlacementError):

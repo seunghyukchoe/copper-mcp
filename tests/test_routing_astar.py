@@ -2501,6 +2501,54 @@ def test_fresh_foreign_fill_replaces_conservative_zone_envelope() -> None:
     assert exact.patch.paths[0].vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
 
 
+def test_fresh_fill_respects_governing_zone_clearance_and_track_half_width() -> None:
+    """Exact fill still carries the zone's clearance rule around its copper polygon."""
+
+    fill_points = (
+        PointNM(3_000, 5_500),
+        PointNM(7_000, 5_500),
+        PointNM(7_000, 5_600),
+        PointNM(3_000, 5_600),
+    )
+
+    low_clearance = _snapshot(
+        foreign_zones=(_rectangle(3_000, 5_500, 7_000, 5_600),),
+        zone_clearance_nm=100,
+    )
+    low_fill = VerifiedFill(
+        net_id=OTHER_NET_ID,
+        layer_id=LAYER_ID,
+        points=fill_points,
+        source_revision=SOURCE_REVISION,
+    )
+    low_candidate = _candidate(
+        AStarRouter().propose(low_clearance, _request(low_clearance), verified_fill=(low_fill,))
+    )
+
+    high_clearance = _snapshot(
+        foreign_zones=(_rectangle(3_000, 5_500, 7_000, 5_600),),
+        zone_clearance_nm=1_000,
+    )
+    high_fill = VerifiedFill(
+        net_id=OTHER_NET_ID,
+        layer_id=LAYER_ID,
+        points=fill_points,
+        source_revision=SOURCE_REVISION,
+    )
+    high_candidate = _candidate(
+        AStarRouter().propose(
+            high_clearance,
+            _request(high_clearance),
+            verified_fill=(high_fill,),
+        )
+    )
+
+    # 100 nm route half-width + 100 nm zone clearance leaves the 5,000 nm centreline open;
+    # the 1,000 nm zone rule must inflate the same exact polygon and force a detour.
+    assert low_candidate.cost.length_nm == 8_000
+    assert high_candidate.cost.length_nm > low_candidate.cost.length_nm
+
+
 def test_verified_fill_without_a_board_ir_zone_is_refused() -> None:
     snapshot = _snapshot()
     fill = VerifiedFill(

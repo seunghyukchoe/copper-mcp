@@ -8,6 +8,12 @@ All notable changes are documented here. The format follows
 
 ### Security
 
+- Layered routing now validates every obstacle and search-budget field before reporting resource
+  exhaustion, and its physical envelopes include the candidate track half-width/via radius plus
+  explicit zone clearances. Malformed requests cannot be reclassified as stale revisions or escape
+  the non-throwing diagnostic contract. Fresh fill obstacles apply the same governing zone-clearance
+  rule as conservative zone envelopes.
+
 - `preview_live_placement` is revision-bound and read-only: malformed requests fail before IPC,
   stale board/snapshot digests stop before candidate work, and no KiCad write, DRC, fill,
   apply-token, or raw source can be requested through the contract.
@@ -77,8 +83,9 @@ All notable changes are documented here. The format follows
 
 - Freshness-verified foreign KiCad fill islands now replace the conservative whole-zone routing
   envelope in the deterministic A* core. Matching zone/source revisions are required, stale or
-  unmatched fill fails closed, and `preview_route` now returns the freshness-bound authority on
-  routed candidates with a typed `routing_effect` when `include_fill_authority` is requested.
+  unmatched fill fails closed, explicit zone clearance is retained, and `preview_route` now returns
+  the freshness-bound authority on routed candidates with a typed `routing_effect` when
+  `include_fill_authority` is requested.
 - Layered two-signal-layer candidates now have an internal, replay-bound authoritative KiCad DRC
   gate. The gate serializes only a disposable derivative, preserves source bytes, binds the
   complete private DRC context, and returns redacted aggregate evidence; it is not exposed through

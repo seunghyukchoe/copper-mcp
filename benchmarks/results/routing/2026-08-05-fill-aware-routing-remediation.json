@@ -1,0 +1,27 @@
+{
+  "date_utc": "2026-08-04T16:53:23+00:00",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "fixture": "synthetic-fill-corridor-v1",
+  "metrics": {
+    "conservative_candidate_id": "sha256:df126b608003e20645a9c9219e699688c6bee7f44a676b90eed67c3435926056",
+    "conservative_length_nm": 14000,
+    "deterministic_conservative": true,
+    "deterministic_fill_aware": true,
+    "drc": false,
+    "fill_aware_candidate_id": "sha256:d2636f03e6bea6aeab332ca176ccf60f75b7b6f93823640bd891c97643dba4bf",
+    "fill_aware_length_nm": 8000,
+    "kicad_invoked": false,
+    "matching_zone_refusal_code": "unsupported_geometry",
+    "matching_zone_required": true,
+    "repetitions": 10,
+    "verified_fill_source_revision": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "wire_length_reduction_nm": 6000
+  },
+  "run_id": "sha256:e6c28419ef56e77493efcc8acc2ea45e4252979fae60e1596b079f454b594106",
+  "schema": "copper-mcp/benchmark/fill-aware-routing/v1",
+  "script": "scripts/benchmark_fill_aware_routing.py",
+  "source_commit": "972b902ea8c845dd5077be9a6a3f549e51848173"
+}

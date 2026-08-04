@@ -344,11 +344,6 @@ def _validate(
     ):
         if not _integer(value) or not 1 <= value <= maximum:
             return f"{name} must be a positive integer"
-    if len(obstacles) + len(via_obstacles) > settings.max_obstacles:
-        return _ValidationFailure(
-            LayeredFailureCode.OBSTACLE_BUDGET_EXCEEDED,
-            "obstacle count exceeds the configured obstacle budget",
-        )
     for obstacle_obj in (*obstacles, *via_obstacles):
         obstacle: object = obstacle_obj
         if not isinstance(obstacle, LayeredObstacle):
@@ -368,6 +363,11 @@ def _validate(
             return "obstacle layer is not one of the signal layers"
         if obstacle.min_x > obstacle.max_x or obstacle.min_y > obstacle.max_y:
             return "obstacle bounds must be ordered"
+    if len(obstacles) + len(via_obstacles) > settings.max_obstacles:
+        return _ValidationFailure(
+            LayeredFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+            "obstacle count exceeds the configured obstacle budget",
+        )
     return request, layers, (min_x, min_y, max_x, max_y)
 
 

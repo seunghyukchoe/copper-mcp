@@ -326,3 +326,16 @@ result or a general performance comparison.
 | Metrics | Routed outcomes 10/10; foreign-zone provenance outcomes 10/10; schema-valid outputs 10/10; deterministic candidate IDs `true`; workspace unchanged `true`; KiCad invocation `false`; DRC `false` |
 | Artifact | [`2026-08-05-fill-preview-provenance.json`](../../benchmarks/results/routing/2026-08-05-fill-preview-provenance.json) |
 | Interpretation | This proves that an MCP caller can distinguish a routed candidate shaped by freshness-bound foreign fill without receiving raw island geometry or mutation authority. It is contract evidence, not KiCad refill, DRC, whole-board, electrical, fabrication, performance, or FreeRouting evidence. |
+
+### B-023 — Fill-aware routing safety remediation
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:e6c28419ef56e77493efcc8acc2ea45e4252979fae60e1596b079f454b594106` |
+| Date and commit | 2026-08-04 16:53:23 UTC; `972b902ea8c845dd5077be9a6a3f549e51848173`; measured before the remediation evidence commit |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
+| Dataset | Independently generated synthetic Board IR fixture `synthetic-fill-corridor-v1`, with a matching foreign zone/fill case and an orphaned-fill negative case; no external or proprietary design data |
+| Configuration | `fill-aware-routing-v1` remediation replay; ten deterministic conservative and freshness-aware replays; explicit orphaned-fill diagnostic gate; CPU-only |
+| Metrics | Conservative 10/10 deterministic; fill-aware 10/10 deterministic; wire length 14,000 nm → 8,000 nm (6,000 nm reduction); orphaned fill refused with `unsupported_geometry`; `matching_zone_required=true`; KiCad invocation `false`; DRC `false` |
+| Artifact | [`2026-08-05-fill-aware-routing-remediation.json`](../../benchmarks/results/routing/2026-08-05-fill-aware-routing-remediation.json) |
+| Interpretation | This substantiates both the route-quality replay and the matching-zone safety gate after review remediation. It remains synthetic core evidence and does not claim real-board refill, KiCad DRC, whole-board completion, electrical behavior, fabrication readiness, or FreeRouting parity. |

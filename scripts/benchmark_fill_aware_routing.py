@@ -37,6 +37,7 @@ from copper_mcp.routing import (
     AStarRouter,
     AStarSettings,
     RouteCandidate,
+    RouteFailureCode,
     RouteRequest,
     RouteResult,
     VerifiedFill,
@@ -78,7 +79,7 @@ def _pad(identifier: str, center: tuple[int, int]) -> Pad:
     )
 
 
-def _snapshot() -> BoardIRSnapshot:
+def _snapshot(*, include_foreign_zone: bool = True) -> BoardIRSnapshot:
     route_class = NetClass(
         id="class:audio",
         name="Audio",
@@ -139,7 +140,9 @@ def _snapshot() -> BoardIRSnapshot:
                     thermal_gap_nm=100,
                     thermal_bridge_width_nm=100,
                 ),
-            ),
+            )
+            if include_foreign_zone
+            else (),
         )
     )
 
@@ -205,6 +208,25 @@ def _run(repetitions: int) -> dict[str, Any]:
         _candidate(router.propose(snapshot, request, verified_fill=(fill,)))
         for _ in range(repetitions)
     ]
+    # A fill island without a corresponding Board IR zone must fail closed.  Keep this as a
+    # real invocation rather than a hard-coded metadata claim so the benchmark catches future
+    # regressions that accidentally trust orphaned or misidentified fill geometry.
+    no_zone_snapshot = _snapshot(include_foreign_zone=False)
+    no_zone_result = router.propose(
+        no_zone_snapshot,
+        _request(no_zone_snapshot),
+        verified_fill=(fill,),
+    )
+    no_zone_diagnostic = no_zone_result.diagnostic
+    if no_zone_diagnostic is None:
+        raise RuntimeError("orphaned fill was not refused with a diagnostic")
+    matching_zone_required = bool(
+        no_zone_result.candidate is None
+        and no_zone_diagnostic.code is RouteFailureCode.UNSUPPORTED_GEOMETRY
+        and "matching Board IR zone" in no_zone_diagnostic.message
+    )
+    if not matching_zone_required:
+        raise RuntimeError("orphaned fill was not refused with a matching-zone diagnostic")
     if len({candidate.candidate_id for candidate in conservative}) != 1:
         raise RuntimeError("conservative route is not deterministic")
     if len({candidate.candidate_id for candidate in fill_aware}) != 1:
@@ -223,7 +245,8 @@ def _run(repetitions: int) -> dict[str, Any]:
         "conservative_candidate_id": conservative[0].candidate_id,
         "fill_aware_candidate_id": fill_aware[0].candidate_id,
         "verified_fill_source_revision": fill.source_revision,
-        "matching_zone_required": True,
+        "matching_zone_required": matching_zone_required,
+        "matching_zone_refusal_code": no_zone_diagnostic.code.value,
         "kicad_invoked": False,
         "drc": False,
     }

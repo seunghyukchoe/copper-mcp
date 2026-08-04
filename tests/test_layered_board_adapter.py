@@ -256,6 +256,27 @@ def test_stale_off_grid_and_ambiguous_endpoint_requests_are_rejected() -> None:
     assert ambiguous.diagnostic.code is LayeredRouteFailureCode.INVALID_REQUEST
 
 
+def test_malformed_request_is_not_misclassified_as_stale_without_expected_revision() -> None:
+    snapshot = _two_layer_snapshot()
+    request = _request(snapshot, net_id="not-a-net")
+
+    result = LayeredBoardRouter().propose(snapshot, request)
+
+    assert result.diagnostic is not None
+    assert result.diagnostic.code is LayeredRouteFailureCode.INVALID_REQUEST
+
+
+def test_malformed_layered_settings_fail_closed_before_physical_obstacle_budgeting() -> None:
+    snapshot = _two_layer_snapshot()
+    malformed = replace(LayeredAStarSettings(), max_obstacles="invalid")
+    request = _request(snapshot, settings=malformed)
+
+    result = LayeredBoardRouter().propose(snapshot, request)
+
+    assert result.diagnostic is not None
+    assert result.diagnostic.code is LayeredRouteFailureCode.INVALID_REQUEST
+
+
 def test_tampering_with_a_candidate_breaks_its_content_digest() -> None:
     snapshot = _two_layer_snapshot()
     candidate = _candidate(LayeredBoardRouter().propose(snapshot, _request(snapshot)))

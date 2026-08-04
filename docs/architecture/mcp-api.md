@@ -67,8 +67,8 @@ through Board IR and Circuit Scene conversion. Optional `expect_board_revision` 
 same editor; either mismatch is a typed refusal. The output reuses the closed Scene `0.2.0`
 contract with `board_path: "live"`, so it exposes exact geometry and typed references but no raw
 serialization, socket path, or token. Revision-bound live proposal gates now exist for placement
-and routing; DRC, fill, editor mutation, and apply remain separate file-backed or future
-transaction surfaces.
+and routing; DRC, fill, editor mutation, and apply remain separate file-backed or future transaction
+surfaces.
 
 `observe_board_scene` takes one request object with a workspace-relative `board`, integer
 `constraints`, a mandatory `region`, and optional `layers` and `include_annotations`. The region is
