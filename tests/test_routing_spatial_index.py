@@ -200,7 +200,10 @@ def test_spatial_index_is_deterministic_and_has_no_false_negatives() -> None:
         bounds = (x, y, x + rng.randrange(0, 3_000), y + rng.randrange(0, 3_000))
         expected = _legacy_values(entries, bounds)
         assert index.query(bounds) == expected
-        assert index.query(bounds) == index.query(bounds)
+        with_stats, candidates_examined = index.query_with_stats(bounds)
+        assert with_stats == expected
+        assert candidates_examined >= len(with_stats)
+        assert with_stats == index.query(bounds)
 
 
 def test_spatial_index_falls_back_for_small_or_giant_inputs() -> None:

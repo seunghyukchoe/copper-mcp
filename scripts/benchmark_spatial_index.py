@@ -89,8 +89,8 @@ def _run(repetitions: int, entry_count: int, query_count: int) -> dict[str, obje
     for query in queries:
         tested, hits = _legacy_count(entries, query)
         legacy_relations += tested
-        indexed = index.query(query)
-        indexed_relations += len(indexed)
+        indexed, candidates_examined = index.query_with_stats(query)
+        indexed_relations += candidates_examined
         exact_matches += int(tuple(indexed) == hits)
 
     legacy_samples: list[int] = []

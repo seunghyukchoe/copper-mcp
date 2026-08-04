@@ -132,17 +132,35 @@ class ConservativeSpatialIndex(Generic[_Value]):
         conservative and exact with respect to the supplied over-approximate entry bounds.
         """
 
+        values, _candidates_examined = self.query_with_stats(bounds)
+        return values
+
+    def query_with_stats(self, bounds: _Bounds) -> tuple[tuple[_Value, ...], int]:
+        """Return query values and the number of candidate ordinals examined.
+
+        The second value counts entries handed to the exact bounds-intersection predicate. It is
+        intended for differential benchmarks and diagnostics; routing correctness continues to
+        use :meth:`query`, and the exact predicate remains authoritative.
+        """
+
         if bounds[0] > bounds[2] or bounds[1] > bounds[3] or not self._entries:
-            return ()
+            return (), 0
         if self._buckets is None:
-            return tuple(entry.value for entry in self._entries)
+            # The linear fallback deliberately returns every immutable entry; the router's
+            # exact obstacle predicate performs the authoritative filtering and metrics retain
+            # the full candidate count for an apples-to-apples work comparison.
+            return tuple(entry.value for entry in self._entries), len(self._entries)
         assert self._cell_size_nm > 0
         ordinals: set[int] = set()
         for cell_x in _cell_range(bounds[0], bounds[2], self._cell_size_nm):
             for cell_y in _cell_range(bounds[1], bounds[3], self._cell_size_nm):
                 ordinals.update(self._buckets.get((cell_x, cell_y), ()))
-        return tuple(
-            self._entries[ordinal].value
-            for ordinal in sorted(ordinals)
-            if _bounds_intersect(self._entries[ordinal].bounds, bounds)
+        candidates = tuple(sorted(ordinals))
+        return (
+            tuple(
+                self._entries[ordinal].value
+                for ordinal in candidates
+                if _bounds_intersect(self._entries[ordinal].bounds, bounds)
+            ),
+            len(candidates),
         )
