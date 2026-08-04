@@ -72,6 +72,13 @@ All notable changes are documented here. The format follows
   and redacted KiCad-session compare-and-swap digests, reuses the file-backed candidate oracle,
   and remains candidate-only with no DRC, refill, serializer, persistence, or apply authority.
 
+### Changed
+
+- Corrected the spatial-index benchmark to count bucket candidates examined by the exact bounds
+  predicate rather than only final hits. The regenerated B-037 artifact reports `636` indexed
+  candidates versus `131,072` linear checks (`99.5148%` reduction); the older `31` metric is kept
+  only as historical evidence and is no longer used for performance claims.
+
 ### Security
 
 - Routing-job and candidate-manifest TTL misses now commit their expiry purge before returning

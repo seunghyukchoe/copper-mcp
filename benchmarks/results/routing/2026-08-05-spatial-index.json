@@ -17,13 +17,13 @@
     "deterministic_replays": 256,
     "exact_query_matches": 256,
     "indexed": true,
-    "indexed_relation_checks": 31,
+    "indexed_relation_checks": 636,
     "legacy_relation_checks": 131072,
-    "median_indexed_query_ns": 277437.5,
-    "median_legacy_query_ns": 96124063.0,
-    "median_speedup": 346.471,
+    "median_indexed_query_ns": 306041.5,
+    "median_legacy_query_ns": 3989812.5,
+    "median_speedup": 13.037,
     "queries": 256,
-    "relation_reduction_ratio": 0.999763
+    "relation_reduction_ratio": 0.995148
   },
   "not_claimed": [
     "multi-net congestion optimization",
@@ -31,6 +31,6 @@
     "KiCad DRC or fabrication readiness",
     "wall-clock performance outside this fixture and machine"
   ],
-  "run_id": "sha256:0375d0e76d5aedbd0dd7dbed082d07f07fc8793ea38cb87ee92faade91993631",
-  "source_commit": "62f10efcd82a8a6e0974e15d69e56573d4115c6e"
+  "run_id": "sha256:99b35ca74757968063a496cd2bd88d9be03639b84bad536eebb7bd7d8277f111",
+  "source_commit": "9b829d5ba8fbfef3b868b3f334be7a9bb5c17653"
 }

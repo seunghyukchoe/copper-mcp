@@ -596,3 +596,16 @@ historical evidence; these runs were generated from the clean implementation com
 | Metrics | Sequential baseline overflow `1` lattice unit and wire length `16,000,000 nm`; negotiated status `completed`, overflow `0`, wire length `26,000,000 nm`, iterations `1`, rip-ups `0`; candidate IDs and serialized outcomes identical across `3/3` replays |
 | Artifact | [`2026-08-05-negotiated-congestion.json`](../../benchmarks/results/routing/2026-08-05-negotiated-congestion.json) |
 | Interpretation | This is a measurable first negotiated-congestion slice: it removes the shared lattice resource on the committed KiCad fixture at a known wire-length tradeoff. The metric is structural occupancy only; it does not establish exact pairwise clearance, multilayer capacity, KiCad DRC, electrical/fabrication correctness, general-board scaling, or FreeRouting parity. |
+
+#### B-037 — corrected spatial-index predicate-work replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:99b35ca74757968063a496cd2bd88d9be03639b84bad536eebb7bd7d8277f111` |
+| Date and commit | 2026-08-05; source commit `9b829d5ba8fbfef3b868b3f334be7a9bb5c17653` |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
+| Dataset | Deterministic uniform-grid fixture with 512 conservative rectangle entries and 256 closed AABB queries; no board bytes, private designs, or external corpus |
+| Configuration | `copper-mcp/benchmark/routing-conservative-spatial-index-v1`; ten repetitions; indexed candidate count is measured before the exact `_bounds_intersect` predicate; ordered source ordinals remain the correctness authority |
+| Metrics | Linear candidate checks `131,072`; indexed candidates examined `636`; predicate-work reduction `99.5148%`; exact query matches `256/256`; indexed buckets `136`; median fixture speedup `13.037x` on this host |
+| Artifact | [`2026-08-05-spatial-index.json`](../../benchmarks/results/routing/2026-08-05-spatial-index.json) |
+| Interpretation | This supersedes the historical `31` indexed-hit metric as current performance evidence. It measures candidate filtering work on one synthetic fixture only; it does not establish whole-board scaling, congestion/rip-up, DRC, electrical/fabrication readiness, or FreeRouting parity. |
