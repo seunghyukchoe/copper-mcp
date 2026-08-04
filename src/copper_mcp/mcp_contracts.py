@@ -66,6 +66,12 @@ PortId = Annotated[
 Digest = Annotated[str, Field(pattern=r"^sha256:[0-9a-f]{64}$")]
 
 
+class InTotoDigestContract(_ClosedContract):
+    """One required SHA-256 digest in an in-toto resource descriptor."""
+
+    sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+
+
 class CircuitComponentContract(_ClosedContract):
     """One supported two-pin passive in an MCP Circuit Intent argument."""
 
@@ -808,10 +814,7 @@ class InTotoResourceDescriptorContract(_ClosedContract):
     """A redacted in-toto resource descriptor with a required SHA-256 digest."""
 
     name: Annotated[str, Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._-]+$")]
-    digest: dict[
-        Literal["sha256"],
-        Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")],
-    ]
+    digest: InTotoDigestContract
 
 
 class InTotoDrcByproductsContract(_ClosedContract):

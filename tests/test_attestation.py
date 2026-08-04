@@ -89,6 +89,18 @@ def test_statement_serialization_is_deterministic_and_detached() -> None:
     assert evidence.to_statement()["subject"][0]["name"] == "route-candidate"
 
 
+def test_statement_rejects_an_empty_or_unknown_digest_object() -> None:
+    statement = _evidence().to_statement()
+    statement["subject"][0]["digest"] = {}
+    with pytest.raises(ValueError):
+        InTotoDrcStatementContract.model_validate(statement)
+
+    statement = _evidence().to_statement()
+    statement["subject"][0]["digest"] = {"sha256": "a" * 64, "sha512": "b" * 128}
+    with pytest.raises(ValueError):
+        InTotoDrcStatementContract.model_validate(statement)
+
+
 def test_invalid_binding_and_digest_are_rejected() -> None:
     evidence = _evidence()
     with pytest.raises(AttestationError, match="candidate_id"):
