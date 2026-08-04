@@ -38,18 +38,20 @@ checked by the same KiCad version.
 
 ## Acceleration track toward comparable routing fundamentals
 
-The fastest capability gap to close is not unbounded brute force. It is a bounded two-signal-layer
-search over `(x, y, layer)` with explicit through-via transitions and a positive via cost. That
-milestone gives CopperMCP a fair chance on boards where a single-layer route is impossible, while
-preserving deterministic budgets and the candidate-first boundary. It should precede negotiated
-multi-net congestion, rip-up, fanout, and post-route optimization.
+The first capability gap is not unbounded brute force. It is a bounded two-signal-layer search over
+`(x, y, layer)` with explicit through-via transitions and a positive via cost. CopperMCP now has
+that search, a Board IR binding, source-preserving segment/via serialization, and an internal
+replay-bound KiCad DRC gate. This gives a fair, evidence-producing chance on boards where a
+single-layer route is impossible while preserving deterministic budgets and the candidate-first
+boundary. Negotiated multi-net congestion, rip-up, fanout, and post-route optimization remain the
+next gap.
 
-Acceptance should require a held-out, licence-cleared corpus with at least three via-required
-cases, 100% zero-new-error KiCad DRC for successful renders, 50 byte-identical replays, unchanged
-single-layer candidate IDs, and fail-closed stale, unsupported-layer, via-rule, budget, and
-cancellation tests. The scoped estimate is 55–85 agent-hours; it is a capability step, not
-FreeRouting parity. The current source-preserving placement projection is a prerequisite for
-high-fidelity editor communication but does not change this routing comparison.
+Acceptance for the current narrow gate is recorded in B-020: ten fresh private-workspace runs,
+10/10 zero-error/zero-unconnected KiCad 10.0.5 reports, deterministic redacted evidence, and
+unchanged source/workspace state. The held-out corpus requirement remains for a production claim;
+this is a capability step, not FreeRouting parity. The current source-preserving placement
+projection is a prerequisite for high-fidelity editor communication but does not change this
+routing comparison.
 
 ## Fair comparison protocol
 

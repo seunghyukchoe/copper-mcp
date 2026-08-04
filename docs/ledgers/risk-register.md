@@ -68,3 +68,8 @@
 > Dependabot, audit, CodeQL, attestations, future SHA pinning."* with status *"Open / release"*;
 > PR #17 rewrote the mitigation and moved the status to *"Mitigated / release"*. The current row
 > is factually right and is left standing; this note restores what the in-place edit removed.
+
+> **Amendment — 2026-08-05:** R-037's “DRC open” qualifier is superseded by R-038 and B-020:
+> the layered serializer is now covered by an internal replay-bound authoritative KiCad DRC gate.
+> MCP exposure, durable export, multilayer generalization, negotiated congestion, and apply remain
+> open, so the layered proposal is not promoted to a general routing capability.

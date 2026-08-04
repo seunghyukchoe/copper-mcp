@@ -287,3 +287,16 @@ result or a general performance comparison.
 | Metrics | Deterministic outputs 10/10; Board IR round trip `true`; source unchanged `true`; two paths and two through-vias; serialized bytes 1,868; output `sha256:c732d5abaccb2d4521005ef15122d1038ff02f96a752df24ff640b69970f842c`; stale request refusal `true`; KiCad invocation `false`; DRC `false` |
 | Artifact | [`2026-08-05-layered-kicad-serializer.json`](../../benchmarks/results/routing/2026-08-05-layered-kicad-serializer.json) |
 | Interpretation | This proves request-replayed disposable segment/via serialization and Board IR round-trip equality for one narrow fixture. It does not establish KiCad DRC, live editor compatibility, mutation/apply safety, electrical behavior, fabrication readiness, whole-board completion, or FreeRouting parity. |
+
+### B-020 — Layered candidate-bound KiCad DRC
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:4f71b18b7d6928680888fdc59b88658e0c9e24f126eb16d7e83d287b32d064cd` |
+| Date and commit | 2026-08-04 16:16:14 UTC; `b13d37d47b140847cf4dca31d6ebebfaa29c97ce`; measured after the layered DRC gate commit |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad CLI 10.0.5 at the standard macOS application path |
+| Dataset | Independently authored `tests/fixtures/route-candidate/blocked-pad.kicad_pcb`; two front-side AUDIO pads, one foreign front-side blocker, and two signal layers; no external or proprietary board |
+| Configuration | `layered-kicad-drc-v1`; ten fresh private-workspace runs; original `LayeredRouteRequest` replay; fixed private KiCad DRC command; aggregate redacted evidence only; CPU-only |
+| Metrics | Deterministic evidence 10/10; KiCad DRC pass 10/10; errors 0; warnings 0; unconnected items 0; ignored checks 5; source bytes/inode/mtime unchanged 10/10; workspace entries unchanged 10/10; patched board `sha256:c732d5abaccb2d4521005ef15122d1038ff02f96a752df24ff640b69970f842c`; patched context `sha256:a929034fa3e4ba7cfe9fcd2b5b0efd9c57b3d98566e691c24a74455229c7cc1c` |
+| Artifact | [`2026-08-05-layered-kicad-drc.json`](../../benchmarks/results/routing/2026-08-05-layered-kicad-drc.json) |
+| Interpretation | This is authoritative KiCad evidence for one replayed two-layer candidate and its captured context. It does not establish multilayer completion, filled-zone routing, negotiated congestion, whole-board completion, electrical behavior, fabrication readiness, or FreeRouting parity. |
