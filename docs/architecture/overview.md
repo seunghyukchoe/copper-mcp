@@ -141,7 +141,9 @@ the abstract maze oracle: it resolves integer width/clearance/via geometry, cons
 obstacles, and separate track/via keepouts into immutable content-addressed candidates. It remains
 proposal-only and is not exported through MCP or the KiCad serializer; source-preserving
 segment/via serialization, round-trip checks, and authoritative KiCad DRC are still required
-before the production route contract can leave its single-layer boundary. See [ADR-0036](../adr/0036-board-ir-layered-proposal-adapter.md).
+before the production route contract can leave its single-layer boundary. The disposable
+serializer now runs the pure bounded `verify_layered_candidate` topology gate first and refuses
+endpoint-via geometry until padstack treatment is represented. See [ADR-0036](../adr/0036-board-ir-layered-proposal-adapter.md) and [ADR-0045](../adr/0045-layered-candidate-topology-verifier.md).
 
 ## Candidate lifecycle
 

@@ -30,6 +30,7 @@ from copper_mcp.board_ir import (
     nm_to_mm,
 )
 from copper_mcp.routing.layered_board_adapter import LayeredBoardRouter, LayeredRouteRequest
+from copper_mcp.routing.layered_candidate_verifier import verify_layered_candidate
 from copper_mcp.routing.layered_contracts import (
     LayeredRouteCandidate,
     LayeredRoutePath,
@@ -193,6 +194,18 @@ def render_kicad_layered_candidate_board(
     replay = LayeredBoardRouter().propose(snapshot, request)
     if replay.candidate is None or replay.candidate != candidate:
         raise KiCadLayeredRoutePatchError("candidate does not match a deterministic router replay")
+
+    structural = verify_layered_candidate(
+        candidate,
+        snapshot,
+        expected_board_revision=snapshot.snapshot_digest,
+        expected_start_pad_id=request.start_pad_id,
+        expected_end_pad_id=request.end_pad_id,
+    )
+    if not structural.ok:
+        raise KiCadLayeredRoutePatchError(
+            f"candidate structural verification refused: {structural.diagnostic.code.value}"
+        )
 
     signal_layers = tuple(
         sorted(

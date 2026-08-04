@@ -97,7 +97,11 @@ def test_layered_candidate_serializes_via_and_round_trips_without_mutation() -> 
         if item.id not in {v.id for v in snapshot.content.vias}
     )
     assert {item.layer_id for item in added_segments} == {F_CU, B_CU}
-    assert len(added_segments) == 2
+    # Endpoint-via transitions are intentionally excluded from the candidate contract.  The
+    # blocked-pad route therefore returns to F.Cu before the final SMD pad, yielding three
+    # serialized segments for two through-vias.
+    assert len(added_segments) == len(candidate.patch.paths)
+    assert len(added_segments) == 3
     assert len(added_vias) == candidate.cost.via_count
     assert all((via.start_layer_id, via.end_layer_id) == (F_CU, B_CU) for via in added_vias)
 

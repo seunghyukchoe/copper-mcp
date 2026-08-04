@@ -338,9 +338,9 @@ def _paths_and_vias(
                 or previous.layer == current.layer
             ):
                 return None
-            # A via may be placed directly on an endpoint pad.  The pad supplies the zero-length
-            # copper connection on that side, so omit a one-point path rather than fabricating a
-            # degenerate segment that the immutable path contract cannot represent.
+            # Padstack-aware modes may eventually support a via directly on an endpoint pad.  The
+            # current adapter blocks that transition conservatively; retain the zero-length guard
+            # so a future mode cannot manufacture a degenerate path segment.
             if len(current_points) >= 2:
                 paths.append(LayeredRoutePath(layer_ids[current_layer], _compress(current_points)))
             vias.append(
@@ -592,6 +592,22 @@ class LayeredBoardRouter:
                     (net_class.track_width_nm + 1) // 2 + clearance,
                 )
                 add_obstacle(rectangle, layer, via_half + clearance, via=True)
+
+        # A via transition at an endpoint would become via-in-pad for the SMD pads supported by
+        # this proposal seam.  The candidate contract intentionally carries no IPC-4761
+        # padstack/treatment evidence, so reserve the endpoint pad envelopes for tracks only and
+        # refuse via transitions on every supported layer.  This is conservative for through-hole
+        # pads as well; a future padstack-aware route mode can relax it with explicit evidence.
+        endpoint_clearance = max(net_class.clearance_nm, widest_clearance)
+        for endpoint_pad in (start_pad, end_pad):
+            endpoint_rectangle = _pad_bounds(endpoint_pad)
+            for layer in range(2):
+                add_obstacle(
+                    endpoint_rectangle,
+                    layer,
+                    via_half + endpoint_clearance,
+                    via=True,
+                )
         for segment in snapshot.content.segments:
             if segment.net_id == request.net_id:
                 continue

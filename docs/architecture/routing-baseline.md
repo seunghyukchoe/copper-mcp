@@ -15,8 +15,10 @@ emits immutable paths and through-vias, and is covered by B-018. The read-only M
 `preview_layered_route` surface now exposes that proposal seam with pad-reference net inference
 and double compare-and-swap binding. A disposable serializer replays the request, emits
 source-preserving segments and canonical full-stack through-vias, and proves a Board IR round
-trip; the public tool deliberately does not invoke it. Authoritative DRC remains required before
-routing through vias can be marked complete.
+trip. `verify_layered_candidate` now gates that serializer with explicit path/via topology,
+endpoint-layer, duplicate/crossing, and endpoint-via checks; its result keeps physical validation
+explicitly `not_modelled`. The public tool deliberately does not invoke the serializer.
+Authoritative DRC remains required before routing through vias can be marked complete.
 
 ## Accepted input
 
@@ -270,8 +272,10 @@ derivative records `copper-mcp` plus its package version as its KiCad writer.
 The rendered bytes stay under the same parser, byte, and total-object budgets and are parsed back
 through the supported KiCad adapter. The complete modeled content must equal the base snapshot after
 replacing only source revision and writer provenance and appending the expected segments. The
-function performs no file write, durable export, subprocess call, preview, MCP action, or board
-mutation. `run_layered_route_candidate_drc()` is the separate internal boundary that invokes
+function first runs the pure bounded layered-candidate topology verifier; it refuses disconnected,
+crossing, duplicate, stale, and unsupported endpoint-via geometry before rendering. It performs no
+file write, durable export, subprocess call, preview, MCP action, or board mutation.
+`run_layered_route_candidate_drc()` is the separate internal boundary that invokes
 authoritative KiCad DRC against this exact replay; it does not make the layered candidate public or
 grant apply authority.
 

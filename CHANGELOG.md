@@ -8,6 +8,11 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added a pure, bounded `verify_layered_candidate` gate for layered route topology. It binds
+  candidate identity, Board IR revision, endpoints, layer transitions, path/via continuity, and
+  duplicate/crossing geometry before the disposable serializer; physical validation remains an
+  explicit `not_modelled` result.
+
 - Added a transport-independent, revision-safe routing-job ledger. `RoutingJobStore` persists only
   bounded redacted JSON records in SQLite, supports idempotent content-addressed creation,
   compare-and-swap transitions, cooperative cancellation, restart rehydration, TTL/capacity
@@ -20,6 +25,11 @@ All notable changes are documented here. The format follows
   and remains candidate-only with no DRC, refill, serializer, persistence, or apply authority.
 
 ### Security
+
+- Layered serialization now refuses structurally disconnected, crossing, duplicate, stale, or
+  endpoint-via candidates before rendering. The layered router reserves endpoint pad envelopes for
+  tracks and blocks via transitions there, avoiding unsupported via-in-pad geometry without
+  claiming fabrication legality.
 
 - Added `preview_layered_route`, a loopback/file-backed, read-only MCP boundary that requires
   both source and Board IR compare-and-swap digests, infers net identity from two pad references,

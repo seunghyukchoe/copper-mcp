@@ -104,13 +104,20 @@ documentation, ledger updates, and benchmark evidence.
   - [x] Live `preview_live_layered_route` proposal over the exact byte-confirmed KiCad IPC
     snapshot, with a redacted `KICAD_API_TOKEN` session CAS and file-oracle equality benchmark;
     real GUI, DRC, serializer, and apply evidence remain open.
+  - [x] Structural candidate verification and endpoint-via avoidance now gate the internal
+    serializer; exact padstack treatment, edge/hole clearance, refill, and fabrication evidence
+    remain open.
 - [~] Board IR-bound two-layer proposal adapter: exact grid attachment, conservative foreign
   copper/zone/pad envelopes, separate track/via keepouts, immutable candidate digests, and
   fail-closed stale/off-grid/unsupported diagnostics are benchmarked in B-018. Source-preserving
   segment/via serialization and Board IR replay are covered by an internal disposable serializer;
   B-020 now binds that exact replay to private authoritative KiCad DRC, and B-024 exposes a
-  separate read-only candidate preview through MCP. Durable export, public DRC, and apply authority
-  remain open gates.
+  separate read-only candidate preview through MCP. A bounded topology verifier now gates the
+  serializer and refuses endpoint-via geometry; exact padstack/clearance, durable export, public
+  DRC, and apply authority remain open gates.
+  - [x] Candidate topology gate: revision/endpoint binding, path-via adjacency, two-layer
+    full-stack transitions, duplicate/crossing rejection, bounded pair checks, and explicit
+    physical-validation non-claim.
 - [x] Attachment to existing same-net copper and bounded partial-route completion.
 - [ ] Multilayer vias and keepouts.
 - [ ] Negotiated-congestion multi-net routing.

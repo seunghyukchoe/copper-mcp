@@ -53,6 +53,14 @@ from copper_mcp.routing.layered_board_adapter import (
     LayeredBoardRouter,
     LayeredRouteRequest,
 )
+from copper_mcp.routing.layered_candidate_verifier import (
+    LayeredCandidateVerificationCode,
+    LayeredCandidateVerificationDiagnostic,
+    LayeredCandidateVerificationLimits,
+    LayeredCandidateVerificationResult,
+    LayeredPhysicalValidation,
+    verify_layered_candidate,
+)
 from copper_mcp.routing.layered_contracts import (
     LayeredRouteCandidate,
     LayeredRouteCost,
@@ -80,8 +88,13 @@ __all__ = [
     "LayeredAStarRequest",
     "LayeredAStarSettings",
     "LayeredBoardRouter",
+    "LayeredCandidateVerificationCode",
+    "LayeredCandidateVerificationDiagnostic",
+    "LayeredCandidateVerificationLimits",
+    "LayeredCandidateVerificationResult",
     "LayeredFailureCode",
     "LayeredObstacle",
+    "LayeredPhysicalValidation",
     "LayeredPoint",
     "LayeredRouteCandidate",
     "LayeredRouteCost",
@@ -121,5 +134,6 @@ __all__ = [
     "canonical_layered_candidate_bytes",
     "route_layered",
     "verify_candidate_id",
+    "verify_layered_candidate",
     "verify_layered_candidate_id",
 ]
