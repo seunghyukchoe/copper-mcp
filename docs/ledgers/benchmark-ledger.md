@@ -378,3 +378,16 @@ result or a general performance comparison.
 | Metrics | Schema-valid replays 10/10; deterministic candidate ID `sha256:bbd149eb890ffd527def0c65f2bcb4269aca8423938cfaaa24743f3fe959a587`; candidate equals file-backed oracle `true`; two full-stack vias; stale-board refusal `true`; capture-race refusal `true`; IPC clients closed `true`; source unchanged `true`; KiCad/DRC/serialization/apply/real-GUI `false` |
 | Artifact | [`2026-08-05-live-layered-route-preview.json`](../../benchmarks/results/routing/2026-08-05-live-layered-route-preview.json) |
 | Interpretation | This proves deterministic observe-to-via-capable-proposal closure over a fake official IPC client, including session/source/snapshot CAS, deadline and lifecycle safety. It does not establish a running KiCad GUI session, endpoint-via legality, DRC, serializer/export, persistence, electrical behavior, fabrication readiness, or FreeRouting parity. |
+
+### B-027 — Layered candidate topology verifier
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:99f494b856c93b641bbb54142039fda146e36fd2aa54e992caf9b2f947f59b8b` |
+| Date and commit | 2026-08-04 18:33:18 UTC; `939c9eb82d70299e0a48128d5980354716a487e3`; measured after the topology-verifier commit |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
+| Dataset | Independently authored `tests/fixtures/route-candidate/blocked-pad.kicad_pcb`; two selected-net pads, a front-layer blocker, and two signal layers; no external or proprietary board data |
+| Configuration | `copper-mcp/benchmark/layered-candidate-verifier/v1`; ten bounded structural verification replays; candidate digest, Board IR revision, endpoint, topology, duplicate/crossing, and conservative endpoint-via checks; CPU-only |
+| Metrics | Verified replays 10/10; deterministic candidate IDs `true`; 3 paths and 2 vias; disconnected geometry refused `true`; endpoint-via refused `true`; stale revision refused `true`; `physical_validation=not_modelled`; KiCad/DRC/serialization/apply `false` |
+| Artifact | [`2026-08-05-layered-candidate-verifier.json`](../../benchmarks/results/routing/2026-08-05-layered-candidate-verifier.json) |
+| Interpretation | This demonstrates a bounded structural gate before disposable layered serialization, including CAS/topology refusal and explicit physical-validation non-claim. It does not establish KiCad DRC, padstack/fabrication legality, whole-board completion, electrical behavior, live GUI compatibility, or FreeRouting parity. |
