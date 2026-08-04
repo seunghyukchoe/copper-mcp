@@ -981,6 +981,19 @@ LayeredRoutePreviewToolRequest = Annotated[
 ]
 
 
+class LiveLayeredRoutePreviewRequestContract(LayeredRoutePreviewRequestContract):
+    """Closed layered route proposal shape for one active KiCad IPC snapshot."""
+
+    board: Literal["live"]
+    expect_session_revision: Digest
+
+
+LiveLayeredRoutePreviewToolRequest = Annotated[
+    Any,
+    WithJsonSchema(_inline_json_schema(LiveLayeredRoutePreviewRequestContract)),
+]
+
+
 class LayeredRoutePathContract(_ClosedContract):
     """One exact orthogonal polyline on one signal layer."""
 
@@ -1090,7 +1103,7 @@ class _LayeredRoutePreviewResponseCommonContract(_ClosedContract):
     ]
     board_revision: Digest
     snapshot_digest: Digest | None
-    request: LayeredRoutePreviewRequestContract
+    request: LiveLayeredRoutePreviewRequestContract | LayeredRoutePreviewRequestContract
     conversion_diagnostic_counts: dict[str, NonNegativeInteger]
 
 

@@ -98,6 +98,7 @@ class McpServerTests(unittest.TestCase):
                 "preview_live_placement",
                 "preview_live_route",
                 "preview_layered_route",
+                "preview_live_layered_route",
                 "preview_route",
                 "render_circuit_schematic",
                 "run_board_drc",
@@ -303,6 +304,47 @@ class McpServerTests(unittest.TestCase):
             asyncio.run(
                 mcp.call_tool(
                     "preview_layered_route",
+                    {"request": {}, secret: 1},
+                )
+            )
+        self.assertNotIn(secret, str(caught.exception))
+
+    def test_live_layered_route_advertises_closed_read_only_revision_bound_request(self) -> None:
+        tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
+        live = tools["preview_live_layered_route"]
+        self.assertEqual(live.input_schema["type"], "object")
+        self.assertIs(live.input_schema["additionalProperties"], False)
+        request_schema = live.input_schema["properties"]["request"]
+        self.assertIs(request_schema["additionalProperties"], False)
+        self.assertEqual(request_schema["properties"]["board"]["const"], "live")
+        self.assertIn("start_pad_id", request_schema["properties"])
+        self.assertIn("end_pad_id", request_schema["properties"])
+        self.assertNotIn("net", request_schema["properties"])
+        self.assertNotIn("net_ref_id", request_schema["properties"])
+        self.assertEqual(
+            set(request_schema["required"]),
+            {
+                "board",
+                "start_pad_id",
+                "end_pad_id",
+                "constraints",
+                "expect_board_revision",
+                "expect_snapshot_digest",
+                "expect_session_revision",
+            },
+        )
+        assert live.annotations is not None
+        self.assertIs(live.annotations.read_only_hint, True)
+        self.assertIs(live.annotations.destructive_hint, False)
+        self.assertIs(live.annotations.idempotent_hint, True)
+        self.assertIs(live.annotations.open_world_hint, False)
+
+    def test_live_layered_route_rejects_unknown_wrapper_fields_without_echo(self) -> None:
+        secret = "SECRET_LIVE_LAYERED_ROUTE_WRAPPER"
+        with self.assertRaises(ToolError) as caught:
+            asyncio.run(
+                mcp.call_tool(
+                    "preview_live_layered_route",
                     {"request": {}, secret: 1},
                 )
             )

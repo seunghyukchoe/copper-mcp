@@ -28,6 +28,9 @@ from copper_mcp.live_editor_context import (
 from copper_mcp.live_editor_context import (
     inspect_live_editor_context_raw as inspect_live_editor_context_service_raw,
 )
+from copper_mcp.live_layered_route_preview import (
+    preview_live_layered_route as preview_live_layered_route_service,
+)
 from copper_mcp.models import candidate_from_dict, rank_candidates
 from copper_mcp.placement.contracts import PlacementResult
 from copper_mcp.placement_preview import preview_live_placement as preview_live_placement_service
@@ -64,6 +67,7 @@ def server_info() -> dict[str, Any]:
             "revision-bound live KiCad IPC placement proposal (read-only)",
             "revision-bound live KiCad IPC editor context (read-only)",
             "revision-bound layered route proposal (read-only)",
+            "revision-bound live layered route proposal (read-only)",
         ],
         "planned": [
             "region-scoped and human-facing board rendering",
@@ -176,6 +180,30 @@ def preview_layered_route(
 
     active_settings = settings or Settings.from_env()
     return preview_layered_route_service(payload, active_settings)
+
+
+def preview_live_layered_route_raw(
+    payload: dict[str, Any],
+    settings: Settings | None = None,
+    *,
+    client_factory: Any = None,
+) -> dict[str, object]:
+    """Propose a bounded layered route from one exact active KiCad snapshot."""
+
+    active_settings = settings or Settings.from_env()
+    return preview_live_layered_route_service(
+        payload,
+        active_settings,
+        client_factory=client_factory,
+    )
+
+
+def preview_live_layered_route(
+    payload: dict[str, Any], settings: Settings | None = None
+) -> dict[str, object]:
+    """Return a detached read-only live layered route proposal."""
+
+    return preview_live_layered_route_raw(payload, settings)
 
 
 def observe_board_scene_raw(

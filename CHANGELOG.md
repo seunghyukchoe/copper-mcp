@@ -14,6 +14,11 @@ All notable changes are documented here. The format follows
   limits, and candidate ID/base-revision binding. It does not run background routing, persist
   candidate geometry, expose MCP Tasks, export boards, or grant apply authority.
 
+- Added `preview_live_layered_route`, a read-only MCP proposal for bounded two-signal-layer routes
+  against the exact active KiCad IPC snapshot. It requires pad references plus source, Board IR,
+  and redacted KiCad-session compare-and-swap digests, reuses the file-backed candidate oracle,
+  and remains candidate-only with no DRC, refill, serializer, persistence, or apply authority.
+
 ### Security
 
 - Added `preview_layered_route`, a loopback/file-backed, read-only MCP boundary that requires
@@ -51,6 +56,10 @@ All notable changes are documented here. The format follows
   allocates its complete response before Python can enforce the size ceiling; this residual API
   limitation is documented, while bounded parsing and removal of extra collection materialization
   reduce avoidable memory exposure.
+- Live IPC clients are now closed on every observation success and failure path, and live layered
+  proposals pass the remaining bounded route deadline into the official client. A hashed
+  `KICAD_API_TOKEN` session precondition prevents identical board bytes from silently crossing a
+  KiCad instance restart; the raw token remains outside all outputs and logs.
 - Scene-selected routes now require both the observed board revision and Board IR snapshot digest.
   Stale source bytes are refused before Board IR conversion, while a stale snapshot is refused
   immediately after it; neither can reach route search, fill authority, DRC, or apply-token

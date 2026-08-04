@@ -39,6 +39,7 @@ live revision before it can release the synchronous connection.
 | `schematic_artifacts.py` | Bounded process-local capability store for stdio schematic resource delivery. |
 | `kicad_cli.py` | Fixed-argument ordinary and candidate-bound DRC over private snapshots, confined file-table dependencies, environment/state roots, and working directory. |
 | `kicad_ipc.py` | Optional official `kicad-python` adapter for redacted observation and exact source hand-off over local IPC. |
+| `live_layered_route_preview.py` | Session-, source-, and Board IR-bound live two-layer route proposal; candidate-only and no editor mutation. |
 | `tools.py` | Pure application services shared by adapters. |
 | `routing/contracts.py` | Exact candidate, cost, settings, result, and backend-neutral contracts. |
 | `routing/astar.py` | Bounded integer two-pin A* reference; candidate-only and fail-closed. |
@@ -112,7 +113,12 @@ digests, then returns the deterministic candidate without DRC, fill, apply-token
 editor mutation. A live action compare-and-swap remains a separate future contract.
 `preview_live_placement` now adds the equivalent ref-anchored placement proposal edge over the
 same snapshot and deterministic legalizer, with both scene digests required and no editor-write
-authority. A live action compare-and-swap remains a separate future contract.
+authority. `preview_live_layered_route` now adds the via-capable two-signal-layer edge over the
+same exact serialization, requiring a redacted `KICAD_API_TOKEN` session digest in addition to
+source and Board IR CAS. It closes official IPC clients and passes the remaining bounded deadline,
+but remains candidate-only: endpoint-via legality, DRC, serializer/export, apply, and real-GUI
+success are separate future gates. A live action compare-and-swap remains a separate future
+contract.
 
 Placement preview resolves its subjects from the same Board IR snapshot and refuses source bytes
 whose revision does not match. The current KiCad footprint subset is deliberately strict: front

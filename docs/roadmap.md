@@ -34,9 +34,10 @@ documentation, ledger updates, and benchmark evidence.
   converts the exact captured IPC serialization through Board IR, and `preview_live_route` now
   returns a deterministic read-only candidate from a scene `net_ref_id` with both stale-session
   digests. `preview_live_placement` now reuses the same exact snapshot → Board IR → legalizer
-  path for a ref-anchored, read-only placement candidate. A real running-editor oracle and live
-  action compare-and-swap before placement or routing remain open because the workstation IPC
-  server is disabled.
+  path for a ref-anchored, read-only placement candidate. `preview_live_layered_route` now adds a
+  session-token, source-digest, and Board IR-digest-bound via-capable proposal with fake-IPC
+  replay evidence. A real running-editor oracle and live action compare-and-swap before placement
+  or routing remain open because the workstation IPC server is disabled.
 - [x] Canonical Board IR v0.2 contract with integer units, typed constraints, strict codecs,
   content digests, first-class footprint pose/side/lock/pad ownership, and bounded rectangular
   courtyard rings. The immutable v0.1 schema remains as legacy compatibility evidence.
@@ -100,6 +101,9 @@ documentation, ledger updates, and benchmark evidence.
     double CAS, closed structured output, and candidate-only full-stack vias. This is a
     read-only proposal surface; public DRC, durable export, multilayer generalization, and apply
     remain open.
+  - [x] Live `preview_live_layered_route` proposal over the exact byte-confirmed KiCad IPC
+    snapshot, with a redacted `KICAD_API_TOKEN` session CAS and file-oracle equality benchmark;
+    real GUI, DRC, serializer, and apply evidence remain open.
 - [~] Board IR-bound two-layer proposal adapter: exact grid attachment, conservative foreign
   copper/zone/pad envelopes, separate track/via keepouts, immutable candidate digests, and
   fail-closed stale/off-grid/unsupported diagnostics are benchmarked in B-018. Source-preserving

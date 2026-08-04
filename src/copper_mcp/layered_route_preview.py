@@ -91,11 +91,12 @@ class LayeredRoutePreviewRequest:
     settings: LayeredAStarSettings
     start_layer_id: str | None = None
     end_layer_id: str | None = None
+    expect_session_revision: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         """Return only validated, non-sensitive request fields for MCP clients."""
 
-        return {
+        document = {
             "board": self.board,
             "start_pad_id": self.start_pad_id,
             "end_pad_id": self.end_pad_id,
@@ -113,6 +114,9 @@ class LayeredRoutePreviewRequest:
             "start_layer_id": self.start_layer_id,
             "end_layer_id": self.end_layer_id,
         }
+        if self.expect_session_revision is not None:
+            document["expect_session_revision"] = self.expect_session_revision
+        return document
 
 
 def _digest(name: str, value: object) -> str:

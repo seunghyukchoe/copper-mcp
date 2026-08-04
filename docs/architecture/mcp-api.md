@@ -22,6 +22,7 @@
 | `observe_live_board_scene` | None | Bounded Circuit Scene `0.2.0` from the active KiCad IPC document; uses `board: "live"` and optional stale-digest compare values. |
 | `preview_live_route` | None | Revision-bound, ref-anchored route proposal over one active KiCad IPC snapshot; never writes, runs DRC/fill, or grants apply authority. |
 | `preview_layered_route` | None | Revision-bound, pad-ref-anchored two-signal-layer proposal with explicit full-stack vias; candidate-only, with no DRC, refill, serialization, export, or apply authority. |
+| `preview_live_layered_route` | None | Session-, source-, and Board IR-revision-bound via-capable proposal over one active KiCad IPC snapshot; candidate-only, with no DRC, refill, serialization, export, or apply authority. |
 | `preview_live_placement` | None | Revision-bound, ref-anchored placement proposal over one active KiCad IPC snapshot; never writes, runs DRC, or grants apply authority. |
 | `inspect_live_editor_context` | None | Revision-bound active layer and bounded native selection references from the KiCad IPC editor; never reads raw selection text or mutates the editor. |
 | `apply_candidate` | **Replaces the board file**; disabled by default | The only mutating tool. Requires an operator flag and a single-use token. Route patches only. |
@@ -289,6 +290,17 @@ DRC command, and it returns no serialized patch, apply token, durable job, or pe
 Its candidate is therefore an actionable proposal for a later reviewed serializer/DRC/apply flow,
 not a claim that KiCad will accept the route. B-024 covers ten deterministic calls on a via-required
 fixture, closed output-schema validation, stale board/snapshot refusal, and unchanged source bytes.
+
+`preview_live_layered_route` applies the same candidate contract to the active editor. Its request
+uses `board: "live"`, two `pad:` references, the net-class/layer/search bounds, and source,
+Board IR, and redacted KiCad-session compare-and-swap digests. The service captures one bounded
+`Board.get_as_string()` serialization, confirms it byte-for-byte, closes the official IPC client,
+converts those exact bytes through the Board IR adapter, and infers the net only from the two pads.
+The session digest is `sha256(KICAD_API_TOKEN)`; the token is never returned. The remaining route
+deadline is passed to IPC and search. A stale session/source/snapshot refuses before candidate
+work, and the live candidate is compared against the file-backed oracle in B-026. The supported
+two-signal-layer geometry remains proposal-only: endpoint-via legality, KiCad DRC, refill,
+serialization/export, apply, real GUI success, and electrical/fabrication claims are not implied.
 
 `render_circuit_schematic` takes one structured Circuit Intent `content` object. The shared service
 performs bounded semantic validation and normalization, computes the intent digest, renders the

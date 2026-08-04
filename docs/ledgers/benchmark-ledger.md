@@ -365,3 +365,16 @@ result or a general performance comparison.
 | Metrics | Records rehydrated `true`; idempotent create `true`; revision-CAS refusal `true`; expiry refusal `true`; redacted storage `true`; source unchanged `true`; create latency p50/p95 `499.292/743.042 µs`; transition latency p50/p95 `180.75/1,651.958 µs`; worker execution `false`; candidate geometry persistence `false`; MCP Tasks `false` |
 | Artifact | [`2026-08-05-routing-job-ledger.json`](../../benchmarks/results/routing/2026-08-05-routing-job-ledger.json) |
 | Interpretation | This measures a restart-safe, bounded lifecycle ledger for revision-bound job metadata. It does not claim background routing, candidate persistence/export, MCP Tasks compatibility, KiCad DRC, electrical behavior, fabrication readiness, or FreeRouting parity. |
+
+### B-026 — Live layered route-preview contract
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:6f81f9f13ef38db8055594433715f4dc29f80ab8a252e3da2d5aca58b50ce8a8` |
+| Date and commit | 2026-08-04 18:03:46 UTC; `92b70a52c371f48e9df4319b2983e096374a3308`; measured with the live implementation and fake-IPC closure remediation in the worktree |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad IPC server was not invoked |
+| Dataset | Independently authored `tests/fixtures/route-candidate/blocked-pad.kicad_pcb`; two selected-net pads, a front-layer blocker, and two signal layers; no external or proprietary board data |
+| Configuration | `copper-mcp/benchmark/live-layered-route-preview/v1`; ten fake official-client replays; source, Board IR, and hashed session CAS; remaining route deadline passed to IPC; CPU-only |
+| Metrics | Schema-valid replays 10/10; deterministic candidate ID `sha256:bbd149eb890ffd527def0c65f2bcb4269aca8423938cfaaa24743f3fe959a587`; candidate equals file-backed oracle `true`; two full-stack vias; stale-board refusal `true`; capture-race refusal `true`; IPC clients closed `true`; source unchanged `true`; KiCad/DRC/serialization/apply/real-GUI `false` |
+| Artifact | [`2026-08-05-live-layered-route-preview.json`](../../benchmarks/results/routing/2026-08-05-live-layered-route-preview.json) |
+| Interpretation | This proves deterministic observe-to-via-capable-proposal closure over a fake official IPC client, including session/source/snapshot CAS, deadline and lifecycle safety. It does not establish a running KiCad GUI session, endpoint-via legality, DRC, serializer/export, persistence, electrical behavior, fabrication readiness, or FreeRouting parity. |

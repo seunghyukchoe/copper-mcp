@@ -27,6 +27,7 @@ IPC_SCHEMA_VERSION = "0.1.0"
 _DEFAULT_TIMEOUT_MS = 2_000
 _MAX_TIMEOUT_MS = 10_000
 _MAX_SOCKET_CHARS = 4_096
+_MAX_TOKEN_CHARS = 4_096
 _MAX_IPC_ITEMS = 1_000_000
 _COUNT_NAMES = (
     "nets",
@@ -164,6 +165,21 @@ def _socket_path() -> tuple[str | None, str]:
     raise KicadIpcConfigurationError("KICAD_API_SOCKET must identify a local IPC endpoint")
 
 
+def _session_revision() -> str | None:
+    """Return a redacted digest of KiCad's per-instance token, when supplied."""
+
+    raw = os.environ.get("KICAD_API_TOKEN", "")
+    if not raw:
+        return None
+    if len(raw) > _MAX_TOKEN_CHARS or any(ord(char) < 0x20 for char in raw):
+        raise KicadIpcConfigurationError("KICAD_API_TOKEN is invalid")
+    try:
+        encoded = raw.encode("utf-8", errors="strict")
+    except UnicodeError as error:
+        raise KicadIpcConfigurationError("KICAD_API_TOKEN is invalid") from error
+    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+
+
 def _load_kicad_factory() -> Callable[..., _KiCadLike]:
     """Load the official binding lazily so the core remains dependency-light."""
 
@@ -177,6 +193,23 @@ def _load_kicad_factory() -> Callable[..., _KiCadLike]:
     if not callable(factory):
         raise KicadIpcUnavailableError("the installed kicad-python binding is incomplete")
     return cast(Callable[..., _KiCadLike], factory)
+
+
+def _close_ipc_client(client: object) -> None:
+    """Close one official IPC client without masking the observation result.
+
+    ``kicad-python`` exposes ``KiCad.close()`` for the socket-backed client.  The test seam and
+    older bindings may not implement it, so closure is capability-detected and best-effort. A
+    close failure must never replace the typed observation error or leak private exception text.
+    """
+
+    close = getattr(client, "close", None)
+    if not callable(close):
+        return
+    try:
+        close()
+    except Exception:
+        return
 
 
 def _count_serialized_items(source: bytes, max_bytes: int) -> dict[str, int]:
@@ -302,6 +335,7 @@ class LiveBoardSnapshot:
 
     observation: LiveBoardObservation
     source: bytes
+    session_revision: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.source, bytes) or not self.source:
@@ -311,6 +345,10 @@ class LiveBoardSnapshot:
         digest = f"sha256:{hashlib.sha256(self.source).hexdigest()}"
         if digest != self.observation.board_digest:
             raise KicadIpcPayloadError("live board source digest is not bound to its observation")
+        if self.session_revision is not None and (
+            not self.session_revision.startswith("sha256:") or len(self.session_revision) != 71
+        ):
+            raise KicadIpcPayloadError("live IPC session revision is invalid")
 
 
 @dataclass(frozen=True, slots=True)
@@ -424,6 +462,26 @@ def capture_live_editor_context(
         raise KicadIpcConnectionError("could not create a KiCad IPC client") from error
 
     try:
+        return _capture_live_editor_context_from_client(
+            client,
+            active_settings,
+            allow_future_api=allow_future_api,
+            max_selection=max_selection,
+        )
+    finally:
+        _close_ipc_client(client)
+
+
+def _capture_live_editor_context_from_client(
+    client: _KiCadLike,
+    settings: Settings,
+    *,
+    allow_future_api: bool,
+    max_selection: int,
+) -> LiveEditorContextSnapshot:
+    """Read and validate one editor context while the caller owns client closure."""
+
+    try:
         _version_string(client.get_version())
         _version_string(client.get_api_version())
         try:
@@ -443,7 +501,7 @@ def capture_live_editor_context(
         if not isinstance(source, str):
             raise KicadIpcPayloadError("KiCad returned a non-text board snapshot")
         source_bytes = source.encode("utf-8", errors="strict")
-        max_bytes = min(active_settings.max_board_bytes, 64 * 1024 * 1024)
+        max_bytes = min(settings.max_board_bytes, 64 * 1024 * 1024)
         if not 1 <= len(source_bytes) <= max_bytes:
             raise KicadIpcPayloadError("KiCad board snapshot exceeds the observation budget")
         active_index = board.get_active_layer()
@@ -457,8 +515,8 @@ def capture_live_editor_context(
         ):
             raise KicadIpcPayloadError("KiCad returned an invalid active layer")
         selection = _read_editor_selection(board, max_selection)
-        # Read the context twice.  Selection and active-layer changes are editor state, not
-        # board bytes, so a stable board alone is insufficient for a compare-and-swap gate.
+        # Read the context twice. Selection and active-layer changes are editor state, not board
+        # bytes, so a stable board alone is insufficient for a compare-and-swap gate.
         second_active_index = board.get_active_layer()
         second_active_name = board.get_layer_name(second_active_index)
         second_selection = _read_editor_selection(board, max_selection)
@@ -507,6 +565,7 @@ def capture_live_board(
         raise KicadIpcConfigurationError("IPC timeout is outside the bounded range")
 
     socket_path, socket_kind = _socket_path()
+    session_revision = _session_revision()
     factory = client_factory or _load_kicad_factory()
     try:
         if socket_path is None:
@@ -517,6 +576,28 @@ def capture_live_board(
         raise
     except Exception as error:  # pragma: no cover - exercised by the real binding
         raise KicadIpcConnectionError("could not create a KiCad IPC client") from error
+
+    try:
+        return _capture_live_board_from_client(
+            client,
+            active_settings,
+            socket_kind=socket_kind,
+            allow_future_api=allow_future_api,
+            session_revision=session_revision,
+        )
+    finally:
+        _close_ipc_client(client)
+
+
+def _capture_live_board_from_client(
+    client: _KiCadLike,
+    settings: Settings,
+    *,
+    socket_kind: str,
+    allow_future_api: bool,
+    session_revision: str | None,
+) -> LiveBoardSnapshot:
+    """Read one board while the public capture function owns client closure."""
 
     try:
         kicad_version = _version_string(client.get_version())
@@ -548,10 +629,10 @@ def capture_live_board(
         source_bytes = source.encode("utf-8", errors="strict")
     except UnicodeError as error:
         raise KicadIpcPayloadError("KiCad returned invalid board text") from error
-    if not 1 <= len(source_bytes) <= min(active_settings.max_board_bytes, 64 * 1024 * 1024):
+    if not 1 <= len(source_bytes) <= min(settings.max_board_bytes, 64 * 1024 * 1024):
         raise KicadIpcPayloadError("KiCad board snapshot exceeds the observation budget")
 
-    max_bytes = min(active_settings.max_board_bytes, 64 * 1024 * 1024)
+    max_bytes = min(settings.max_board_bytes, 64 * 1024 * 1024)
     counts = _count_serialized_items(source_bytes, max_bytes)
     try:
         confirmation = board.get_as_string()
@@ -562,6 +643,8 @@ def capture_live_board(
         ) from error
     if confirmation_bytes != source_bytes:
         raise KicadIpcConnectionError("KiCad board changed during observation")
+    if _session_revision() != session_revision:
+        raise KicadIpcConnectionError("KiCad IPC session changed during observation")
     observation = LiveBoardObservation(
         kicad_version=kicad_version,
         api_version=api_version,
@@ -571,7 +654,11 @@ def capture_live_board(
         object_counts=counts,
         socket_kind=socket_kind,
     )
-    return LiveBoardSnapshot(observation=observation, source=source_bytes)
+    return LiveBoardSnapshot(
+        observation=observation,
+        source=source_bytes,
+        session_revision=session_revision,
+    )
 
 
 def inspect_live_board(

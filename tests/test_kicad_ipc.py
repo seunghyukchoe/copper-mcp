@@ -16,6 +16,7 @@ from copper_mcp.kicad_ipc import (
     KicadIpcUnavailableError,
     KicadIpcVersionError,
     capture_live_board,
+    capture_live_editor_context,
     inspect_live_board,
 )
 
@@ -98,6 +99,50 @@ def _settings(**overrides: object) -> Settings:
 
 
 class KicadIpcTests(unittest.TestCase):
+    def test_ipc_clients_are_closed_after_success_and_failure(self) -> None:
+        closed: list[str] = []
+
+        class ClosableKiCad(_KiCad):
+            def close(self) -> None:
+                closed.append("board")
+
+        inspect_live_board(_settings(), client_factory=lambda **_: ClosableKiCad())
+        with self.assertRaises(KicadIpcPayloadError):
+            inspect_live_board(
+                _settings(),
+                client_factory=lambda **_: ClosableKiCad(board=_Board(source="not-a-board")),
+            )
+        self.assertEqual(closed, ["board", "board"])
+
+    def test_editor_context_client_is_closed_after_capture(self) -> None:
+        closed: list[str] = []
+
+        class ContextBoard(_Board):
+            def get_active_layer(self) -> int:
+                return 0
+
+            def get_layer_name(self, layer: int) -> str:
+                self.assert_layer(layer)
+                return "F.Cu"
+
+            @staticmethod
+            def assert_layer(layer: int) -> None:
+                if layer != 0:
+                    raise AssertionError("unexpected layer")
+
+            def get_selection(self) -> list[object]:
+                return []
+
+        class ClosableKiCad(_KiCad):
+            def close(self) -> None:
+                closed.append("context")
+
+        capture_live_editor_context(
+            _settings(),
+            client_factory=lambda **_: ClosableKiCad(board=ContextBoard()),
+        )
+        self.assertEqual(closed, ["context"])
+
     def test_observation_is_redacted_and_repeatable(self) -> None:
         calls: list[dict[str, object]] = []
 
