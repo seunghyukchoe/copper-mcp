@@ -378,6 +378,8 @@ this boundary.
 
 ## Documentation
 
+- [Project handoff](docs/HANDOFF.md) — current state, invariants, and next steps
+- [Codex handoff](docs/HANDOFF_CODEX.md) — task-first onboarding for a continuing agent
 - [Project charter](docs/project-charter.md)
 - [Architecture](docs/architecture/overview.md)
 - [Board IR and KiCad adapter contract](docs/architecture/board-ir.md)
