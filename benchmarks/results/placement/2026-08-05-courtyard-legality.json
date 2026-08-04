@@ -1,0 +1,49 @@
+{
+  "date_utc": "2026-08-05",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "fixtures": [
+    "tests/fixtures/board-ir-v0.2/footprint-front-back-pose.kicad_pcb",
+    "tests/fixtures/placement-v0.1/placement-legal.kicad_pcb"
+  ],
+  "metrics": {
+    "absent": {
+      "checks_used": 7,
+      "courtyard_overlap": "proven_clear",
+      "pad_overlap": "proven_clear",
+      "status": "previewed"
+    },
+    "absent_courtyard_clear": true,
+    "cross_side": {
+      "checks_used": 16,
+      "courtyard_overlap": "proven_clear",
+      "pad_overlap": "proven_clear",
+      "status": "previewed"
+    },
+    "cross_side_overlap_clear": true,
+    "custom_clearance_claim": false,
+    "general_topology_claim": false,
+    "kicad_invoked": false,
+    "placement_apply_claim": false,
+    "same_side": {
+      "checks_used": 17,
+      "courtyard_overlap": "violated",
+      "pad_overlap": "proven_clear",
+      "status": "refused"
+    },
+    "same_side_overlap_refused": true,
+    "workspace_mutations": 0
+  },
+  "not_claimed": [
+    "configurable nonzero courtyard clearance",
+    "line-chain or polygon courtyard topology",
+    "KiCad DRC or placement apply",
+    "post-placement connectivity",
+    "FreeRouting parity"
+  ],
+  "run_id": "sha256:3b88877d622b04abc850137ad6804308f151652e699cc67cff1d2a666394fe54",
+  "schema": "copper-mcp/benchmark/placement-courtyard-legality/v1",
+  "source_commit": "46d0ef5255093133619da961f61d093d4d0c5ba4"
+}

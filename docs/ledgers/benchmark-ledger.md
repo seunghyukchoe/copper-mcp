@@ -648,3 +648,16 @@ historical evidence; these runs were generated from the clean implementation com
 | Metrics | Front footprints observed `1`; back footprints observed `1`; pad/courtyard pose match `true`; second mirror applied `false`; KiCad violations `0`; unconnected items `0` |
 | Artifact | [`2026-08-05-kicad-front-back-footprint-observation.json`](../../benchmarks/results/placement/2026-08-05-kicad-front-back-footprint-observation.json) |
 | Interpretation | This expands read-only observation to the narrow front/back rectangular-courtyard subset and pins a valid source/CLI DRC oracle. It is not a GUI flip-save round-trip, general courtyard topology, side-aware placement legality, apply, or FreeRouting result. |
+
+#### B-041 — side-aware rectangular-courtyard placement legality
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:3b88877d622b04abc850137ad6804308f151652e699cc67cff1d2a666394fe54` |
+| Date and commit | 2026-08-05; source commit `46d0ef5255093133619da961f61d093d4d0c5ba4` |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad not invoked |
+| Dataset | Front/back asymmetric Board IR fixture plus the no-courtyard placement fixture; synthetic source variants are created in memory and never written |
+| Configuration | `copper-mcp/benchmark/placement-courtyard-legality/v1`; exact integer pose transformation and same-side rectangle overlap through `evaluate_placement` |
+| Metrics | Same-side overlap: `refused`, `courtyard_overlap=violated`, `pad_overlap=proven_clear`; cross-side overlap: `previewed`, `proven_clear`; absent courtyard: `previewed`, `proven_clear`; workspace mutations `0` |
+| Artifact | [`2026-08-05-courtyard-legality.json`](../../benchmarks/results/placement/2026-08-05-courtyard-legality.json) |
+| Interpretation | This closes the former placement `not_modelled` gap for the exact Board IR v0.2 rectangular subset. It does not establish nonzero custom courtyard clearance, general polygon/line-chain topology, KiCad DRC, post-placement connectivity, apply, or FreeRouting parity. |
