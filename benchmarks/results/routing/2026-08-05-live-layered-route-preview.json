@@ -1,5 +1,5 @@
 {
-  "date_utc": "2026-08-04T18:10:26+00:00",
+  "date_utc": "2026-08-04T20:28:41+00:00",
   "environment": {
     "platform": "macOS-26.5.2-arm64-arm-64bit",
     "python": "3.12.13"
@@ -7,7 +7,7 @@
   "fixture": "tests/fixtures/route-candidate/blocked-pad.kicad_pcb",
   "metrics": {
     "apply_authority": false,
-    "candidate_id": "sha256:bbd149eb890ffd527def0c65f2bcb4269aca8423938cfaaa24743f3fe959a587",
+    "candidate_id": "sha256:c53a6d61db99715ad46dce180fe0abfbf72235eb2678092938cbbdee27057ced",
     "candidate_matches_file_oracle": true,
     "capture_race_refused": true,
     "deterministic_candidate_ids": true,
@@ -22,8 +22,8 @@
     "stale_board_refused": true,
     "via_count": 2
   },
-  "run_id": "sha256:722d55fc1df22a711219dfa7c12cc07103575fe0dda192809f9e76e102489a40",
+  "run_id": "sha256:56d9061491ea85b08286add9c3e39884a33731bf1d03d9a7e5223632a2a054c0",
   "schema": "copper-mcp/benchmark/live-layered-route-preview/v1",
   "script": "scripts/benchmark_live_layered_route_preview.py",
-  "source_commit": "ceba0c907d127f2aadec69145eb55a0da876fa82"
+  "source_commit": "e0e10edf30d2d22c9c1e49b82017d4cfb7b9971d"
 }
