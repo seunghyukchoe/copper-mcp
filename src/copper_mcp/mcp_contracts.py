@@ -937,6 +937,215 @@ class RoutePreviewToolResponse(
     """Strict status-specific structured output contract for ``preview_route``."""
 
 
+class LayeredRouteSettingsContract(_ClosedContract):
+    """Bounded policy and resource ceilings for the two-signal-layer router."""
+
+    move_cost: Annotated[int, Field(ge=1, le=1_000_000_000)] = 1
+    via_cost: Annotated[int, Field(ge=1, le=1_000_000_000)] = 10
+    max_expansions: Annotated[int, Field(ge=1, le=1_000_000)] = 100_000
+    max_nodes: Annotated[int, Field(ge=1, le=500_000)] = 250_000
+    max_obstacles: Annotated[int, Field(ge=1, le=4_096)] = 256
+    max_obstacle_checks: Annotated[int, Field(ge=1, le=10_000_000)] = 2_000_000
+
+
+class LayeredRoutePreviewRequestContract(_ClosedContract):
+    """Closed, revision-bound request for a candidate-only layered route proposal.
+
+    The selected net is inferred from the two explicitly named Board IR pads.  Deliberately no
+    KiCad net name, raw board text, DRC flag, or apply capability crosses this MCP boundary.
+    """
+
+    board: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=4096,
+            pattern=r"^[^\u0000-\u001f\u007f]+$",
+        ),
+    ]
+    start_pad_id: PadRefId
+    end_pad_id: PadRefId
+    constraints: RouteConstraintsContract
+    expect_board_revision: Digest
+    expect_snapshot_digest: Digest
+    start_layer_id: LayerId | None = None
+    end_layer_id: LayerId | None = None
+    grid_step_nm: Annotated[int, Field(ge=1, le=1_000_000_000)] = 250_000
+    seed: NonNegativeInteger = 0
+    settings: LayeredRouteSettingsContract = Field(default_factory=LayeredRouteSettingsContract)
+
+
+LayeredRoutePreviewToolRequest = Annotated[
+    Any,
+    WithJsonSchema(_inline_json_schema(LayeredRoutePreviewRequestContract)),
+]
+
+
+class LayeredRoutePathContract(_ClosedContract):
+    """One exact orthogonal polyline on one signal layer."""
+
+    layer_id: LayerId
+    vertices_nm: Annotated[list[PointArray], Field(min_length=2, max_length=500_000)]
+
+
+class LayeredPointContract(_ClosedContract):
+    """Exact Board IR coordinate pair, represented as integer nanometres."""
+
+    x_nm: Nanometres
+    y_nm: Nanometres
+
+
+class LayeredRouteViaContract(_ClosedContract):
+    """One explicit full-stack via in a layered candidate."""
+
+    id: Annotated[str, Field(pattern=r"^via:[0-9a-zA-Z:._-]{1,160}$")]
+    center_nm: LayeredPointContract
+    diameter_nm: PositiveNanometres
+    drill_nm: PositiveNanometres
+    start_layer_id: LayerId
+    end_layer_id: LayerId
+
+
+class LayeredRoutePatchContract(_ClosedContract):
+    """Immutable, unapplied layered geometry carried by one route candidate."""
+
+    net_id: NetRefId
+    width_nm: PositiveNanometres
+    via_diameter_nm: PositiveNanometres
+    via_drill_nm: PositiveNanometres
+    paths: Annotated[list[LayeredRoutePathContract], Field(min_length=1, max_length=100_000)]
+    vias: Annotated[list[LayeredRouteViaContract], Field(max_length=100_000)]
+
+
+class LayeredRouteCostContract(_ClosedContract):
+    """Deterministic physical and search-cost decomposition."""
+
+    wire_length_nm: NonNegativeInteger
+    via_count: NonNegativeInteger
+    via_cost_units: NonNegativeInteger
+    total_search_cost_units: NonNegativeInteger
+
+
+class LayeredRouteMetricsContract(_ClosedContract):
+    """Bounded search metrics for one layered candidate."""
+
+    expanded_states: NonNegativeInteger
+    discovered_states: NonNegativeInteger
+    peak_frontier_states: NonNegativeInteger
+    obstacle_checks: NonNegativeInteger
+    move_steps: NonNegativeInteger
+    vias: NonNegativeInteger
+    wire_length_nm: NonNegativeInteger
+    bend_count: NonNegativeInteger
+
+
+class LayeredRouteCandidateContract(_ClosedContract):
+    """Content-addressed, candidate-only layered route proposal."""
+
+    candidate_id: Digest
+    base_revision: Digest
+    start_pad_id: PadRefId
+    end_pad_id: PadRefId
+    router_version: Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._/\-]{0,127}$")]
+    policy: Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._/\-]{0,127}$")]
+    seed: NonNegativeInteger
+    patch: LayeredRoutePatchContract
+    cost: LayeredRouteCostContract
+    metrics: LayeredRouteMetricsContract
+    settings: LayeredRouteSettingsContract
+
+
+class LayeredRouteDiagnosticContract(_ClosedContract):
+    """Bounded, non-echoing explanation for a refused layered proposal."""
+
+    code: Literal[
+        "invalid_request",
+        "invalid_snapshot",
+        "stale_revision",
+        "unsupported_geometry",
+        "unsupported_constraint",
+        "off_grid",
+        "grid_budget_exceeded",
+        "obstacle_budget_exceeded",
+        "search_budget_exceeded",
+        "cancelled",
+        "no_path",
+    ]
+    message: Annotated[str, Field(min_length=1, max_length=256)]
+    expanded_states: NonNegativeInteger
+    obstacle_checks: NonNegativeInteger
+
+
+class _LayeredRoutePreviewResponseCommonContract(_ClosedContract):
+    """Fields shared by all mutually exclusive layered preview outcomes."""
+
+    schema_version: Literal["1.0"]
+    board_path: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=4096,
+            pattern=r"^[^\u0000-\u001f\u007f]+$",
+        ),
+    ]
+    board_revision: Digest
+    snapshot_digest: Digest | None
+    request: LayeredRoutePreviewRequestContract
+    conversion_diagnostic_counts: dict[str, NonNegativeInteger]
+
+
+_EmptyLayeredDiagnosticCounts = Annotated[
+    dict[str, NonNegativeInteger],
+    Field(max_length=0),
+]
+_LayeredDiagnosticCounts = Annotated[
+    dict[str, NonNegativeInteger],
+    Field(min_length=1, max_length=1_000),
+]
+
+
+class RoutedLayeredRoutePreviewContract(_LayeredRoutePreviewResponseCommonContract):
+    status: Literal["routed"]
+    snapshot_digest: Digest
+    candidate: LayeredRouteCandidateContract
+    diagnostic: None
+    conversion_diagnostic_counts: _EmptyLayeredDiagnosticCounts
+
+
+class NotRoutedLayeredRoutePreviewContract(_LayeredRoutePreviewResponseCommonContract):
+    status: Literal["not_routed"]
+    snapshot_digest: Digest
+    candidate: None
+    diagnostic: LayeredRouteDiagnosticContract
+    conversion_diagnostic_counts: _EmptyLayeredDiagnosticCounts
+
+
+class StaleLayeredRoutePreviewContract(_LayeredRoutePreviewResponseCommonContract):
+    status: Literal["not_routed"]
+    snapshot_digest: None
+    candidate: None
+    diagnostic: LayeredRouteDiagnosticContract
+    conversion_diagnostic_counts: _EmptyLayeredDiagnosticCounts
+
+
+class UnsupportedLayeredRoutePreviewContract(_LayeredRoutePreviewResponseCommonContract):
+    status: Literal["unsupported_board"]
+    candidate: None
+    diagnostic: LayeredRouteDiagnosticContract | None
+    conversion_diagnostic_counts: _LayeredDiagnosticCounts
+
+
+class LayeredRoutePreviewToolResponse(
+    RootModel[
+        RoutedLayeredRoutePreviewContract
+        | NotRoutedLayeredRoutePreviewContract
+        | StaleLayeredRoutePreviewContract
+        | UnsupportedLayeredRoutePreviewContract
+    ]
+):
+    """Strict status-specific structured output for ``preview_layered_route``."""
+
+
 class PlacementRuleResultContract(_ClosedContract):
     """What one rule concluded, and by how much."""
 
@@ -1180,6 +1389,8 @@ __all__ = [
     "CircuitIntentToolContent",
     "CircuitSceneToolResponse",
     "CircuitSchematicToolResponse",
+    "LayeredRoutePreviewToolRequest",
+    "LayeredRoutePreviewToolResponse",
     "LiveEditorContextToolRequest",
     "LiveEditorContextToolResponse",
     "LivePlacementToolRequest",

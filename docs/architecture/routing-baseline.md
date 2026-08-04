@@ -11,10 +11,12 @@ route multiple nets, run durable jobs, persist or export candidate boards, or ap
 
 The internal `LayeredBoardRouter` is a separate Board IR-bound proposal seam. It accepts only the
 narrow two-signal-layer matrix in [ADR-0036](../adr/0036-board-ir-layered-proposal-adapter.md),
-emits immutable paths and through-vias, and is covered by B-018. A disposable serializer now
-replays the request, emits source-preserving segments and canonical full-stack through-vias, and
-proves a Board IR round trip. It is not wired to public route preview; authoritative DRC remains
-required before routing through vias can be marked complete.
+emits immutable paths and through-vias, and is covered by B-018. The read-only MCP
+`preview_layered_route` surface now exposes that proposal seam with pad-reference net inference
+and double compare-and-swap binding. A disposable serializer replays the request, emits
+source-preserving segments and canonical full-stack through-vias, and proves a Board IR round
+trip; the public tool deliberately does not invoke it. Authoritative DRC remains required before
+routing through vias can be marked complete.
 
 ## Accepted input
 

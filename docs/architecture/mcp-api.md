@@ -21,6 +21,7 @@
 | `observe_board_scene` | None, or a process-local render artifact when `include_render` is set | Bounded, region-scoped semantic scene of one board, with board text quarantined. |
 | `observe_live_board_scene` | None | Bounded Circuit Scene `0.2.0` from the active KiCad IPC document; uses `board: "live"` and optional stale-digest compare values. |
 | `preview_live_route` | None | Revision-bound, ref-anchored route proposal over one active KiCad IPC snapshot; never writes, runs DRC/fill, or grants apply authority. |
+| `preview_layered_route` | None | Revision-bound, pad-ref-anchored two-signal-layer proposal with explicit full-stack vias; candidate-only, with no DRC, refill, serialization, export, or apply authority. |
 | `preview_live_placement` | None | Revision-bound, ref-anchored placement proposal over one active KiCad IPC snapshot; never writes, runs DRC, or grants apply authority. |
 | `inspect_live_editor_context` | None | Revision-bound active layer and bounded native selection references from the KiCad IPC editor; never reads raw selection text or mutates the editor. |
 | `apply_candidate` | **Replaces the board file**; disabled by default | The only mutating tool. Requires an operator flag and a single-use token. Route patches only. |
@@ -270,6 +271,24 @@ requested evidence is missing or does not bind. On an `already_connected` net th
 and `drc_evidence` is `null`, because that rule protects a proposal and none is being made. Preview
 writes no file, creates no job, and never returns source board bytes; it does return the geometry it
 generated, so a host that must not disclose generated copper to a model should not enable this tool.
+
+`preview_layered_route` is the separate via-capable proposal surface. Its request names a
+workspace-relative `.kicad_pcb`, two `pad:` references, explicit net-class dimensions, and both
+the source-byte and Board IR snapshot digests copied from an observation. It does not accept a raw
+net selector. The service converts the exact source first, checks both compare-and-swap values,
+infers the common net from the pads, and then invokes the bounded Board IR adapter. The supported
+matrix is exactly two signal layers, a rectangular hole-free outline, conservative foreign
+geometry/keepout envelopes, and full-stack through-vias. A routed result carries a separate
+layered candidate with per-layer integer paths, via centers/dimensions, deterministic cost and
+search metrics, and a canonical candidate digest. Refusals carry only bounded status/code/count
+data; a conversion failure is `unsupported_board`, while a valid board outside the layered subset
+is `not_routed` with its snapshot digest.
+
+This tool is read-only and idempotent. It never calls `begin_commit`, `refill_zones`, or the KiCad
+DRC command, and it returns no serialized patch, apply token, durable job, or persistent candidate.
+Its candidate is therefore an actionable proposal for a later reviewed serializer/DRC/apply flow,
+not a claim that KiCad will accept the route. B-024 covers ten deterministic calls on a via-required
+fixture, closed output-schema validation, stale board/snapshot refusal, and unchanged source bytes.
 
 `render_circuit_schematic` takes one structured Circuit Intent `content` object. The shared service
 performs bounded semantic validation and normalization, computes the intent digest, renders the

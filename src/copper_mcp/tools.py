@@ -18,6 +18,7 @@ from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import run_board_drc as run_kicad_board_drc
 from copper_mcp.kicad_file import inspect_kicad_board
 from copper_mcp.kicad_ipc import inspect_live_board as inspect_live_kicad_board
+from copper_mcp.layered_route_preview import preview_layered_route as preview_layered_route_service
 from copper_mcp.live_editor_context import (
     LiveEditorContext,
 )
@@ -62,6 +63,7 @@ def server_info() -> dict[str, Any]:
             "revision-bound live KiCad IPC route proposal (read-only)",
             "revision-bound live KiCad IPC placement proposal (read-only)",
             "revision-bound live KiCad IPC editor context (read-only)",
+            "revision-bound layered route proposal (read-only)",
         ],
         "planned": [
             "region-scoped and human-facing board rendering",
@@ -165,6 +167,15 @@ def preview_live_route(payload: dict[str, Any], settings: Settings | None = None
     """Return a revision-bound live route proposal as a detached dictionary."""
 
     return preview_live_route_raw(payload, settings).to_dict()
+
+
+def preview_layered_route(
+    payload: dict[str, Any], settings: Settings | None = None
+) -> dict[str, Any]:
+    """Return a revision-bound, candidate-only two-signal-layer route proposal."""
+
+    active_settings = settings or Settings.from_env()
+    return preview_layered_route_service(payload, active_settings)
 
 
 def observe_board_scene_raw(

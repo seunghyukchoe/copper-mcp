@@ -8,6 +8,11 @@ All notable changes are documented here. The format follows
 
 ### Security
 
+- Added `preview_layered_route`, a loopback/file-backed, read-only MCP boundary that requires
+  both source and Board IR compare-and-swap digests, infers net identity from two pad references,
+  validates bounded settings, verifies candidate digests, and redacts board text/net names. It
+  cannot request DRC, refill, serialization, export, persistence, or apply authority.
+
 - Layered routing now validates every obstacle and search-budget field before reporting resource
   exhaustion, and its physical envelopes include the candidate track half-width/via radius plus
   explicit zone clearances. Malformed requests cannot be reclassified as stale revisions or escape
@@ -97,8 +102,9 @@ All notable changes are documented here. The format follows
 - Added an internal, Board IR-bound two-layer routing proposal adapter. It resolves exact
   nanometre grid geometry, net-class width/clearance/via dimensions, foreign physical envelopes,
   track versus via-only keepouts, immutable candidate identity, and fail-closed stale/off-grid/
-  unsupported diagnostics. This is proposal-only: it does not serialize KiCad segments or vias,
-  invoke DRC, mutate a board, expose an MCP tool, or claim production routing through vias.
+  unsupported diagnostics. This remains proposal-only: the public MCP wrapper exposes only the
+  bounded candidate contract; it does not serialize KiCad segments or vias, invoke DRC, mutate a
+  board, or claim production routing through vias.
 
 - Added a request-replayed, source-preserving serializer for the layered proposal seam. It emits
   deterministic segment and full-stack through-via expressions, canonicalizes reversed via
@@ -144,6 +150,12 @@ All notable changes are documented here. The format follows
 
 
 ### Added
+
+- Added the public, candidate-only `preview_layered_route` MCP tool for the narrow two-signal-layer
+  Board IR router. It returns closed structured output with per-layer paths, full-stack vias,
+  deterministic metrics, and typed stale/unsupported/no-path diagnostics. B-024 records ten
+  schema-valid deterministic replays, stale CAS refusals, and unchanged source bytes; it does not
+  claim general multilayer routing, KiCad DRC, fabrication readiness, or FreeRouting parity.
 
 - `inspect_live_editor_context`, a read-only MCP surface for the active KiCad layer and bounded
   native selection refs, bound to the raw board serialization and editor-context digests. It now

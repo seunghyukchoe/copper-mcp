@@ -30,6 +30,8 @@ from copper_mcp.mcp_contracts import (
     CircuitIntentToolContent,
     CircuitSceneToolResponse,
     CircuitSchematicToolResponse,
+    LayeredRoutePreviewToolRequest,
+    LayeredRoutePreviewToolResponse,
     LiveBoardObservationToolResponse,
     LiveCircuitSceneToolRequest,
     LiveEditorContextToolRequest,
@@ -61,6 +63,7 @@ from copper_mcp.tools import (
 )
 from copper_mcp.tools import observe_board_scene_raw as observe_board_scene_service_raw
 from copper_mcp.tools import observe_live_board_scene_raw as observe_live_board_scene_service_raw
+from copper_mcp.tools import preview_layered_route as preview_layered_route_service
 from copper_mcp.tools import preview_live_placement_raw as preview_live_placement_service_raw
 from copper_mcp.tools import preview_live_route_raw as preview_live_route_service_raw
 from copper_mcp.tools import preview_placement as preview_placement_service
@@ -91,6 +94,7 @@ class CopperMCPServer(MCPServer[None]):
             if tool.name not in {
                 "preview_route",
                 "preview_live_route",
+                "preview_layered_route",
                 "render_circuit_schematic",
                 "observe_live_board_scene",
                 "preview_live_placement",
@@ -117,6 +121,8 @@ class CopperMCPServer(MCPServer[None]):
             raise ToolError("route tool arguments are malformed")
         if name == "preview_live_route" and set(arguments) != {"request"}:
             raise ToolError("live route tool arguments are malformed")
+        if name == "preview_layered_route" and set(arguments) != {"request"}:
+            raise ToolError("layered route tool arguments are malformed")
         if name == "observe_live_board_scene" and set(arguments) != {"request"}:
             raise ToolError("live scene tool arguments are malformed")
         if name == "preview_live_placement" and set(arguments) != {"request"}:
@@ -282,6 +288,30 @@ def preview_live_route(request: LiveRoutePreviewToolRequest) -> RoutePreviewTool
 
     return RoutePreviewToolResponse.model_validate(
         preview_live_route_service_raw(request, _SETTINGS).to_dict()
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def preview_layered_route(
+    request: LayeredRoutePreviewToolRequest,
+) -> LayeredRoutePreviewToolResponse:
+    """Propose one revision-bound two-signal-layer route without mutation.
+
+    The selected net is inferred from ``start_pad_id`` and ``end_pad_id`` in the converted
+    Board IR snapshot. The result is an immutable candidate or a bounded typed refusal; it never
+    runs DRC, writes KiCad bytes, mints an apply token, or returns raw board text.
+    """
+
+    return LayeredRoutePreviewToolResponse.model_validate(
+        preview_layered_route_service(request, _SETTINGS)
     )
 
 

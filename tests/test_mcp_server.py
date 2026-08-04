@@ -97,6 +97,7 @@ class McpServerTests(unittest.TestCase):
                 "preview_placement",
                 "preview_live_placement",
                 "preview_live_route",
+                "preview_layered_route",
                 "preview_route",
                 "render_circuit_schematic",
                 "run_board_drc",
@@ -255,6 +256,145 @@ class McpServerTests(unittest.TestCase):
         self.assertIs(live_placement.annotations.destructive_hint, False)
         self.assertIs(live_placement.annotations.idempotent_hint, True)
         self.assertIs(live_placement.annotations.open_world_hint, False)
+
+    def test_layered_route_advertises_closed_read_only_revision_bound_request(self) -> None:
+        tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
+        layered = tools["preview_layered_route"]
+        self.assertEqual(layered.input_schema["type"], "object")
+        self.assertIs(layered.input_schema["additionalProperties"], False)
+        request_schema = layered.input_schema["properties"]["request"]
+        self.assertIs(request_schema["additionalProperties"], False)
+        self.assertEqual(
+            set(request_schema["required"]),
+            {
+                "board",
+                "start_pad_id",
+                "end_pad_id",
+                "constraints",
+                "expect_board_revision",
+                "expect_snapshot_digest",
+            },
+        )
+        self.assertNotIn("net", request_schema["properties"])
+        self.assertIn("start_layer_id", request_schema["properties"])
+        self.assertIn("end_layer_id", request_schema["properties"])
+        self.assertIn("grid_step_nm", request_schema["properties"])
+        self.assertIn("settings", request_schema["properties"])
+        output = layered.output_schema
+        self.assertIsNotNone(output)
+        assert isinstance(output, dict)
+        variants = [_resolve_local_ref(output, variant) for variant in output["anyOf"]]
+        self.assertEqual(len(variants), 4)
+        self.assertEqual(
+            sorted(variant["properties"]["status"].get("const") for variant in variants),
+            ["not_routed", "not_routed", "routed", "unsupported_board"],
+        )
+        for variant in variants:
+            self.assertIs(variant["additionalProperties"], False)
+        assert layered.annotations is not None
+        self.assertIs(layered.annotations.read_only_hint, True)
+        self.assertIs(layered.annotations.destructive_hint, False)
+        self.assertIs(layered.annotations.idempotent_hint, True)
+        self.assertIs(layered.annotations.open_world_hint, False)
+
+    def test_layered_route_rejects_unknown_wrapper_fields_without_echo(self) -> None:
+        secret = "SECRET_LAYERED_ROUTE_WRAPPER"
+        with self.assertRaises(ToolError) as caught:
+            asyncio.run(
+                mcp.call_tool(
+                    "preview_layered_route",
+                    {"request": {}, secret: 1},
+                )
+            )
+        self.assertNotIn(secret, str(caught.exception))
+
+    def test_layered_route_rejects_unknown_request_fields_without_echo(self) -> None:
+        secret = "SECRET_LAYERED_ROUTE_REQUEST"
+        with self.assertRaises(ToolError) as caught:
+            asyncio.run(
+                mcp.call_tool(
+                    "preview_layered_route",
+                    {"request": {secret: 1}},
+                )
+            )
+        self.assertNotIn(secret, str(caught.exception))
+
+    def test_layered_route_returns_status_specific_structured_candidate(self) -> None:
+        digest = "sha256:" + "a" * 64
+        request = {
+            "board": "two-pad.kicad_pcb",
+            "start_pad_id": "pad:kicad:start",
+            "end_pad_id": "pad:kicad:end",
+            "constraints": {
+                "clearance_nm": 250_000,
+                "track_width_nm": 250_000,
+                "via_diameter_nm": 800_000,
+                "via_drill_nm": 400_000,
+            },
+            "expect_board_revision": digest,
+            "expect_snapshot_digest": digest,
+        }
+        response = {
+            "schema_version": "1.0",
+            "status": "routed",
+            "board_path": "two-pad.kicad_pcb",
+            "board_revision": digest,
+            "snapshot_digest": digest,
+            "request": request,
+            "conversion_diagnostic_counts": {},
+            "candidate": {
+                "candidate_id": digest,
+                "base_revision": digest,
+                "start_pad_id": "pad:kicad:start",
+                "end_pad_id": "pad:kicad:end",
+                "router_version": "layered-board-a-star/0.1.0",
+                "policy": "board-layered-a-star-v1",
+                "seed": 0,
+                "patch": {
+                    "net_id": "net:name:audio",
+                    "width_nm": 250_000,
+                    "via_diameter_nm": 800_000,
+                    "via_drill_nm": 400_000,
+                    "paths": [
+                        {
+                            "layer_id": "layer:F.Cu",
+                            "vertices_nm": [[0, 0], [1_000, 0]],
+                        }
+                    ],
+                    "vias": [],
+                },
+                "cost": {
+                    "wire_length_nm": 1_000,
+                    "via_count": 0,
+                    "via_cost_units": 0,
+                    "total_search_cost_units": 1,
+                },
+                "metrics": {
+                    "expanded_states": 1,
+                    "discovered_states": 2,
+                    "peak_frontier_states": 1,
+                    "obstacle_checks": 0,
+                    "move_steps": 1,
+                    "vias": 0,
+                    "wire_length_nm": 1_000,
+                    "bend_count": 0,
+                },
+                "settings": {},
+            },
+            "diagnostic": None,
+        }
+        with patch.object(_server, "preview_layered_route_service", return_value=response):
+            result = asyncio.run(mcp.call_tool("preview_layered_route", {"request": request}))
+        self.assertFalse(result.is_error)
+        structured = result.structured_content
+        assert isinstance(structured, dict)
+        self.assertEqual(structured["status"], "routed")
+        self.assertEqual(structured["candidate"]["patch"]["paths"][0]["layer_id"], "layer:F.Cu")
+        self.assertNotIn("net", structured["request"])
+        tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
+        output_schema = tools["preview_layered_route"].output_schema
+        assert isinstance(output_schema, dict)
+        self.assertEqual(list(Draft202012Validator(output_schema).iter_errors(structured)), [])
 
     def test_render_tool_declares_structured_content_and_security_annotations(self) -> None:
         tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}

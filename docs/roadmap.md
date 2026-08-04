@@ -92,12 +92,17 @@ documentation, ledger updates, and benchmark evidence.
     deterministic budgets, delivered as an internal oracle only. Board IR binding, physical
     clearance/via legality, KiCad serialization, and DRC remain required before this becomes a
     routing capability.
+  - [x] Public, file-backed `preview_layered_route` MCP proposal with pad-reference net inference,
+    double CAS, closed structured output, and candidate-only full-stack vias. This is a
+    read-only proposal surface; public DRC, durable export, multilayer generalization, and apply
+    remain open.
 - [~] Board IR-bound two-layer proposal adapter: exact grid attachment, conservative foreign
   copper/zone/pad envelopes, separate track/via keepouts, immutable candidate digests, and
   fail-closed stale/off-grid/unsupported diagnostics are benchmarked in B-018. Source-preserving
   segment/via serialization and Board IR replay are covered by an internal disposable serializer;
-  B-020 now binds that exact replay to private authoritative KiCad DRC. MCP exposure, durable
-  export, and apply authority remain open gates.
+  B-020 now binds that exact replay to private authoritative KiCad DRC, and B-024 exposes a
+  separate read-only candidate preview through MCP. Durable export, public DRC, and apply authority
+  remain open gates.
 - [x] Attachment to existing same-net copper and bounded partial-route completion.
 - [ ] Multilayer vias and keepouts.
 - [ ] Negotiated-congestion multi-net routing.
