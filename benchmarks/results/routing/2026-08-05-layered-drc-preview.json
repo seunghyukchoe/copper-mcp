@@ -1,0 +1,24 @@
+{
+  "date_utc": "2026-08-04T20:11:17+00:00",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "fixture": "tests/fixtures/route-candidate/two-pad.kicad_pcb",
+  "metrics": {
+    "candidate_evidence_binding": true,
+    "fixture_sha256": "sha256:5f88ebcf52cf8f1548990bdbdc1c52ac7a30f39c013366f79b161ec15e1caae2",
+    "freerouting_parity_claim": false,
+    "kicad_invoked": false,
+    "omitted_drc_calls": 0,
+    "requested_drc_calls": 1,
+    "schema_or_authority_quality_claim": false,
+    "source_unchanged": true,
+    "whole_board_drc_claim": false,
+    "workspace_mutations": 0
+  },
+  "run_id": "sha256:c13d66d2ece04f0a8d4605a2b7ef7a8cab56be0fce0a656f4cf2833c8c14de6d",
+  "schema": "copper-mcp/benchmark/layered-drc-preview/v1",
+  "script": "scripts/benchmark_layered_drc_preview.py",
+  "source_commit": "19f8a81cb5968dcea2fab63a0799afe213488384"
+}

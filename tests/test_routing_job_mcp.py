@@ -14,7 +14,11 @@ from copper_mcp.board_ir import NetClass
 from copper_mcp.config import Settings
 from copper_mcp.mcp_server import mcp
 from copper_mcp.routing import RoutingJobRepository
-from copper_mcp.routing_job_service import execute_routing_job
+from copper_mcp.routing_job_service import (
+    RoutingJobServiceError,
+    _prepare_layered_job,
+    execute_routing_job,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "two-pad.kicad_pcb"
 
@@ -114,6 +118,36 @@ def test_job_tools_are_closed_and_context_bound(tmp_path: Path) -> None:
                         )
     finally:
         repository.close()
+
+
+def test_job_request_cannot_silently_accept_layered_drc_opt_in(tmp_path: Path) -> None:
+    settings, request, authorization = _workspace(tmp_path)
+    request["include_drc"] = True
+    repository = RoutingJobRepository(tmp_path / "jobs.sqlite3")
+    try:
+        with patch.object(server, "_SETTINGS", settings):
+            with patch.object(server, "_routing_repository", return_value=repository):
+                with patch.object(server, "_schedule_routing_job"):
+                    with pytest.raises(ToolError):
+                        asyncio.run(
+                            mcp.call_tool(
+                                "start_routing",
+                                {"request": request, "authorization_digest": authorization},
+                            )
+                        )
+    finally:
+        repository.close()
+
+
+def test_direct_job_preparation_rejects_layered_drc_opt_in(tmp_path: Path) -> None:
+    settings, request, _ = _workspace(tmp_path)
+    request["include_drc"] = True
+
+    with pytest.raises(
+        RoutingJobServiceError,
+        match="cannot request authoritative DRC evidence",
+    ):
+        _prepare_layered_job(request, settings)
 
 
 def test_job_worker_persists_result_and_explicit_geometry_export(tmp_path: Path) -> None:

@@ -67,6 +67,7 @@ def server_info() -> dict[str, Any]:
             "revision-bound live KiCad IPC placement proposal (read-only)",
             "revision-bound live KiCad IPC editor context (read-only)",
             "revision-bound layered route proposal (read-only)",
+            "opt-in authoritative DRC evidence for file-backed layered proposals",
             "durable file-backed layered routing jobs with bounded worker execution",
             "authorization-bound candidate geometry export",
             "revision-bound live layered route proposal (read-only)",
@@ -179,7 +180,7 @@ def preview_live_route(payload: dict[str, Any], settings: Settings | None = None
 def preview_layered_route(
     payload: dict[str, Any], settings: Settings | None = None
 ) -> dict[str, Any]:
-    """Return a revision-bound, candidate-only two-signal-layer route proposal."""
+    """Return a revision-bound two-signal-layer proposal with optional private DRC evidence."""
 
     active_settings = settings or Settings.from_env()
     return preview_layered_route_service(payload, active_settings)

@@ -125,6 +125,10 @@ def _prepare_layered_job(payload: object, settings: Settings) -> PreparedLayered
         raise RoutingJobServiceError("routing job request is invalid") from error
     if request.board == "live" or request.expect_session_revision is not None:
         raise RoutingJobServiceError("durable routing jobs require a file-backed board")
+    if request.include_drc:
+        raise RoutingJobServiceError(
+            "durable routing jobs cannot request authoritative DRC evidence"
+        )
     try:
         board = read_workspace_file(
             settings.workspace,
@@ -173,8 +177,13 @@ def _prepare_layered_job(payload: object, settings: Settings) -> PreparedLayered
 
 
 def _spec(prepared: PreparedLayeredRoutingJob, settings: Settings) -> tuple[Any, dict[str, object]]:
+    # ``include_drc`` is a preview-only capability.  The parser and job schema accept only its
+    # explicit false default, and omitting that default from the persisted envelope prevents the
+    # redacted job repository from ever acquiring a silently ignored authority flag.
     request_document = {
-        key: value for key, value in prepared.request.to_dict().items() if value is not None
+        key: value
+        for key, value in prepared.request.to_dict().items()
+        if value is not None and key != "include_drc"
     }
     request_digest = f"sha256:{hashlib.sha256(_canonical_bytes(request_document)).hexdigest()}"
     request = prepared.request

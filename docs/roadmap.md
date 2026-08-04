@@ -107,12 +107,12 @@ documentation, ledger updates, and benchmark evidence.
     clearance/via legality, KiCad serialization, and DRC remain required before this becomes a
     routing capability.
   - [x] Public, file-backed `preview_layered_route` MCP proposal with pad-reference net inference,
-    double CAS, closed structured output, and candidate-only full-stack vias. This is a
-    read-only proposal surface; public DRC, durable export, multilayer generalization, and apply
-    remain open.
+    double CAS, closed structured output, candidate-only full-stack vias, and explicit opt-in
+    candidate-bound authoritative DRC evidence. This remains a read-only two-signal-layer surface;
+    durable export, multilayer generalization, refill, and apply remain open.
   - [x] Live `preview_live_layered_route` proposal over the exact byte-confirmed KiCad IPC
     snapshot, with a redacted `KICAD_API_TOKEN` session CAS and file-oracle equality benchmark;
-    real GUI, DRC, serializer, and apply evidence remain open.
+    real GUI, live DRC, serializer, and apply evidence remain open.
   - [x] Structural candidate verification and endpoint-via avoidance now gate the internal
     serializer; exact padstack treatment, edge/hole clearance, refill, and fabrication evidence
     remain open.
@@ -122,8 +122,9 @@ documentation, ledger updates, and benchmark evidence.
   segment/via serialization and Board IR replay are covered by an internal disposable serializer;
   B-020 now binds that exact replay to private authoritative KiCad DRC, and B-024 exposes a
   separate read-only candidate preview through MCP. A bounded topology verifier now gates the
-  serializer and refuses endpoint-via geometry; exact padstack/clearance, durable export, public
-  DRC, and apply authority remain open gates.
+  serializer and refuses endpoint-via geometry; exact padstack/clearance, durable export,
+  multilayer generalization, and apply authority remain open gates. B-032 now covers the narrow
+  public file-backed DRC evidence binding.
   - [x] Candidate topology gate: revision/endpoint binding, path-via adjacency, two-layer
     full-stack transitions, duplicate/crossing rejection, bounded pair checks, and explicit
     physical-validation non-claim.

@@ -949,10 +949,11 @@ class LayeredRouteSettingsContract(_ClosedContract):
 
 
 class LayeredRoutePreviewRequestContract(_ClosedContract):
-    """Closed, revision-bound request for a candidate-only layered route proposal.
+    """Closed, revision-bound request for a layered route proposal.
 
     The selected net is inferred from the two explicitly named Board IR pads.  Deliberately no
-    KiCad net name, raw board text, DRC flag, or apply capability crosses this MCP boundary.
+    KiCad net name, raw board text, or apply capability crosses this MCP boundary. Authoritative
+    DRC is an explicit opt-in and remains private, aggregate, and candidate-bound.
     """
 
     board: Annotated[
@@ -973,6 +974,7 @@ class LayeredRoutePreviewRequestContract(_ClosedContract):
     grid_step_nm: Annotated[int, Field(ge=1, le=1_000_000_000)] = 250_000
     seed: NonNegativeInteger = 0
     settings: LayeredRouteSettingsContract = Field(default_factory=LayeredRouteSettingsContract)
+    include_drc: bool = False
 
 
 LayeredRoutePreviewToolRequest = Annotated[
@@ -986,6 +988,7 @@ class LiveLayeredRoutePreviewRequestContract(LayeredRoutePreviewRequestContract)
 
     board: Literal["live"]
     expect_session_revision: Digest
+    include_drc: Literal[False] = False
 
 
 LiveLayeredRoutePreviewToolRequest = Annotated[
@@ -1122,6 +1125,7 @@ class RoutedLayeredRoutePreviewContract(_LayeredRoutePreviewResponseCommonContra
     snapshot_digest: Digest
     candidate: LayeredRouteCandidateContract
     diagnostic: None
+    drc_evidence: RouteCandidateDrcEvidenceContract | None
     conversion_diagnostic_counts: _EmptyLayeredDiagnosticCounts
 
 
@@ -1130,6 +1134,7 @@ class NotRoutedLayeredRoutePreviewContract(_LayeredRoutePreviewResponseCommonCon
     snapshot_digest: Digest
     candidate: None
     diagnostic: LayeredRouteDiagnosticContract
+    drc_evidence: None
     conversion_diagnostic_counts: _EmptyLayeredDiagnosticCounts
 
 
@@ -1138,6 +1143,7 @@ class StaleLayeredRoutePreviewContract(_LayeredRoutePreviewResponseCommonContrac
     snapshot_digest: None
     candidate: None
     diagnostic: LayeredRouteDiagnosticContract
+    drc_evidence: None
     conversion_diagnostic_counts: _EmptyLayeredDiagnosticCounts
 
 
@@ -1145,6 +1151,7 @@ class UnsupportedLayeredRoutePreviewContract(_LayeredRoutePreviewResponseCommonC
     status: Literal["unsupported_board"]
     candidate: None
     diagnostic: LayeredRouteDiagnosticContract | None
+    drc_evidence: None
     conversion_diagnostic_counts: _LayeredDiagnosticCounts
 
 
@@ -1170,6 +1177,7 @@ class RoutingJobRequestContract(LayeredRoutePreviewRequestContract):
             pattern=r"^[^\u0000-\u001f\u007f]+$",
         ),
     ]
+    include_drc: Literal[False] = False
 
 
 RoutingJobRequest = Annotated[

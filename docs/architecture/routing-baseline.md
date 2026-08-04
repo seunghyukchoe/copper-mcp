@@ -503,12 +503,14 @@ Behind that sit routing *through* vias, which needs Board IR-bound layer-aware g
 does not yet have. An internal abstract two-layer A* oracle now exercises the maze-level primitive
 with explicit via transitions and deterministic budgets, but it does not model nanometre trace
 width/clearance, via annuli/drills, keepouts, net ownership, or KiCad serialization/DRC. The
-production route contract therefore remains single-layer, and no net on this board still needs a
-route.
+general production route contract therefore remains single-layer; the separate layered preview
+supports only its documented two-signal-layer subset and does not make this board a fully routed
+production design.
 
-Board IR handles a real two-layer audio board today, and the router still does not route one
-unaided. Attachment, polygon keepouts, and diagonal envelopes remain validated by purpose-built
-fixtures whose KiCad DRC evidence is real and which are checked to be discriminating. The
+Board IR handles a real two-layer audio board today, and the layered preview now routes only a
+bounded fixture subset with opt-in candidate-bound DRC evidence. Attachment, polygon keepouts, and
+diagonal envelopes remain validated by purpose-built fixtures whose KiCad DRC evidence is real and
+which are checked to be discriminating. The
 [roadmap](../roadmap.md) records the remainder as separate contracts.
 
 ## Safety boundary
@@ -522,10 +524,11 @@ It says nothing about electrical behavior, SI/PI, EMC, thermal performance, DFM,
 readiness, or hardware safety. Preview, persistence, and application require separate contracts.
 
 A committed `blocked-pad.kicad_pcb` fixture places a 2 mm x 8 mm foreign-net pad between the two
-endpoints. The router detours around it, and a KiCad 10.0.5 integration test asserts the resulting
-board reports zero DRC errors and zero unconnected items, so that rectangular obstacle path is
-checked against the authoritative tool rather than only against itself. No zone-specific KiCad DRC
-claim is made: candidate DRC intentionally does not refill zones, and cached fill is not authority.
+endpoints. The router detours around it, and the public `preview_layered_route` path can now opt in
+to the same private candidate replay: a KiCad 10.0.5 integration test asserts zero DRC errors, zero
+warnings, and zero unconnected items, with candidate/source/patched/context binding and unchanged
+source bytes, inode, and mtime. No zone-specific KiCad DRC claim is made: candidate DRC intentionally
+does not refill zones, and cached fill is not authority.
 The separate `blocked-zone.kicad_pcb` fixture exercises KiCad parsing through deterministic,
 read-only public preview and workspace-preservation checks, not authoritative zone-fill DRC.
 

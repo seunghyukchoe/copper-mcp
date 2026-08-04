@@ -443,3 +443,16 @@ result or a general performance comparison.
 | Metrics | Baseline wire length 48,000,000 nm; one-Steiner ordering 42,000,000 nm; reduction 6,000,000 nm (12.5%); deterministic heuristic candidate `true`; deterministic baseline candidate `true`; source bytes/inode/mtime unchanged `true`; KiCad invocation `false`; optimality claim `false`; FreeRouting parity claim `false` |
 | Artifact | [`2026-08-05-steiner-ordering.json`](../../benchmarks/results/routing/2026-08-05-steiner-ordering.json) |
 | Interpretation | This is a narrow topology-ordering improvement on one synthetic four-pad fixture, measured through the real route-preview service and the same obstacle-aware A* budgets. It is not a FLUTE implementation, a Steiner-optimality certificate, a whole-board result, KiCad DRC evidence, electrical/fabrication evidence, or a FreeRouting comparison. |
+
+### B-032 — Public layered candidate DRC evidence contract
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:c13d66d2ece04f0a8d4605a2b7ef7a8cab56be0fce0a656f4cf2833c8c14de6d` |
+| Date and commit | 2026-08-05; source commit `19f8a81cb5968dcea2fab63a0799afe213488384` recorded before this slice; benchmark run used a dirty tree with the current implementation |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; fake authority only; KiCad was not invoked |
+| Dataset | Independently authored `tests/fixtures/route-candidate/two-pad.kicad_pcb`; one two-pad fixture; no external or proprietary board data |
+| Configuration | `copper-mcp/benchmark/layered-drc-preview/v1`; public `preview_layered_route` service; one omitted-flag replay and one explicit `include_drc=true` replay; aggregate redacted fake evidence; no geometry or raw report disclosure |
+| Metrics | Omitted DRC calls `0`; requested DRC calls `1`; candidate/evidence binding `true`; source unchanged `true`; workspace mutations `0`; KiCad invoked `false`; whole-board DRC claim `false`; FreeRouting parity claim `false` |
+| Artifact | [`2026-08-05-layered-drc-preview.json`](../../benchmarks/results/routing/2026-08-05-layered-drc-preview.json) |
+| Interpretation | This measures the public opt-in/schema and provenance boundary, not KiCad DRC quality or timing. The real blocked-pad smoke uses KiCad 10.0.5 and records zero errors, warnings, and unconnected items with the same candidate/source/context binding; neither result establishes whole-board, fabrication, electrical, refill, general multilayer, or FreeRouting authority. |

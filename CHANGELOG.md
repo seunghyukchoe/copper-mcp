@@ -8,6 +8,12 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added opt-in candidate-bound authoritative KiCad DRC evidence to file-backed
+  `preview_layered_route`. The closed response binds candidate, base, source, patched-board, and
+  DRC-context revisions while returning only aggregate findings; live layered preview and durable
+  routing jobs reject the flag instead of silently ignoring it. This remains a narrow two-signal-
+  layer proposal signal, not whole-board, refill, fabrication, or FreeRouting authority.
+
 - Added a bounded `batched-1-steiner-v1` ordering policy for low-degree multi-pin nets. It keeps
   the deterministic A* core and all geometry validation authoritative while reducing the recorded
   four-pad fixture's wire length from 48 mm to 42 mm; no Steiner-optimality or FreeRouting parity

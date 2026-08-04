@@ -21,7 +21,7 @@
 | `observe_board_scene` | None, or a process-local render artifact when `include_render` is set | Bounded, region-scoped semantic scene of one board, with board text quarantined. |
 | `observe_live_board_scene` | None | Bounded Circuit Scene `0.2.0` from the active KiCad IPC document; uses `board: "live"` and optional stale-digest compare values. |
 | `preview_live_route` | None | Revision-bound, ref-anchored route proposal over one active KiCad IPC snapshot; never writes, runs DRC/fill, or grants apply authority. |
-| `preview_layered_route` | None | Revision-bound, pad-ref-anchored two-signal-layer proposal with explicit full-stack vias; candidate-only, with no DRC, refill, serialization, export, or apply authority. |
+| `preview_layered_route` | None | Revision-bound, pad-ref-anchored two-signal-layer proposal with explicit full-stack vias and opt-in candidate-bound aggregate DRC evidence; still no refill, serialization, export, or apply authority. |
 | `preview_live_layered_route` | None | Session-, source-, and Board IR-revision-bound via-capable proposal over one active KiCad IPC snapshot; candidate-only, with no DRC, refill, serialization, export, or apply authority. |
 | `start_routing` | Local SQLite job state and bounded worker activity | Persist and queue one file-backed two-signal-layer proposal; returns a redacted lifecycle record and never applies copper. |
 | `get_routing_job` | None | Read one authorization-bound routing lifecycle record and its normalized request after restart. |
@@ -271,13 +271,14 @@ refused with the typed `stale_fill` diagnostic rather than answering from either
 workspace board is never refilled. The flag is opt-in because it spawns KiCad, and it changes
 nothing for a board without zones on the requested layer.
 
-Setting `include_drc` binds the proposal to candidate-bound authoritative KiCad DRC evidence, which
-returns the same aggregate, redacted summary as `run_board_drc` plus the candidate, source, patched
-board, and patched context revisions. The call fails rather than returning a candidate whose
-requested evidence is missing or does not bind. On an `already_connected` net the flag is skipped
-and `drc_evidence` is `null`, because that rule protects a proposal and none is being made. Preview
-writes no file, creates no job, and never returns source board bytes; it does return the geometry it
-generated, so a host that must not disclose generated copper to a model should not enable this tool.
+Setting `include_drc` on file-backed `preview_layered_route` binds the proposal to candidate-bound
+authoritative KiCad DRC evidence. The response returns the same aggregate, redacted summary as
+`run_board_drc` plus candidate, source, patched-board, and patched-context revisions. The call
+fails rather than returning a candidate whose requested evidence is missing or does not bind. The
+flag is explicitly disabled for `preview_live_layered_route` and durable routing jobs. On a
+non-routed status `drc_evidence` is `null`; no DRC is run without a candidate. Preview writes no
+file, creates no job, and never returns source board bytes; it does return the geometry it generated,
+so a host that must not disclose generated copper to a model should not enable this tool.
 
 `preview_layered_route` is the separate via-capable proposal surface. Its request names a
 workspace-relative `.kicad_pcb`, two `pad:` references, explicit net-class dimensions, and both
@@ -291,11 +292,13 @@ search metrics, and a canonical candidate digest. Refusals carry only bounded st
 data; a conversion failure is `unsupported_board`, while a valid board outside the layered subset
 is `not_routed` with its snapshot digest.
 
-This tool is read-only and idempotent. It never calls `begin_commit`, `refill_zones`, or the KiCad
-DRC command, and it returns no serialized patch, apply token, durable job, or persistent candidate.
-Its candidate is therefore an actionable proposal for a later reviewed serializer/DRC/apply flow,
-not a claim that KiCad will accept the route. B-024 covers ten deterministic calls on a via-required
-fixture, closed output-schema validation, stale board/snapshot refusal, and unchanged source bytes.
+This tool is read-only and idempotent. Without `include_drc` it never calls `begin_commit`,
+`refill_zones`, or the KiCad DRC command. With the explicit flag it invokes only the bounded private
+candidate-DRC replay and returns aggregate evidence; it still returns no serialized patch, apply
+token, durable job, or persistent candidate. Its candidate is therefore an actionable proposal
+with an optional authority signal for a later reviewed serializer/apply flow, not a claim of whole-
+board or fabrication acceptance. B-024 covers deterministic calls and schema/CAS behavior; B-032
+covers the new evidence binding, and the blocked-pad KiCad fixture covers the narrow real-tool path.
 
 `preview_live_layered_route` applies the same candidate contract to the active editor. Its request
 uses `board: "live"`, two `pad:` references, the net-class/layer/search bounds, and source,

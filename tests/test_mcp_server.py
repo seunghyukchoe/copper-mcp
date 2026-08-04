@@ -285,6 +285,7 @@ class McpServerTests(unittest.TestCase):
         self.assertIn("end_layer_id", request_schema["properties"])
         self.assertIn("grid_step_nm", request_schema["properties"])
         self.assertIn("settings", request_schema["properties"])
+        self.assertEqual(request_schema["properties"]["include_drc"]["type"], "boolean")
         output = layered.output_schema
         self.assertIsNotNone(output)
         assert isinstance(output, dict)
@@ -325,6 +326,7 @@ class McpServerTests(unittest.TestCase):
         self.assertIn("end_pad_id", request_schema["properties"])
         self.assertNotIn("net", request_schema["properties"])
         self.assertNotIn("net_ref_id", request_schema["properties"])
+        self.assertEqual(request_schema["properties"]["include_drc"].get("const"), False)
         self.assertEqual(
             set(request_schema["required"]),
             {
@@ -379,6 +381,7 @@ class McpServerTests(unittest.TestCase):
             },
             "expect_board_revision": digest,
             "expect_snapshot_digest": digest,
+            "include_drc": True,
         }
         response = {
             "schema_version": "1.0",
@@ -388,6 +391,28 @@ class McpServerTests(unittest.TestCase):
             "snapshot_digest": digest,
             "request": request,
             "conversion_diagnostic_counts": {},
+            "drc_evidence": {
+                "candidate_id": digest,
+                "candidate_base_revision": digest,
+                "source_revision": digest,
+                "patched_board_revision": "sha256:" + "b" * 64,
+                "patched_drc_context_revision": "sha256:" + "c" * 64,
+                "summary": {
+                    "base_revision": "sha256:" + "b" * 64,
+                    "drc_context_revision": "sha256:" + "c" * 64,
+                    "kicad_version": "10.0.5",
+                    "drc_schema": "https://schemas.kicad.org/drc.v1.json",
+                    "coordinate_units": "mm",
+                    "error_count": 0,
+                    "warning_count": 0,
+                    "exclusion_count": 0,
+                    "ignored_check_count": 0,
+                    "unconnected_count": 0,
+                    "violation_type_counts": {},
+                    "passed": True,
+                    "schema_version": "1.0",
+                },
+            },
             "candidate": {
                 "candidate_id": digest,
                 "base_revision": digest,

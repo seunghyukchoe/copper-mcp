@@ -403,8 +403,10 @@ def preview_layered_route(
     """Propose one revision-bound two-signal-layer route without mutation.
 
     The selected net is inferred from ``start_pad_id`` and ``end_pad_id`` in the converted
-    Board IR snapshot. The result is an immutable candidate or a bounded typed refusal; it never
-    runs DRC, writes KiCad bytes, mints an apply token, or returns raw board text.
+    Board IR snapshot. The result is an immutable candidate or a bounded typed refusal. With
+    ``include_drc`` the same candidate is replayed through private authoritative KiCad DRC and
+    returns only aggregate, revision-bound evidence; no source bytes, mutation, or apply token
+    crosses the boundary.
     """
 
     return LayeredRoutePreviewToolResponse.model_validate(

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from collections import Counter
 from dataclasses import dataclass, replace
 from typing import Any, cast
@@ -21,10 +22,16 @@ from typing import Any, cast
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.board_ir import NetClass, ParseLimits
 from copper_mcp.config import Settings
+from copper_mcp.kicad_cli import (
+    KiCadCliError,
+    LayeredRouteCandidateDrcEvidence,
+    run_layered_route_candidate_drc,
+)
 from copper_mcp.request_boundary import (
     MAX_JSON_SAFE_INTEGER,
     RequestError,
     board_path,
+    boolean,
     copper_layer,
     integer,
     known_fields,
@@ -61,6 +68,7 @@ _OPTIONAL_FIELDS = (
     "settings",
     "start_layer_id",
     "end_layer_id",
+    "include_drc",
 )
 _SETTING_LIMITS: dict[str, int] = {
     "move_cost": 1_000_000_000,
@@ -89,6 +97,7 @@ class LayeredRoutePreviewRequest:
     grid_step_nm: int
     seed: int
     settings: LayeredAStarSettings
+    include_drc: bool = False
     start_layer_id: str | None = None
     end_layer_id: str | None = None
     expect_session_revision: str | None = None
@@ -111,6 +120,7 @@ class LayeredRoutePreviewRequest:
             "grid_step_nm": self.grid_step_nm,
             "seed": self.seed,
             "settings": {field: getattr(self.settings, field) for field in _SETTINGS_FIELDS},
+            "include_drc": self.include_drc,
             "start_layer_id": self.start_layer_id,
             "end_layer_id": self.end_layer_id,
         }
@@ -197,6 +207,7 @@ def parse_layered_route_preview_request(payload: Any) -> LayeredRoutePreviewRequ
             ),
             seed=integer("seed", fields.get("seed", 0), minimum=0, maximum=MAX_JSON_SAFE_INTEGER),
             settings=_settings(fields.get("settings", {})),
+            include_drc=boolean("include_drc", fields.get("include_drc", False)),
             start_layer_id=(
                 _layer_selector("start_layer_id", fields["start_layer_id"])
                 if "start_layer_id" in fields
@@ -303,6 +314,7 @@ def _empty_result(
     diagnostic: dict[str, object] | None = None,
     candidate: dict[str, object] | None = None,
     conversion_diagnostic_counts: dict[str, int] | None = None,
+    drc_evidence: LayeredRouteCandidateDrcEvidence | None = None,
 ) -> dict[str, object]:
     return {
         "schema_version": "1.0",
@@ -312,6 +324,7 @@ def _empty_result(
         "snapshot_digest": snapshot_digest,
         "request": request.to_dict(),
         "candidate": candidate,
+        "drc_evidence": None if drc_evidence is None else drc_evidence.to_dict(),
         "diagnostic": diagnostic,
         "conversion_diagnostic_counts": conversion_diagnostic_counts or {},
     }
@@ -322,6 +335,7 @@ def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]
 
     if not isinstance(settings, Settings):
         raise LayeredRoutePreviewError("layered preview settings are malformed")
+    deadline = time.monotonic() + settings.max_route_preview_seconds
     request = parse_layered_route_preview_request(payload)
     workspace_root = settings.workspace.resolve(strict=True)
     board = read_workspace_file(
@@ -414,8 +428,35 @@ def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]
         grid_step_nm=request.grid_step_nm,
         settings=request.settings,
     )
-    result = LayeredBoardRouter().propose(snapshot, layered_request)
+    result = LayeredBoardRouter().propose(
+        snapshot,
+        layered_request,
+        cancelled=lambda: time.monotonic() >= deadline,
+    )
     if result.candidate is not None:
+        evidence = None
+        if request.include_drc:
+            remaining = int(deadline - time.monotonic())
+            if remaining < 1:
+                raise LayeredRoutePreviewError(
+                    "the layered preview deadline expired before authoritative DRC could run"
+                )
+            drc_settings = replace(
+                settings,
+                kicad_timeout_seconds=min(settings.kicad_timeout_seconds, remaining),
+            )
+            try:
+                evidence = run_layered_route_candidate_drc(
+                    relative_path,
+                    result.candidate,
+                    profile,
+                    drc_settings,
+                    request=layered_request,
+                )
+            except KiCadCliError as error:
+                raise LayeredRoutePreviewError(
+                    "authoritative layered DRC evidence is unavailable"
+                ) from error
         return _empty_result(
             "routed",
             request,
@@ -423,6 +464,7 @@ def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]
             board_revision,
             snapshot_digest=snapshot.snapshot_digest,
             candidate=_candidate_document(result.candidate),
+            drc_evidence=evidence,
         )
     assert result.diagnostic is not None
     diagnostic = result.diagnostic
