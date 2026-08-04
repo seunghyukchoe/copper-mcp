@@ -261,3 +261,16 @@ result or a general performance comparison.
 | Metrics | Deterministic replays 200/200; differential cost/no-path matches 4/4; via-required success `true` with two transitions; direct single-layer case used zero transitions; blocked case remained `no_path` |
 | Artifact | [`2026-08-04-layered-astar-oracle.json`](../../benchmarks/results/routing/2026-08-04-layered-astar-oracle.json) |
 | Interpretation | This is algorithmic evidence for the internal maze-level `(x, y, layer)` search seam only. It does not claim Board IR mapping, trace width/clearance, via annulus/drill/keepout/net-class legality, source-preserving KiCad serialization, DRC, congestion/rip-up, whole-board completion, or FreeRouting parity. |
+
+### B-018 — Board IR-bound layered proposal adapter
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:6691b5c860ae3d48eb6e9c6710c5308247de6e43011486098e976f1a4f13f79a` |
+| Date and commit | 2026-08-04 15:39:10 UTC; `b19b2d020ac017d34f0911176fc88733895f3d4d`; tracked tree clean except the pre-existing user handoff file and this output artifact before its evidence commit |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
+| Dataset | Independently authored synthetic Board IR v0.2 fixture set `synthetic-two-layer-board-ir-v1`; exactly two signal layers, rectangular hole-free outline, two F.Cu pads, front-layer wall, both-layer block, full via keepout, stale revision, and off-grid endpoint; no external content or proprietary board |
+| Configuration | `layered-board-ir-adapter-v1`; ten replays per case; six cases; `board-layered-a-star-v1`; script SHA-256 `0cebb5563952a4d4ba8510e0232c6b29d3c12e6fd8e52ff88eff673664d062f8`; CPU-only; no KiCad subprocess |
+| Metrics | Deterministic replays 60/60; same-layer candidate 1 path/0 vias; via-required candidate 2 paths/2 vias/8,000 nm wire with 90 obstacle checks; blocked and via-keepout cases `no_path`; stale and off-grid refusals before search; source snapshot unchanged `true`; candidate digest tamper rejected `true` |
+| Artifact | [`2026-08-04-layered-board-adapter.json`](../../benchmarks/results/routing/2026-08-04-layered-board-adapter.json) |
+| Interpretation | This is evidence for a deterministic, Board IR-bound proposal seam and its fail-closed boundaries only. It does not claim source-preserving KiCad serialization, Board IR round-trip after a write, KiCad DRC/refill, whole-board completion, electrical behavior, fabrication readiness, performance generalization, negotiated congestion, rip-up/reroute, or FreeRouting parity. |
