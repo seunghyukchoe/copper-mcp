@@ -666,8 +666,8 @@ historical evidence; these runs were generated from the clean implementation com
 
 | Field | Recorded evidence |
 |---|---|
-| Run ID | `sha256:477fbaf538b354f3146a06ae8328c1f183184500a3e654ebb75e1a94763cb2b8` |
-| Date and commit | 2026-08-05; source commit `f3dcdadef0714423b58f678feeffa5731991681b` |
+| Run ID | `sha256:ac1a208cdecda95eb4a4a79caf1f8dc21b8d80c3cc6ebba6575e44b075c2964a` |
+| Date and commit | 2026-08-05; source commit `545db9d29f5d993ddcaa23d956331a459c7d46dd` |
 | Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad and live IPC not invoked |
 | Dataset | [`placement-legal.kicad_pcb`](../../tests/fixtures/placement-v0.1/placement-legal.kicad_pcb), one committed front-side orthogonal footprint fixture |
 | Configuration | `copper-mcp/benchmark/placement-apply/v1`; explicit placement-scoped token; operator apply enabled only in an isolated temporary workspace; source/snapshot/candidate CAS; lock/backup/atomic service; route-token cross-domain replay |
@@ -679,8 +679,8 @@ historical evidence; these runs were generated from the clean implementation com
 
 | Field | Recorded evidence |
 |---|---|
-| Run ID | `sha256:e325c4efb649984540cc797e8ccaea92e507906ef8ae4160b2de8ae7cbb1d613` |
-| Date and commit | 2026-08-05; source commit `378d4c6b7adb47fdd1b33a010048e5839cfa1366` |
+| Run ID | `sha256:42155ec5d88e18bb4c29e0441790370486e1465f7cd709205ef089a7d741b235` |
+| Date and commit | 2026-08-05; source commit `545db9d29f5d993ddcaa23d956331a459c7d46dd` |
 | Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad and live IPC not invoked |
 | Dataset | [`rc-low-pass-routing-v1.kicad_pcb`](../../benchmarks/audio/fixtures/rc-low-pass-routing-v1.kicad_pcb), CopperMCP-original synthetic two-pad RC microcase with Apache-2.0 catalog metadata |
 | Configuration | `copper-mcp/benchmark/audio-routing-gap/v1`; ten deterministic route previews, candidate identity replay, disposable source-preserving serialization, and Board IR reparse |

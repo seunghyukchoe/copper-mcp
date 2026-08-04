@@ -1,8 +1,8 @@
 {
-  "date_utc": "2026-08-04T23:42:44+00:00",
+  "date_utc": "2026-08-04T23:53:42+00:00",
   "environment": {
-    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
-    "python": "3.14.2"
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
   },
   "fixture": "benchmarks/audio/fixtures/rc-low-pass-routing-v1.kicad_pcb",
   "metrics": {
@@ -39,8 +39,8 @@
     "repetitions": 10,
     "source_unchanged": true
   },
-  "run_id": "sha256:e325c4efb649984540cc797e8ccaea92e507906ef8ae4160b2de8ae7cbb1d613",
+  "run_id": "sha256:42155ec5d88e18bb4c29e0441790370486e1465f7cd709205ef089a7d741b235",
   "schema": "copper-mcp/benchmark/audio-routing-gap/v1",
   "script": "scripts/benchmark_audio_routing_gap.py",
-  "source_commit": "378d4c6b7adb47fdd1b33a010048e5839cfa1366"
+  "source_commit": "545db9d29f5d993ddcaa23d956331a459c7d46dd"
 }

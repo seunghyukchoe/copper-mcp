@@ -1,0 +1,35 @@
+{
+  "date_utc": "2026-08-05",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "fixture": "tests/fixtures/placement-v0.1/placement-legal.kicad_pcb",
+  "metrics": {
+    "backup_exact": true,
+    "bytes_changed": 530,
+    "explicit_token_requested": true,
+    "footprints_moved": 1,
+    "general_placement_claim": false,
+    "kicad_invoked": false,
+    "live_ipc_invoked": false,
+    "placement_token_issued": true,
+    "post_apply_drc_claim": false,
+    "result_reparsed_clean": true,
+    "result_revision_matches": true,
+    "route_token_cross_domain_refused": true,
+    "status": "applied",
+    "workspace_files_after": 2,
+    "workspace_files_before": 1,
+    "workspace_mutations": 2
+  },
+  "not_claimed": [
+    "general KiCad footprint geometry or side flipping",
+    "post-placement KiCad DRC or connectivity",
+    "live IPC mutation or undo integration",
+    "fabrication, electrical, or FreeRouting parity"
+  ],
+  "run_id": "sha256:ac1a208cdecda95eb4a4a79caf1f8dc21b8d80c3cc6ebba6575e44b075c2964a",
+  "schema": "copper-mcp/benchmark/placement-apply/v1",
+  "source_commit": "545db9d29f5d993ddcaa23d956331a459c7d46dd"
+}
