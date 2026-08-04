@@ -357,11 +357,11 @@ result or a general performance comparison.
 
 | Field | Recorded evidence |
 |---|---|
-| Run ID | `sha256:8392499287185e66906d5fa72525c8243f2fe0e3c7ab44e2960b48d90c1b4cf3` |
-| Date and commit | 2026-08-04 17:40:59 UTC; `752c23b24f583869314a572f83e7ad889b97c7be`; measured after the ledger implementation and benchmark script |
+| Run ID | `sha256:c6a01655da9938cb085679784bf6fa0f934df0095609978ff71b92c1c9a1c001` |
+| Date and commit | 2026-08-04 17:46:09 UTC; `519077cc158b773aaaed6b88319eaa941bf237cd`; measured after the pushed ledger implementation |
 | Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
 | Dataset | Independently authored `tests/fixtures/route-candidate/blocked-pad.kicad_pcb`; only its source digest was used in normalized job specifications |
 | Configuration | `copper-mcp/benchmark/routing-job-ledger/v1`; 100 bounded SQLite records; deterministic create/start/cancel/get transitions; reopen and expiry probes; CPU-only |
-| Metrics | Records rehydrated `true`; idempotent create `true`; revision-CAS refusal `true`; expiry refusal `true`; redacted storage `true`; source unchanged `true`; create latency p50/p95 `476.0/708.458 µs`; transition latency p50/p95 `166.084/1,247.959 µs`; worker execution `false`; candidate geometry persistence `false`; MCP Tasks `false` |
+| Metrics | Records rehydrated `true`; idempotent create `true`; revision-CAS refusal `true`; expiry refusal `true`; redacted storage `true`; source unchanged `true`; create latency p50/p95 `499.292/743.042 µs`; transition latency p50/p95 `180.75/1,651.958 µs`; worker execution `false`; candidate geometry persistence `false`; MCP Tasks `false` |
 | Artifact | [`2026-08-05-routing-job-ledger.json`](../../benchmarks/results/routing/2026-08-05-routing-job-ledger.json) |
 | Interpretation | This measures a restart-safe, bounded lifecycle ledger for revision-bound job metadata. It does not claim background routing, candidate persistence/export, MCP Tasks compatibility, KiCad DRC, electrical behavior, fabrication readiness, or FreeRouting parity. |
