@@ -16,14 +16,16 @@ from __future__ import annotations
 import shutil
 import subprocess
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
-from copper_mcp.board_ir import NetClass, ParseLimits
+from copper_mcp.board_ir import FootprintSide, NetClass, ParseLimits, PointNM, Ring, make_snapshot
 from copper_mcp.placement import (
+    COURTYARD_POLICY,
     ORDERING_POLICY,
     PLACEMENT_VERSION,
     PlacementError,
@@ -36,7 +38,12 @@ from copper_mcp.placement import (
 )
 from copper_mcp.placement.contracts import canonical_candidate_bytes
 from copper_mcp.placement.geometry import pad_bounds, pad_core, rects_overlap
-from copper_mcp.placement.legalizer import snap
+from copper_mcp.placement.legalizer import (
+    _Budget,
+    _BudgetExhaustedError,
+    _courtyard_overlap,
+    snap,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "placement-v0.1"
@@ -204,6 +211,294 @@ class FootprintV02PlacementRegressionTests(unittest.TestCase):
         assert result.diagnostic is not None
         self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
         self.assertEqual(result.diagnostic.message, "moving a locked footprint is not authorized")
+
+    def test_a_nonorthogonal_source_pose_is_a_typed_refusal_after_an_orthogonal_proposal(
+        self,
+    ) -> None:
+        source, snapshot, _ = _board(FOOTPRINT_V02_BOARD)
+        unlocked = next(item for item in snapshot.content.footprints if not item.locked)
+        footprints = tuple(
+            replace(item, rotation_udeg=45_000_000) if item.id == unlocked.id else item
+            for item in snapshot.content.footprints
+        )
+        forged = make_snapshot(replace(snapshot.content, footprints=footprints))
+        view = build_placement_view(source, forged)
+        result = evaluate_placement(
+            _intent(
+                view,
+                FOOTPRINT_V02_BOARD.name,
+                proposals=[{"subject": unlocked.id, "orientation_udeg": 0}],
+            ),
+            forged,
+            view,
+        )
+
+        self.assertEqual(result.status, "refused")
+        assert result.diagnostic is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+        self.assertEqual(
+            result.diagnostic.message,
+            "placement supports orthogonal orientations only",
+        )
+
+
+class CourtyardLegalityTests(unittest.TestCase):
+    """Pin Placement 0.2 to KiCad 10.0.5's rectangular courtyard cache semantics."""
+
+    @staticmethod
+    def _pose_probe_result(*, offset_x_nm: int, orientation_udeg: int = 0) -> Any:
+        _, snapshot, view = _board(FOOTPRINT_V02_BOARD)
+        refs = sorted(view.footprints)
+        return evaluate_placement(
+            _intent(
+                view,
+                FOOTPRINT_V02_BOARD.name,
+                placement_grid_nm=1,
+                proposals=[
+                    {
+                        "subject": refs[1],
+                        "anchor": refs[0],
+                        "offset_x_nm": offset_x_nm,
+                        "offset_y_nm": -250_000,
+                        "orientation_udeg": orientation_udeg,
+                    }
+                ],
+            ),
+            snapshot,
+            view,
+        )
+
+    def test_a_complete_static_board_reports_auditable_courtyard_coverage(self) -> None:
+        result = _evaluate(FOOTPRINT_V02_BOARD)
+        self.assertEqual(result.status, "previewed")
+        assert result.candidate is not None
+        evidence = result.candidate.evidence
+        self.assertEqual(evidence.legality.courtyard_overlap, "proven_clear")
+        self.assertEqual(evidence.courtyard_policy, COURTYARD_POLICY)
+        self.assertEqual(evidence.courtyard_footprints_checked, 4)
+        self.assertEqual(evidence.courtyard_pairs_checked, 6)
+        self.assertEqual(evidence.missing_courtyard_footprints, 0)
+
+    def test_a_rotated_move_is_refused_when_only_the_courtyards_overlap(self) -> None:
+        # The second probe is rotated from 90 to 0 degrees and placed at (21 mm, 15 mm).
+        # Its pads remain clear, while its non-square courtyard overlaps the locked first probe.
+        result = self._pose_probe_result(offset_x_nm=5_500_000)
+        self.assertEqual(result.status, "refused")
+        assert result.diagnostic is not None and result.diagnostic.legality is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.ILLEGAL_PLACEMENT)
+        self.assertEqual(result.diagnostic.legality.pad_overlap, "proven_clear")
+        self.assertEqual(result.diagnostic.legality.courtyard_overlap, "violated")
+
+    def test_the_kicad_cache_threshold_is_exact_at_one_nanometre_resolution(self) -> None:
+        # KiCad 10.0.5 contracts each courtyard by 5 um. Two opposing boundaries therefore
+        # first collide at 10,000 nm nominal penetration, inclusive.
+        clear = self._pose_probe_result(offset_x_nm=6_490_001)
+        collision = self._pose_probe_result(offset_x_nm=6_490_000)
+        self.assertEqual(clear.status, "previewed", "9,999 nm penetration must remain legal")
+        self.assertEqual(collision.status, "refused", "10,000 nm is the first violation")
+        assert clear.candidate is not None
+        assert collision.diagnostic is not None and collision.diagnostic.legality is not None
+        self.assertEqual(clear.candidate.evidence.legality.courtyard_overlap, "proven_clear")
+        self.assertEqual(collision.diagnostic.legality.courtyard_overlap, "violated")
+
+    def test_tiny_courtyard_cache_transition_fails_closed_at_the_measured_boundary(self) -> None:
+        source, snapshot, _ = _board(FOOTPRINT_V02_BOARD)
+        footprint = snapshot.content.footprints[0]
+        original = footprint.courtyards[0]
+        min_x = min(point.x for point in original.points)
+        min_y = min(point.y for point in original.points)
+
+        def evaluate_rectangle(width_nm: int, height_nm: int) -> Any:
+            courtyard = Ring(
+                (
+                    PointNM(min_x, min_y),
+                    PointNM(min_x + width_nm, min_y),
+                    PointNM(min_x + width_nm, min_y + height_nm),
+                    PointNM(min_x, min_y + height_nm),
+                )
+            )
+            forged = make_snapshot(
+                replace(
+                    snapshot.content,
+                    footprints=(
+                        replace(footprint, courtyards=(courtyard,)),
+                        *snapshot.content.footprints[1:],
+                    ),
+                )
+            )
+            view = build_placement_view(source, forged)
+            return evaluate_placement(
+                _intent(view, FOOTPRINT_V02_BOARD.name),
+                forged,
+                view,
+            )
+
+        below_x = evaluate_rectangle(10_050, 1_000_000)
+        below_y = evaluate_rectangle(1_000_000, 10_050)
+        at_limit = evaluate_rectangle(10_051, 10_051)
+
+        for below in (below_x, below_y):
+            with self.subTest(axis="x" if below is below_x else "y"):
+                self.assertEqual(below.status, "refused")
+                assert below.diagnostic is not None
+                self.assertEqual(
+                    below.diagnostic.code,
+                    PlacementFailureCode.UNSUPPORTED_GEOMETRY,
+                )
+                self.assertEqual(
+                    below.diagnostic.message,
+                    "courtyard rectangles smaller than 10,051 nm are outside the pinned KiCad "
+                    "cache model",
+                )
+        self.assertEqual(at_limit.status, "previewed")
+        assert at_limit.candidate is not None
+        self.assertEqual(at_limit.candidate.evidence.legality.courtyard_overlap, "proven_clear")
+
+    def test_minimum_sized_caches_keep_the_exact_closed_contact_boundary(self) -> None:
+        source, snapshot, _ = _board(FOOTPRINT_V02_BOARD)
+        first, second, *remaining = snapshot.content.footprints
+        origin_x = 25_000_000
+        origin_y = 25_000_000
+        side_nm = 10_051
+
+        def courtyard(offset_x_nm: int) -> Ring:
+            return Ring(
+                (
+                    PointNM(origin_x + offset_x_nm, origin_y),
+                    PointNM(origin_x + offset_x_nm + side_nm, origin_y),
+                    PointNM(origin_x + offset_x_nm + side_nm, origin_y + side_nm),
+                    PointNM(origin_x + offset_x_nm, origin_y + side_nm),
+                )
+            )
+
+        def evaluate_pair(offset_x_nm: int) -> Any:
+            forged = make_snapshot(
+                replace(
+                    snapshot.content,
+                    footprints=(
+                        replace(first, courtyards=(courtyard(0),)),
+                        replace(second, courtyards=(courtyard(offset_x_nm),)),
+                        *remaining,
+                    ),
+                )
+            )
+            view = build_placement_view(source, forged)
+            return evaluate_placement(
+                _intent(view, FOOTPRINT_V02_BOARD.name),
+                forged,
+                view,
+            )
+
+        contact = evaluate_pair(51)
+        one_nm_gap = evaluate_pair(52)
+
+        self.assertEqual(contact.status, "refused")
+        assert contact.diagnostic is not None and contact.diagnostic.legality is not None
+        self.assertEqual(contact.diagnostic.code, PlacementFailureCode.ILLEGAL_PLACEMENT)
+        self.assertEqual(contact.diagnostic.legality.pad_overlap, "proven_clear")
+        self.assertEqual(contact.diagnostic.legality.courtyard_overlap, "violated")
+        self.assertEqual(one_nm_gap.status, "previewed")
+        assert one_nm_gap.candidate is not None
+        self.assertEqual(
+            one_nm_gap.candidate.evidence.legality.courtyard_overlap,
+            "proven_clear",
+        )
+
+    def test_a_padless_mechanical_footprint_remains_a_fixed_courtyard_obstacle(self) -> None:
+        source = PADLESS_BOARD.read_bytes().replace(b"(at 45 15 0)", b"(at 18 15 0)", 1)
+        parsed = parse_kicad_bytes(source, _profile(), ParseLimits())
+        assert parsed.snapshot is not None
+        view = build_placement_view(source, parsed.snapshot)
+        result = evaluate_placement(
+            _intent(view, PADLESS_BOARD.name),
+            parsed.snapshot,
+            view,
+        )
+        self.assertEqual(result.status, "refused")
+        assert result.diagnostic is not None and result.diagnostic.legality is not None
+        self.assertEqual(result.diagnostic.legality.pad_overlap, "proven_clear")
+        self.assertEqual(result.diagnostic.legality.courtyard_overlap, "violated")
+
+    def test_an_unchanged_padless_courtyard_stays_in_the_board_frame(self) -> None:
+        source, snapshot, _ = _board(PADLESS_BOARD)
+        footprints = tuple(
+            replace(footprint, rotation_udeg=45_000_000)
+            if footprint.id == PADLESS_REF
+            else footprint
+            for footprint in snapshot.content.footprints
+        )
+        forged = make_snapshot(replace(snapshot.content, footprints=footprints))
+        view = build_placement_view(source, forged)
+
+        result = evaluate_placement(
+            _intent(view, PADLESS_BOARD.name),
+            forged,
+            view,
+        )
+
+        self.assertEqual(result.status, "previewed")
+        assert result.candidate is not None
+        self.assertEqual(result.candidate.evidence.legality.courtyard_overlap, "proven_clear")
+
+    def test_multiple_rectangles_collide_when_any_one_pair_intersects(self) -> None:
+        source = FOOTPRINT_V02_BOARD.read_bytes()
+        marker = b'    (pad "1" smd rect\n'
+        extra = b"""    (fp_rect
+      (start 26 -2)
+      (end 34 2)
+      (stroke (width 0.05) (type default))
+      (fill none)
+      (layer "F.CrtYd")
+      (uuid "92000000-0000-0000-0000-000000000005")
+    )
+"""
+        source = source.replace(marker, extra + marker, 1)
+        parsed = parse_kicad_bytes(source, _profile(), ParseLimits())
+        assert parsed.snapshot is not None
+        view = build_placement_view(source, parsed.snapshot)
+        result = evaluate_placement(
+            _intent(view, FOOTPRINT_V02_BOARD.name),
+            parsed.snapshot,
+            view,
+        )
+        self.assertEqual(result.status, "refused")
+        assert result.diagnostic is not None and result.diagnostic.legality is not None
+        self.assertEqual(result.diagnostic.legality.courtyard_overlap, "violated")
+
+    def test_coincident_rectangles_on_opposite_sides_do_not_collide(self) -> None:
+        source = PADLESS_BOARD.read_bytes().replace(b"(at 45 15 0)", b"(at 15 15 0)", 1)
+        parsed = parse_kicad_bytes(source, _profile(), ParseLimits())
+        assert parsed.snapshot is not None
+        first, second = parsed.snapshot.content.footprints
+        opposite = replace(second, side=FootprintSide.BACK)
+        content = replace(parsed.snapshot.content, footprints=(first, opposite))
+        snapshot = make_snapshot(content)
+        result = _courtyard_overlap((), snapshot, _Budget(100, 10.0))
+        self.assertEqual(result.verdict, "proven_clear")
+        self.assertEqual(result.footprints_checked, 2)
+        self.assertEqual(result.pairs_checked, 0)
+
+    def test_courtyard_work_honours_the_exact_shared_budget_boundary(self) -> None:
+        _, snapshot, view = _board(FOOTPRINT_V02_BOARD)
+        intent = _intent(view, FOOTPRINT_V02_BOARD.name)
+        baseline = evaluate_placement(intent, snapshot, view)
+        assert baseline.candidate is not None
+        used = baseline.candidate.evidence.checks_used
+        exact = evaluate_placement(intent, snapshot, view, max_checks=used)
+        exhausted = evaluate_placement(intent, snapshot, view, max_checks=used - 1)
+        self.assertEqual(exact.status, "previewed")
+        self.assertEqual(exhausted.status, "refused")
+        assert exhausted.diagnostic is not None
+        self.assertEqual(exhausted.diagnostic.code, PlacementFailureCode.BUDGET_EXHAUSTED)
+
+    def test_missing_courtyard_scans_honour_check_and_deadline_budgets(self) -> None:
+        _, snapshot, _ = _board(FIXTURES / "placement-legal.kicad_pcb")
+        self.assertTrue(all(not item.courtyards for item in snapshot.content.footprints))
+
+        with self.assertRaises(_BudgetExhaustedError):
+            _courtyard_overlap((), snapshot, _Budget(0, 10.0))
+        with self.assertRaises(_BudgetExhaustedError):
+            _courtyard_overlap((), snapshot, _Budget(100, -1.0))
 
 
 class PadlessFootprintTests(unittest.TestCase):
@@ -442,7 +737,9 @@ class LegalityTests(unittest.TestCase):
         self.assertEqual(legality.pad_overlap, "proven_clear")
         self.assertEqual(legality.outline_containment, "proven_inside")
         self.assertEqual(legality.keepout_respect, "proven_clear")
-        self.assertEqual(legality.courtyard_overlap, "not_modelled")
+        self.assertEqual(legality.courtyard_overlap, "proven_clear")
+        self.assertEqual(result.candidate.evidence.courtyard_footprints_checked, 0)
+        self.assertEqual(result.candidate.evidence.missing_courtyard_footprints, 2)
         self.assertTrue(legality.legal)
 
     def test_each_illegality_is_reported_by_its_own_check(self) -> None:
@@ -814,6 +1111,12 @@ class CandidateTests(unittest.TestCase):
         assert result.candidate is not None
         self.assertEqual(result.candidate.base_revision, snapshot.snapshot_digest)
         self.assertEqual(result.candidate.view_revision, view.board_revision)
+
+    def test_a_candidate_cannot_claim_an_older_placement_contract(self) -> None:
+        result = _evaluate(FIXTURES / "placement-legal.kicad_pcb")
+        assert result.candidate is not None
+        with self.assertRaisesRegex(PlacementError, "exactly one contract version"):
+            replace(result.candidate, placement_version="0.1.0")
 
     def test_tampering_with_a_candidate_breaks_its_identity(self) -> None:
         from dataclasses import replace

@@ -15,6 +15,13 @@ All notable changes are documented here. The format follows
   ordering and digest binding, applies caller-tightened Board IR limits before projection, and
   rejects forged footprint content instead of issuing a view under a stale digest. Locked
   footprints now refuse movement proposals.
+- Board IR and placement now fail closed on same-footprint courtyard rectangles whose bounds touch,
+  overlap, or nest instead of flattening KiCad's malformed/union/hole topology into unrelated
+  solids. Unchanged padless courtyards stay in their canonical board frame even if the stored pose
+  is non-orthogonal; a moved pad-bearing footprint with a non-orthogonal source pose returns a typed
+  refusal instead of leaking a geometry exception. Every missing-courtyard footprint scan now
+  consumes the shared check and deadline budget, and same-footprint relationship checks consume the
+  Board IR intersection budget after the total-vertex gate.
 - Candidate apply now holds an **exclusive `flock` across the compare-and-swap and the rename**,
   closing a confirmed concurrency hole: two applies from the same base both passed the checks and
   one silently destroyed the other. The board's digest is re-verified under the held lock
@@ -46,6 +53,11 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Placement output is now contract `0.2.0`. `courtyard_overlap` is a required
+  `proven_clear | violated` result, placement candidates pin the
+  `kicad-10.0.5-rect-cache-v1` policy, and candidate IDs intentionally change with the new version
+  and evidence. MCP clients generated against Placement 0.1's closed output enum must regenerate.
+  See the [Placement 0.2 migration note](docs/migrations/placement-0.2.md).
 - The active Board IR writer and decoder now target exact `copper.board-ir` `0.2.0`. Historical 0.1
   schema and golden data stay immutable, while migration requires re-converting the original board
   because flattened 0.1 pads cannot recover trustworthy parent identity or pose. Snapshot digests
@@ -67,6 +79,17 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Bounded same-side courtyard legality for Board IR's rectangular subset. The legalizer replays
+  every supported ring into the proposed orthogonal pose, models KiCad 10.0.5's 5 µm-per-edge
+  cached-outline contraction, includes fixed padless and locked footprints as obstacles, and
+  accepts multiple rectangles only when their same-footprint bounds are strictly disjoint. Every
+  scanned footprint, transformed vertex, and pair predicate consumes the shared work/deadline
+  budget. Evidence reports checked footprints, evaluated pairs, and missing courtyards; custom
+  `courtyard_clearance`, general topology, full placement DRC binding, and placement apply remain
+  explicit non-claims. A reproducible nine-case local KiCad oracle pins the 9,999/10,000 nm
+  penetration boundary; a separate repeated tiny-cache sweep sets a conservative 10,051 nm
+  per-axis support floor and returns typed `unsupported_geometry` below it. The committed benchmark
+  reproduces all twelve tiny-cache cases five times each.
 - First-class immutable Board IR footprints with exact origin, normalized rotation, side, lock
   state, total pad ownership, and canonical board-frame rectangular courtyard rings. A compact
   KiCad fixture pins all four orthogonal transforms and passes KiCad 10.0.5 DRC with zero violations

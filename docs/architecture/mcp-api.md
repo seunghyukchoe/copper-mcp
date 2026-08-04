@@ -143,10 +143,21 @@ carries evidence holding per-rule residuals and the legality record. `pad_overla
 **three-valued**: `proven_clear` when pad
 bounds are disjoint, `violated` when pad cores overlap, and `inconclusive` in between.
 `inconclusive` is not a failure and a candidate is still produced; it means neither clearance nor
-collision could be proven. `courtyard_overlap` has exactly one permitted value, `not_modelled`.
-Board IR 0.2 carries bounded courtyard geometry for the supported subset, but the placement
-legalizer has no side-aware courtyard legality evaluator yet; there is deliberately no vocabulary
-in which a response could claim that check was performed.
+collision could be proven. `courtyard_overlap` is required and two-valued: `proven_clear` or
+`violated`. Placement 0.2 replays supported Board IR rectangles into the proposed pose and compares
+same-side footprints with the literal `kicad-10.0.5-rect-cache-v1` policy, including KiCad's
+5 µm-per-edge cached-outline contraction. Same-footprint rectangle bounds must be strictly
+disjoint; ambiguous touch/overlap/nesting fails closed before preview. Both rectangle dimensions
+must be at least 10,051 nm; smaller cache behavior is orientation-sensitive in KiCad 10.0.5 and
+returns typed `unsupported_geometry` rather than an approximate result. Evidence reports
+`courtyard_footprints_checked`,
+`courtyard_pairs_checked`, and `missing_courtyard_footprints`; missing geometry is a separate KiCad
+check and cannot masquerade as complete coverage. Every footprint scan, transformed vertex, and
+pair predicate shares the request work/deadline budget. Custom `courtyard_clearance`, general
+topology, and full KiCad DRC binding are not claimed.
+
+Clients moving from Placement 0.1 should follow the
+[Placement 0.2 migration note](../migrations/placement-0.2.md).
 
 A `refused` response carries a typed code: `unresolved_ref`, `infeasible_constraints`,
 `budget_exhausted`, `unsupported_geometry`, `illegal_placement`, `stale_revision` or
@@ -154,7 +165,7 @@ A `refused` response carries a typed code: `unresolved_ref`, `infeasible_constra
 first is a proof that no placement satisfies the rules as written, the second an admission that
 the work ran out - and only syntactic contradictions are claimed as infeasible. An
 `illegal_placement` refusal includes the legality record that condemned it, so a caller never has
-to guess which of the three independent checks failed. `satisfied_within_tolerance` appears only
+to guess which independent check failed. `satisfied_within_tolerance` appears only
 when the caller supplied a `tolerance_nm`; an unstated tolerance means exact.
 
 A proposal that would move a footprint whose Board IR `locked` field is true is refused as

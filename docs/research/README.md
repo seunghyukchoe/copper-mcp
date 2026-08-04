@@ -17,6 +17,9 @@ that every product feature, price, or repository release will remain current.
 - [Audio circuit benchmark intake](./audio-circuit-benchmarks.md) records why public DIY catalogs
   are reference-only and defines a licence-aware, original-fixture capability ladder for MCP-shared
   board inspection/routing tests plus MCP-independent Circuit Intent and schematic-rendering checks.
+- [KiCad courtyard-legality references](./courtyard-legality-references.md) pins Placement 0.2's
+  rectangular overlap policy to KiCad 10.0.5 source, upstream QA cases, and a reproducible local
+  nanometre-boundary oracle.
 
 ## Terms used in this review
 

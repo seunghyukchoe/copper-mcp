@@ -475,19 +475,85 @@ def test_footprints_and_courtyards_are_charged_to_validation_budgets() -> None:
     assert vertex_error.value.code == "budget.exceeded"
 
 
+def test_same_footprint_courtyard_pairs_share_the_intersection_budget() -> None:
+    content = sample_content()
+    amplifier, mechanical = content.footprints
+    disjoint = _ring(
+        (
+            (8_000_000, 1_000_000),
+            (9_000_000, 1_000_000),
+            (9_000_000, 2_000_000),
+            (8_000_000, 2_000_000),
+        )
+    )
+    two_courtyards = replace(
+        content,
+        footprints=(
+            replace(amplifier, courtyards=(*amplifier.courtyards, disjoint)),
+            mechanical,
+        ),
+    )
+
+    # Six four-edge rings consume two self-intersection checks each, while the
+    # amplifier's two courtyard rectangles consume one cross-ring relationship check.
+    validate_content(two_courtyards, ParseLimits(max_intersection_tests=13))
+    with pytest.raises(BoardIRValidationError) as caught:
+        validate_content(two_courtyards, ParseLimits(max_intersection_tests=12))
+    assert caught.value.code == "budget.exceeded"
+    assert caught.value.message == "polygon intersection-test budget exceeded"
+
+
+def test_total_vertex_budget_precedes_courtyard_relationship_work() -> None:
+    content = sample_content()
+    amplifier, mechanical = content.footprints
+    overlapping = _ring(
+        (
+            (6_000_000, 2_000_000),
+            (9_000_000, 2_000_000),
+            (9_000_000, 3_000_000),
+            (6_000_000, 3_000_000),
+        )
+    )
+    over_budget = replace(
+        content,
+        footprints=(
+            replace(amplifier, courtyards=(*amplifier.courtyards, overlapping)),
+            mechanical,
+        ),
+    )
+
+    with pytest.raises(BoardIRValidationError) as caught:
+        validate_content(
+            over_budget,
+            ParseLimits(max_total_vertices=23, max_intersection_tests=1),
+        )
+    assert caught.value.code == "budget.exceeded"
+    assert caught.value.message == "total vertex budget exceeded"
+
+
 def test_one_footprint_may_have_at_most_64_courtyard_rings() -> None:
     content = sample_content()
     amplifier, mechanical = content.footprints
-    courtyard = amplifier.courtyards[0]
+    courtyards = tuple(
+        _ring(
+            (
+                (index * 2_000_000, 1_000_000),
+                (index * 2_000_000 + 1_000_000, 1_000_000),
+                (index * 2_000_000 + 1_000_000, 2_000_000),
+                (index * 2_000_000, 2_000_000),
+            )
+        )
+        for index in range(65)
+    )
     at_limit = replace(
         content,
-        footprints=(replace(amplifier, courtyards=(courtyard,) * 64), mechanical),
+        footprints=(replace(amplifier, courtyards=courtyards[:64]), mechanical),
     )
     validate_content(at_limit)
 
     over_limit = replace(
         content,
-        footprints=(replace(amplifier, courtyards=(courtyard,) * 65), mechanical),
+        footprints=(replace(amplifier, courtyards=courtyards), mechanical),
     )
     with pytest.raises(BoardIRValidationError) as caught:
         validate_content(over_limit)
@@ -768,6 +834,84 @@ def test_board_ir_v0_2_rejects_non_rectangular_courtyards() -> None:
     # The refusal names the contract, never the caller's geometry.
     for error in (triangle_error, skew_error):
         assert "1000000" not in error.value.message
+
+
+@pytest.mark.parametrize(
+    "second",
+    [
+        _ring(
+            (
+                (7_000_000, 2_000_000),
+                (9_000_000, 2_000_000),
+                (9_000_000, 3_000_000),
+                (7_000_000, 3_000_000),
+            )
+        ),
+        _ring(
+            (
+                (6_000_000, 2_000_000),
+                (9_000_000, 2_000_000),
+                (9_000_000, 3_000_000),
+                (6_000_000, 3_000_000),
+            )
+        ),
+        _ring(
+            (
+                (2_000_000, 2_000_000),
+                (3_000_000, 2_000_000),
+                (3_000_000, 3_000_000),
+                (2_000_000, 3_000_000),
+            )
+        ),
+    ],
+    ids=("touching", "overlapping", "nested"),
+)
+def test_board_ir_v0_2_rejects_ambiguous_same_footprint_courtyard_topology(
+    second: Ring,
+) -> None:
+    """Board IR cannot silently erase KiCad's malformed-versus-hole relationship."""
+
+    content = sample_content()
+    footprint = content.footprints[0]
+    with pytest.raises(BoardIRValidationError) as caught:
+        make_snapshot(
+            replace(
+                content,
+                footprints=(
+                    replace(footprint, courtyards=(*footprint.courtyards, second)),
+                    *content.footprints[1:],
+                ),
+            )
+        )
+
+    assert caught.value.code == "unsupported.topology"
+    assert "strictly disjoint" in caught.value.message
+    assert "1000000" not in caught.value.message
+
+
+def test_board_ir_v0_2_accepts_strictly_disjoint_same_footprint_courtyards() -> None:
+    content = sample_content()
+    footprint = content.footprints[0]
+    disjoint = _ring(
+        (
+            (8_000_000, 1_000_000),
+            (9_000_000, 1_000_000),
+            (9_000_000, 2_000_000),
+            (8_000_000, 2_000_000),
+        )
+    )
+
+    snapshot = make_snapshot(
+        replace(
+            content,
+            footprints=(
+                replace(footprint, courtyards=(*footprint.courtyards, disjoint)),
+                *content.footprints[1:],
+            ),
+        )
+    )
+
+    assert len(snapshot.content.footprints[0].courtyards) == 2
 
 
 def test_board_ir_v0_2_accepts_rectangular_courtyards_at_every_quarter_turn() -> None:

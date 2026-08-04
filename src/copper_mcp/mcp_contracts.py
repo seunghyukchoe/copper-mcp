@@ -488,9 +488,8 @@ class PlacementLegalityContract(_ClosedContract):
     pad_overlap: Literal["proven_clear", "inconclusive", "violated"]
     outline_containment: Literal["proven_inside", "violated"]
     keepout_respect: Literal["proven_clear", "violated"]
-    #: One permitted value. Board IR carries no courtyard geometry, so there is no vocabulary
-    #: here for a courtyard that was checked and a response can never imply one.
-    courtyard_overlap: Literal["not_modelled"]
+    #: Exact zero-clearance overlap over the versioned rectangular KiCad-cache subset.
+    courtyard_overlap: Literal["proven_clear", "violated"]
 
 
 class FootprintPlacementContract(_ClosedContract):
@@ -508,18 +507,21 @@ class PlacementEvidenceContract(_ClosedContract):
     legality: PlacementLegalityContract
     checks_used: Annotated[int, Field(ge=0)]
     inconclusive_pairs: Annotated[int, Field(ge=0)]
+    courtyard_policy: Literal["kicad-10.0.5-rect-cache-v1"]
+    courtyard_footprints_checked: Annotated[int, Field(ge=0)]
+    courtyard_pairs_checked: Annotated[int, Field(ge=0)]
+    missing_courtyard_footprints: Annotated[int, Field(ge=0)]
 
 
 class PlacementCandidateContract(_ClosedContract):
     """An immutable proposal, bound to the exact board it was derived from."""
 
     candidate_id: Digest
-    #: Both digests. ``base_revision`` binds the geometry and ``view_revision`` binds the
-    #: footprint grouping, which is recovered out of band and so is not covered by the
-    #: snapshot digest.
+    #: Both digests. ``base_revision`` binds Board IR geometry and grouping; ``view_revision``
+    #: independently binds the exact source bytes from which that snapshot was projected.
     base_revision: Digest
     view_revision: Digest
-    placement_version: Literal["0.1.0"]
+    placement_version: Literal["0.2.0"]
     ordering_policy: Literal["validate-snap-v1"]
     placement_grid_nm: Annotated[int, Field(ge=1)]
     placements: Annotated[list[FootprintPlacementContract], Field(min_length=1, max_length=4096)]
@@ -530,7 +532,7 @@ class PlacementDiagnosticContract(_ClosedContract):
     """One typed, non-echoing refusal.
 
     An illegal placement carries the legality record that condemned it, so a caller never has
-    to guess which of three independent checks failed.
+    to guess which independent check failed.
     """
 
     code: Literal[
@@ -562,7 +564,7 @@ class PlacementPreviewToolResponse(_ClosedContract):
     """Strict structured output contract for ``preview_placement``."""
 
     status: Literal["previewed", "refused", "unsupported_board"]
-    placement_version: Literal["0.1.0"]
+    placement_version: Literal["0.2.0"]
     board_path: str
     board_revision: Digest
     snapshot_digest: Digest | None

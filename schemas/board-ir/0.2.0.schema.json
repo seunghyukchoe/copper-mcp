@@ -357,6 +357,7 @@
         "courtyards": {
           "type": "array",
           "maxItems": 64,
+          "description": "Axis-aligned rectangular rings whose bounds are pairwise strictly disjoint within this footprint; enforced by semantic validation.",
           "items": {
             "$ref": "#/$defs/ring"
           }

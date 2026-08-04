@@ -7,12 +7,12 @@ do first.
 
 ## Right now
 
-- Default branch `main` is at the project's last released posture (`v0.4.0` plus the merged
-  `apply_candidate` capability). Working branch `feat/board-ir-v0-2-footprints` (PR #47) carries
-  **Board IR 0.2 with footprint modelling** — the single dependency the whole roadmap was waiting
-  on. Merge it before starting new work if it is not already on `main`.
-- 888 tests pass; `make check` is green; KiCad 10.0.5 is required for the real-KiCad nodes.
-- No work is in flight. The task list is clear.
+- Default branch `main` includes merged PR #47: **Board IR 0.2 with revision-bound footprint
+  modelling**. The current development arc is Placement 0.2's versioned rectangular-courtyard
+  legalizer, grounded in KiCad 10.0.5 source and a nanometre-boundary oracle.
+- KiCad 10.0.5 is required for the external-oracle benchmark and real-KiCad nodes; dependency-light
+  CI skips those nodes where the executable is unavailable.
+- Check the current branch, PR, hosted CI, and review-bot threads before choosing the next item.
 
 ## The one rule that matters most
 
@@ -24,9 +24,10 @@ don't; recompute it and compare.
 The corollary you will feel constantly: **every claim is bound to a test or declared a non-claim.**
 When you cannot verify something, model it as a one-value literal (`not_run`, `not_modelled`,
 `inconclusive`) rather than implying it. Two findings were fixed in this very branch because a
-contract made a promise the code did not keep — a non-rectangular courtyard that validated, and a
-padless footprint reported as "does not exist." Both were honesty bugs, and both are the kind of
-thing to watch for.
+contract made a promise the code did not keep — a non-rectangular courtyard that validated, a
+padless footprint reported as "does not exist," and intersecting same-footprint rectangles treated
+as unrelated solids even when KiCad merged them or interpreted a hole. These were honesty bugs,
+and they are the kind of thing to watch for.
 
 ## How every change ships here
 
@@ -67,15 +68,19 @@ thing to watch for.
 
 ## What to build next, in order
 
-1. **Merge Board IR 0.2 (PR #47)** if not already on `main`. It unblocks the three items below.
-2. **Placement apply.** Now possible: with footprints modelled, a pose edit can be verified against
-   Board IR, so the assertion that made it unverifiable no longer holds. This is the natural next
-   capability — extend the apply engine (`src/copper_mcp/apply/`) from routes to placements, reusing
-   the CST splice, the token flow, and the lock/CAS machinery. Placement patches edit poses in
-   place rather than appending, so the "untouched bytes identical" assertion becomes "only the
-   named footprint's pose nodes changed" — design that assertion carefully.
-3. **Courtyard legality** in the placement legalizer, now that courtyard geometry exists in the IR.
-   Flip `courtyard_overlap` from its `not_modelled` literal to a real three-valued check.
+1. **Finish and merge Placement 0.2 courtyard legality.** Require 9/9 agreement with the isolated
+   KiCad 10.0.5 overlap oracle, local topology-oracle regressions for strict disjoint/touch/merge/
+   hole semantics, a green full gate, and review-bot triage. Do not widen the claim to custom
+   `courtyard_clearance`, general topology, rectangles below the measured 10,051 nm per-axis floor,
+   full DRC binding, or apply.
+2. **Generalize footprint/courtyard fidelity.** Capture revision-bound custom rule context and add
+   source-oracle fixtures before back-side or line/polygon/arc import. KiCad can place front and
+   back courtyard sets on one footprint, so a future general Board IR must attach layer/side to
+   each courtyard rather than infer it forever from the footprint side.
+3. **Close the footprint replay gap before placement apply.** Board IR still omits author text,
+   fabrication graphics, library identity, properties, and 3D-model pose. Model and verify every
+   pose-carrying node before extending the destructive apply engine; footprint pose splices need a
+   stricter assertion than route append.
 4. **A board that actually needs routing.** The single most important empirical gap: every net on
    the reference board was already routed by its designer, so the router has recognized coverage
    but never *produced* new copper on a real board. Author or adopt one, measure honestly, record

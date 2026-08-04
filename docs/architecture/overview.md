@@ -92,9 +92,17 @@ Circuit Intent, so that semantic fusion remains a north star rather than a curre
 Placement preview resolves its subjects from the same Board IR snapshot and refuses source bytes
 whose revision does not match. The current KiCad footprint subset is deliberately strict: front
 side, orthogonal rotations, and unfilled `fp_rect` geometry on matching `F.CrtYd`; unsupported
-topology and back-side footprints fail closed. A locked footprint cannot be moved.
-`courtyard_overlap` remains `not_modelled` because no bounded, side-aware legality evaluator exists,
-not because the supported contour is absent. Placement apply remains deferred. Models never write
+topology and back-side footprints fail closed. Same-footprint rectangle bounds must be strictly
+disjoint, because touching/overlap/nesting can carry malformed, union, or hole semantics in KiCad.
+A locked footprint cannot be moved. Placement 0.2 keeps unmoved rings in their canonical board
+frame, transforms moved rings into the proposed pose, applies KiCad 10.0.5's
+5 µm-per-edge courtyard-cache contraction, and checks distinct same-side footprints under a shared
+work/deadline budget that also charges every footprint scan. Evidence names the policy and reports
+checked, compared, and missing counts. Rectangles below the measured 10,051 nm per-axis support
+floor return typed `unsupported_geometry` rather than entering KiCad's orientation-sensitive
+tiny-cache band.
+Custom `courtyard_clearance`, general topology, and full DRC binding remain outside the claim.
+Placement apply remains deferred. Models never write
 KiCad syntax, mutate a live editor, or bypass deterministic candidate validation and explicit
 revision-checked authorization.
 

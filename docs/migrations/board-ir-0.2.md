@@ -11,8 +11,9 @@ To migrate:
    typed constraint profile used for the old snapshot.
 2. Re-run the current `parse_kicad_bytes` converter or the `inspect_board_ir` service.
 3. Resolve every conversion diagnostic. Unsupported courtyard primitives, back-side footprints,
-   and non-orthogonal footprint transforms must be changed at the source or left on a compatible
-   older consumer; they are never omitted automatically.
+   non-orthogonal footprint transforms, and same-footprint courtyard rectangles whose bounds touch,
+   overlap, or nest must be changed at the source or left on a compatible older consumer; they are
+   never omitted automatically.
 4. Store the newly encoded 0.2 snapshot and invalidate every candidate or cached scene bound to the
    old snapshot digest.
 

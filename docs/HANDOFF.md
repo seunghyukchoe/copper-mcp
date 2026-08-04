@@ -96,9 +96,12 @@ These are not style preferences. Most of them were paid for with a bug. Preserve
   serializer cannot yet prove that it preserved everything KiCad would move or rewrite.
 - **Courtyard coverage is deliberately narrow.** The adapter accepts only front-side,
   orthogonally rotated footprints with unfilled `fp_rect` centerlines on matching `F.CrtYd`.
-  Back-side footprints and line, polygon, arc, open, mixed, or mismatched courtyard topology fail
-  closed. `courtyard_overlap` remains `not_modelled` because the bounded side-aware evaluator is
-  absent, not because the supported rectangle is absent.
+  Same-footprint rectangles must be strictly disjoint; touching, overlapping, nested, back-side,
+  line, polygon, arc, open, mixed, or mismatched courtyard topology fails closed. Placement 0.2 now
+  evaluates the supported rectangles with the version-pinned KiCad 10.0.5 cache rule, budgets every
+  footprint scan, and exposes explicit coverage counts. Custom positive/negative
+  `courtyard_clearance`, general topology, and full placement DRC binding remain absent. Rectangles
+  below the measured 10,051 nm per-axis support floor return typed `unsupported_geometry`.
 - **Apply gives a pre-apply copy, not a KiCad undo step.** Restoring is manual. IPC-based
   one-undo-commit apply is designed and deferred.
 - **Renders are whole-board even for a windowed scene**, and are advisory, never geometric
@@ -112,10 +115,10 @@ These are not style preferences. Most of them were paid for with a bug. Preserve
 
 ## 5. What to do next, in priority order
 
-1. **Generalize footprint/courtyard fidelity and implement legality.** Add source-oracle fixtures
-   before supporting back-side footprints or line/polygon/arc and multi-loop courtyard topology;
-   then build a bounded, side-aware evaluator. Until that evaluator exists,
-   `courtyard_overlap` must remain `not_modelled`.
+1. **Generalize footprint/courtyard fidelity beyond Placement 0.2.** Capture revision-bound custom
+   `courtyard_clearance` context, then add source-oracle fixtures before supporting back-side
+   footprints or line/polygon/arc topology. The current exact claim stops at the named KiCad 10.0.5
+   rectangular zero-clearance cache policy.
 2. **Close the data-fidelity gap before placement apply.** Model and replay the author text,
    fabrication graphics, library identity, properties, and 3D-model pose affected by a move, then
    require exact source/revision binding and KiCad verification. Do not turn the existing preview

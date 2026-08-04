@@ -35,7 +35,7 @@ future work, not a current property.
 | AI output → policy | Prompt injection, invalid commands, cost exhaustion | Allowlisted typed actions, deterministic validation, token/iteration budgets |
 | Router → KiCad | Candidate/source/context misbinding, stale state, unsafe copper | Exact replay, immutable multi-revision evidence, live-context recheck, private candidate snapshot, separate apply authorization |
 | MCP input → preview | Unbounded search, unsupported-subset confusion, geometry disclosure, unverified candidates | Strict typed request parsing, caller-supplied constraints, wall-clock deadline over integer ceilings, fail-closed conversion with code-only diagnostics, opt-in authoritative DRC that fails closed, no write or job side effect |
-| Board IR scene → placement preview | Proprietary geometry disclosure, cross-revision subject confusion, truncated detail mistaken for complete geometry, unsupported courtyards treated as legal, locked-footprint movement | Region and object/detail ceilings, typed reference durability, quarantined author text, source/snapshot revision equality, fail-closed footprint conversion, explicit `not_modelled` legality, locked-move refusal, no placement apply |
+| Board IR scene → placement preview | Proprietary geometry disclosure, cross-revision subject confusion, truncated detail mistaken for complete geometry, unsupported/custom-rule courtyards treated as legal, locked-footprint movement | Region and object/detail ceilings, typed reference durability, quarantined author text, source/snapshot revision equality, fail-closed footprint conversion, a versioned budgeted rectangle-cache policy with explicit coverage counts, locked/padless obstacles, locked-move refusal, no placement apply |
 | Benchmark catalog → offline runner | Licence laundering, fabricated capability claims, copied third-party circuits, path/symlink escape, artifact substitution or replacement races, hidden network intake | Reference-only source records, no downloader, strict bounded schema, single-read validation snapshot, repository-confined paths, artifact and licence hashes, evidence-derived claims, explicit safety/derivation fields, original or separately open fixtures only |
 | Circuit Intent → schematic renderer | Malformed or oversized model topology, reference confusion, incomplete connectivity, S-expression injection, output amplification, false electrical/PCB claims | Strict bounded codec, typed IDs, complete-pin validation, canonical digest, escaped strings, original embedded symbols, deterministic 1 MB pure renderer, empty footprints, `on_board=no`, explicit non-claims |
 | MCP schematic build → artifact resource | Proprietary topology in model context, guessable capability, cross-client disclosure, unbounded retention, digest used as authorization, TTL mistaken for secure erasure | Redacted tool result, independent 256-bit opaque token, stdio-only process-local store, no listing/logging/persistence, 15-minute access expiry with documented lazy reclamation, 16-entry/16 MiB limits, 1 MB (1,000,000 bytes) artifact limit, uniform unavailable error, digest recheck |
@@ -165,11 +165,17 @@ geometric authority.
 
 The active KiCad adapter accepts only front-side footprints with orthogonal transforms and unfilled
 rectangular `fp_rect` courtyard centerlines on matching `F.CrtYd`; unsupported footprint or
-courtyard forms fail closed before a scene or placement view exists. Placement subjects are
+courtyard forms, including same-footprint rectangles that touch, overlap, or nest, fail closed
+before a scene or placement view exists. Placement subjects are
 projected from the same Board IR snapshot, and the supplied source bytes must match its source
 revision. AI output remains typed placement intent, a locked footprint cannot be moved, and
-`courtyard_overlap` remains the one-value `not_modelled` result because no bounded side-aware
-evaluator has run. Direct model-generated KiCad mutation and placement apply remain prohibited.
+Placement 0.2's required courtyard result comes from a side-filtered, budgeted evaluator over the
+named KiCad-10.0.5 rectangular cache policy. Padless and locked footprints remain obstacles;
+unmoved rings remain in their canonical board frame, and every footprint scan is budgeted. Checked,
+compared, and missing counts make vacuous coverage visible. A measured 10,051 nm minimum dimension
+fails tiny orientation-sensitive caches closed instead of approximating them. Project custom clearance
+rules, unsupported topology, full DRC binding, direct model-generated KiCad mutation, and
+placement apply remain prohibited or explicit non-claims.
 
 MCP schematic delivery validates a closed outer wrapper, closed Circuit Intent content, and closed
 structured output. Scalars, lists, and extra fields at those boundaries fail without echoing the

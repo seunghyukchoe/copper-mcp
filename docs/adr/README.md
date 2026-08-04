@@ -30,3 +30,4 @@ from the decision ledger.
 - [ADR-0024: Typed placement intent, validated by a deterministic legalizer](0024-placement-intent-and-legalization.md)
 - [ADR-0025: Apply a route candidate by splicing bytes, not by rewriting a board](0025-file-level-candidate-apply.md)
 - [ADR-0026: Make footprints revision-bound Board IR objects before moving them](0026-first-class-footprints-in-board-ir.md)
+- [ADR-0027: Legalize rectangular courtyards against a versioned KiCad cache oracle](0027-kicad-courtyard-legality.md)

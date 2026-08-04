@@ -36,7 +36,8 @@ from copper_mcp.request_boundary import (
     text,
 )
 
-PLACEMENT_VERSION = "0.1.0"
+PLACEMENT_VERSION = "0.2.0"
+COURTYARD_POLICY = "kicad-10.0.5-rect-cache-v1"
 #: How proposals are resolved and ordered. Recorded on every candidate so a later solver
 #: cannot be mistaken for this one.
 ORDERING_POLICY = "validate-snap-v1"
@@ -533,10 +534,8 @@ class PlacementLegality:
     pad_overlap: str
     outline_containment: str
     keepout_respect: str
-    #: One permitted value. There is no vocabulary here for a courtyard that was checked, so a
-    #: candidate can never imply a check this version does not perform. Board IR carries no
-    #: courtyard geometry, and this repository's own board draws none at all.
-    courtyard_overlap: str = "not_modelled"
+    #: Required rather than defaulted: every candidate must prove that this evaluator ran.
+    courtyard_overlap: str
 
     def __post_init__(self) -> None:
         if self.pad_overlap not in {"proven_clear", "inconclusive", "violated"}:
@@ -545,8 +544,8 @@ class PlacementLegality:
             raise PlacementError("outline containment is malformed")
         if self.keepout_respect not in {"proven_clear", "violated"}:
             raise PlacementError("keepout respect is malformed")
-        if self.courtyard_overlap != "not_modelled":
-            raise PlacementError("courtyard overlap has exactly one permitted value")
+        if self.courtyard_overlap not in {"proven_clear", "violated"}:
+            raise PlacementError("courtyard overlap must be two-valued")
 
     @property
     def legal(self) -> bool:
@@ -556,6 +555,7 @@ class PlacementLegality:
             self.pad_overlap != "violated"
             and self.outline_containment == "proven_inside"
             and self.keepout_respect == "proven_clear"
+            and self.courtyard_overlap == "proven_clear"
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -575,6 +575,25 @@ class PlacementEvidence:
     legality: PlacementLegality
     checks_used: int
     inconclusive_pairs: int
+    courtyard_policy: str
+    courtyard_footprints_checked: int
+    courtyard_pairs_checked: int
+    missing_courtyard_footprints: int
+
+    def __post_init__(self) -> None:
+        if self.courtyard_policy != COURTYARD_POLICY:
+            raise PlacementError("placement evidence records exactly one courtyard policy")
+        counts = (
+            self.checks_used,
+            self.inconclusive_pairs,
+            self.courtyard_footprints_checked,
+            self.courtyard_pairs_checked,
+            self.missing_courtyard_footprints,
+        )
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in counts
+        ):
+            raise PlacementError("placement evidence counts must be non-negative integers")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -582,6 +601,10 @@ class PlacementEvidence:
             "legality": self.legality.to_dict(),
             "checks_used": self.checks_used,
             "inconclusive_pairs": self.inconclusive_pairs,
+            "courtyard_policy": self.courtyard_policy,
+            "courtyard_footprints_checked": self.courtyard_footprints_checked,
+            "courtyard_pairs_checked": self.courtyard_pairs_checked,
+            "missing_courtyard_footprints": self.missing_courtyard_footprints,
         }
 
 
@@ -601,6 +624,8 @@ class PlacementCandidate:
     def __post_init__(self) -> None:
         if self.ordering_policy != ORDERING_POLICY:
             raise PlacementError("placement candidates record exactly one ordering policy")
+        if self.placement_version != PLACEMENT_VERSION:
+            raise PlacementError("placement candidates record exactly one contract version")
         if not self.placements:
             raise PlacementError("a placement candidate must place at least one footprint")
         refs = [item.ref_id for item in self.placements]
@@ -661,7 +686,7 @@ class PlacementDiagnostic:
     """One typed, non-echoing refusal.
 
     An illegal placement carries the legality record that condemned it. A refusal that only
-    said "illegal" would force a caller to guess which of three independent checks failed, and
+    said "illegal" would force a caller to guess which independent check failed, and
     guessing is what this contract exists to remove.
     """
 
@@ -722,6 +747,7 @@ class PlacementResult:
 __all__ = [
     "ANCHOR_POINTS",
     "AXES",
+    "COURTYARD_POLICY",
     "EDGES",
     "EMPTY_DIGEST",
     "MAX_JSON_SAFE_INTEGER",

@@ -101,7 +101,7 @@ board. The schema is the field-level reference.
 | Stack | Ordered copper layers of kind `signal`, `plane`, or `mixed`. |
 | Connectivity | Stable net IDs with UTF-8 display names. |
 | Constraints | Net classes, one assignment per net, differential-pair rules, and min/max length rules. |
-| Components | Footprint identity, board-frame origin, normalized rotation, side, lock state, total pad ownership, and up to 64 exact rectangular courtyard rings. |
+| Components | Footprint identity, board-frame origin, normalized rotation, side, lock state, total pad ownership, and up to 64 exact rectangular courtyard rings whose bounds are pairwise strictly disjoint within a footprint. |
 | Terminations | SMD, through-hole, and NPTH pads; circle, rectangle, oval, and rounded-rectangle shapes. |
 | Existing copper | Straight segments, exact three-point arcs, full-stack through vias, and solid zones with priority, pad-connection, island-removal, clearance, and thermal intent. |
 | Exclusions | Multi-layer polygonal keepouts with explicit track, via, pad, zone, and footprint prohibitions. |
@@ -148,7 +148,7 @@ contains a bounded machine-readable diagnostic and no snapshot.
 | Board metadata | Exact KiCad PCB format version `20260206`, optional `generator`, ordered copper declarations `0/F.Cu`, contiguous even-numbered inner layers, then `B.Cu`, and a narrow setup-metadata allowlist with KiCad-default front/back via tenting. |
 | Nets | Quote-aware named item-level net references and legacy numeric root declarations; quoted numeric text remains a name while bare signed numeric tokens retain legacy net-code meaning. |
 | Outline | Exactly one `gr_rect` on `Edge.Cuts`; it becomes the single imported contour. |
-| Footprints/pads | Footprints on `F.Cu` with rotations in 90-degree increments, exact origin/side/lock/pad ownership, and optional unfilled `fp_rect` centerlines on matching `F.CrtYd`; `smd`, `thru_hole`, and `np_thru_hole` pads; circle, rect, oval, and roundrect shapes; round or oval drills; copper layer names, `*.Cu`, and `F&B.Cu`. |
+| Footprints/pads | Footprints on `F.Cu` with rotations in 90-degree increments, exact origin/side/lock/pad ownership, and optional pairwise-strictly-disjoint unfilled `fp_rect` centerlines on matching `F.CrtYd`; `smd`, `thru_hole`, and `np_thru_hole` pads; circle, rect, oval, and roundrect shapes; round or oval drills; copper layer names, `*.Cu`, and `F&B.Cu`. |
 | Routed copper | Net-bound straight `segment` items, exact start/mid/end `arc` items, and through vias spanning the declared copper stack. |
 | Zones | Net-bound, single-copper-layer, solid zones with one polygon loop; explicit priority, thermal/through-hole-thermal/solid/none pad connection, always/never island removal, clearance, and conditionally required thermal dimensions. |
 | Keepouts | Copper-layer sets, exactly one polygon loop, the five modeled prohibition flags, and lock state. |
@@ -163,8 +163,9 @@ The converter performs a version-specific semantic preflight. Root and footprint
 copper layer are rejected. Footprint graphics on `Edge.Cuts` are also rejected, and the only accepted
 root `Edge.Cuts` primitive is the one unfilled rectangle. Non-routing documentation graphics may be
 ignored. Rectangular courtyard centerlines are the exception: they become canonical board-frame
-rings. `filled_polygon` data is treated as a derived KiCad fill cache: v0.2 records zone fill intent,
-not cached fill geometry, fill freshness, or connectivity proof.
+rings only when their same-footprint bounds are pairwise strictly disjoint. `filled_polygon` data
+is treated as a derived KiCad fill cache: v0.2 records zone fill intent, not cached fill geometry,
+fill freshness, or connectivity proof.
 
 ### Rejected today
 
@@ -175,9 +176,10 @@ including:
   outlines;
 - root or footprint-local text/graphics on copper, and any footprint-local `Edge.Cuts` primitive;
 - back-side footprints and footprint rotations not divisible by 90 degrees;
-- `fp_line`, `fp_poly`, arc, open, mixed-layer, or other non-rectangular courtyard topology, a
-  courtyard layer that disagrees with the supported front-side footprint, and more than 64
-  courtyard rectangles on one footprint;
+- `fp_line`, `fp_poly`, arc, open, mixed-layer, or other non-rectangular courtyard topology;
+  touching, overlapping, or nested same-footprint courtyard rectangles; a courtyard layer that
+  disagrees with the supported front-side footprint; and more than 64 courtyard rectangles on one
+  footprint;
 - custom or other unmodeled pad shapes and custom pad primitives;
 - blind, buried, or microvias in KiCad input;
 - multiple polygon loops or holes in a zone/keepout, multi-layer copper zones, hatched fills,

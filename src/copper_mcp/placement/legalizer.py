@@ -1,6 +1,6 @@
 """Deterministic placement legalization: AI proposes, this code disposes.
 
-v0.1 **validates and snaps** model proposals rather than solving for positions. The reasons are
+v0.2 **validates and snaps** model proposals rather than solving for positions. The reasons are
 recorded in ADR-0024, but the short one is that a legalizer is needed under either
 architecture, and a solver written before a trustworthy legalizer has nothing to check itself
 against.
@@ -14,8 +14,9 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
-from copper_mcp.board_ir import BoardIRSnapshot, Keepout, Pad, PointNM, Ring
+from copper_mcp.board_ir import BoardIRSnapshot, Footprint, Keepout, Pad, PointNM, Ring
 from copper_mcp.placement.contracts import (
+    COURTYARD_POLICY,
     EMPTY_DIGEST,
     AlignmentRule,
     EdgeRule,
@@ -40,11 +41,13 @@ from copper_mcp.placement.contracts import (
 from copper_mcp.placement.geometry import (
     QUARTER_UDEG,
     Rect,
+    inset_rect,
     pad_bounds,
     pad_core,
     rect_gap,
     rect_inside_ring,
     rect_touches_ring,
+    rects_intersect_closed,
     rects_overlap,
     ring_bounds,
     rotate_offset,
@@ -75,7 +78,7 @@ def _reject_padless(view: PlacementView, ref: str) -> None:
 
     if view.is_padless(ref):
         raise _UnsupportedError(
-            "a placement subject owns no copper pad, so it cannot be placed in v0.1"
+            "a placement subject owns no copper pad, so it cannot be placed in v0.2"
         )
 
 
@@ -116,6 +119,34 @@ class _PlacedFootprint:
     moved: bool
     pads: tuple[_PlacedPad, ...]
     hull: Rect
+
+
+@dataclass(frozen=True, slots=True)
+class _PlacedCourtyard:
+    side: str
+    rects: tuple[Rect, ...]
+    hull: Rect
+
+
+@dataclass(frozen=True, slots=True)
+class _CourtyardResult:
+    verdict: str
+    footprints_checked: int
+    pairs_checked: int
+    missing_footprints: int
+
+
+# KiCad 10.0.5 polygonizes courtyard centerlines with a 0.005 mm maximum error, then contracts
+# every cached outline by that amount so nominal edge touch is legal. The collision provider tests
+# those cached shapes at zero clearance. Placement 0.2 pins that exact rectangular subset under
+# ``COURTYARD_POLICY``; project-specific positive/negative courtyard-clearance rules remain out of
+# scope. See ADR-0027 for the versioned upstream source and oracle evidence.
+_KICAD_COURTYARD_CACHE_INSET_NM = 5_000
+# KiCad 10.0.5 drops or treats very small contracted rectangles non-linearly: local JSON DRC
+# measurements found a square/short-X transition at 10,050/10,051 nm and a slightly lower
+# short-Y transition. Requiring both dimensions at or above the larger adjacent boundary keeps
+# the simple rectangular cache replay inside the measured orientation-independent subset.
+_KICAD_COURTYARD_MIN_DIMENSION_NM = 10_051
 
 
 def snap(value: int, grid_nm: int) -> int:
@@ -177,10 +208,10 @@ def _place(
                 # A side change mirrors the footprint, which is a different transform from the
                 # rigid moves this version models. Refusing is honest; a half-correct mirror
                 # would silently produce copper on the wrong side of the board.
-                raise _UnsupportedError("changing a footprint's side is not modelled in v0.1")
+                raise _UnsupportedError("changing a footprint's side is not modelled in v0.2")
             moved = True
 
-        if orientation % QUARTER_UDEG != 0:
+        if footprint.orientation_udeg % QUARTER_UDEG != 0 or orientation % QUARTER_UDEG != 0:
             raise _UnsupportedError("placement supports orthogonal orientations only")
 
         pads: list[_PlacedPad] = []
@@ -296,6 +327,129 @@ def _pad_overlap(placed: tuple[_PlacedFootprint, ...], budget: _Budget) -> tuple
                     inconclusive += 1
                     verdict = "inconclusive"
     return verdict, inconclusive
+
+
+def _placed_courtyard(
+    footprint: Footprint,
+    placed_by_ref: dict[str, _PlacedFootprint],
+    budget: _Budget,
+) -> _PlacedCourtyard | None:
+    """Replay supported Board IR rectangles into the proposed pose and KiCad cache.
+
+    The minimum-dimension gate excludes the measured tiny-shape transition where KiCad 10.0.5
+    can drop the cache or change behavior by axis. It is a supported-subset boundary, not a
+    statement that smaller source geometry is invalid.
+    """
+
+    if not footprint.courtyards:
+        return None
+    proposed = placed_by_ref.get(footprint.id)
+    if proposed is not None and proposed.moved:
+        moved = True
+        target_origin = proposed.origin
+        target_orientation = proposed.orientation_udeg
+        target_side = proposed.side
+    else:
+        moved = False
+        target_origin = footprint.origin
+        target_orientation = footprint.rotation_udeg
+        target_side = footprint.side.value
+    rects: list[Rect] = []
+    for courtyard in footprint.courtyards:
+        transformed: list[PointNM] = []
+        for point in courtyard.points:
+            budget.charge()
+            if not moved:
+                # Board IR courtyard points are already in the board frame. Keeping an
+                # unchanged padless footprint in that frame avoids inventing a transform (and
+                # remains valid even when its source pose is non-orthogonal).
+                transformed.append(point)
+                continue
+            try:
+                local = _inverse_rotate(
+                    PointNM(point.x - footprint.origin.x, point.y - footprint.origin.y),
+                    footprint.rotation_udeg,
+                )
+                turned = rotate_offset(local, target_orientation)
+            except ValueError as error:
+                raise _UnsupportedError(
+                    "courtyard placement supports orthogonal orientations only"
+                ) from error
+            transformed.append(PointNM(target_origin.x + turned.x, target_origin.y + turned.y))
+        bounds = (
+            min(point.x for point in transformed),
+            min(point.y for point in transformed),
+            max(point.x for point in transformed),
+            max(point.y for point in transformed),
+        )
+        if (
+            bounds[2] - bounds[0] < _KICAD_COURTYARD_MIN_DIMENSION_NM
+            or bounds[3] - bounds[1] < _KICAD_COURTYARD_MIN_DIMENSION_NM
+        ):
+            raise _UnsupportedError(
+                "courtyard rectangles smaller than 10,051 nm are outside the pinned KiCad "
+                "cache model"
+            )
+        cached = inset_rect(bounds, _KICAD_COURTYARD_CACHE_INSET_NM)
+        if cached is not None:
+            rects.append(cached)
+    if not rects:
+        return None
+    hull = rects[0]
+    for rect in rects[1:]:
+        hull = union(hull, rect)
+    return _PlacedCourtyard(
+        side=target_side,
+        rects=tuple(rects),
+        hull=hull,
+    )
+
+
+def _courtyard_overlap(
+    placed: tuple[_PlacedFootprint, ...],
+    snapshot: BoardIRSnapshot,
+    budget: _Budget,
+) -> _CourtyardResult:
+    """Exact KiCad-10.0.5 zero-clearance overlap for Board IR rectangular courtyards.
+
+    Fixed padless footprints participate as obstacles even though they cannot be proposal
+    subjects. Missing courtyards do not participate, matching KiCad's separate (default-ignored)
+    ``missing_courtyard`` check. Work is filtered by side before pair enumeration and every
+    transform vertex, footprint-pair bound, and exact rectangle-pair predicate is budgeted.
+    """
+
+    placed_by_ref = {item.ref_id: item for item in placed}
+    by_side: dict[str, list[_PlacedCourtyard]] = {"front": [], "back": []}
+    missing = 0
+    checked = 0
+    # ``make_snapshot`` canonicalizes footprint order, so no unmetered defensive sort is
+    # needed here. Charge before even the missing-courtyard branch so both the check ceiling
+    # and deadline cover every Board IR footprint scanned.
+    for footprint in snapshot.content.footprints:
+        budget.charge()
+        if not footprint.courtyards:
+            missing += 1
+            continue
+        checked += 1
+        courtyard = _placed_courtyard(footprint, placed_by_ref, budget)
+        if courtyard is not None:
+            by_side[courtyard.side].append(courtyard)
+
+    pairs = 0
+    for side in ("front", "back"):
+        courtyards = by_side[side]
+        for first_index, first in enumerate(courtyards):
+            for second in courtyards[first_index + 1 :]:
+                budget.charge()
+                pairs += 1
+                if not rects_intersect_closed(first.hull, second.hull):
+                    continue
+                for left in first.rects:
+                    for right in second.rects:
+                        budget.charge()
+                        if rects_intersect_closed(left, right):
+                            return _CourtyardResult("violated", checked, pairs, missing)
+    return _CourtyardResult("proven_clear", checked, pairs, missing)
 
 
 def _outline_containment(
@@ -529,10 +683,12 @@ def evaluate_placement(
             for index, rule in enumerate(intent.rules)
         )
         overlap, inconclusive = _pad_overlap(placed, budget)
+        courtyard = _courtyard_overlap(placed, snapshot, budget)
         legality = PlacementLegality(
             pad_overlap=overlap,
             outline_containment=_outline_containment(placed, snapshot, budget),
             keepout_respect=_keepout_respect(placed, snapshot, budget),
+            courtyard_overlap=courtyard.verdict,
         )
     except _BudgetExhaustedError as error:
         return _refuse(
@@ -609,6 +765,10 @@ def evaluate_placement(
                 legality=legality,
                 checks_used=budget.used,
                 inconclusive_pairs=inconclusive,
+                courtyard_policy=COURTYARD_POLICY,
+                courtyard_footprints_checked=courtyard.footprints_checked,
+                courtyard_pairs_checked=courtyard.pairs_checked,
+                missing_courtyard_footprints=courtyard.missing_footprints,
             ),
             placement_grid_nm=intent.placement_grid_nm,
         )

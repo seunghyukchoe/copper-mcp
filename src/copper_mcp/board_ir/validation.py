@@ -54,6 +54,54 @@ def _require_rectangular_courtyard(ring: Ring, locator: str) -> None:
             )
 
 
+def _require_disjoint_courtyards(
+    courtyards: tuple[Ring, ...],
+    locator: str,
+    *,
+    limits: ParseLimits,
+    intersection_budget: list[int],
+) -> None:
+    """Keep the v0.2 multi-ring subset unambiguous and exactly reproducible.
+
+    KiCad converts every same-layer courtyard primitive on a footprint into one polygon set.
+    Intersecting rectangle outlines can therefore be malformed or encode an outer boundary and
+    a hole, depending on their topology. Board IR v0.2 carries independent rings rather than
+    that relationship, so accepting touching, overlapping, or nested rectangles would lose
+    meaning. Strictly disjoint rectangles are the only supported multi-ring subset.
+    """
+
+    bounds = [
+        (
+            min(point.x for point in courtyard.points),
+            min(point.y for point in courtyard.points),
+            max(point.x for point in courtyard.points),
+            max(point.y for point in courtyard.points),
+        )
+        for courtyard in courtyards
+    ]
+    for first_index, first in enumerate(bounds):
+        for second in bounds[first_index + 1 :]:
+            intersection_budget[0] += 1
+            if intersection_budget[0] > limits.max_intersection_tests:
+                raise BoardIRValidationError(
+                    "budget.exceeded",
+                    "polygon intersection-test budget exceeded",
+                    locator,
+                )
+            separated = (
+                first[2] < second[0]
+                or second[2] < first[0]
+                or first[3] < second[1]
+                or second[3] < first[1]
+            )
+            if not separated:
+                raise BoardIRValidationError(
+                    "unsupported.topology",
+                    "Board IR v0.2 courtyard rectangles on one footprint must be strictly disjoint",
+                    locator,
+                )
+
+
 @dataclass(frozen=True, slots=True)
 class BoardIRValidationError(ValueError):
     """A stable validation failure suitable for an adapter diagnostic."""
@@ -315,6 +363,13 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
     if total_vertices > limits.max_total_vertices:
         raise BoardIRValidationError("budget.exceeded", "total vertex budget exceeded")
     intersection_budget = [0]
+    for footprint in content.footprints:
+        _require_disjoint_courtyards(
+            footprint.courtyards,
+            footprint.id,
+            limits=limits,
+            intersection_budget=intersection_budget,
+        )
     for locator, ring in rings:
         _validate_ring(
             ring,

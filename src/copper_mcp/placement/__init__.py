@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copper_mcp.placement.contracts import (
+    COURTYARD_POLICY,
     ORDERING_POLICY,
     PLACEMENT_VERSION,
     PlacementCandidate,
@@ -23,6 +24,7 @@ from copper_mcp.placement.view import (
 )
 
 __all__ = [
+    "COURTYARD_POLICY",
     "ORDERING_POLICY",
     "PLACEMENT_VERSION",
     "FootprintView",

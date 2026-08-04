@@ -130,9 +130,12 @@ and the policy-plugin work.
   assertion would remain blind to part of the edit.
 - [~] Deterministic snapping, connectivity, clearance, rule, provenance, and revision validation for
   every placement candidate. Grid snapping, rule residuals, three-valued pad overlap, outline
-  containment, keepout respect and dual-digest binding are implemented. Board IR now carries the
-  supported rectangular courtyard rings, but side-aware bounded courtyard legality is still
-  reported as `not_modelled`; connectivity after a placement is future work.
+  containment, keepout respect, dual-digest binding, and Placement 0.2 courtyard legality are
+  implemented. The courtyard check is exact for the named KiCad 10.0.5 rectangular zero-clearance
+  cache subset, requires strictly disjoint same-footprint rectangles, budgets missing-shape scans,
+  fails rectangles below the measured 10,051 nm per-axis floor closed, and exposes coverage counts;
+  custom courtyard-clearance rules, general topology, full DRC
+  binding, and connectivity after a placement remain future work.
 - [ ] General courtyard line-chain/polygon topology and back-side footprint observation, pinned to
   KiCad-authored front/back flip and DRC oracle fixtures without applying a second mirror.
 - [ ] Separately authorized placement apply; direct AI mutation of KiCad remains prohibited.

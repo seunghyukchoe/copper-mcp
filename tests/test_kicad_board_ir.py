@@ -392,6 +392,121 @@ def test_v02_unsupported_courtyard_primitive_fails_closed() -> None:
     assert "courtyard primitive is unsupported" in result.diagnostics[0].message
 
 
+def _add_first_footprint_courtyard(source: bytes, start: str, end: str) -> bytes:
+    marker = b'    (pad "1" smd rect\n'
+    rectangle = f"""    (fp_rect
+      (start {start})
+      (end {end})
+      (stroke (width 0.05) (type default))
+      (fill none)
+      (layer "F.CrtYd")
+      (uuid "92000000-0000-0000-0000-000000000005")
+    )
+""".encode()
+    return _replace(source, marker, rectangle + marker)
+
+
+@pytest.mark.parametrize(
+    ("start", "end"),
+    [
+        ("4 -1", "6 1"),
+        ("3 -1", "6 1"),
+        ("-1 -1", "1 1"),
+    ],
+    ids=("touching", "overlapping", "nested"),
+)
+def test_v02_ambiguous_same_footprint_courtyard_topology_fails_closed(
+    start: str,
+    end: str,
+) -> None:
+    source = _add_first_footprint_courtyard(
+        FOOTPRINT_V02_BOARD.read_bytes(),
+        start,
+        end,
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile())
+
+    assert result.snapshot is None
+    assert len(result.diagnostics) == 1
+    assert result.diagnostics[0].code == "unsupported.topology"
+    assert "converted Board IR content failed semantic validation" in result.diagnostics[0].message
+
+
+def test_v02_strictly_disjoint_same_footprint_courtyards_are_preserved() -> None:
+    source = _add_first_footprint_courtyard(
+        FOOTPRINT_V02_BOARD.read_bytes(),
+        "6 -1",
+        "8 1",
+    )
+
+    snapshot = parse_success(source, constraint_profile())
+
+    first = next(footprint for footprint in snapshot.content.footprints if footprint.locked)
+    assert len(first.courtyards) == 2
+
+
+def _real_kicad_drc_types(source: bytes, tmp_path: Path, name: str) -> set[str]:
+    board = tmp_path / f"{name}.kicad_pcb"
+    report = tmp_path / f"{name}.json"
+    board.write_bytes(source)
+    completed = subprocess.run(  # noqa: S603 - fixed local argv, trusted discovered CLI
+        [
+            str(REAL_KICAD_CLI),
+            "pcb",
+            "drc",
+            "--format",
+            "json",
+            "--units",
+            "mm",
+            "--severity-all",
+            "--exit-code-violations",
+            "--output",
+            str(report),
+            str(board),
+        ],
+        check=False,
+        capture_output=True,
+        timeout=120,
+    )
+    assert completed.returncode in (0, 5), completed.stderr.decode(errors="replace")
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    return {item["type"] for item in payload.get("violations", [])}
+
+
+@pytest.mark.skipif(not REAL_KICAD_CLI.is_file(), reason="KiCad CLI is not installed")
+def test_real_kicad_10_0_5_confirms_the_supported_multi_rectangle_subset(
+    tmp_path: Path,
+) -> None:
+    version = subprocess.run(  # noqa: S603 - fixed local argv, trusted discovered CLI
+        [str(REAL_KICAD_CLI), "--version"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    ).stdout.strip()
+    if version != "10.0.5":
+        pytest.skip(f"courtyard topology oracle is pinned to KiCad 10.0.5, found {version}")
+
+    baseline = FOOTPRINT_V02_BOARD.read_bytes()
+    touching = _add_first_footprint_courtyard(baseline, "4 -1", "6 1")
+    overlapping = _add_first_footprint_courtyard(baseline, "3 -1", "6 1")
+    disjoint = _add_first_footprint_courtyard(baseline, "6 -1", "8 1")
+    nested = _replace(baseline, b"(start -3 -2)", b"(start -10 -10)")
+    nested = _replace(nested, b"(end 4 2.5)", b"(end 10 10)")
+    nested = _add_first_footprint_courtyard(nested, "-5 -5", "5 5")
+    nested = _replace(nested, b"(at 45 15 90)", b"(at 15 15 90)")
+
+    assert "malformed_courtyard" in _real_kicad_drc_types(touching, tmp_path, "touching")
+    # KiCad unions intersecting closed outlines, while Board IR v0.2 has no representation for
+    # that topology relationship. The adapter therefore rejects it even though KiCad accepts it.
+    assert "malformed_courtyard" not in _real_kicad_drc_types(overlapping, tmp_path, "overlapping")
+    assert "malformed_courtyard" not in _real_kicad_drc_types(disjoint, tmp_path, "disjoint")
+    nested_types = _real_kicad_drc_types(nested, tmp_path, "nested-hole")
+    assert "malformed_courtyard" not in nested_types
+    assert "courtyards_overlap" not in nested_types
+
+
 def _four_layer_source() -> bytes:
     return _replace(
         SUBSET_BOARD.read_bytes(),

@@ -242,8 +242,10 @@ def preview_placement(request: dict[str, Any]) -> PlacementPreviewToolResponse:
     A ``previewed`` result carries an immutable candidate whose legality was proven
     deterministically. Note that ``pad_overlap`` is three-valued: ``inconclusive`` means
     neither clearance nor collision could be proven, and is not a failure. Courtyard overlap is
-    reported as ``not_modelled`` and is genuinely not checked. This tool never applies a
-    placement, and a placement is not bound to KiCad DRC evidence in this version.
+    checked exactly for the versioned KiCad 10.0.5 rectangular, zero-clearance cache subset;
+    evidence reports checked and missing footprint counts. Custom ``courtyard_clearance`` rules
+    and general courtyard topology are not modelled. This tool never applies a placement, and a
+    placement is not bound to a full KiCad DRC report in this version.
     """
 
     # Both transports, like preview_route: one self-contained response, no server-side state,

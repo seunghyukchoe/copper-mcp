@@ -22,6 +22,7 @@ import copper_mcp.mcp_server as _server
 from copper_mcp.cli import main
 from copper_mcp.config import Settings
 from copper_mcp.mcp_contracts import PlacementPreviewToolResponse
+from copper_mcp.placement import COURTYARD_POLICY, PLACEMENT_VERSION
 from copper_mcp.placement.contracts import PlacementError
 from copper_mcp.placement_preview import preview_placement
 
@@ -84,6 +85,7 @@ class ServiceTests(unittest.TestCase):
 
     def test_a_response_echoes_the_validated_request_and_binds_to_the_board(self) -> None:
         document = _preview("placement-legal.kicad_pcb")
+        self.assertEqual(document["placement_version"], PLACEMENT_VERSION)
         self.assertEqual(document["board_path"], "placement-legal.kicad_pcb")
         self.assertRegex(document["board_revision"], r"^sha256:[0-9a-f]{64}$")
         self.assertRegex(document["snapshot_digest"], r"^sha256:[0-9a-f]{64}$")
@@ -102,11 +104,16 @@ class ServiceTests(unittest.TestCase):
         self.assertIsNotNone(diagnostic["legality"])
         self.assertEqual(diagnostic["legality"]["keepout_respect"], "violated")
 
-    def test_courtyards_are_reported_as_unchecked_rather_than_passed(self) -> None:
+    def test_courtyard_coverage_is_explicit_even_when_the_board_has_none(self) -> None:
         document = _preview("placement-legal.kicad_pcb")
         candidate = document["candidate"]
         assert candidate is not None
-        self.assertEqual(candidate["evidence"]["legality"]["courtyard_overlap"], "not_modelled")
+        evidence = candidate["evidence"]
+        self.assertEqual(evidence["legality"]["courtyard_overlap"], "proven_clear")
+        self.assertEqual(evidence["courtyard_policy"], COURTYARD_POLICY)
+        self.assertEqual(evidence["courtyard_footprints_checked"], 0)
+        self.assertEqual(evidence["courtyard_pairs_checked"], 0)
+        self.assertEqual(evidence["missing_courtyard_footprints"], 2)
 
     def test_a_board_outside_the_workspace_is_refused(self) -> None:
         for path in ("../board-ir-v0.1/subset.kicad_pcb", "/etc/hosts", "nope.kicad_pcb"):

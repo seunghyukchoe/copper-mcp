@@ -53,6 +53,23 @@ def rects_overlap(first: Rect, second: Rect) -> bool:
     )
 
 
+def rects_intersect_closed(first: Rect, second: Rect) -> bool:
+    """Closed intersection: a shared edge or point counts as contact."""
+
+    return not (
+        first[2] < second[0] or second[2] < first[0] or first[3] < second[1] or second[3] < first[1]
+    )
+
+
+def inset_rect(rect: Rect, amount: int) -> Rect | None:
+    """Inset every edge equally, returning ``None`` when no positive area remains."""
+
+    if amount < 0:
+        raise ValueError("rectangle inset must not be negative")
+    inset = (rect[0] + amount, rect[1] + amount, rect[2] - amount, rect[3] - amount)
+    return inset if inset[0] < inset[2] and inset[1] < inset[3] else None
+
+
 def rect_gap(first: Rect, second: Rect) -> int:
     """Rectilinear separation between two boxes, or ``0`` when they touch or overlap."""
 
