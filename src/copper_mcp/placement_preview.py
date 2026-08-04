@@ -65,6 +65,21 @@ def _preview_placement_source(
 ) -> PlacementResult:
     """Run the deterministic placement pipeline over one already-bound source."""
 
+    # A caller may bind a file-backed request to a previously observed revision as well as a
+    # live request.  Honor that precondition before parsing so a stale request cannot echo its
+    # expected digest as if it had been checked.
+    if intent.expect_board_revision is not None and intent.expect_board_revision != board_revision:
+        return PlacementResult(
+            status="refused",
+            board_revision=board_revision,
+            board_path=relative_path,
+            request=intent,
+            diagnostic=PlacementDiagnostic(
+                code=PlacementFailureCode.STALE_REVISION,
+                message="board revision is stale",
+            ),
+        )
+
     default_limits = ParseLimits()
     limits = replace(
         default_limits,
@@ -86,6 +101,24 @@ def _preview_placement_source(
         )
 
     snapshot = conversion.snapshot
+    # Snapshot CAS stops immediately after conversion and before placement-view construction or
+    # legalizer work.  This keeps stale requests bounded even when a board is expensive to
+    # evaluate.
+    if (
+        intent.expect_snapshot_digest is not None
+        and intent.expect_snapshot_digest != snapshot.snapshot_digest
+    ):
+        return PlacementResult(
+            status="refused",
+            board_revision=board_revision,
+            board_path=relative_path,
+            request=intent,
+            snapshot_digest=snapshot.snapshot_digest,
+            diagnostic=PlacementDiagnostic(
+                code=PlacementFailureCode.STALE_REVISION,
+                message="Board IR snapshot revision is stale",
+            ),
+        )
     try:
         view = build_placement_view(source, snapshot, limits=limits)
     except PlacementViewError as error:

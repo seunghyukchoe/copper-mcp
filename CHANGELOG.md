@@ -92,6 +92,9 @@ All notable changes are documented here. The format follows
 - Placement grouping is now projected from the same Board IR snapshot that carries the pads and
   rejects mismatched source bytes, replacing the second out-of-band KiCad identity parse. Route
   serialization also requires native footprint identities before producing output.
+- File-backed placement previews now honor optional board and Board IR snapshot compare-and-swap
+  digests before placement-view/legalizer work; stale requests return a typed refusal instead of
+  echoing unverified preconditions.
 - Applied and backup files now keep the board's own **permission bits** instead of collapsing to
   `0600`, so group and CI readability and hard links survive an apply.
 - Pre-apply copies are written into a `.copper-mcp-backups/` subdirectory, not beside the board
