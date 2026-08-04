@@ -24,6 +24,7 @@ from copper_mcp.route_preview import (
     RoutePreviewError,
     RoutePreviewStatus,
     parse_route_preview_request,
+    preview_live_route,
     preview_route,
 )
 from copper_mcp.routing import RouteConnection, RouteDiagnostic, RouteFailureCode
@@ -35,6 +36,37 @@ REAL_KICAD_CLI = (
     if _DISCOVERED_KICAD_CLI is not None
     else Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli")
 )
+
+
+class _FakeVersion:
+    major = 10
+    minor = 0
+    patch = 5
+
+
+class _FakeLiveBoard:
+    def __init__(self, source: str) -> None:
+        self._source = source
+
+    def get_as_string(self) -> str:
+        return self._source
+
+
+class _FakeLiveKiCad:
+    def __init__(self, source: str) -> None:
+        self._board = _FakeLiveBoard(source)
+
+    def get_version(self) -> _FakeVersion:
+        return _FakeVersion()
+
+    def get_api_version(self) -> _FakeVersion:
+        return _FakeVersion()
+
+    def check_version(self) -> bool:
+        return True
+
+    def get_board(self) -> _FakeLiveBoard:
+        return self._board
 
 
 def _request(**overrides: Any) -> dict[str, Any]:
@@ -419,6 +451,77 @@ def test_scene_net_reference_requires_both_revision_preconditions() -> None:
         del request[missing]
         with pytest.raises(RoutePreviewError, match="revision preconditions"):
             parse_route_preview_request(request)
+
+
+def _live_reference_request(preview: RoutePreview) -> dict[str, Any]:
+    request = _reference_request(preview)
+    request["board"] = "live"
+    return request
+
+
+def test_live_route_proposal_reuses_the_exact_ipc_snapshot_and_candidate(
+    tmp_path: Path,
+) -> None:
+    _, settings = _workspace(tmp_path)
+    named = preview_route(_request(), settings)
+    assert named.candidate is not None
+    source = FIXTURE.read_text(encoding="utf-8")
+
+    live = preview_live_route(
+        _live_reference_request(named),
+        settings,
+        client_factory=lambda **_: _FakeLiveKiCad(source),
+    )
+
+    assert live.status is RoutePreviewStatus.ROUTED
+    assert live.board_path == "live"
+    assert live.candidate == named.candidate
+    assert live.board_revision == named.board_revision
+    assert live.snapshot_digest == named.snapshot_digest
+    assert live.drc_evidence is None
+    assert live.fill_authority is None
+    assert live.apply_token is None
+    assert live.to_dict()["request"]["net_ref_id"] == named.candidate.patch.net_id
+
+
+def test_live_route_refuses_stale_board_before_conversion(tmp_path: Path) -> None:
+    _, settings = _workspace(tmp_path)
+    named = preview_route(_request(), settings)
+    assert named.candidate is not None
+    calls = 0
+
+    def factory(**_: Any) -> _FakeLiveKiCad:
+        nonlocal calls
+        calls += 1
+        return _FakeLiveKiCad(FIXTURE.read_text(encoding="utf-8"))
+
+    request = _live_reference_request(named)
+    request["expect_board_revision"] = f"sha256:{'0' * 64}"
+    stale = preview_live_route(request, settings, client_factory=factory)
+
+    assert stale.status is RoutePreviewStatus.NOT_ROUTED
+    assert stale.snapshot_digest is None
+    assert stale.diagnostic is not None
+    assert stale.diagnostic.code is RouteFailureCode.STALE_REVISION
+    assert calls == 1
+
+
+@pytest.mark.parametrize("field", ["include_drc", "include_fill_authority", "include_apply_token"])
+def test_live_route_rejects_action_authority_before_ipc_capture(tmp_path: Path, field: str) -> None:
+    _, settings = _workspace(tmp_path)
+    named = preview_route(_request(), settings)
+    calls = 0
+
+    def factory(**_: Any) -> _FakeLiveKiCad:
+        nonlocal calls
+        calls += 1
+        return _FakeLiveKiCad(FIXTURE.read_text(encoding="utf-8"))
+
+    request = _live_reference_request(named)
+    request[field] = True
+    with pytest.raises(RoutePreviewError, match="read-only"):
+        preview_live_route(request, settings, client_factory=factory)
+    assert calls == 0
 
 
 def test_route_request_requires_exactly_one_name_or_scene_reference() -> None:

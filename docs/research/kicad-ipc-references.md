@@ -60,6 +60,15 @@ Malformed constraints, regions, layer filters, unknown fields, invalid expected 
 unsupported render flag therefore fail without opening the IPC client; B-011 records the zero-call
 preflight oracle.
 
+## Read-only route proposal
+
+`preview_live_route` is the next narrow bridge: it accepts only a `net_ref_id` copied from a
+revision-bound Circuit Scene and both compare-and-swap digests, captures one exact IPC snapshot,
+converts it through the same Board IR adapter, and returns the existing immutable route candidate.
+The application boundary rejects DRC, zone refill, and apply-token flags before IPC. B-013 measures
+candidate equality with the file-backed oracle, deterministic replay, stale-session refusal, and
+zero-call action preflight. This closes the observe-to-propose loop, not the live action loop.
+
 ## Primary references
 
 - KiCad, “For Add-on Developers,” especially API limits, socket/token variables, plugin runtime,

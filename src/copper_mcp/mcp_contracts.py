@@ -361,11 +361,27 @@ class RoutePreviewRequestSchemaContract(
     """Advertised exclusive route selector union."""
 
 
+class LiveRoutePreviewRequestContract(_RouteRequestCommonContract):
+    """Closed, read-only route proposal shape for one active KiCad snapshot."""
+
+    board: Literal["live"]
+    net_ref_id: NetRefId
+    expect_board_revision: Digest
+    expect_snapshot_digest: Digest
+    include_drc: Literal[False] = False
+    include_fill_authority: Literal[False] = False
+    include_apply_token: Literal[False] = False
+
+
 # Runtime acceptance remains broad so the non-echoing application boundary handles malformed
 # values. The MCP schema is nevertheless exact and closed for clients that generate calls from it.
 RoutePreviewToolRequest = Annotated[
     Any,
     WithJsonSchema(_inline_json_schema(RoutePreviewRequestSchemaContract)),
+]
+LiveRoutePreviewToolRequest = Annotated[
+    Any,
+    WithJsonSchema(_inline_json_schema(LiveRoutePreviewRequestContract)),
 ]
 
 

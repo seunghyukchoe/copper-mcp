@@ -30,10 +30,11 @@ documentation, ledger updates, and benchmark evidence.
   separated labels/properties, real KiCad SVG inspection, and a structural regression.
 - [x] Descriptor-anchored workspace reads and exact-lowercase create-only schematic output.
 - [ ] Schematic round trip, authoritative ERC, and source-to-board connectivity parity.
-- [~] Live KiCad IPC snapshot to Circuit Scene revision binding. `observe_live_board_scene` now
-  converts the exact captured IPC serialization through Board IR and refuses caller-supplied
-  stale board/snapshot digests; a real running-editor oracle and live action compare-and-swap
-  before placement or routing remain open because the workstation IPC server is disabled.
+- [~] Live KiCad IPC snapshot to Circuit Scene and route-proposal binding. `observe_live_board_scene`
+  converts the exact captured IPC serialization through Board IR, and `preview_live_route` now
+  returns a deterministic read-only candidate from a scene `net_ref_id` with both stale-session
+  digests. A real running-editor oracle and live action compare-and-swap before placement or
+  routing remain open because the workstation IPC server is disabled.
 - [x] Canonical Board IR v0.2 contract with integer units, typed constraints, strict codecs,
   content digests, first-class footprint pose/side/lock/pad ownership, and bounded rectangular
   courtyard rings. The immutable v0.1 schema remains as legacy compatibility evidence.

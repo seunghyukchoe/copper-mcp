@@ -101,7 +101,10 @@ surface advertises this as an exclusive, closed request union and returns a full
 result. This closes one file-backed observation-to-action edge. The read-only live IPC bridge now
 converts the exact captured editor serialization into the same Circuit Scene contract and refuses
 caller-supplied stale board or snapshot digests; it still does not grant live route/placement
-authority, a policy solver, or an autonomous whole-board loop.
+authority, a policy solver, or an autonomous whole-board loop. `preview_live_route` now adds a
+read-only proposal edge over that exact snapshot: it accepts only a scene net reference and both
+digests, then returns the deterministic candidate without DRC, fill, apply-token issuance, or
+editor mutation. A live action compare-and-swap remains a separate future contract.
 
 Placement preview resolves its subjects from the same Board IR snapshot and refuses source bytes
 whose revision does not match. The current KiCad footprint subset is deliberately strict: front

@@ -34,6 +34,7 @@ from copper_mcp.kicad_cli import (
     run_route_candidate_drc,
     run_zone_fill_authority,
 )
+from copper_mcp.kicad_ipc import capture_live_board
 from copper_mcp.models import SCHEMA_VERSION
 from copper_mcp.request_boundary import (
     CONSTRAINT_FIELDS,
@@ -707,4 +708,135 @@ def preview_route(
         candidate=result.candidate,
         drc_evidence=evidence,
         apply_token=apply_token,
+    )
+
+
+def preview_live_route(
+    payload: Any,
+    settings: Settings,
+    *,
+    client_factory: Any = None,
+) -> RoutePreview:
+    """Propose one read-only route against the exact active KiCad IPC snapshot.
+
+    Live proposals intentionally accept only a Circuit Scene ``net_ref_id`` and require both
+    revision preconditions. They never invoke KiCad DRC, zone refill, or apply-token issuance:
+    those operations need separate live session compare-and-swap contracts. The returned
+    candidate is bound to the captured source and Board IR snapshot, so an AI client can inspect
+    the active editor and receive a deterministic proposal without mutating it.
+    """
+
+    if not isinstance(settings, Settings):
+        raise RoutePreviewError("preview settings are malformed")
+    deadline = time.monotonic() + settings.max_route_preview_seconds
+    request = parse_route_preview_request(payload)
+    if request.board != "live":
+        raise RoutePreviewError("live route requests must set board to 'live'")
+    if request.net is not None or request.net_ref_id is None:
+        raise RoutePreviewError("live route requests require a Circuit Scene net reference")
+    if request.include_drc or request.include_fill_authority or request.include_apply_token:
+        raise RoutePreviewError("live route proposals are read-only and cannot request actions")
+
+    captured = capture_live_board(settings, client_factory=client_factory)
+    board_revision = captured.observation.board_digest
+    if (
+        request.expect_board_revision is not None
+        and request.expect_board_revision != board_revision
+    ):
+        return RoutePreview(
+            status=RoutePreviewStatus.NOT_ROUTED,
+            board_path="live",
+            board_revision=board_revision,
+            request=request,
+            diagnostic=RouteDiagnostic(
+                code=RouteFailureCode.STALE_REVISION,
+                message="the observed live board no longer matches the requested revision",
+            ),
+        )
+
+    default_limits = ParseLimits()
+    limits = replace(
+        default_limits,
+        max_input_bytes=min(default_limits.max_input_bytes, settings.max_board_bytes),
+    )
+    conversion = parse_kicad_bytes(captured.source, request.profile(), limits)
+    if conversion.snapshot is None or conversion.diagnostics:
+        counts = Counter(diagnostic.code for diagnostic in conversion.diagnostics)
+        return RoutePreview(
+            status=RoutePreviewStatus.UNSUPPORTED_BOARD,
+            board_path="live",
+            board_revision=board_revision,
+            request=request,
+            conversion_diagnostic_counts=counts,
+        )
+
+    snapshot = conversion.snapshot
+    if snapshot.content.source.revision != board_revision:
+        raise RoutePreviewError(
+            "converted live board revision is inconsistent with its source bytes"
+        )
+    if (
+        request.expect_snapshot_digest is not None
+        and request.expect_snapshot_digest != snapshot.snapshot_digest
+    ):
+        return RoutePreview(
+            status=RoutePreviewStatus.NOT_ROUTED,
+            board_path="live",
+            board_revision=board_revision,
+            request=request,
+            snapshot_digest=snapshot.snapshot_digest,
+            diagnostic=RouteDiagnostic(
+                code=RouteFailureCode.STALE_REVISION,
+                message="the observed live Board IR snapshot is stale",
+            ),
+        )
+    if time.monotonic() >= deadline:
+        return RoutePreview(
+            status=RoutePreviewStatus.NOT_ROUTED,
+            board_path="live",
+            board_revision=board_revision,
+            request=request,
+            snapshot_digest=snapshot.snapshot_digest,
+            diagnostic=RouteDiagnostic(
+                code=RouteFailureCode.CANCELLED,
+                message="the live route proposal deadline expired during board conversion",
+            ),
+        )
+
+    result = AStarRouter().propose(
+        snapshot,
+        RouteRequest(
+            board_revision=snapshot.snapshot_digest,
+            net_id=request.net_id,
+            layer_id=request.layer_id,
+            seed=request.seed,
+            settings=request.settings,
+        ),
+        cancelled=lambda: time.monotonic() >= deadline,
+    )
+    if result.connected is not None:
+        return RoutePreview(
+            status=RoutePreviewStatus.ALREADY_CONNECTED,
+            board_path="live",
+            board_revision=board_revision,
+            request=request,
+            snapshot_digest=snapshot.snapshot_digest,
+            connection=result.connected,
+        )
+    if result.candidate is None:
+        return RoutePreview(
+            status=RoutePreviewStatus.NOT_ROUTED,
+            board_path="live",
+            board_revision=board_revision,
+            request=request,
+            snapshot_digest=snapshot.snapshot_digest,
+            diagnostic=result.diagnostic,
+        )
+    return RoutePreview(
+        status=RoutePreviewStatus.ROUTED,
+        board_path="live",
+        board_revision=board_revision,
+        request=request,
+        snapshot_digest=snapshot.snapshot_digest,
+        candidate=result.candidate,
     )

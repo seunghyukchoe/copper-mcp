@@ -102,6 +102,11 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- `preview_live_route`, a read-only MCP route-proposal tool that consumes a Circuit Scene
+  `net_ref_id` plus both board/snapshot revisions, converts the exact active KiCad IPC snapshot,
+  and returns the existing deterministic candidate contract. DRC, zone refill, apply-token
+  issuance, live editor mutation, and real-session success remain explicitly unclaimed; B-013
+  records the fake-client oracle, stale-session refusals, and zero-call action preflight.
 - `observe_live_board_scene`, a read-only bridge from the active KiCad IPC document to Circuit
   Scene `0.2.0`. It reuses exact Board IR geometry and author-text quarantine, with optional
   compare-and-swap digests for stale-session refusal; live action gates remain separate.

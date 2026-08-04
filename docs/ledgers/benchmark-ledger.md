@@ -179,3 +179,16 @@ not routing-quality or throughput claims.
 | Metrics | Deterministic replays 10/10; median observation latency 41,292 ns; board digest `sha256:8641a71e350494ce284c46b3a4b7e768d8ad6c5d78009f308a212ecdd54343a0`; serialized-source counts `nets=1`, `footprints=1`, `pads=1`, `shapes=1`, all other categories `0`; false/future version refusals 1/1; TCP endpoint refusals 1; raw board/object content returned `false/false` |
 | Artifact | [`2026-08-04-kicad-ipc-counts.json`](../../benchmarks/results/mcp/2026-08-04-kicad-ipc-counts.json) |
 | Interpretation | Corrective replacement for B-010's count implementation after review: only direct board-level `(net ...)` declarations count as nets, nested copper references do not inflate topology, and `gr_circle` is classified as a shape. It remains a fake-client contract baseline with no live-session, placement, routing, DRC, electrical, fabrication, or throughput claim. |
+
+### B-013 — Revision-bound live route proposal
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | Recorded in the benchmark artifact after the clean implementation commit |
+| Date and commit | 2026-08-04; source commit is the exact code commit recorded by the script |
+| Environment | Apple arm64 CPU; Python 3.12.13; deterministic fake official-client serialization; `kicad-python` not installed; KiCad IPC server disabled and not invoked |
+| Dataset | Committed `two-pad.kicad_pcb` route fixture; the same bytes are used by the file-backed route oracle and fake IPC client; no external or proprietary board |
+| Configuration | `kicad-ipc-live-route-v1`; ten replays; scene `net_ref_id`; both board/snapshot preconditions; source script SHA-256 and fixture SHA-256 are embedded in the artifact |
+| Metrics | Deterministic candidate equality with the file-backed oracle; median end-to-end capture/convert/route latency; stale board/snapshot refusals 1/1; forbidden action refusal 1/1 with zero IPC calls; raw source, DRC evidence, fill authority, and apply token all `false` |
+| Artifact | [`2026-08-04-live-route-proposal.json`](../../benchmarks/results/mcp/2026-08-04-live-route-proposal.json) |
+| Interpretation | This proves the read-only observe-to-propose contract over one exact fake IPC snapshot. It does not establish live GUI-session success, live editor mutation, DRC, placement, electrical behavior, fabrication readiness, or throughput on real boards. |

@@ -20,6 +20,8 @@ from copper_mcp.kicad_file import inspect_kicad_board
 from copper_mcp.kicad_ipc import inspect_live_board as inspect_live_kicad_board
 from copper_mcp.models import candidate_from_dict, rank_candidates
 from copper_mcp.placement_preview import preview_placement as preview_placement_service
+from copper_mcp.route_preview import RoutePreview
+from copper_mcp.route_preview import preview_live_route as preview_live_route_candidate
 from copper_mcp.route_preview import preview_route as preview_route_candidate
 
 
@@ -46,6 +48,7 @@ def server_info() -> dict[str, Any]:
             "explicit create-only CLI schematic export and ephemeral stdio MCP artifact delivery",
             "read-only live KiCad IPC board observation (optional kicad-python)",
             "revision-bound live KiCad IPC Circuit Scene observation (read-only)",
+            "revision-bound live KiCad IPC route proposal (read-only)",
         ],
         "planned": [
             "region-scoped and human-facing board rendering",
@@ -102,6 +105,28 @@ def preview_route(
 
     active_settings = settings or Settings.from_env()
     return preview_route_candidate(payload, active_settings, token_authority).to_dict()
+
+
+def preview_live_route_raw(
+    payload: dict[str, Any],
+    settings: Settings | None = None,
+    *,
+    client_factory: Any = None,
+) -> RoutePreview:
+    """Propose one route against the exact active KiCad IPC snapshot without mutation."""
+
+    active_settings = settings or Settings.from_env()
+    return preview_live_route_candidate(
+        payload,
+        active_settings,
+        client_factory=client_factory,
+    )
+
+
+def preview_live_route(payload: dict[str, Any], settings: Settings | None = None) -> dict[str, Any]:
+    """Return a revision-bound live route proposal as a detached dictionary."""
+
+    return preview_live_route_raw(payload, settings).to_dict()
 
 
 def observe_board_scene_raw(

@@ -32,6 +32,7 @@ from copper_mcp.mcp_contracts import (
     CircuitSchematicToolResponse,
     LiveBoardObservationToolResponse,
     LiveCircuitSceneToolRequest,
+    LiveRoutePreviewToolRequest,
     PlacementPreviewToolResponse,
     RoutePreviewToolRequest,
     RoutePreviewToolResponse,
@@ -54,6 +55,7 @@ from copper_mcp.tools import inspect_board_ir as inspect_board_ir_service
 from copper_mcp.tools import inspect_live_board as inspect_live_board_service
 from copper_mcp.tools import observe_board_scene_raw as observe_board_scene_service_raw
 from copper_mcp.tools import observe_live_board_scene_raw as observe_live_board_scene_service_raw
+from copper_mcp.tools import preview_live_route_raw as preview_live_route_service_raw
 from copper_mcp.tools import preview_placement as preview_placement_service
 from copper_mcp.tools import preview_route as preview_route_service
 from copper_mcp.tools import render_circuit_schematic as render_circuit_schematic_service
@@ -81,6 +83,7 @@ class CopperMCPServer(MCPServer[None]):
         for tool in listed:
             if tool.name not in {
                 "preview_route",
+                "preview_live_route",
                 "render_circuit_schematic",
                 "observe_live_board_scene",
             }:
@@ -103,6 +106,8 @@ class CopperMCPServer(MCPServer[None]):
             raise ToolError("schematic tool arguments are malformed")
         if name == "preview_route" and set(arguments) != {"request"}:
             raise ToolError("route tool arguments are malformed")
+        if name == "preview_live_route" and set(arguments) != {"request"}:
+            raise ToolError("live route tool arguments are malformed")
         if name == "observe_live_board_scene" and set(arguments) != {"request"}:
             raise ToolError("live scene tool arguments are malformed")
         return await super().call_tool(name, arguments, context)
@@ -218,6 +223,28 @@ def preview_route(request: RoutePreviewToolRequest) -> RoutePreviewToolResponse:
 
     return RoutePreviewToolResponse.model_validate(
         preview_route_service(request, _SETTINGS, _APPLY_TOKENS)
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def preview_live_route(request: LiveRoutePreviewToolRequest) -> RoutePreviewToolResponse:
+    """Propose one route against the exact active KiCad IPC snapshot without mutation.
+
+    The request must use a Circuit Scene ``net_ref_id`` and both scene revision preconditions.
+    Live proposals do not run DRC, refill zones, mint apply tokens, or modify the KiCad editor;
+    those are separate session compare-and-swap contracts.
+    """
+
+    return RoutePreviewToolResponse.model_validate(
+        preview_live_route_service_raw(request, _SETTINGS).to_dict()
     )
 
 

@@ -33,3 +33,4 @@ from the decision ledger.
 - [ADR-0028: Make Circuit Scene net references directly actionable for routing](0028-revision-bound-scene-route-references.md)
 - [ADR-0029: Add a redacted, read-only KiCad IPC observer](0029-read-only-kicad-ipc-observer.md)
 - [ADR-0030: Bind a bounded KiCad IPC snapshot to Circuit Scene](0030-live-ipc-circuit-scene-binding.md)
+- [ADR-0031: Keep live KiCad route proposals read-only and revision-bound](0031-live-ipc-route-proposal.md)
