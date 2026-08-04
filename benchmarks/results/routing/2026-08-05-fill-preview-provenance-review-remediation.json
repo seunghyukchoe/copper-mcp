@@ -1,0 +1,22 @@
+{
+  "date_utc": "2026-08-04T21:36:11+00:00",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "fixture": "blocked-zone-foreign-fill-contract-v1",
+  "metrics": {
+    "deterministic_candidate_ids": true,
+    "drc": false,
+    "foreign_zone_provenance_outcomes": 10,
+    "kicad_invoked": false,
+    "repetitions": 10,
+    "routed_outcomes": 10,
+    "schema_valid": true,
+    "workspace_unchanged": true
+  },
+  "run_id": "sha256:267bd95964d7248992fa6fb0afb3ac1071db96e5d4d9695654b8106c6050ffb4",
+  "schema": "copper-mcp/benchmark/fill-preview-provenance/v1",
+  "script": "scripts/benchmark_fill_preview_provenance.py",
+  "source_commit": "d69f3b0b9e563ef5d4d6c1e99a6ef47508fdf51b"
+}

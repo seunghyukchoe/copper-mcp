@@ -521,3 +521,65 @@ result or a general performance comparison.
 | Metrics | Clean DRC `3/3`; candidate binding `true`; context binding `true`; source bytes/inode/mtime preserved `true`; workspace mutations `0`; median private DRC `3,088,695,417 ns` on this host |
 | Artifact | [`2026-08-05-placement-drc.json`](../../benchmarks/results/routing/2026-08-05-placement-drc.json) |
 | Interpretation | Current-contract replay superseding B-035's pre-implementation source commit. It establishes the narrow private placement evidence gate and source-preserving replay on one fixture. It does not establish back-side/non-rectangular coverage, public/live placement DRC, apply/undo, electrical/fabrication readiness, or FreeRouting parity. |
+
+### Review-remediation replays — 2026-08-05
+
+The following append-only rows supersede only the provenance or metric-coverage limitations called
+out in the historical B-022, B-026, B-027, B-031, B-032, and B-033 rows. Earlier rows remain
+historical evidence; these runs were generated from the clean implementation commit
+`d69f3b0b9e563ef5d4d6c1e99a6ef47508fdf51b`.
+
+#### B-022 — complete workspace-preservation replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:267bd95964d7248992fa6fb0afb3ac1071db96e5d4d9695654b8106c6050ffb4` |
+| Artifact | [`2026-08-05-fill-preview-provenance-review-remediation.json`](../../benchmarks/results/routing/2026-08-05-fill-preview-provenance-review-remediation.json) |
+| Evidence | Ten deterministic routed previews; ten foreign-zone provenance outcomes; schema-valid `10/10`; complete temporary-workspace entry snapshot unchanged; board bytes unchanged; KiCad/DRC not invoked. |
+| Limits | Synthetic fill-authority fixture only; no KiCad refill, electrical, fabrication, or FreeRouting claim. |
+
+#### B-026 — live layered CAS and client-closure replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:3bc9d8ac9b50f0df2d23b6711aa60c81bea3359358a380c7807349e8410fbded` |
+| Artifact | [`2026-08-05-live-layered-route-preview-review-remediation.json`](../../benchmarks/results/routing/2026-08-05-live-layered-route-preview-review-remediation.json) |
+| Evidence | Ten schema-valid deterministic replays; stale board, stale Board IR snapshot, and stale KiCad-session CAS refusals; capture-race refusal; `ipc_clients_closed=true` for success and refusal paths; file-oracle candidate equality; source unchanged. |
+| Limits | Fake official-client harness, not a real GUI session; the cooperative IPC deadline cannot pre-empt one blocking official call. |
+
+#### B-027 — layered topology verifier replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:bce0deb65e8e9f3e02666f0da99c041c38f8b2689d5561f9b5746a2470c6a799` |
+| Artifact | [`2026-08-05-layered-candidate-verifier-review-remediation.json`](../../benchmarks/results/routing/2026-08-05-layered-candidate-verifier-review-remediation.json) |
+| Evidence | Ten verified replays with deterministic candidate IDs; disconnected, duplicate, crossing, stale-revision, and endpoint-via refusal metrics all true; three paths and two vias; physical validation explicitly `not_modelled`. |
+| Limits | Structural verifier fixture only; no exact padstack, refill, DRC, fabrication, or FreeRouting claim. |
+
+#### B-031 — deterministic multi-pin ordering replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:0ee063da419e2986334a5029f8eea173972eecbf0e394a9c1eef5e2f181c9053` |
+| Artifact | [`2026-08-05-steiner-ordering-review-remediation.json`](../../benchmarks/results/routing/2026-08-05-steiner-ordering-review-remediation.json) |
+| Evidence | Ten independent Steiner and ten baseline replays; both candidate streams deterministic; wire length `48,000,000 → 42,000,000 nm` (`12.5%`) on the fixed four-pad fixture; source unchanged. |
+| Limits | One bounded one-Steiner heuristic fixture; no optimality, congestion, DRC, electrical, fabrication, or FreeRouting claim. |
+
+#### B-032 — exact layered DRC provenance replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:17f4126edc3b8cd18d5d6bb79e3a5d4bb78736350889d801dbb14f197864f664` |
+| Artifact | [`2026-08-05-layered-drc-preview-review-remediation.json`](../../benchmarks/results/routing/2026-08-05-layered-drc-preview-review-remediation.json) |
+| Evidence | Candidate/evidence binding is derived from candidate, source, base, patched-board, and DRC-context revisions; omitted DRC calls `0`; requested calls `1`; source unchanged; workspace mutations `0`; KiCad not invoked; no whole-board claim. |
+| Limits | Fake authority and narrow two-pad contract evidence only; no KiCad DRC quality, fabrication, electrical, or FreeRouting claim. |
+
+#### B-033 — exact spatial-index identity replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:40aeea7c3befa294be0252108c2523bb42598c9c4dc319db5acb6f4d28796259` |
+| Artifact | [`2026-08-05-spatial-index-review-remediation.json`](../../benchmarks/results/routing/2026-08-05-spatial-index-review-remediation.json) |
+| Evidence | Exact ordered query identities match `256/256`, not merely hit counts; legacy relation checks `131,072` versus indexed `31` (`99.9763%` reduction); median fixture query speedup `14.134x`; source ordinals are the comparison authority. |
+| Correction | The historical B-033 row's route-differential metrics are not reproduced by this artifact and are withdrawn as unsupported by the recorded script. This row supports only exact conservative query equivalence and fixture-bounded relation reduction. |
+| Limits | Synthetic uniform-grid fixture only; no whole-board scaling, congestion, DRC, fabrication, electrical, or FreeRouting claim. |

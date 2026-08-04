@@ -1,0 +1,28 @@
+{
+  "date_utc": "2026-08-04T21:35:04+00:00",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "fixture": "tests/fixtures/route-candidate/tree-star.kicad_pcb",
+  "metrics": {
+    "baseline_policy": "component-mst-v1",
+    "baseline_wire_length_nm": 48000000,
+    "deterministic_baseline_candidate": true,
+    "deterministic_steiner_candidate": true,
+    "fixture_sha256": "sha256:b5827917889d31e917cde8dc28362953c8d4c657182e8c0845c9a96e8c110a40",
+    "freerouting_parity_claim": false,
+    "kicad_invoked": false,
+    "replay_count": 10,
+    "source_unchanged": true,
+    "steiner_optimality_claim": false,
+    "steiner_policy": "batched-1-steiner-v1",
+    "steiner_wire_length_nm": 42000000,
+    "wire_length_reduction_nm": 6000000,
+    "wire_length_reduction_ratio": 0.125
+  },
+  "run_id": "sha256:0ee063da419e2986334a5029f8eea173972eecbf0e394a9c1eef5e2f181c9053",
+  "schema": "copper-mcp/benchmark/steiner-ordering/v1",
+  "script": "scripts/benchmark_steiner_ordering.py",
+  "source_commit": "43df15d62336a95d44f960181a9b0fe1e2279c2e"
+}
