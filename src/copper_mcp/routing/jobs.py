@@ -966,6 +966,13 @@ class RoutingJobStore:
                 record = self._require_row_locked(job_id, timestamp)
                 self._commit()
                 return record
+            except RoutingJobNotFoundError:
+                # Expiry is a durable retention boundary, even when the caller only observes a
+                # miss.  `_require_row_locked` purges expired rows before looking up the ID;
+                # rolling that transaction back would retain board-derived job metadata until a
+                # later successful operation or explicit purge.
+                self._commit()
+                raise
             except BaseException:
                 self._rollback()
                 raise

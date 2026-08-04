@@ -74,6 +74,11 @@ All notable changes are documented here. The format follows
 
 ### Security
 
+- Routing-job and candidate-manifest TTL misses now commit their expiry purge before returning
+  the uniform unavailable diagnostic, so expired board-derived metadata cannot reappear after a
+  read-only miss. The boundary remains redacted and bounded; no routing or mutation authority is
+  added.
+
 - Closed the latest routing review-bot boundary gaps: public scene references now carry only
   content-derived net identifiers; live IPC capture carries one cooperative operation deadline;
   job failures persist fixed typed diagnostics; candidate completion and manifests bind request

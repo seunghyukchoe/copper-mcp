@@ -1044,8 +1044,9 @@ def observe_live_board_scene(
 
     The request uses the literal board label ``"live"`` rather than a filesystem path.  The
     returned ``board_revision`` and ``snapshot_digest`` are derived from the same source bytes
-    handed to the Board IR converter.  This makes the scene self-consistent, while routing and
-    placement actions remain file-backed until their own live compare-and-swap gate exists.
+    handed to the Board IR converter. This makes the scene self-consistent. Live placement and
+    routing proposals have their own revision-bound, candidate-only compare-and-swap gates;
+    DRC, fill, editor mutation, and apply remain separate authorities.
     """
 
     if not isinstance(settings, Settings):

@@ -333,6 +333,10 @@ def test_sqlite_expiry_and_unknown_ids_share_one_not_found_error(tmp_path: Path)
         with pytest.raises(RoutingJobNotFoundError) as expired_error:
             store.get(spec.job_id, now_ms=110)
         assert str(unknown_error.value) == str(expired_error.value)
+    connection = sqlite3.connect(path)
+    assert connection.execute("SELECT COUNT(*) FROM routing_jobs").fetchone() == (0,)
+    connection.close()
+    with RoutingJobStore(path, ttl_ms=10) as store:
         recreated = store.create(spec, now_ms=111)
         assert recreated.created_at_ms == 111
 
