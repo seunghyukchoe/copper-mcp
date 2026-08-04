@@ -106,6 +106,9 @@ def test_expiry_is_bounded_and_unknown_and_expired_are_uniform(tmp_path: Path) -
         with pytest.raises(CandidateManifestNotFoundError) as unknown:
             store.get(_digest("d"), now_ms=110)
         assert str(expired.value) == str(unknown.value)
+    connection = sqlite3.connect(path)
+    assert connection.execute("SELECT COUNT(*) FROM routing_candidate_manifests").fetchone() == (0,)
+    connection.close()
 
 
 def test_capacity_purges_expired_rows_before_refusing_new_manifest(tmp_path: Path) -> None:
@@ -187,6 +190,39 @@ def test_job_binding_checks_identity_revision_endpoints_kind_router_and_policy(
         )
         with pytest.raises(CandidateManifestBindingError):
             store.put(wrong_endpoint, job_spec=spec, now_ms=102)
+
+        wrong_router = CandidateManifest.create(
+            candidate_id=_digest("e"),
+            base_revision=matching.base_revision,
+            start_pad_id=matching.start_pad_id,
+            end_pad_id=matching.end_pad_id,
+            kind=matching.kind,
+            router="other-router-v1",
+            policy=matching.policy,
+            path_count=1,
+            via_count=0,
+            cost=1,
+            metrics={"wire_length_nm": 1},
+            job_id=spec.job_id,
+        )
+        with pytest.raises(CandidateManifestBindingError):
+            store.put(wrong_router, job_spec=spec, now_ms=103)
+
+        missing_job_id = CandidateManifest.create(
+            candidate_id=_digest("f"),
+            base_revision=matching.base_revision,
+            start_pad_id=matching.start_pad_id,
+            end_pad_id=matching.end_pad_id,
+            kind=matching.kind,
+            router=matching.router,
+            policy=matching.policy,
+            path_count=1,
+            via_count=0,
+            cost=1,
+            metrics={"wire_length_nm": 1},
+        )
+        with pytest.raises(CandidateManifestBindingError):
+            store.put(missing_job_id, job_spec=spec, now_ms=104)
 
 
 def test_sqlite_payload_contains_no_geometry_or_board_content(tmp_path: Path) -> None:

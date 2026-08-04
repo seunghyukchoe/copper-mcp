@@ -391,6 +391,7 @@ class LayeredBoardRouter:
             if (
                 isinstance(request, LayeredRouteRequest)
                 and request.expected_revision is not None
+                and _digest(request.board_revision)
                 and _digest(request.expected_revision)
                 and request.expected_revision != request.board_revision
             ):
@@ -569,11 +570,28 @@ class LayeredBoardRouter:
         widest_clearance = max([net_class.clearance_nm, *clearance_by_class.values()])
         grid_margin = (step + 1) // 2
 
-        def add_obstacle(rectangle: _Rect, layer: int, margin: int, *, via: bool = False) -> None:
+        def add_obstacle(
+            rectangle: _Rect,
+            layer: int,
+            margin: int,
+            *,
+            via: bool = False,
+        ) -> bool:
+            """Append one derived obstacle, refusing before constructing past the ceiling.
+
+            The obstacle budget is a hard input-boundary limit, not merely a post-hoc metric.  In
+            particular, a pad or foreign via can produce multiple envelopes; checking the count
+            after the loops would still allocate and quantize all of those envelopes.  Returning
+            ``False`` lets the caller terminate at the first rejected envelope without raising
+            through the proposal-only API.
+            """
+            if len(track_obstacles) + len(via_obstacles) >= request.settings.max_obstacles:
+                return False
             obstacle = _cell_obstacle(
                 _inflate(rectangle, margin), layer=layer, origin=origin, step=step
             )
             (via_obstacles if via else track_obstacles).append(obstacle)
+            return True
 
         for pad in snapshot.content.pads:
             if pad.id in {start_pad.id, end_pad.id}:
@@ -587,12 +605,15 @@ class LayeredBoardRouter:
             clearance = max(net_class.clearance_nm, pad_clearance)
             for layer_id in set(pad.layer_ids) & set(layer_ids):
                 layer = layer_index[layer_id]
-                add_obstacle(
+                if not add_obstacle(
                     rectangle,
                     layer,
                     (net_class.track_width_nm + 1) // 2 + clearance,
-                )
-                add_obstacle(rectangle, layer, via_half + clearance, via=True)
+                ) or not add_obstacle(rectangle, layer, via_half + clearance, via=True):
+                    return _diagnostic(
+                        LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+                        "layered physical obstacle count exceeds the configured budget",
+                    )
 
         # A via transition at an endpoint would become via-in-pad for the SMD pads supported by
         # this proposal seam.  The candidate contract intentionally carries no IPC-4761
@@ -603,12 +624,16 @@ class LayeredBoardRouter:
         for endpoint_pad in (start_pad, end_pad):
             endpoint_rectangle = _pad_bounds(endpoint_pad)
             for layer in range(2):
-                add_obstacle(
+                if not add_obstacle(
                     endpoint_rectangle,
                     layer,
                     via_half + endpoint_clearance,
                     via=True,
-                )
+                ):
+                    return _diagnostic(
+                        LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+                        "layered physical obstacle count exceeds the configured budget",
+                    )
         for segment in snapshot.content.segments:
             if segment.net_id == request.net_id:
                 continue
@@ -624,17 +649,20 @@ class LayeredBoardRouter:
             clearance = max(
                 net_class.clearance_nm, clearance_by_net.get(segment.net_id, widest_clearance)
             )
-            add_obstacle(
+            if not add_obstacle(
                 rectangle,
                 layer_index[segment.layer_id],
                 half_width + clearance,
-            )
-            add_obstacle(
+            ) or not add_obstacle(
                 rectangle,
                 layer_index[segment.layer_id],
                 via_half + clearance,
                 via=True,
-            )
+            ):
+                return _diagnostic(
+                    LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+                    "layered physical obstacle count exceeds the configured budget",
+                )
         for via in snapshot.content.vias:
             if via.net_id == request.net_id:
                 continue
@@ -652,8 +680,13 @@ class LayeredBoardRouter:
                 # The foreign via rectangle already contains its own radius. Inflate it by the
                 # candidate copper envelope as well: tracks need half-width clearance, while a
                 # candidate via transition needs the candidate via radius.
-                add_obstacle(rectangle, layer, half_width + clearance)
-                add_obstacle(rectangle, layer, via_half + clearance, via=True)
+                if not add_obstacle(rectangle, layer, half_width + clearance) or not add_obstacle(
+                    rectangle, layer, via_half + clearance, via=True
+                ):
+                    return _diagnostic(
+                        LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+                        "layered physical obstacle count exceeds the configured budget",
+                    )
         for zone in snapshot.content.zones:
             if zone.net_id == request.net_id:
                 continue
@@ -665,17 +698,25 @@ class LayeredBoardRouter:
                 max(point.y for point in points),
             )
             if zone.layer_id in layer_index:
-                add_obstacle(
-                    rectangle,
-                    layer_index[zone.layer_id],
-                    half_width + max(net_class.clearance_nm, zone.clearance_nm),
+                zone_clearance = max(
+                    net_class.clearance_nm,
+                    zone.clearance_nm,
+                    clearance_by_net.get(zone.net_id, widest_clearance),
                 )
-                add_obstacle(
+                if not add_obstacle(
                     rectangle,
                     layer_index[zone.layer_id],
-                    via_half + max(net_class.clearance_nm, zone.clearance_nm),
+                    half_width + zone_clearance,
+                ) or not add_obstacle(
+                    rectangle,
+                    layer_index[zone.layer_id],
+                    via_half + zone_clearance,
                     via=True,
-                )
+                ):
+                    return _diagnostic(
+                        LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+                        "layered physical obstacle count exceeds the configured budget",
+                    )
         for keepout in snapshot.content.keepouts:
             points = keepout.boundary.points
             rectangle = (
@@ -687,14 +728,22 @@ class LayeredBoardRouter:
             for layer_id in set(keepout.layer_ids) & set(layer_ids):
                 layer = layer_index[layer_id]
                 if keepout.prohibit_tracks:
-                    add_obstacle(rectangle, layer, half_width + grid_margin)
+                    if not add_obstacle(rectangle, layer, half_width + grid_margin):
+                        return _diagnostic(
+                            LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+                            "layered physical obstacle count exceeds the configured budget",
+                        )
                 if keepout.prohibit_vias:
-                    add_obstacle(
+                    if not add_obstacle(
                         rectangle,
                         layer,
                         (net_class.via_diameter_nm + 1) // 2 + net_class.clearance_nm,
                         via=True,
-                    )
+                    ):
+                        return _diagnostic(
+                            LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+                            "layered physical obstacle count exceeds the configured budget",
+                        )
         if len(track_obstacles) + len(via_obstacles) > request.settings.max_obstacles:
             return _diagnostic(
                 LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,

@@ -462,6 +462,7 @@ def route_layered(
         if (
             isinstance(request, LayeredAStarRequest)
             and isinstance(request.board_revision, str)
+            and 1 <= len(request.board_revision) <= 256
             and isinstance(request.expected_revision, str)
             and 1 <= len(request.expected_revision) <= 256
             and (request.expected_revision != request.board_revision)

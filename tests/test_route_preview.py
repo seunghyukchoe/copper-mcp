@@ -589,6 +589,7 @@ def test_route_request_requires_exactly_one_name_or_scene_reference() -> None:
         "net:x",
         "pad:kicad:01234567-89ab-cdef-0123-456789abcdef",
         "net:name:x\n",
+        "net:name:audio",
     ],
 )
 def test_route_request_rejects_malformed_scene_net_references(net_ref_id: str) -> None:

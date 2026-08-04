@@ -92,6 +92,7 @@ def preview_live_layered_route(
         settings,
         client_factory=client_factory,
         timeout_ms=remaining_ms,
+        deadline=deadline,
     )
     board_revision = captured.observation.board_digest
     if request.expect_session_revision != captured.session_revision:

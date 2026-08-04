@@ -59,8 +59,8 @@ def _queries(count: int) -> tuple[tuple[int, int, int, int], ...]:
 
 def _legacy_count(
     entries: tuple[SpatialIndexEntry[int], ...], query: tuple[int, int, int, int]
-) -> tuple[int, int]:
-    hits = 0
+) -> tuple[int, tuple[int, ...]]:
+    hits: list[int] = []
     for entry in entries:
         if (
             entry.bounds[0] <= query[2]
@@ -68,8 +68,8 @@ def _legacy_count(
             and entry.bounds[1] <= query[3]
             and query[1] <= entry.bounds[3]
         ):
-            hits += 1
-    return len(entries), hits
+            hits.append(entry.ordinal)
+    return len(entries), tuple(hits)
 
 
 def _canonical_bytes(document: dict[str, object]) -> bytes:
@@ -91,7 +91,7 @@ def _run(repetitions: int, entry_count: int, query_count: int) -> dict[str, obje
         legacy_relations += tested
         indexed = index.query(query)
         indexed_relations += len(indexed)
-        exact_matches += int(len(indexed) == hits)
+        exact_matches += int(tuple(entry.ordinal for entry in indexed) == hits)
 
     legacy_samples: list[int] = []
     indexed_samples: list[int] = []

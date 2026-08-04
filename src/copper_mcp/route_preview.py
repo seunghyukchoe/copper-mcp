@@ -63,7 +63,7 @@ from copper_mcp.routing import (
 from copper_mcp.security import read_workspace_file
 
 _SHA256_ID = re.compile(r"^sha256:[a-f0-9]{64}$")
-_NET_REF_ID = re.compile(r"^net:[a-z]+:[0-9A-Za-z._-]{1,128}$")
+_NET_REF_ID = re.compile(r"^net:name:[0-9a-f]{32}$")
 _MAX_NET_NAME_CHARACTERS = 255
 _REQUIRED_FIELDS = ("board", "layer", "constraints")
 _OPTIONAL_FIELDS = (

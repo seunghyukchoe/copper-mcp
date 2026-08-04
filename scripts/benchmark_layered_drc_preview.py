@@ -133,9 +133,16 @@ def _run() -> dict[str, Any]:
             raise RuntimeError("DRC was not opt-in")
         if not isinstance(evidence, dict):
             raise RuntimeError("requested DRC evidence was not serialized")
-        if evidence["candidate_id"] != requested["candidate"]["candidate_id"]:
-            raise RuntimeError("DRC evidence was not candidate-bound")
-        if evidence["source_revision"] != revision or calls != 1:
+        candidate_binding = (
+            evidence.get("candidate_id") == requested["candidate"]["candidate_id"]
+            and evidence.get("candidate_base_revision") == requested["candidate"]["base_revision"]
+            and evidence.get("source_revision") == revision
+            and evidence.get("patched_board_revision")
+            == evidence.get("summary", {}).get("base_revision")
+            and evidence.get("patched_drc_context_revision")
+            == evidence.get("summary", {}).get("drc_context_revision")
+        )
+        if not candidate_binding or calls != 1:
             raise RuntimeError("DRC evidence binding or call count is incorrect")
         if before != after:
             raise RuntimeError("public preview mutated its source board")
@@ -143,7 +150,7 @@ def _run() -> dict[str, Any]:
             "fixture_sha256": source_digest,
             "omitted_drc_calls": omitted_calls,
             "requested_drc_calls": calls,
-            "candidate_evidence_binding": True,
+            "candidate_evidence_binding": candidate_binding,
             "source_unchanged": True,
             "workspace_mutations": 0,
             "kicad_invoked": False,

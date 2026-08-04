@@ -194,6 +194,28 @@ def _run(repetitions: int) -> dict[str, Any]:
     if stale_response.status != "not_routed" or stale_response.diagnostic.code != "stale_revision":
         raise RuntimeError("live stale-board CAS was not refused")
 
+    stale_session = dict(request)
+    stale_session["expect_session_revision"] = "sha256:" + "1" * 64
+    stale_session_response = LayeredRoutePreviewToolResponse.model_validate(
+        preview_live_layered_route(stale_session, settings, client_factory=factory)
+    ).root
+    if (
+        stale_session_response.status != "not_routed"
+        or stale_session_response.diagnostic.code != "stale_revision"
+    ):
+        raise RuntimeError("live stale-session CAS was not refused")
+
+    stale_snapshot = dict(request)
+    stale_snapshot["expect_snapshot_digest"] = "sha256:" + "2" * 64
+    stale_snapshot_response = LayeredRoutePreviewToolResponse.model_validate(
+        preview_live_layered_route(stale_snapshot, settings, client_factory=factory)
+    ).root
+    if (
+        stale_snapshot_response.status != "not_routed"
+        or stale_snapshot_response.diagnostic.code != "stale_revision"
+    ):
+        raise RuntimeError("live stale-snapshot CAS was not refused")
+
     race_closed: list[bool] = []
 
     def changing_factory(**_: object) -> _KiCad:
@@ -216,8 +238,10 @@ def _run(repetitions: int) -> dict[str, Any]:
         "via_count": len(live_responses[0].candidate.patch.vias),
         "schema_valid_replays": repetitions,
         "stale_board_refused": True,
+        "stale_session_refused": True,
+        "stale_snapshot_refused": True,
         "capture_race_refused": capture_race_refused,
-        "ipc_clients_closed": len(closed) == repetitions + 1,
+        "ipc_clients_closed": len(closed) == repetitions + 3 and len(race_closed) == 1,
         "source_unchanged": FIXTURE.read_bytes() == source,
         "kicad_invoked": False,
         "drc_performed": False,

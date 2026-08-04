@@ -74,15 +74,23 @@ def _run() -> dict[str, Any]:
         request = _request()
         before = (board.read_bytes(), board.stat().st_ino, board.stat().st_mtime_ns)
 
-        steiner = preview_route(request, settings)
-        if steiner.status is not RoutePreviewStatus.ROUTED or steiner.candidate is None:
+        steiner_replays = [preview_route(request, settings) for _ in range(10)]
+        steiner = steiner_replays[0]
+        if any(
+            replay.status is not RoutePreviewStatus.ROUTED or replay.candidate is None
+            for replay in steiner_replays
+        ):
             raise RuntimeError("one-Steiner preview did not route the fixture")
 
         # The old implementation is retained as a deterministic, internal baseline.  Swapping
         # only this pure ordering function leaves every route legality and A* budget identical.
         with patch.object(astar, "_steiner_merge_order", astar._merge_order):
-            baseline = preview_route(request, settings)
-        if baseline.status is not RoutePreviewStatus.ROUTED or baseline.candidate is None:
+            baseline_replays = [preview_route(request, settings) for _ in range(10)]
+        baseline = baseline_replays[0]
+        if any(
+            replay.status is not RoutePreviewStatus.ROUTED or replay.candidate is None
+            for replay in baseline_replays
+        ):
             raise RuntimeError("component-MST baseline did not route the fixture")
 
         after = (board.read_bytes(), board.stat().st_ino, board.stat().st_mtime_ns)
@@ -106,8 +114,12 @@ def _run() -> dict[str, Any]:
                 1 - steiner.candidate.cost.length_nm / baseline.candidate.cost.length_nm,
                 6,
             ),
-            "deterministic_steiner_candidate": (
-                steiner.candidate == preview_route(request, settings).candidate
+            "replay_count": len(steiner_replays),
+            "deterministic_steiner_candidate": all(
+                replay.candidate == steiner.candidate for replay in steiner_replays
+            ),
+            "deterministic_baseline_candidate": all(
+                replay.candidate == baseline.candidate for replay in baseline_replays
             ),
             "source_unchanged": True,
             "kicad_invoked": False,

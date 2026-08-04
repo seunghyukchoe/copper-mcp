@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+import math
 import os
 import platform
 import re
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from typing import Any, Protocol, cast
@@ -100,6 +102,10 @@ class KicadIpcVersionError(KicadIpcError):
 
 class KicadIpcPayloadError(KicadIpcError):
     """Raised when a live board snapshot exceeds the configured safety budget."""
+
+
+class KicadIpcDeadlineError(KicadIpcConnectionError):
+    """Raised when a bounded multi-call capture reaches its operation-wide deadline."""
 
 
 class _VersionLike(Protocol):
@@ -549,6 +555,7 @@ def capture_live_board(
     client_factory: Callable[..., _KiCadLike] | None = None,
     allow_future_api: bool = False,
     timeout_ms: int = _DEFAULT_TIMEOUT_MS,
+    deadline: float | None = None,
 ) -> LiveBoardSnapshot:
     """Capture one bounded live board for an internal semantic conversion.
 
@@ -563,6 +570,12 @@ def capture_live_board(
         raise KicadIpcConfigurationError("live observation settings are malformed")
     if not 1 <= timeout_ms <= _MAX_TIMEOUT_MS:
         raise KicadIpcConfigurationError("IPC timeout is outside the bounded range")
+    if deadline is not None and (
+        isinstance(deadline, bool)
+        or not isinstance(deadline, int | float)
+        or not math.isfinite(float(deadline))
+    ):
+        raise KicadIpcConfigurationError("IPC deadline is malformed")
 
     socket_path, socket_kind = _socket_path()
     session_revision = _session_revision()
@@ -584,6 +597,7 @@ def capture_live_board(
             socket_kind=socket_kind,
             allow_future_api=allow_future_api,
             session_revision=session_revision,
+            deadline=deadline,
         )
     finally:
         _close_ipc_client(client)
@@ -596,12 +610,20 @@ def _capture_live_board_from_client(
     socket_kind: str,
     allow_future_api: bool,
     session_revision: str | None,
+    deadline: float | None,
 ) -> LiveBoardSnapshot:
     """Read one board while the public capture function owns client closure."""
 
+    def check_deadline() -> None:
+        if deadline is not None and time.monotonic() >= deadline:
+            raise KicadIpcDeadlineError("live IPC capture deadline expired")
+
     try:
+        check_deadline()
         kicad_version = _version_string(client.get_version())
+        check_deadline()
         api_version = _version_string(client.get_api_version())
+        check_deadline()
         compatibility = "compatible"
         try:
             version_ok = client.check_version()
@@ -616,8 +638,11 @@ def _capture_live_board_from_client(
         else:
             if version_ok is not True:
                 raise KicadIpcVersionError("KiCad IPC version validation was inconclusive")
+        check_deadline()
         board = client.get_board()
+        check_deadline()
         source = board.get_as_string()
+        check_deadline()
     except KicadIpcError:
         raise
     except Exception as error:  # pragma: no cover - exercised by the real binding
@@ -635,7 +660,9 @@ def _capture_live_board_from_client(
     max_bytes = min(settings.max_board_bytes, 64 * 1024 * 1024)
     counts = _count_serialized_items(source_bytes, max_bytes)
     try:
+        check_deadline()
         confirmation = board.get_as_string()
+        check_deadline()
         confirmation_bytes = confirmation.encode("utf-8", errors="strict")
     except Exception as error:  # pragma: no cover - exercised by the real binding
         raise KicadIpcConnectionError(

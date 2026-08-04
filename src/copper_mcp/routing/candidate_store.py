@@ -421,11 +421,11 @@ def _validate_binding(manifest: CandidateManifest, job_spec: RoutingJobSpec) -> 
         raise CandidateManifestBindingError("candidate endpoints do not match routing job")
     if manifest.kind != job_spec.request_kind.value:
         raise CandidateManifestBindingError("candidate kind does not match routing job")
-    if manifest.router not in {job_spec.backend, job_spec.router_version}:
+    if manifest.router != job_spec.router_version:
         raise CandidateManifestBindingError("candidate router does not match routing job")
     if manifest.policy != job_spec.policy:
         raise CandidateManifestBindingError("candidate policy does not match routing job")
-    if manifest.job_id is not None and manifest.job_id != job_spec.job_id:
+    if manifest.job_id != job_spec.job_id:
         raise CandidateManifestBindingError("candidate job ID does not match routing job")
 
 
@@ -623,6 +623,10 @@ class CandidateManifestStore:
                 self._purge_locked(timestamp)
                 row = self._row_locked(candidate_id)
                 if row is None:
+                    # Expiry is a durable retention boundary, even when the caller only
+                    # observes a miss. Commit the purge before returning the uniform not-found
+                    # error; rolling it back would retain expired board-derived metadata.
+                    self._finish(commit=True)
                     raise CandidateManifestNotFoundError("candidate manifest is unavailable")
                 manifest = self._manifest_from_row(row)
                 self._finish(commit=True)

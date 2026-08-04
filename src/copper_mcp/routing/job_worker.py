@@ -249,6 +249,14 @@ class RoutingJobWorker:
 
         now = self._now()
         record = self._store.get(job_id, now_ms=now)
+        if record.status is RoutingJobStatus.CANCEL_REQUESTED:
+            if now - record.updated_at_ms < self._limits.lease_ms:
+                raise RoutingJobLeaseExpiredError("routing job lease has not expired")
+            return self._store.acknowledge_cancel(
+                job_id,
+                expected_revision=record.revision,
+                now_ms=now,
+            )
         if record.status is not RoutingJobStatus.RUNNING:
             return record
         if now - record.updated_at_ms < self._limits.lease_ms:
@@ -332,6 +340,15 @@ class RoutingJobWorker:
                         lease.job_id,
                         RoutingJobFailureCode.WORKER_ERROR,
                         "routing worker lease expired before completion",
+                        expected_revision=record.revision,
+                        now_ms=self._now(),
+                    )
+                elif record.status is RoutingJobStatus.CANCEL_REQUESTED:
+                    # Expiry must not strand a cancellation request in a non-terminal state.
+                    # A worker that dies after the caller's cancel CAS still leaves the store
+                    # responsible for acknowledging that terminal outcome.
+                    result = self._store.acknowledge_cancel(
+                        lease.job_id,
                         expected_revision=record.revision,
                         now_ms=self._now(),
                     )

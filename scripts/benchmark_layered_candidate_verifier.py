@@ -141,6 +141,57 @@ def _run(repetitions: int) -> dict[str, Any]:
     )
     disconnected_result = verify_layered_candidate(disconnected, snapshot)
 
+    first_path = candidate.patch.paths[0]
+    first_start = first_path.vertices[0]
+    first_end = first_path.vertices[-1]
+    midpoint = type(first_start)(first_start.x + 1_000, first_start.y)
+    duplicate = _restamp(
+        candidate,
+        patch=replace(
+            candidate.patch,
+            paths=(
+                replace(first_path, vertices=(first_start, midpoint, first_start, first_end)),
+                *candidate.patch.paths[1:],
+            ),
+        ),
+    )
+    duplicate_result = verify_layered_candidate(duplicate, snapshot)
+
+    via_start = candidate.patch.vias[-1].center
+    last_path = candidate.patch.paths[-1]
+    last_end = last_path.vertices[-1]
+    # Keep the path/via chain valid while introducing one same-layer crossing.  The first path
+    # detours across y=14,000; the final path crosses it vertically at x=29,000,000.
+    crossing_first = replace(
+        first_path,
+        vertices=(
+            first_start,
+            type(first_start)(first_start.x, first_start.y - 1_000),
+            type(first_start)(via_start.x + 1_651_000, first_start.y - 1_000),
+            type(first_start)(via_start.x + 1_651_000, first_start.y),
+            first_end,
+        ),
+    )
+    crossing_last = replace(
+        last_path,
+        vertices=(
+            via_start,
+            type(via_start)(via_start.x, via_start.y - 1_000),
+            type(via_start)(via_start.x + 651_000, via_start.y - 1_000),
+            type(via_start)(via_start.x + 651_000, via_start.y - 2_000),
+            type(via_start)(last_end.x, via_start.y - 2_000),
+            last_end,
+        ),
+    )
+    crossing = _restamp(
+        candidate,
+        patch=replace(
+            candidate.patch,
+            paths=(crossing_first, candidate.patch.paths[1], crossing_last),
+        ),
+    )
+    crossing_result = verify_layered_candidate(crossing, snapshot)
+
     endpoint = _restamp(
         candidate,
         patch=replace(
@@ -170,6 +221,10 @@ def _run(repetitions: int) -> dict[str, Any]:
         is LayeredCandidateVerificationCode.UNSUPPORTED_ENDPOINT_VIA,
         "disconnected_geometry_refused": disconnected_result.diagnostic.code
         is LayeredCandidateVerificationCode.VIA_DISCONTINUITY,
+        "duplicate_geometry_refused": duplicate_result.diagnostic.code
+        is LayeredCandidateVerificationCode.DUPLICATE_GEOMETRY,
+        "crossing_geometry_refused": crossing_result.diagnostic.code
+        is LayeredCandidateVerificationCode.DUPLICATE_GEOMETRY,
         "stale_revision_refused": stale_result.diagnostic.code
         is LayeredCandidateVerificationCode.STALE_REVISION,
         "physical_validation": "not_modelled",

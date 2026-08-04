@@ -422,7 +422,7 @@ class McpServerTests(unittest.TestCase):
                 "policy": "board-layered-a-star-v1",
                 "seed": 0,
                 "patch": {
-                    "net_id": "net:name:audio",
+                    "net_id": "net:name:0123456789abcdef0123456789abcdef",
                     "width_nm": 250_000,
                     "via_diameter_nm": 800_000,
                     "via_drill_nm": 400_000,

@@ -21,6 +21,7 @@ from copper_mcp.board_ir import (
     PointNM,
     Ring,
     SourceInfo,
+    Zone,
     make_content,
     make_snapshot,
 )
@@ -276,6 +277,16 @@ def test_malformed_expected_revision_is_invalid_even_when_it_differs() -> None:
     assert result.diagnostic.code is LayeredRouteFailureCode.INVALID_REQUEST
 
 
+def test_malformed_board_revision_is_invalid_even_with_a_valid_expected_digest() -> None:
+    snapshot = _two_layer_snapshot()
+    request = _request(snapshot, board_revision="bad", expected_revision=OTHER_REVISION)
+
+    result = LayeredBoardRouter().propose(snapshot, request)
+
+    assert result.diagnostic is not None
+    assert result.diagnostic.code is LayeredRouteFailureCode.INVALID_REQUEST
+
+
 def test_malformed_layered_settings_fail_closed_before_physical_obstacle_budgeting() -> None:
     snapshot = _two_layer_snapshot()
     malformed = replace(LayeredAStarSettings(), max_obstacles="invalid")
@@ -285,6 +296,91 @@ def test_malformed_layered_settings_fail_closed_before_physical_obstacle_budgeti
 
     assert result.diagnostic is not None
     assert result.diagnostic.code is LayeredRouteFailureCode.INVALID_REQUEST
+
+
+def test_foreign_zone_uses_its_net_class_clearance_in_both_envelopes() -> None:
+    """A foreign zone's assigned class is part of the physical clearance rule."""
+
+    base = _two_layer_snapshot()
+    strict_class = NetClass(
+        id="class:strict",
+        name="Strict",
+        clearance_nm=1_200,
+        track_width_nm=200,
+        via_diameter_nm=600,
+        via_drill_nm=300,
+    )
+    foreign_net = Net(id="net:foreign", name="FOREIGN")
+    foreign_zone = Zone(
+        id="zone:foreign",
+        net_id=foreign_net.id,
+        layer_id=LAYER_ID,
+        boundary=_rectangle(4_000, 3_000, 6_000, 4_000),
+        clearance_nm=100,
+        min_thickness_nm=100,
+        thermal_gap_nm=100,
+        thermal_bridge_width_nm=100,
+    )
+    constraints = replace(
+        base.content.constraints,
+        net_classes=(*base.content.constraints.net_classes, strict_class),
+        assignments=(
+            *base.content.constraints.assignments,
+            NetClassAssignment(net_id=foreign_net.id, net_class_id=strict_class.id),
+        ),
+    )
+    snapshot = make_snapshot(
+        make_content(
+            source=base.content.source,
+            outline=base.content.outline,
+            copper_layers=base.content.copper_layers,
+            nets=(*base.content.nets, foreign_net),
+            constraints=constraints,
+            footprints=base.content.footprints,
+            pads=base.content.pads,
+            vias=base.content.vias,
+            segments=base.content.segments,
+            arcs=base.content.arcs,
+            zones=(foreign_zone,),
+            keepouts=base.content.keepouts,
+        )
+    )
+
+    result = LayeredBoardRouter().propose(snapshot, _request(snapshot))
+
+    candidate = _candidate(result)
+    # The 1,200 nm class clearance requires the route centreline to clear the zone's upper
+    # edge by at least 1,300 nm; on the 1,000 nm lattice that means the y=7,000 detour.
+    assert candidate.patch.paths[0].vertices[0] == PointNM(1_000, 5_000)
+    assert any(vertex.y >= 7_000 for path in candidate.patch.paths for vertex in path.vertices)
+
+
+def test_layered_obstacle_ceiling_stops_before_constructing_the_next_envelope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A hard obstacle budget must stop quantization at the first rejected envelope."""
+
+    snapshot = _two_layer_snapshot()
+    calls = 0
+
+    import copper_mcp.routing.layered_board_adapter as adapter
+
+    original = adapter._cell_obstacle
+
+    def counted(*args, **kwargs):  # type: ignore[no-untyped-def]
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(adapter, "_cell_obstacle", counted)
+    result = LayeredBoardRouter().propose(
+        snapshot,
+        _request(snapshot, settings=LayeredAStarSettings(max_obstacles=1)),
+    )
+
+    assert result.diagnostic is not None
+    assert result.diagnostic.code is LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED
+    assert calls == 1
 
 
 def test_tampering_with_a_candidate_breaks_its_content_digest() -> None:

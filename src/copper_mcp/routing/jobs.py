@@ -117,6 +117,17 @@ class RoutingJobFailureCode(StrEnum):
     CANCELLED = "cancelled"
 
 
+_FIXED_FAILURE_MESSAGES: Final[dict[RoutingJobFailureCode, str]] = {
+    RoutingJobFailureCode.INVALID_REQUEST: "routing executor returned an invalid candidate",
+    RoutingJobFailureCode.STALE_REVISION: "routing source revision is stale",
+    RoutingJobFailureCode.UNSUPPORTED: "routing geometry is unsupported",
+    RoutingJobFailureCode.NO_PATH: "routing search found no path",
+    RoutingJobFailureCode.SEARCH_BUDGET_EXCEEDED: "routing search budget was exceeded",
+    RoutingJobFailureCode.OBSTACLE_BUDGET_EXCEEDED: "routing obstacle budget was exceeded",
+    RoutingJobFailureCode.WORKER_ERROR: "routing worker failed",
+}
+
+
 class RoutingJobError(ValueError):
     """Base error for malformed records or invalid lifecycle transitions."""
 
@@ -387,15 +398,30 @@ def _candidate_id(candidate: Candidate, spec: RoutingJobSpec) -> tuple[str, str]
     """Verify one immutable candidate and return its ID and base revision."""
 
     if isinstance(candidate, RouteCandidate):
+        candidate_kind = RoutingJobKind.SINGLE_LAYER
         verify_candidate_id(candidate)
     elif isinstance(candidate, LayeredRouteCandidate):
+        candidate_kind = RoutingJobKind.LAYERED
         verify_layered_candidate_id(candidate)
     else:
         raise RoutingJobError("routing job completion requires a supported route candidate")
+    if candidate_kind is not spec.request_kind:
+        raise RoutingJobError("candidate kind does not match the routing job")
     if candidate.base_revision != spec.expected_candidate_revision:
         raise RoutingJobError("candidate base revision does not match the job's compare-and-swap")
     if candidate.start_pad_id != spec.start_pad_id or candidate.end_pad_id != spec.end_pad_id:
         raise RoutingJobError("candidate endpoints do not match the routing job")
+    if candidate.router_version != spec.router_version:
+        raise RoutingJobError("candidate router version does not match the routing job")
+    if candidate.policy != spec.policy:
+        raise RoutingJobError("candidate policy does not match the routing job")
+    if candidate.seed != spec.seed:
+        raise RoutingJobError("candidate seed does not match the routing job")
+    if (
+        candidate.metrics.expanded_states > spec.limits.max_expansions
+        or candidate.metrics.obstacle_checks > spec.limits.max_obstacle_checks
+    ):
+        raise RoutingJobError("candidate work metrics exceed the routing job limits")
     return candidate.candidate_id, candidate.base_revision
 
 
@@ -643,12 +669,15 @@ class RoutingJobRecord:
             raise RoutingJobStateError("only a running job can fail")
         if not isinstance(code, RoutingJobFailureCode) or code is RoutingJobFailureCode.CANCELLED:
             raise RoutingJobError("failure code is unsupported for a failed job")
-        if (
-            not isinstance(message, str)
-            or not 1 <= len(message) <= _MAX_DIAGNOSTIC_MESSAGE
-            or any(ord(character) < 0x20 for character in message)
-        ):
+        if not isinstance(message, str):
             raise RoutingJobError("failure message is malformed")
+        # The caller may have a useful local diagnostic, but it is never safe to persist
+        # executor-provided text: it can contain board names, prompts, or credentials.  Store
+        # only the fixed public message associated with the typed failure code.
+        try:
+            safe_message = _FIXED_FAILURE_MESSAGES[code]
+        except KeyError as error:
+            raise RoutingJobError("failure code has no public diagnostic") from error
         return self._transition(
             expected_revision=expected_revision,
             now_ms=now_ms,
@@ -656,7 +685,7 @@ class RoutingJobRecord:
             candidate_id=None,
             candidate_base_revision=None,
             diagnostic_code=code,
-            diagnostic_message=message,
+            diagnostic_message=safe_message,
             cancel_reason=None,
         )
 

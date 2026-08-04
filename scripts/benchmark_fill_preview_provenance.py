@@ -61,6 +61,23 @@ def _git_commit() -> str:
         return "unknown"
 
 
+def _workspace_state(root: Path) -> tuple[tuple[str, str, int, str | None], ...]:
+    """Capture every workspace entry, not just the board bytes."""
+
+    entries: list[tuple[str, str, int, str | None]] = []
+    for path in sorted(root.rglob("*")):
+        relative = str(path.relative_to(root))
+        if path.is_dir():
+            entries.append((relative, "directory", 0, None))
+            continue
+        if not path.is_file():
+            entries.append((relative, "other", 0, None))
+            continue
+        payload = path.read_bytes()
+        entries.append((relative, "file", len(payload), hashlib.sha256(payload).hexdigest()))
+    return tuple(entries)
+
+
 def _run(repetitions: int) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="copper-mcp-fill-preview-") as temporary_directory:
         workspace = Path(temporary_directory)
@@ -91,6 +108,7 @@ def _run(repetitions: int) -> dict[str, Any]:
         route_preview_module.run_zone_fill_authority = lambda *_: (authority, (island,))
         try:
             before = board.read_bytes()
+            before_workspace = _workspace_state(workspace)
             previews = [preview_route(_request(board.name), settings) for _ in range(repetitions)]
         finally:
             route_preview_module.run_zone_fill_authority = original
@@ -114,7 +132,9 @@ def _run(repetitions: int) -> dict[str, Any]:
         }
         if len(candidate_ids) != 1:
             raise RuntimeError("fill-aware preview was not deterministic")
-        if board.read_bytes() != before:
+        after_workspace = _workspace_state(workspace)
+        workspace_unchanged = before_workspace == after_workspace
+        if board.read_bytes() != before or not workspace_unchanged:
             raise RuntimeError("preview changed the workspace board")
         return {
             "repetitions": repetitions,
@@ -122,7 +142,7 @@ def _run(repetitions: int) -> dict[str, Any]:
             "routed_outcomes": repetitions,
             "foreign_zone_provenance_outcomes": repetitions,
             "deterministic_candidate_ids": len(candidate_ids) == 1,
-            "workspace_unchanged": True,
+            "workspace_unchanged": workspace_unchanged,
             "kicad_invoked": False,
             "drc": False,
         }

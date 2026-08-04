@@ -321,18 +321,21 @@ def verify_layered_candidate(
             "Board IR snapshot verification failed",
             candidate_id=candidate_id,
         )
+    # Apply cheap structural ceilings before canonicalizing and hashing the candidate.  The
+    # identity check is deliberately later: a hostile over-limit candidate must not spend the
+    # full canonical-JSON cost merely to discover that its geometry was already outside the
+    # caller's verification budget.
     try:
-        verify_layered_candidate_id(candidate)
-    except (TypeError, ValueError):
+        budget_error = _validate_candidate_budget(candidate, active_limits)
+        path_count = len(candidate.patch.paths)
+        vertex_count = sum(len(path.vertices) for path in candidate.patch.paths)
+        via_count = len(candidate.patch.vias)
+    except (AttributeError, TypeError, ValueError):
         return _failure(
             LayeredCandidateVerificationCode.INVALID_CANDIDATE,
-            "candidate identity verification failed",
+            "candidate budget fields are malformed",
             candidate_id=candidate_id,
         )
-    budget_error = _validate_candidate_budget(candidate, active_limits)
-    path_count = len(candidate.patch.paths)
-    vertex_count = sum(len(path.vertices) for path in candidate.patch.paths)
-    via_count = len(candidate.patch.vias)
     if budget_error is not None:
         return _failure(
             LayeredCandidateVerificationCode.BUDGET_EXCEEDED,
@@ -341,6 +344,14 @@ def verify_layered_candidate(
             path_count=path_count,
             vertex_count=vertex_count,
             via_count=via_count,
+        )
+    try:
+        verify_layered_candidate_id(candidate)
+    except (TypeError, ValueError):
+        return _failure(
+            LayeredCandidateVerificationCode.INVALID_CANDIDATE,
+            "candidate identity verification failed",
+            candidate_id=candidate_id,
         )
     if expected_board_revision is not None and (
         not _is_digest(expected_board_revision)

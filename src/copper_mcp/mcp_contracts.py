@@ -248,7 +248,10 @@ LayerId = Annotated[str, Field(pattern=r"^layer:[A-Za-z0-9_.\-]{1,64}$")]
 LayerName = Annotated[str, Field(pattern=r"^[A-Za-z0-9_.\-]{1,64}$")]
 NetRefId = Annotated[
     str,
-    Field(max_length=164, pattern=r"^net:[a-z]+:[0-9a-zA-Z._-]{1,128}$"),
+    # Board IR net references are redacted content identifiers.  Keep the public contract
+    # narrower than the internal ``net:<name>`` domain IDs so a future adapter cannot
+    # accidentally publish an authored net name through a layered candidate.
+    Field(max_length=41, pattern=r"^net:name:[0-9a-f]{32}$"),
 ]
 PadRefId = Annotated[str, Field(pattern=r"^pad:[0-9a-zA-Z:._-]{1,160}$")]
 RefStability = Literal["native", "content_derived", "request_scoped"]

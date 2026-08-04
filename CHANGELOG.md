@@ -68,6 +68,13 @@ All notable changes are documented here. The format follows
 
 ### Security
 
+- Closed the latest routing review-bot boundary gaps: public scene references now carry only
+  content-derived net identifiers; live IPC capture carries one cooperative operation deadline;
+  job failures persist fixed typed diagnostics; candidate completion and manifests bind request
+  identity, router policy, seed, and work budgets; expired manifest rows are purged transactionally;
+  and layered obstacle envelopes remain conservative before budget exhaustion. These changes add no
+  mutation, remote transport, or general multilayer authority.
+
 - Tightened the in-toto MCP contract so every resource descriptor has a required, closed nested
   `sha256` digest object; `{}` and unknown digest algorithms now fail validation. B-034/B-035 were
   replayed from the implementation commit and recorded as append-only current-contract evidence.

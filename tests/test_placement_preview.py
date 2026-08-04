@@ -166,15 +166,40 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(stale_snapshot["snapshot_digest"], snapshot_digest)
         self.assertIsNone(stale_snapshot["candidate"])
 
+    def test_stale_file_backed_board_revision_skips_conversion(self) -> None:
+        """The board CAS must stop before parsing untrusted/stale file-backed work."""
+
+        with patch(
+            "copper_mcp.placement_preview.parse_kicad_bytes",
+            side_effect=AssertionError("stale board reached Board IR conversion"),
+        ) as parse:
+            result = _preview(
+                "placement-legal.kicad_pcb",
+                expect_board_revision="sha256:" + "0" * 64,
+                expect_snapshot_digest="sha256:" + "1" * 64,
+            )
+
+        self.assertFalse(parse.called)
+        self.assertEqual(result["status"], "refused")
+        assert result["diagnostic"] is not None
+        self.assertEqual(result["diagnostic"]["code"], "stale_revision")
+        self.assertIsNone(result["snapshot_digest"])
+
     def test_stale_snapshot_is_rejected_before_building_placement_view(self) -> None:
         baseline = _preview("placement-legal.kicad_pcb")
         board_revision = baseline["board_revision"]
 
         # A stale snapshot must be a cheap CAS refusal. In particular, the placement view can
         # be expensive for large boards and must not be constructed before the digest check.
-        with patch(
-            "copper_mcp.placement_preview.build_placement_view",
-            side_effect=AssertionError("stale snapshot reached placement view"),
+        with (
+            patch(
+                "copper_mcp.placement_preview.build_placement_view",
+                return_value=object(),
+            ) as build_view,
+            patch(
+                "copper_mcp.placement_preview.evaluate_placement",
+                side_effect=AssertionError("stale snapshot reached legalizer"),
+            ) as legalizer,
         ):
             result = _preview(
                 "placement-legal.kicad_pcb",
@@ -182,6 +207,8 @@ class ServiceTests(unittest.TestCase):
                 expect_snapshot_digest="sha256:" + "1" * 64,
             )
 
+        self.assertFalse(build_view.called)
+        self.assertFalse(legalizer.called)
         self.assertEqual(result["status"], "refused")
         assert result["diagnostic"] is not None
         self.assertEqual(result["diagnostic"]["code"], "stale_revision")

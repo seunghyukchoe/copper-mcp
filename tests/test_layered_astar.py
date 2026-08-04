@@ -150,6 +150,9 @@ def test_stale_invalid_budget_and_cancelled_requests_fail_closed() -> None:
         replace(_request(), expected_revision=123),  # type: ignore[arg-type]
     )
     oversized_revision = route_layered(replace(_request(), expected_revision="x" * 257))
+    malformed_board_revision = route_layered(
+        replace(_request(), board_revision="", expected_revision="different")
+    )
 
     assert stale.diagnostic is not None
     assert stale.diagnostic.code is LayeredFailureCode.STALE_REVISION
@@ -163,6 +166,8 @@ def test_stale_invalid_budget_and_cancelled_requests_fail_closed() -> None:
     assert malformed_revision.diagnostic.code is LayeredFailureCode.INVALID_REQUEST
     assert oversized_revision.diagnostic is not None
     assert oversized_revision.diagnostic.code is LayeredFailureCode.INVALID_REQUEST
+    assert malformed_board_revision.diagnostic is not None
+    assert malformed_board_revision.diagnostic.code is LayeredFailureCode.INVALID_REQUEST
     assert not stale.ok and not invalid.ok and not budget.ok and not cancelled.ok
 
 

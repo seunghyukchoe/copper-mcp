@@ -12,6 +12,7 @@ from copper_mcp.config import Settings
 from copper_mcp.kicad_ipc import (
     KicadIpcConfigurationError,
     KicadIpcConnectionError,
+    KicadIpcDeadlineError,
     KicadIpcPayloadError,
     KicadIpcUnavailableError,
     KicadIpcVersionError,
@@ -99,6 +100,19 @@ def _settings(**overrides: object) -> Settings:
 
 
 class KicadIpcTests(unittest.TestCase):
+    def test_capture_deadline_is_checked_between_ipc_calls(self) -> None:
+        with patch(
+            "copper_mcp.kicad_ipc.time.monotonic",
+            side_effect=(0.0, 1.1),
+        ):
+            with self.assertRaises(KicadIpcDeadlineError):
+                capture_live_board(
+                    _settings(),
+                    client_factory=lambda **_: _KiCad(),
+                    timeout_ms=1_000,
+                    deadline=1.0,
+                )
+
     def test_ipc_clients_are_closed_after_success_and_failure(self) -> None:
         closed: list[str] = []
 

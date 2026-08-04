@@ -119,6 +119,43 @@ def test_start_requires_compare_and_swap_and_completion_binds_candidate_revision
         completed.start(expected_revision=completed.revision, now_ms=31)
 
 
+def test_completion_binds_kind_router_policy_seed_and_work_limits() -> None:
+    candidate, spec = _candidate_and_spec()
+    mismatched = RoutingJobSpec.create(
+        board_revision=spec.board_revision,
+        snapshot_digest=spec.snapshot_digest,
+        start_pad_id=spec.start_pad_id,
+        end_pad_id=spec.end_pad_id,
+        request_digest=spec.request_digest,
+        request_kind=RoutingJobKind.SINGLE_LAYER,
+        backend=spec.backend,
+        router_version=spec.router_version,
+        policy=spec.policy,
+        seed=spec.seed,
+        limits=spec.limits,
+    )
+    running = RoutingJobRecord.create(mismatched).start(expected_revision=0, now_ms=1)
+    with pytest.raises(ValueError, match="candidate kind"):
+        running.complete(candidate, expected_revision=running.revision, now_ms=2)
+
+    mismatched = RoutingJobSpec.create(
+        board_revision=spec.board_revision,
+        snapshot_digest=spec.snapshot_digest,
+        start_pad_id=spec.start_pad_id,
+        end_pad_id=spec.end_pad_id,
+        request_digest=spec.request_digest,
+        request_kind=spec.request_kind,
+        backend=spec.backend,
+        router_version=spec.router_version,
+        policy=spec.policy,
+        seed=spec.seed + 1,
+        limits=spec.limits,
+    )
+    running = RoutingJobRecord.create(mismatched).start(expected_revision=0, now_ms=3)
+    with pytest.raises(ValueError, match="candidate seed"):
+        running.complete(candidate, expected_revision=running.revision, now_ms=4)
+
+
 def test_cancellation_is_cooperative_and_wins_over_candidate_publication() -> None:
     candidate, spec = _candidate_and_spec()
     running = RoutingJobRecord.create(spec, now_ms=10).start(expected_revision=0, now_ms=20)
@@ -224,6 +261,7 @@ def test_sqlite_store_reopens_queued_running_and_terminal_records(tmp_path: Path
             expected_revision=running.revision,
             now_ms=103,
         )
+        assert failed.diagnostic_message == "routing search found no path"
         completed_running = store.start(queued.spec.job_id, expected_revision=0, now_ms=104)
         completed = store.complete(
             queued.spec.job_id,
