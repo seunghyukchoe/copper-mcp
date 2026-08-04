@@ -66,7 +66,9 @@ documentation, ledger updates, and benchmark evidence.
       start/get/cancel tools.
       - [x] Single-worker CAS leases, cooperative cancellation, stale-lease recovery, and
         fail-closed invalid-candidate publication are covered by ADR-0046 and B-028.
-      - [ ] Bounded request/result or candidate-manifest persistence, durable export, and ordinary
+      - [x] Bounded redacted candidate-manifest persistence with restart, TTL, tamper, and
+        RoutingJobSpec binding checks is covered by ADR-0047 and B-029.
+      - [ ] Bounded request/result persistence for task lookup, route-geometry export, and ordinary
         MCP `start_routing`/`get_routing_job`/`cancel_routing_job` tools.
 - [x] Existing selected-layer copper as exact rectangular obstacles.
 - [x] Via obstacles on the selected layer, the first limit a real board hit.
@@ -133,9 +135,9 @@ documentation, ledger updates, and benchmark evidence.
 
 ## M3 — Safe candidate application
 
-- [~] Durable routing jobs and cancellation. The bounded internal ledger and single-worker lease
-  recovery now exist; bounded request/result persistence, ordinary MCP tools, and execution
-  export remain open.
+- [~] Durable routing jobs and cancellation. The bounded internal ledger, single-worker lease
+  recovery, and redacted candidate manifests now exist; bounded request/result persistence,
+  ordinary MCP tools, and route-geometry export remain open.
 - [ ] MCP Tasks progressive enhancement. The current protocol is an experimental extension and
   remains deferred until a pinned client/server compatibility matrix, random task handles, and
   authorization-bound result storage exist; see ADR-0046.

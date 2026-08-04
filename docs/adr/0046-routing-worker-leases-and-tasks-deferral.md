@@ -36,7 +36,8 @@ Add a protocol-independent `RoutingJobWorker` with a single active lease per wor
    as a generic `worker_error` rather than silently retrying a potentially changed board.
 4. Publish only a verified candidate identity/base revision through `RoutingJobStore.complete`.
    Invalid, stale, or malformed executor output becomes a terminal generic `invalid_request`
-   diagnostic; raw exception text is not persisted.
+   diagnostic; executor exception text is never persisted and terminal messages are stable
+   code-based literals.
 5. Map cooperative cancellation to the existing CAS cancellation states and keep all terminal
    transitions revision-safe.
 

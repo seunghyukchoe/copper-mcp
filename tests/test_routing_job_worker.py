@@ -226,12 +226,14 @@ def test_bounded_executor_failure_maps_to_failed_status(tmp_path: Path) -> None:
         result = worker.execute(
             spec.job_id,
             lambda _probe: _raise(
-                RoutingJobExecutionError(RoutingJobFailureCode.NO_PATH, "blocked")
+                RoutingJobExecutionError(
+                    RoutingJobFailureCode.NO_PATH, "private board and prompt details"
+                )
             ),
         )
         assert result.status is RoutingJobStatus.FAILED
         assert result.diagnostic_code is RoutingJobFailureCode.NO_PATH
-        assert result.diagnostic_message == "blocked"
+        assert result.diagnostic_message == "routing search found no path"
 
 
 def test_invalid_candidate_output_maps_to_bounded_request_failure(tmp_path: Path) -> None:

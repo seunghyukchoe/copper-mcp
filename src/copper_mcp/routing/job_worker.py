@@ -50,6 +50,22 @@ def _bounded_integer(
     return value
 
 
+def _failure_message(code: RoutingJobFailureCode) -> str:
+    """Return a stable, non-echoing diagnostic for a worker terminal state."""
+
+    messages = {
+        RoutingJobFailureCode.INVALID_REQUEST: "routing request was rejected",
+        RoutingJobFailureCode.STALE_REVISION: "routing source revision is stale",
+        RoutingJobFailureCode.UNSUPPORTED: "routing geometry is unsupported",
+        RoutingJobFailureCode.NO_PATH: "routing search found no path",
+        RoutingJobFailureCode.SEARCH_BUDGET_EXCEEDED: "routing search budget was exceeded",
+        RoutingJobFailureCode.OBSTACLE_BUDGET_EXCEEDED: "routing obstacle budget was exceeded",
+        RoutingJobFailureCode.WORKER_ERROR: "routing worker failed",
+        RoutingJobFailureCode.CANCELLED: "routing job was cancelled",
+    }
+    return messages[code]
+
+
 RoutingJobExecutor: TypeAlias = Callable[["CancellationProbe"], Candidate]
 
 
@@ -257,18 +273,19 @@ class RoutingJobWorker:
         except RoutingJobCancelledError:
             return self._cancel_or_expire(lease)
         except RoutingJobExecutionError as error:
-            return self._fail_or_cancel(lease, error.code, error.message)
+            return self._fail_or_cancel(lease, error.code, _failure_message(error.code))
         except TimeoutError:
             return self._fail_or_cancel(
                 lease,
                 RoutingJobFailureCode.SEARCH_BUDGET_EXCEEDED,
                 "routing executor exceeded its bounded time budget",
             )
-        except Exception as error:
-            message = (
-                str(error).replace("\n", " ")[:_MAX_FAILURE_MESSAGE] or "routing executor failed"
+        except Exception:
+            return self._fail_or_cancel(
+                lease,
+                RoutingJobFailureCode.WORKER_ERROR,
+                _failure_message(RoutingJobFailureCode.WORKER_ERROR),
             )
-            return self._fail_or_cancel(lease, RoutingJobFailureCode.WORKER_ERROR, message)
         if probe.is_cancelled():
             return self._cancel_or_expire(lease)
         try:

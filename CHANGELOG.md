@@ -8,6 +8,10 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added a bounded SQLite `CandidateManifestStore` for restart-safe, content-addressed candidate
+  summaries. It persists only redacted identity, endpoint, cost, and metric metadata; route
+  geometry, board bytes, DRC findings, durable export, and MCP Tasks remain separate capabilities.
+
 - Added a protocol-independent `RoutingJobWorker` with one active CAS-backed lease, cooperative
   cancellation, stale-lease recovery, and fail-closed invalid-candidate publication. The worker
   stores only the existing redacted job record; candidate persistence/export and MCP Tasks remain
