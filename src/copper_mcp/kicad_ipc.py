@@ -218,7 +218,12 @@ def _close_ipc_client(client: object) -> None:
         return
 
 
-def _count_serialized_items(source: bytes, max_bytes: int) -> dict[str, int]:
+def _count_serialized_items(
+    source: bytes,
+    max_bytes: int,
+    *,
+    check_deadline: Callable[[], None] | None = None,
+) -> dict[str, int]:
     """Count objects from the captured serialization, not mutable live collections.
 
     KiCad's IPC API does not expose a count-only or max-items request. Calling ten collection
@@ -242,6 +247,8 @@ def _count_serialized_items(source: bytes, max_bytes: int) -> dict[str, int]:
     counts = dict.fromkeys(_COUNT_NAMES, 0)
     stack: list[tuple[SExpr, bool]] = [(root, False)]
     while stack:
+        if check_deadline is not None:
+            check_deadline()
         expression, is_top_level_child = stack.pop()
         head = expression.head
         name: str | None = None
@@ -658,12 +665,18 @@ def _capture_live_board_from_client(
         raise KicadIpcPayloadError("KiCad board snapshot exceeds the observation budget")
 
     max_bytes = min(settings.max_board_bytes, 64 * 1024 * 1024)
-    counts = _count_serialized_items(source_bytes, max_bytes)
+    counts = _count_serialized_items(
+        source_bytes,
+        max_bytes,
+        check_deadline=check_deadline,
+    )
     try:
         check_deadline()
         confirmation = board.get_as_string()
         check_deadline()
         confirmation_bytes = confirmation.encode("utf-8", errors="strict")
+    except KicadIpcError:
+        raise
     except Exception as error:  # pragma: no cover - exercised by the real binding
         raise KicadIpcConnectionError(
             "KiCad changed before observation could be confirmed"

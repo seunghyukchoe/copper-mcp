@@ -38,8 +38,9 @@ pipeline:
    verify the token digest did not change during capture, and close the client in all success and
    failure paths. The token itself never enters a response, log, candidate, or ledger.
 4. Convert those exact bytes through the existing Board IR 0.2 adapter and invoke the pure
-   two-layer A* router with the remaining request deadline. A stale source or session stops before
-   conversion; a stale Board IR snapshot stops before search.
+   two-layer A* router with the remaining request deadline. The capture deadline is checked
+   between synchronous IPC calls and throughout bounded serialized-item counting. A stale source
+   or session stops before conversion; a stale Board IR snapshot stops before search.
 5. Return the existing closed layered candidate/refusal union. A candidate is immutable and
    content-addressed, but remains **unverified proposal geometry**: this surface does not serialize
    KiCad objects, run DRC or refill, persist geometry, mint an apply token, or mutate the editor.
@@ -64,8 +65,9 @@ Trade-offs and residuals:
 
 - The token digest is only a session CAS signal; KiCad exposes no atomic board revision/event API,
   so an ABA change that returns to identical bytes between confirmations remains possible.
-- The official wrapper allocates the returned serialization before Python can enforce the byte
-  ceiling; the existing isolated-worker residual remains open for hostile remote sessions.
+- The official synchronous wrapper may block inside a call and allocates the returned serialization
+  before Python can enforce the byte ceiling; cooperative checks cannot forcibly pre-empt that
+  call. An isolated worker/process boundary remains open for hostile or unresponsive sessions.
 - The supported geometry is intentionally narrow (two signal layers, conservative envelopes,
   full-stack vias). Real GUI IPC, KiCad DRC, serializer round-trip, endpoint-via legality,
   electrical behavior, fabrication readiness, and FreeRouting parity require separate evidence.

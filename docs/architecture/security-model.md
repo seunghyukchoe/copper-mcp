@@ -96,9 +96,11 @@ requests through one shared boundary before any file is read: unknown fields, no
 out-of-range budgets, booleans supplied as integers, control characters, oversized net names, and
 non-copper layer names are rejected, rejections report counts rather than echoing caller-supplied
 field names, and routing constraints come only from typed caller values rather than from untrusted
-board content. A wall-clock deadline starts at the operation boundary and bounds the entire preview
-call — conversion, search, and the clamped KiCad timeout for optional DRC — above the existing grid,
-expansion, and obstacle ceilings. Unsupported boards
+board content. A wall-clock deadline starts at the operation boundary and bounds conversion,
+search, and the clamped KiCad timeout for optional DRC above the existing grid, expansion, and
+obstacle ceilings. Live IPC additionally checks the deadline between synchronous calls and during
+bounded serialized-item counting; because the official wrapper is synchronous, this remains
+cooperative and cannot forcibly pre-empt a blocking third-party call. Unsupported boards
 return bounded diagnostic-code counts, not raw adapter text, and routing failures return typed
 non-echoing diagnostics. Authoritative DRC runs only when the caller opts in, still yields aggregate
 redacted evidence, and fails the call when the evidence is missing or does not bind. A preview does

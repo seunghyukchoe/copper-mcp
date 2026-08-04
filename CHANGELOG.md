@@ -90,6 +90,11 @@ All notable changes are documented here. The format follows
   cancellation acknowledgement or publish-race resolution. This prevents a worker from being
   stranded after a bounded store miss and adds no retry or mutation authority.
 
+- Live KiCad capture now checks the shared deadline while traversing the bounded serialized
+  S-expression and preserves the typed deadline refusal during confirmation. The official
+  synchronous IPC wrapper remains cooperative: a blocking third-party call cannot be forcibly
+  pre-empted by this Python process.
+
 - Closed the latest routing review-bot boundary gaps: public scene references now carry only
   content-derived net identifiers; live IPC capture carries one cooperative operation deadline;
   job failures persist fixed typed diagnostics; candidate completion and manifests bind request

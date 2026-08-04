@@ -315,8 +315,11 @@ Board IR, and redacted KiCad-session compare-and-swap digests. The service captu
 `Board.get_as_string()` serialization, confirms it byte-for-byte, closes the official IPC client,
 converts those exact bytes through the Board IR adapter, and infers the net only from the two pads.
 The session digest is `sha256(KICAD_API_TOKEN)`; the token is never returned. The remaining route
-deadline is passed to IPC and search. A stale session/source/snapshot refuses before candidate
-work, and the live candidate is compared against the file-backed oracle in B-026. The supported
+deadline is passed to IPC and search, checked between synchronous IPC calls, and checked during
+bounded serialized-item counting. A stale session/source/snapshot refuses before candidate work,
+and the live candidate is compared against the file-backed oracle in B-026. The official wrapper
+is synchronous, so a third-party IPC call cannot be forcibly pre-empted by this Python process;
+this is a cooperative deadline, not a hard real-time guarantee. The supported
 two-signal-layer geometry remains proposal-only: endpoint-via legality, KiCad DRC, refill,
 serialization/export, apply, real GUI success, and electrical/fabrication claims are not implied.
 

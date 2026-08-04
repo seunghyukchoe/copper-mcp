@@ -16,6 +16,7 @@ from copper_mcp.kicad_ipc import (
     KicadIpcPayloadError,
     KicadIpcUnavailableError,
     KicadIpcVersionError,
+    _count_serialized_items,
     capture_live_board,
     capture_live_editor_context,
     inspect_live_board,
@@ -100,6 +101,23 @@ def _settings(**overrides: object) -> Settings:
 
 
 class KicadIpcTests(unittest.TestCase):
+    def test_serialized_item_count_checks_the_operation_deadline(self) -> None:
+        calls = 0
+
+        def check_deadline() -> None:
+            nonlocal calls
+            calls += 1
+            if calls >= 2:
+                raise KicadIpcDeadlineError("live IPC capture deadline expired")
+
+        with self.assertRaises(KicadIpcDeadlineError):
+            _count_serialized_items(
+                b'(kicad_pcb (general (thickness 1)) (net 1 "AUDIO"))',
+                1_000_000,
+                check_deadline=check_deadline,
+            )
+        self.assertGreaterEqual(calls, 2)
+
     def test_capture_deadline_is_checked_between_ipc_calls(self) -> None:
         with patch(
             "copper_mcp.kicad_ipc.time.monotonic",
