@@ -31,7 +31,7 @@ rip-up, multi-net scheduling, and live mutation remain separate milestones.
 - `tests/test_layered_astar.py` covers via-required completion, via-cost choice, layer-scoped
   obstacles, deterministic replay, stale/invalid/cancellation/resource failures, and blocked
   terminals.
-- B-017 records deterministic replay and a seeded Dijkstra differential check for this abstract
+- B-017 records deterministic replay and an independent Dijkstra differential check for this abstract
   lattice only.
 - FreeRouting primary sources: [architecture](https://raw.githubusercontent.com/freerouting/freerouting/master/docs/architecture.md),
   [maze search](https://raw.githubusercontent.com/freerouting/freerouting/master/src/main/java/app/freerouting/autoroute/MazeSearchAlgo.java),
