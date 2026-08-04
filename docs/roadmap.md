@@ -84,8 +84,11 @@ documentation, ledger updates, and benchmark evidence.
   same-net zone, whose fill is not trusted.
 - [ ] Routing *through* vias, which needs a layer-aware lattice, a via-insertion cost, and a
   via-placement contract. Connectivity is multilayer today; path search is not.
-  - [ ] First acceleration milestone: bounded two-signal-layer `(x, y, layer)` A* with explicit
-    through-via transitions, positive via cost, per-layer obstacles, and deterministic budgets.
+  - [x] First algorithmic acceleration milestone: bounded two-signal-layer `(x, y, layer)` A*
+    with explicit through-via transitions, positive via cost, per-layer obstacles, and
+    deterministic budgets, delivered as an internal oracle only. Board IR binding, physical
+    clearance/via legality, KiCad serialization, and DRC remain required before this becomes a
+    routing capability.
 - [x] Attachment to existing same-net copper and bounded partial-route completion.
 - [ ] Multilayer vias and keepouts.
 - [ ] Negotiated-congestion multi-net routing.
