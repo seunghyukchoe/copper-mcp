@@ -248,3 +248,16 @@ result or a general performance comparison.
 | Metrics | Deterministic projection replays 10/10; Board IR round-trip replays 10/10; source unchanged `true`; median projection latency 5,502,417 ns; candidate `sha256:4d4839eb58c6679384c78a94cbc640268fee994d7018de44ea46a54e6f2a3538`; candidate base `sha256:73463aa02b61a571f5b4c3b21844a56dd5c3ca0b457958c73b096b0e7f2ed982`; output `sha256:1a0dd7389e80027393b0ffb53ebdaa60a40a4a4d3f1469cc613dcd879eba1153`; source/output bytes 2,914/2,938; no KiCad, DRC, live mutation, or undo calls |
 | Artifact | [`2026-08-04-placement-projection-d76cc13.json`](../../benchmarks/results/mcp/2026-08-04-placement-projection-d76cc13.json) |
 | Interpretation | This is a deterministic source-preservation and Board IR round-trip oracle for the narrow supported placement subset. It shows that a disposable placement derivative can be produced without changing the source fixture, but it does not claim placement DRC, courtyard legality, back-side or non-orthogonal fidelity, live KiCad mutation, undo, electrical behavior, fabrication readiness, or performance generalization. |
+
+### B-017 — Internal layered A* oracle differential
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:7a0e238729d37384d2ea9d11aad09061101f6067b2d5cf783589a802cdeb974b` |
+| Date and commit | 2026-08-04 15:06:56 UTC; `81ca8031583393b37cb88fc207bec82b42c545fc`; tracked tree clean except the pre-existing user handoff file and this output artifact before commit |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
+| Dataset | Four fixed 5x5 two-layer abstract lattice cases: via-required, via-cost choice, direct single-layer, and both layers blocked; no Board IR/KiCad board or external design data |
+| Configuration | `layered-astar-oracle-v1`; 50 replays per case; independent zero-heuristic Dijkstra differential; script SHA-256 `888d1c4fc86d1bdbda4aed851607d644f3afd8c3a06543f0c01086d362d56729`; fixture set `four-fixed-5x5-v1`; CPU-only |
+| Metrics | Deterministic replays 200/200; differential cost/no-path matches 4/4; via-required success `true` with two transitions; direct single-layer case used zero transitions; blocked case remained `no_path` |
+| Artifact | [`2026-08-04-layered-astar-oracle.json`](../../benchmarks/results/routing/2026-08-04-layered-astar-oracle.json) |
+| Interpretation | This is algorithmic evidence for the internal maze-level `(x, y, layer)` search seam only. It does not claim Board IR mapping, trace width/clearance, via annulus/drill/keepout/net-class legality, source-preserving KiCad serialization, DRC, congestion/rip-up, whole-board completion, or FreeRouting parity. |
