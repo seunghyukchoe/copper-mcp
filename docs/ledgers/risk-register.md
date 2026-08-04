@@ -89,3 +89,5 @@
 > the narrow file-backed preview. Candidate-bound aggregate DRC evidence is now opt-in and
 > fail-closed; live preview, durable jobs, refill, multilayer generalization, export, and apply
 > remain open.
+
+| R-046 | 2026-08-05 | A conservative spatial index could omit an obstacle and make exact routing unsound. | High | Medium | Store canonical source ordinals, over-approximate closed bounds, sort bucket results, retain a bounded linear fallback, and differentially replay 256 adversarial queries plus indexed/linear A*/Dijkstra routes. Exact predicates remain the authority and all ceilings fail closed. | Mitigated / routing; adversarial and cross-board scaling coverage remain open |

@@ -461,11 +461,11 @@ result or a general performance comparison.
 
 | Field | Recorded evidence |
 |---|---|
-| Run ID | `sha256:69702753f7a0436a53b92473911c95986eaab5ee5c9cfff47388f9e49b6405e1` |
-| Date and commit | 2026-08-05; source commit `9918236c7a6022e7bbaf44fd6ca0b27729b469ee` recorded before the spatial-index evidence commit |
+| Run ID | `sha256:0375d0e76d5aedbd0dd7dbed082d07f07fc8793ea38cb87ee92faade91993631` |
+| Date and commit | 2026-08-05; source commit `62f10efcd82a8a6e0974e15d69e56573d4115c6e` recorded after the spatial-index implementation commit |
 | Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
 | Dataset | Independently authored deterministic uniform-grid fixture: 512 conservative rectangle entries and 256 closed AABB queries; no board bytes, private designs, or external corpus |
-| Configuration | `copper-mcp/benchmark/routing-conservative-spatial-index-v1`; seven repetitions; exact closed-bound legacy relation scan versus immutable uniform-grid query; 256 deterministic exact-query replays |
-| Metrics | Legacy relation checks `131,072`; indexed relation checks `31`; reduction `99.9763%`; exact query matches `256/256`; indexed buckets `136`; median microbenchmark speedup `15.27x` on this host. Differential A*/Dijkstra route fixture: same geometry/cost/expanded states; A* exact checks `19,982 → 308`; low ceilings remain fail-closed while indexed work may complete under a ceiling the legacy scan would exhaust. |
+| Configuration | `copper-mcp/benchmark/routing-conservative-spatial-index-v1`; ten repetitions; exact closed-bound legacy relation scan versus immutable uniform-grid query; 256 deterministic exact-query replays |
+| Metrics | Legacy relation checks `131,072`; indexed relation checks `31`; reduction `99.9763%`; exact query matches `256/256`; indexed buckets `136`; median microbenchmark speedup `346.471x` on this host. Differential A*/Dijkstra route fixture: same geometry/cost/expanded states; A* exact checks `19,982 → 308`; low ceilings remain fail-closed while indexed work may complete under a ceiling the legacy scan would exhaust. |
 | Artifact | [`2026-08-05-spatial-index.json`](../../benchmarks/results/routing/2026-08-05-spatial-index.json) |
 | Interpretation | This is a conservative candidate-filter and resource-use result, not a whole-board scaling claim. It does not establish congestion/rip-up, FreeRouting parity, KiCad DRC, electrical behavior, fabrication readiness, or cross-host wall-clock performance. |

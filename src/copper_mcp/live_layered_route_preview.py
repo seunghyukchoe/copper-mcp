@@ -6,9 +6,9 @@ binding, converts those exact bytes through the same Board IR adapter, then invo
 two-layer router.  No board bytes are written, no KiCad mutation/DRC operation is called, and
 the candidate remains bound to both the IPC source digest and the converted snapshot digest.
 
-This module is intentionally not registered as an MCP tool yet.  The registration layer can
-advertise the capability only after the live contract has been reviewed alongside the protocol
-schema; keeping the implementation isolated makes that review and its fake-IPC tests explicit.
+The MCP registration layer exposes this adapter only through the closed, revision-bound request
+and response contracts.  Keeping the implementation isolated from the registration layer makes
+the fake-IPC safety tests and the candidate-only boundary explicit.
 """
 
 from __future__ import annotations
