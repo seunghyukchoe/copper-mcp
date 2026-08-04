@@ -184,11 +184,11 @@ not routing-quality or throughput claims.
 
 | Field | Recorded evidence |
 |---|---|
-| Run ID | Recorded in the benchmark artifact after the clean implementation commit |
-| Date and commit | 2026-08-04; source commit is the exact code commit recorded by the script |
-| Environment | Apple arm64 CPU; Python 3.12.13; deterministic fake official-client serialization; `kicad-python` not installed; KiCad IPC server disabled and not invoked |
+| Run ID | `sha256:14749ab5c2762da3ed2fc99e7ab4968e7ae0c8ce8ee146f0d3fb8e90d100e6a4` |
+| Date and commit | 2026-08-04 13:41:12 UTC; `1c190305d2a46f546d084a14a224e9dc73cc28f9`; tracked tree clean, one pre-existing untracked user handoff file |
+| Environment | Apple arm64 CPU; no accelerator; 38,654,705,664 physical bytes; macOS 26.5.2; Python 3.12.13; `mcp` 2.0.0; `pydantic` 2.13.4; `kicad-python` not installed; KiCad IPC server disabled and not invoked |
 | Dataset | Committed `two-pad.kicad_pcb` route fixture; the same bytes are used by the file-backed route oracle and fake IPC client; no external or proprietary board |
-| Configuration | `kicad-ipc-live-route-v1`; ten replays; scene `net_ref_id`; both board/snapshot preconditions; source script SHA-256 and fixture SHA-256 are embedded in the artifact |
-| Metrics | Deterministic candidate equality with the file-backed oracle; median end-to-end capture/convert/route latency; stale board/snapshot refusals 1/1; forbidden action refusal 1/1 with zero IPC calls; raw source, DRC evidence, fill authority, and apply token all `false` |
+| Configuration | `kicad-ipc-live-route-v1`; ten replays; scene `net_ref_id`; both board/snapshot preconditions; fixture SHA-256 `5f88ebcf52cf8f1548990bdbdc1c52ac7a30f39c013366f79b161ec15e1caae2`; script SHA-256 `faeace4413360ba8163a529d5b4e9ee0fd2120784f676fde72946399ad7c16c8`; CPU-only |
+| Metrics | Deterministic replays 10/10; median end-to-end capture/convert/route latency 3,606,646 ns; board revision `sha256:5f88ebcf52cf8f1548990bdbdc1c52ac7a30f39c013366f79b161ec15e1caae2`; snapshot/candidate base `sha256:e57e679dc80e2d413c59c186db4ff520a5dc526bb025fde32f3b9eaa8d1e469f`; candidate `sha256:befda305388c5e9d7e46f9ca859af1cf3876d2132cd20c427a292b573bfe9a81`; stale board/snapshot refusals 1/1; forbidden action refusal 1/1 with zero IPC calls; raw source, DRC evidence, fill authority, and apply token all `false` |
 | Artifact | [`2026-08-04-live-route-proposal.json`](../../benchmarks/results/mcp/2026-08-04-live-route-proposal.json) |
 | Interpretation | This proves the read-only observe-to-propose contract over one exact fake IPC snapshot. It does not establish live GUI-session success, live editor mutation, DRC, placement, electrical behavior, fabrication readiness, or throughput on real boards. |
