@@ -91,6 +91,7 @@ def _dijkstra_cost(request: LayeredAStarRequest) -> int | None:
         return None
     costs: dict[tuple[int, int, int], int] = {start: 0}
     frontier = [(0, start)]
+    min_x, min_y, max_x, max_y = request.bounds
     while frontier:
         cost, node = heapq.heappop(frontier)
         if cost != costs.get(node):
@@ -103,7 +104,7 @@ def _dijkstra_cost(request: LayeredAStarRequest) -> int | None:
         neighbors += ((x, y, other),)
         for next_node in neighbors:
             nx, ny, next_layer = next_node
-            if not (0 <= nx <= 4 and 0 <= ny <= 4) or next_node in blocked:
+            if not (min_x <= nx <= max_x and min_y <= ny <= max_y) or next_node in blocked:
                 continue
             step = request.settings.via_cost if next_layer != layer else request.settings.move_cost
             next_cost = cost + step
@@ -195,7 +196,7 @@ def _run(repetitions: int) -> dict[str, Any]:
             "repetitions_per_case": repetitions,
             "case_count": len(cases),
             "seeded_differential": "dijkstra-v1",
-            "seed": 7,
+            "fixture_set": "four-fixed-5x5-v1",
         },
         "metrics": {
             "case_results": cases,
