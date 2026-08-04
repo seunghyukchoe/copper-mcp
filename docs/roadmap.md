@@ -130,11 +130,19 @@ documentation, ledger updates, and benchmark evidence.
     physical-validation non-claim.
 - [x] Attachment to existing same-net copper and bounded partial-route completion.
 - [ ] Multilayer vias and keepouts.
-- [ ] Negotiated-congestion multi-net routing.
+- [~] Negotiated-congestion multi-net routing.
+  - [x] Bounded candidate-only present/history congestion ledger with exact lattice edge/vertex
+    occupancy, deterministic rip-up order, policy-digest-bound candidates, cancellation, and
+    fixed iteration/routing budgets.
+  - [x] B-036 KiCad-fixture replay: sequential baseline overflow `1` versus negotiated overflow
+    `0` across three deterministic replays; physical clearance, multilayer capacity, KiCad DRC,
+    and held-out corpus comparison remain open.
 - [~] Incremental spatial index and bounded rip-up/reroute.
   - [x] Immutable conservative obstacle index for exact A*/Dijkstra query narrowing, with
-    canonical linear fallback, differential route tests, and B-033 evidence. Bounded rip-up /
-    reroute coordination remains open.
+    canonical linear fallback, differential route tests, and B-033 evidence.
+  - [x] Candidate-only bounded rip-up/reroute coordination is covered by the negotiated
+    congestion ledger and B-036; incremental obstacle updates and broader multi-net repair remain
+    open.
 - [ ] Benchmark comparison against established open baselines.
 
 - [~] Emit candidate DRC evidence as a deterministic, unsigned in-toto Statement payload using

@@ -44,3 +44,5 @@ from the decision ledger.
 - [ADR-0051: Narrow exact obstacle queries with a conservative spatial index](0051-conservative-spatial-index.md)
 - [ADR-0052: Emit candidate DRC as a redacted in-toto Statement payload](0052-in-toto-candidate-drc-statement.md)
 - [ADR-0053: Bind the supported placement subset to private KiCad DRC](0053-private-placement-candidate-drc.md)
+- [ADR-0054: Close review-bot boundary gaps in routing and live observation](0054-review-boundary-hardening.md)
+- [ADR-0055: Add a bounded negotiated-congestion coordinator](0055-bounded-negotiated-congestion.md)

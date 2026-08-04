@@ -8,6 +8,12 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added a bounded, deterministic negotiated-congestion coordinator for two-pin nets on one
+  signal-layer lattice. It uses present and historical edge/vertex pressure to reroute conflicted
+  candidates, binds each accepted candidate to the policy digest, and records structural overflow
+  evidence in B-036. It remains candidate-only: exact physical clearance, multilayer vias, KiCad
+  DRC, apply, and FreeRouting parity are not claimed.
+
 - Added an internal, candidate-bound KiCad DRC gate for the supported placement serializer. It runs
   against a disposable private context, rechecks source/rule/library CAS, and returns only a
   redacted aggregate summary; public/live placement and apply remain unchanged.

@@ -30,6 +30,7 @@ from copper_mcp.routing.contracts import (
     SINGLE_PATH_ORDERING,
     AStarSettings,
     CancellationCheck,
+    CongestionPenalty,
     RouteCandidate,
     RouteConnection,
     RouteCost,
@@ -48,11 +49,15 @@ ROUTER_VERSION = "astar-grid/0.6.0"
 ROUTING_POLICY = "orthogonal-a-star-spatial-index-v1"
 _EMPTY_DIGEST = f"sha256:{'0' * 64}"
 _SPATIAL_INDEX_MIN_ENTRIES = 8
+_MAX_CONGESTION_PENALTY = 1_000_000_000
 
 _Rect: TypeAlias = tuple[int, int, int, int]
 _Node: TypeAlias = tuple[int, int]
 _State: TypeAlias = tuple[int, int, int]
-_Score: TypeAlias = tuple[int, int, int]
+# (policy cost, physical geometry cost, bends, proximity steps).  With no policy hook the first
+# two terms are equal, preserving the historical A* ordering exactly.  Congestion only changes
+# search ordering; candidate RouteCost remains the physical geometry decomposition.
+_Score: TypeAlias = tuple[int, int, int, int]
 _DIRECTIONS: tuple[tuple[int, int], ...] = (
     (1, 0),  # east
     (0, -1),  # north
@@ -99,6 +104,7 @@ class _Problem:
     target_max_ix: int
     target_min_iy: int
     target_max_iy: int
+    congestion_penalty: CongestionPenalty | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -979,6 +985,7 @@ def _prepare(
     request: RouteRequest,
     work: _WorkBudget,
     verified_fill: tuple[VerifiedFill, ...] = (),
+    congestion_penalty: CongestionPenalty | None = None,
 ) -> _Problem:
     work.checkpoint()
     try:
@@ -1578,6 +1585,7 @@ def _prepare(
         target_max_ix=max(node[0] for node in target_nodes),
         target_min_iy=min(node[1] for node in target_nodes),
         target_max_iy=max(node[1] for node in target_nodes),
+        congestion_penalty=congestion_penalty,
     )
     for obstacle in problem.rect_obstacles:
         work.obstacle_check()
@@ -1802,16 +1810,17 @@ def _search(problem: _Problem, work: _WorkBudget) -> _Leg:
     settings = problem.request.settings
     start_states = _start_states(problem)
     start_state_set = frozenset(start_states)
-    start_score: _Score = (0, 0, 0)
+    start_score: _Score = (0, 0, 0, 0)
     best: dict[_State, _Score] = dict.fromkeys(start_states, start_score)
     parents: dict[_State, _State] = {}
-    frontier: list[tuple[int, int, int, int, int, int, int, int, _State]] = []
+    frontier: list[tuple[int, int, int, int, int, int, int, int, int, _State]] = []
     counter = 0
     for state in start_states:
         heapq.heappush(
             frontier,
             (
                 _heuristic(problem, state[0], state[1]),
+                0,
                 0,
                 0,
                 0,
@@ -1831,8 +1840,19 @@ def _search(problem: _Problem, work: _WorkBudget) -> _Leg:
 
     while frontier:
         work.checkpoint()
-        _, g_cost, bends, proximity_steps, iy, ix, direction, _, state = heapq.heappop(frontier)
-        if best.get(state) != (g_cost, bends, proximity_steps):
+        (
+            _,
+            policy_cost,
+            g_cost,
+            bends,
+            proximity_steps,
+            iy,
+            ix,
+            direction,
+            _,
+            state,
+        ) = heapq.heappop(frontier)
+        if best.get(state) != (policy_cost, g_cost, bends, proximity_steps):
             continue
         if (ix, iy) in problem.target_nodes:
             route_states = [state]
@@ -1893,9 +1913,45 @@ def _search(problem: _Problem, work: _WorkBudget) -> _Leg:
                 + bend_increment * settings.bend_penalty_nm
                 + proximity_increment * settings.proximity_penalty_nm
             )
+            congestion_increment = 0
+            if problem.congestion_penalty is not None:
+                try:
+                    raw_penalty = problem.congestion_penalty(current, destination)
+                except Exception as error:  # pragma: no cover - defensive boundary
+                    raise _fail(
+                        RouteFailureCode.UNSUPPORTED_CONSTRAINT,
+                        "the congestion policy failed closed",
+                        expanded_states=work.expanded_states,
+                        obstacle_checks=work.obstacle_checks,
+                    ) from error
+                if (
+                    isinstance(raw_penalty, bool)
+                    or not isinstance(raw_penalty, int)
+                    or raw_penalty < 0
+                    or raw_penalty > _MAX_CONGESTION_PENALTY
+                ):
+                    raise _fail(
+                        RouteFailureCode.UNSUPPORTED_CONSTRAINT,
+                        "the congestion policy returned an invalid penalty",
+                        expanded_states=work.expanded_states,
+                        obstacle_checks=work.obstacle_checks,
+                    )
+                congestion_increment = raw_penalty
             next_state: _State = (next_ix, next_iy, next_direction)
-            next_score: _Score = (next_cost, next_bends, next_proximity)
-            if next_score >= best.get(next_state, (1 << 63, 1 << 63, 1 << 63)):
+            next_policy_cost = (
+                policy_cost
+                + settings.grid_step_nm
+                + bend_increment * settings.bend_penalty_nm
+                + proximity_increment * settings.proximity_penalty_nm
+                + congestion_increment
+            )
+            next_score: _Score = (
+                next_policy_cost,
+                next_cost,
+                next_bends,
+                next_proximity,
+            )
+            if next_score >= best.get(next_state, (1 << 63, 1 << 63, 1 << 63, 1 << 63)):
                 continue
             best[next_state] = next_score
             parents[next_state] = state
@@ -1903,7 +1959,8 @@ def _search(problem: _Problem, work: _WorkBudget) -> _Leg:
             heapq.heappush(
                 frontier,
                 (
-                    next_cost + _heuristic(problem, next_ix, next_iy),
+                    next_policy_cost + _heuristic(problem, next_ix, next_iy),
+                    next_policy_cost,
                     next_cost,
                     next_bends,
                     next_proximity,
@@ -2130,7 +2187,16 @@ def _validate_public_inputs(
     snapshot: object,
     request: object,
     cancelled: object,
-) -> tuple[BoardIRSnapshot, RouteRequest, CancellationCheck | None] | RouteResult:
+    congestion_penalty: object,
+) -> (
+    tuple[
+        BoardIRSnapshot,
+        RouteRequest,
+        CancellationCheck | None,
+        CongestionPenalty | None,
+    ]
+    | RouteResult
+):
     if not isinstance(snapshot, BoardIRSnapshot):
         return _result_failure(
             _fail(
@@ -2138,14 +2204,23 @@ def _validate_public_inputs(
                 "the Board IR snapshot type is invalid",
             )
         )
-    if not isinstance(request, RouteRequest) or (cancelled is not None and not callable(cancelled)):
+    if (
+        not isinstance(request, RouteRequest)
+        or (cancelled is not None and not callable(cancelled))
+        or (congestion_penalty is not None and not callable(congestion_penalty))
+    ):
         return _result_failure(
             _fail(
                 RouteFailureCode.INVALID_REQUEST,
                 "the routing request type is invalid",
             )
         )
-    return snapshot, request, cast("CancellationCheck | None", cancelled)
+    return (
+        snapshot,
+        request,
+        cast("CancellationCheck | None", cancelled),
+        cast("CongestionPenalty | None", congestion_penalty),
+    )
 
 
 class AStarRouter:
@@ -2162,6 +2237,7 @@ class AStarRouter:
         *,
         cancelled: CancellationCheck | None = None,
         verified_fill: tuple[VerifiedFill, ...] = (),
+        congestion_penalty: CongestionPenalty | None = None,
     ) -> RouteResult:
         """Return an unapplied candidate, an already-connected record, or an expected failure.
 
@@ -2170,13 +2246,19 @@ class AStarRouter:
         does not exist as far as any claim here is concerned.
         """
 
-        validated = _validate_public_inputs(snapshot, request, cancelled)
+        validated = _validate_public_inputs(snapshot, request, cancelled, congestion_penalty)
         if isinstance(validated, RouteResult):
             return validated
-        checked_snapshot, checked_request, cancellation_check = validated
+        checked_snapshot, checked_request, cancellation_check, checked_penalty = validated
         work = _WorkBudget(settings=checked_request.settings, cancelled=cancellation_check)
         try:
-            problem = _prepare(checked_snapshot, checked_request, work, verified_fill)
+            problem = _prepare(
+                checked_snapshot,
+                checked_request,
+                work,
+                verified_fill,
+                checked_penalty,
+            )
             return RouteResult(candidate=_route_tree(problem, work))
         except _AlreadyConnectedError as connection:
             return RouteResult(

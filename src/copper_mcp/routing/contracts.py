@@ -424,6 +424,12 @@ class RouteResult:
 
 CancellationCheck = Callable[[], bool]
 
+# Internal, candidate-only policy hook used by negotiated multi-net routing.  The callback is
+# intentionally expressed in world coordinates rather than lattice indices so the deterministic
+# A* core does not expose its private search state to policy code.  A penalty is an integer search
+# ordering term; it is never included in a candidate's physical cost or treated as DRC evidence.
+CongestionPenalty = Callable[[PointNM, PointNM], int]
+
 
 class RoutingBackend(Protocol):
     """Contract implemented by deterministic CPU and future accelerated backends."""

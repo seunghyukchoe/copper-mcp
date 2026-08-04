@@ -1,0 +1,669 @@
+"""Bounded, candidate-only negotiated-congestion routing.
+
+This module is a deliberately small PathFinder-inspired coordinator around the deterministic
+single-net A* backend.  It does not mutate a board, inject model-generated copper, or claim KiCad
+DRC validity.  Present occupancy and historical overflow only influence the next A* search order;
+every returned path remains an ordinary immutable route candidate that must pass the existing
+verification/apply gates.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from collections import Counter, defaultdict
+from dataclasses import dataclass, replace
+from enum import StrEnum
+from itertools import pairwise
+from typing import TypeAlias, cast
+
+from copper_mcp.board_ir import BoardIRSnapshot, BoardIRValidationError, PointNM, verify_snapshot
+from copper_mcp.routing.astar import AStarRouter, canonical_candidate_bytes, verify_candidate_id
+from copper_mcp.routing.contracts import (
+    CancellationCheck,
+    RouteCandidate,
+    RouteConnection,
+    RouteRequest,
+)
+
+_EMPTY_DIGEST = f"sha256:{'0' * 64}"
+_MAX_NETS = 32
+_MAX_ITERATIONS = 32
+_MAX_PENALTY_NM = 1_000_000_000
+_MAX_HISTORY = 1_000_000
+_MAX_DIAGNOSTIC = 256
+_MAX_UNIT_RESOURCES = 2_000_000
+_MAX_TOTAL_EXPANSIONS = 10_000_000
+_MAX_TOTAL_OBSTACLE_CHECKS = 50_000_000
+_SHA256 = re.compile(r"^sha256:[a-f0-9]{64}$")
+NEGOTIATED_ROUTER_VERSION = "negotiated-grid-0.1.0"
+NEGOTIATED_ROUTING_POLICY = "negotiated-congestion-v1"
+
+ResourceKey: TypeAlias = tuple[str, PointNM, PointNM]
+
+
+def _integer(name: str, value: int, *, minimum: int = 0, maximum: int = (1 << 53) - 1) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
+        raise ValueError(f"{name} is outside the supported integer range")
+
+
+class NegotiatedRoutingStatus(StrEnum):
+    """Terminal status for one bounded multi-net proposal run."""
+
+    COMPLETED = "completed"
+    PARTIAL = "partial"
+    NO_PATH = "no_path"
+    INVALID_REQUEST = "invalid_request"
+    CANCELLED = "cancelled"
+
+
+@dataclass(frozen=True, slots=True)
+class NegotiatedRoutingRequest:
+    """Immutable policy and request envelope for one multi-net routing run.
+
+    The first slice intentionally requires two-pin requests on one signal layer and one common
+    grid.  That lets the coordinator report exact lattice resource conflicts while leaving
+    multilayer vias, differential pairs, and length matching to their dedicated validators.
+    """
+
+    board_revision: str
+    requests: tuple[RouteRequest, ...]
+    max_iterations: int = 8
+    present_penalty_nm: int = 20_000_000
+    history_penalty_nm: int = 5_000_000
+    max_total_expansions: int = 2_000_000
+    max_total_obstacle_checks: int = 10_000_000
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.board_revision, str) or not _SHA256.fullmatch(self.board_revision):
+            raise ValueError("board revision must be a sha256 digest")
+        if (
+            not isinstance(self.requests, tuple)
+            or not 2 <= len(self.requests) <= _MAX_NETS
+            or not all(isinstance(item, RouteRequest) for item in self.requests)
+        ):
+            raise ValueError("negotiated routing requires an immutable bounded request tuple")
+        _integer(
+            "negotiated iteration budget", self.max_iterations, minimum=1, maximum=_MAX_ITERATIONS
+        )
+        _integer("present congestion penalty", self.present_penalty_nm, maximum=_MAX_PENALTY_NM)
+        _integer("history congestion penalty", self.history_penalty_nm, maximum=_MAX_PENALTY_NM)
+        _integer(
+            "total expansion budget",
+            self.max_total_expansions,
+            minimum=1,
+            maximum=_MAX_TOTAL_EXPANSIONS,
+        )
+        _integer(
+            "total obstacle-check budget",
+            self.max_total_obstacle_checks,
+            minimum=1,
+            maximum=_MAX_TOTAL_OBSTACLE_CHECKS,
+        )
+        net_ids = [item.net_id for item in self.requests]
+        if len(set(net_ids)) != len(net_ids):
+            raise ValueError("negotiated requests must target distinct nets")
+        if any(item.board_revision != self.board_revision for item in self.requests):
+            raise ValueError("every negotiated request must bind the envelope board revision")
+        layers = {item.layer_id for item in self.requests}
+        grid_steps = {item.settings.grid_step_nm for item in self.requests}
+        if len(layers) != 1 or len(grid_steps) != 1:
+            raise ValueError("the first negotiated slice requires one layer and one grid step")
+
+    @property
+    def layer_id(self) -> str:
+        """Return the common selected layer after constructor validation."""
+
+        return self.requests[0].layer_id
+
+    @property
+    def grid_step_nm(self) -> int:
+        """Return the common lattice step after constructor validation."""
+
+        return self.requests[0].settings.grid_step_nm
+
+    @property
+    def policy_digest(self) -> str:
+        """Return a content digest for the policy envelope, including all request limits."""
+
+        payload = {
+            "board_revision": self.board_revision,
+            "history_penalty_nm": self.history_penalty_nm,
+            "max_iterations": self.max_iterations,
+            "max_total_expansions": self.max_total_expansions,
+            "max_total_obstacle_checks": self.max_total_obstacle_checks,
+            "present_penalty_nm": self.present_penalty_nm,
+            "requests": [
+                {
+                    "board_revision": request.board_revision,
+                    "layer_id": request.layer_id,
+                    "net_id": request.net_id,
+                    "seed": request.seed,
+                    "settings": {
+                        "bend_penalty_nm": request.settings.bend_penalty_nm,
+                        "grid_step_nm": request.settings.grid_step_nm,
+                        "max_expansions": request.settings.max_expansions,
+                        "max_grid_nodes": request.settings.max_grid_nodes,
+                        "max_obstacle_checks": request.settings.max_obstacle_checks,
+                        "max_obstacles": request.settings.max_obstacles,
+                        "proximity_penalty_nm": request.settings.proximity_penalty_nm,
+                    },
+                }
+                for request in sorted(self.requests, key=lambda item: (item.net_id, item.seed))
+            ],
+        }
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class CongestionResource:
+    """One exact unit edge or lattice vertex with its present usage count."""
+
+    kind: str
+    start: PointNM
+    end: PointNM
+    usage: int
+
+    def __post_init__(self) -> None:
+        if self.kind not in {"edge", "vertex"}:
+            raise ValueError("congestion resource kind is unsupported")
+        if self.kind == "vertex" and self.start != self.end:
+            raise ValueError("a vertex resource must have identical endpoints")
+        if self.kind == "edge" and self.start == self.end:
+            raise ValueError("an edge resource must have distinct endpoints")
+        _integer("congestion resource usage", self.usage, minimum=2)
+
+
+@dataclass(frozen=True, slots=True)
+class NegotiatedRoutingResult:
+    """Immutable evidence from one bounded negotiated-routing replay."""
+
+    status: NegotiatedRoutingStatus
+    board_revision: str
+    candidates: tuple[RouteCandidate, ...] = ()
+    connections: tuple[RouteConnection, ...] = ()
+    unrouted_nets: tuple[str, ...] = ()
+    iterations: int = 0
+    ripups: int = 0
+    overflow_resources: tuple[CongestionResource, ...] = ()
+    overflow_units: int = 0
+    total_wire_length_nm: int = 0
+    diagnostic: str | None = None
+    policy_digest: str = _EMPTY_DIGEST
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.status, NegotiatedRoutingStatus):
+            raise ValueError("negotiated status is malformed")
+        if not isinstance(self.board_revision, str) or not _SHA256.fullmatch(self.board_revision):
+            raise ValueError("negotiated result revision is malformed")
+        if (
+            not isinstance(self.candidates, tuple)
+            or not all(isinstance(item, RouteCandidate) for item in self.candidates)
+            or tuple(sorted(self.candidates, key=lambda item: item.patch.net_id)) != self.candidates
+        ):
+            raise ValueError("negotiated candidates must be sorted immutable route candidates")
+        if len({item.patch.net_id for item in self.candidates}) != len(self.candidates):
+            raise ValueError("negotiated candidates must target distinct nets")
+        if not isinstance(self.connections, tuple) or not all(
+            isinstance(item, RouteConnection) for item in self.connections
+        ):
+            raise ValueError("negotiated connections are malformed")
+        if (
+            not isinstance(self.unrouted_nets, tuple)
+            or not all(isinstance(item, str) for item in self.unrouted_nets)
+            or tuple(sorted(self.unrouted_nets)) != self.unrouted_nets
+            or len(set(self.unrouted_nets)) != len(self.unrouted_nets)
+        ):
+            raise ValueError("unrouted net IDs must be sorted")
+        _integer("negotiated iterations", self.iterations, maximum=_MAX_ITERATIONS)
+        _integer("negotiated ripups", self.ripups)
+        if (
+            not isinstance(self.overflow_resources, tuple)
+            or not all(isinstance(item, CongestionResource) for item in self.overflow_resources)
+            or tuple(sorted(self.overflow_resources)) != self.overflow_resources
+        ):
+            raise ValueError("overflow resources must be sorted immutable evidence")
+        _integer("negotiated overflow units", self.overflow_units)
+        _integer("negotiated wire length", self.total_wire_length_nm)
+        if self.diagnostic is not None and (
+            not isinstance(self.diagnostic, str) or not 1 <= len(self.diagnostic) <= _MAX_DIAGNOSTIC
+        ):
+            raise ValueError("negotiated diagnostic is malformed")
+        if not isinstance(self.policy_digest, str) or not _SHA256.fullmatch(self.policy_digest):
+            raise ValueError("negotiated policy digest is malformed")
+        if self.overflow_units != sum(item.usage - 1 for item in self.overflow_resources):
+            raise ValueError("overflow units must equal the exact resource excess")
+        if self.total_wire_length_nm != sum(item.patch.length_nm for item in self.candidates):
+            raise ValueError("negotiated wire length must match candidate geometry")
+
+    @property
+    def ok(self) -> bool:
+        """Return true only for a fully routed, structurally conflict-free proposal."""
+
+        return self.status is NegotiatedRoutingStatus.COMPLETED and not self.overflow_resources
+
+
+class CongestionLedger:
+    """Mutable per-replay occupancy overlay with bounded integer penalties."""
+
+    def __init__(
+        self,
+        *,
+        grid_step_nm: int,
+        present_penalty_nm: int,
+        history_penalty_nm: int,
+    ) -> None:
+        _integer("grid step", grid_step_nm, minimum=1)
+        _integer("present penalty", present_penalty_nm, maximum=_MAX_PENALTY_NM)
+        _integer("history penalty", history_penalty_nm, maximum=_MAX_PENALTY_NM)
+        self.grid_step_nm = grid_step_nm
+        self.present_penalty_nm = present_penalty_nm
+        self.history_penalty_nm = history_penalty_nm
+        self._present: Counter[ResourceKey] = Counter()
+        self._history: Counter[ResourceKey] = Counter()
+        self._nets: dict[ResourceKey, Counter[str]] = defaultdict(Counter)
+        self._added_nets: set[str] = set()
+
+    def clear_present(self) -> None:
+        """Rip up the current iteration while retaining historical overflow pressure."""
+
+        self._present.clear()
+        self._nets.clear()
+        self._added_nets.clear()
+
+    def add_candidate(self, candidate: RouteCandidate) -> None:
+        """Add one candidate's distinct unit resources to present occupancy."""
+
+        keys = _candidate_resources(candidate, self.grid_step_nm)
+        if len(keys) > _MAX_UNIT_RESOURCES:
+            raise ValueError("candidate resource expansion exceeds the bounded ledger budget")
+        net_id = candidate.patch.net_id
+        if net_id in self._added_nets:
+            raise ValueError("the congestion ledger accepts one candidate per net per iteration")
+        self._added_nets.add(net_id)
+        for key in keys:
+            self._present[key] += 1
+            self._nets[key][net_id] += 1
+
+    def penalty(self, start: PointNM, end: PointNM) -> int:
+        """Return a bounded non-negative search-ordering penalty for one proposed lattice edge."""
+
+        edge = _edge_key(start, end)
+        destination = _vertex_key(end)
+        value = (
+            self._present[edge] * self.present_penalty_nm
+            + self._history[edge] * self.history_penalty_nm
+            + self._present[destination] * self.present_penalty_nm
+            + self._history[destination] * self.history_penalty_nm
+        )
+        return min(value, _MAX_PENALTY_NM)
+
+    def update_history(self) -> None:
+        """Accumulate only exact overuse units, capped to keep future penalties bounded."""
+
+        for key, usage in sorted(self._present.items()):
+            if usage > 1:
+                self._history[key] = min(_MAX_HISTORY, self._history[key] + usage - 1)
+
+    def overflow_resources(self) -> tuple[CongestionResource, ...]:
+        """Return sorted exact resources used by more than one distinct route."""
+
+        return tuple(
+            CongestionResource(kind=key[0], start=key[1], end=key[2], usage=usage)
+            for key, usage in sorted(self._present.items())
+            if usage > 1
+        )
+
+    def conflict_scores(self) -> dict[str, int]:
+        """Return deterministic per-net conflict scores for the next rip-up order."""
+
+        scores: Counter[str] = Counter()
+        for key, usage in self._present.items():
+            if usage <= 1:
+                continue
+            for net_id, net_usage in self._nets[key].items():
+                scores[net_id] += (usage - 1) * net_usage
+        return dict(scores)
+
+
+def _vertex_key(point: PointNM) -> ResourceKey:
+    return ("vertex", point, point)
+
+
+def _edge_key(start: PointNM, end: PointNM) -> ResourceKey:
+    if start == end or (start.x != end.x and start.y != end.y):
+        raise ValueError("congestion resources require non-zero orthogonal edges")
+    if (end.x, end.y) < (start.x, start.y):
+        start, end = end, start
+    return ("edge", start, end)
+
+
+def _path_resources(path_vertices: tuple[PointNM, ...], grid_step_nm: int) -> set[ResourceKey]:
+    keys: set[ResourceKey] = set()
+    for start, end in pairwise(path_vertices):
+        if start.x != end.x and start.y != end.y:
+            raise ValueError("negotiated routing only accepts orthogonal paths")
+        delta = abs(end.x - start.x) + abs(end.y - start.y)
+        if delta == 0 or delta % grid_step_nm != 0:
+            raise ValueError("route geometry is not aligned to the negotiated grid")
+        steps = delta // grid_step_nm
+        dx = 0 if start.x == end.x else (1 if end.x > start.x else -1)
+        dy = 0 if start.y == end.y else (1 if end.y > start.y else -1)
+        for index in range(steps):
+            left = PointNM(start.x + index * grid_step_nm * dx, start.y + index * grid_step_nm * dy)
+            right = PointNM(
+                start.x + (index + 1) * grid_step_nm * dx,
+                start.y + (index + 1) * grid_step_nm * dy,
+            )
+            keys.add(_edge_key(left, right))
+            keys.add(_vertex_key(left))
+            keys.add(_vertex_key(right))
+    return keys
+
+
+def _candidate_resources(candidate: RouteCandidate, grid_step_nm: int) -> set[ResourceKey]:
+    resources: set[ResourceKey] = set()
+    for path in candidate.patch.paths:
+        resources.update(_path_resources(path.vertices, grid_step_nm))
+    return resources
+
+
+def _invalid_result(
+    message: str, *, board_revision: str = _EMPTY_DIGEST
+) -> NegotiatedRoutingResult:
+    return NegotiatedRoutingResult(
+        status=NegotiatedRoutingStatus.INVALID_REQUEST,
+        board_revision=board_revision,
+        diagnostic=message,
+    )
+
+
+def _cancelled(cancelled: CancellationCheck | None) -> bool:
+    if cancelled is None:
+        return False
+    try:
+        return bool(cancelled())
+    except Exception:  # pragma: no cover - fail closed for an untrusted cancellation boundary
+        return True
+
+
+def _request_pad_centres(
+    snapshot: BoardIRSnapshot, request: RouteRequest
+) -> tuple[PointNM, ...] | None:
+    pads = tuple(
+        sorted(
+            (
+                pad
+                for pad in snapshot.content.pads
+                if pad.net_id == request.net_id and request.layer_id in pad.layer_ids
+            ),
+            key=lambda pad: pad.id,
+        )
+    )
+    if len(pads) != 2:
+        return None
+    return tuple(pad.center for pad in pads)
+
+
+def _validate_snapshot_requests(
+    snapshot: BoardIRSnapshot, envelope: NegotiatedRoutingRequest
+) -> str | None:
+    try:
+        verify_snapshot(snapshot)
+    except (BoardIRValidationError, TypeError, ValueError):
+        return "the Board IR snapshot failed canonical verification"
+    if snapshot.snapshot_digest != envelope.board_revision:
+        return "the negotiated request is stale against the immutable board revision"
+    origin: PointNM | None = None
+    step = envelope.grid_step_nm
+    for request in sorted(envelope.requests, key=lambda item: (item.net_id, item.seed)):
+        centres = _request_pad_centres(snapshot, request)
+        if centres is None:
+            return "each negotiated net must expose exactly two pads on the selected layer"
+        if origin is None:
+            origin = centres[0]
+        if any(
+            (centre.x - origin.x) % step != 0 or (centre.y - origin.y) % step != 0
+            for centre in centres
+        ):
+            return "all negotiated pad centres must share one world-coordinate grid"
+    return None
+
+
+def _reidentify_candidate(candidate: RouteCandidate, policy_digest: str) -> RouteCandidate:
+    """Bind each accepted path to the negotiated policy envelope before publication."""
+
+    policy = f"{NEGOTIATED_ROUTING_POLICY}-{policy_digest.removeprefix('sha256:')[:16]}"
+    marked = replace(
+        candidate,
+        candidate_id=_EMPTY_DIGEST,
+        router_version=NEGOTIATED_ROUTER_VERSION,
+        policy=policy,
+    )
+    digest = f"sha256:{hashlib.sha256(canonical_candidate_bytes(marked)).hexdigest()}"
+    marked = replace(marked, candidate_id=digest)
+    verify_candidate_id(marked)
+    return marked
+
+
+def _best_key(
+    candidates: tuple[RouteCandidate, ...],
+    unrouted: tuple[str, ...],
+    overflow: tuple[CongestionResource, ...],
+) -> tuple[int, int, int, tuple[str, ...]]:
+    return (
+        sum(item.usage - 1 for item in overflow),
+        len(unrouted),
+        sum(item.patch.length_nm for item in candidates),
+        tuple(item.candidate_id for item in candidates),
+    )
+
+
+def negotiate_routes(
+    snapshot: object,
+    envelope: object,
+    *,
+    cancelled: object = None,
+    router: AStarRouter | None = None,
+) -> NegotiatedRoutingResult:
+    """Run bounded deterministic rip-up/reroute and return immutable candidate evidence."""
+
+    if not isinstance(snapshot, BoardIRSnapshot) or not isinstance(
+        envelope, NegotiatedRoutingRequest
+    ):
+        return _invalid_result("the negotiated snapshot or request type is invalid")
+    checked_snapshot = snapshot
+    checked_envelope = envelope
+    if cancelled is not None and not callable(cancelled):
+        return _invalid_result(
+            "the negotiated cancellation hook is invalid",
+            board_revision=checked_envelope.board_revision,
+        )
+    validation_error = _validate_snapshot_requests(checked_snapshot, checked_envelope)
+    if validation_error is not None:
+        return _invalid_result(validation_error, board_revision=checked_envelope.board_revision)
+
+    cancellation_check = cast(CancellationCheck | None, cancelled)
+    selected_router = router or AStarRouter()
+    ordered = tuple(sorted(checked_envelope.requests, key=lambda item: (item.net_id, item.seed)))
+    ledger = CongestionLedger(
+        grid_step_nm=checked_envelope.grid_step_nm,
+        present_penalty_nm=checked_envelope.present_penalty_nm,
+        history_penalty_nm=checked_envelope.history_penalty_nm,
+    )
+    best_candidates: tuple[RouteCandidate, ...] = ()
+    best_connections: tuple[RouteConnection, ...] = ()
+    best_unrouted = tuple(item.net_id for item in ordered)
+    best_overflow: tuple[CongestionResource, ...] = ()
+    best_key: tuple[int, int, int, tuple[str, ...]] | None = None
+    iterations = 0
+    ripups = 0
+    total_expansions = 0
+    total_obstacle_checks = 0
+    current_order = ordered
+
+    for iteration in range(1, checked_envelope.max_iterations + 1):
+        if _cancelled(cancellation_check):
+            return NegotiatedRoutingResult(
+                status=NegotiatedRoutingStatus.CANCELLED,
+                board_revision=checked_envelope.board_revision,
+                candidates=best_candidates,
+                connections=best_connections,
+                unrouted_nets=best_unrouted,
+                iterations=iterations,
+                ripups=ripups,
+                overflow_resources=best_overflow,
+                overflow_units=sum(item.usage - 1 for item in best_overflow),
+                total_wire_length_nm=sum(item.patch.length_nm for item in best_candidates),
+                diagnostic="negotiated routing was cancelled before the next bounded iteration",
+                policy_digest=checked_envelope.policy_digest,
+            )
+        if iteration > 1:
+            ripups += len(best_candidates)
+        ledger.clear_present()
+        working: dict[str, RouteCandidate] = {}
+        connections: dict[str, RouteConnection] = {}
+        unrouted: set[str] = set()
+        failure_message: str | None = None
+        cancelled_during_iteration = False
+        for request in current_order:
+            if _cancelled(cancellation_check):
+                cancelled_during_iteration = True
+                break
+            remaining_expansions = checked_envelope.max_total_expansions - total_expansions
+            remaining_obstacle_checks = (
+                checked_envelope.max_total_obstacle_checks - total_obstacle_checks
+            )
+            if remaining_expansions <= 0 or remaining_obstacle_checks <= 0:
+                failure_message = "the negotiated routing budget was exhausted"
+                unrouted.update(item.net_id for item in current_order if item.net_id not in working)
+                break
+            bounded_settings = replace(
+                request.settings,
+                max_expansions=min(request.settings.max_expansions, remaining_expansions),
+                max_obstacle_checks=min(
+                    request.settings.max_obstacle_checks, remaining_obstacle_checks
+                ),
+            )
+            bounded_request = replace(request, settings=bounded_settings)
+            result = selected_router.propose(
+                checked_snapshot,
+                bounded_request,
+                cancelled=cancellation_check,
+                congestion_penalty=ledger.penalty,
+            )
+            if result.candidate is not None:
+                total_expansions += result.candidate.metrics.expanded_states
+                total_obstacle_checks += result.candidate.metrics.obstacle_checks
+                marked = _reidentify_candidate(result.candidate, checked_envelope.policy_digest)
+                working[request.net_id] = marked
+                ledger.add_candidate(marked)
+            elif result.connected is not None:
+                connections[request.net_id] = result.connected
+            else:
+                if result.diagnostic is not None:
+                    total_expansions += result.diagnostic.expanded_states
+                    total_obstacle_checks += result.diagnostic.obstacle_checks
+                unrouted.add(request.net_id)
+                failure_message = "one or more negotiated nets did not produce a candidate"
+        if len(working) + len(connections) < len(ordered):
+            unrouted.update(
+                item.net_id
+                for item in ordered
+                if item.net_id not in working and item.net_id not in connections
+            )
+        present_overflow = ledger.overflow_resources()
+        candidates = tuple(sorted(working.values(), key=lambda item: item.patch.net_id))
+        connected = tuple(sorted(connections.values(), key=lambda item: item.start_pad_id))
+        unrouted_tuple = tuple(sorted(unrouted))
+        score = _best_key(candidates, unrouted_tuple, present_overflow)
+        if best_key is None or score < best_key:
+            best_key = score
+            best_candidates = candidates
+            best_connections = connected
+            best_unrouted = unrouted_tuple
+            best_overflow = present_overflow
+        iterations = iteration
+        if cancelled_during_iteration:
+            return NegotiatedRoutingResult(
+                status=NegotiatedRoutingStatus.CANCELLED,
+                board_revision=checked_envelope.board_revision,
+                candidates=best_candidates,
+                connections=best_connections,
+                unrouted_nets=best_unrouted,
+                iterations=iterations,
+                ripups=ripups,
+                overflow_resources=best_overflow,
+                overflow_units=sum(item.usage - 1 for item in best_overflow),
+                total_wire_length_nm=sum(item.patch.length_nm for item in best_candidates),
+                diagnostic="negotiated routing was cancelled during a bounded iteration",
+                policy_digest=checked_envelope.policy_digest,
+            )
+        if not unrouted_tuple and not present_overflow:
+            return NegotiatedRoutingResult(
+                status=NegotiatedRoutingStatus.COMPLETED,
+                board_revision=checked_envelope.board_revision,
+                candidates=candidates,
+                connections=connected,
+                iterations=iterations,
+                ripups=ripups,
+                overflow_resources=(),
+                overflow_units=0,
+                total_wire_length_nm=sum(item.patch.length_nm for item in candidates),
+                policy_digest=checked_envelope.policy_digest,
+            )
+        ledger.update_history()
+        scores = ledger.conflict_scores()
+        current_order = tuple(
+            sorted(
+                ordered,
+                key=lambda item: (-scores.get(item.net_id, 0), item.net_id, item.seed),
+            )
+        )
+        if failure_message is not None and not candidates and not connections:
+            return NegotiatedRoutingResult(
+                status=NegotiatedRoutingStatus.NO_PATH,
+                board_revision=checked_envelope.board_revision,
+                candidates=(),
+                connections=(),
+                unrouted_nets=tuple(sorted(unrouted)),
+                iterations=iterations,
+                ripups=ripups,
+                overflow_resources=(),
+                overflow_units=0,
+                total_wire_length_nm=0,
+                diagnostic=failure_message,
+                policy_digest=checked_envelope.policy_digest,
+            )
+
+    status = NegotiatedRoutingStatus.PARTIAL
+    diagnostic = "negotiated routing reached its bounded iteration budget"
+    if best_unrouted and not best_candidates and not best_connections:
+        status = NegotiatedRoutingStatus.NO_PATH
+        diagnostic = "no negotiated net produced a candidate within the bounded budget"
+    return NegotiatedRoutingResult(
+        status=status,
+        board_revision=checked_envelope.board_revision,
+        candidates=best_candidates,
+        connections=best_connections,
+        unrouted_nets=best_unrouted,
+        iterations=iterations,
+        ripups=ripups,
+        overflow_resources=best_overflow,
+        overflow_units=sum(item.usage - 1 for item in best_overflow),
+        total_wire_length_nm=sum(item.patch.length_nm for item in best_candidates),
+        diagnostic=diagnostic,
+        policy_digest=checked_envelope.policy_digest,
+    )
+
+
+__all__ = [
+    "CongestionLedger",
+    "CongestionResource",
+    "NegotiatedRoutingRequest",
+    "NegotiatedRoutingResult",
+    "NegotiatedRoutingStatus",
+    "negotiate_routes",
+]
