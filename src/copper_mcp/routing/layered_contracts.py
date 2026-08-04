@@ -2,8 +2,9 @@
 
 This is deliberately separate from :mod:`copper_mcp.routing.contracts`.  The legacy route
 candidate and KiCad serializer are single-layer contracts; changing them would make old candidate
-IDs and apply guards ambiguous.  The layered contract is proposal-only until a source-preserving
-segment/via serializer and authoritative KiCad DRC gate are added.
+IDs and apply guards ambiguous.  The layered contract remains proposal-only even though it now has
+source-preserving serialization and a separate authoritative DRC evidence gate; MCP exposure and
+apply authority are still not part of this contract.
 """
 
 from __future__ import annotations

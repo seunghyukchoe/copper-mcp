@@ -269,7 +269,9 @@ The rendered bytes stay under the same parser, byte, and total-object budgets an
 through the supported KiCad adapter. The complete modeled content must equal the base snapshot after
 replacing only source revision and writer provenance and appending the expected segments. The
 function performs no file write, durable export, subprocess call, preview, MCP action, or board
-mutation. DRC orchestration remains a separate adapter boundary.
+mutation. `run_layered_route_candidate_drc()` is the separate internal boundary that invokes
+authoritative KiCad DRC against this exact replay; it does not make the layered candidate public or
+grant apply authority.
 
 ## Candidate-bound authoritative DRC
 
@@ -294,6 +296,14 @@ an adapter failure; warning-only or exclusion-only evidence may still have a har
 candidate bytes, raw descriptions, coordinates, UUIDs, or net names are returned. A KiCad 10.0.5
 integration test runs this path from the original synthetic two-pad fixture and verifies that source
 bytes, inode, modification time, and workspace entries remain unchanged.
+
+The layered counterpart, `run_layered_route_candidate_drc()`, accepts the original
+`LayeredRouteRequest`, replays it through `LayeredBoardRouter`, renders the two-layer derivative with
+full-stack through-vias, and feeds the same private context and fixed CLI vector to KiCad. Its frozen
+evidence binds the layered candidate, Board IR base revision, source bytes, patched board, complete
+DRC context, and aggregate summary. A KiCad 10.0.5 run against the blocked-pad fixture reports zero
+errors and zero unconnected items while preserving the source inode, mtime, and bytes. This is a
+candidate-evidence gate, not multilayer completion, negotiated congestion, or FreeRouting parity.
 
 ## Public non-mutating preview
 

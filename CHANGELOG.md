@@ -75,6 +75,10 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Layered two-signal-layer candidates now have an internal, replay-bound authoritative KiCad DRC
+  gate. The gate serializes only a disposable derivative, preserves source bytes, binds the
+  complete private DRC context, and returns redacted aggregate evidence; it is not exposed through
+  MCP/CLI and does not grant apply authority.
 - Placement candidate rendering now preserves arbitrary exact Board IR pad angles while retaining
   the orthogonal-only restriction on parent footprint poses. Layered A* now reports a distinct
   obstacle-count budget diagnostic when a structurally valid request exceeds its configured ceiling.

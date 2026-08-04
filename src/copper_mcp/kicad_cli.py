@@ -21,6 +21,10 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from copper_mcp.adapters.kicad_board_ir import KiCadConstraintProfile, parse_kicad_bytes
+from copper_mcp.adapters.kicad_layered_route_patch import (
+    KiCadLayeredRoutePatchError,
+    render_kicad_layered_candidate_board,
+)
 from copper_mcp.adapters.kicad_route_patch import (
     KiCadRoutePatchError,
     render_kicad_candidate_board,
@@ -29,7 +33,7 @@ from copper_mcp.adapters.sexpr import SExpr, SExprError, atoms, parse_sexpr
 from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
 from copper_mcp.models import DrcSummary
-from copper_mcp.routing import RouteCandidate
+from copper_mcp.routing import LayeredRouteCandidate, LayeredRouteRequest, RouteCandidate
 from copper_mcp.scene_render import (
     RENDER_LAYERS,
     SVG_CANONICALIZATION,
@@ -80,6 +84,46 @@ class KiCadCliError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class RouteCandidateDrcEvidence:
     """Immutable bindings between one replayed route candidate and KiCad DRC evidence."""
+
+    candidate_id: str
+    candidate_base_revision: str
+    source_revision: str
+    patched_board_revision: str
+    patched_drc_context_revision: str
+    summary: DrcSummary
+
+    def __post_init__(self) -> None:
+        for name in (
+            "candidate_id",
+            "candidate_base_revision",
+            "source_revision",
+            "patched_board_revision",
+            "patched_drc_context_revision",
+        ):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not _SHA256_ID.fullmatch(value):
+                raise ValueError(f"{name} must be content-addressed with sha256")
+        if not isinstance(self.summary, DrcSummary):
+            raise ValueError("summary must be strict KiCad DRC evidence")
+        if self.summary.base_revision != self.patched_board_revision:
+            raise ValueError("DRC summary is not bound to the patched board revision")
+        if self.summary.drc_context_revision != self.patched_drc_context_revision:
+            raise ValueError("DRC summary is not bound to the patched context revision")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "candidate_id": self.candidate_id,
+            "candidate_base_revision": self.candidate_base_revision,
+            "source_revision": self.source_revision,
+            "patched_board_revision": self.patched_board_revision,
+            "patched_drc_context_revision": self.patched_drc_context_revision,
+            "summary": self.summary.to_dict(),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class LayeredRouteCandidateDrcEvidence:
+    """Immutable KiCad DRC evidence bound to one layered route proposal."""
 
     candidate_id: str
     candidate_base_revision: str
@@ -1190,6 +1234,97 @@ def run_route_candidate_drc(
             "board or DRC rules changed while candidate DRC was running; result discarded"
         )
     return RouteCandidateDrcEvidence(
+        candidate_id=candidate.candidate_id,
+        candidate_base_revision=candidate.base_revision,
+        source_revision=source_revision,
+        patched_board_revision=patched_board_revision,
+        patched_drc_context_revision=patched_drc_context_revision,
+        summary=summary,
+    )
+
+
+def run_layered_route_candidate_drc(
+    requested_path: str,
+    candidate: LayeredRouteCandidate,
+    profile: KiCadConstraintProfile,
+    settings: Settings,
+    *,
+    request: LayeredRouteRequest,
+) -> LayeredRouteCandidateDrcEvidence:
+    """Bind an exact replayed layered candidate to private authoritative KiCad DRC."""
+
+    if not isinstance(candidate, LayeredRouteCandidate):
+        raise KiCadCliError("layered route candidate is malformed")
+    if not isinstance(profile, KiCadConstraintProfile):
+        raise KiCadCliError("KiCad constraint profile is malformed")
+    if not isinstance(request, LayeredRouteRequest):
+        raise KiCadCliError("layered route request is malformed")
+
+    board = read_workspace_file(
+        settings.workspace,
+        requested_path,
+        allowed_suffixes={".kicad_pcb"},
+        max_bytes=settings.max_board_bytes,
+    )
+    board_path = board.path
+    captured_context = _drc_context(board_path, settings, board)
+    board_relative = board_path.relative_to(settings.workspace.resolve(strict=True)).as_posix()
+    original_context_revision = _context_revision(captured_context)
+    source = captured_context[board_relative]
+    source_revision = _revision(source)
+
+    default_limits = ParseLimits()
+    parse_limits = replace(
+        default_limits,
+        max_input_bytes=min(default_limits.max_input_bytes, settings.max_board_bytes),
+    )
+    conversion = parse_kicad_bytes(source, profile, parse_limits)
+    if conversion.snapshot is None or conversion.diagnostics:
+        raise KiCadCliError("captured KiCad board cannot be represented by the supported Board IR")
+    snapshot = conversion.snapshot
+    if snapshot.content.source.revision != source_revision:
+        raise KiCadCliError("captured KiCad source revision is inconsistent")
+    if candidate.base_revision != snapshot.snapshot_digest:
+        raise KiCadCliError("layered route candidate is stale for the captured Board IR snapshot")
+    try:
+        patched_board = render_kicad_layered_candidate_board(
+            source,
+            snapshot,
+            candidate,
+            profile,
+            request=request,
+            limits=parse_limits,
+        )
+    except KiCadLayeredRoutePatchError as error:
+        raise KiCadCliError(
+            "layered route candidate failed replay-verified KiCad serialization"
+        ) from error
+
+    patched_context = _candidate_drc_context(
+        captured_context,
+        board_relative=board_relative,
+        patched_board=patched_board,
+        settings=settings,
+    )
+    patched_board_revision = _revision(patched_board)
+    patched_drc_context_revision = _context_revision(patched_context)
+    del captured_context, conversion, patched_board, snapshot, source
+
+    summary = _run_captured_drc(
+        patched_context,
+        board_relative=board_relative,
+        settings=settings,
+    )
+    if (
+        summary.base_revision != patched_board_revision
+        or summary.drc_context_revision != patched_drc_context_revision
+    ):
+        raise KiCadCliError("KiCad DRC summary revision binding is inconsistent")
+    if _context_revision(_drc_context(board_path, settings)) != original_context_revision:
+        raise KiCadCliError(
+            "board or DRC rules changed while layered candidate DRC was running; result discarded"
+        )
+    return LayeredRouteCandidateDrcEvidence(
         candidate_id=candidate.candidate_id,
         candidate_base_revision=candidate.base_revision,
         source_revision=source_revision,

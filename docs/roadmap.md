@@ -92,8 +92,9 @@ documentation, ledger updates, and benchmark evidence.
 - [~] Board IR-bound two-layer proposal adapter: exact grid attachment, conservative foreign
   copper/zone/pad envelopes, separate track/via keepouts, immutable candidate digests, and
   fail-closed stale/off-grid/unsupported diagnostics are benchmarked in B-018. Source-preserving
-  segment/via serialization and Board IR replay are now covered by an internal disposable
-  serializer; authoritative KiCad DRC and MCP exposure remain open gates.
+  segment/via serialization and Board IR replay are covered by an internal disposable serializer;
+  B-020 now binds that exact replay to private authoritative KiCad DRC. MCP exposure, durable
+  export, and apply authority remain open gates.
 - [x] Attachment to existing same-net copper and bounded partial-route completion.
 - [ ] Multilayer vias and keepouts.
 - [ ] Negotiated-congestion multi-net routing.
