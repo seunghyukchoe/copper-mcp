@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-04
 - Owners: `@seunghyukchoe`
-- Related: ADR-0022, ADR-0028, ADR-0029, SEC-024, B-009
+- Related: ADR-0022, ADR-0028, ADR-0029, SEC-024, SEC-026, B-009, B-011
 
 ## Context
 
@@ -34,6 +34,11 @@ through the existing Board IR and Scene pipeline, and refuses a stale expected s
 before returning. The output uses the existing Circuit Scene `0.2.0` contract with `board_path:
 live`; no raw source is added to the response. Live rendering is refused until a private
 snapshot-to-render binding exists.
+
+The service parses and bounds the complete live-scene request, including constraints, region,
+layers, optional digests, and the render flag, before opening the IPC client. This keeps malformed
+MCP traffic from triggering a board serialization or object-count pass; validation failures use a
+generic application error and never echo the rejected payload.
 
 This is an observation bridge, not action authority. `preview_route`, `preview_placement`, DRC,
 and `apply_candidate` remain file-backed and must gain their own live compare-and-swap/session

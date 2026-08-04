@@ -51,6 +51,11 @@ IR snapshot digest. A mismatch refuses before the scene is returned. B-009 measu
 fake-client conversion and stale-digest refusals; it intentionally does not claim a live GUI
 session because the local KiCad IPC server is disabled.
 
+The live-scene service performs the same bounded request parse before `capture_live_board`.
+Malformed constraints, regions, layer filters, unknown fields, invalid expected digests, and the
+unsupported render flag therefore fail without opening the IPC client; B-011 records the zero-call
+preflight oracle.
+
 ## Primary references
 
 - KiCad, “For Add-on Developers,” especially API limits, socket/token variables, plugin runtime,

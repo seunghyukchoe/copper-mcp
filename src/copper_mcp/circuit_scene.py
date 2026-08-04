@@ -1063,6 +1063,9 @@ def observe_live_board_scene(
             not isinstance(value, str) or _SHA256_DIGEST.fullmatch(value) is None
         ):
             raise CircuitSceneError(f"{name} is malformed")
+    validated_request = parse_circuit_scene_request(request_payload)
+    if validated_request.include_render:
+        raise CircuitSceneError("live scene rendering is not available")
     snapshot = capture_live_board(settings, client_factory=client_factory)
     if (
         expected_board_revision is not None

@@ -265,6 +265,36 @@ class KicadIpcTests(unittest.TestCase):
                 client_factory=factory,
             )
 
+    def test_malformed_live_scene_request_is_rejected_before_ipc_capture(self) -> None:
+        calls = 0
+
+        def factory(**_: object) -> _KiCad:
+            nonlocal calls
+            calls += 1
+            return _KiCad()
+
+        with self.assertRaises(CircuitSceneError):
+            observe_live_board_scene(
+                {
+                    "board": "live",
+                    "constraints": {
+                        "clearance_nm": "not-an-integer",
+                        "track_width_nm": 250_000,
+                        "via_diameter_nm": 600_000,
+                        "via_drill_nm": 300_000,
+                    },
+                    "region": {
+                        "min_x_nm": -1_000_000_000,
+                        "min_y_nm": -1_000_000_000,
+                        "max_x_nm": 1_000_000_000,
+                        "max_y_nm": 1_000_000_000,
+                    },
+                },
+                _settings(),
+                client_factory=factory,
+            )
+        self.assertEqual(calls, 0)
+
     def test_official_plugin_manifest_is_closed_to_the_pcb_read_only_action(self) -> None:
         manifest_path = ROOT / "hardware" / "kicad-ipc-plugin" / "plugin.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))

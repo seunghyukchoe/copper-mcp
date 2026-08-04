@@ -160,7 +160,13 @@ def _repetitions(value: str) -> int:
 def _run(repetitions: int) -> dict[str, Any]:
     source = FIXTURE.read_text(encoding="utf-8")
     settings = Settings(workspace=ROOT)
-    factory = lambda **_: _FakeKiCad(source)  # noqa: E731 - bounded test factory
+    factory_calls = 0
+
+    def factory(**_: object) -> _FakeKiCad:
+        nonlocal factory_calls
+        factory_calls += 1
+        return _FakeKiCad(source)
+
     request = {"board": "live", "constraints": CONSTRAINTS, "region": REGION}
     documents: list[dict[str, Any]] = []
     latencies: list[int] = []
@@ -205,6 +211,30 @@ def _run(repetitions: int) -> dict[str, Any]:
     if stale_board_refusals != 1 or stale_snapshot_refusals != 1:
         raise BenchmarkError("stale live scene revisions were not refused")
 
+    calls_before_malformed = factory_calls
+    malformed_request_refusals = 0
+    try:
+        observe_live_board_scene(
+            {
+                **request,
+                "constraints": {
+                    "clearance_nm": "not-an-integer",
+                    "track_width_nm": CONSTRAINTS["track_width_nm"],
+                    "via_diameter_nm": CONSTRAINTS["via_diameter_nm"],
+                    "via_drill_nm": CONSTRAINTS["via_drill_nm"],
+                },
+            },
+            settings,
+            client_factory=factory,
+        )
+    except CircuitSceneError:
+        malformed_request_refusals = 1
+    if malformed_request_refusals != 1:
+        raise BenchmarkError("malformed live-scene request was not refused")
+    malformed_request_ipc_calls = factory_calls - calls_before_malformed
+    if malformed_request_ipc_calls != 0:
+        raise BenchmarkError("malformed request opened a KiCad IPC client")
+
     commit, tracked_dirty, untracked = _git_metadata()
     return {
         "benchmark": BENCHMARK_NAME,
@@ -242,6 +272,8 @@ def _run(repetitions: int) -> dict[str, Any]:
             "annotations_returned": document["truncation"]["annotations_returned"],
             "stale_board_revision_refusals": stale_board_refusals,
             "stale_snapshot_digest_refusals": stale_snapshot_refusals,
+            "malformed_request_refusals": malformed_request_refusals,
+            "malformed_request_ipc_calls": malformed_request_ipc_calls,
             "raw_source_returned": False,
         },
         "not_claimed": [

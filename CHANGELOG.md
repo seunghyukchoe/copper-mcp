@@ -12,6 +12,9 @@ All notable changes are documented here. The format follows
   and refuses a caller-supplied board or Board IR snapshot revision mismatch before returning a
   scene. The live tool uses the literal `board: "live"`, refuses render delivery, and does not
   grant routing, placement, DRC, or apply authority.
+- Live-scene requests are now fully preflighted before any IPC connection or board serialization:
+  malformed constraints, regions, layers, unknown fields, and the unsupported render flag fail at
+  the application boundary, keeping invalid MCP traffic from driving expensive KiCad reads.
 - The optional KiCad IPC observer is constrained to a local IPC socket, bounded by a connection
   timeout and board-size/object-count ceilings, and refuses a future KiCad API version unless an
   explicit development-only opt-in is supplied. It returns only numeric versions, a board digest,
