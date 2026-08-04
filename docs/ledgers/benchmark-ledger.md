@@ -235,3 +235,16 @@ result or a general performance comparison.
 | Metrics | Deterministic replays 10/10; unique response digests 1; median capture latency 31,437 ns; selection count 2; stale board/context refusals 1/1; changing active layer changes context digest 1/1; mutating IPC calls 0; raw editor content returned `false` |
 | Artifact | [`2026-08-04-live-editor-context.json`](../../benchmarks/results/mcp/2026-08-04-live-editor-context.json) |
 | Interpretation | This proves only the bounded read-only editor-context contract over a fake client: active layer and typed native selection references are deterministic and stale/context changes fail closed. It does not establish live GUI compatibility, placement/routing mutation, DRC, ERC, electrical behavior, fabrication readiness, or performance generalization. |
+
+### B-016 — Source-preserving KiCad placement projection
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:a9a2227c5c9beb21f3b43f2bc61c5db315c33922220f648559f9813a54f56ec5` |
+| Date and commit | 2026-08-04 14:47:34 UTC; `d76cc134ee6d8bde9c65553d78a57310d615f9d8`; tracked tree clean at run time except the pre-existing user handoff file and the output artifact created by the run |
+| Environment | Apple arm64 CPU; no accelerator; 38,654,705,664 physical bytes; macOS 26.5.2; Python 3.12.13; MCP 2.0.0; Pydantic 2.13.4; KiCad was not invoked |
+| Dataset | Independently authored `footprint-pose-courtyard.kicad_pcb`, SHA-256 `8bb7b22bf38db4d0272d5010cd9d9357123f3bf5d37329e4e01851266032cf48`; four native-identity front-side orthogonal footprints, two pads each, and unfilled `F.CrtYd` rectangles; no external or proprietary board; no train/test split |
+| Configuration | `kicad-source-preserving-placement-v1`; ten measured repetitions; `request-200um-v1` constraints; `front-orthogonal-unfilled-courtyard-v1` projection; script SHA-256 `eeaf08e818d0a68d1c09399171f79d0803db6f86bd49f95176ff12e1ad414ddb`; CPU-only |
+| Metrics | Deterministic projection replays 10/10; Board IR round-trip replays 10/10; source unchanged `true`; median projection latency 5,502,417 ns; candidate `sha256:4d4839eb58c6679384c78a94cbc640268fee994d7018de44ea46a54e6f2a3538`; candidate base `sha256:73463aa02b61a571f5b4c3b21844a56dd5c3ca0b457958c73b096b0e7f2ed982`; output `sha256:1a0dd7389e80027393b0ffb53ebdaa60a40a4a4d3f1469cc613dcd879eba1153`; source/output bytes 2,914/2,938; no KiCad, DRC, live mutation, or undo calls |
+| Artifact | [`2026-08-04-placement-projection-d76cc13.json`](../../benchmarks/results/mcp/2026-08-04-placement-projection-d76cc13.json) |
+| Interpretation | This is a deterministic source-preservation and Board IR round-trip oracle for the narrow supported placement subset. It shows that a disposable placement derivative can be produced without changing the source fixture, but it does not claim placement DRC, courtyard legality, back-side or non-orthogonal fidelity, live KiCad mutation, undo, electrical behavior, fabrication readiness, or performance generalization. |
