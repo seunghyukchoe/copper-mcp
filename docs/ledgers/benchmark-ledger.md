@@ -331,8 +331,8 @@ result or a general performance comparison.
 
 | Field | Recorded evidence |
 |---|---|
-| Run ID | `sha256:e6c28419ef56e77493efcc8acc2ea45e4252979fae60e1596b079f454b594106` |
-| Date and commit | 2026-08-04 16:53:23 UTC; `972b902ea8c845dd5077be9a6a3f549e51848173`; measured before the remediation evidence commit |
+| Run ID | `sha256:90b840eed06667b3928d4264cbb4891f95d7993ad5745c8ae550c2ce860764da` |
+| Date and commit | 2026-08-04 16:58:55 UTC; `12be421304b8b512552a2a8173924ab4a40fcc67`; measured after the remediation code commit |
 | Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
 | Dataset | Independently generated synthetic Board IR fixture `synthetic-fill-corridor-v1`, with a matching foreign zone/fill case and an orphaned-fill negative case; no external or proprietary design data |
 | Configuration | `fill-aware-routing-v1` remediation replay; ten deterministic conservative and freshness-aware replays; explicit orphaned-fill diagnostic gate; CPU-only |
