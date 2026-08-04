@@ -212,5 +212,6 @@ release.
 General placement mutation remains blocked until Board IR can preserve and replay every source span
 affected by a pose edit, including the currently omitted author text, fabrication graphics, library
 identity, properties, and 3D-model pose. The bounded front-side orthogonal subset now has explicit
-authorization, revision-race tests, recoverable-undo behavior, audit metadata, and a dedicated
-security review; KiCad post-apply verification, cancellation, and live IPC action remain open.
+authorization, revision-race tests, recoverable-undo behavior, post-publication re-render/reparse,
+observed final-digest reporting, audit metadata, and a dedicated security review; KiCad DRC/scene
+verification, cancellation, undo transaction, and live IPC action remain open.

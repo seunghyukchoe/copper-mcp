@@ -454,8 +454,10 @@ The planned Circuit Scene IR will add bounded semantic and visual observation pl
 intent. Models may request immutable placement previews/candidates; deterministic services own
 snapping, connectivity, clearance, provenance, and validation, and any eventual apply remains a
 separate explicit capability. Direct model-authored KiCad mutation is never an MCP shortcut. This is
-a high-fidelity north star; live-scene binding, placement apply, and autonomous policy remain
-unimplemented.
+a high-fidelity north star; live-scene action CAS, broader placement fidelity, and autonomous
+policy remain unimplemented. The narrow file-backed `apply_placement_candidate` capability is
+implemented as a separately authorized, default-off operation with closed request fields and
+post-publication verification.
 
 ## Compatibility
 

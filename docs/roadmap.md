@@ -187,8 +187,9 @@ documentation, ledger updates, and benchmark evidence.
 ## M4 — High-fidelity Circuit Scene and AI policy plugins
 
 Circuit Scene IR covers both semantic and visual observation, and placement has a public preview
-surface judged by a deterministic legalizer. What remains is applying a placement, solving for one,
-and the policy-plugin work.
+surface judged by a deterministic legalizer. The bounded file-backed placement apply gate is now
+implemented; what remains is broader source fidelity, post-action/editor authority, solving for a
+placement, and the policy-plugin work.
 
 - [x] Versioned Circuit Scene IR for bounded semantic and visual observation. Semantic observation
   is `observe_board_scene` (Circuit Scene IR 0.2.0): region-scoped, exact integer geometry,

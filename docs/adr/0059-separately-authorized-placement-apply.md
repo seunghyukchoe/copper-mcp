@@ -34,8 +34,12 @@ cannot authorize placement, and no token is minted by default or for a live IPC 
 The placement apply service reuses the route apply safety sequence: operator opt-in, token
 verification, lockfile refusal, first compare-and-swap, fail-closed Board IR conversion, pure
 replay, local-filesystem check, timestamped content-addressed pre-apply copy, an under-lock
-second compare-and-swap, atomic replacement, and truthful post-publication reporting. A refused
-operation never consumes its token; a successful operation consumes it once.
+second compare-and-swap, atomic replacement, and truthful post-publication reporting. The manifest
+decoder bounds pose, grid, legality, and evidence fields before the board is parsed, and the MCP
+request exposes the same closed shape to clients. After publication the service re-renders the
+authorized bytes, reparses them, spends the capability exactly once even on an unverified write,
+and re-reads the final digest after guarded recovery. A refusal before publication never consumes
+its token; any operation that has published bytes consumes it once.
 
 The pure engine calls the existing replay-verified placement serializer and returns only bytes
 that it proved reparsed and matched the source Board IR plus the transformed footprint poses,
@@ -64,6 +68,9 @@ validation and explicit operator authorization.
 - Placement application has the same stale-candidate and recoverable-backup semantics as route
   application, but its result reports `footprints_moved` and `bytes_changed` rather than route
   segment counts.
+- Post-publication verification now checks the actual published bytes against a fresh authorized
+  replay and Board IR parse. A concurrent writer or recovery-sync failure returns
+  `applied_but_unverified` with the digest observed on disk and cannot replay the same capability.
 - A real KiCad DRC run, post-apply scene observation, side-aware flip serialization, arbitrary
   courtyard topology, and a genuine KiCad undo transaction remain open. The response reports
   KiCad-open and DRC stages as `not_run` until those checks are actually executed.

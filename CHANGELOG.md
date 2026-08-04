@@ -16,6 +16,11 @@ All notable changes are documented here. The format follows
   footprint properties/graphics/library/3D-model syntax, no-op candidates, live IPC mutation, and
   post-placement DRC remain fail-closed under ADR-0059.
 
+- Added a deterministic, CopperMCP-original Apache-2.0 synthetic RC audio-routing microcase.
+  Repeated previews produce one reproducible candidate and one new copper segment in a disposable
+  derivative; the source board is unchanged and the fixture makes no DRC, apply, production,
+  fabrication, or hardware claim. Evidence is recorded in B-043.
+
 - Added deterministic same-side courtyard legality to placement previews for the Board IR v0.2
   rectangular subset. The legalizer transforms proposed poses, checks exact integer rectangle
   overlap, treats front/back courtyards independently, and refuses overlapping candidates; custom
@@ -110,6 +115,13 @@ All notable changes are documented here. The format follows
   only as historical evidence and is no longer used for performance claims.
 
 ### Security
+
+- Hardened placement application after review: bounded manifest pose, grid, legality, and evidence
+  fields are rejected before board parsing; the destructive MCP request is closed at its nested
+  boundary; post-rename and post-publication paths spend the capability exactly once; and the
+  final board revision is re-read after guarded recovery so an observed rollback cannot report a
+  stale published digest. Published placement bytes are re-rendered and reparsed before a success
+  response.
 
 - Routing-job and candidate-manifest TTL misses now commit their expiry purge before returning
   the uniform unavailable diagnostic, so expired board-derived metadata cannot reappear after a

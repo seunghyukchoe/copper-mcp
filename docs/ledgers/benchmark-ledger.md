@@ -661,3 +661,29 @@ historical evidence; these runs were generated from the clean implementation com
 | Metrics | Same-side overlap: `refused`, `courtyard_overlap=violated`, `pad_overlap=proven_clear`; cross-side overlap: `previewed`, `proven_clear`; absent courtyard: `previewed`, `proven_clear`; workspace mutations `0` |
 | Artifact | [`2026-08-05-courtyard-legality.json`](../../benchmarks/results/placement/2026-08-05-courtyard-legality.json) |
 | Interpretation | This closes the former placement `not_modelled` gap for the exact Board IR v0.2 rectangular subset. It does not establish nonzero custom courtyard clearance, general polygon/line-chain topology, KiCad DRC, post-placement connectivity, apply, or FreeRouting parity. |
+
+#### B-042 — separately authorized bounded placement apply
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:477fbaf538b354f3146a06ae8328c1f183184500a3e654ebb75e1a94763cb2b8` |
+| Date and commit | 2026-08-05; source commit `f3dcdadef0714423b58f678feeffa5731991681b` |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad and live IPC not invoked |
+| Dataset | [`placement-legal.kicad_pcb`](../../tests/fixtures/placement-v0.1/placement-legal.kicad_pcb), one committed front-side orthogonal footprint fixture |
+| Configuration | `copper-mcp/benchmark/placement-apply/v1`; explicit placement-scoped token; operator apply enabled only in an isolated temporary workspace; source/snapshot/candidate CAS; lock/backup/atomic service; route-token cross-domain replay |
+| Metrics | Apply status `applied`; `footprints_moved=1`; `bytes_changed=530`; exact pre-apply backup `true`; result reparsed clean `true`; result revision matched `true`; route-token cross-domain refusal `true`; workspace files `1 → 2`; workspace mutations `2` |
+| Artifact | [`2026-08-05-placement-apply.json`](../../benchmarks/results/placement/2026-08-05-placement-apply.json) |
+| Interpretation | This closes the file-backed mutation gate for the documented front-side, orthogonal, native-identity, rectangular-courtyard subset. It does not establish general KiCad footprint fidelity, side flips, post-placement DRC/connectivity, live IPC mutation, undo integration, fabrication/electrical safety, or FreeRouting parity. |
+
+#### B-043 — deterministic synthetic audio-routing microcase
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:e325c4efb649984540cc797e8ccaea92e507906ef8ae4160b2de8ae7cbb1d613` |
+| Date and commit | 2026-08-05; source commit `378d4c6b7adb47fdd1b33a010048e5839cfa1366` |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad and live IPC not invoked |
+| Dataset | [`rc-low-pass-routing-v1.kicad_pcb`](../../benchmarks/audio/fixtures/rc-low-pass-routing-v1.kicad_pcb), CopperMCP-original synthetic two-pad RC microcase with Apache-2.0 catalog metadata |
+| Configuration | `copper-mcp/benchmark/audio-routing-gap/v1`; ten deterministic route previews, candidate identity replay, disposable source-preserving serialization, and Board IR reparse |
+| Metrics | Candidate deterministic `true`; derivative bytes deterministic `true`; original segments `0`; rendered segments `1`; new copper segments `1`; new copper length `8,000,000 nm`; source unchanged `true`; candidate applied `false`; authoritative DRC `false` |
+| Artifact | [`2026-08-04-audio-routing-gap-378d4c6.json`](../../benchmarks/results/routing/2026-08-04-audio-routing-gap-378d4c6.json) |
+| Interpretation | This is a deterministic candidate-to-disposable-copper regression for a synthetic low-voltage audio-shaped RC net. It does not establish external-board coverage, circuit correctness, KiCad DRC, apply, manufacturability, fabrication readiness, hardware behavior, or FreeRouting parity. |
