@@ -404,3 +404,16 @@ result or a general performance comparison.
 | Metrics | Successful completion `true`; deterministic candidate ID `true`; claim race one winner `true`; cancellation terminal `true`; expired lease recovered `true`; invalid candidate terminal `true`; redacted storage `true`; candidate persistence `false`; MCP Tasks `false` |
 | Artifact | [`2026-08-05-routing-job-worker.json`](../../benchmarks/results/routing/2026-08-05-routing-job-worker.json) |
 | Interpretation | This demonstrates local CAS-backed single-worker execution, cooperative cancellation, stale-lease terminalization, and safe invalid-output handling while preserving the redacted-store boundary. It does not establish request/result persistence, durable candidate export, authorization, MCP Tasks compatibility, KiCad DRC, electrical behavior, fabrication readiness, or FreeRouting parity. |
+
+### B-029 — Redacted candidate-manifest persistence
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:80e37afd84c7c8ded159dba51c13a11fc75e3ebb51bcd5a707f9e1a928f49359` |
+| Date and commit | 2026-08-04 19:01:26 UTC; `2c1a7fd14e1cf5f50ffc25ab40ab5219947d1ad9`; measured after the manifest-store commit |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
+| Dataset | Synthetic redacted-manifest fixture `synthetic-redacted-manifest-v1`; no board bytes, net names, geometry, prompts, credentials, or DRC findings |
+| Configuration | `copper-mcp/benchmark/routing-candidate-manifest-store/v1`; temporary SQLite stores; bounded TTL; deterministic manifest digest; tamper and uniform lookup probes; CPU-only |
+| Metrics | Restart preservation `true`; idempotent put `true`; expiry refusal `true`; unknown/expired error uniform `true`; tamper refusal `true`; redacted payload `true`; geometry export `false`; MCP Tasks `false` |
+| Artifact | [`2026-08-05-routing-candidate-manifest-store.json`](../../benchmarks/results/routing/2026-08-05-routing-candidate-manifest-store.json) |
+| Interpretation | This demonstrates restart-safe redacted candidate-summary persistence and fail-closed integrity/retention boundaries. It does not establish route-geometry rehydration/export, ordinary MCP job tools, authorization, MCP Tasks compatibility, KiCad DRC, electrical behavior, fabrication readiness, or FreeRouting parity. |

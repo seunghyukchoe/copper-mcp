@@ -1,0 +1,22 @@
+{
+  "date_utc": "2026-08-04T19:01:26+00:00",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "fixture": "synthetic-redacted-manifest-v1",
+  "metrics": {
+    "expiry_refused": true,
+    "geometry_export": false,
+    "idempotent_put": true,
+    "mcp_tasks": false,
+    "redacted_payload": true,
+    "reopen_preserved": true,
+    "tamper_refused": true,
+    "unknown_expiry_error_uniform": true
+  },
+  "run_id": "sha256:80e37afd84c7c8ded159dba51c13a11fc75e3ebb51bcd5a707f9e1a928f49359",
+  "schema": "copper-mcp/benchmark/routing-candidate-manifest-store/v1",
+  "script": "scripts/benchmark_routing_candidate_manifest_store.py",
+  "source_commit": "2c1a7fd14e1cf5f50ffc25ab40ab5219947d1ad9"
+}
