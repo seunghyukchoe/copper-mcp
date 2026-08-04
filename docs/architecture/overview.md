@@ -49,7 +49,7 @@ live revision before it can release the synchronous connection.
 | `circuit_scene.py` | Bounded, region-scoped Board IR observation with typed references and quarantined author text. |
 | `placement/` | Revision-bound footprint views, typed placement intent, and deterministic preview/legalization. |
 | `route_preview.py` | The public non-mutating route preview service. |
-| `routing/jobs.py` | Transport-independent revision-safe job records and a bounded SQLite ledger; no worker or MCP Tasks adapter. |
+| `routing/jobs.py` / `routing/job_worker.py` | Transport-independent revision-safe job records plus a bounded single-worker lease/recovery seam; no request/result repository or MCP Tasks adapter. |
 | `mcp_server.py` | MCP tools/resources and transport configuration. |
 
 Board IR `0.2.0` is the domain and source-adapter foundation. It adds immutable footprint pose,

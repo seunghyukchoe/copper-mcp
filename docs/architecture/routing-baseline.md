@@ -7,7 +7,9 @@
 disposable KiCad board, and the internal KiCad service can bind that private derivative to
 authoritative DRC evidence. A bounded, non-mutating preview now exposes that pipeline through MCP
 and the CLI. The slice remains smaller than issue #10's complete acceptance target: it does not
-route multiple nets, run durable jobs, persist or export candidate boards, or apply copper.
+route multiple nets, persist or export candidate boards, or apply copper. The protocol-independent
+`RoutingJobWorker` can execute one redacted job under a bounded CAS lease, but request/result
+persistence and MCP job tools remain separate roadmap gates.
 
 The internal `LayeredBoardRouter` is a separate Board IR-bound proposal seam. It accepts only the
 narrow two-signal-layer matrix in [ADR-0036](../adr/0036-board-ir-layered-proposal-adapter.md),

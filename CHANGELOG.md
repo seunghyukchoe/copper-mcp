@@ -8,6 +8,11 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added a protocol-independent `RoutingJobWorker` with one active CAS-backed lease, cooperative
+  cancellation, stale-lease recovery, and fail-closed invalid-candidate publication. The worker
+  stores only the existing redacted job record; candidate persistence/export and MCP Tasks remain
+  deferred until their request/result and authorization contracts are pinned.
+
 - Added a pure, bounded `verify_layered_candidate` gate for layered route topology. It binds
   candidate identity, Board IR revision, endpoints, layer transitions, path/via continuity, and
   duplicate/crossing geometry before the disposable serializer; physical validation remains an

@@ -62,8 +62,12 @@ documentation, ledger updates, and benchmark evidence.
   - [~] Durable routing jobs, candidate persistence, and export.
     - [x] Transport-independent redacted job records with revision CAS, SQLite reopen, bounded
       TTL/capacity, idempotent creation, and cooperative cancellation.
-    - [ ] Worker execution/leases, candidate persistence, durable export, and ordinary MCP
+    - [~] Worker execution/leases, candidate persistence, durable export, and ordinary MCP
       start/get/cancel tools.
+      - [x] Single-worker CAS leases, cooperative cancellation, stale-lease recovery, and
+        fail-closed invalid-candidate publication are covered by ADR-0046 and B-028.
+      - [ ] Bounded request/result or candidate-manifest persistence, durable export, and ordinary
+        MCP `start_routing`/`get_routing_job`/`cancel_routing_job` tools.
 - [x] Existing selected-layer copper as exact rectangular obstacles.
 - [x] Via obstacles on the selected layer, the first limit a real board hit.
 - [x] Conservative polygon zone-boundary envelope obstacles with exact integer concave/diagonal
@@ -129,10 +133,12 @@ documentation, ledger updates, and benchmark evidence.
 
 ## M3 — Safe candidate application
 
-- [~] Durable routing jobs and cancellation. The bounded internal ledger exists; worker leases,
-  ordinary MCP tools, and execution recovery remain open.
+- [~] Durable routing jobs and cancellation. The bounded internal ledger and single-worker lease
+  recovery now exist; bounded request/result persistence, ordinary MCP tools, and execution
+  export remain open.
 - [ ] MCP Tasks progressive enhancement. The current protocol is an experimental extension and
-  remains deferred until a pinned client/server compatibility matrix exists.
+  remains deferred until a pinned client/server compatibility matrix, random task handles, and
+  authorization-bound result storage exist; see ADR-0046.
 - [x] Immutable route patch format. A byte-preserving span-splice CST and a pure apply engine:
   given board bytes and a verified candidate they return the bytes an apply would write, proven
   by a three-part assertion (untouched bytes bit-identical, result reparses fail-closed,
