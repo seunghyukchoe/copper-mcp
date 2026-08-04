@@ -89,6 +89,11 @@ documentation, ledger updates, and benchmark evidence.
     deterministic budgets, delivered as an internal oracle only. Board IR binding, physical
     clearance/via legality, KiCad serialization, and DRC remain required before this becomes a
     routing capability.
+- [~] Board IR-bound two-layer proposal adapter: exact grid attachment, conservative foreign
+  copper/zone/pad envelopes, separate track/via keepouts, immutable candidate digests, and
+  fail-closed stale/off-grid/unsupported diagnostics are benchmarked in B-018. Source-preserving
+  segment/via serialization, Board IR replay, authoritative KiCad DRC, and MCP exposure remain
+  open gates.
 - [x] Attachment to existing same-net copper and bounded partial-route completion.
 - [ ] Multilayer vias and keepouts.
 - [ ] Negotiated-congestion multi-net routing.

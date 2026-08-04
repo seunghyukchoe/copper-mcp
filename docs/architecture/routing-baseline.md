@@ -9,6 +9,12 @@ authoritative DRC evidence. A bounded, non-mutating preview now exposes that pip
 and the CLI. The slice remains smaller than issue #10's complete acceptance target: it does not
 route multiple nets, run durable jobs, persist or export candidate boards, or apply copper.
 
+The internal `LayeredBoardRouter` is a separate Board IR-bound proposal seam. It accepts only the
+narrow two-signal-layer matrix in [ADR-0036](../adr/0036-board-ir-layered-proposal-adapter.md),
+emits immutable paths and through-vias, and is covered by B-018. It is not wired to the public
+route preview or the KiCad serializer; source-preserving segment/via output, Board IR replay, and
+authoritative DRC are still required before routing through vias can be marked complete.
+
 ## Accepted input
 
 | Surface | First-slice contract |
@@ -517,4 +523,6 @@ See [ADR-0006](../adr/0006-bounded-deterministic-astar.md),
 [ADR-0011](../adr/0011-existing-copper-obstacles.md),
 [ADR-0012](../adr/0012-via-obstacles.md),
 [ADR-0013](../adr/0013-polygon-zone-obstacles.md),
-[ADR-0016](../adr/0016-same-net-attachment.md), and the [roadmap](../roadmap.md).
+[ADR-0016](../adr/0016-same-net-attachment.md),
+[ADR-0035](../adr/0035-internal-layered-search-oracle.md),
+[ADR-0036](../adr/0036-board-ir-layered-proposal-adapter.md), and the [roadmap](../roadmap.md).

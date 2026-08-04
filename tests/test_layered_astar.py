@@ -24,6 +24,7 @@ def _request(
     goal: LayeredPoint = DEFAULT_GOAL,
     bounds: tuple[int, int, int, int] = (0, 0, 4, 4),
     obstacles: tuple[LayeredObstacle, ...] = (),
+    via_obstacles: tuple[LayeredObstacle, ...] = (),
     settings: LayeredAStarSettings = DEFAULT_SETTINGS,
     expected_revision: str | None = REVISION,
 ) -> LayeredAStarRequest:
@@ -34,6 +35,7 @@ def _request(
         start=start,
         goal=goal,
         obstacles=obstacles,
+        via_obstacles=via_obstacles,
         settings=settings,
     )
 
@@ -117,6 +119,22 @@ def test_obstacles_are_scoped_to_their_declared_layer() -> None:
     assert blocked.diagnostic.code is LayeredFailureCode.NO_PATH
     assert unblocked.ok
     assert unblocked.metrics.via_steps == 0
+
+
+def test_via_only_obstacles_block_transitions_without_blocking_tracks() -> None:
+    via_keepout = LayeredObstacle(0, 0, 1, 0, 1)
+    result = route_layered(
+        _request(
+            start=LayeredPoint(0, 1, 0),
+            goal=LayeredPoint(4, 1, 1),
+            via_obstacles=(via_keepout,),
+        )
+    )
+
+    assert result.ok
+    assert result.path is not None
+    assert result.metrics.via_steps == 1
+    assert all(not (step.kind == "via" and step.x == 0 and step.y == 1) for step in result.path)
 
 
 def test_stale_invalid_budget_and_cancelled_requests_fail_closed() -> None:

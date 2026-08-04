@@ -127,11 +127,12 @@ bytes, and reparses the disposable result against the expected Board IR transfor
 candidate derivative only: placement DRC, live compare-and-swap, KiCad undo, and post-action
 observation remain separate gates.
 
-The internal layered search seam now exercises the first maze-level primitive needed for
-via-capable routing: a bounded `(x, y, layer)` lattice with explicit positive-cost transitions.
-It remains abstract cell geometry and is intentionally not exported or mapped to Board IR; the
-production route contract stays single-layer until width/clearance, via rules, source-preserving
-segment/via serialization, round-trip checks, and KiCad DRC are implemented together.
+The internal layered search seam now has a narrow Board IR-bound proposal adapter in addition to
+the abstract maze oracle: it resolves integer width/clearance/via geometry, conservative foreign
+obstacles, and separate track/via keepouts into immutable content-addressed candidates. It remains
+proposal-only and is not exported through MCP or the KiCad serializer; source-preserving
+segment/via serialization, round-trip checks, and authoritative KiCad DRC are still required
+before the production route contract can leave its single-layer boundary. See [ADR-0036](../adr/0036-board-ir-layered-proposal-adapter.md).
 
 ## Candidate lifecycle
 

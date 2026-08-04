@@ -1,0 +1,729 @@
+"""Board IR adapter for the bounded, proposal-only two-layer router.
+
+The adapter is intentionally conservative.  It accepts exactly two signal layers, a rectangular
+hole-free board, two pads, and foreign orthogonal copper/rectangular keepout envelopes.  It emits
+an immutable layered candidate but does not write KiCad bytes, call KiCad, or grant apply authority.
+"""
+
+from __future__ import annotations
+
+import hashlib
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
+from itertools import pairwise
+from typing import TypeAlias, cast
+
+from copper_mcp.board_ir import (
+    BoardIRSnapshot,
+    BoardIRValidationError,
+    Pad,
+    PadShape,
+    PointNM,
+    Ring,
+    Segment,
+    verify_snapshot,
+)
+from copper_mcp.board_ir.types import Layer, NetClass
+from copper_mcp.routing.layered_astar import (
+    LayeredAStarRequest,
+    LayeredAStarResult,
+    LayeredAStarSettings,
+    LayeredFailureCode,
+    LayeredObstacle,
+    LayeredPoint,
+    LayeredStep,
+    route_layered,
+)
+from copper_mcp.routing.layered_contracts import (
+    LayeredRouteCandidate,
+    LayeredRouteCost,
+    LayeredRouteDiagnostic,
+    LayeredRouteFailureCode,
+    LayeredRouteMetrics,
+    LayeredRoutePatch,
+    LayeredRoutePath,
+    LayeredRouteResult,
+    LayeredRouteVia,
+    canonical_layered_candidate_bytes,
+    verify_layered_candidate_id,
+)
+
+_Rect: TypeAlias = tuple[int, int, int, int]
+CancellationCheck: TypeAlias = Callable[[], bool]
+LAYERED_ROUTER_VERSION = "layered-board-a-star/0.1.0"
+LAYERED_ROUTING_POLICY = "board-layered-a-star-v1"
+_EMPTY_DIGEST = f"sha256:{'0' * 64}"
+_MAX_SAFE_INT = (1 << 53) - 1
+
+
+@dataclass(frozen=True, slots=True)
+class LayeredRouteRequest:
+    """A two-pad, two-layer Board IR routing request.
+
+    ``start_layer_id`` and ``end_layer_id`` are explicit because through-hole pads can be
+    reachable on both layers.  Omitting one is accepted only when the corresponding pad exposes
+    exactly one of the two signal layers.
+    """
+
+    board_revision: str
+    net_id: str
+    start_pad_id: str
+    end_pad_id: str
+    seed: int = 0
+    start_layer_id: str | None = None
+    end_layer_id: str | None = None
+    expected_revision: str | None = None
+    grid_step_nm: int = 250_000
+    settings: LayeredAStarSettings = field(default_factory=LayeredAStarSettings)
+
+
+def _digest(value: object) -> bool:
+    if not isinstance(value, str) or len(value) != 71 or not value.startswith("sha256:"):
+        return False
+    try:
+        int(value[7:], 16)
+    except ValueError:
+        return False
+    return True
+
+
+def _typed(value: object, prefix: str) -> bool:
+    return (
+        isinstance(value, str)
+        and value.startswith(prefix)
+        and 1 <= len(value.removeprefix(prefix)) <= 160
+        and all(
+            character.isascii() and (character.isalnum() or character in "_.:-")
+            for character in value
+        )
+    )
+
+
+def _invalid_request(request: object) -> str | None:
+    if not isinstance(request, LayeredRouteRequest):
+        return "request must be a LayeredRouteRequest"
+    if not _digest(request.board_revision):
+        return "board revision is malformed"
+    if request.expected_revision is not None and not _digest(request.expected_revision):
+        return "expected revision is malformed"
+    if (
+        request.expected_revision is not None
+        and request.expected_revision != request.board_revision
+    ):
+        return "board revision does not match expected revision"
+    for name, value, prefix in (
+        ("net ID", request.net_id, "net:"),
+        ("start pad ID", request.start_pad_id, "pad:"),
+        ("end pad ID", request.end_pad_id, "pad:"),
+    ):
+        if not _typed(value, prefix):
+            return f"{name} is malformed"
+    if request.start_pad_id == request.end_pad_id:
+        return "route endpoints must be distinct"
+    layer_values: tuple[tuple[str, str | None], ...] = (
+        ("start layer ID", request.start_layer_id),
+        ("end layer ID", request.end_layer_id),
+    )
+    for name, layer_value in layer_values:
+        if layer_value is not None and not _typed(layer_value, "layer:"):
+            return f"{name} is malformed"
+    if (
+        isinstance(request.seed, bool)
+        or not isinstance(request.seed, int)
+        or not 0 <= request.seed <= _MAX_SAFE_INT
+    ):
+        return "seed is malformed"
+    if (
+        isinstance(request.grid_step_nm, bool)
+        or not isinstance(request.grid_step_nm, int)
+        or not 0 < request.grid_step_nm <= _MAX_SAFE_INT
+    ):
+        return "grid step must be positive"
+    settings_obj: object = request.settings
+    if not isinstance(settings_obj, LayeredAStarSettings):
+        return "settings must be a LayeredAStarSettings value"
+    return None
+
+
+def _diagnostic(
+    code: LayeredRouteFailureCode,
+    message: str,
+    *,
+    search: LayeredAStarResult | None = None,
+) -> LayeredRouteResult:
+    metrics = search.metrics if search is not None else None
+    return LayeredRouteResult(
+        diagnostic=LayeredRouteDiagnostic(
+            code=code,
+            message=message,
+            expanded_states=metrics.expanded_nodes if metrics is not None else 0,
+            obstacle_checks=metrics.obstacle_checks if metrics is not None else 0,
+        )
+    )
+
+
+def _axis_aligned_rectangle(ring: Ring) -> _Rect | None:
+    points = ring.points
+    xs = sorted({point.x for point in points})
+    ys = sorted({point.y for point in points})
+    if len(points) != 4 or len(xs) != 2 or len(ys) != 2:
+        return None
+    if {(point.x, point.y) for point in points} != {
+        (xs[0], ys[0]),
+        (xs[0], ys[1]),
+        (xs[1], ys[0]),
+        (xs[1], ys[1]),
+    }:
+        return None
+    return xs[0], ys[0], xs[1], ys[1]
+
+
+def _pad_bounds(pad: Pad) -> _Rect:
+    if pad.rotation_udeg:
+        # The sum-of-sides envelope is conservative for arbitrary rotation. Exact polygon
+        # projection belongs to the KiCad adapter, not this proposal seam.
+        half_x = half_y = (pad.size_x_nm + pad.size_y_nm + 1) // 2
+    elif pad.shape is PadShape.RECT:
+        half_x = (pad.size_x_nm + 1) // 2
+        half_y = (pad.size_y_nm + 1) // 2
+    elif pad.shape in {PadShape.CIRCLE, PadShape.OVAL, PadShape.ROUNDRECT}:
+        half_x = (pad.size_x_nm + 1) // 2
+        half_y = (pad.size_y_nm + 1) // 2
+    else:  # pragma: no cover - Board IR validation keeps this enum closed
+        raise ValueError("pad shape is unsupported")
+    return (
+        pad.center.x - half_x,
+        pad.center.y - half_y,
+        pad.center.x + half_x,
+        pad.center.y + half_y,
+    )
+
+
+def _segment_bounds(segment: Segment) -> _Rect | None:
+    start, end = segment.start, segment.end
+    if start.x != end.x and start.y != end.y:
+        return None
+    half_width = (segment.width_nm + 1) // 2
+    return (
+        min(start.x, end.x) - half_width,
+        min(start.y, end.y) - half_width,
+        max(start.x, end.x) + half_width,
+        max(start.y, end.y) + half_width,
+    )
+
+
+def _inflate(rectangle: _Rect, margin: int) -> _Rect:
+    return (
+        rectangle[0] - margin,
+        rectangle[1] - margin,
+        rectangle[2] + margin,
+        rectangle[3] + margin,
+    )
+
+
+def _cell_obstacle(
+    rectangle: _Rect,
+    *,
+    layer: int,
+    origin: PointNM,
+    step: int,
+) -> LayeredObstacle:
+    # Add half a cell: node-only occupancy otherwise lets an edge pass between two apparently
+    # clear centers while crossing a physical obstacle.
+    margin = (step + 1) // 2
+    inflated = _inflate(rectangle, margin)
+    min_x = -((-(inflated[0] - origin.x)) // step)
+    min_y = -((-(inflated[1] - origin.y)) // step)
+    max_x = -((-(inflated[2] - origin.x)) // step)
+    max_y = -((-(inflated[3] - origin.y)) // step)
+    return LayeredObstacle(layer, min_x, min_y, max_x, max_y)
+
+
+def _resolve_net_class(snapshot: BoardIRSnapshot, net_id: str) -> NetClass | None:
+    constraints = snapshot.content.constraints
+    assignment = next((item for item in constraints.assignments if item.net_id == net_id), None)
+    if assignment is None:
+        return None
+    return next(
+        (item for item in constraints.net_classes if item.id == assignment.net_class_id),
+        None,
+    )
+
+
+def _layer_order(snapshot: BoardIRSnapshot) -> tuple[Layer, ...]:
+    return tuple(sorted(snapshot.content.copper_layers, key=lambda layer: (layer.index, layer.id)))
+
+
+def _map_failure(result: LayeredAStarResult) -> LayeredRouteResult:
+    assert result.diagnostic is not None
+    code = {
+        LayeredFailureCode.INVALID_REQUEST: LayeredRouteFailureCode.INVALID_REQUEST,
+        LayeredFailureCode.STALE_REVISION: LayeredRouteFailureCode.STALE_REVISION,
+        LayeredFailureCode.GRID_BUDGET_EXCEEDED: LayeredRouteFailureCode.GRID_BUDGET_EXCEEDED,
+        LayeredFailureCode.OBSTACLE_BUDGET_EXCEEDED: (
+            LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED
+        ),
+        LayeredFailureCode.SEARCH_BUDGET_EXCEEDED: LayeredRouteFailureCode.SEARCH_BUDGET_EXCEEDED,
+        LayeredFailureCode.CANCELLED: LayeredRouteFailureCode.CANCELLED,
+        LayeredFailureCode.NO_PATH: LayeredRouteFailureCode.NO_PATH,
+    }[result.diagnostic.code]
+    return _diagnostic(code, result.diagnostic.message, search=result)
+
+
+def _compress(points: list[PointNM]) -> tuple[PointNM, ...]:
+    compressed: list[PointNM] = []
+    for point in points:
+        if len(compressed) >= 2:
+            first, middle = compressed[-2:]
+            if (first.x == middle.x == point.x) or (first.y == middle.y == point.y):
+                compressed[-1] = point
+                continue
+        compressed.append(point)
+    return tuple(compressed)
+
+
+def _paths_and_vias(
+    steps: tuple[LayeredStep, ...],
+    *,
+    layer_ids: tuple[str, str],
+    origin: PointNM,
+    start_point: PointNM,
+    end_point: PointNM,
+    step_nm: int,
+    via_diameter_nm: int,
+    via_drill_nm: int,
+) -> tuple[tuple[LayeredRoutePath, ...], tuple[LayeredRouteVia, ...]] | None:
+    if not steps or steps[0].kind != "start":
+        return None
+    paths: list[LayeredRoutePath] = []
+    vias: list[LayeredRouteVia] = []
+    current_layer = steps[0].layer
+    current_points: list[PointNM] = []
+
+    def physical(item: LayeredStep) -> PointNM:
+        return PointNM(origin.x + item.x * step_nm, origin.y + item.y * step_nm)
+
+    if physical(steps[0]) != start_point or physical(steps[-1]) != end_point:
+        return None
+    current_points.append(physical(steps[0]))
+    for previous, current in pairwise(steps):
+        if current.kind == "via":
+            if (
+                previous.x != current.x
+                or previous.y != current.y
+                or previous.layer == current.layer
+            ):
+                return None
+            # A via may be placed directly on an endpoint pad.  The pad supplies the zero-length
+            # copper connection on that side, so omit a one-point path rather than fabricating a
+            # degenerate segment that the immutable path contract cannot represent.
+            if len(current_points) >= 2:
+                paths.append(LayeredRoutePath(layer_ids[current_layer], _compress(current_points)))
+            vias.append(
+                LayeredRouteVia(
+                    id=f"via:layered:{len(vias):04d}",
+                    center=physical(previous),
+                    diameter_nm=via_diameter_nm,
+                    drill_nm=via_drill_nm,
+                    start_layer_id=layer_ids[previous.layer],
+                    end_layer_id=layer_ids[current.layer],
+                )
+            )
+            current_layer = current.layer
+            current_points = [physical(current)]
+            continue
+        if current.kind != "move" or current.layer != previous.layer:
+            return None
+        if abs(current.x - previous.x) + abs(current.y - previous.y) != 1:
+            return None
+        current_points.append(physical(current))
+    if len(current_points) >= 2:
+        paths.append(LayeredRoutePath(layer_ids[current_layer], _compress(current_points)))
+    if not paths:
+        return None
+    if paths[0].vertices[0] != start_point and (not vias or vias[0].center != start_point):
+        return None
+    if paths[-1].vertices[-1] != end_point and (not vias or vias[-1].center != end_point):
+        return None
+    return tuple(paths), tuple(vias)
+
+
+class LayeredBoardRouter:
+    """Pure Board IR → layered candidate adapter; never writes or invokes KiCad."""
+
+    @property
+    def name(self) -> str:
+        return LAYERED_ROUTING_POLICY
+
+    def propose(
+        self,
+        snapshot: BoardIRSnapshot,
+        request: LayeredRouteRequest,
+        *,
+        cancelled: CancellationCheck | None = None,
+    ) -> LayeredRouteResult:
+        malformed = _invalid_request(request)
+        if malformed is not None:
+            if (
+                isinstance(request, LayeredRouteRequest)
+                and request.expected_revision != request.board_revision
+            ):
+                return _diagnostic(LayeredRouteFailureCode.STALE_REVISION, malformed)
+            return _diagnostic(LayeredRouteFailureCode.INVALID_REQUEST, malformed)
+        snapshot_obj: object = snapshot
+        if not isinstance(snapshot_obj, BoardIRSnapshot):
+            return _diagnostic(
+                LayeredRouteFailureCode.INVALID_SNAPSHOT, "board snapshot type is invalid"
+            )
+        snapshot = snapshot_obj
+        if request.board_revision != snapshot.snapshot_digest:
+            return _diagnostic(
+                LayeredRouteFailureCode.STALE_REVISION, "request is stale for the Board IR snapshot"
+            )
+        try:
+            verify_snapshot(snapshot)
+        except (BoardIRValidationError, TypeError, ValueError):
+            return _diagnostic(
+                LayeredRouteFailureCode.INVALID_SNAPSHOT, "Board IR snapshot verification failed"
+            )
+        cancelled_obj: object = cancelled
+        if cancelled_obj is not None and not callable(cancelled_obj):
+            return _diagnostic(
+                LayeredRouteFailureCode.INVALID_REQUEST, "cancellation check must be callable"
+            )
+        cancellation_check = cast(CancellationCheck | None, cancelled_obj)
+
+        layers = _layer_order(snapshot)
+        if len(layers) != 2 or any(layer.kind != "signal" for layer in layers):
+            return _diagnostic(
+                LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY,
+                "layered routing v0.1 requires exactly two signal layers",
+            )
+        layer_ids = (layers[0].id, layers[1].id)
+        layer_index = {layer.id: index for index, layer in enumerate(layers)}
+        net_class = _resolve_net_class(snapshot, request.net_id)
+        if net_class is None:
+            return _diagnostic(
+                LayeredRouteFailureCode.UNSUPPORTED_CONSTRAINT, "net class assignment is missing"
+            )
+        constraints = snapshot.content.constraints
+        if any(
+            request.net_id in {rule.positive_net_id, rule.negative_net_id}
+            for rule in constraints.differential_pairs
+        ) or any(rule.net_id == request.net_id for rule in constraints.length_rules):
+            return _diagnostic(
+                LayeredRouteFailureCode.UNSUPPORTED_CONSTRAINT,
+                "the selected net has an unmodeled length or differential constraint",
+            )
+        outline = (
+            snapshot.content.outline[0].outer
+            if len(snapshot.content.outline) == 1 and not snapshot.content.outline[0].holes
+            else None
+        )
+        board = _axis_aligned_rectangle(outline) if outline is not None else None
+        if board is None:
+            return _diagnostic(
+                LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY,
+                "layered routing requires one rectangular hole-free outline",
+            )
+        pads = {pad.id: pad for pad in snapshot.content.pads}
+        start_pad, end_pad = pads.get(request.start_pad_id), pads.get(request.end_pad_id)
+        if (
+            start_pad is None
+            or end_pad is None
+            or start_pad.net_id != request.net_id
+            or end_pad.net_id != request.net_id
+        ):
+            return _diagnostic(
+                LayeredRouteFailureCode.INVALID_REQUEST,
+                "route endpoints are not pads on the selected net",
+            )
+        net_pads = tuple(pad for pad in snapshot.content.pads if pad.net_id == request.net_id)
+        if len(net_pads) != 2:
+            return _diagnostic(
+                LayeredRouteFailureCode.UNSUPPORTED_CONSTRAINT,
+                "layered routing v0.1 requires exactly two pads",
+            )
+        for pad in (start_pad, end_pad):
+            if not set(pad.layer_ids) & set(layer_ids):
+                return _diagnostic(
+                    LayeredRouteFailureCode.INVALID_REQUEST,
+                    "a route endpoint has no signal-layer access",
+                )
+        start_access = tuple(layer_id for layer_id in layer_ids if layer_id in start_pad.layer_ids)
+        end_access = tuple(layer_id for layer_id in layer_ids if layer_id in end_pad.layer_ids)
+        if request.start_layer_id is None and len(start_access) != 1:
+            return _diagnostic(
+                LayeredRouteFailureCode.INVALID_REQUEST,
+                "start layer must be explicit for a multi-layer endpoint",
+            )
+        if request.end_layer_id is None and len(end_access) != 1:
+            return _diagnostic(
+                LayeredRouteFailureCode.INVALID_REQUEST,
+                "end layer must be explicit for a multi-layer endpoint",
+            )
+        start_layer_id = request.start_layer_id or next(
+            (layer_id for layer_id in layer_ids if layer_id in start_pad.layer_ids), None
+        )
+        end_layer_id = request.end_layer_id or next(
+            (layer_id for layer_id in layer_ids if layer_id in end_pad.layer_ids), None
+        )
+        if start_layer_id not in layer_ids or end_layer_id not in layer_ids:
+            return _diagnostic(
+                LayeredRouteFailureCode.INVALID_REQUEST,
+                "requested endpoint layer is not a signal layer",
+            )
+        if start_layer_id not in start_pad.layer_ids or end_layer_id not in end_pad.layer_ids:
+            return _diagnostic(
+                LayeredRouteFailureCode.INVALID_REQUEST,
+                "requested endpoint layer is not exposed by its pad",
+            )
+        if start_pad.center == end_pad.center:
+            return _diagnostic(
+                LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY,
+                "coincident route endpoints are unsupported",
+            )
+        if (
+            any(item.net_id == request.net_id for item in snapshot.content.segments)
+            or any(item.net_id == request.net_id for item in snapshot.content.vias)
+            or any(item.net_id == request.net_id for item in snapshot.content.zones)
+            or snapshot.content.arcs
+        ):
+            return _diagnostic(
+                LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY,
+                "selected-net copper and arcs are outside the first layered proposal contract",
+            )
+
+        step = request.grid_step_nm
+        origin = start_pad.center
+        delta_x = end_pad.center.x - origin.x
+        delta_y = end_pad.center.y - origin.y
+        if delta_x % step != 0 or delta_y % step != 0:
+            return _diagnostic(
+                LayeredRouteFailureCode.OFF_GRID,
+                "pad-center delta is not divisible by the grid step",
+            )
+        half_width = (net_class.track_width_nm + 1) // 2
+        via_half = (net_class.via_diameter_nm + 1) // 2
+        edge_margin = max(half_width, via_half)
+        safe = (
+            board[0] + edge_margin,
+            board[1] + edge_margin,
+            board[2] - edge_margin,
+            board[3] - edge_margin,
+        )
+        if safe[0] > safe[2] or safe[1] > safe[3]:
+            return _diagnostic(
+                LayeredRouteFailureCode.NO_PATH, "track width does not fit inside the board"
+            )
+        min_x = -((-(safe[0] - origin.x)) // step)
+        min_y = -((-(safe[1] - origin.y)) // step)
+        max_x = (safe[2] - origin.x) // step
+        max_y = (safe[3] - origin.y) // step
+        goal = (delta_x // step, delta_y // step)
+        if (
+            not min_x <= 0 <= max_x
+            or not min_y <= 0 <= max_y
+            or not min_x <= goal[0] <= max_x
+            or not min_y <= goal[1] <= max_y
+        ):
+            return _diagnostic(
+                LayeredRouteFailureCode.NO_PATH, "a route endpoint cannot contain the track width"
+            )
+
+        track_obstacles: list[LayeredObstacle] = []
+        via_obstacles: list[LayeredObstacle] = []
+        clearance_by_class = {item.id: item.clearance_nm for item in constraints.net_classes}
+        clearance_by_net = {
+            assignment.net_id: clearance_by_class.get(
+                assignment.net_class_id, net_class.clearance_nm
+            )
+            for assignment in constraints.assignments
+        }
+        widest_clearance = max([net_class.clearance_nm, *clearance_by_class.values()])
+        grid_margin = (step + 1) // 2
+
+        def add_obstacle(rectangle: _Rect, layer: int, margin: int, *, via: bool = False) -> None:
+            obstacle = _cell_obstacle(
+                _inflate(rectangle, margin), layer=layer, origin=origin, step=step
+            )
+            (via_obstacles if via else track_obstacles).append(obstacle)
+
+        for pad in snapshot.content.pads:
+            if pad.id in {start_pad.id, end_pad.id}:
+                continue
+            rectangle = _pad_bounds(pad)
+            pad_clearance = (
+                clearance_by_net.get(pad.net_id, widest_clearance)
+                if pad.net_id is not None
+                else widest_clearance
+            )
+            clearance = max(net_class.clearance_nm, pad_clearance)
+            for layer_id in set(pad.layer_ids) & set(layer_ids):
+                layer = layer_index[layer_id]
+                add_obstacle(
+                    rectangle,
+                    layer,
+                    (net_class.track_width_nm + 1) // 2 + clearance,
+                )
+                add_obstacle(rectangle, layer, via_half + clearance, via=True)
+        for segment in snapshot.content.segments:
+            if segment.net_id == request.net_id:
+                continue
+            if segment.layer_id not in layer_index:
+                continue
+            segment_rectangle = _segment_bounds(segment)
+            if segment_rectangle is None:
+                return _diagnostic(
+                    LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY,
+                    "diagonal foreign segments are not modeled",
+                )
+            rectangle = segment_rectangle
+            clearance = max(
+                net_class.clearance_nm, clearance_by_net.get(segment.net_id, widest_clearance)
+            )
+            add_obstacle(rectangle, layer_index[segment.layer_id], clearance)
+            add_obstacle(
+                rectangle,
+                layer_index[segment.layer_id],
+                via_half + clearance,
+                via=True,
+            )
+        for via in snapshot.content.vias:
+            if via.net_id == request.net_id:
+                continue
+            radius = (via.diameter_nm + 1) // 2
+            rectangle = (
+                via.center.x - radius,
+                via.center.y - radius,
+                via.center.x + radius,
+                via.center.y + radius,
+            )
+            clearance = max(
+                net_class.clearance_nm, clearance_by_net.get(via.net_id, widest_clearance)
+            )
+            for layer in range(2):
+                add_obstacle(rectangle, layer, clearance)
+                add_obstacle(rectangle, layer, clearance, via=True)
+        for zone in snapshot.content.zones:
+            if zone.net_id == request.net_id:
+                continue
+            points = zone.boundary.points
+            rectangle = (
+                min(point.x for point in points),
+                min(point.y for point in points),
+                max(point.x for point in points),
+                max(point.y for point in points),
+            )
+            if zone.layer_id in layer_index:
+                add_obstacle(
+                    rectangle,
+                    layer_index[zone.layer_id],
+                    max(net_class.clearance_nm, zone.clearance_nm),
+                )
+                add_obstacle(
+                    rectangle,
+                    layer_index[zone.layer_id],
+                    via_half + max(net_class.clearance_nm, zone.clearance_nm),
+                    via=True,
+                )
+        for keepout in snapshot.content.keepouts:
+            points = keepout.boundary.points
+            rectangle = (
+                min(point.x for point in points),
+                min(point.y for point in points),
+                max(point.x for point in points),
+                max(point.y for point in points),
+            )
+            for layer_id in set(keepout.layer_ids) & set(layer_ids):
+                layer = layer_index[layer_id]
+                if keepout.prohibit_tracks:
+                    add_obstacle(rectangle, layer, half_width + grid_margin)
+                if keepout.prohibit_vias:
+                    add_obstacle(
+                        rectangle,
+                        layer,
+                        (net_class.via_diameter_nm + 1) // 2 + net_class.clearance_nm,
+                        via=True,
+                    )
+        if len(track_obstacles) + len(via_obstacles) > request.settings.max_obstacles:
+            return _diagnostic(
+                LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+                "layered physical obstacle count exceeds the configured budget",
+            )
+
+        abstract = LayeredAStarRequest(
+            board_revision=snapshot.snapshot_digest,
+            expected_revision=request.board_revision,
+            bounds=(min_x, min_y, max_x, max_y),
+            start=LayeredPoint(0, 0, layer_index[start_layer_id]),
+            goal=LayeredPoint(goal[0], goal[1], layer_index[end_layer_id]),
+            obstacles=tuple(track_obstacles),
+            via_obstacles=tuple(via_obstacles),
+            layers=(0, 1),
+            settings=request.settings,
+        )
+        searched = route_layered(abstract, cancelled=cancellation_check)
+        if not searched.ok:
+            return _map_failure(searched)
+        assert searched.path is not None
+        converted = _paths_and_vias(
+            searched.path,
+            layer_ids=layer_ids,
+            origin=origin,
+            start_point=start_pad.center,
+            end_point=end_pad.center,
+            step_nm=step,
+            via_diameter_nm=net_class.via_diameter_nm,
+            via_drill_nm=net_class.via_drill_nm,
+        )
+        if converted is None:
+            return _diagnostic(
+                LayeredRouteFailureCode.INVALID_REQUEST,
+                "layered search returned discontinuous geometry",
+                search=searched,
+            )
+        paths, vias = converted
+        patch = LayeredRoutePatch(
+            net_id=request.net_id,
+            width_nm=net_class.track_width_nm,
+            via_diameter_nm=net_class.via_diameter_nm,
+            via_drill_nm=net_class.via_drill_nm,
+            paths=paths,
+            vias=vias,
+        )
+        metrics = LayeredRouteMetrics(
+            expanded_states=searched.metrics.expanded_nodes,
+            discovered_states=searched.metrics.discovered_nodes,
+            peak_frontier_states=searched.metrics.peak_frontier_nodes,
+            obstacle_checks=searched.metrics.obstacle_checks,
+            move_steps=searched.metrics.move_steps,
+            vias=len(vias),
+            wire_length_nm=patch.wire_length_nm,
+            bend_count=patch.bend_count,
+        )
+        cost = LayeredRouteCost(
+            wire_length_nm=patch.wire_length_nm,
+            via_count=len(vias),
+            via_cost_units=len(vias) * request.settings.via_cost,
+            total_search_cost_units=searched.metrics.path_cost,
+        )
+        candidate = LayeredRouteCandidate(
+            candidate_id=_EMPTY_DIGEST,
+            base_revision=snapshot.snapshot_digest,
+            start_pad_id=start_pad.id,
+            end_pad_id=end_pad.id,
+            patch=patch,
+            cost=cost,
+            metrics=metrics,
+            settings=request.settings,
+            router_version=LAYERED_ROUTER_VERSION,
+            policy=LAYERED_ROUTING_POLICY,
+            seed=request.seed,
+        )
+        candidate = replace(
+            candidate,
+            candidate_id=f"sha256:{hashlib.sha256(canonical_layered_candidate_bytes(candidate)).hexdigest()}",
+        )
+        verify_layered_candidate_id(candidate)
+        return LayeredRouteResult(candidate=candidate)

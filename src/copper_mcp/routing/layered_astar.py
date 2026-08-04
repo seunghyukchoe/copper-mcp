@@ -82,6 +82,7 @@ class LayeredAStarRequest:
     start: LayeredPoint
     goal: LayeredPoint
     obstacles: tuple[LayeredObstacle, ...] = ()
+    via_obstacles: tuple[LayeredObstacle, ...] = ()
     layers: tuple[int, int] = (0, 1)
     expected_revision: str | None = None
     settings: LayeredAStarSettings = LayeredAStarSettings()
@@ -316,9 +317,11 @@ def _validate(request: object) -> tuple[LayeredAStarRequest, tuple[int, int], _B
         if not min_x <= point.x <= max_x or not min_y <= point.y <= max_y:
             return f"{name} is outside the search bounds"
     obstacles_obj: object = request.obstacles
-    if not isinstance(obstacles_obj, tuple):
+    via_obstacles_obj: object = request.via_obstacles
+    if not isinstance(obstacles_obj, tuple) or not isinstance(via_obstacles_obj, tuple):
         return "obstacles must be an immutable tuple"
     obstacles = obstacles_obj
+    via_obstacles = via_obstacles_obj
     settings_obj: object = request.settings
     if not isinstance(settings_obj, LayeredAStarSettings):
         return "settings must be a LayeredAStarSettings value"
@@ -333,9 +336,9 @@ def _validate(request: object) -> tuple[LayeredAStarRequest, tuple[int, int], _B
     ):
         if not _integer(value) or not 1 <= value <= maximum:
             return f"{name} must be a positive integer"
-    if len(obstacles) > settings.max_obstacles:
+    if len(obstacles) + len(via_obstacles) > settings.max_obstacles:
         return "obstacle count exceeds the configured obstacle budget"
-    for obstacle_obj in obstacles:
+    for obstacle_obj in (*obstacles, *via_obstacles):
         obstacle: object = obstacle_obj
         if not isinstance(obstacle, LayeredObstacle):
             return "obstacles must be LayeredObstacle values"
@@ -382,6 +385,22 @@ def _blocked(
     x, y, layer = node
     return any(
         obstacle.layer == layer
+        and obstacle.min_x <= x <= obstacle.max_x
+        and obstacle.min_y <= y <= obstacle.max_y
+        for obstacle in obstacles
+    )
+
+
+def _via_blocked(
+    node: _Node,
+    layers: tuple[int, int],
+    obstacles: tuple[LayeredObstacle, ...],
+) -> bool:
+    """Return whether a transition at ``node`` violates either layer's via keepout."""
+
+    x, y, _ = node
+    return any(
+        obstacle.layer in layers
         and obstacle.min_x <= x <= obstacle.max_x
         and obstacle.min_y <= y <= obstacle.max_y
         for obstacle in obstacles
@@ -514,6 +533,8 @@ def route_layered(
             if not min_x <= nx <= max_x or not min_y <= ny <= max_y:
                 continue
             relation_checks = len(checked.obstacles)
+            if is_via:
+                relation_checks += len(checked.via_obstacles)
             if work.obstacle_checks + relation_checks > settings.max_obstacle_checks:
                 return _failure(
                     LayeredFailureCode.OBSTACLE_BUDGET_EXCEEDED,
@@ -521,7 +542,9 @@ def route_layered(
                     work,
                 )
             work.obstacle_checks += relation_checks
-            if _blocked(neighbor, checked.obstacles):
+            if _blocked(neighbor, checked.obstacles) or (
+                is_via and _via_blocked(current, layers, checked.via_obstacles)
+            ):
                 continue
             step_cost = settings.via_cost if is_via else settings.move_cost
             tentative_g = g_score[current] + step_cost

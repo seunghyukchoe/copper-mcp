@@ -75,6 +75,12 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Added an internal, Board IR-bound two-layer routing proposal adapter. It resolves exact
+  nanometre grid geometry, net-class width/clearance/via dimensions, foreign physical envelopes,
+  track versus via-only keepouts, immutable candidate identity, and fail-closed stale/off-grid/
+  unsupported diagnostics. This is proposal-only: it does not serialize KiCad segments or vias,
+  invoke DRC, mutate a board, expose an MCP tool, or claim production routing through vias.
+
 - Added an internal, non-public two-layer A* search oracle with explicit via transitions,
   deterministic tie-breaking, per-layer cell obstacles, cancellation, and bounded resource
   accounting. It is algorithmic evidence toward via-capable routing only; it does not produce
