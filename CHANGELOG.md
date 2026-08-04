@@ -8,6 +8,12 @@ All notable changes are documented here. The format follows
 
 ### Security
 
+- The optional KiCad IPC observer is constrained to a local IPC socket, bounded by a connection
+  timeout and board-size/object-count ceilings, and refuses a future KiCad API version unless an
+  explicit development-only opt-in is supplied. It returns only numeric versions, a board digest,
+  byte count, object counts, and the socket kind; socket paths, tokens, board text, names, UUIDs,
+  and geometry never cross the MCP boundary. The bundled KiCad plugin exposes the same read-only
+  surface and does not mutate an open document.
 - Scene-selected routes now require both the observed board revision and Board IR snapshot digest.
   Stale source bytes are refused before Board IR conversion, while a stale snapshot is refused
   immediately after it; neither can reach route search, fill authority, DRC, or apply-token
@@ -78,6 +84,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- An optional official `kicad-python` integration: the read-only `inspect_live_board` MCP tool and
+  `hardware/kicad-ipc-plugin` action provide a redacted live-board observation contract while
+  keeping placement, routing, DRC, and candidate application behind separate validated gates.
 - A reproducible MCP observation-to-action benchmark over the licensed RC low-pass audio fixture.
   It pins the former 0/3 actionable Scene references against 3/3 revision-bound references, exact
   candidate equality with the hidden-name oracle, stale-reference refusal, deterministic replay,
