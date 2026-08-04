@@ -110,8 +110,10 @@ pruning, and every exact polygon-edge relation count against the obstacle-check 
 its 64-check cancellation cadence. The integer kernel uses no floating point or external geometry
 library, applies the strictest routed-net, zone-net, and zone clearance, and rejects same-net zones
 as partial routing. This can reject a route through a real fill void, but cannot use stale
-`filled_polygon` data to permit copper through an area the zone may occupy. Fill-aware routing stays
-blocked on a separately reviewed refill/freshness contract.
+`filled_polygon` data to permit copper through an area the zone may occupy. The deterministic core
+now accepts only the separately reviewed, source-revision-bound refill/freshness evidence and uses
+matching foreign fill islands as exact obstacles; the public preview still does not advertise that
+provenance for routed candidates.
 
 Board IR inspection discloses only object counts, digests, units, and standard KiCad copper layer
 names. Coordinates, net names, pad and net identities, UUIDs, and source bytes are excluded, and a

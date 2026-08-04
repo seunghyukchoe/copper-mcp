@@ -771,10 +771,12 @@ class VerifiedFill:
     proved current, which keeps KiCad execution out of the search and out of Board IR.
 
     ``source_revision`` is the board the evidence was established against, and preparation
-    refuses fill whose revision does not match the snapshot in hand. This is not a defence
-    against a caller determined to lie — an in-process caller can always construct whatever it
-    likes — but it does turn the realistic mistake, handing the router a pour proved on some
-    other board or an earlier revision of this one, from a silent wrong answer into a refusal.
+    refuses fill whose revision does not match the snapshot in hand. For a foreign net, the fresh
+    islands become exact selected-layer obstacles and replace that zone's conservative outline;
+    for the routed net, they remain connectivity evidence. This is not a defence against a caller
+    determined to lie — an in-process caller can always construct whatever it likes — but it does
+    turn the realistic mistake, handing the router a pour proved on some other board or an earlier
+    revision of this one, from a silent wrong answer into a refusal.
     """
 
     net_id: str
@@ -1056,6 +1058,9 @@ def _prepare(
             )
     blocking_zones: list[Zone] = []
     same_net_zone = False
+    verified_fill_zone_keys = frozenset(
+        (zone.net_id, zone.layer_id) for zone in content.zones if zone.net_id is not None
+    )
     # A same-net zone anywhere in the stack is unmodeled copper, and connectivity is a
     # multilayer question, so a pour on the back layer can carry a connection just as a front
     # one can. The gate therefore covers every copper layer, and is lifted only for a layer
@@ -1077,6 +1082,11 @@ def _prepare(
             raise _fail(
                 RouteFailureCode.STALE_FILL,
                 "verified zone fill was established against a different board revision",
+            )
+        if (island.net_id, island.layer_id) not in verified_fill_zone_keys:
+            raise _fail(
+                RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                "verified zone fill is not backed by a matching Board IR zone",
             )
     net_fill = tuple(island for island in verified_fill if island.net_id == request.net_id)
     if (same_net_via or net_fill) and not same_net_zone_present:
@@ -1114,6 +1124,14 @@ def _prepare(
                     RouteFailureCode.UNSUPPORTED_GEOMETRY,
                     "the selected net already carries a zone and is partially routed",
                 )
+            continue
+        # A fresh KiCad fill is tighter than treating the whole zone outline as copper. Replace
+        # the conservative envelope only when this net/layer has at least one verified island;
+        # the islands below then become the complete obstacle set for that zone family.
+        if (zone.net_id, zone.layer_id) in verified_fill_zone_keys and any(
+            island.net_id == zone.net_id and island.layer_id == zone.layer_id
+            for island in verified_fill
+        ):
             continue
         blocking_zones.append(zone)
     attachment_segments: list[Segment] = []
@@ -1391,6 +1409,19 @@ def _prepare(
                 points=points,
                 bounds=_polygon_bounds(points, work),
                 margin_nm=half_width_nm + clearance_nm,
+            )
+        )
+
+    for index, island in enumerate(verified_fill):
+        if island.layer_id != request.layer_id or island.net_id == request.net_id:
+            continue
+        ensure_obstacle_capacity()
+        polygon_obstacles.append(
+            _PolygonObstacle(
+                source_id=f"fill:{island.net_id}:{island.layer_id}:{index}",
+                points=island.points,
+                bounds=_polygon_bounds(island.points, work),
+                margin_nm=half_width_nm + governing_clearance_nm(island.net_id),
             )
         )
 

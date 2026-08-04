@@ -41,6 +41,7 @@ from copper_mcp.routing import (
     RoutePath,
     RouteRequest,
     RouteResult,
+    VerifiedFill,
     canonical_candidate_bytes,
     verify_candidate_id,
 )
@@ -2459,8 +2460,6 @@ def test_a_multi_pin_pad_off_the_lattice_is_still_reached_through_its_core() -> 
 def test_verified_fill_from_another_board_is_refused() -> None:
     """Fill proved against a different board must never be believed for this one."""
 
-    from copper_mcp.routing import VerifiedFill
-
     snapshot = _snapshot(own_zone=_rectangle(1_000, 1_000, 2_000, 2_000))
     foreign = VerifiedFill(
         net_id=NET_ID,
@@ -2474,6 +2473,48 @@ def test_verified_fill_from_another_board_is_refused() -> None:
     _assert_failure(result, RouteFailureCode.STALE_FILL)
     assert result.diagnostic is not None
     assert "different board revision" in result.diagnostic.message
+
+
+def test_fresh_foreign_fill_replaces_conservative_zone_envelope() -> None:
+    """Fresh KiCad fill opens a clear corridor that the zone outline would conservatively block."""
+
+    snapshot = _snapshot(
+        foreign_zones=(_rectangle(3_000, 3_000, 7_000, 7_000),),
+    )
+    fill = VerifiedFill(
+        net_id=OTHER_NET_ID,
+        layer_id=LAYER_ID,
+        points=(
+            PointNM(3_000, 6_000),
+            PointNM(7_000, 6_000),
+            PointNM(7_000, 7_000),
+            PointNM(3_000, 7_000),
+        ),
+        source_revision=SOURCE_REVISION,
+    )
+
+    conservative = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+    exact = _candidate(AStarRouter().propose(snapshot, _request(snapshot), verified_fill=(fill,)))
+
+    assert conservative.cost.length_nm > 8_000
+    assert exact.cost.length_nm == 8_000
+    assert exact.patch.paths[0].vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
+
+
+def test_verified_fill_without_a_board_ir_zone_is_refused() -> None:
+    snapshot = _snapshot()
+    fill = VerifiedFill(
+        net_id=OTHER_NET_ID,
+        layer_id=LAYER_ID,
+        points=(PointNM(3_000, 6_000), PointNM(7_000, 6_000), PointNM(7_000, 7_000)),
+        source_revision=SOURCE_REVISION,
+    )
+
+    result = AStarRouter().propose(snapshot, _request(snapshot), verified_fill=(fill,))
+
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert "matching Board IR zone" in result.diagnostic.message
 
 
 def test_the_multilayer_connectivity_model_shares_the_object_ceiling() -> None:

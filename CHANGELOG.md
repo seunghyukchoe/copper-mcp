@@ -75,6 +75,10 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Freshness-verified foreign KiCad fill islands now replace the conservative whole-zone routing
+  envelope in the deterministic A* core. Matching zone/source revisions are required, stale or
+  unmatched fill fails closed, and the public preview does not yet claim fill-aware provenance for
+  routed candidates.
 - Layered two-signal-layer candidates now have an internal, replay-bound authoritative KiCad DRC
   gate. The gate serializes only a disposable derivative, preserves source bytes, binds the
   complete private DRC context, and returns redacted aggregate evidence; it is not exposed through

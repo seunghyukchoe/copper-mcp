@@ -370,12 +370,18 @@ repository omits those flags, and the source is recaptured and compared afterwar
 enters Board IR: the router accepts verified islands as a parameter and never fetches them, so
 snapshots and their digests are unchanged and KiCad execution stays out of the search.
 
+For a foreign net, a matching fresh island set replaces that zone's conservative outline on the
+selected layer; each island is then an exact polygon obstacle with the governing clearance. A fill
+island without a matching Board IR zone, or with a different source revision, is refused before
+search.
+
 Once freshness-bound, the pour is KiCad's own authority on where that copper is, so contact testing
 uses the polygon itself with exact integer geometry. Pad and track cores stay under-approximating;
 only the pour is exact. Reading is bounded by `max_fill_vertices`, default 50,000; CopperTone's pour
-is 4,314 vertices across two layers. Scope is deliberately connectivity only — using verified fill
-as a tighter routing *obstacle* than the conservative boundary envelope would change routed geometry
-on every zoned board and needs its own measurement.
+is 4,314 vertices across two layers. B-021 measures the narrow fill-aware routing core on a
+synthetic corridor: ten deterministic replays reduce wire length from 14,000 nm to 8,000 nm. The
+public preview still needs a response contract before it advertises fill-aware routed-candidate
+provenance.
 
 ## Multi-pin trees
 

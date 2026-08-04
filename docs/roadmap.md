@@ -70,8 +70,10 @@ documentation, ledger updates, and benchmark evidence.
   that is provably inside the track and provably self-connected.
 - [x] Freshness-bound zone fill authority: cached fill is admitted as connectivity evidence only
   when a fresh KiCad refill on a disposable copy reproduces it exactly.
-- [ ] Fill-aware zone *routing*, using verified fill as a tighter obstacle than the conservative
-  boundary envelope. Connectivity uses exact fill today; the routing obstacle model does not.
+- [~] Fill-aware zone *routing*: the deterministic A* core now replaces a matching foreign-zone
+  envelope with freshness-verified exact fill islands and fails closed on stale/unmatched evidence;
+  B-021 measures the route-quality improvement. The public preview still needs a separate response
+  contract to advertise that fill-aware mode for routed candidates.
 - [~] Multi-pin nets, since most real nets have more than two pads.
   - [x] Connectivity analysis for nets of any width, so an already-connected multi-pin net
     is recognised rather than refused.
