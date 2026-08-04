@@ -1,0 +1,26 @@
+{
+  "date_utc": "2026-08-04T15:57:46+00:00",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "fixture": "tests/fixtures/route-candidate/blocked-pad.kicad_pcb",
+  "metrics": {
+    "candidate_id": "sha256:1ac8a82eca13195582fef2241571836341db1e8d8e04d87ab3fe728dd07857ee",
+    "deterministic_outputs": true,
+    "drc": false,
+    "kicad_invoked": false,
+    "path_count": 2,
+    "repetitions": 10,
+    "round_trip": true,
+    "serialized_bytes": 1868,
+    "serialized_sha256": "sha256:c732d5abaccb2d4521005ef15122d1038ff02f96a752df24ff640b69970f842c",
+    "source_unchanged": true,
+    "stale_request_refused": true,
+    "via_count": 2
+  },
+  "run_id": "sha256:c24ecef1fc5d14f4f29aee5b35c13aeff6c21203235c2545132795324e26bc02",
+  "schema": "copper-mcp/benchmark/layered-kicad-serializer/v1",
+  "script": "scripts/benchmark_layered_kicad_serializer.py",
+  "source_commit": "b94a92d032be23efa63fc5d8cff2bd145203e394"
+}

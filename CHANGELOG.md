@@ -85,6 +85,12 @@ All notable changes are documented here. The format follows
   unsupported diagnostics. This is proposal-only: it does not serialize KiCad segments or vias,
   invoke DRC, mutate a board, expose an MCP tool, or claim production routing through vias.
 
+- Added a request-replayed, source-preserving serializer for the layered proposal seam. It emits
+  deterministic segment and full-stack through-via expressions, canonicalizes reversed via
+  transitions to KiCad copper-stack order, rejects native-identity collisions, and requires a
+  Board IR round trip equal to the source plus the candidate geometry. It remains disposable and
+  candidate-only: no file write, KiCad invocation, DRC, MCP exposure, or apply authority.
+
 - Added an internal, non-public two-layer A* search oracle with explicit via transitions,
   deterministic tie-breaking, per-layer cell obstacles, cancellation, and bounded resource
   accounting. It is algorithmic evidence toward via-capable routing only; it does not produce

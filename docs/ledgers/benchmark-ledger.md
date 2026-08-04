@@ -274,3 +274,16 @@ result or a general performance comparison.
 | Metrics | Deterministic replays 60/60; same-layer candidate 1 path/0 vias; via-required candidate 2 paths/2 vias/8,000 nm wire with 90 obstacle checks; blocked and via-keepout cases `no_path`; stale and off-grid refusals before search; source snapshot unchanged `true`; candidate digest tamper rejected `true` |
 | Artifact | [`2026-08-04-layered-board-adapter.json`](../../benchmarks/results/routing/2026-08-04-layered-board-adapter.json) |
 | Interpretation | This is evidence for a deterministic, Board IR-bound proposal seam and its fail-closed boundaries only. It does not claim source-preserving KiCad serialization, Board IR round-trip after a write, KiCad DRC/refill, whole-board completion, electrical behavior, fabrication readiness, performance generalization, negotiated congestion, rip-up/reroute, or FreeRouting parity. |
+
+### B-019 — Disposable layered KiCad serializer
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:c24ecef1fc5d14f4f29aee5b35c13aeff6c21203235c2545132795324e26bc02` |
+| Date and commit | 2026-08-04 15:57:46 UTC; `b94a92d032be23efa63fc5d8cff2bd145203e394`; serializer changes were measured before this evidence commit |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
+| Dataset | Independently authored `tests/fixtures/route-candidate/blocked-pad.kicad_pcb`; two front-side AUDIO pads, a foreign front-side blocker, and two signal layers; no external or proprietary board |
+| Configuration | `layered-kicad-serializer-v1`; ten request-replayed renders; source/profile/snapshot and candidate digest gates; deterministic UUID-v5 segment/via identities; CPU-only |
+| Metrics | Deterministic outputs 10/10; Board IR round trip `true`; source unchanged `true`; two paths and two through-vias; serialized bytes 1,868; output `sha256:c732d5abaccb2d4521005ef15122d1038ff02f96a752df24ff640b69970f842c`; stale request refusal `true`; KiCad invocation `false`; DRC `false` |
+| Artifact | [`2026-08-05-layered-kicad-serializer.json`](../../benchmarks/results/routing/2026-08-05-layered-kicad-serializer.json) |
+| Interpretation | This proves request-replayed disposable segment/via serialization and Board IR round-trip equality for one narrow fixture. It does not establish KiCad DRC, live editor compatibility, mutation/apply safety, electrical behavior, fabrication readiness, whole-board completion, or FreeRouting parity. |
