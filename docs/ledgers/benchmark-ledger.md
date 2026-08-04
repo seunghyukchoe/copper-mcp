@@ -339,3 +339,16 @@ result or a general performance comparison.
 | Metrics | Conservative 10/10 deterministic; fill-aware 10/10 deterministic; wire length 14,000 nm → 8,000 nm (6,000 nm reduction); orphaned fill refused with `unsupported_geometry`; `matching_zone_required=true`; KiCad invocation `false`; DRC `false` |
 | Artifact | [`2026-08-05-fill-aware-routing-remediation.json`](../../benchmarks/results/routing/2026-08-05-fill-aware-routing-remediation.json) |
 | Interpretation | This substantiates both the route-quality replay and the matching-zone safety gate after review remediation. It remains synthetic core evidence and does not claim real-board refill, KiCad DRC, whole-board completion, electrical behavior, fabrication readiness, or FreeRouting parity. |
+
+### B-024 — Public layered route-preview contract
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:5e6b2d56a38ead46c165a0fd42ea89635042b19c73aa4e6170ee1d9fd98dfa99` |
+| Date and commit | 2026-08-04 17:17:48 UTC; `a739c1d93c65aa05a95e4c946d83ba1b265355c5`; measured after the public MCP slice commit |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
+| Dataset | Independently authored `tests/fixtures/route-candidate/blocked-pad.kicad_pcb`; two same-net pads, a front-layer blocker, and two signal layers; no external or proprietary board data |
+| Configuration | `copper-mcp/benchmark/layered-route-preview/v1`; ten calls through the public layered service and `LayeredRoutePreviewToolResponse`; both source/snapshot CAS values required; CPU-only |
+| Metrics | Schema-valid replays 10/10; deterministic candidate ID `sha256:7ec5e572a93a197843928a65173f768b8999ed3d2768d692f517706b13d90a7d`; two full-stack vias; stale-board and stale-snapshot refusals `true`; source bytes/inode/mtime unchanged; KiCad/DRC/apply authority `false` |
+| Artifact | [`2026-08-05-layered-route-preview.json`](../../benchmarks/results/routing/2026-08-05-layered-route-preview.json) |
+| Interpretation | This is evidence that the read-only MCP contract can produce and validate a deterministic via-capable proposal while refusing stale references and preserving the source. It does not claim public KiCad DRC, serializer/export, durable jobs, multilayer completion, electrical behavior, fabrication readiness, or FreeRouting parity. |
