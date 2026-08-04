@@ -214,8 +214,10 @@ A proposal that would move a footprint whose Board IR `locked` field is true is 
 `unsupported_geometry` before a candidate is issued. Unlocking or applying that move is never
 implicit.
 
-**The tool never applies a placement, and a placement candidate is not bound to KiCad DRC.** What
-it claims is exactly what the deterministic legalizer proved. Moving a footprint moves its pads,
+**The public tool never applies a placement and does not return KiCad DRC evidence.** A separate
+internal `run_placement_candidate_drc` gate can bind the supported candidate subset to a private,
+disposable KiCad replay; that evidence is not exposed through `preview_placement` or live
+placement. What the public tool claims is exactly what the deterministic legalizer proved. Moving a footprint moves its pads,
 so a placement candidate invalidates any route candidate bound to the same base revision, and
 observing a scene after a hypothetical placement is not supported. Like `preview_route`, the tool
 is exposed over both transports: the response is self-contained, retains no server-side state and
@@ -279,6 +281,13 @@ flag is explicitly disabled for `preview_live_layered_route` and durable routing
 non-routed status `drc_evidence` is `null`; no DRC is run without a candidate. Preview writes no
 file, creates no job, and never returns source board bytes; it does return the geometry it generated,
 so a host that must not disclose generated copper to a model should not enable this tool.
+
+When present, `drc_evidence.statement` is a deterministic unsigned in-toto Statement payload. Its
+subject is the candidate digest; Link v0.3 materials are fixed names for the source, Board IR base,
+patched board, and patched DRC context digests; and the byproducts contain only the existing
+aggregate DRC summary plus the `disposable-candidate` scope. No path, net name, UUID, coordinate,
+raw finding, board bytes, signature, or DSSE envelope is included. Canonical JSON bytes are exposed
+only through the internal evidence object; signing and verification remain separate future gates.
 
 `preview_layered_route` is the separate via-capable proposal surface. Its request names a
 workspace-relative `.kicad_pcb`, two `pad:` references, explicit net-class dimensions, and both

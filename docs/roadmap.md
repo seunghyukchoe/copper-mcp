@@ -137,8 +137,9 @@ documentation, ledger updates, and benchmark evidence.
     reroute coordination remains open.
 - [ ] Benchmark comparison against established open baselines.
 
-- [ ] Emit candidate DRC evidence in the in-toto Statement envelope, so an attestation this
-  project already produces in substance is also machine-checkable by standard tooling.
+- [~] Emit candidate DRC evidence as a deterministic, unsigned in-toto Statement payload using
+  Link v0.3, with digest-bound subjects/materials and aggregate redacted byproducts. DSSE signing,
+  verification, persistence, and remote transport remain open before this roadmap item can close.
 
 ## M3 — Safe candidate application
 
@@ -194,11 +195,12 @@ and the policy-plugin work.
   implemented. A locked footprint cannot be moved. `preview_live_placement` adds the same
   candidate-only pipeline over a byte-confirmed active KiCad snapshot; it requires both scene
   digests and never writes or grants apply authority. Nothing applies a placement.
-- [~] Authoritative KiCad DRC binding for placement candidates. A narrow internal
-  source-preserving serializer now covers front-side, orthogonal, unfilled-courtyard footprints
-  and reparses its disposable result; authoritative DRC remains deferred until unsupported
-  properties, text, fabrication graphics, library identity, and 3D-model pose are either modeled
-  or explicitly refused at the transaction boundary.
+- [~] Authoritative KiCad DRC binding for placement candidates. The narrow internal
+  source-preserving serializer covers front-side, orthogonal, unfilled-courtyard footprints and
+  reparses its disposable result; `run_placement_candidate_drc` now binds that exact replay to a
+  private KiCad 10.0.5 DRC context with source/context CAS and redacted aggregate evidence. Public
+  placement DRC, unsupported properties/text/fabrication graphics/library identity/3D-model pose,
+  live compare-and-swap, and apply remain open gates.
 - [~] Deterministic snapping, connectivity, clearance, rule, provenance, and revision validation for
   every placement candidate. Grid snapping, rule residuals, three-valued pad overlap, outline
   containment, keepout respect and dual-digest binding are implemented. Board IR now carries the

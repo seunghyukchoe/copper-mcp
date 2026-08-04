@@ -20,8 +20,9 @@ Terminology used throughout: DRC evidence is an **attestation** — a statement 
 bound to their digests, refused when any binding fails — while release-ledger rows are **provenance**
 in the SLSA sense, and the ledgers as a whole are an append-only **transparency record** rather than
 a cryptographic transparency log. There is no Merkle tree or signed checkpoint; Git history is the
-only integrity mechanism behind them. Emitting DRC evidence in the in-toto Statement envelope is
-future work, not a current property.
+only integrity mechanism behind them. Candidate DRC responses include an unsigned in-toto
+Statement payload with redacted Link v0.3 byproducts; DSSE signing, verification, persistence, and
+remote transport remain future work, not current properties.
 - Compute budgets for routing and AI inference.
 
 ## Trust boundaries

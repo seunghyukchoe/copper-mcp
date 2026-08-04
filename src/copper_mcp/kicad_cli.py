@@ -30,6 +30,7 @@ from copper_mcp.adapters.kicad_route_patch import (
     render_kicad_candidate_board,
 )
 from copper_mcp.adapters.sexpr import SExpr, SExprError, atoms, parse_sexpr
+from copper_mcp.attestation import build_candidate_drc_statement, canonical_statement_bytes
 from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
 from copper_mcp.models import DrcSummary
@@ -118,7 +119,25 @@ class RouteCandidateDrcEvidence:
             "patched_board_revision": self.patched_board_revision,
             "patched_drc_context_revision": self.patched_drc_context_revision,
             "summary": self.summary.to_dict(),
+            "statement": self.to_statement(),
         }
+
+    def to_statement(self) -> dict[str, Any]:
+        """Return the redacted unsigned in-toto Statement payload."""
+
+        return build_candidate_drc_statement(
+            candidate_id=self.candidate_id,
+            candidate_base_revision=self.candidate_base_revision,
+            source_revision=self.source_revision,
+            patched_board_revision=self.patched_board_revision,
+            patched_drc_context_revision=self.patched_drc_context_revision,
+            summary=self.summary,
+        )
+
+    def canonical_statement_bytes(self) -> bytes:
+        """Return deterministic Statement JSON bytes; no signature is included."""
+
+        return canonical_statement_bytes(self.to_statement())
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,7 +177,25 @@ class LayeredRouteCandidateDrcEvidence:
             "patched_board_revision": self.patched_board_revision,
             "patched_drc_context_revision": self.patched_drc_context_revision,
             "summary": self.summary.to_dict(),
+            "statement": self.to_statement(),
         }
+
+    def to_statement(self) -> dict[str, Any]:
+        """Return the redacted unsigned in-toto Statement payload."""
+
+        return build_candidate_drc_statement(
+            candidate_id=self.candidate_id,
+            candidate_base_revision=self.candidate_base_revision,
+            source_revision=self.source_revision,
+            patched_board_revision=self.patched_board_revision,
+            patched_drc_context_revision=self.patched_drc_context_revision,
+            summary=self.summary,
+        )
+
+    def canonical_statement_bytes(self) -> bytes:
+        """Return deterministic Statement JSON bytes; no signature is included."""
+
+        return canonical_statement_bytes(self.to_statement())
 
 
 def _validated_executable(candidate: Path) -> Path | None:

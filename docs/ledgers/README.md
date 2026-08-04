@@ -26,9 +26,10 @@ Naming the pattern each record follows makes it clear what it does and does not 
   commit was verified, by which workflow, producing which artifacts.
 - Candidate DRC evidence is structurally an **attestation**: a statement about named subjects,
   bound to their digests — candidate, Board IR base revision, source board, patched board and
-  patched context — and refused when any binding fails. It is not currently emitted in the in-toto
-  Statement envelope, and adopting that format is recorded as future work on the
-  [roadmap](../roadmap.md) rather than implied here.
+  patched context — and refused when any binding fails. Candidate DRC responses now include an
+  unsigned, redacted in-toto Statement **payload** using the Link v0.3 predicate. The payload is
+  deterministic and machine-checkable, but it is not signed, persisted, or wrapped in DSSE; those
+  authentication and transport steps remain future work on the [roadmap](../roadmap.md).
 - The [benchmark ledger](benchmark-ledger.md) records **content-addressed measurement artifacts**;
   each run file is validated against its own self-digest.
 

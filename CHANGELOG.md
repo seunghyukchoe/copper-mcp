@@ -8,6 +8,15 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added an internal, candidate-bound KiCad DRC gate for the supported placement serializer. It runs
+  against a disposable private context, rechecks source/rule/library CAS, and returns only a
+  redacted aggregate summary; public/live placement and apply remain unchanged.
+
+- Added a redacted, deterministic unsigned in-toto Statement payload to candidate-bound DRC
+  evidence. The Link v0.3 payload binds the candidate and board revisions by digest, carries only
+  aggregate DRC byproducts, and is validated at the MCP boundary; DSSE signing and verification
+  remain intentionally deferred.
+
 - Added a deterministic conservative spatial index to the A* and benchmark Dijkstra obstacle
   hot path. Exact integer legality predicates remain authoritative, small/pathological boards
   fall back to linear scans, and candidate identity advances to `astar-grid/0.6.0` with policy

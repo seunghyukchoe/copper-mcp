@@ -469,3 +469,29 @@ result or a general performance comparison.
 | Metrics | Legacy relation checks `131,072`; indexed relation checks `31`; reduction `99.9763%`; exact query matches `256/256`; indexed buckets `136`; median microbenchmark speedup `346.471x` on this host. Differential A*/Dijkstra route fixture: same geometry/cost/expanded states; A* exact checks `19,982 → 308`; low ceilings remain fail-closed while indexed work may complete under a ceiling the legacy scan would exhaust. |
 | Artifact | [`2026-08-05-spatial-index.json`](../../benchmarks/results/routing/2026-08-05-spatial-index.json) |
 | Interpretation | This is a conservative candidate-filter and resource-use result, not a whole-board scaling claim. It does not establish congestion/rip-up, FreeRouting parity, KiCad DRC, electrical behavior, fabrication readiness, or cross-host wall-clock performance. |
+
+### B-034 — Deterministic unsigned in-toto candidate DRC Statement
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:c70de01be5a259936c5c784c3e5b17141bdff8ab244c4006f09f85519a5ec933` |
+| Date and commit | 2026-08-05; source commit `7facad8` recorded before this attestation slice; local benchmark artifact generated on a dirty tree |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
+| Dataset | Fixed content-addressed synthetic revisions and aggregate `DrcSummary`; no board bytes, geometry, net names, UUIDs, or external/private corpus |
+| Configuration | `copper-mcp/benchmark/drc-statement/v1`; 128 deterministic builds; in-toto Statement v1 with Link v0.3 predicate; closed Pydantic contract validation; canonical compact UTF-8 serialization |
+| Metrics | Schema-valid `128/128`; deterministic bytes `true`; subject candidate binding `true`; material revision binding `true`; redacted payload `true`; Statement size `1,412` bytes; median build+serialize `19,875 ns` on this host; signature count `0`; DSSE envelope `false`; KiCad invoked `false` |
+| Artifact | [`2026-08-05-drc-statement.json`](../../benchmarks/results/routing/2026-08-05-drc-statement.json) |
+| Interpretation | This measures payload shape, binding, redaction, and local serialization only. It does not establish DSSE authentication, verifier coverage, provenance, whole-board DRC quality, electrical/fabrication readiness, remote transport, persistence, or FreeRouting parity. |
+
+### B-035 — Private placement-candidate KiCad DRC replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:3e1b4fa7abca5c934b5a86201bc121cd427ee6cbdc8b5fa8590890f93776410b` |
+| Date and commit | 2026-08-05; source commit `7facad8` recorded before the placement DRC implementation; benchmark run after implementation on the local worktree |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad CLI 10.x |
+| Dataset | Independently authored `tests/fixtures/board-ir-v0.2/footprint-pose-courtyard.kicad_pcb`; two pad-owning front-side orthogonal footprints with unfilled rectangular courtyards |
+| Configuration | `copper-mcp/benchmark/placement-candidate-drc/v1`; three private disposable KiCad DRC replays; fixed JSON report command with no refill/save; source/context CAS and aggregate-only evidence |
+| Metrics | Clean DRC `3/3`; candidate binding `true`; context binding `true`; source bytes/inode/mtime preserved `true`; workspace mutations `0`; median private DRC `846,023,417 ns` on this host |
+| Artifact | [`2026-08-05-placement-drc.json`](../../benchmarks/results/routing/2026-08-05-placement-drc.json) |
+| Interpretation | This establishes the narrow private placement evidence gate and source-preserving replay on one fixture. It does not establish back-side/non-rectangular coverage, public/live placement DRC, apply/undo, electrical/fabrication readiness, or FreeRouting parity. |

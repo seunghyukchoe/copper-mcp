@@ -804,6 +804,62 @@ class RouteDrcSummaryContract(_ClosedContract):
     schema_version: Literal["1.0"]
 
 
+class InTotoResourceDescriptorContract(_ClosedContract):
+    """A redacted in-toto resource descriptor with a required SHA-256 digest."""
+
+    name: Annotated[str, Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._-]+$")]
+    digest: dict[
+        Literal["sha256"],
+        Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")],
+    ]
+
+
+class InTotoDrcByproductsContract(_ClosedContract):
+    """Aggregate DRC counts carried as opaque Link byproducts."""
+
+    drc_summary: RouteDrcSummaryContract
+    evidence_scope: Literal["disposable-candidate"]
+
+
+class InTotoDrcEnvironmentContract(_ClosedContract):
+    """Tool metadata without paths, board bytes, or caller-controlled values."""
+
+    tool: Literal["kicad-cli"]
+    kicad_version: Annotated[
+        str,
+        Field(min_length=1, max_length=128, pattern=r"^[^\u0000-\u001f\u007f]+$"),
+    ]
+    drc_schema: Literal["https://schemas.kicad.org/drc.v1.json"]
+    coordinate_units: Literal["mm"]
+
+
+class InTotoDrcPredicateContract(_ClosedContract):
+    """The bounded Link v0.3 predicate emitted for candidate DRC evidence."""
+
+    name: Literal["kicad-candidate-drc"]
+    command: Annotated[list[str], Field(max_length=0)]
+    materials: Annotated[
+        list[InTotoResourceDescriptorContract],
+        Field(min_length=4, max_length=4),
+    ]
+    byproducts: InTotoDrcByproductsContract
+    environment: InTotoDrcEnvironmentContract
+
+
+class InTotoDrcStatementContract(_ClosedContract):
+    """Closed in-toto Statement payload for redacted candidate DRC evidence."""
+
+    statement_type: Literal["https://in-toto.io/Statement/v1"] = Field(alias="_type")
+    subject: Annotated[
+        list[InTotoResourceDescriptorContract],
+        Field(min_length=1, max_length=1),
+    ]
+    predicate_type: Literal["https://in-toto.io/attestation/link/v0.3"] = Field(
+        alias="predicateType"
+    )
+    predicate: InTotoDrcPredicateContract
+
+
 class RouteCandidateDrcEvidenceContract(_ClosedContract):
     candidate_id: Digest
     candidate_base_revision: Digest
@@ -811,6 +867,7 @@ class RouteCandidateDrcEvidenceContract(_ClosedContract):
     patched_board_revision: Digest
     patched_drc_context_revision: Digest
     summary: RouteDrcSummaryContract
+    statement: InTotoDrcStatementContract | None = None
 
 
 class RouteFillAuthorityContract(_ClosedContract):
