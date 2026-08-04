@@ -209,14 +209,36 @@ class LiveBoardObservation:
         }
 
 
-def inspect_live_board(
+@dataclass(frozen=True, slots=True)
+class LiveBoardSnapshot:
+    """The bounded source bytes paired with their redacted live observation.
+
+    The source is an internal hand-off to the Board IR/Circuit Scene converter.  MCP and
+    plugin adapters receive only :attr:`observation`, so a caller cannot accidentally turn
+    the IPC transport into a raw-board export.
+    """
+
+    observation: LiveBoardObservation
+    source: bytes
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.source, bytes) or not self.source:
+            raise KicadIpcPayloadError("live board source is empty")
+        if len(self.source) != self.observation.board_bytes:
+            raise KicadIpcPayloadError("live board source size is not bound to its observation")
+        digest = f"sha256:{hashlib.sha256(self.source).hexdigest()}"
+        if digest != self.observation.board_digest:
+            raise KicadIpcPayloadError("live board source digest is not bound to its observation")
+
+
+def capture_live_board(
     settings: Settings | None = None,
     *,
     client_factory: Callable[..., _KiCadLike] | None = None,
     allow_future_api: bool = False,
     timeout_ms: int = _DEFAULT_TIMEOUT_MS,
-) -> LiveBoardObservation:
-    """Observe the first open PCB through a local KiCad IPC session.
+) -> LiveBoardSnapshot:
+    """Capture one bounded live board for an internal semantic conversion.
 
     The optional ``client_factory`` is a test seam; production calls lazily load
     ``kicad-python``.  ``allow_future_api`` is intentionally not an MCP argument:
@@ -273,7 +295,7 @@ def inspect_live_board(
         raise KicadIpcPayloadError("KiCad board snapshot exceeds the observation budget")
 
     counts = _count_items(board)
-    return LiveBoardObservation(
+    observation = LiveBoardObservation(
         kicad_version=kicad_version,
         api_version=api_version,
         compatibility=compatibility,
@@ -282,3 +304,26 @@ def inspect_live_board(
         object_counts=counts,
         socket_kind=socket_kind,
     )
+    return LiveBoardSnapshot(observation=observation, source=source_bytes)
+
+
+def inspect_live_board(
+    settings: Settings | None = None,
+    *,
+    client_factory: Callable[..., _KiCadLike] | None = None,
+    allow_future_api: bool = False,
+    timeout_ms: int = _DEFAULT_TIMEOUT_MS,
+) -> LiveBoardObservation:
+    """Observe the first open PCB through a local KiCad IPC session.
+
+    The public result is intentionally redacted.  Internal consumers that need to prove a
+    Circuit Scene revision came from the same live bytes must call :func:`capture_live_board`
+    and keep the returned source within the same bounded process path.
+    """
+
+    return capture_live_board(
+        settings,
+        client_factory=client_factory,
+        allow_future_api=allow_future_api,
+        timeout_ms=timeout_ms,
+    ).observation

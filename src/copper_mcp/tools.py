@@ -13,6 +13,7 @@ from copper_mcp.circuit_intent_service import (
 )
 from copper_mcp.circuit_scene import CircuitScene
 from copper_mcp.circuit_scene import observe_board_scene as observe_scene
+from copper_mcp.circuit_scene import observe_live_board_scene as observe_live_scene
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import run_board_drc as run_kicad_board_drc
 from copper_mcp.kicad_file import inspect_kicad_board
@@ -44,12 +45,13 @@ def server_info() -> dict[str, Any]:
             "bounded Circuit Intent validation and deterministic KiCad schematic rendering",
             "explicit create-only CLI schematic export and ephemeral stdio MCP artifact delivery",
             "read-only live KiCad IPC board observation (optional kicad-python)",
+            "revision-bound live KiCad IPC Circuit Scene observation (read-only)",
         ],
         "planned": [
             "region-scoped and human-facing board rendering",
             "authoritative KiCad DRC binding for placement candidates",
             "explicit placement apply and post-placement observation",
-            "live Circuit Scene binding over KiCad IPC",
+            "live placement/routing action compare-and-swap over KiCad IPC",
             "routing job lifecycle",
             "negotiated-congestion router",
             "immutable route patches",
@@ -122,6 +124,26 @@ def observe_board_scene(
     """Observe one board as a bounded, region-scoped Circuit Scene without modifying it."""
 
     return observe_board_scene_raw(payload, settings).to_dict()
+
+
+def observe_live_board_scene_raw(
+    payload: dict[str, Any],
+    settings: Settings | None = None,
+    *,
+    client_factory: Any = None,
+) -> CircuitScene:
+    """Observe the active KiCad IPC document and bind its bytes to a Circuit Scene."""
+
+    active_settings = settings or Settings.from_env()
+    return observe_live_scene(payload, active_settings, client_factory=client_factory)
+
+
+def observe_live_board_scene(
+    payload: dict[str, Any], settings: Settings | None = None
+) -> dict[str, Any]:
+    """Return a redaction-safe Circuit Scene bound to one active KiCad IPC snapshot."""
+
+    return observe_live_board_scene_raw(payload, settings).to_dict()
 
 
 def preview_placement(payload: dict[str, Any], settings: Settings | None = None) -> dict[str, Any]:

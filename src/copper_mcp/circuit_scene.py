@@ -14,6 +14,7 @@ into a field that reads as instruction.
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from math import isqrt
@@ -36,6 +37,7 @@ from copper_mcp.board_ir import (
     Zone,
 )
 from copper_mcp.config import Settings
+from copper_mcp.kicad_ipc import capture_live_board
 from copper_mcp.models import SCHEMA_VERSION
 from copper_mcp.request_boundary import (
     CONSTRAINT_FIELDS,
@@ -64,6 +66,7 @@ _REQUIRED_FIELDS = ("board", "constraints", "region")
 _OPTIONAL_FIELDS = ("layers", "include_annotations", "include_render")
 _REGION_FIELDS = ("min_x_nm", "min_y_nm", "max_x_nm", "max_y_nm", "around_ref_id", "radius_nm")
 _MAX_REF_CHARACTERS = 200
+_SHA256_DIGEST = re.compile(r"^sha256:[a-f0-9]{64}$")
 
 #: Board nodes whose text the board's author controls. None of it is ever trusted.
 _ANNOTATION_HEADS = ("gr_text", "fp_text")
@@ -835,29 +838,43 @@ class CircuitScene:
         }
 
 
-def observe_board_scene(payload: Any, settings: Settings) -> CircuitScene:
-    """Observe one workspace board as a bounded, region-scoped typed scene."""
+def _observe_board_scene(
+    payload: Any,
+    settings: Settings,
+    *,
+    source: bytes | None = None,
+    board_path_override: str | None = None,
+) -> CircuitScene:
+    """Build one scene from either a confined file or one already-captured live snapshot."""
 
     if not isinstance(settings, Settings):
         raise CircuitSceneError("scene settings are malformed")
     request = parse_circuit_scene_request(payload)
 
-    board = read_workspace_file(
-        settings.workspace,
-        request.board,
-        allowed_suffixes={".kicad_pcb"},
-        max_bytes=settings.max_board_bytes,
-    )
-    relative_path = board.path.relative_to(settings.workspace.resolve(strict=True)).as_posix()
-    source = board.content
-    board_revision = f"sha256:{hashlib.sha256(source).hexdigest()}"
+    if source is None:
+        board = read_workspace_file(
+            settings.workspace,
+            request.board,
+            allowed_suffixes={".kicad_pcb"},
+            max_bytes=settings.max_board_bytes,
+        )
+        board_source = board.content
+        relative_path = board.path.relative_to(settings.workspace.resolve(strict=True)).as_posix()
+    else:
+        if board_path_override is None:
+            raise CircuitSceneError("a live scene requires a bounded board label")
+        board_source = source
+        relative_path = board_path_override
+        if request.include_render:
+            raise CircuitSceneError("live scene rendering is not available")
+    board_revision = f"sha256:{hashlib.sha256(board_source).hexdigest()}"
 
     default_limits = ParseLimits()
     limits = replace(
         default_limits,
         max_input_bytes=min(default_limits.max_input_bytes, settings.max_board_bytes),
     )
-    conversion = parse_kicad_bytes(source, request.profile(), limits)
+    conversion = parse_kicad_bytes(board_source, request.profile(), limits)
     if conversion.snapshot is None or conversion.diagnostics:
         counts: dict[str, int] = {}
         for diagnostic in conversion.diagnostics:
@@ -969,7 +986,7 @@ def observe_board_scene(payload: Any, settings: Settings) -> CircuitScene:
     annotations_omitted = 0
     if request.include_annotations:
         annotations, annotations_omitted = _read_annotations(
-            source, limits, settings.max_scene_annotations
+            board_source, limits, settings.max_scene_annotations
         )
 
     render_evidence: SceneRenderEvidence | None = None
@@ -1009,3 +1026,55 @@ def observe_board_scene(payload: Any, settings: Settings) -> CircuitScene:
         content_derived_ref_count=content_derived,
         request_scoped_ref_count=request_scoped,
     )
+
+
+def observe_board_scene(payload: Any, settings: Settings) -> CircuitScene:
+    """Observe one confined workspace board as a bounded, region-scoped typed scene."""
+
+    return _observe_board_scene(payload, settings)
+
+
+def observe_live_board_scene(
+    payload: Any,
+    settings: Settings,
+    *,
+    client_factory: Any = None,
+) -> CircuitScene:
+    """Bind one active KiCad IPC snapshot to the Circuit Scene revision contract.
+
+    The request uses the literal board label ``"live"`` rather than a filesystem path.  The
+    returned ``board_revision`` and ``snapshot_digest`` are derived from the same source bytes
+    handed to the Board IR converter.  This makes the scene self-consistent, while routing and
+    placement actions remain file-backed until their own live compare-and-swap gate exists.
+    """
+
+    if not isinstance(settings, Settings):
+        raise CircuitSceneError("scene settings are malformed")
+    if not isinstance(payload, Mapping) or payload.get("board") != "live":
+        raise CircuitSceneError("live scene requests must set board to 'live'")
+    request_payload = dict(payload)
+    expected_board_revision = request_payload.pop("expect_board_revision", None)
+    expected_snapshot_digest = request_payload.pop("expect_snapshot_digest", None)
+    for name, value in (
+        ("expect_board_revision", expected_board_revision),
+        ("expect_snapshot_digest", expected_snapshot_digest),
+    ):
+        if value is not None and (
+            not isinstance(value, str) or _SHA256_DIGEST.fullmatch(value) is None
+        ):
+            raise CircuitSceneError(f"{name} is malformed")
+    snapshot = capture_live_board(settings, client_factory=client_factory)
+    if (
+        expected_board_revision is not None
+        and expected_board_revision != snapshot.observation.board_digest
+    ):
+        raise CircuitSceneError("live board revision is stale")
+    scene = _observe_board_scene(
+        request_payload,
+        settings,
+        source=snapshot.source,
+        board_path_override="live",
+    )
+    if expected_snapshot_digest is not None and expected_snapshot_digest != scene.snapshot_digest:
+        raise CircuitSceneError("live Board IR snapshot is stale")
+    return scene

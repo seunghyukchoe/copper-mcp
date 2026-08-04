@@ -8,6 +8,10 @@ All notable changes are documented here. The format follows
 
 ### Security
 
+- Live IPC-to-scene conversion now keeps the exact UTF-8 snapshot paired with its redacted digest
+  and refuses a caller-supplied board or Board IR snapshot revision mismatch before returning a
+  scene. The live tool uses the literal `board: "live"`, refuses render delivery, and does not
+  grant routing, placement, DRC, or apply authority.
 - The optional KiCad IPC observer is constrained to a local IPC socket, bounded by a connection
   timeout and board-size/object-count ceilings, and refuses a future KiCad API version unless an
   explicit development-only opt-in is supplied. It returns only numeric versions, a board digest,
@@ -84,6 +88,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- `observe_live_board_scene`, a read-only bridge from the active KiCad IPC document to Circuit
+  Scene `0.2.0`. It reuses exact Board IR geometry and author-text quarantine, with optional
+  compare-and-swap digests for stale-session refusal; live action gates remain separate.
 - An optional official `kicad-python` integration: the read-only `inspect_live_board` MCP tool and
   `hardware/kicad-ipc-plugin` action provide a redacted live-board observation contract while
   keeping placement, routing, DRC, and candidate application behind separate validated gates.

@@ -17,9 +17,9 @@ immutable candidate store and provenance
 ```
 
 MCP does not call geometry primitives directly. It invokes the same application services used by
-the CLI and tests. The current KiCad plugin snapshots only redacted read-only metadata; a future
-live-scene adapter may release the synchronous IPC connection while routing runs and apply only a
-validated candidate tied to the unchanged base revision.
+the CLI and tests. The KiCad plugin and live-scene adapter snapshot only through bounded local IPC;
+the scene is read-only and any future action must keep a validated candidate tied to an unchanged
+live revision before it can release the synchronous connection.
 
 ## Components
 
@@ -37,7 +37,7 @@ validated candidate tied to the unchanged base revision.
 | `circuit_intent_service.py` | Validate or normalize Circuit Intent and require byte-identical double rendering before delivery. |
 | `schematic_artifacts.py` | Bounded process-local capability store for stdio schematic resource delivery. |
 | `kicad_cli.py` | Fixed-argument ordinary and candidate-bound DRC over private snapshots, confined file-table dependencies, environment/state roots, and working directory. |
-| `kicad_ipc.py` | Optional official `kicad-python` adapter for redacted, read-only live-board observation over local IPC. |
+| `kicad_ipc.py` | Optional official `kicad-python` adapter for redacted observation and exact source hand-off over local IPC. |
 | `tools.py` | Pure application services shared by adapters. |
 | `routing/contracts.py` | Exact candidate, cost, settings, result, and backend-neutral contracts. |
 | `routing/astar.py` | Bounded integer two-pin A* reference; candidate-only and fail-closed. |
@@ -58,16 +58,18 @@ memory, an internal service binds that private derivative to strict aggregate Ki
 `inspect_board_ir` reports whether a board is representable at all. The separately authorized,
 default-off `apply_candidate` surface applies replay-verified route patches only. No durable
 candidate export, raw Board IR MCP resource, route/evidence resource, routing job, candidate
-persistence, placement apply, or live-editor apply path is implemented. The live IPC observer is
-metadata-only and does not change this mutation boundary. See
+persistence, placement apply, or live-editor apply path is implemented. The live IPC observer and
+`observe_live_board_scene` bridge are read-only and do not change this mutation boundary; live
+route/placement action authority is not implemented. See
 [Board IR and KiCad adapter contracts](board-ir.md),
 [ADR-0005](../adr/0005-canonical-board-ir.md),
 [ADR-0026](../adr/0026-first-class-footprints-in-board-ir.md),
 [ADR-0006](../adr/0006-bounded-deterministic-astar.md),
 [ADR-0007](../adr/0007-disposable-kicad-candidate-snapshot.md),
 [ADR-0008](../adr/0008-candidate-bound-kicad-drc.md),
-[ADR-0009](../adr/0009-non-mutating-route-preview.md), and
-[ADR-0010](../adr/0010-board-ir-inspection-service.md).
+[ADR-0009](../adr/0009-non-mutating-route-preview.md),
+[ADR-0010](../adr/0010-board-ir-inspection-service.md), and
+[ADR-0030](../adr/0030-live-ipc-circuit-scene-binding.md).
 
 Circuit Intent IR `0.1.0` is a separate logical contract for a bounded two-pin passive subset. Its
 pure adapter produces a new content-addressed KiCad schematic derivative with embedded original
@@ -96,9 +98,10 @@ Observed net identities are directly actionable by `preview_route`: the caller c
 identity without exposing or reconstructing the private KiCad net name. Both revisions are checked
 before candidate work, so a stale observation cannot silently route against unseen state. The MCP
 surface advertises this as an exclusive, closed request union and returns a fully typed structured
-result. This closes one file-backed observation-to-action edge; the live IPC observer now confirms
-editor reachability and a redacted board digest, but it does not yet provide a live-scene binding,
-policy solver, or autonomous whole-board loop.
+result. This closes one file-backed observation-to-action edge. The read-only live IPC bridge now
+converts the exact captured editor serialization into the same Circuit Scene contract and refuses
+caller-supplied stale board or snapshot digests; it still does not grant live route/placement
+authority, a policy solver, or an autonomous whole-board loop.
 
 Placement preview resolves its subjects from the same Board IR snapshot and refuses source bytes
 whose revision does not match. The current KiCad footprint subset is deliberately strict: front

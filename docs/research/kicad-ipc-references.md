@@ -32,6 +32,17 @@ The B-008 benchmark uses a fake `KiCad` client so CI measures deterministic beha
 requiring a GUI, token, or global KiCad setting. The current desktop KiCad IPC server was observed
 disabled, so no live-session success is claimed in that benchmark.
 
+## Snapshot-to-scene binding
+
+The next bridge is now implemented as `capture_live_board` plus the read-only
+`observe_live_board_scene` MCP tool. The internal capture pairs the exact UTF-8 serialization with
+the redacted digest and checks their byte count and SHA-256 equality before Board IR conversion.
+The scene uses the literal `board: "live"`, preserves the existing exact integer geometry and
+quarantined annotation contract, and can require both an expected board digest and expected Board
+IR snapshot digest. A mismatch refuses before the scene is returned. B-009 measures deterministic
+fake-client conversion and stale-digest refusals; it intentionally does not claim a live GUI
+session because the local KiCad IPC server is disabled.
+
 ## Primary references
 
 - KiCad, “For Add-on Developers,” especially API limits, socket/token variables, plugin runtime,
@@ -45,6 +56,6 @@ disabled, so no live-session success is claimed in that benchmark.
 
 ## Non-claims
 
-This record does not claim IPC write support, single-undo transactions, live Circuit Scene
-geometry, placement, routing, DRC, ERC, schematic parity, headless KiCad 10 operation, or
-production/fabrication readiness. Those require separate contracts and real-session evidence.
+This record does not claim IPC write support, single-undo transactions, live GUI-session success,
+live placement/routing action authority, DRC, ERC, schematic parity, headless KiCad 10 operation,
+or production/fabrication readiness. Those require separate contracts and real-session evidence.

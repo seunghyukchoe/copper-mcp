@@ -19,6 +19,7 @@
 | `inspect_board_ir` | None | Read-only Board IR conversion check and structural description. |
 | `inspect_live_board` | None | Optional `kicad-python` IPC observation of the first open PCB; returns only numeric versions, a SHA-256 digest, byte count, and bounded object counts. |
 | `observe_board_scene` | None, or a process-local render artifact when `include_render` is set | Bounded, region-scoped semantic scene of one board, with board text quarantined. |
+| `observe_live_board_scene` | None | Bounded Circuit Scene `0.2.0` from the active KiCad IPC document; uses `board: "live"` and optional stale-digest compare values. |
 | `apply_candidate` | **Replaces the board file**; disabled by default | The only mutating tool. Requires an operator flag and a single-use token. Route patches only. |
 | `preview_placement` | None | Deterministic legality preview for a proposed footprint placement. Never applies, and carries no DRC evidence. |
 | `preview_route` | None, or a temporary report when `include_drc` is set | Bounded, non-mutating two-pin route proposal on the documented Board IR subset. |
@@ -52,8 +53,18 @@ Editor. It lazily loads the optional official `kicad-python` binding, accepts on
 IPC socket, checks the binding/API version, and returns a redacted `kicad-ipc-live` record with a
 board digest and bounded object counts. It never returns the live serialization, net names, UUIDs,
 coordinates, or tokens. KiCad 9/10 requires a GUI session with the IPC server enabled; a future
-KiCad version is refused by default. This record does not yet act as a Circuit Scene snapshot or
-route/placement authority.
+KiCad version is refused by default. This record is metadata-only and does not act as a route or
+placement authority.
+
+`observe_live_board_scene` takes the same constraints and region shape as `observe_board_scene`,
+but requires the literal `board: "live"` and refuses `include_render`. It captures one bounded
+IPC serialization, checks that its digest and byte count remain paired, and runs that exact source
+through Board IR and Circuit Scene conversion. Optional `expect_board_revision` and
+`expect_snapshot_digest` values provide compare-and-swap semantics for a caller re-observing the
+same editor; either mismatch is a typed refusal. The output reuses the closed Scene `0.2.0`
+contract with `board_path: "live"`, so it exposes exact geometry and typed references but no raw
+serialization, socket path, or token. Placement, routing, DRC, and apply remain file-backed until
+each action has a live-session gate.
 
 `observe_board_scene` takes one request object with a workspace-relative `board`, integer
 `constraints`, a mandatory `region`, and optional `layers` and `include_annotations`. The region is

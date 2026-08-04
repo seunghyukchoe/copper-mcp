@@ -31,6 +31,7 @@ from copper_mcp.mcp_contracts import (
     CircuitSceneToolResponse,
     CircuitSchematicToolResponse,
     LiveBoardObservationToolResponse,
+    LiveCircuitSceneToolRequest,
     PlacementPreviewToolResponse,
     RoutePreviewToolRequest,
     RoutePreviewToolResponse,
@@ -52,6 +53,7 @@ from copper_mcp.tools import inspect_board as inspect_board_service
 from copper_mcp.tools import inspect_board_ir as inspect_board_ir_service
 from copper_mcp.tools import inspect_live_board as inspect_live_board_service
 from copper_mcp.tools import observe_board_scene_raw as observe_board_scene_service_raw
+from copper_mcp.tools import observe_live_board_scene_raw as observe_live_board_scene_service_raw
 from copper_mcp.tools import preview_placement as preview_placement_service
 from copper_mcp.tools import preview_route as preview_route_service
 from copper_mcp.tools import render_circuit_schematic as render_circuit_schematic_service
@@ -77,7 +79,11 @@ class CopperMCPServer(MCPServer[None]):
         listed = await super().list_tools()
         result: list[Tool] = []
         for tool in listed:
-            if tool.name not in {"preview_route", "render_circuit_schematic"}:
+            if tool.name not in {
+                "preview_route",
+                "render_circuit_schematic",
+                "observe_live_board_scene",
+            }:
                 result.append(tool)
                 continue
             schema = dict(tool.input_schema)
@@ -97,6 +103,8 @@ class CopperMCPServer(MCPServer[None]):
             raise ToolError("schematic tool arguments are malformed")
         if name == "preview_route" and set(arguments) != {"request"}:
             raise ToolError("route tool arguments are malformed")
+        if name == "observe_live_board_scene" and set(arguments) != {"request"}:
+            raise ToolError("live scene tool arguments are malformed")
         return await super().call_tool(name, arguments, context)
 
 
@@ -152,6 +160,31 @@ def inspect_live_board() -> LiveBoardObservationToolResponse:
     """
 
     return LiveBoardObservationToolResponse.model_validate(inspect_live_board_service(_SETTINGS))
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def observe_live_board_scene(
+    request: LiveCircuitSceneToolRequest,
+) -> CircuitSceneToolResponse:
+    """Observe the active KiCad PCB as a revision-bound Circuit Scene.
+
+    Set ``request.board`` to the literal ``"live"`` and provide the same bounded constraints
+    and region shape as ``observe_board_scene``. The scene's board revision is the digest of the
+    exact IPC serialization parsed into Board IR, so every reference is tied to one snapshot.
+    This read-only bridge does not yet make placement, routing, DRC, or apply operations live;
+    those actions must add their own session compare-and-swap gate.
+    """
+
+    scene = observe_live_board_scene_service_raw(request, _SETTINGS)
+    return CircuitSceneToolResponse.model_validate(scene.to_dict())
 
 
 @mcp.tool()

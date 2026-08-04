@@ -263,6 +263,40 @@ class RouteConstraintsContract(_ClosedContract):
     ]
 
 
+class LiveSceneRegionRequestContract(_ClosedContract):
+    """Bounded region shape for the active KiCad IPC scene request.
+
+    The runtime boundary enforces the exclusive box/reference forms; the advertised schema
+    keeps every coordinate exact and finite without echoing malformed values.
+    """
+
+    min_x_nm: Nanometres | None = None
+    min_y_nm: Nanometres | None = None
+    max_x_nm: Nanometres | None = None
+    max_y_nm: Nanometres | None = None
+    around_ref_id: Annotated[str, Field(max_length=200)] | None = None
+    radius_nm: PositiveNanometres | None = None
+
+
+class LiveSceneRequestContract(_ClosedContract):
+    """Closed input shape for a scene sourced from the active KiCad document."""
+
+    board: Literal["live"]
+    constraints: RouteConstraintsContract
+    region: LiveSceneRegionRequestContract
+    layers: Annotated[list[LayerName], Field(max_length=64)] = Field(default_factory=list)
+    include_annotations: bool = False
+    include_render: Literal[False] = False
+    expect_board_revision: Digest | None = None
+    expect_snapshot_digest: Digest | None = None
+
+
+LiveCircuitSceneToolRequest = Annotated[
+    Any,
+    WithJsonSchema(_inline_json_schema(LiveSceneRequestContract)),
+]
+
+
 class RouteSettingsContract(_ClosedContract):
     """Exact optional policy and work ceilings of the deterministic A* backend."""
 

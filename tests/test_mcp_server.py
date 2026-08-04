@@ -92,6 +92,7 @@ class McpServerTests(unittest.TestCase):
                 "inspect_board_ir",
                 "inspect_live_board",
                 "observe_board_scene",
+                "observe_live_board_scene",
                 "preview_placement",
                 "preview_route",
                 "render_circuit_schematic",
@@ -134,6 +135,71 @@ class McpServerTests(unittest.TestCase):
             result = asyncio.run(_server.mcp.call_tool("inspect_live_board", {}))
         self.assertFalse(result.is_error)
         self.assertEqual(result.structured_content, payload)
+
+    def test_live_scene_advertises_a_closed_revision_bound_request(self) -> None:
+        tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
+        live_scene = tools["observe_live_board_scene"]
+        self.assertEqual(live_scene.input_schema["type"], "object")
+        self.assertIs(live_scene.input_schema["additionalProperties"], False)
+        request_schema = live_scene.input_schema["properties"]["request"]
+        self.assertIs(request_schema["additionalProperties"], False)
+        self.assertEqual(request_schema["properties"]["board"]["const"], "live")
+        self.assertIn("expect_board_revision", request_schema["properties"])
+        self.assertIn("expect_snapshot_digest", request_schema["properties"])
+        assert live_scene.annotations is not None
+        self.assertIs(live_scene.annotations.read_only_hint, True)
+        self.assertIs(live_scene.annotations.destructive_hint, False)
+        self.assertIs(live_scene.annotations.idempotent_hint, True)
+
+    def test_live_scene_returns_the_same_structured_scene_contract(self) -> None:
+        from copper_mcp.circuit_scene import observe_board_scene
+
+        board = ROOT / "tests" / "fixtures" / "circuit-scene-v0.1" / "scene-region.kicad_pcb"
+        settings = replace(_server._SETTINGS, workspace=board.parent.resolve())
+        scene = observe_board_scene(
+            {
+                "board": board.name,
+                "constraints": {
+                    "clearance_nm": 200_000,
+                    "track_width_nm": 250_000,
+                    "via_diameter_nm": 600_000,
+                    "via_drill_nm": 300_000,
+                },
+                "region": {
+                    "min_x_nm": 0,
+                    "min_y_nm": 0,
+                    "max_x_nm": 30_000_000,
+                    "max_y_nm": 30_000_000,
+                },
+            },
+            settings,
+        )
+        with patch.object(_server, "observe_live_board_scene_service_raw", return_value=scene):
+            with patch.object(_server, "_SETTINGS", settings):
+                result = asyncio.run(
+                    _server.mcp.call_tool(
+                        "observe_live_board_scene",
+                        {
+                            "request": {
+                                "board": "live",
+                                "constraints": {
+                                    "clearance_nm": 200_000,
+                                    "track_width_nm": 250_000,
+                                    "via_diameter_nm": 600_000,
+                                    "via_drill_nm": 300_000,
+                                },
+                                "region": {
+                                    "min_x_nm": 0,
+                                    "min_y_nm": 0,
+                                    "max_x_nm": 30_000_000,
+                                    "max_y_nm": 30_000_000,
+                                },
+                            }
+                        },
+                    )
+                )
+        self.assertFalse(result.is_error)
+        self.assertEqual(result.structured_content["scene_version"], "0.2.0")
 
     def test_render_tool_declares_structured_content_and_security_annotations(self) -> None:
         tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}

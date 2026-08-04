@@ -7,12 +7,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from copper_mcp.circuit_scene import CircuitSceneError, observe_live_board_scene
 from copper_mcp.config import Settings
 from copper_mcp.kicad_ipc import (
     KicadIpcConfigurationError,
     KicadIpcPayloadError,
     KicadIpcUnavailableError,
     KicadIpcVersionError,
+    capture_live_board,
     inspect_live_board,
 )
 
@@ -159,6 +161,55 @@ class KicadIpcTests(unittest.TestCase):
         ):
             with self.assertRaises(KicadIpcUnavailableError):
                 inspect_live_board(_settings())
+
+    def test_live_snapshot_binds_to_scene_and_refuses_stale_revisions(self) -> None:
+        source = (
+            ROOT / "tests" / "fixtures" / "circuit-scene-v0.1" / "scene-region.kicad_pcb"
+        ).read_text(encoding="utf-8")
+        board = _Board(source=source)
+
+        def factory(**_: object) -> _KiCad:
+            return _KiCad(board=board)
+
+        captured = capture_live_board(_settings(), client_factory=factory)
+        request = {
+            "board": "live",
+            "constraints": {
+                "clearance_nm": 200_000,
+                "track_width_nm": 250_000,
+                "via_diameter_nm": 600_000,
+                "via_drill_nm": 300_000,
+            },
+            "region": {
+                "min_x_nm": -1_000_000_000,
+                "min_y_nm": -1_000_000_000,
+                "max_x_nm": 1_000_000_000,
+                "max_y_nm": 1_000_000_000,
+            },
+        }
+        scene = observe_live_board_scene(request, _settings(), client_factory=factory)
+        document = scene.to_dict()
+        self.assertEqual(scene.board_path, "live")
+        self.assertEqual(scene.board_revision, captured.observation.board_digest)
+        self.assertIsNotNone(scene.snapshot_digest)
+        self.assertNotIn("CopperMCP_ScenePad", repr(document))
+
+        with self.assertRaises(CircuitSceneError):
+            observe_live_board_scene(
+                {**request, "expect_board_revision": "sha256:" + "0" * 64},
+                _settings(),
+                client_factory=factory,
+            )
+        with self.assertRaises(CircuitSceneError):
+            observe_live_board_scene(
+                {
+                    **request,
+                    "expect_board_revision": scene.board_revision,
+                    "expect_snapshot_digest": "sha256:" + "1" * 64,
+                },
+                _settings(),
+                client_factory=factory,
+            )
 
     def test_official_plugin_manifest_is_closed_to_the_pcb_read_only_action(self) -> None:
         manifest_path = ROOT / "hardware" / "kicad-ipc-plugin" / "plugin.json"
