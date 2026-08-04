@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import tempfile
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -15,11 +17,16 @@ from copper_mcp.apply import (
     apply_placement_candidate_bytes,
     lockfile_for,
 )
+from copper_mcp.apply import (
+    service as apply_service,
+)
+from copper_mcp.apply.contracts import ApplyRequestError
 from copper_mcp.apply.engine import ApplyEngineError
 from copper_mcp.board_ir import NetClass, ParseLimits
 from copper_mcp.config import Settings
 from copper_mcp.placement import build_placement_view
 from copper_mcp.placement_preview import preview_placement
+from copper_mcp.security import WorkspacePostRenameError
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "placement-v0.1" / "placement-legal.kicad_pcb"
@@ -198,8 +205,37 @@ def test_malformed_placement_pose_is_refused_without_a_partial_write() -> None:
         assert isinstance(placements, list)
         placements[0]["moved"] = 1
         request["candidate"] = candidate
-        result = apply_placement_candidate(request, settings, authority)
-        assert result.status == "refused"
-        assert result.diagnostic is not None
-        assert result.diagnostic.code == "invalid_request"
+        with pytest.raises(ApplyRequestError):
+            apply_placement_candidate(request, settings, authority)
         assert board.read_bytes() == original
+
+
+def test_post_rename_failure_consumes_token_and_reports_restored_revision() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        board, original, settings, authority, preview = _fixture(Path(directory))
+        request = _request(preview, board)
+        real_replace = apply_service.replace_workspace_file
+        state = {"first": True}
+
+        def replace_then_fail(*args: object, **kwargs: object) -> object:
+            if state["first"]:
+                state["first"] = False
+                published = args[2]
+                assert isinstance(published, bytes)
+                real_replace(*args, **kwargs)
+                raise WorkspacePostRenameError(
+                    "simulated post-rename failure",
+                    f"sha256:{hashlib.sha256(published).hexdigest()}",
+                )
+            return real_replace(*args, **kwargs)
+
+        with patch.object(apply_service, "replace_workspace_file", replace_then_fail):
+            result = apply_service.apply_placement_candidate(request, settings, authority)
+
+        assert result.status == "applied_but_unverified"
+        assert result.board_revision_after == preview.board_revision
+        assert board.read_bytes() == original
+        replay = apply_service.apply_placement_candidate(request, settings, authority)
+        assert replay.status == "refused"
+        assert replay.diagnostic is not None
+        assert replay.diagnostic.code == "token_already_used"

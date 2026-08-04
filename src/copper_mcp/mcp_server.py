@@ -44,6 +44,7 @@ from copper_mcp.mcp_contracts import (
     LiveLayeredRoutePreviewToolRequest,
     LivePlacementToolRequest,
     LiveRoutePreviewToolRequest,
+    PlacementApplyToolRequest,
     PlacementApplyToolResponse,
     PlacementPreviewToolResponse,
     RoutePreviewToolRequest,
@@ -713,7 +714,7 @@ def preview_placement(request: dict[str, Any]) -> PlacementPreviewToolResponse:
 def apply_candidate(request: dict[str, Any]) -> ApplyCandidateToolResponse:
     """Apply a previewed route candidate to a board, replacing the file on disk.
 
-    **This is the only tool that changes a board.** It is disabled unless the operator set
+    This route-only mutation tool is disabled unless the operator set
     `COPPER_MCP_ALLOW_APPLY=1`, and it additionally requires an `apply_token` issued by
     `preview_route` for this exact candidate, board revision and path. A model cannot enable
     the flag or mint a token.
@@ -727,10 +728,10 @@ def apply_candidate(request: dict[str, Any]) -> ApplyCandidateToolResponse:
     the board and its path is returned - **that copy is the undo**, restored by copying it
     back. This is not a KiCad undo step.
 
-    Only additive route patches are applied. Nothing here applies a placement, and the applied
-    board carries no DRC evidence: the reported verification covers byte preservation, a
-    fail-closed reparse, and Board IR equality, and says `not_run` for anything involving
-    KiCad.
+    Only additive route patches are applied. Placement mutation is a separate tool with its own
+    operation-scoped token. The applied board carries no DRC evidence: the reported verification
+    covers byte preservation, a fail-closed reparse, and Board IR equality, and says `not_run` for
+    anything involving KiCad.
     """
 
     return ApplyCandidateToolResponse.model_validate(
@@ -747,7 +748,7 @@ def apply_candidate(request: dict[str, Any]) -> ApplyCandidateToolResponse:
     ),
     structured_output=True,
 )
-def apply_placement_candidate(request: dict[str, Any]) -> PlacementApplyToolResponse:
+def apply_placement_candidate(request: PlacementApplyToolRequest) -> PlacementApplyToolResponse:
     """Apply a separately authorized bounded placement candidate to a board file.
 
     The operation is disabled unless ``COPPER_MCP_ALLOW_APPLY=1`` and requires a placement-

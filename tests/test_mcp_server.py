@@ -264,6 +264,35 @@ class McpServerTests(unittest.TestCase):
         self.assertIs(live_placement.annotations.idempotent_hint, True)
         self.assertIs(live_placement.annotations.open_world_hint, False)
 
+    def test_placement_apply_advertises_closed_destructive_request(self) -> None:
+        tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
+        placement_apply = tools["apply_placement_candidate"]
+        self.assertEqual(placement_apply.input_schema["type"], "object")
+        request_schema = _resolve_local_ref(
+            placement_apply.input_schema,
+            placement_apply.input_schema["properties"]["request"],
+        )
+        self.assertIs(request_schema["additionalProperties"], False)
+        self.assertEqual(
+            set(request_schema["required"]),
+            {"board", "candidate", "apply_token", "expect_board_revision", "constraints"},
+        )
+        candidate_schema = _resolve_local_ref(
+            placement_apply.input_schema,
+            request_schema["properties"]["candidate"],
+        )
+        self.assertIs(candidate_schema["additionalProperties"], False)
+        placements_schema = _resolve_local_ref(
+            placement_apply.input_schema,
+            candidate_schema["properties"]["placements"]["items"],
+        )
+        self.assertIs(placements_schema["additionalProperties"], False)
+        assert placement_apply.annotations is not None
+        self.assertIs(placement_apply.annotations.read_only_hint, False)
+        self.assertIs(placement_apply.annotations.destructive_hint, True)
+        self.assertIs(placement_apply.annotations.idempotent_hint, False)
+        self.assertIs(placement_apply.annotations.open_world_hint, False)
+
     def test_layered_route_advertises_closed_read_only_revision_bound_request(self) -> None:
         tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
         layered = tools["preview_layered_route"]

@@ -1508,6 +1508,25 @@ class PlacementCandidateContract(_ClosedContract):
     evidence: PlacementEvidenceContract
 
 
+class PlacementApplyToolRequestContract(_ClosedContract):
+    """Closed destructive request for the bounded placement apply surface."""
+
+    board: Annotated[
+        str,
+        Field(min_length=1, max_length=4096, pattern=r"^[^\u0000-\u001f\u007f]+$"),
+    ]
+    candidate: PlacementCandidateContract
+    apply_token: Annotated[str, Field(min_length=1, max_length=512)]
+    expect_board_revision: Digest
+    constraints: RouteConstraintsContract
+
+
+PlacementApplyToolRequest = Annotated[
+    Any,
+    WithJsonSchema(_inline_json_schema(PlacementApplyToolRequestContract)),
+]
+
+
 class PlacementDiagnosticContract(_ClosedContract):
     """One typed, non-echoing refusal.
 
@@ -1729,6 +1748,8 @@ __all__ = [
     "LiveEditorContextToolRequest",
     "LiveEditorContextToolResponse",
     "LivePlacementToolRequest",
+    "PlacementApplyToolRequest",
+    "PlacementApplyToolRequestContract",
     "PlacementApplyToolResponse",
     "RoutePreviewToolRequest",
     "RoutePreviewToolResponse",

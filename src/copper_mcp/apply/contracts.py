@@ -31,6 +31,7 @@ MAX_MANIFEST_VERTICES = 100_000
 MAX_MANIFEST_FIELD_CHARACTERS = 256
 MAX_MANIFEST_PLACEMENTS = 4_096
 MAX_MANIFEST_RULE_RESULTS = 16_384
+MAX_MANIFEST_COORDINATE_NM = 1_000_000_000
 
 
 class ApplyRequestError(ValueError):
@@ -207,6 +208,9 @@ def _bound_manifest(candidate: Mapping[str, Any], *, placement: bool = False) ->
             value = candidate.get(field_name)
             if not isinstance(value, str) or len(value) > MAX_MANIFEST_FIELD_CHARACTERS:
                 raise ApplyRequestError("a placement candidate field is malformed")
+        grid = candidate.get("placement_grid_nm")
+        if type(grid) is not int or not 1 <= grid <= MAX_MANIFEST_COORDINATE_NM:
+            raise ApplyRequestError("a placement grid is malformed")
         placements = candidate.get("placements")
         if not isinstance(placements, list | tuple) or len(placements) > MAX_MANIFEST_PLACEMENTS:
             raise ApplyRequestError("the placement candidate carries too many footprints")
@@ -219,9 +223,37 @@ def _bound_manifest(candidate: Mapping[str, Any], *, placement: bool = False) ->
                 item,
                 frozenset({"ref_id", "origin_nm", "orientation_udeg", "side", "moved"}),
             )
+            required_fields(
+                "placement entry",
+                item,
+                ("ref_id", "origin_nm", "orientation_udeg", "side", "moved"),
+            )
             ref_id = item.get("ref_id")
             if not isinstance(ref_id, str) or len(ref_id) > MAX_MANIFEST_FIELD_CHARACTERS:
                 raise ApplyRequestError("a placement reference is malformed")
+            origin = item.get("origin_nm")
+            if (
+                not isinstance(origin, list | tuple)
+                or len(origin) != 2
+                or any(
+                    type(value) is not int or abs(value) > MAX_MANIFEST_COORDINATE_NM
+                    for value in origin
+                )
+            ):
+                raise ApplyRequestError("a placement origin is malformed")
+            orientation = item.get("orientation_udeg")
+            if type(orientation) is not int or orientation not in {
+                0,
+                90_000_000,
+                180_000_000,
+                270_000_000,
+            }:
+                raise ApplyRequestError("a placement rotation is malformed")
+            side = item.get("side")
+            if not isinstance(side, str) or side not in {"front", "back"}:
+                raise ApplyRequestError("a placement side is malformed")
+            if type(item.get("moved")) is not bool:
+                raise ApplyRequestError("a placement moved flag is malformed")
         evidence = candidate.get("evidence")
         if not isinstance(evidence, Mapping):
             raise ApplyRequestError("placement evidence is malformed")
@@ -229,6 +261,11 @@ def _bound_manifest(candidate: Mapping[str, Any], *, placement: bool = False) ->
             "placement evidence",
             evidence,
             frozenset({"rule_results", "legality", "checks_used", "inconclusive_pairs"}),
+        )
+        required_fields(
+            "placement evidence",
+            evidence,
+            ("rule_results", "legality", "checks_used", "inconclusive_pairs"),
         )
         rule_results = evidence.get("rule_results")
         if not isinstance(rule_results, list | tuple) or len(rule_results) > (
@@ -253,10 +290,42 @@ def _bound_manifest(candidate: Mapping[str, Any], *, placement: bool = False) ->
                 item,
                 frozenset({"rule_index", "kind", "status", "residual_nm"}),
             )
+            required_fields(
+                "placement rule evidence",
+                item,
+                ("rule_index", "kind", "status", "residual_nm"),
+            )
+            rule_index = item.get("rule_index")
+            residual = item.get("residual_nm")
+            if (
+                type(rule_index) is not int
+                or not 0 <= rule_index <= MAX_MANIFEST_RULE_RESULTS
+                or type(residual) is not int
+                or not 0 <= residual <= MAX_MANIFEST_COORDINATE_NM
+            ):
+                raise ApplyRequestError("placement rule evidence is malformed")
             for field_name in ("kind", "status"):
                 value = item.get(field_name)
                 if not isinstance(value, str) or len(value) > MAX_MANIFEST_FIELD_CHARACTERS:
                     raise ApplyRequestError("placement rule evidence is malformed")
+        checks_used = evidence.get("checks_used")
+        inconclusive_pairs = evidence.get("inconclusive_pairs")
+        if (
+            type(checks_used) is not int
+            or not 0 <= checks_used <= MAX_MANIFEST_RULE_RESULTS
+            or type(inconclusive_pairs) is not int
+            or not 0 <= inconclusive_pairs <= MAX_MANIFEST_RULE_RESULTS
+        ):
+            raise ApplyRequestError("placement evidence counters are malformed")
+        for field_name in (
+            "pad_overlap",
+            "outline_containment",
+            "keepout_respect",
+            "courtyard_overlap",
+        ):
+            value = legality.get(field_name)
+            if not isinstance(value, str) or len(value) > MAX_MANIFEST_FIELD_CHARACTERS:
+                raise ApplyRequestError("placement legality evidence is malformed")
         total_rules += len(rule_results)
         if total_rules > MAX_MANIFEST_RULE_RESULTS:
             raise ApplyRequestError("the placement candidate carries too many rule results")

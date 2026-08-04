@@ -549,12 +549,20 @@ def apply_candidate(
     except WorkspacePostRenameError as error:
         # The rename happened, so the board IS changed. Report that truthfully and attempt a
         # guarded rollback that only touches the file if it still holds exactly our bytes.
+        # A post-rename condition spends the capability even when the guarded rollback succeeds:
+        # otherwise the same token could replay a second write against the restored revision.
+        token_authority.consume(verified)
         restored = _guarded_restore(settings, board, error.published_revision)
+        final_revision = _observed_revision(
+            settings,
+            board,
+            fallback=board.revision if restored else error.published_revision,
+        )
         return ApplyResult(
             status="applied_but_unverified",
             board_path=board.relative_path,
             board_revision_before=board.revision,
-            board_revision_after=error.published_revision,
+            board_revision_after=final_revision,
             snapshot_digest_before=snapshot.snapshot_digest,
             base_revision=candidate.base_revision,
             candidate_id=candidate.candidate_id,
@@ -776,12 +784,20 @@ def apply_placement_candidate(
             backup_path=backup_path,
         )
     except WorkspacePostRenameError as error:
+        # A post-rename condition spends the capability even when the guarded rollback succeeds;
+        # otherwise the same token could replay a second write against the restored revision.
+        token_authority.consume(verified)
         restored = _guarded_restore(settings, board, error.published_revision)
+        final_revision = _observed_revision(
+            settings,
+            board,
+            fallback=board.revision if restored else error.published_revision,
+        )
         return PlacementApplyResult(
             status="applied_but_unverified",
             board_path=board.relative_path,
             board_revision_before=board.revision,
-            board_revision_after=error.published_revision,
+            board_revision_after=final_revision,
             snapshot_digest_before=snapshot.snapshot_digest,
             base_revision=candidate.base_revision,
             candidate_id=candidate.candidate_id,
@@ -951,6 +967,21 @@ def _guarded_restore(settings: Settings, board: _Board, published_revision: str)
     except (WorkspaceViolationError, WorkspacePostRenameError, OSError):
         return False
     return True
+
+
+def _observed_revision(settings: Settings, board: _Board, *, fallback: str) -> str:
+    """Return the digest actually visible after a post-rename recovery attempt.
+
+    A post-rename durability error can be raised after the replacement bytes are visible.  The
+    guarded restore has the same property: it may publish the original bytes and then fail while
+    syncing the directory.  Re-reading here keeps the response truthful even in that narrow
+    window; the fallback is used only when the file cannot be observed.
+    """
+
+    try:
+        return _read_board(settings, board.relative_path).revision
+    except (WorkspaceViolationError, OSError):
+        return fallback
 
 
 __all__ = [

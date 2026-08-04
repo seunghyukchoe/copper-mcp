@@ -7,6 +7,7 @@ directory the test owns.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import unittest
 from dataclasses import replace
@@ -539,13 +540,18 @@ class DurabilityTests(_Case):
 
         self.assertEqual(document["status"], "applied_but_unverified")
         self.assertIsNotNone(document["board_revision_after"])
-        self.assertNotEqual(document["board_revision_after"], document["board_revision_before"])
         assert document["diagnostic"] is not None
         self.assertEqual(document["diagnostic"]["code"], "apply_verification_failed")
         self.assertIsNotNone(document["backup_path"])
         # The board is genuinely one of the two known states, never torn.
         on_disk = self.fixture.board.read_bytes()
         self.assertIn(on_disk, (self.fixture.original,), "guarded rollback returns the original")
+        on_disk_revision = f"sha256:{hashlib.sha256(on_disk).hexdigest()}"
+        self.assertEqual(document["board_revision_after"], on_disk_revision)
+        self.assertEqual(document["board_revision_after"], document["board_revision_before"])
+        replay = self.fixture.apply()
+        assert replay["diagnostic"] is not None
+        self.assertEqual(replay["diagnostic"]["code"], "token_already_used")
 
     def test_a_backup_that_cannot_be_written_stops_the_apply(self) -> None:
         """No pre-apply copy means no way back, so the apply must not proceed."""
