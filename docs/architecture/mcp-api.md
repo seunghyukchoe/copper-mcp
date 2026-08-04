@@ -196,10 +196,10 @@ carries evidence holding per-rule residuals and the legality record. `pad_overla
 **three-valued**: `proven_clear` when pad
 bounds are disjoint, `violated` when pad cores overlap, and `inconclusive` in between.
 `inconclusive` is not a failure and a candidate is still produced; it means neither clearance nor
-collision could be proven. `courtyard_overlap` has exactly one permitted value, `not_modelled`.
-Board IR 0.2 carries bounded courtyard geometry for the supported subset, but the placement
-legalizer has no side-aware courtyard legality evaluator yet; there is deliberately no vocabulary
-in which a response could claim that check was performed.
+collision could be proven. `courtyard_overlap` is exact for Board IR 0.2's rectangular courtyard
+subset: `proven_clear` or `violated`. Only footprints on the same physical side are compared, and
+edge contact is not overlap. A Board IR conversion rejects non-rectangular courtyard topology
+before a placement view exists, so the result cannot silently claim fidelity outside that subset.
 
 A `refused` response carries a typed code: `unresolved_ref`, `infeasible_constraints`,
 `budget_exhausted`, `unsupported_geometry`, `illegal_placement`, `stale_revision` or

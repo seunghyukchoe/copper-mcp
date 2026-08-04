@@ -44,6 +44,9 @@ ROTATION_BOARD = ROOT / "tests" / "fixtures" / "board-ir-v0.1" / "footprint-rota
 FOOTPRINT_V02_BOARD = (
     ROOT / "tests" / "fixtures" / "board-ir-v0.2" / "footprint-pose-courtyard.kicad_pcb"
 )
+FRONT_BACK_FOOTPRINT_V02_BOARD = (
+    ROOT / "tests" / "fixtures" / "board-ir-v0.2" / "footprint-front-back-pose.kicad_pcb"
+)
 PADLESS_BOARD = ROOT / "tests" / "fixtures" / "board-ir-v0.2" / "padless-footprint.kicad_pcb"
 #: The graphics-only footprint in ``PADLESS_BOARD``: real in Board IR, reported by the scene,
 #: but owning no copper pad.
@@ -442,8 +445,44 @@ class LegalityTests(unittest.TestCase):
         self.assertEqual(legality.pad_overlap, "proven_clear")
         self.assertEqual(legality.outline_containment, "proven_inside")
         self.assertEqual(legality.keepout_respect, "proven_clear")
-        self.assertEqual(legality.courtyard_overlap, "not_modelled")
+        self.assertEqual(legality.courtyard_overlap, "proven_clear")
         self.assertTrue(legality.legal)
+
+    def test_same_side_rectangular_courtyards_are_exactly_checked(self) -> None:
+        """Courtyard overlap is independent from pad overlap on the bounded Board IR subset."""
+
+        source = FRONT_BACK_FOOTPRINT_V02_BOARD.read_bytes()
+        source = source.replace(b'(layer "B.Cu")', b'(layer "F.Cu")', 1)
+        source = source.replace(b'(layer "B.CrtYd")', b'(layer "F.CrtYd")', 1)
+        source = source.replace(b"(at 60 20 0)", b"(at 20 20 0)", 1)
+        parsed = parse_kicad_bytes(source, _profile(), ParseLimits())
+        assert parsed.snapshot is not None
+        view = build_placement_view(source, parsed.snapshot)
+        result = evaluate_placement(
+            _intent(view, "front-back-overlap.kicad_pcb"), parsed.snapshot, view
+        )
+
+        self.assertEqual(result.status, "refused")
+        assert result.diagnostic is not None
+        assert result.diagnostic.legality is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.ILLEGAL_PLACEMENT)
+        self.assertEqual(result.diagnostic.legality.courtyard_overlap, "violated")
+        self.assertEqual(result.diagnostic.legality.pad_overlap, "proven_clear")
+
+    def test_front_and_back_courtyards_do_not_collide_across_sides(self) -> None:
+        source = FRONT_BACK_FOOTPRINT_V02_BOARD.read_bytes().replace(
+            b"(at 60 20 0)", b"(at 20 20 0)", 1
+        )
+        parsed = parse_kicad_bytes(source, _profile(), ParseLimits())
+        assert parsed.snapshot is not None
+        view = build_placement_view(source, parsed.snapshot)
+        result = evaluate_placement(
+            _intent(view, "front-back-cross-side.kicad_pcb"), parsed.snapshot, view
+        )
+
+        self.assertEqual(result.status, "previewed")
+        assert result.candidate is not None
+        self.assertEqual(result.candidate.evidence.legality.courtyard_overlap, "proven_clear")
 
     def test_each_illegality_is_reported_by_its_own_check(self) -> None:
         """Guard the guard: the three checks must be independent, not one flag in disguise."""

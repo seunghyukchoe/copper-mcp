@@ -116,6 +116,7 @@ class _PlacedFootprint:
     moved: bool
     pads: tuple[_PlacedPad, ...]
     hull: Rect
+    courtyards: tuple[Ring, ...]
 
 
 def snap(value: int, grid_nm: int) -> int:
@@ -130,6 +131,26 @@ def snap(value: int, grid_nm: int) -> int:
 
 def _inverse_rotate(offset: PointNM, orientation_udeg: int) -> PointNM:
     return rotate_offset(offset, (-orientation_udeg) % 360_000_000)
+
+
+def _place_ring(
+    ring: Ring,
+    original_origin: PointNM,
+    original_orientation_udeg: int,
+    new_origin: PointNM,
+    new_orientation_udeg: int,
+) -> Ring:
+    """Move one Board IR courtyard from its saved pose to a proposed orthogonal pose."""
+
+    points = []
+    for point in ring.points:
+        saved_local = _inverse_rotate(
+            PointNM(point.x - original_origin.x, point.y - original_origin.y),
+            original_orientation_udeg,
+        )
+        turned = rotate_offset(saved_local, new_orientation_udeg)
+        points.append(PointNM(new_origin.x + turned.x, new_origin.y + turned.y))
+    return Ring(tuple(points))
 
 
 def _place(
@@ -228,6 +249,16 @@ def _place(
             )
             hull = bounds if hull is None else union(hull, bounds)
         assert hull is not None  # a view never keeps a footprint without pads
+        courtyards = tuple(
+            _place_ring(
+                ring,
+                footprint.origin,
+                footprint.orientation_udeg,
+                origin,
+                orientation,
+            )
+            for ring in footprint.courtyards
+        )
         placed.append(
             _PlacedFootprint(
                 ref_id=ref_id,
@@ -237,6 +268,7 @@ def _place(
                 moved=moved,
                 pads=tuple(pads),
                 hull=hull,
+                courtyards=courtyards,
             )
         )
     return tuple(placed)
@@ -333,6 +365,31 @@ def _keepout_respect(
                     continue
                 if rect_touches_ring(pad.bounds, keepout.boundary):
                     return "violated"
+    return "proven_clear"
+
+
+def _courtyard_overlap(placed: tuple[_PlacedFootprint, ...], budget: _Budget) -> str:
+    """Check exact rectangular courtyards on the same physical side.
+
+    Board IR v0.2 admits only axis-aligned rectangular courtyard rings. Their closed bounds are
+    therefore the exact geometry, and an open rectangle overlap treats edge contact as legal, as
+    KiCad's zero-clearance default does. Front and back courtyards are independent physical layers;
+    an overlap across sides is not a same-layer courtyard collision.
+    """
+
+    for first_index, first in enumerate(placed):
+        if not first.courtyards:
+            continue
+        for second in placed[first_index + 1 :]:
+            budget.charge()
+            if first.side != second.side or not second.courtyards:
+                continue
+            for left in first.courtyards:
+                left_bounds = ring_bounds(left)
+                for right in second.courtyards:
+                    budget.charge()
+                    if rects_overlap(left_bounds, ring_bounds(right)):
+                        return "violated"
     return "proven_clear"
 
 
@@ -533,6 +590,7 @@ def evaluate_placement(
             pad_overlap=overlap,
             outline_containment=_outline_containment(placed, snapshot, budget),
             keepout_respect=_keepout_respect(placed, snapshot, budget),
+            courtyard_overlap=_courtyard_overlap(placed, budget),
         )
     except _BudgetExhaustedError as error:
         return _refuse(

@@ -127,8 +127,9 @@ whose revision does not match. Observation now accepts the bounded front- and ba
 orthogonal, unfilled-rectangular-courtyard subset and imports KiCad's authored child coordinates
 without a second mirror. The placement derivative remains deliberately stricter: front side only,
 with unsupported topology and back-side edits failing closed. A locked footprint cannot be moved.
-`courtyard_overlap` remains `not_modelled` because no bounded, side-aware legality evaluator exists,
-not because the supported contour is absent. Placement apply remains deferred. Models never write
+`courtyard_overlap` is exact for the bounded rectangular Board IR subset: same-side rings return
+`proven_clear` or `violated`, while front/back rings are evaluated independently. Unsupported
+topology fails closed before the view exists. Placement apply remains deferred. Models never write
 KiCad syntax, mutate a live editor, or bypass deterministic candidate validation and explicit
 revision-checked authorization.
 

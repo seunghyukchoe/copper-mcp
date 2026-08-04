@@ -102,11 +102,11 @@ class ServiceTests(unittest.TestCase):
         self.assertIsNotNone(diagnostic["legality"])
         self.assertEqual(diagnostic["legality"]["keepout_respect"], "violated")
 
-    def test_courtyards_are_reported_as_unchecked_rather_than_passed(self) -> None:
+    def test_boards_without_courtyards_are_proven_clear_for_that_check(self) -> None:
         document = _preview("placement-legal.kicad_pcb")
         candidate = document["candidate"]
         assert candidate is not None
-        self.assertEqual(candidate["evidence"]["legality"]["courtyard_overlap"], "not_modelled")
+        self.assertEqual(candidate["evidence"]["legality"]["courtyard_overlap"], "proven_clear")
 
     def test_a_board_outside_the_workspace_is_refused(self) -> None:
         for path in ("../board-ir-v0.1/subset.kicad_pcb", "/etc/hosts", "nope.kicad_pcb"):

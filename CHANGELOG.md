@@ -8,6 +8,12 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added deterministic same-side courtyard legality to placement previews for the Board IR v0.2
+  rectangular subset. The legalizer transforms proposed poses, checks exact integer rectangle
+  overlap, treats front/back courtyards independently, and refuses overlapping candidates; custom
+  courtyard clearance, general topology, placement connectivity, and apply remain open under
+  ADR-0058.
+
 - Added a bounded `kicad_schematic_parity` verifier for the passive Circuit Intent subset. It
   requires exact renderer replay and checks real KiCad format-E `kicadxml` component, pin, and
   net-node parity with bounded hostile-input handling; authoritative ERC and schematic-to-PCB

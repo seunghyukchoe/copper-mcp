@@ -214,9 +214,9 @@ and the policy-plugin work.
   live compare-and-swap, and apply remain open gates.
 - [~] Deterministic snapping, connectivity, clearance, rule, provenance, and revision validation for
   every placement candidate. Grid snapping, rule residuals, three-valued pad overlap, outline
-  containment, keepout respect and dual-digest binding are implemented. Board IR now carries the
-  supported rectangular courtyard rings, but side-aware bounded courtyard legality is still
-  reported as `not_modelled`; connectivity after a placement is future work.
+  containment, keepout respect, exact same-side rectangular-courtyard overlap, and dual-digest
+  binding are implemented. Board IR now carries the supported rectangular courtyard rings; pad-net
+  connectivity after a placement and non-rectangular topology remain future work.
 - [~] General courtyard line-chain/polygon topology and back-side footprint observation, pinned to
   KiCad-authored front/back flip and DRC oracle fixtures without applying a second mirror. The
   adapter now observes bounded `F.Cu`/`B.Cu` footprints with rectangular courtyards and a real

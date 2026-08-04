@@ -684,7 +684,8 @@ def preview_placement(request: dict[str, Any]) -> PlacementPreviewToolResponse:
     A ``previewed`` result carries an immutable candidate whose legality was proven
     deterministically. Note that ``pad_overlap`` is three-valued: ``inconclusive`` means
     neither clearance nor collision could be proven, and is not a failure. Courtyard overlap is
-    reported as ``not_modelled`` and is genuinely not checked. This tool never applies a
+    reported as ``proven_clear`` or ``violated`` for the bounded same-side rectangular-courtyard
+    subset. Unsupported courtyard topology fails closed. This tool never applies a
     placement, and a placement is not bound to KiCad DRC evidence in this version.
     """
 

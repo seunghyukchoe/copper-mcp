@@ -1470,9 +1470,9 @@ class PlacementLegalityContract(_ClosedContract):
     pad_overlap: Literal["proven_clear", "inconclusive", "violated"]
     outline_containment: Literal["proven_inside", "violated"]
     keepout_respect: Literal["proven_clear", "violated"]
-    #: One permitted value. Board IR carries no courtyard geometry, so there is no vocabulary
-    #: here for a courtyard that was checked and a response can never imply one.
-    courtyard_overlap: Literal["not_modelled"]
+    #: Exact for the rectangular Board IR v0.2 subset; front/back courtyards are compared only
+    #: on the same physical side and edge contact is not overlap.
+    courtyard_overlap: Literal["proven_clear", "violated"]
 
 
 class FootprintPlacementContract(_ClosedContract):

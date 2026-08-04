@@ -579,10 +579,10 @@ class PlacementLegality:
     pad_overlap: str
     outline_containment: str
     keepout_respect: str
-    #: One permitted value. There is no vocabulary here for a courtyard that was checked, so a
-    #: candidate can never imply a check this version does not perform. Board IR carries no
-    #: courtyard geometry, and this repository's own board draws none at all.
-    courtyard_overlap: str = "not_modelled"
+    #: Exact for the rectangular Board IR v0.2 subset and evaluated only between footprints on
+    #: the same physical side. Edge contact is not overlap; non-rectangular topology is rejected
+    #: by the Board IR contract before a placement view exists.
+    courtyard_overlap: str = "proven_clear"
 
     def __post_init__(self) -> None:
         if self.pad_overlap not in {"proven_clear", "inconclusive", "violated"}:
@@ -591,8 +591,8 @@ class PlacementLegality:
             raise PlacementError("outline containment is malformed")
         if self.keepout_respect not in {"proven_clear", "violated"}:
             raise PlacementError("keepout respect is malformed")
-        if self.courtyard_overlap != "not_modelled":
-            raise PlacementError("courtyard overlap has exactly one permitted value")
+        if self.courtyard_overlap not in {"proven_clear", "violated"}:
+            raise PlacementError("courtyard overlap must be proven_clear or violated")
 
     @property
     def legal(self) -> bool:
@@ -602,6 +602,7 @@ class PlacementLegality:
             self.pad_overlap != "violated"
             and self.outline_containment == "proven_inside"
             and self.keepout_respect == "proven_clear"
+            and self.courtyard_overlap == "proven_clear"
         )
 
     def to_dict(self) -> dict[str, Any]:

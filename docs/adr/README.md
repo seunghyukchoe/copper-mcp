@@ -48,3 +48,4 @@ from the decision ledger.
 - [ADR-0055: Add a bounded negotiated-congestion coordinator](0055-bounded-negotiated-congestion.md)
 - [ADR-0056: Verify bounded Circuit Intent schematic parity](0056-kicad-schematic-parity.md)
 - [ADR-0057: Observe bounded front/back footprint poses](0057-front-back-footprint-observation.md)
+- [ADR-0058: Check same-side rectangular courtyard legality](0058-rectangular-courtyard-legality.md)

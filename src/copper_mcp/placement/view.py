@@ -13,6 +13,7 @@ from copper_mcp.board_ir import (
     Pad,
     ParseLimits,
     PointNM,
+    Ring,
     validate_content,
     verify_snapshot,
 )
@@ -35,6 +36,8 @@ class FootprintView:
     locked: bool
     #: Union of the footprint's pad bounds in the board frame, as currently placed.
     hull: Rect
+    #: Exact rectangular courtyard rings in the current Board IR board frame.
+    courtyards: tuple[Ring, ...]
 
     def __post_init__(self) -> None:
         if not self.ref_id.startswith("footprint:"):
@@ -45,6 +48,10 @@ class FootprintView:
             raise PlacementViewError("a placeable footprint must own at least one pad")
         if not isinstance(self.locked, bool):
             raise PlacementViewError("footprint locked state must be boolean")
+        if not isinstance(self.courtyards, tuple) or not all(
+            isinstance(ring, Ring) for ring in self.courtyards
+        ):
+            raise PlacementViewError("footprint courtyards must be immutable rings")
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +149,7 @@ def build_placement_view(
             pad_ids=footprint.pad_ids,
             locked=footprint.locked,
             hull=hull,
+            courtyards=footprint.courtyards,
         )
 
     unowned = set(pads_by_id) - set(owner_by_pad)
