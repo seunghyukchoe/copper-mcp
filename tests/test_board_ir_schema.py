@@ -18,11 +18,15 @@ from copper_mcp.board_ir import (
 )
 
 TEST_ROOT = Path(__file__).parent
-FIXTURE_ROOT = TEST_ROOT / "fixtures" / "board-ir-v0.1"
-SCHEMA_PATH = TEST_ROOT.parent / "schemas" / "board-ir" / "0.1.0.schema.json"
-VALID_FIXTURE = FIXTURE_ROOT / "schema-valid.json"
-INVALID_FIXTURE = FIXTURE_ROOT / "schema-invalid.json"
-SUBSET_BOARD = FIXTURE_ROOT / "subset.kicad_pcb"
+ACTIVE_FIXTURE_ROOT = TEST_ROOT / "fixtures" / "board-ir-v0.2"
+LEGACY_FIXTURE_ROOT = TEST_ROOT / "fixtures" / "board-ir-v0.1"
+SCHEMA_ROOT = TEST_ROOT.parent / "schemas" / "board-ir"
+SCHEMA_PATH = SCHEMA_ROOT / "0.2.0.schema.json"
+LEGACY_SCHEMA_PATH = SCHEMA_ROOT / "0.1.0.schema.json"
+VALID_FIXTURE = ACTIVE_FIXTURE_ROOT / "schema-valid.json"
+INVALID_FIXTURE = ACTIVE_FIXTURE_ROOT / "schema-invalid.json"
+LEGACY_VALID_FIXTURE = LEGACY_FIXTURE_ROOT / "schema-valid.json"
+SUBSET_BOARD = LEGACY_FIXTURE_ROOT / "subset.kicad_pcb"
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -31,6 +35,10 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def _validator() -> Draft202012Validator:
     return Draft202012Validator(_load_json(SCHEMA_PATH))
+
+
+def _legacy_validator() -> Draft202012Validator:
+    return Draft202012Validator(_load_json(LEGACY_SCHEMA_PATH))
 
 
 def _fixture_profile() -> KiCadConstraintProfile:
@@ -57,8 +65,30 @@ def _fixture_profile() -> KiCadConstraintProfile:
     )
 
 
-def test_board_ir_schema_is_valid_draft_2020_12() -> None:
+def test_active_board_ir_schema_is_valid_draft_2020_12() -> None:
     Draft202012Validator.check_schema(_load_json(SCHEMA_PATH))
+
+
+def test_legacy_v0_1_schema_remains_valid_and_accepts_its_golden_snapshot() -> None:
+    schema = _load_json(LEGACY_SCHEMA_PATH)
+    payload = _load_json(LEGACY_VALID_FIXTURE)
+
+    Draft202012Validator.check_schema(schema)
+    assert schema["properties"]["schema_version"]["const"] == "0.1.0"
+    assert "footprints" not in schema["$defs"]["content"]["properties"]["items"]["properties"]
+    assert list(_legacy_validator().iter_errors(payload)) == []
+
+
+def test_active_schema_and_decoder_reject_legacy_v0_1_snapshot() -> None:
+    encoded = LEGACY_VALID_FIXTURE.read_bytes()
+    payload = json.loads(encoded)
+
+    assert list(_legacy_validator().iter_errors(payload)) == []
+    assert list(_validator().iter_errors(payload))
+    with pytest.raises(BoardIRValidationError) as caught:
+        decode_snapshot_json(encoded)
+
+    assert caught.value.code == "schema.invalid"
 
 
 def test_valid_golden_snapshot_satisfies_schema_and_codec() -> None:
@@ -106,6 +136,54 @@ def test_schema_closes_nested_objects_and_requires_integer_nanometres(
     mutate(payload)
 
     assert list(_validator().iter_errors(payload))
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda footprint: footprint.update({"id": "pad:not-a-footprint"}),
+        lambda footprint: footprint["origin"].update({"x_nm": 0.5}),
+        lambda footprint: footprint.update({"rotation_udeg": 360_000_000}),
+        lambda footprint: footprint.update({"side": "inner"}),
+        lambda footprint: footprint.update({"locked": 1}),
+        lambda footprint: footprint.update({"unexpected": True}),
+    ],
+)
+def test_schema_closes_footprints_and_enforces_pose_types(
+    mutate: Callable[[dict[str, Any]], None],
+) -> None:
+    payload = deepcopy(_load_json(VALID_FIXTURE))
+    footprint = payload["content"]["items"]["footprints"][0]
+    mutate(footprint)
+
+    assert list(_validator().iter_errors(payload))
+
+
+def test_schema_requires_footprints_as_a_total_items_collection() -> None:
+    payload = deepcopy(_load_json(VALID_FIXTURE))
+    del payload["content"]["items"]["footprints"]
+
+    errors = list(_validator().iter_errors(payload))
+
+    assert any(error.validator == "required" and "footprints" in error.message for error in errors)
+
+
+def test_schema_enforces_unique_pad_ids_and_at_most_64_courtyards() -> None:
+    duplicate_pad = deepcopy(_load_json(VALID_FIXTURE))
+    footprint = duplicate_pad["content"]["items"]["footprints"][0]
+    assert footprint["pad_ids"]
+    footprint["pad_ids"].append(footprint["pad_ids"][0])
+    assert any(
+        error.validator == "uniqueItems" for error in _validator().iter_errors(duplicate_pad)
+    )
+
+    too_many_courtyards = deepcopy(_load_json(VALID_FIXTURE))
+    footprint = too_many_courtyards["content"]["items"]["footprints"][0]
+    courtyard = deepcopy(too_many_courtyards["content"]["outline"]["contours"][0]["outer"])
+    footprint["courtyards"] = [deepcopy(courtyard) for _ in range(65)]
+    assert any(
+        error.validator == "maxItems" for error in _validator().iter_errors(too_many_courtyards)
+    )
 
 
 def test_schema_enforces_pad_kind_drill_and_npth_net_rules() -> None:

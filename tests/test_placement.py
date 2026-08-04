@@ -41,6 +41,13 @@ from copper_mcp.placement.legalizer import snap
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "placement-v0.1"
 ROTATION_BOARD = ROOT / "tests" / "fixtures" / "board-ir-v0.1" / "footprint-rotation.kicad_pcb"
+FOOTPRINT_V02_BOARD = (
+    ROOT / "tests" / "fixtures" / "board-ir-v0.2" / "footprint-pose-courtyard.kicad_pcb"
+)
+PADLESS_BOARD = ROOT / "tests" / "fixtures" / "board-ir-v0.2" / "padless-footprint.kicad_pcb"
+#: The graphics-only footprint in ``PADLESS_BOARD``: real in Board IR, reported by the scene,
+#: but owning no copper pad.
+PADLESS_REF = "footprint:kicad:93000000-0000-0000-0000-000000000011"
 COPPERTONE = ROOT / "hardware" / "coppertone-buffer" / "coppertone-buffer.kicad_pcb"
 REAL_KICAD_CLI = Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli")
 
@@ -110,6 +117,38 @@ class PlacementViewTests(unittest.TestCase):
         with self.assertRaises(PlacementViewError):
             build_placement_view(other, snapshot)
 
+    def test_a_view_refuses_footprint_content_not_bound_to_its_snapshot_digest(self) -> None:
+        from dataclasses import replace
+
+        source, snapshot, _ = _board(FOOTPRINT_V02_BOARD)
+        first, *remaining = snapshot.content.footprints
+        forged_footprint = replace(
+            first,
+            origin=replace(first.origin, x=first.origin.x + 1),
+        )
+        forged = replace(
+            snapshot,
+            content=replace(
+                snapshot.content,
+                footprints=(forged_footprint, *remaining),
+            ),
+        )
+
+        with self.assertRaisesRegex(
+            PlacementViewError,
+            "Board IR snapshot failed placement-view validation",
+        ):
+            build_placement_view(source, forged)
+
+    def test_a_view_enforces_caller_tightened_board_ir_limits(self) -> None:
+        source, snapshot, _ = _board(FOOTPRINT_V02_BOARD)
+
+        with self.assertRaisesRegex(
+            PlacementViewError,
+            "Board IR snapshot failed placement-view validation",
+        ):
+            build_placement_view(source, snapshot, limits=ParseLimits(max_objects=1))
+
     def test_a_pad_reference_resolves_to_the_footprint_that_owns_it(self) -> None:
         _, _, view = _board(FIXTURES / "placement-legal.kicad_pcb")
         footprint = sorted(view.footprints.values(), key=lambda item: item.ref_id)[0]
@@ -131,6 +170,144 @@ class PlacementViewTests(unittest.TestCase):
         )
         view = build_placement_view(stripped, result.snapshot)
         self.assertEqual(len(view.owner_by_pad), len(result.snapshot.content.pads))
+
+
+class FootprintV02PlacementRegressionTests(unittest.TestCase):
+    def test_source_revision_mismatch_is_rejected_before_the_join(self) -> None:
+        source, snapshot, _ = _board(FOOTPRINT_V02_BOARD)
+        changed_source = source.replace(b"(at 45 15 90)", b"(at 45 16 90)", 1)
+        self.assertNotEqual(changed_source, source)
+
+        with self.assertRaisesRegex(
+            PlacementViewError,
+            "board source and Board IR snapshot revisions disagree",
+        ):
+            build_placement_view(changed_source, snapshot)
+
+    def test_a_locked_footprint_move_is_refused_without_a_candidate(self) -> None:
+        _, snapshot, view = _board(FOOTPRINT_V02_BOARD)
+        locked = [footprint for footprint in view.footprints.values() if footprint.locked]
+        self.assertEqual(len(locked), 1)
+
+        result = evaluate_placement(
+            _intent(
+                view,
+                FOOTPRINT_V02_BOARD.name,
+                proposals=[{"subject": locked[0].ref_id, "offset_x_nm": 1_000_000}],
+            ),
+            snapshot,
+            view,
+        )
+
+        self.assertEqual(result.status, "refused")
+        self.assertIsNone(result.candidate)
+        assert result.diagnostic is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+        self.assertEqual(result.diagnostic.message, "moving a locked footprint is not authorized")
+
+
+class PadlessFootprintTests(unittest.TestCase):
+    """A footprint with no copper pads exists; refusing it must not deny that.
+
+    Board IR v0.2 keeps graphics-only footprints and the scene reports them, so answering
+    ``unresolved_ref`` - "does not exist on this board" - would be a false statement about the
+    caller's board. The honest answer is that it exists and this version cannot place it.
+    """
+
+    def test_the_view_records_a_padless_footprint_instead_of_forgetting_it(self) -> None:
+        _, snapshot, view = _board(PADLESS_BOARD)
+
+        board_ir_refs = {footprint.id for footprint in snapshot.content.footprints}
+        self.assertIn(PADLESS_REF, board_ir_refs, "the fixture must carry a padless footprint")
+        # It is not placeable, so it is deliberately absent from the placeable mapping...
+        self.assertNotIn(PADLESS_REF, view.footprints)
+        self.assertIsNone(view.resolve(PADLESS_REF))
+        # ...but its identity survives, which is what lets the refusal be truthful.
+        self.assertTrue(view.is_padless(PADLESS_REF))
+        self.assertFalse(view.is_padless("footprint:kicad:not-on-this-board"))
+
+    def test_naming_a_padless_subject_is_refused_as_unplaceable_not_as_unknown(self) -> None:
+        _, snapshot, view = _board(PADLESS_BOARD)
+
+        result = evaluate_placement(
+            _intent(view, PADLESS_BOARD.name, subjects=[PADLESS_REF]), snapshot, view
+        )
+
+        self.assertEqual(result.status, "refused")
+        assert result.diagnostic is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+        self.assertIn("no copper pad", result.diagnostic.message)
+        self.assertNotIn("does not exist", result.diagnostic.message)
+
+    def test_a_padless_anchor_and_rule_subject_are_refused_the_same_way(self) -> None:
+        _, snapshot, view = _board(PADLESS_BOARD)
+        placeable = sorted(view.footprints)[0]
+
+        anchored = evaluate_placement(
+            _intent(
+                view,
+                PADLESS_BOARD.name,
+                subjects=[placeable],
+                proposals=[{"subject": placeable, "anchor": PADLESS_REF, "offset_x_nm": 0}],
+            ),
+            snapshot,
+            view,
+        )
+        assert anchored.diagnostic is not None
+        self.assertEqual(anchored.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+        self.assertIn("no copper pad", anchored.diagnostic.message)
+
+        ruled = evaluate_placement(
+            _intent(
+                view,
+                PADLESS_BOARD.name,
+                subjects=[placeable],
+                rules=[
+                    {
+                        "kind": "alignment",
+                        "axis": "x",
+                        "members": [placeable, PADLESS_REF],
+                    }
+                ],
+            ),
+            snapshot,
+            view,
+        )
+        assert ruled.diagnostic is not None
+        self.assertEqual(ruled.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+        self.assertIn("no copper pad", ruled.diagnostic.message)
+
+    def test_a_genuinely_absent_reference_is_still_unresolved(self) -> None:
+        """Guard the guard: the honest refusal must not swallow the real unknown-ref case."""
+
+        _, snapshot, view = _board(PADLESS_BOARD)
+
+        result = evaluate_placement(
+            _intent(
+                view,
+                PADLESS_BOARD.name,
+                subjects=["footprint:kicad:00000000-0000-0000-0000-00000000ffff"],
+            ),
+            snapshot,
+            view,
+        )
+
+        assert result.diagnostic is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNRESOLVED_REF)
+        self.assertIn("does not exist", result.diagnostic.message)
+
+    def test_the_padless_board_still_places_its_real_footprint(self) -> None:
+        """The padless footprint must not block placement of the rest of the board."""
+
+        _, snapshot, view = _board(PADLESS_BOARD)
+        placeable = sorted(view.footprints)[0]
+
+        result = evaluate_placement(
+            _intent(view, PADLESS_BOARD.name, subjects=[placeable]), snapshot, view
+        )
+
+        self.assertEqual(result.status, "previewed")
+        assert result.candidate is not None
 
 
 class RequestBoundaryTests(unittest.TestCase):

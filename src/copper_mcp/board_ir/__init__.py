@@ -1,4 +1,4 @@
-"""Canonical, MCP-independent Board IR v0.1 contracts."""
+"""Canonical, MCP-independent Board IR v0.2 contracts."""
 
 from copper_mcp.board_ir.canonical import (
     canonical_content_bytes,
@@ -18,6 +18,8 @@ from copper_mcp.board_ir.types import (
     BoardIRSnapshot,
     ConstraintSet,
     DifferentialPairRule,
+    Footprint,
+    FootprintSide,
     Keepout,
     Layer,
     LengthRule,
@@ -54,6 +56,8 @@ __all__ = [
     "ConversionResult",
     "Diagnostic",
     "DifferentialPairRule",
+    "Footprint",
+    "FootprintSide",
     "Keepout",
     "Layer",
     "LengthRule",

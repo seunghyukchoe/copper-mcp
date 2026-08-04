@@ -60,7 +60,7 @@ def test_describes_a_supported_board_without_disclosing_content(tmp_path: Path) 
     assert summary.snapshot_digest is not None
     assert summary.snapshot_digest != summary.board_revision
     assert summary.constraint_digest is not None
-    assert summary.ir_schema_version == "0.1.0"
+    assert summary.ir_schema_version == "0.2.0"
     assert summary.distance_unit == "nm"
     assert summary.angle_unit == "udeg"
     assert summary.copper_layer_ids == ("layer:B.Cu", "layer:F.Cu")

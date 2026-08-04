@@ -205,6 +205,7 @@ RefId = Annotated[str, Field(pattern=r"^[a-z_]+:[a-z]+(:[0-9a-zA-Z:._-]{1,128})?
 LayerId = Annotated[str, Field(pattern=r"^layer:[A-Za-z0-9_.\-]{1,64}$")]
 LayerName = Annotated[str, Field(pattern=r"^[A-Za-z0-9_.\-]{1,64}$")]
 NetRefId = Annotated[str, Field(pattern=r"^net:[a-z]+:[0-9a-zA-Z._-]{1,128}$")]
+PadRefId = Annotated[str, Field(pattern=r"^pad:[0-9a-zA-Z:._-]{1,160}$")]
 RefStability = Literal["native", "content_derived", "request_scoped"]
 
 #: Board coordinates are exact nanometres and never floats; the bound is the JSON-safe
@@ -250,6 +251,19 @@ class PadGeometryContract(_ClosedContract):
 class ScenePadContract(_SceneObjectContract):
     kind: Literal["pad"]
     geometry: PadGeometryContract
+
+
+class FootprintGeometryContract(_ClosedContract):
+    origin_nm: PointArray
+    rotation_udeg: Annotated[int, Field(ge=0, lt=360_000_000)]
+    side: Literal["front", "back"]
+    pad_ids: Annotated[list[PadRefId], Field(max_length=100_000)]
+    courtyards_nm: Annotated[list[Ring], Field(max_length=64)]
+
+
+class SceneFootprintContract(_SceneObjectContract):
+    kind: Literal["footprint"]
+    geometry: FootprintGeometryContract
 
 
 class KeepoutGeometryContract(_ClosedContract):
@@ -332,6 +346,7 @@ class SceneStaticContract(_ClosedContract):
     """Objects a route proposal may not change."""
 
     outline: Annotated[list[SceneOutlineContract], _Objects]
+    footprints: Annotated[list[SceneFootprintContract], _Objects]
     pads: Annotated[list[ScenePadContract], _Objects]
     keepouts: Annotated[list[SceneKeepoutContract], _Objects]
     rules: Annotated[list[SceneNetClassContract], _Objects]
@@ -437,7 +452,7 @@ class CircuitSceneToolResponse(_ClosedContract):
     """Strict structured output contract for ``observe_board_scene``."""
 
     schema_version: str
-    scene_version: Literal["0.1.0"]
+    scene_version: Literal["0.2.0"]
     board_path: str
     board_revision: Digest
     snapshot_digest: Digest | None

@@ -1,4 +1,4 @@
-"""Frozen Board IR v0.1 domain types and exact unit conversions."""
+"""Frozen Board IR v0.2 domain types and exact unit conversions."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 BOARD_IR_SCHEMA = "copper.board-ir"
-BOARD_IR_SCHEMA_VERSION = "0.1.0"
+BOARD_IR_SCHEMA_VERSION = "0.2.0"
 JSON_SAFE_INTEGER = (1 << 53) - 1
 NM_PER_MM = 1_000_000
 UDEG_PER_DEGREE = 1_000_000
@@ -15,7 +15,7 @@ FULL_ROTATION_UDEG = 360 * UDEG_PER_DEGREE
 
 _SHA256 = re.compile(r"^sha256:[a-f0-9]{64}$")
 _TYPED_ID = re.compile(
-    r"^(?:layer|net|class|pad|via|segment|arc|zone|keepout|contour|rule):"
+    r"^(?:layer|net|class|footprint|pad|via|segment|arc|zone|keepout|contour|rule):"
     r"[A-Za-z0-9_.:-]{1,160}$"
 )
 _DECIMAL = re.compile(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
@@ -143,14 +143,14 @@ class Ring:
 
 @dataclass(frozen=True, slots=True)
 class UnitSystem:
-    """Closed unit declaration for Board IR v0.1."""
+    """Closed unit declaration for Board IR."""
 
     distance: str = "nm"
     angle: str = "udeg"
 
     def __post_init__(self) -> None:
         if self.distance != "nm" or self.angle != "udeg":
-            raise ValueError("Board IR v0.1 requires nm and udeg units")
+            raise ValueError("Board IR requires nm and udeg units")
 
 
 @dataclass(frozen=True, slots=True)
@@ -304,6 +304,45 @@ class OutlineContour:
         if not isinstance(self.outer, Ring):
             raise ValueError("contour outer boundary must be a ring")
         _tuple_of("contour holes", self.holes, Ring)
+
+
+class FootprintSide(StrEnum):
+    """Physical side on which a footprint is placed."""
+
+    FRONT = "front"
+    BACK = "back"
+
+
+@dataclass(frozen=True, slots=True)
+class Footprint:
+    """One placeable footprint and its exact board-frame ownership geometry."""
+
+    id: str
+    origin: PointNM
+    rotation_udeg: int
+    side: FootprintSide
+    pad_ids: tuple[str, ...]
+    courtyards: tuple[Ring, ...] = ()
+    locked: bool = False
+
+    def __post_init__(self) -> None:
+        _typed_id("footprint ID", self.id, "footprint:")
+        if not isinstance(self.origin, PointNM):
+            raise ValueError("footprint origin must be a PointNM")
+        _integer(
+            "footprint rotation",
+            self.rotation_udeg,
+            minimum=0,
+            maximum=FULL_ROTATION_UDEG - 1,
+        )
+        if not isinstance(self.side, FootprintSide):
+            raise ValueError("footprint side must use the Board IR enum")
+        _tuple_of("footprint pad IDs", self.pad_ids, str)
+        for pad_id in self.pad_ids:
+            _typed_id("footprint pad ID", pad_id, "pad:")
+        _tuple_of("footprint courtyards", self.courtyards, Ring)
+        if not isinstance(self.locked, bool):
+            raise ValueError("footprint locked flag must be boolean")
 
 
 class PadKind(StrEnum):
@@ -572,6 +611,7 @@ class BoardIRContent:
     copper_layers: tuple[Layer, ...]
     nets: tuple[Net, ...]
     constraints: ConstraintSet
+    footprints: tuple[Footprint, ...] = ()
     pads: tuple[Pad, ...] = ()
     vias: tuple[Via, ...] = ()
     segments: tuple[Segment, ...] = ()
@@ -588,6 +628,7 @@ class BoardIRContent:
         _tuple_of("nets", self.nets, Net)
         if not isinstance(self.constraints, ConstraintSet):
             raise ValueError("Board IR constraints must be a ConstraintSet")
+        _tuple_of("footprints", self.footprints, Footprint)
         _tuple_of("pads", self.pads, Pad)
         _tuple_of("vias", self.vias, Via)
         _tuple_of("segments", self.segments, Segment)

@@ -160,6 +160,7 @@ def main() -> int:
         "instrumentation": "perf_counter_ns with tracemalloc enabled",
         "objects": {
             "arcs": len(content.arcs),
+            "footprints": len(content.footprints),
             "keepouts": len(content.keepouts),
             "nets": len(content.nets),
             "pads": len(content.pads),
@@ -169,6 +170,7 @@ def main() -> int:
         },
         "output": {
             "canonical_json_bytes": len(encode_snapshot(snapshot)),
+            "schema_version": snapshot.schema_version,
             "snapshot_digest": snapshot.snapshot_digest,
         },
         "peak_memory_bytes": {

@@ -26,8 +26,9 @@ documentation, ledger updates, and benchmark evidence.
   separated labels/properties, real KiCad SVG inspection, and a structural regression.
 - [x] Descriptor-anchored workspace reads and exact-lowercase create-only schematic output.
 - [ ] Schematic round trip, authoritative ERC, and source-to-board connectivity parity.
-- [x] Canonical Board IR v0.1 contract with integer units, typed constraints, strict codecs, and
-  content digests.
+- [x] Canonical Board IR v0.2 contract with integer units, typed constraints, strict codecs,
+  content digests, first-class footprint pose/side/lock/pad ownership, and bounded rectangular
+  courtyard rings. The immutable v0.1 schema remains as legacy compatibility evidence.
 - [x] Board IR application-service and MCP exposure as a read-only structural summary.
 - [ ] Broader KiCad geometry and rule coverage.
 - [x] Headless `kicad-cli pcb drc --format json` validation.
@@ -101,7 +102,9 @@ documentation, ledger updates, and benchmark evidence.
   restores manually and never appears in KiCad's undo stack. A real single-undo transaction
   needs the IPC API, deferred because it mutates an in-memory document whose state cannot be
   bound to a file digest.
-- [ ] Placement apply, which needs footprint-modelling Board IR 0.2.
+- [ ] Placement apply. Board IR 0.2 now models the identity, pose, pad ownership, lock, and supported
+  courtyard geometry needed for observation, but a faithful edit still needs properties, text,
+  fabrication graphics, library identity, and 3D-model pose plus an exact rewrite oracle.
 
 ## M4 — High-fidelity Circuit Scene and AI policy plugins
 
@@ -110,25 +113,28 @@ surface judged by a deterministic legalizer. What remains is applying a placemen
 and the policy-plugin work.
 
 - [x] Versioned Circuit Scene IR for bounded semantic and visual observation. Semantic observation
-  is `observe_board_scene` (Circuit Scene IR 0.1.0): region-scoped, exact integer geometry,
-  static/mutable partition, stable Board IR references with declared durability, explicit
-  truncation, and board text quarantined in a separately typed untrusted collection. Visual
+  is `observe_board_scene` (Circuit Scene IR 0.2.0): region-scoped, exact integer geometry,
+  first-class footprint pose/pad ownership/courtyard observation, a static/mutable partition,
+  stable Board IR references with declared durability, relationship-aware explicit truncation,
+  and board text quarantined in a separately typed untrusted collection. Visual
   observation is the opt-in `include_render` flag: a deterministic, digest-bound, copper-only SVG
   delivered as an ephemeral capability, subordinate to the scene by construction and whole-board
   rather than region-scoped. A human-facing thumbnail remains unimplemented.
 - [x] Typed placement-intent contract and immutable placement preview/candidates. The seven-rule
-  intent language, the out-of-band footprint view, the deterministic legalizer, the
+  intent language, the revision-bound Board IR footprint view, the deterministic legalizer, the
   dual-digest-bound `PlacementCandidate` and the `preview_placement` MCP tool and CLI command are
-  implemented. Nothing applies a placement.
+  implemented. A locked footprint cannot be moved. Nothing applies a placement.
 - [ ] Authoritative KiCad DRC binding for placement candidates. Deferred deliberately: a
-  footprint-move serializer would have to rewrite roughly twice as many pose-carrying nodes as
-  Board IR can verify, so the round-trip assertion that makes the route patch trustworthy would be
-  blind to most of the edit. Revisit once Board IR models footprints.
+  footprint-move serializer would still have to rewrite properties, text, fabrication graphics,
+  library identity, and 3D-model pose that Board IR cannot verify, so the route patch's equality
+  assertion would remain blind to part of the edit.
 - [~] Deterministic snapping, connectivity, clearance, rule, provenance, and revision validation for
   every placement candidate. Grid snapping, rule residuals, three-valued pad overlap, outline
-  containment, keepout respect and dual-digest binding are implemented. Courtyard overlap is
-  reported as `not_modelled` because Board IR carries no courtyard geometry, and connectivity
-  after a placement is future work.
+  containment, keepout respect and dual-digest binding are implemented. Board IR now carries the
+  supported rectangular courtyard rings, but side-aware bounded courtyard legality is still
+  reported as `not_modelled`; connectivity after a placement is future work.
+- [ ] General courtyard line-chain/polygon topology and back-side footprint observation, pinned to
+  KiCad-authored front/back flip and DRC oracle fixtures without applying a second mirror.
 - [ ] Separately authorized placement apply; direct AI mutation of KiCad remains prohibited.
 - [ ] Heuristic policy baseline and trace dataset.
 - [ ] Typed net-ordering, corridor, and repair policy interface.

@@ -1,4 +1,4 @@
-"""Circuit Scene IR v0.1: region scoping, ceilings, reference durability, and quarantine.
+"""Circuit Scene IR v0.2: footprint-aware scoping, ceilings, references, and quarantine.
 
 The quarantine test is the load-bearing one. It does not check that the hostile strings are
 labelled correctly in the place we chose to put them — it greps the entire serialized response
@@ -162,6 +162,19 @@ class RegionScopingTests(unittest.TestCase):
         self.assertEqual(_refs(near, "static", "pads"), {west_pad["ref_id"]})
         self.assertEqual(near["mutable"]["vias"], [])
 
+    def test_a_footprint_reference_can_anchor_a_region_query(self) -> None:
+        whole = _observe("scene-region.kicad_pcb")
+        footprint = min(
+            whole["static"]["footprints"],
+            key=lambda item: item["geometry"]["origin_nm"][0],
+        )
+        near = _observe(
+            "scene-region.kicad_pcb",
+            region={"around_ref_id": footprint["ref_id"], "radius_nm": 1_000_000},
+        )
+        self.assertIn(footprint["ref_id"], _refs(near, "static", "footprints"))
+        self.assertEqual(len(near["static"]["pads"]), 1)
+
     def test_an_unknown_reference_is_refused_without_quoting_it(self) -> None:
         with self.assertRaises(CircuitSceneError) as caught:
             observe_board_scene(
@@ -293,6 +306,11 @@ class BudgetTests(unittest.TestCase):
         CircuitSceneToolResponse.model_validate(document)
         self.assertEqual(document["truncation"]["ceiling_hit"], "max_scene_vertices")
         self.assertGreater(document["truncation"]["objects_omitted"], 0)
+        self.assertEqual(
+            document["static"]["footprints"],
+            [],
+            "footprint pad relationships must consume the detail budget",
+        )
 
     def test_an_untruncated_scene_states_completeness_rather_than_implying_it(self) -> None:
         document = _observe("scene-region.kicad_pcb")
@@ -509,6 +527,22 @@ class BoundsFindingTests(unittest.TestCase):
 
 
 class ObjectDetailFindingTests(unittest.TestCase):
+    def test_footprints_expose_revision_bound_pose_and_pad_ownership(self) -> None:
+        document = _observe("scene-region.kicad_pcb")
+        footprints = document["static"]["footprints"]
+        pads = {item["ref_id"] for item in document["static"]["pads"]}
+        self.assertEqual(len(footprints), 2)
+        owned = set()
+        for footprint in footprints:
+            geometry = footprint["geometry"]
+            self.assertEqual(footprint["kind"], "footprint")
+            self.assertEqual(geometry["side"], "front")
+            self.assertEqual(len(geometry["origin_nm"]), 2)
+            self.assertIsInstance(geometry["rotation_udeg"], int)
+            self.assertIsInstance(geometry["courtyards_nm"], list)
+            owned.update(geometry["pad_ids"])
+        self.assertEqual(owned, pads)
+
     def test_a_roundrect_pad_reports_the_radius_that_defines_its_shape(self) -> None:
         document = _observe(BOUNDS_BOARD)
         radii = {

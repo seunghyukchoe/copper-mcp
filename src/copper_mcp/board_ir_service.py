@@ -37,6 +37,7 @@ _OBJECT_COLLECTIONS = (
     "outline",
     "copper_layers",
     "nets",
+    "footprints",
     "pads",
     "vias",
     "segments",

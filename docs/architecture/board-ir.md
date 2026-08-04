@@ -1,14 +1,11 @@
 # Board IR and KiCad Adapter Contracts
 
-Board IR is the deterministic board snapshot that future routing, replay, benchmark, and MCP layers
-can share. The current contract is `copper.board-ir` version `0.1.0`. It is implemented as a pure
-domain package, strict JSON codec, JSON Schema, and a narrow read-only KiCad converter.
+Board IR is the deterministic board snapshot shared by routing, replay, placement, benchmark, and
+MCP application layers. The current contract is `copper.board-ir` version `0.2.0`. It is implemented
+as a pure domain package, strict JSON codec, JSON Schema, and a narrow read-only KiCad converter.
 
-This slice does **not** implement routing, candidate preview, board mutation, candidate application,
-or an MCP tool that exposes Board IR. The existing MCP inspection and DRC services remain separate
-until an application-service integration is designed.
-
-See [ADR-0005](../adr/0005-canonical-board-ir.md) for the durable decision and versioning rules.
+See [ADR-0005](../adr/0005-canonical-board-ir.md) for the original integer/digest contract and
+[ADR-0026](../adr/0026-first-class-footprints-in-board-ir.md) for the 0.2 footprint model.
 
 ## Contract map
 
@@ -17,9 +14,10 @@ See [ADR-0005](../adr/0005-canonical-board-ir.md) for the durable decision and v
 | `copper_mcp.board_ir.types` | Immutable typed units, geometry, constraints, items, and snapshot envelope. |
 | `copper_mcp.board_ir.validation` | Reference, identity, budget, degeneracy, and exact polygon-topology checks. |
 | `copper_mcp.board_ir.canonical` | Normalization, canonical JSON bytes, constraint digest, and snapshot digest. |
-| `copper_mcp.board_ir.codec` | Strict bounded decoding of untrusted `0.1.0` JSON. |
+| `copper_mcp.board_ir.codec` | Strict bounded decoding of untrusted `0.2.0` JSON. |
 | `copper_mcp.adapters.kicad_board_ir` | Fail-closed conversion of the documented KiCad subset from bytes. |
-| [`0.1.0.schema.json`](../../schemas/board-ir/0.1.0.schema.json) | Portable serialized-envelope contract. |
+| [`0.2.0.schema.json`](../../schemas/board-ir/0.2.0.schema.json) | Active portable serialized-envelope contract. |
+| [`0.1.0.schema.json`](../../schemas/board-ir/0.1.0.schema.json) | Immutable legacy compatibility contract. |
 
 The board model has no dependency on MCP, GUI APIs, provider SDKs, routing backends, or filesystem
 access. The source adapter accepts bytes supplied by its caller and does not mutate or retain them.
@@ -31,7 +29,7 @@ The serialized shape is:
 ```json
 {
   "schema": "copper.board-ir",
-  "schema_version": "0.1.0",
+  "schema_version": "0.2.0",
   "snapshot_digest": "sha256:<64 lowercase hex characters>",
   "content": {
     "units": {"distance": "nm", "angle": "udeg"},
@@ -48,6 +46,7 @@ The serialized shape is:
     "constraints": {},
     "items": {
       "arcs": [],
+      "footprints": [],
       "keepouts": [],
       "pads": [],
       "segments": [],
@@ -81,31 +80,34 @@ board. The schema is the field-level reference.
   widths, diameters, and drills cannot be zero; typed non-negative values may be zero.
 - Millimetre/degree source tokens use ordinary decimal notation and must convert exactly. There is no
   rounding path for sub-nanometre or sub-microdegree input.
-- IDs use type prefixes such as `layer:`, `net:`, `class:`, `pad:`, `via:`, `segment:`, `arc:`,
-  `zone:`, `keepout:`, `contour:`, and `rule:`. IDs and display names have different roles.
+- IDs use type prefixes such as `layer:`, `net:`, `class:`, `footprint:`, `pad:`, `via:`,
+  `segment:`, `arc:`, `zone:`, `keepout:`, `contour:`, and `rule:`. IDs and display names have
+  different roles.
 - All references must resolve. Layer indices are contiguous physical ordinals, object IDs are
-  unique, every net has exactly one net-class assignment, through vias span the complete stack, and
-  locked state is explicit.
+  unique, every net has exactly one net-class assignment, every pad belongs to exactly one
+  footprint, through vias span the complete stack, and locked state is explicit. Padless
+  footprints remain representable.
 - Rings contain at least three distinct vertices, omit a duplicated closing point, have nonzero area,
-  and cannot self-intersect. The v0.1 board has exactly one counter-clockwise outer ring and no
+  and cannot self-intersect. The v0.2 board has exactly one counter-clockwise outer ring and no
   outline holes.
 - Circle pads have equal axes. SMD pads are drill-free, through-hole and NPTH pads require exact
   drill dimensions, and NPTH pads cannot carry an electrical net.
 
 ## Typed model coverage
 
-| Area | v0.1 representation |
+| Area | v0.2 representation |
 |---|---|
-| Board | Exactly one named outer outline contour; holes are not representable in v0.1. |
+| Board | Exactly one named outer outline contour; holes are not representable in v0.2. |
 | Stack | Ordered copper layers of kind `signal`, `plane`, or `mixed`. |
 | Connectivity | Stable net IDs with UTF-8 display names. |
 | Constraints | Net classes, one assignment per net, differential-pair rules, and min/max length rules. |
+| Components | Footprint identity, board-frame origin, normalized rotation, side, lock state, total pad ownership, and up to 64 exact rectangular courtyard rings. |
 | Terminations | SMD, through-hole, and NPTH pads; circle, rectangle, oval, and rounded-rectangle shapes. |
 | Existing copper | Straight segments, exact three-point arcs, full-stack through vias, and solid zones with priority, pad-connection, island-removal, clearance, and thermal intent. |
 | Exclusions | Multi-layer polygonal keepouts with explicit track, via, pad, zone, and footprint prohibitions. |
 | Provenance | Source format/version/generator, source SHA-256 revision, constraint digest, and snapshot digest. |
 
-The v0.1 model and adapter intentionally share the same narrow outline and via topology. Adding
+The v0.2 model and adapter intentionally share the same narrow outline and via topology. Adding
 outline holes or blind, buried, or microvias requires a later schema version and migration review.
 
 ## Canonicalization and digests
@@ -114,6 +116,7 @@ Before hashing, construction normalizes:
 
 - copper layers by stack index;
 - nets and board items by stable ID;
+- footprint pad ownership and normalized courtyard rings;
 - constraint records by stable ID or assigned net ID;
 - pad and keepout layer sets by stack order;
 - via start/end layers into stack order; and
@@ -145,7 +148,7 @@ contains a bounded machine-readable diagnostic and no snapshot.
 | Board metadata | Exact KiCad PCB format version `20260206`, optional `generator`, ordered copper declarations `0/F.Cu`, contiguous even-numbered inner layers, then `B.Cu`, and a narrow setup-metadata allowlist with KiCad-default front/back via tenting. |
 | Nets | Quote-aware named item-level net references and legacy numeric root declarations; quoted numeric text remains a name while bare signed numeric tokens retain legacy net-code meaning. |
 | Outline | Exactly one `gr_rect` on `Edge.Cuts`; it becomes the single imported contour. |
-| Footprints/pads | Footprints on `F.Cu` with rotations in 90-degree increments; `smd`, `thru_hole`, and `np_thru_hole` pads; circle, rect, oval, and roundrect shapes; round or oval drills; copper layer names, `*.Cu`, and `F&B.Cu`. |
+| Footprints/pads | Footprints on `F.Cu` with rotations in 90-degree increments, exact origin/side/lock/pad ownership, and optional unfilled `fp_rect` centerlines on matching `F.CrtYd`; `smd`, `thru_hole`, and `np_thru_hole` pads; circle, rect, oval, and roundrect shapes; round or oval drills; copper layer names, `*.Cu`, and `F&B.Cu`. |
 | Routed copper | Net-bound straight `segment` items, exact start/mid/end `arc` items, and through vias spanning the declared copper stack. |
 | Zones | Net-bound, single-copper-layer, solid zones with one polygon loop; explicit priority, thermal/through-hole-thermal/solid/none pad connection, always/never island removal, clearance, and conditionally required thermal dimensions. |
 | Keepouts | Copper-layer sets, exactly one polygon loop, the five modeled prohibition flags, and lock state. |
@@ -159,7 +162,8 @@ are deterministic from net names.
 The converter performs a version-specific semantic preflight. Root and footprint graphics on any
 copper layer are rejected. Footprint graphics on `Edge.Cuts` are also rejected, and the only accepted
 root `Edge.Cuts` primitive is the one unfilled rectangle. Non-routing documentation graphics may be
-ignored. `filled_polygon` data is treated as a derived KiCad fill cache: v0.1 records zone fill intent,
+ignored. Rectangular courtyard centerlines are the exception: they become canonical board-frame
+rings. `filled_polygon` data is treated as a derived KiCad fill cache: v0.2 records zone fill intent,
 not cached fill geometry, fill freshness, or connectivity proof.
 
 ### Rejected today
@@ -171,6 +175,9 @@ including:
   outlines;
 - root or footprint-local text/graphics on copper, and any footprint-local `Edge.Cuts` primitive;
 - back-side footprints and footprint rotations not divisible by 90 degrees;
+- `fp_line`, `fp_poly`, arc, open, mixed-layer, or other non-rectangular courtyard topology, a
+  courtyard layer that disagrees with the supported front-side footprint, and more than 64
+  courtyard rectangles on one footprint;
 - custom or other unmodeled pad shapes and custom pad primitives;
 - blind, buried, or microvias in KiCad input;
 - multiple polygon loops or holes in a zone/keepout, multi-layer copper zones, hatched fills,
@@ -205,21 +212,28 @@ treat `snapshot is None` as a hard failure rather than attempting partial routin
 
 ## Contract fixtures
 
-- [`schema-valid.json`](../../tests/fixtures/board-ir-v0.1/schema-valid.json) is the golden canonical
+- [`schema-valid.json`](../../tests/fixtures/board-ir-v0.2/schema-valid.json) is the active golden canonical
   snapshot produced by the synthetic KiCad subset.
-- [`schema-invalid.json`](../../tests/fixtures/board-ir-v0.1/schema-invalid.json) is rejected by both
+- [`schema-invalid.json`](../../tests/fixtures/board-ir-v0.2/schema-invalid.json) is rejected by both
   the JSON Schema and runtime decoder.
 - [`subset.kicad_pcb`](../../tests/fixtures/board-ir-v0.1/subset.kicad_pcb) exercises pads, a segment,
   an arc, a through via, a solid zone, a keepout, exact UTF-8 net identity, and typed constraints.
+- [`footprint-pose-courtyard.kicad_pcb`](../../tests/fixtures/board-ir-v0.2/footprint-pose-courtyard.kicad_pcb)
+  pins footprint pose, ownership, lock state, and rectangular courtyard transforms at all four
+  orthogonal rotations; KiCad 10.0.5 reports zero DRC violations and zero unconnected items.
 - [`malformed-unbalanced.kicad_pcb`](../../tests/fixtures/board-ir-v0.1/malformed-unbalanced.kicad_pcb)
   exercises bounded fail-closed S-expression parsing.
 
 ## Evolution rules
 
 Breaking canonical changes require a new schema version, fixtures, compatibility tests, migration
-guidance, ADR review, and changelog entry. Source-adapter coverage may expand under `0.1.0` only when
+guidance, ADR review, and changelog entry. Source-adapter coverage may expand under `0.2.0` only when
 the resulting canonical meaning is unchanged and the accepted/rejected matrix plus fixtures are
 updated. Unknown Board IR versions and unknown fields remain errors.
+
+Serialized 0.1 snapshots cannot be upgraded by inventing missing parents. Preserve them against the
+legacy schema and re-convert the original source as described in the
+[0.2 migration guide](../migrations/board-ir-0.2.md).
 
 Related contracts remain separate:
 

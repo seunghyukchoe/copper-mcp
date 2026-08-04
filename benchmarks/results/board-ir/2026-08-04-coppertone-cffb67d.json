@@ -1,0 +1,90 @@
+{
+  "benchmark": "board-ir-kicad-conversion-v1",
+  "commit": "cffb67d9dbea86e349e2816a4a487da7666f32c1",
+  "configuration": {
+    "limits": {
+      "max_atom_chars": 4096,
+      "max_children_per_list": 100000,
+      "max_depth": 128,
+      "max_diagnostics": 100,
+      "max_input_bytes": 16777216,
+      "max_intersection_tests": 2000000,
+      "max_nodes": 500000,
+      "max_objects": 250000,
+      "max_tokens": 1000000,
+      "max_total_vertices": 1000000,
+      "max_vertices_per_ring": 100000
+    },
+    "net_classes": [
+      {
+        "clearance_nm": 200000,
+        "id": "class:default",
+        "track_width_nm": 250000,
+        "via_diameter_nm": 600000,
+        "via_drill_nm": 300000
+      }
+    ]
+  },
+  "dirty": false,
+  "environment": {
+    "accelerator": "none (CPU-only)",
+    "machine": "arm64",
+    "physical_memory_bytes": 38654705664,
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "processor": "arm",
+    "python": "3.12.13"
+  },
+  "input": {
+    "bytes": 166070,
+    "license": "CERN-OHL-S-2.0",
+    "path": "hardware/coppertone-buffer/coppertone-buffer.kicad_pcb",
+    "sha256": "3bcd01ec4942fccabfaf1c21bdae050a31a7bf99af7ab1bcb0dbb3d0aabcfb94"
+  },
+  "instrumentation": "perf_counter_ns with tracemalloc enabled",
+  "iterations": 7,
+  "objects": {
+    "arcs": 0,
+    "footprints": 26,
+    "keepouts": 2,
+    "nets": 14,
+    "pads": 55,
+    "segments": 53,
+    "vias": 9,
+    "zones": 2
+  },
+  "output": {
+    "canonical_json_bytes": 48188,
+    "schema_version": "0.2.0",
+    "snapshot_digest": "sha256:a3803f87e8c70f300c49f9c3a6f5167a4ad629ebc96a8878aed548591a37c79e"
+  },
+  "peak_memory_bytes": {
+    "max": 2183557,
+    "median": 2066581,
+    "samples": [
+      2066717,
+      2066597,
+      2183557,
+      2066581,
+      2066573,
+      2066557,
+      2066549
+    ]
+  },
+  "recorded_at_utc": "2026-08-04T01:19:59+00:00",
+  "run_id": "sha256:ca65721f1519104c2d9fc803b401936b5c401b14818f9f0dabc046809453ed48",
+  "timing_ns": {
+    "max": 292213667,
+    "median": 280239000,
+    "min": 276004209,
+    "samples": [
+      276996708,
+      283259458,
+      285788334,
+      277440375,
+      280239000,
+      292213667,
+      276004209
+    ]
+  },
+  "warmups": 2
+}

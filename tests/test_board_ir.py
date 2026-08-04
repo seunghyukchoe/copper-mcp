@@ -18,6 +18,8 @@ from copper_mcp.board_ir import (
     BoardIRValidationError,
     ConstraintSet,
     DifferentialPairRule,
+    Footprint,
+    FootprintSide,
     Keepout,
     Layer,
     LengthRule,
@@ -42,6 +44,7 @@ from copper_mcp.board_ir import (
     mm_to_nm,
     nm_to_mm,
     normalize_rotation_udeg,
+    validate_content,
     verify_snapshot,
 )
 
@@ -120,6 +123,37 @@ def sample_content(
         (12_000_000, 12_000_000),
         (10_000_000, 12_000_000),
     )
+    amplifier_courtyard = (
+        (1_000_000, 1_000_000),
+        (7_000_000, 1_000_000),
+        (7_000_000, 4_000_000),
+        (1_000_000, 4_000_000),
+    )
+    mechanical_courtyard = (
+        (28_000_000, 18_000_000),
+        (32_000_000, 18_000_000),
+        (32_000_000, 22_000_000),
+        (28_000_000, 22_000_000),
+    )
+    footprints = (
+        Footprint(
+            id="footprint:amplifier",
+            origin=PointNM(3_000_000, 2_000_000),
+            rotation_udeg=90_000_000,
+            side=FootprintSide.FRONT,
+            pad_ids=("pad:n1", "pad:p1") if alternate_order else ("pad:p1", "pad:n1"),
+            courtyards=(_ring(amplifier_courtyard, alternate=alternate_order),),
+        ),
+        Footprint(
+            id="footprint:mechanical",
+            origin=PointNM(30_000_000, 20_000_000),
+            rotation_udeg=270_000_000,
+            side=FootprintSide.BACK,
+            pad_ids=(),
+            courtyards=(_ring(mechanical_courtyard, alternate=alternate_order),),
+            locked=True,
+        ),
+    )
     return make_content(
         source=SourceInfo(
             format="kicad_pcb",
@@ -136,6 +170,7 @@ def sample_content(
         copper_layers=(back, front) if alternate_order else (front, back),
         nets=(ground, negative, positive) if alternate_order else (positive, negative, ground),
         constraints=constraints,
+        footprints=tuple(reversed(footprints)) if alternate_order else footprints,
         pads=(
             Pad(
                 id="pad:p1",
@@ -312,6 +347,31 @@ def test_pad_kind_shape_and_drill_semantics_are_explicit() -> None:
         )
 
 
+def test_footprint_domain_fields_are_exact_typed_and_frozen() -> None:
+    content = sample_content()
+    amplifier = next(item for item in content.footprints if item.id == "footprint:amplifier")
+    mechanical = next(item for item in content.footprints if item.id == "footprint:mechanical")
+
+    assert amplifier.origin == PointNM(3_000_000, 2_000_000)
+    assert amplifier.rotation_udeg == 90_000_000
+    assert amplifier.side is FootprintSide.FRONT
+    assert amplifier.pad_ids == ("pad:n1", "pad:p1")
+    assert len(amplifier.courtyards) == 1
+    assert mechanical.side is FootprintSide.BACK
+    assert mechanical.locked is True
+
+    with pytest.raises(FrozenInstanceError):
+        amplifier.locked = True  # type: ignore[misc]
+    with pytest.raises(ValueError, match="footprint ID"):
+        replace(amplifier, id="pad:not-a-footprint")
+    with pytest.raises(ValueError, match="footprint rotation"):
+        replace(amplifier, rotation_udeg=360_000_000)
+    with pytest.raises(ValueError, match="footprint side"):
+        replace(amplifier, side="front")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="footprint pad ID"):
+        replace(amplifier, pad_ids=("segment:not-a-pad",))
+
+
 def test_canonical_snapshot_is_order_and_ring_invariant() -> None:
     first = make_snapshot(sample_content())
     reordered = make_snapshot(sample_content(alternate_order=True))
@@ -320,6 +380,118 @@ def test_canonical_snapshot_is_order_and_ring_invariant() -> None:
     assert encode_snapshot(first) == encode_snapshot(reordered)
     assert encode_snapshot(first).endswith(b"\n")
     assert verify_snapshot(first)
+    assert [item.id for item in first.content.footprints] == [
+        "footprint:amplifier",
+        "footprint:mechanical",
+    ]
+    assert first.content.footprints[0].pad_ids == ("pad:n1", "pad:p1")
+
+
+def test_every_pad_has_exactly_one_first_class_footprint_owner() -> None:
+    content = sample_content()
+    amplifier, mechanical = content.footprints
+    malformed = (
+        (
+            replace(
+                content,
+                footprints=(replace(amplifier, pad_ids=("pad:p1",)), mechanical),
+            ),
+            "reference.unowned",
+        ),
+        (
+            replace(
+                content,
+                footprints=(
+                    replace(amplifier, pad_ids=(*amplifier.pad_ids, "pad:missing")),
+                    mechanical,
+                ),
+            ),
+            "reference.unknown",
+        ),
+        (
+            replace(
+                content,
+                footprints=(amplifier, replace(mechanical, pad_ids=("pad:p1",))),
+            ),
+            "identity.duplicate",
+        ),
+        (
+            replace(
+                content,
+                footprints=(
+                    replace(amplifier, pad_ids=(*amplifier.pad_ids, "pad:p1")),
+                    mechanical,
+                ),
+            ),
+            "identity.duplicate",
+        ),
+    )
+
+    for candidate, expected_code in malformed:
+        with pytest.raises(BoardIRValidationError) as caught:
+            validate_content(candidate)
+        assert caught.value.code == expected_code
+
+
+def test_footprints_and_courtyards_are_charged_to_validation_budgets() -> None:
+    content = sample_content()
+    object_groups = (
+        content.outline,
+        content.copper_layers,
+        content.nets,
+        content.constraints.net_classes,
+        content.constraints.assignments,
+        content.constraints.differential_pairs,
+        content.constraints.length_rules,
+        content.footprints,
+        content.pads,
+        content.vias,
+        content.segments,
+        content.arcs,
+        content.zones,
+        content.keepouts,
+    )
+    object_count = sum(len(group) for group in object_groups)
+    assert object_count == 22
+    validate_content(content, ParseLimits(max_objects=object_count))
+    with pytest.raises(BoardIRValidationError) as object_error:
+        validate_content(content, ParseLimits(max_objects=object_count - 1))
+    assert object_error.value.code == "budget.exceeded"
+
+    total_vertices = (
+        sum(len(contour.outer.points) for contour in content.outline)
+        + sum(len(zone.boundary.points) for zone in content.zones)
+        + sum(len(keepout.boundary.points) for keepout in content.keepouts)
+        + sum(
+            len(courtyard.points)
+            for footprint in content.footprints
+            for courtyard in footprint.courtyards
+        )
+    )
+    assert total_vertices == 20
+    validate_content(content, ParseLimits(max_total_vertices=total_vertices))
+    with pytest.raises(BoardIRValidationError) as vertex_error:
+        validate_content(content, ParseLimits(max_total_vertices=total_vertices - 1))
+    assert vertex_error.value.code == "budget.exceeded"
+
+
+def test_one_footprint_may_have_at_most_64_courtyard_rings() -> None:
+    content = sample_content()
+    amplifier, mechanical = content.footprints
+    courtyard = amplifier.courtyards[0]
+    at_limit = replace(
+        content,
+        footprints=(replace(amplifier, courtyards=(courtyard,) * 64), mechanical),
+    )
+    validate_content(at_limit)
+
+    over_limit = replace(
+        content,
+        footprints=(replace(amplifier, courtyards=(courtyard,) * 65), mechanical),
+    )
+    with pytest.raises(BoardIRValidationError) as caught:
+        validate_content(over_limit)
+    assert caught.value.code == "schema.limit"
 
 
 def test_make_snapshot_normalizes_a_directly_reversed_via_span() -> None:
@@ -343,7 +515,7 @@ def test_make_snapshot_normalizes_a_directly_reversed_via_span() -> None:
     assert decode_snapshot_json(encode_snapshot(normalized)) == normalized
 
 
-def test_board_ir_v0_1_rejects_outline_holes_and_multiple_contours() -> None:
+def test_board_ir_v0_2_rejects_outline_holes_and_multiple_contours() -> None:
     content = sample_content()
     hole = _ring(((1, 1), (2, 1), (2, 2), (1, 2)))
 
@@ -377,6 +549,7 @@ def test_public_writer_rejects_schema_invalid_layer_count() -> None:
     oversized = replace(
         content,
         copper_layers=layers,
+        footprints=(),
         pads=(),
         vias=(),
         segments=(),
@@ -549,3 +722,83 @@ def test_geometry_package_has_no_mcp_gui_filesystem_or_adapter_imports() -> None
             for imported in imports
             for item in forbidden
         ), f"forbidden Board IR import in {source_path}: {sorted(imports)}"
+
+
+def test_board_ir_v0_2_rejects_non_rectangular_courtyards() -> None:
+    """Externally-produced Board IR must obey the same courtyard contract as the adapter.
+
+    The 0.2 contract promises rectangular courtyard rings, and the KiCad adapter enforces that
+    by importing only ``fp_rect`` primitives. Without the same check in validation, hand-written
+    or third-party JSON could carry a triangle or an arbitrary simple polygon that validates,
+    decodes and digest-verifies - so the codec path and the adapter path would disagree about
+    what a courtyard is.
+    """
+
+    content = sample_content()
+    footprint = content.footprints[0]
+
+    triangle = _ring(((1_000_000, 1_000_000), (7_000_000, 1_000_000), (4_000_000, 4_000_000)))
+    with pytest.raises(BoardIRValidationError) as triangle_error:
+        make_snapshot(
+            replace(
+                content,
+                footprints=(replace(footprint, courtyards=(triangle,)), *content.footprints[1:]),
+            )
+        )
+    assert triangle_error.value.code == "unsupported.topology"
+
+    # A four-vertex ring is not enough: the corners must form an axis-aligned rectangle.
+    skewed = _ring(
+        (
+            (1_000_000, 1_000_000),
+            (7_000_000, 1_500_000),
+            (7_000_000, 4_000_000),
+            (1_000_000, 4_000_000),
+        )
+    )
+    with pytest.raises(BoardIRValidationError) as skew_error:
+        make_snapshot(
+            replace(
+                content,
+                footprints=(replace(footprint, courtyards=(skewed,)), *content.footprints[1:]),
+            )
+        )
+    assert skew_error.value.code == "unsupported.topology"
+
+    # The refusal names the contract, never the caller's geometry.
+    for error in (triangle_error, skew_error):
+        assert "1000000" not in error.value.message
+
+
+def test_board_ir_v0_2_accepts_rectangular_courtyards_at_every_quarter_turn() -> None:
+    """Guard the guard: the rectangularity check must not reject legitimate rotated courtyards.
+
+    A quarter turn maps an axis-aligned rectangle onto another axis-aligned rectangle, which is
+    exactly what the adapter emits, so all four orientations must validate.
+    """
+
+    content = sample_content()
+    footprint = content.footprints[0]
+    corners = (
+        (1_000_000, 2_000_000),
+        (7_000_000, 2_000_000),
+        (7_000_000, 5_000_000),
+        (1_000_000, 5_000_000),
+    )
+
+    for turn in range(4):
+        rotated: list[tuple[int, int]] = []
+        for x, y in corners:
+            for _ in range(turn):
+                x, y = y, -x
+            rotated.append((x, y))
+        snapshot = make_snapshot(
+            replace(
+                content,
+                footprints=(
+                    replace(footprint, courtyards=(_ring(tuple(rotated)),)),
+                    *content.footprints[1:],
+                ),
+            )
+        )
+        assert decode_snapshot_json(encode_snapshot(snapshot)) == snapshot

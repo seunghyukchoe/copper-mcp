@@ -120,6 +120,7 @@ def _modeled_object_count(snapshot: BoardIRSnapshot) -> int:
             content.constraints.assignments,
             content.constraints.differential_pairs,
             content.constraints.length_rules,
+            content.footprints,
             content.pads,
             content.vias,
             content.segments,
@@ -134,6 +135,7 @@ def _require_native_geometry_identities(snapshot: BoardIRSnapshot) -> None:
     content = snapshot.content
     geometry_ids = (
         tuple(item.id for item in content.outline)
+        + tuple(item.id for item in content.footprints)
         + tuple(item.id for item in content.pads)
         + tuple(item.id for item in content.vias)
         + tuple(item.id for item in content.segments)

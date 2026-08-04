@@ -16,10 +16,12 @@ MCP-based tools, and optional AI policy plugins.**
 > non-mutating route preview, and bounded Circuit Intent delivery as a deterministic KiCad
 > schematic. The CLI may explicitly create one new schematic or one new board render, always at a
 > path that does not already exist; over stdio only, the schematic and render tools may each mint
-> one short-lived, non-enumerable artifact capability. No path modifies a board.
+> one short-lived, non-enumerable artifact capability. Route apply is the sole mutating path and is
+> disabled by default behind explicit operator authorization; placement never mutates a board.
 >
 > `0.4` completes the *observation* surface and opens *placement*. A board can now be read as a
-> typed Circuit Scene — region-scoped, exact integer geometry, objects named by stable references,
+> typed Circuit Scene — region-scoped, exact integer geometry, footprint pose and pad ownership,
+> objects named by stable references,
 > and every string the board's author controls quarantined in a separate untrusted collection that
 > is off by default. An opt-in render turns the same board into a deterministic, digest-bound SVG
 > of its copper; two renders of an unchanged board are byte-identical, and silkscreen and
@@ -27,9 +29,10 @@ MCP-based tools, and optional AI policy plugins.**
 > Placement arrives as a typed intent language that cannot express an illegal result, judged by a
 > deterministic legalizer.
 >
-> What `0.4` does **not** do: nothing applies a placement or a route, there is no placement solver,
-> courtyard overlap is not modelled and is reported as such, and a placement candidate is not bound
-> to KiCad DRC evidence. Pad overlap is deliberately three-valued, so `inconclusive` means neither
+> The released `0.4` line is non-mutating; current unreleased main adds only an operator-gated,
+> token-authorized route apply. Placement apply and a placement solver still do not exist,
+> courtyard overlap is not yet evaluated and is reported as `not_modelled`, and a placement
+> candidate is not bound to KiCad DRC evidence. Pad overlap is deliberately three-valued, so `inconclusive` means neither
 > clearance nor collision could be proven rather than that anything is wrong. Connectivity
 > *recognition* from `0.3` is unchanged: a net already joined by existing copper is identified
 > across any pad count, through same-net vias between layers, and — with the opt-in
@@ -54,8 +57,10 @@ The non-negotiable boundary is simple:
 - Read-only, bounded inspection of documented `.kicad_pcb` files.
 - Workspace confinement, including protection against parent-path and symlink escapes.
 - SHA-256 board revisions and versioned JSON schemas.
-- Immutable Board IR `0.1.0` with exact integer units, typed constraints, canonical digests, and a
-  bounded fail-closed converter for a documented KiCad subset.
+- Immutable Board IR `0.2.0` with exact integer units, typed constraints, canonical digests,
+  first-class footprint pose/side/lock/pad ownership, rectangular courtyard rings, and a bounded
+  fail-closed converter for a documented KiCad subset. The 0.1 schema remains available as immutable
+  compatibility evidence; migration re-converts the original board rather than inventing parents.
 - Immutable Circuit Intent IR `0.1.0` for bounded two-pin resistor/capacitor topology, with a strict
   codec, canonical content digest, and deterministic in-memory KiCad `20250114` schematic renderer
   using original embedded symbols. The shared build service validates and normalizes structured
@@ -88,10 +93,13 @@ The non-negotiable boundary is simple:
   proposes one candidate under a wall-clock deadline, and optionally binds it to aggregate
   authoritative KiCad DRC evidence. It has no durable export, persistence, job, source mutation, or
   apply path.
-- Circuit Scene IR `0.1.0` observation over MCP and the CLI: a mandatory region — an exact
+- Circuit Scene IR `0.2.0` observation over MCP and the CLI: a mandatory region — an exact
   nanometre box or one object reference with a radius — returns full-precision integer geometry for
-  the objects that overlap it, split into `static` (outline, pads, keepouts, rules) and `mutable`
+  the objects that overlap it, split into `static` (outline, footprints, pads, keepouts, rules) and `mutable`
   (segments, arcs, vias, zones) so code meaning to read only the givens cannot iterate over both.
+  Footprints expose revision-bound origin, rotation, side, lock state, pad IDs, and rectangular
+  courtyard rings; relationship IDs consume the bounded scene-detail budget rather than expanding
+  a response for free.
   Objects are named by the Board IR references they already carry, each declaring how durable that
   reference is, and truncation against object, vertex and annotation ceilings is reported
   explicitly rather than left to be inferred. Board text is off by default and, when requested,
@@ -107,12 +115,12 @@ The non-negotiable boundary is simple:
   placement preview over MCP and the CLI. Seven rule kinds name objects only by scene references
   and carry exact integer parameters; the language has no way to state an absolute coordinate or to
   permit an overlap, so every position in a response is derived by CopperMCP and snapped to an
-  explicit grid. A candidate is immutable, bound to both the board snapshot and the out-of-band
-  footprint grouping, and proves exactly three things: pad overlap, board-outline containment, and
-  keepout respect. Pad overlap is three-valued, courtyard overlap is reported as `not_modelled`
-  because Board IR carries no courtyard geometry, and `infeasible_constraints` is never conflated
-  with `budget_exhausted`. Nothing applies a placement, there is no solver, and a placement
-  candidate carries no KiCad DRC evidence.
+  explicit grid. A candidate is immutable, bound to both the board snapshot and its revision-bound
+  Board IR footprint view, and proves exactly three things: pad overlap, board-outline containment,
+  and keepout respect. Pad overlap is three-valued, courtyard overlap is reported as `not_modelled`
+  because the side-aware legality evaluator is not implemented yet, and `infeasible_constraints`
+  is never conflated with `budget_exhausted`. Nothing applies a placement, there is no solver, and a placement
+  candidate carries no KiCad DRC evidence. Locked footprints reject movement proposals.
 - Operator-gated, token-authorized application of a route candidate to a board — the only
   mutating operation in the project. Off by default behind an exact `COPPER_MCP_ALLOW_APPLY`
   flag; over MCP it additionally needs a single-use token bound to the exact candidate, board
@@ -221,9 +229,10 @@ copper-mcp --workspace /absolute/path/to/boards observe-scene example.kicad_pcb 
   --region 0 0 30000000 30000000
 ```
 
-Objects come back split into `static` (outline, pads, keepouts, rules) and `mutable` (segments,
-arcs, vias, zones), each named by the Board IR reference it already carries so you can refer to it
-in a later call. Board text is omitted unless `--include-annotations` is passed, and even then it is
+Objects come back split into `static` (outline, footprints, pads, keepouts, rules) and `mutable`
+(segments, arcs, vias, zones), each named by the Board IR reference it already carries so you can
+refer to it in a later call. Footprints include pose, side, lock, pad ownership, and the supported
+courtyard rings. Board text is omitted unless `--include-annotations` is passed, and even then it is
 confined to a separate `annotations` collection marked untrusted: it is written by whoever authored
 the board, and it is data to be read, never instructions to follow.
 
@@ -272,8 +281,9 @@ way to write an absolute coordinate - so every position in the response was deri
 and snapped to an explicit grid. The response proves three things and claims nothing else: pad
 overlap, board-outline containment, and keepout respect. `pad_overlap` is three-valued, so
 `inconclusive` means neither clearance nor collision could be proven rather than that something is
-wrong. Courtyard overlap is reported as `not_modelled` because Board IR carries no courtyard
-geometry. **The preview never applies a placement and is not bound to KiCad DRC evidence**; a
+wrong. Courtyard overlap is reported as `not_modelled` because the bounded side-aware evaluator is
+not implemented yet. **The preview never applies a placement and is not bound to KiCad DRC
+evidence**; a
 placement also invalidates any route candidate bound to the same board revision.
 
 Preview one route without modifying the board, then optionally validate it with KiCad:
@@ -368,6 +378,8 @@ this boundary.
 
 ## Documentation
 
+- [Project handoff](docs/HANDOFF.md) — current state, invariants, and next steps
+- [Codex handoff](docs/HANDOFF_CODEX.md) — task-first onboarding for a continuing agent
 - [Project charter](docs/project-charter.md)
 - [Architecture](docs/architecture/overview.md)
 - [Board IR and KiCad adapter contract](docs/architecture/board-ir.md)

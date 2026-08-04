@@ -8,6 +8,13 @@ All notable changes are documented here. The format follows
 
 ### Security
 
+- Board IR 0.2 makes footprint ownership revision-bound and budgeted: footprints count against the
+  object ceiling, courtyard vertices and intersection work use polygon ceilings, one footprint is
+  capped at 64 courtyard rings before geometry allocation, and Circuit Scene charges serialized
+  pad relationships against its detail budget. Placement projection re-verifies canonical snapshot
+  ordering and digest binding, applies caller-tightened Board IR limits before projection, and
+  rejects forged footprint content instead of issuing a view under a stale digest. Locked
+  footprints now refuse movement proposals.
 - Candidate apply now holds an **exclusive `flock` across the compare-and-swap and the rename**,
   closing a confirmed concurrency hole: two applies from the same base both passed the checks and
   one silently destroyed the other. The board's digest is re-verified under the held lock
@@ -39,6 +46,13 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- The active Board IR writer and decoder now target exact `copper.board-ir` `0.2.0`. Historical 0.1
+  schema and golden data stay immutable, while migration requires re-converting the original board
+  because flattened 0.1 pads cannot recover trustworthy parent identity or pose. Snapshot digests
+  change; constraint digests do not change from footprint-only data.
+- Placement grouping is now projected from the same Board IR snapshot that carries the pads and
+  rejects mismatched source bytes, replacing the second out-of-band KiCad identity parse. Route
+  serialization also requires native footprint identities before producing output.
 - Applied and backup files now keep the board's own **permission bits** instead of collapsing to
   `0600`, so group and CI readability and hard links survive an apply.
 - Pre-apply copies are written into a `.copper-mcp-backups/` subdirectory, not beside the board
@@ -53,6 +67,15 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- First-class immutable Board IR footprints with exact origin, normalized rotation, side, lock
+  state, total pad ownership, and canonical board-frame rectangular courtyard rings. A compact
+  KiCad fixture pins all four orthogonal transforms and passes KiCad 10.0.5 DRC with zero violations
+  and zero unconnected items.
+- Circuit Scene IR `0.2.0` footprint objects. Region queries can anchor on a footprint and return
+  revision-bound pose, side, pad IDs, supported courtyard rings, lock state, and reference
+  durability without exposing footprint names, values, properties, or other author text.
+- Board IR 0.2 JSON Schema, golden/invalid fixtures, migration guidance, and ADR-0026. The schema
+  requires `items.footprints`, closes every nested object, and preserves the 0.1 schema unchanged.
 - `apply_candidate`: the first and only operation in this project that changes a user's board.
   It applies **route patches only**, and three independent things must hold before a single byte
   is written. The operator must have set `COPPER_MCP_ALLOW_APPLY=1` — matched as exactly `"0"` or

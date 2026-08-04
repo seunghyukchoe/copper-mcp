@@ -1,29 +1,30 @@
 # CopperMCP handoff — 2026-08-04
 
-State of the project at the end of the build session that took it from a pre-alpha MVP to a
-released tool that can observe, reason about, and safely modify real KiCad boards. Written for
-whoever picks this up next, human or agent.
+State of the project after the Board IR 0.2 footprint-fidelity slice. This records the unreleased
+engineering state for whoever picks it up next, human or agent; it is not release authorization.
 
 ---
 
 ## 1. Where the project stands
 
-**`main` = `14e8c4a`.** No open pull requests. Working tree clean. 850 tests plus 335 subtests
-pass, including every real-KiCad node, against KiCad 10.0.5 and Python 3.12.13.
+The slice branched from **`main` = `5f17f89`** as `feat/board-ir-v0-2-footprints`. Its exact head,
+full-gate count, hosted-CI result, and PR state must be read from Git/GitHub after integration rather
+than inferred from this document.
 
 **Released:** `v0.1.0` → `v0.4.0`, all with attested wheel and sdist artifacts. `v0.4.0` is the
-current release; the apply capability merged after it and is unreleased, so **the next release
-should be `v0.5.0`** and its headline is `apply_candidate`.
+current release. The apply capability and the Board IR/Circuit Scene 0.2 work are unreleased; a
+future `v0.5.0` must follow the changelog, full-gate, and release-ledger process rather than treating
+this handoff as approval.
 
 ### What an AI agent can do over MCP today
 
 | Verb | Tool | What it is bound to |
 |---|---|---|
 | See (structure) | `inspect_board_ir` | counts and digests only, no geometry disclosure |
-| See (semantics) | `observe_board_scene` | typed scene, stable ref ids, region-scoped, text quarantined |
+| See (semantics) | `observe_board_scene` | Circuit Scene 0.2, footprint pose/ownership/courtyards, stable ref ids, region-scoped, text quarantined |
 | Look | `observe_board_scene` with `include_render` | normalized SVG, digest-bound, stdio only |
 | Trace | `preview_route` | multi-pin trees, exact integer geometry, optional authoritative KiCad DRC evidence |
-| Judge placement | `preview_placement` | seven-rule intent language, three-valued legality |
+| Judge placement | `preview_placement` | Board IR-projected subjects, locked-move refusal, seven-rule intent language, three-valued legality |
 | Build | `render_circuit_schematic` | deterministic KiCad schematic from Circuit Intent IR |
 | Check | `run_board_drc` | fixed-argument headless DRC, read-only |
 | **Apply** | `apply_candidate` | route candidates written to the real file, **default off** |
@@ -41,9 +42,10 @@ These are not style preferences. Most of them were paid for with a bug. Preserve
 1. **AI proposes, deterministic code disposes.** No model output reaches a board without being
    recomputed, replayed, and verified by code that does not consult a model.
 2. **Every claim is bound to evidence or listed as an explicit non-claim.** ERC, board parity,
-   electrical validation, courtyards, and fabrication readiness are all reported as `not_run` or
-   `not_modelled` one-value literals rather than implied. A field that can only hold one value
-   cannot be quietly upgraded.
+   electrical validation, courtyard legality, and fabrication readiness are all reported as
+   `not_run` or `not_modelled` one-value literals rather than implied. Board IR carrying a supported
+   courtyard contour is not evidence that an overlap evaluator ran. A field that can only hold one
+   value cannot be quietly upgraded.
 3. **Direction of error is a design decision, stated everywhere.** Obstacles over-approximate;
    connectivity proofs under-approximate. A wrong answer must cost a redundant route, never a
    false connection. Legality verdicts are three-valued because `inconclusive` is honest and
@@ -88,10 +90,15 @@ These are not style preferences. Most of them were paid for with a bug. Preserve
   routed by its designer, and the router correctly recognizes that. Routing is proven on
   purpose-built fixtures with real KiCad DRC, not yet on a board that genuinely needed new copper.
   Finding or building that board is the missing empirical validation.
-- **Placement apply does not exist.** Preview and legalization only. A pose edit touches roughly
-  twice as many nodes as Board IR can verify, so a serializer would be unverifiable today.
-- **Courtyards are not modelled.** Board IR has no courtyard geometry; the reference board draws
-  none. Recorded as a one-value literal, not a silent gap.
+- **Placement apply does not exist.** Preview and legalization only. Board IR 0.2 now binds
+  footprint pose, side, lock state, pad ownership, and its supported courtyard geometry, but still
+  omits author text, fabrication graphics, library identity, properties, and 3D-model pose. A pose
+  serializer cannot yet prove that it preserved everything KiCad would move or rewrite.
+- **Courtyard coverage is deliberately narrow.** The adapter accepts only front-side,
+  orthogonally rotated footprints with unfilled `fp_rect` centerlines on matching `F.CrtYd`.
+  Back-side footprints and line, polygon, arc, open, mixed, or mismatched courtyard topology fail
+  closed. `courtyard_overlap` remains `not_modelled` because the bounded side-aware evaluator is
+  absent, not because the supported rectangle is absent.
 - **Apply gives a pre-apply copy, not a KiCad undo step.** Restoring is manual. IPC-based
   one-undo-commit apply is designed and deferred.
 - **Renders are whole-board even for a windowed scene**, and are advisory, never geometric
@@ -105,19 +112,22 @@ These are not style preferences. Most of them were paid for with a bug. Preserve
 
 ## 5. What to do next, in priority order
 
-1. **Board IR 0.2 with footprint modelling.** This single dependency unblocks three deferred
-   items: placement apply, courtyard legality, and placement DRC binding. It is a schema version
-   bump under ADR-0005's rules — new fixtures, compatibility tests, an ADR, migration guidance —
-   and it changes every zoned board's snapshot digest, so it deserves a slice of its own.
-2. **A board that actually needs routing.** Either author one or adopt a real open-hardware board
+1. **Generalize footprint/courtyard fidelity and implement legality.** Add source-oracle fixtures
+   before supporting back-side footprints or line/polygon/arc and multi-loop courtyard topology;
+   then build a bounded, side-aware evaluator. Until that evaluator exists,
+   `courtyard_overlap` must remain `not_modelled`.
+2. **Close the data-fidelity gap before placement apply.** Model and replay the author text,
+   fabrication graphics, library identity, properties, and 3D-model pose affected by a move, then
+   require exact source/revision binding and KiCad verification. Do not turn the existing preview
+   candidate into a write path by assumption.
+3. **A board that actually needs routing.** Either author one or adopt a real open-hardware board
    with unrouted nets, then measure and record honest coverage. This converts the routing claims
    from fixture-proven to board-proven.
-3. **IPC apply (v0.2 of the apply arc).** `kicad-python`'s `begin_commit` / `push_commit` gives a
+4. **IPC apply (v0.2 of the apply arc).** `kicad-python`'s `begin_commit` / `push_commit` gives a
    genuine single-undo-step transaction into a running KiCad. The hard part is binding an
    in-memory document to a file digest; the research doc lays out the constraints.
-4. **`v0.5.0` release** once apply has soaked, following the ledger discipline in
+5. **`v0.5.0` release** once the unreleased surfaces have soaked, following the ledger discipline in
    `docs/ledgers/release-ledger.md`.
-5. **Placement apply**, after 1.
 6. **Deferred quality items**: fill-aware routing obstacles (currently connectivity only),
    durable routing jobs and candidate persistence, the `PlacementBackend` solver seam, and the
    `ordering_policy` seam for RSMT-guided topology. All are additive behind existing contracts.
@@ -151,6 +161,8 @@ mypy, pytest, secret scan, pip-audit, isolated build. KiCad 10.0.5 lives at
   double-counts and transposes non-square pads. Pinned by an SVG-oracle test.
 - KiCad stores boards y-down while its angles read counter-clockwise on screen, so a quarter turn
   is `(x, y) → (y, −x)`.
+- Back-side footprint-local coordinates in a saved KiCad board are already flipped. Do not add a
+  second mirror when extending the adapter; require source-oracle fixtures before accepting them.
 - SVG export is byte-deterministic **except** one `<title>` line carrying a wall clock and the
   output filename. Canonicalize that line before digesting.
 - Silkscreen strings appear **twice in literal, greppable form** — an invisible zero-opacity
@@ -179,7 +191,7 @@ src/copper_mcp/
   mcp_contracts.py                     closed Pydantic contracts for tool responses
   request_boundary.py, security.py     untrusted input validation; workspace confinement,
                                        descriptor-anchored reads, create-only and replace writes
-  board_ir/                            canonical Board IR 0.1: types, validation, digests
+  board_ir/                            canonical Board IR 0.2: footprints, geometry, validation, digests
   adapters/                            KiCad parsers and serializers, CST span splicing
   routing/                             exact-integer A*, contracts, oracle
   circuit_ir/, circuit_intent_service  Circuit Intent IR and deterministic schematic build
@@ -188,16 +200,17 @@ src/copper_mcp/
   apply/                               tokens, pure engine, mutating service
   zone_fill.py, kicad_cli.py           fill authority, bounded KiCad execution
 docs/
-  adr/                                 ADR-0001 … ADR-0025, the decision record
+  adr/                                 ADR-0001 … ADR-0026, the decision record
   architecture/                        board-ir, routing-baseline, mcp-api, security-model
   ledgers/                             decision, risk, security, release (append-only)
   research/                            literature and licensing surveys per arc
   HANDOFF.md                           this document
-tests/                                 850 tests; fixtures under tests/fixtures/
+tests/                                 regression and integration fixtures under tests/fixtures/
 ```
 
 Read in this order to get oriented: `README.md`, `AGENTS.md`, `docs/architecture/security-model.md`,
-`docs/architecture/routing-baseline.md`, then the ADRs from 0016 onward for the recent arcs.
+`docs/architecture/board-ir.md`, `docs/architecture/routing-baseline.md`, then the ADRs from 0016
+through 0026 for the recent arcs.
 
 ---
 

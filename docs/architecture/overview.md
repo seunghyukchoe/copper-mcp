@@ -42,19 +42,25 @@ revision.
 | `routing/astar.py` | Bounded integer two-pin A* reference; candidate-only and fail-closed. |
 | `request_boundary.py` | Shared untrusted-request validation primitives for every public service. |
 | `board_ir_service.py` | Read-only Board IR conversion check and structural description. |
+| `circuit_scene.py` | Bounded, region-scoped Board IR observation with typed references and quarantined author text. |
+| `placement/` | Revision-bound footprint views, typed placement intent, and deterministic preview/legalization. |
 | `route_preview.py` | The public non-mutating route preview service. |
 | `mcp_server.py` | MCP tools/resources and transport configuration. |
 
-Board IR `0.1.0` is the domain and source-adapter foundation. A narrow deterministic
+Board IR `0.2.0` is the domain and source-adapter foundation. It adds immutable footprint pose,
+side, lock state, total pad ownership, and bounded board-frame rectangular courtyard rings to the
+geometry already used by routing. A narrow deterministic
 [two-pin routing baseline](routing-baseline.md) now produces immutable in-memory candidates for
 supported synthetic Board IR inputs. The pure adapter can serialize an exact replayed candidate in
 memory, an internal service binds that private derivative to strict aggregate KiCad DRC evidence,
 `preview_route` exposes that pipeline as a bounded, non-mutating public proposal, and
-`inspect_board_ir` reports whether a board is representable at all. No durable
-export, MCP Board IR, route/evidence resource, routing job, candidate persistence, source mutation,
-or apply path is implemented. See
+`inspect_board_ir` reports whether a board is representable at all. The separately authorized,
+default-off `apply_candidate` surface applies replay-verified route patches only. No durable
+candidate export, raw Board IR MCP resource, route/evidence resource, routing job, candidate
+persistence, placement apply, or live-editor apply path is implemented. See
 [Board IR and KiCad adapter contracts](board-ir.md),
 [ADR-0005](../adr/0005-canonical-board-ir.md),
+[ADR-0026](../adr/0026-first-class-footprints-in-board-ir.md),
 [ADR-0006](../adr/0006-bounded-deterministic-astar.md),
 [ADR-0007](../adr/0007-disposable-kicad-candidate-snapshot.md),
 [ADR-0008](../adr/0008-candidate-bound-kicad-drc.md),
@@ -76,17 +82,21 @@ process exit; no secure memory-erasure claim is made. See the
 
 ## High-fidelity circuit perception and placement north star
 
-The long-term perception contract is a versioned **Circuit Scene IR** that combines semantic circuit
-intent with a bounded visual description suitable for MCP observation. It will not expose an
-unbounded screen stream or make pixels authoritative. A model may use that scene to propose typed
-placement intent and compare immutable placement previews or candidates. Deterministic services
-remain responsible for identity, snapping, connectivity, clearance, rule evaluation, provenance,
-and revision binding.
+Circuit Scene IR `0.2.0` is the current bounded structured board observation contract. It exposes
+revision-bound footprint pose, side, lock state, pad ownership, and supported courtyard rings beside
+the existing pads and copper. Region scoping, typed reference durability, object/detail ceilings,
+and quarantined board-author text keep the observation explicit; an optional normalized render is
+an advisory orientation aid, never geometry authority. It does not yet join Board IR with logical
+Circuit Intent, so that semantic fusion remains a north star rather than a current claim.
 
-Any eventual placement or routing apply stays a separate, explicit, revision-checked operation.
-Models never write KiCad syntax, mutate a live editor, or bypass candidate validation. This is a
-north star rather than a current placement, board-generation, or editor-control capability; Circuit
-Scene IR and its placement surfaces have not been implemented.
+Placement preview resolves its subjects from the same Board IR snapshot and refuses source bytes
+whose revision does not match. The current KiCad footprint subset is deliberately strict: front
+side, orthogonal rotations, and unfilled `fp_rect` geometry on matching `F.CrtYd`; unsupported
+topology and back-side footprints fail closed. A locked footprint cannot be moved.
+`courtyard_overlap` remains `not_modelled` because no bounded, side-aware legality evaluator exists,
+not because the supported contour is absent. Placement apply remains deferred. Models never write
+KiCad syntax, mutate a live editor, or bypass deterministic candidate validation and explicit
+revision-checked authorization.
 
 ## Candidate lifecycle
 
@@ -97,9 +107,11 @@ Scene IR and its placement surfaces have not been implemented.
 5. Run authoritative KiCad DRC and future physics/DFM checks.
 6. Compare candidates with hard correctness first.
 7. Recheck the live board revision.
-8. Apply one approved patch as a single undoable operation.
+8. Apply one approved patch through a separate, explicitly authorized, revision-checked operation.
 
-No lifecycle stage may mutate the base snapshot. See [ADR-0001](../adr/0001-candidate-first.md).
+No candidate-building lifecycle stage may mutate the base snapshot. The current route apply writes a
+recoverable pre-apply copy but is not a KiCad undo transaction; placement apply does not exist. See
+[ADR-0001](../adr/0001-candidate-first.md).
 
 ## Performance evolution
 
