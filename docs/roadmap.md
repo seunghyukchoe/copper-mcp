@@ -68,8 +68,9 @@ documentation, ledger updates, and benchmark evidence.
         fail-closed invalid-candidate publication are covered by ADR-0046 and B-028.
       - [x] Bounded redacted candidate-manifest persistence with restart, TTL, tamper, and
         RoutingJobSpec binding checks is covered by ADR-0047 and B-029.
-      - [ ] Bounded request/result persistence for task lookup, route-geometry export, and ordinary
-        MCP `start_routing`/`get_routing_job`/`cancel_routing_job` tools.
+      - [x] Bounded file-backed layered request/result persistence, authorization-bound route-
+        geometry export, and ordinary MCP `start_routing`/`get_routing_job`/`cancel_routing_job`
+        tools. Single-layer/live jobs and MCP Tasks negotiation remain open.
 - [x] Existing selected-layer copper as exact rectangular obstacles.
 - [x] Via obstacles on the selected layer, the first limit a real board hit.
 - [x] Conservative polygon zone-boundary envelope obstacles with exact integer concave/diagonal
@@ -135,9 +136,10 @@ documentation, ledger updates, and benchmark evidence.
 
 ## M3 — Safe candidate application
 
-- [~] Durable routing jobs and cancellation. The bounded internal ledger, single-worker lease
-  recovery, and redacted candidate manifests now exist; bounded request/result persistence,
-  ordinary MCP tools, and route-geometry export remain open.
+- [x] Durable routing jobs and cancellation. The bounded internal ledger, single-worker lease
+  recovery, redacted candidate manifests, file-backed layered request/result persistence,
+  authorization-bound geometry export, and ordinary MCP tools now exist. Single-layer/live jobs
+  and MCP Tasks negotiation remain open.
 - [ ] MCP Tasks progressive enhancement. The current protocol is an experimental extension and
   remains deferred until a pinned client/server compatibility matrix, random task handles, and
   authorization-bound result storage exist; see ADR-0046.

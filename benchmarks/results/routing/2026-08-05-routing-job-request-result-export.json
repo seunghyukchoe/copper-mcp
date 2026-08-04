@@ -1,0 +1,28 @@
+{
+  "date_utc": "2026-08-04T19:29:05+00:00",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "fixture": "tests/fixtures/route-candidate/two-pad.kicad_pcb",
+  "metrics": {
+    "board_mutation": false,
+    "candidate_geometry_exported_only_explicitly": true,
+    "completed_candidate": true,
+    "deterministic_job_id_idempotency": true,
+    "export_median_ns": 131917,
+    "get_median_ns": 99625,
+    "live_request_refused": true,
+    "mcp_tasks": false,
+    "queued_before_worker": true,
+    "request_and_export_redacted": true,
+    "request_result_repository": true,
+    "restart_recovered_normalized_request": true,
+    "restart_recovered_terminal_job": true,
+    "wrong_context_refused": true
+  },
+  "run_id": "sha256:4378d26900746549bfa6e59fc82fbc0314e2647901bd3069823d4f0e9fc9670a",
+  "schema": "copper-mcp/benchmark/routing-job-request-result-export/v1",
+  "script": "scripts/benchmark_routing_job_request_result.py",
+  "source_commit": "e4c92681f3d6da7705d0d10257e6ed3ba85072aa"
+}

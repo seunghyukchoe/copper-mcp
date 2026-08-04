@@ -1159,6 +1159,207 @@ class LayeredRoutePreviewToolResponse(
     """Strict status-specific structured output for ``preview_layered_route``."""
 
 
+class RoutingJobRequestContract(LayeredRoutePreviewRequestContract):
+    """File-backed layered request accepted by the first durable job queue."""
+
+    board: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=4096,
+            pattern=r"^[^\u0000-\u001f\u007f]+$",
+        ),
+    ]
+
+
+RoutingJobRequest = Annotated[
+    RoutingJobRequestContract,
+    WithJsonSchema(_inline_json_schema(RoutingJobRequestContract)),
+]
+
+
+class RoutingJobStartToolRequestContract(_ClosedContract):
+    """Start request with a caller-context digest; the job ID is not authorization."""
+
+    request: RoutingJobRequestContract
+    authorization_digest: Digest
+
+
+RoutingJobStartToolRequest = Annotated[
+    Any,
+    WithJsonSchema(_inline_json_schema(RoutingJobStartToolRequestContract)),
+]
+
+
+class RoutingJobLookupToolRequestContract(_ClosedContract):
+    """Lookup request bound to the same caller-context digest used at creation."""
+
+    job_id: Digest
+    authorization_digest: Digest
+
+
+RoutingJobLookupToolRequest = Annotated[
+    Any,
+    WithJsonSchema(_inline_json_schema(RoutingJobLookupToolRequestContract)),
+]
+
+
+class RoutingJobCancelToolRequestContract(RoutingJobLookupToolRequestContract):
+    """Cooperative cancellation request for a queued or running job."""
+
+    reason: Annotated[
+        str, Field(min_length=1, max_length=256, pattern=r"^[^\u0000-\u001f\u007f]+$")
+    ] = "caller_requested"
+
+
+RoutingJobCancelToolRequest = Annotated[
+    Any,
+    WithJsonSchema(_inline_json_schema(RoutingJobCancelToolRequestContract)),
+]
+
+
+class RoutingCandidateExportToolRequestContract(_ClosedContract):
+    """Explicit geometry export request; candidate IDs are not apply authority."""
+
+    job_id: Digest
+    candidate_id: Digest
+    authorization_digest: Digest
+
+
+RoutingCandidateExportToolRequest = Annotated[
+    Any,
+    WithJsonSchema(_inline_json_schema(RoutingCandidateExportToolRequestContract)),
+]
+
+
+class RoutingJobToolResponse(_ClosedContract):
+    """Bounded lifecycle summary shared by start/get/cancel routing tools."""
+
+    schema_version: Literal["1.0"]
+    job_id: Digest
+    status: Literal[
+        "queued",
+        "running",
+        "cancel_requested",
+        "completed",
+        "failed",
+        "cancelled",
+    ]
+    revision: NonNegativeInteger
+    attempt: NonNegativeInteger
+    created_at_ms: NonNegativeInteger
+    updated_at_ms: NonNegativeInteger
+    request_digest: Digest
+    request_kind: Literal["layered"]
+    board_revision: Digest
+    snapshot_digest: Digest
+    start_pad_id: PadRefId
+    end_pad_id: PadRefId
+    candidate_id: Digest | None
+    candidate_base_revision: Digest | None
+    diagnostic_code: (
+        Literal[
+            "invalid_request",
+            "stale_revision",
+            "unsupported",
+            "no_path",
+            "search_budget_exceeded",
+            "obstacle_budget_exceeded",
+            "worker_error",
+            "cancelled",
+        ]
+        | None
+    )
+    diagnostic_message: Annotated[str, Field(max_length=256)] | None
+    cancel_reason: Annotated[str, Field(max_length=256)] | None
+    request: RoutingJobRequestContract | None = None
+
+
+class RoutingCandidateExportPointContract(_ClosedContract):
+    x_nm: Nanometres
+    y_nm: Nanometres
+
+
+class RoutingCandidateExportPathContract(_ClosedContract):
+    layer_id: LayerId
+    vertices: Annotated[
+        list[RoutingCandidateExportPointContract],
+        Field(min_length=2, max_length=500_000),
+    ]
+
+
+class RoutingCandidateExportViaContract(_ClosedContract):
+    id: Annotated[str, Field(pattern=r"^via:[0-9a-zA-Z:._-]{1,160}$")]
+    center: RoutingCandidateExportPointContract
+    diameter_nm: PositiveNanometres
+    drill_nm: PositiveNanometres
+    start_layer_id: LayerId
+    end_layer_id: LayerId
+
+
+class RoutingCandidateExportPatchContract(_ClosedContract):
+    net_id: NetRefId
+    width_nm: PositiveNanometres
+    via_diameter_nm: PositiveNanometres
+    via_drill_nm: PositiveNanometres
+    paths: Annotated[
+        list[RoutingCandidateExportPathContract],
+        Field(min_length=1, max_length=100_000),
+    ]
+    vias: Annotated[list[RoutingCandidateExportViaContract], Field(max_length=100_000)]
+
+
+class RoutingCandidateExportCostContract(_ClosedContract):
+    total_search_cost_units: NonNegativeInteger
+    via_cost_units: NonNegativeInteger
+    via_count: NonNegativeInteger
+    wire_length_nm: NonNegativeInteger
+
+
+class RoutingCandidateExportMetricsContract(_ClosedContract):
+    bend_count: NonNegativeInteger
+    discovered_states: NonNegativeInteger
+    expanded_states: NonNegativeInteger
+    move_steps: NonNegativeInteger
+    obstacle_checks: NonNegativeInteger
+    peak_frontier_states: NonNegativeInteger
+    vias: NonNegativeInteger
+    wire_length_nm: NonNegativeInteger
+
+
+class RoutingCandidateExportSettingsContract(_ClosedContract):
+    max_expansions: PositiveNanometres
+    max_nodes: PositiveNanometres
+    max_obstacle_checks: PositiveNanometres
+    max_obstacles: PositiveNanometres
+    move_cost: PositiveNanometres
+    via_cost: PositiveNanometres
+
+
+class RoutingCandidateExportContract(_ClosedContract):
+    """Canonical, immutable layered geometry returned only after authorization."""
+
+    base_revision: Digest
+    candidate_id: Digest
+    cost: RoutingCandidateExportCostContract
+    end_pad_id: PadRefId
+    metrics: RoutingCandidateExportMetricsContract
+    patch: RoutingCandidateExportPatchContract
+    policy: Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._/\-]{0,127}$")]
+    router_version: Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._/\-]{0,127}$")]
+    seed: NonNegativeInteger
+    settings: RoutingCandidateExportSettingsContract
+    start_pad_id: PadRefId
+
+
+class RoutingCandidateExportToolResponse(_ClosedContract):
+    """Explicit geometry export; no board bytes, DRC evidence, or apply token."""
+
+    schema_version: Literal["1.0"]
+    candidate: RoutingCandidateExportContract
+    geometry_disclosure: Literal["explicitly_authorized"]
+
+
 class PlacementRuleResultContract(_ClosedContract):
     """What one rule concluded, and by how much."""
 
@@ -1409,5 +1610,17 @@ __all__ = [
     "LivePlacementToolRequest",
     "RoutePreviewToolRequest",
     "RoutePreviewToolResponse",
+    "RoutingCandidateExportToolRequest",
+    "RoutingCandidateExportToolRequestContract",
+    "RoutingCandidateExportToolResponse",
+    "RoutingJobCancelToolRequest",
+    "RoutingJobCancelToolRequestContract",
+    "RoutingJobLookupToolRequest",
+    "RoutingJobLookupToolRequestContract",
+    "RoutingJobRequest",
+    "RoutingJobRequestContract",
+    "RoutingJobStartToolRequest",
+    "RoutingJobStartToolRequestContract",
+    "RoutingJobToolResponse",
     "SceneRenderContract",
 ]

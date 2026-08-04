@@ -417,3 +417,16 @@ result or a general performance comparison.
 | Metrics | Restart preservation `true`; idempotent put `true`; expiry refusal `true`; unknown/expired error uniform `true`; tamper refusal `true`; redacted payload `true`; geometry export `false`; MCP Tasks `false` |
 | Artifact | [`2026-08-05-routing-candidate-manifest-store.json`](../../benchmarks/results/routing/2026-08-05-routing-candidate-manifest-store.json) |
 | Interpretation | This demonstrates restart-safe redacted candidate-summary persistence and fail-closed integrity/retention boundaries. It does not establish route-geometry rehydration/export, ordinary MCP job tools, authorization, MCP Tasks compatibility, KiCad DRC, electrical behavior, fabrication readiness, or FreeRouting parity. |
+
+### B-030 — Durable layered routing request/result and explicit geometry export
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | Recorded in the self-addressed artifact below |
+| Date and commit | 2026-08-05; source commit recorded in the artifact; benchmark run after the implementation commit |
+| Environment | Apple arm64 CPU; Python 3.12; KiCad was not invoked; temporary local SQLite repository |
+| Dataset | Independently authored `tests/fixtures/route-candidate/two-pad.kicad_pcb`; one two-pad audio-style net; no external or proprietary board data |
+| Configuration | `copper-mcp/benchmark/routing-job-request-result-export/v1`; file-backed `start_routing_job` service, single local worker, five lookup/export timing samples, 60-second TTL, no MCP Tasks |
+| Metrics | The artifact records queued-before-worker, deterministic job-ID idempotency, completed candidate, explicit geometry export, wrong-context refusal, restart recovery of the terminal job and normalized request, deep/redacted persistence, live-request refusal, median lookup/export latency, board mutation `false`, and MCP Tasks `false`. |
+| Artifact | [`2026-08-05-routing-job-request-result-export.json`](../../benchmarks/results/routing/2026-08-05-routing-job-request-result-export.json) |
+| Interpretation | This is contract and restart evidence for the narrow file-backed two-signal queue. It demonstrates a measurable durable handoff and a separately authorized geometry disclosure, not general routing quality, throughput, KiCad DRC, live GUI compatibility, MCP Tasks interoperability, electrical behavior, fabrication readiness, or FreeRouting parity. |

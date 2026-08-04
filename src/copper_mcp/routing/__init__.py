@@ -38,6 +38,16 @@ from copper_mcp.routing.contracts import (
     RouteResult,
     RoutingBackend,
 )
+from copper_mcp.routing.job_repository import (
+    RoutingCandidateExportConflictError,
+    RoutingCandidateExportStore,
+    RoutingCandidateExportUnavailableError,
+    RoutingJobRepository,
+    RoutingJobRequestConflictError,
+    RoutingJobRequestEnvelope,
+    RoutingJobRequestStore,
+    RoutingJobRequestUnavailableError,
+)
 from copper_mcp.routing.job_worker import (
     CancellationProbe,
     RoutingJobAlreadyClaimedError,
@@ -152,6 +162,9 @@ __all__ = [
     "RouteRequest",
     "RouteResult",
     "RoutingBackend",
+    "RoutingCandidateExportConflictError",
+    "RoutingCandidateExportStore",
+    "RoutingCandidateExportUnavailableError",
     "RoutingCandidateManifest",
     "RoutingCandidateManifestStore",
     "RoutingJobAlreadyClaimedError",
@@ -167,6 +180,11 @@ __all__ = [
     "RoutingJobLimits",
     "RoutingJobNotFoundError",
     "RoutingJobRecord",
+    "RoutingJobRepository",
+    "RoutingJobRequestConflictError",
+    "RoutingJobRequestEnvelope",
+    "RoutingJobRequestStore",
+    "RoutingJobRequestUnavailableError",
     "RoutingJobSpec",
     "RoutingJobStateError",
     "RoutingJobStatus",

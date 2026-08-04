@@ -67,6 +67,8 @@ def server_info() -> dict[str, Any]:
             "revision-bound live KiCad IPC placement proposal (read-only)",
             "revision-bound live KiCad IPC editor context (read-only)",
             "revision-bound layered route proposal (read-only)",
+            "durable file-backed layered routing jobs with bounded worker execution",
+            "authorization-bound candidate geometry export",
             "revision-bound live layered route proposal (read-only)",
         ],
         "planned": [
@@ -74,7 +76,8 @@ def server_info() -> dict[str, Any]:
             "authoritative KiCad DRC binding for placement candidates",
             "explicit placement apply and post-placement observation",
             "live placement/routing action compare-and-swap over KiCad IPC",
-            "routing job lifecycle",
+            "MCP Tasks negotiated progressive enhancement",
+            "multilayer generalization beyond the two-signal subset",
             "negotiated-congestion router",
             "immutable route patches",
             "placement apply and post-placement observation",

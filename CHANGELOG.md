@@ -8,6 +8,12 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added a bounded, restart-safe routing-job repository and ordinary MCP lifecycle surface. The
+  file-backed two-signal-layer queue persists deep-frozen normalized requests, redacted manifests,
+  and separately authorized content-addressed candidate geometry behind TTL/capacity limits;
+  `start_routing`, `get_routing_job`, `cancel_routing_job`, and `export_routing_candidate` never
+  apply copper, accept board bytes, or claim MCP Tasks compatibility.
+
 - Added a bounded SQLite `CandidateManifestStore` for restart-safe, content-addressed candidate
   summaries. It persists only redacted identity, endpoint, cost, and metric metadata; route
   geometry, board bytes, DRC findings, durable export, and MCP Tasks remain separate capabilities.

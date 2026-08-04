@@ -6,6 +6,10 @@ than the internal architecture, so routing remains usable through other hosts.
 
 from __future__ import annotations
 
+import os
+import threading
+from concurrent.futures import Future, ThreadPoolExecutor
+from pathlib import Path
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
@@ -30,6 +34,7 @@ from copper_mcp.mcp_contracts import (
     CircuitIntentToolContent,
     CircuitSceneToolResponse,
     CircuitSchematicToolResponse,
+    Digest,
     LayeredRoutePreviewToolRequest,
     LayeredRoutePreviewToolResponse,
     LiveBoardObservationToolResponse,
@@ -42,6 +47,26 @@ from copper_mcp.mcp_contracts import (
     PlacementPreviewToolResponse,
     RoutePreviewToolRequest,
     RoutePreviewToolResponse,
+    RoutingCandidateExportToolResponse,
+    RoutingJobRequest,
+    RoutingJobToolResponse,
+)
+from copper_mcp.routing import RoutingJobRepository
+from copper_mcp.routing_job_service import (
+    RoutingJobServiceError,
+    execute_routing_job,
+)
+from copper_mcp.routing_job_service import (
+    cancel_routing_job as cancel_routing_job_service,
+)
+from copper_mcp.routing_job_service import (
+    export_routing_candidate as export_routing_candidate_service,
+)
+from copper_mcp.routing_job_service import (
+    get_routing_job as get_routing_job_service,
+)
+from copper_mcp.routing_job_service import (
+    start_routing_job as start_routing_job_service,
 )
 from copper_mcp.scene_render import (
     SCENE_RENDER_URI_TEMPLATE,
@@ -84,6 +109,56 @@ _SCENE_RENDERS = SceneRenderStore()
 #: server invalidates every outstanding token. That is intended for a short-lived confirmation.
 _APPLY_TOKENS = ApplyTokenAuthority()
 SCENE_RENDER_MIME_TYPE = "image/svg+xml"
+_ROUTING_REPOSITORY: RoutingJobRepository | None = None
+_ROUTING_REPOSITORY_LOCK = threading.RLock()
+_ROUTING_FUTURES: dict[str, Future[Any]] = {}
+_ROUTING_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="copper-routing")
+
+
+def _routing_repository() -> RoutingJobRepository:
+    """Open the ignored local routing ledger lazily, so read-only imports do not write state."""
+
+    global _ROUTING_REPOSITORY
+    with _ROUTING_REPOSITORY_LOCK:
+        if _ROUTING_REPOSITORY is not None:
+            return _ROUTING_REPOSITORY
+        configured = os.environ.get("COPPER_MCP_ROUTING_JOB_STORE", "").strip()
+        path = (
+            Path(configured)
+            if configured
+            else _SETTINGS.workspace / ".copper-mcp" / "routing.sqlite3"
+        )
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            path.parent.chmod(0o700)
+            _ROUTING_REPOSITORY = RoutingJobRepository(path)
+        except OSError as error:
+            raise RoutingJobServiceError("routing job persistence is unavailable") from error
+        return _ROUTING_REPOSITORY
+
+
+def _schedule_routing_job(job_id: str, authorization_digest: str) -> None:
+    repository = _routing_repository()
+    with _ROUTING_REPOSITORY_LOCK:
+        existing = _ROUTING_FUTURES.get(job_id)
+        if existing is not None and not existing.done():
+            return
+
+        future = _ROUTING_EXECUTOR.submit(
+            execute_routing_job,
+            job_id,
+            authorization_digest,
+            _SETTINGS,
+            repository,
+        )
+        _ROUTING_FUTURES[job_id] = future
+
+        def _forget(_completed: Future[Any]) -> None:
+            with _ROUTING_REPOSITORY_LOCK:
+                if _ROUTING_FUTURES.get(job_id) is _completed:
+                    _ROUTING_FUTURES.pop(job_id, None)
+
+        future.add_done_callback(_forget)
 
 
 class CopperMCPServer(MCPServer[None]):
@@ -136,6 +211,21 @@ class CopperMCPServer(MCPServer[None]):
             raise ToolError("live placement tool arguments are malformed")
         if name == "inspect_live_editor_context" and set(arguments) != {"request"}:
             raise ToolError("live editor context tool arguments are malformed")
+        if name == "start_routing" and set(arguments) != {"request", "authorization_digest"}:
+            raise ToolError("routing job start arguments are malformed")
+        if name == "get_routing_job" and set(arguments) != {"job_id", "authorization_digest"}:
+            raise ToolError("routing job lookup arguments are malformed")
+        if name == "cancel_routing_job" and frozenset(arguments) not in {
+            frozenset({"job_id", "authorization_digest"}),
+            frozenset({"job_id", "authorization_digest", "reason"}),
+        }:
+            raise ToolError("routing job cancellation arguments are malformed")
+        if name == "export_routing_candidate" and set(arguments) != {
+            "job_id",
+            "candidate_id",
+            "authorization_digest",
+        }:
+            raise ToolError("routing candidate export arguments are malformed")
         return await super().call_tool(name, arguments, context)
 
 
@@ -345,6 +435,131 @@ def preview_live_layered_route(
     return LayeredRoutePreviewToolResponse.model_validate(
         preview_live_layered_route_service_raw(request, _SETTINGS)
     )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def start_routing(
+    request: RoutingJobRequest,
+    authorization_digest: Digest,
+) -> RoutingJobToolResponse:
+    """Queue one durable, file-backed layered route proposal and dispatch the local worker.
+
+    The request is validated and persisted before this tool returns. The caller supplies an
+    opaque context digest that must be repeated for lookup, cancellation, and geometry export;
+    the deterministic job ID is only an idempotency key. This first queue refuses live-editor
+    requests and never applies copper or runs DRC.
+    """
+
+    try:
+        repository = _routing_repository()
+        result = start_routing_job_service(
+            {
+                "request": request.model_dump(mode="python", exclude_none=True),
+                "authorization_digest": authorization_digest,
+            },
+            _SETTINGS,
+            repository,
+        )
+        _schedule_routing_job(str(result["job_id"]), authorization_digest)
+        return RoutingJobToolResponse.model_validate(result)
+    except RoutingJobServiceError as error:
+        raise ToolError("routing job request was refused") from error
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def get_routing_job(job_id: Digest, authorization_digest: Digest) -> RoutingJobToolResponse:
+    """Read one durable routing-job record and its normalized request."""
+
+    try:
+        result = get_routing_job_service(
+            {"job_id": job_id, "authorization_digest": authorization_digest},
+            _routing_repository(),
+        )
+        return RoutingJobToolResponse.model_validate(result)
+    except RoutingJobServiceError as error:
+        raise ToolError("routing job is unavailable") from error
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=False,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def cancel_routing_job(
+    job_id: Digest,
+    authorization_digest: Digest,
+    reason: str = "caller_requested",
+) -> RoutingJobToolResponse:
+    """Request cooperative cancellation of one queued or running route proposal."""
+
+    try:
+        result = cancel_routing_job_service(
+            {
+                "job_id": job_id,
+                "authorization_digest": authorization_digest,
+                "reason": reason,
+            },
+            _routing_repository(),
+        )
+        return RoutingJobToolResponse.model_validate(result)
+    except RoutingJobServiceError as error:
+        raise ToolError("routing job cancellation was refused") from error
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def export_routing_candidate(
+    job_id: Digest,
+    candidate_id: Digest,
+    authorization_digest: Digest,
+) -> RoutingCandidateExportToolResponse:
+    """Return candidate geometry only after the job's caller-context authorization succeeds."""
+
+    try:
+        result = export_routing_candidate_service(
+            {
+                "job_id": job_id,
+                "candidate_id": candidate_id,
+                "authorization_digest": authorization_digest,
+            },
+            _routing_repository(),
+        )
+        return RoutingCandidateExportToolResponse.model_validate(
+            {
+                "schema_version": "1.0",
+                "candidate": result,
+                "geometry_disclosure": "explicitly_authorized",
+            }
+        )
+    except RoutingJobServiceError as error:
+        raise ToolError("routing candidate export is unavailable") from error
 
 
 @mcp.tool(

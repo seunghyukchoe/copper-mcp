@@ -23,6 +23,10 @@
 | `preview_live_route` | None | Revision-bound, ref-anchored route proposal over one active KiCad IPC snapshot; never writes, runs DRC/fill, or grants apply authority. |
 | `preview_layered_route` | None | Revision-bound, pad-ref-anchored two-signal-layer proposal with explicit full-stack vias; candidate-only, with no DRC, refill, serialization, export, or apply authority. |
 | `preview_live_layered_route` | None | Session-, source-, and Board IR-revision-bound via-capable proposal over one active KiCad IPC snapshot; candidate-only, with no DRC, refill, serialization, export, or apply authority. |
+| `start_routing` | Local SQLite job state and bounded worker activity | Persist and queue one file-backed two-signal-layer proposal; returns a redacted lifecycle record and never applies copper. |
+| `get_routing_job` | None | Read one authorization-bound routing lifecycle record and its normalized request after restart. |
+| `cancel_routing_job` | Local SQLite lifecycle state | Request cooperative cancellation for one authorization-bound queued or running proposal. |
+| `export_routing_candidate` | None | Explicitly disclose one immutable candidate geometry only after job and caller-context authorization succeed. |
 | `preview_live_placement` | None | Revision-bound, ref-anchored placement proposal over one active KiCad IPC snapshot; never writes, runs DRC, or grants apply authority. |
 | `inspect_live_editor_context` | None | Revision-bound active layer and bounded native selection references from the KiCad IPC editor; never reads raw selection text or mutates the editor. |
 | `apply_candidate` | **Replaces the board file**; disabled by default | The only mutating tool. Requires an operator flag and a single-use token. Route patches only. |
@@ -334,12 +338,24 @@ it is non-destructive and performs no network access. Both the tool and dynamic 
 disabled for streamable HTTP until authenticated principals, session isolation, authorization, and
 per-principal quotas exist. Rendering over MCP never writes into the configured workspace.
 
-The internal `RoutingJobStore` now provides a bounded, transport-independent SQLite ledger for
-redacted job records and compare-and-swap lifecycle transitions. It does not run a worker, retain
-candidate geometry, expose a job resource, or grant export/apply authority. Candidate persistence,
-durable candidate export, route/evidence resource exposure, and ordinary `start_routing`,
-`get_routing_job`, and `cancel_routing_job` tools remain deferred to the planned routing-service
-contract. Route-candidate apply is implemented and documented above; placement apply is not.
+The routing-job surface now composes four bounded SQLite tables behind a protocol-independent
+repository: lifecycle metadata, a normalized request envelope, a redacted candidate manifest, and
+an explicit geometry export. `start_routing` accepts only the current file-backed two-signal-layer
+request, stores it before dispatching a single local worker, and returns a deterministic job ID as
+an idempotency key rather than as authorization. `get_routing_job`, `cancel_routing_job`, and
+`export_routing_candidate` require the same caller-context digest; unknown, expired, and wrong-
+context records share an unavailable error. Requests are deep-frozen, bounded, and reject board
+bytes, prompts, credentials, DRC findings, and token-like fields. Candidate bytes are content-
+addressed, TTL/capacity bounded, and separately disclosed only by the export tool. The worker
+rechecks the source and Board IR CAS values before routing and publishes the manifest/export before
+the lifecycle CAS completion; an orphaned export is harmless and expires with the repository.
+
+This is an ordinary MCP job API, not a claim of MCP Tasks compatibility. The current Tasks extension
+(`io.modelcontextprotocol/tasks`) requires per-request capability negotiation, durable creation
+before returning a task handle, and a polymorphic result (`tasks/get`, `tasks/update`, and
+`tasks/cancel`). CopperMCP will add that adapter only after a pinned client matrix and task-handle
+authorization contract. Route-candidate apply is implemented and documented above; placement apply
+is not.
 
 `apply_candidate` is the only tool that changes a board, and it applies **route patches only**.
 It takes `board`, the `candidate` manifest from a preview, an `apply_token`,
