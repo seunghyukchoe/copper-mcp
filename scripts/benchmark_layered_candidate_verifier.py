@@ -144,13 +144,24 @@ def _run(repetitions: int) -> dict[str, Any]:
     first_path = candidate.patch.paths[0]
     first_start = first_path.vertices[0]
     first_end = first_path.vertices[-1]
-    midpoint = type(first_start)(first_start.x + 1_000, first_start.y)
+    loop_top_end = type(first_end)(first_end.x, first_end.y + 1_000)
+    loop_top_start = type(first_start)(first_start.x, first_start.y + 1_000)
     duplicate = _restamp(
         candidate,
         patch=replace(
             candidate.patch,
             paths=(
-                replace(first_path, vertices=(first_start, midpoint, first_start, first_end)),
+                replace(
+                    first_path,
+                    vertices=(
+                        first_start,
+                        first_end,
+                        loop_top_end,
+                        loop_top_start,
+                        first_start,
+                        first_end,
+                    ),
+                ),
                 *candidate.patch.paths[1:],
             ),
         ),
