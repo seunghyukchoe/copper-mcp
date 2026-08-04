@@ -94,6 +94,7 @@ class McpServerTests(unittest.TestCase):
                 "observe_board_scene",
                 "observe_live_board_scene",
                 "preview_placement",
+                "preview_live_placement",
                 "preview_live_route",
                 "preview_route",
                 "render_circuit_schematic",
@@ -228,6 +229,31 @@ class McpServerTests(unittest.TestCase):
         self.assertIs(live_route.annotations.destructive_hint, False)
         self.assertIs(live_route.annotations.idempotent_hint, True)
         self.assertIs(live_route.annotations.open_world_hint, False)
+
+    def test_live_placement_advertises_closed_read_only_revision_bound_request(self) -> None:
+        tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
+        live_placement = tools["preview_live_placement"]
+        self.assertEqual(live_placement.input_schema["type"], "object")
+        self.assertIs(live_placement.input_schema["additionalProperties"], False)
+        request_schema = live_placement.input_schema["properties"]["request"]
+        self.assertIs(request_schema["additionalProperties"], False)
+        self.assertEqual(request_schema["properties"]["board"]["const"], "live")
+        self.assertEqual(
+            set(request_schema["required"]),
+            {
+                "board",
+                "constraints",
+                "subjects",
+                "expect_board_revision",
+                "expect_snapshot_digest",
+            },
+        )
+        self.assertNotIn("include_apply_token", request_schema["properties"])
+        assert live_placement.annotations is not None
+        self.assertIs(live_placement.annotations.read_only_hint, True)
+        self.assertIs(live_placement.annotations.destructive_hint, False)
+        self.assertIs(live_placement.annotations.idempotent_hint, True)
+        self.assertIs(live_placement.annotations.open_world_hint, False)
 
     def test_render_tool_declares_structured_content_and_security_annotations(self) -> None:
         tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}

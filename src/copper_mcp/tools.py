@@ -19,6 +19,8 @@ from copper_mcp.kicad_cli import run_board_drc as run_kicad_board_drc
 from copper_mcp.kicad_file import inspect_kicad_board
 from copper_mcp.kicad_ipc import inspect_live_board as inspect_live_kicad_board
 from copper_mcp.models import candidate_from_dict, rank_candidates
+from copper_mcp.placement.contracts import PlacementResult
+from copper_mcp.placement_preview import preview_live_placement as preview_live_placement_service
 from copper_mcp.placement_preview import preview_placement as preview_placement_service
 from copper_mcp.route_preview import RoutePreview
 from copper_mcp.route_preview import preview_live_route as preview_live_route_candidate
@@ -49,6 +51,7 @@ def server_info() -> dict[str, Any]:
             "read-only live KiCad IPC board observation (optional kicad-python)",
             "revision-bound live KiCad IPC Circuit Scene observation (read-only)",
             "revision-bound live KiCad IPC route proposal (read-only)",
+            "revision-bound live KiCad IPC placement proposal (read-only)",
         ],
         "planned": [
             "region-scoped and human-facing board rendering",
@@ -176,6 +179,30 @@ def preview_placement(payload: dict[str, Any], settings: Settings | None = None)
 
     active_settings = settings or Settings.from_env()
     return preview_placement_service(payload, active_settings).to_dict()
+
+
+def preview_live_placement_raw(
+    payload: dict[str, Any],
+    settings: Settings | None = None,
+    *,
+    client_factory: Any = None,
+) -> PlacementResult:
+    """Propose one placement against the exact active KiCad IPC snapshot."""
+
+    active_settings = settings or Settings.from_env()
+    return preview_live_placement_service(
+        payload,
+        active_settings,
+        client_factory=client_factory,
+    )
+
+
+def preview_live_placement(
+    payload: dict[str, Any], settings: Settings | None = None
+) -> dict[str, Any]:
+    """Return a detached revision-bound live placement proposal."""
+
+    return preview_live_placement_raw(payload, settings).to_dict()
 
 
 def apply_candidate(

@@ -32,6 +32,7 @@ from copper_mcp.mcp_contracts import (
     CircuitSchematicToolResponse,
     LiveBoardObservationToolResponse,
     LiveCircuitSceneToolRequest,
+    LivePlacementToolRequest,
     LiveRoutePreviewToolRequest,
     PlacementPreviewToolResponse,
     RoutePreviewToolRequest,
@@ -55,6 +56,7 @@ from copper_mcp.tools import inspect_board_ir as inspect_board_ir_service
 from copper_mcp.tools import inspect_live_board as inspect_live_board_service
 from copper_mcp.tools import observe_board_scene_raw as observe_board_scene_service_raw
 from copper_mcp.tools import observe_live_board_scene_raw as observe_live_board_scene_service_raw
+from copper_mcp.tools import preview_live_placement_raw as preview_live_placement_service_raw
 from copper_mcp.tools import preview_live_route_raw as preview_live_route_service_raw
 from copper_mcp.tools import preview_placement as preview_placement_service
 from copper_mcp.tools import preview_route as preview_route_service
@@ -86,6 +88,7 @@ class CopperMCPServer(MCPServer[None]):
                 "preview_live_route",
                 "render_circuit_schematic",
                 "observe_live_board_scene",
+                "preview_live_placement",
             }:
                 result.append(tool)
                 continue
@@ -110,6 +113,8 @@ class CopperMCPServer(MCPServer[None]):
             raise ToolError("live route tool arguments are malformed")
         if name == "observe_live_board_scene" and set(arguments) != {"request"}:
             raise ToolError("live scene tool arguments are malformed")
+        if name == "preview_live_placement" and set(arguments) != {"request"}:
+            raise ToolError("live placement tool arguments are malformed")
         return await super().call_tool(name, arguments, context)
 
 
@@ -245,6 +250,28 @@ def preview_live_route(request: LiveRoutePreviewToolRequest) -> RoutePreviewTool
 
     return RoutePreviewToolResponse.model_validate(
         preview_live_route_service_raw(request, _SETTINGS).to_dict()
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def preview_live_placement(request: LivePlacementToolRequest) -> PlacementPreviewToolResponse:
+    """Preview a ref-anchored placement against the active KiCad snapshot without mutation.
+
+    The request must use ``board: 'live'`` plus both digests copied from a live Circuit Scene.
+    The exact IPC serialization is converted through Board IR and the deterministic placement
+    legalizer; KiCad writes, DRC, fill, apply tokens, and raw source are deliberately absent.
+    """
+
+    return PlacementPreviewToolResponse.model_validate(
+        preview_live_placement_service_raw(request, _SETTINGS).to_dict()
     )
 
 

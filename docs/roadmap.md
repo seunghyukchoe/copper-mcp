@@ -33,8 +33,10 @@ documentation, ledger updates, and benchmark evidence.
 - [~] Live KiCad IPC snapshot to Circuit Scene and route-proposal binding. `observe_live_board_scene`
   converts the exact captured IPC serialization through Board IR, and `preview_live_route` now
   returns a deterministic read-only candidate from a scene `net_ref_id` with both stale-session
-  digests. A real running-editor oracle and live action compare-and-swap before placement or
-  routing remain open because the workstation IPC server is disabled.
+  digests. `preview_live_placement` now reuses the same exact snapshot → Board IR → legalizer
+  path for a ref-anchored, read-only placement candidate. A real running-editor oracle and live
+  action compare-and-swap before placement or routing remain open because the workstation IPC
+  server is disabled.
 - [x] Canonical Board IR v0.2 contract with integer units, typed constraints, strict codecs,
   content digests, first-class footprint pose/side/lock/pad ownership, and bounded rectangular
   courtyard rings. The immutable v0.1 schema remains as legacy compatibility evidence.
@@ -137,7 +139,9 @@ and the policy-plugin work.
 - [x] Typed placement-intent contract and immutable placement preview/candidates. The seven-rule
   intent language, the revision-bound Board IR footprint view, the deterministic legalizer, the
   dual-digest-bound `PlacementCandidate` and the `preview_placement` MCP tool and CLI command are
-  implemented. A locked footprint cannot be moved. Nothing applies a placement.
+  implemented. A locked footprint cannot be moved. `preview_live_placement` adds the same
+  candidate-only pipeline over a byte-confirmed active KiCad snapshot; it requires both scene
+  digests and never writes or grants apply authority. Nothing applies a placement.
 - [ ] Authoritative KiCad DRC binding for placement candidates. Deferred deliberately: a
   footprint-move serializer would still have to rewrite properties, text, fabrication graphics,
   library identity, and 3D-model pose that Board IR cannot verify, so the route patch's equality

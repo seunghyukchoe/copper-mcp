@@ -20,6 +20,7 @@
 | `inspect_live_board` | None | Optional `kicad-python` IPC observation of the first open PCB; returns only numeric versions, a SHA-256 digest, byte count, and bounded object counts. |
 | `observe_board_scene` | None, or a process-local render artifact when `include_render` is set | Bounded, region-scoped semantic scene of one board, with board text quarantined. |
 | `observe_live_board_scene` | None | Bounded Circuit Scene `0.2.0` from the active KiCad IPC document; uses `board: "live"` and optional stale-digest compare values. |
+| `preview_live_placement` | None | Revision-bound, ref-anchored placement proposal over one active KiCad IPC snapshot; never writes, runs DRC, or grants apply authority. |
 | `apply_candidate` | **Replaces the board file**; disabled by default | The only mutating tool. Requires an operator flag and a single-use token. Route patches only. |
 | `preview_placement` | None | Deterministic legality preview for a proposed footprint placement. Never applies, and carries no DRC evidence. |
 | `preview_route` | None, or a temporary report when `include_drc` is set | Bounded, non-mutating two-pin route proposal on the documented Board IR subset. |
@@ -146,6 +147,17 @@ bounds that disclosure. `include_render` is the one asymmetry: render bytes are 
 through the process-local capability store, which a stateless HTTP deployment cannot resolve,
 so that flag alone is refused off stdio while the semantic scene stays available everywhere. Its handler returns a closed contract, so it advertises a real `outputSchema`
 and returns populated `structuredContent`.
+
+`preview_live_placement` takes the same ref-anchored rules and proposals as the file-backed
+placement preview, but requires the literal `board: "live"`, scene footprint/pad references, and
+both `expect_board_revision` and `expect_snapshot_digest` values copied from the live scene. It
+captures one byte-confirmed KiCad IPC serialization and reuses the exact Board IR 0.2 snapshot,
+placement view, and deterministic legalizer. A board mismatch is refused before conversion; a
+snapshot mismatch is refused before placement-view/legalizer work. The output uses
+`board_path: "live"` only as a label and carries no source bytes, socket/token, DRC, fill,
+apply-token, or editor-write authority. The fake-client B-014 oracle covers candidate equality
+with the file-backed path, deterministic replay, stale preconditions, and zero mutating calls;
+it does not claim success against a running KiCad GUI session.
 
 `preview_placement` takes one request object with a workspace-relative `board`, integer
 `constraints`, and `subjects` - the footprint references a proposal may move - plus optional

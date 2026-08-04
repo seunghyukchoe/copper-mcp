@@ -17,6 +17,7 @@ from typing import Any
 from copper_mcp.adapters import parse_kicad_bytes
 from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
+from copper_mcp.kicad_ipc import capture_live_board
 from copper_mcp.placement import build_placement_view, evaluate_placement
 from copper_mcp.placement.contracts import (
     PLACEMENT_VERSION,
@@ -51,6 +52,18 @@ def preview_placement(payload: Any, settings: Settings) -> PlacementResult:
     relative_path = board.path.relative_to(workspace_root).as_posix()
     source = board.content
     board_revision = f"sha256:{hashlib.sha256(source).hexdigest()}"
+
+    return _preview_placement_source(intent, source, relative_path, board_revision, settings)
+
+
+def _preview_placement_source(
+    intent: Any,
+    source: bytes,
+    relative_path: str,
+    board_revision: str,
+    settings: Settings,
+) -> PlacementResult:
+    """Run the deterministic placement pipeline over one already-bound source."""
 
     default_limits = ParseLimits()
     limits = replace(
@@ -100,4 +113,69 @@ def preview_placement(payload: Any, settings: Settings) -> PlacementResult:
     )
 
 
-__all__ = ["PLACEMENT_VERSION", "preview_placement"]
+def preview_live_placement(
+    payload: Any,
+    settings: Settings,
+    *,
+    client_factory: Any = None,
+) -> PlacementResult:
+    """Preview a placement against one exact, read-only KiCad IPC snapshot.
+
+    The IPC adapter is the only live boundary. Once its byte-confirmed snapshot is captured,
+    the same Board IR and legalizer used by the file-backed tool produce the candidate. No
+    editor mutation, DRC, fill, apply token, or raw board source is exposed.
+    """
+
+    if not isinstance(settings, Settings):
+        raise PlacementError("placement settings are malformed")
+    intent = parse_placement_intent(
+        payload,
+        max_subjects=settings.max_placement_subjects,
+        max_rules=settings.max_placement_rules,
+        allow_live=True,
+        require_revisions=True,
+    )
+    if intent.board != "live":
+        raise PlacementError("live placement requests must set board to 'live'")
+
+    captured = capture_live_board(settings, client_factory=client_factory)
+    board_revision = captured.observation.board_digest
+    if intent.expect_board_revision != board_revision:
+        return PlacementResult(
+            status="refused",
+            board_revision=board_revision,
+            board_path="live",
+            request=intent,
+            diagnostic=PlacementDiagnostic(
+                code=PlacementFailureCode.STALE_REVISION,
+                message="live board revision is stale",
+            ),
+        )
+
+    result = _preview_placement_source(
+        intent,
+        captured.source,
+        "live",
+        board_revision,
+        settings,
+    )
+    if (
+        intent.expect_snapshot_digest is not None
+        and result.snapshot_digest is not None
+        and intent.expect_snapshot_digest != result.snapshot_digest
+    ):
+        return PlacementResult(
+            status="refused",
+            board_revision=board_revision,
+            board_path="live",
+            request=intent,
+            snapshot_digest=result.snapshot_digest,
+            diagnostic=PlacementDiagnostic(
+                code=PlacementFailureCode.STALE_REVISION,
+                message="live Board IR snapshot is stale",
+            ),
+        )
+    return result
+
+
+__all__ = ["PLACEMENT_VERSION", "preview_live_placement", "preview_placement"]

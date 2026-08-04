@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
@@ -41,6 +42,7 @@ PLACEMENT_VERSION = "0.1.0"
 #: cannot be mistaken for this one.
 ORDERING_POLICY = "validate-snap-v1"
 EMPTY_DIGEST = f"sha256:{'0' * 64}"
+_SHA256_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 MAX_REF_CHARACTERS = 200
 MAX_DIMENSION_NM = 1_000_000_000
@@ -240,6 +242,8 @@ class PlacementIntent:
     rules: tuple[PlacementRule, ...]
     proposals: tuple[PlacementProposal, ...]
     placement_grid_nm: int = 1_000
+    expect_board_revision: str | None = None
+    expect_snapshot_digest: str | None = None
 
     def profile(self) -> KiCadConstraintProfile:
         """The constraint profile this intent's board must be converted under."""
@@ -261,6 +265,8 @@ class PlacementIntent:
                 field_name: getattr(self.constraints, field_name)
                 for field_name in CONSTRAINT_FIELDS
             },
+            "expect_board_revision": self.expect_board_revision,
+            "expect_snapshot_digest": self.expect_snapshot_digest,
         }
 
     def __post_init__(self) -> None:
@@ -270,6 +276,12 @@ class PlacementIntent:
             raise PlacementError("placement subjects must be distinct")
         if self.placement_grid_nm < 1:
             raise PlacementError("a placement grid must be positive")
+        for name, revision in (
+            ("expect_board_revision", self.expect_board_revision),
+            ("expect_snapshot_digest", self.expect_snapshot_digest),
+        ):
+            if revision is not None and _SHA256_DIGEST.fullmatch(revision) is None:
+                raise PlacementError(f"{name} must be content-addressed with sha256")
         moved = [proposal.subject for proposal in self.proposals]
         if len(set(moved)) != len(moved):
             raise PlacementError("a subject may be proposed at most once")
@@ -283,7 +295,13 @@ class PlacementIntent:
 # --- request parsing --------------------------------------------------------------------
 
 _REQUIRED_FIELDS = ("board", "constraints", "subjects")
-_OPTIONAL_FIELDS = ("rules", "proposals", "placement_grid_nm")
+_OPTIONAL_FIELDS = (
+    "rules",
+    "proposals",
+    "placement_grid_nm",
+    "expect_board_revision",
+    "expect_snapshot_digest",
+)
 
 
 def _ref(name: str, value: Any) -> str:
@@ -446,7 +464,12 @@ def _parse_proposal(index: int, payload: Any) -> PlacementProposal:
 
 
 def parse_placement_intent(
-    payload: Any, *, max_subjects: int = 64, max_rules: int = 256
+    payload: Any,
+    *,
+    max_subjects: int = 64,
+    max_rules: int = 256,
+    allow_live: bool = False,
+    require_revisions: bool = False,
 ) -> PlacementIntent:
     """Validate one untrusted placement request without echoing unvalidated input."""
 
@@ -457,8 +480,29 @@ def parse_placement_intent(
         subjects = _sequence("subjects", fields["subjects"], maximum=max_subjects)
         rules = _sequence("rules", fields.get("rules", []), maximum=max_rules)
         proposals = _sequence("proposals", fields.get("proposals", []), maximum=max_subjects)
+        board_value = fields["board"]
+        if allow_live and board_value == "live":
+            board = "live"
+        else:
+            board = board_path(board_value)
+        expected_board_revision = fields.get("expect_board_revision")
+        expected_snapshot_digest = fields.get("expect_snapshot_digest")
+        if require_revisions and (
+            expected_board_revision is None or expected_snapshot_digest is None
+        ):
+            raise PlacementError(
+                "live placement requires board and snapshot revision preconditions"
+            )
+        if expected_board_revision is not None:
+            expected_board_revision = text(
+                "expect_board_revision", expected_board_revision, maximum=71
+            )
+        if expected_snapshot_digest is not None:
+            expected_snapshot_digest = text(
+                "expect_snapshot_digest", expected_snapshot_digest, maximum=71
+            )
         return PlacementIntent(
-            board=board_path(fields["board"]),
+            board=board,
             constraints=net_class_constraints(fields["constraints"]),
             subject_refs=tuple(_ref(f"subjects[{i}]", item) for i, item in enumerate(subjects)),
             rules=tuple(_parse_rule(i, item) for i, item in enumerate(rules)),
@@ -469,6 +513,8 @@ def parse_placement_intent(
                 minimum=1,
                 maximum=MAX_DIMENSION_NM,
             ),
+            expect_board_revision=expected_board_revision,
+            expect_snapshot_digest=expected_snapshot_digest,
         )
     except PlacementError:
         raise

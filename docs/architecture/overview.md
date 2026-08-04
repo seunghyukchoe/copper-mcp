@@ -105,6 +105,9 @@ authority, a policy solver, or an autonomous whole-board loop. `preview_live_rou
 read-only proposal edge over that exact snapshot: it accepts only a scene net reference and both
 digests, then returns the deterministic candidate without DRC, fill, apply-token issuance, or
 editor mutation. A live action compare-and-swap remains a separate future contract.
+`preview_live_placement` now adds the equivalent ref-anchored placement proposal edge over the
+same snapshot and deterministic legalizer, with both scene digests required and no editor-write
+authority. A live action compare-and-swap remains a separate future contract.
 
 Placement preview resolves its subjects from the same Board IR snapshot and refuses source bytes
 whose revision does not match. The current KiCad footprint subset is deliberately strict: front

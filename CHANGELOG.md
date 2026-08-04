@@ -8,6 +8,10 @@ All notable changes are documented here. The format follows
 
 ### Security
 
+- `preview_live_placement` is revision-bound and read-only: malformed requests fail before IPC,
+  stale board/snapshot digests stop before candidate work, and no KiCad write, DRC, fill,
+  apply-token, or raw source can be requested through the contract.
+
 - Live IPC-to-scene conversion now keeps the exact UTF-8 snapshot paired with its redacted digest
   and refuses a caller-supplied board or Board IR snapshot revision mismatch before returning a
   scene. The live tool uses the literal `board: "live"`, refuses render delivery, and does not
@@ -101,6 +105,10 @@ All notable changes are documented here. The format follows
 
 
 ### Added
+
+- `preview_live_placement`, a deterministic placement proposal over one byte-confirmed active
+  KiCad IPC snapshot. It reuses the file-backed legalizer and requires both Circuit Scene digests;
+  B-014 records fake-client equality, replay, stale-precondition, and zero-mutation evidence.
 
 - `preview_live_route`, a read-only MCP route-proposal tool that consumes a Circuit Scene
   `net_ref_id` plus both board/snapshot revisions, converts the exact active KiCad IPC snapshot,

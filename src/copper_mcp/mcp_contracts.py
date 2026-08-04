@@ -959,6 +959,76 @@ class PlacementRequestEchoContract(_ClosedContract):
     proposal_count: Annotated[int, Field(ge=0)]
     placement_grid_nm: Annotated[int, Field(ge=1)]
     constraints: dict[str, int]
+    expect_board_revision: Digest | None = None
+    expect_snapshot_digest: Digest | None = None
+
+
+class PlacementRuleInputContract(_ClosedContract):
+    """Closed, advisory shape for one of the seven placement rule forms.
+
+    The runtime parser remains the authority for per-kind required fields; keeping this
+    envelope closed prevents undocumented action flags or raw KiCad values from entering the
+    live tool schema.
+    """
+
+    kind: Literal[
+        "proximity",
+        "alignment",
+        "symmetry",
+        "edge",
+        "region",
+        "orientation",
+        "side",
+    ]
+    subject: RefId | None = None
+    target: RefId | None = None
+    max_distance_nm: NonNegativeInteger | None = None
+    axis: Literal["x", "y"] | None = None
+    members: Annotated[list[RefId], Field(max_length=64)] = Field(default_factory=list)
+    about: RefId | None = None
+    pairs: Annotated[list[list[RefId]], Field(max_length=64)] = Field(default_factory=list)
+    edge: Literal["north", "south", "east", "west"] | None = None
+    offset_nm: NonNegativeInteger | None = None
+    mode: Annotated[str, Field(max_length=16)] | None = None
+    boundary_ref: RefId | None = None
+    allowed: Annotated[list[NonNegativeInteger], Field(max_length=4)] = Field(default_factory=list)
+    side: Literal["front", "back"] | None = None
+    tolerance_nm: NonNegativeInteger | None = None
+
+
+class PlacementProposalInputContract(_ClosedContract):
+    """Closed ref-anchored placement proposal shape."""
+
+    subject: RefId
+    anchor: RefId | None = None
+    anchor_point: Literal["center", "north", "south", "east", "west"] = "center"
+    offset_x_nm: Nanometres = 0
+    offset_y_nm: Nanometres = 0
+    orientation_udeg: Literal[0, 90000000, 180000000, 270000000] | None = None
+    side: Literal["front", "back"] | None = None
+
+
+class LivePlacementRequestContract(_ClosedContract):
+    """Closed read-only placement proposal request for the active KiCad document."""
+
+    board: Literal["live"]
+    constraints: RouteConstraintsContract
+    subjects: Annotated[list[RefId], Field(min_length=1, max_length=64)]
+    rules: Annotated[list[PlacementRuleInputContract], Field(max_length=256)] = Field(
+        default_factory=list
+    )
+    proposals: Annotated[list[PlacementProposalInputContract], Field(max_length=64)] = Field(
+        default_factory=list
+    )
+    placement_grid_nm: PositiveNanometres = 1_000
+    expect_board_revision: Digest
+    expect_snapshot_digest: Digest
+
+
+LivePlacementToolRequest = Annotated[
+    Any,
+    WithJsonSchema(_inline_json_schema(LivePlacementRequestContract)),
+]
 
 
 class PlacementPreviewToolResponse(_ClosedContract):
@@ -1044,6 +1114,7 @@ __all__ = [
     "CircuitIntentToolContent",
     "CircuitSceneToolResponse",
     "CircuitSchematicToolResponse",
+    "LivePlacementToolRequest",
     "RoutePreviewToolRequest",
     "RoutePreviewToolResponse",
     "SceneRenderContract",

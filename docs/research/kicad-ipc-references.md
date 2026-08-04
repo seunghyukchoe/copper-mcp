@@ -69,6 +69,22 @@ The application boundary rejects DRC, zone refill, and apply-token flags before 
 candidate equality with the file-backed oracle, deterministic replay, stale-session refusal, and
 zero-call action preflight. This closes the observe-to-propose loop, not the live action loop.
 
+## Read-only placement proposal
+
+`preview_live_placement` is the next safe action edge. It accepts the same ref-anchored rules and
+proposals as the file-backed placement surface, but binds them to `board: "live"` and the two
+digests emitted by Circuit Scene. The service captures one exact serialization, converts that
+source through Board IR 0.2, builds the placement view from the same snapshot, and runs the
+existing deterministic legalizer. A stale board digest is refused before conversion; a stale
+snapshot digest is refused before placement projection. The response contains only a candidate or
+typed refusal and uses no KiCad write, DRC, fill, apply-token, selection, or raw-source API.
+
+This follows the official Board API boundary: `get_as_string()` is the complete board
+serialization, while `update_items()`, `push_commit()`, and `save()` are mutation APIs and are
+therefore deliberately outside this proposal contract. The fake-client B-014 oracle proves
+candidate equality with the file-backed placement oracle and zero mutating calls; a real GUI
+session, KiCad DRC, undo transaction, and placement apply remain unclaimed.
+
 ## Primary references
 
 - KiCad, “For Add-on Developers,” especially API limits, socket/token variables, plugin runtime,
@@ -79,6 +95,8 @@ zero-call action preflight. This closes the observe-to-propose loop, not the liv
 - Official plugin metadata schema: <https://gitlab.com/kicad/code/kicad/-/raw/master/api/schemas/api.v1.schema.json>
 - KiCad Python 0.7.1 package metadata (API build compatibility is checked at runtime):
   <https://pypi.org/project/kicad-python/>
+- Official Board API reference for `get_as_string`, `get_active_layer`, `get_selection`, and
+  mutation methods: <https://docs.kicad.org/kicad-python-main/board.html>
 
 ## Non-claims
 

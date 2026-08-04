@@ -23,7 +23,7 @@ from copper_mcp.cli import main
 from copper_mcp.config import Settings
 from copper_mcp.mcp_contracts import PlacementPreviewToolResponse
 from copper_mcp.placement.contracts import PlacementError
-from copper_mcp.placement_preview import preview_placement
+from copper_mcp.placement_preview import preview_live_placement, preview_placement
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "placement-v0.1"
@@ -182,6 +182,127 @@ class HostileRequestTests(unittest.TestCase):
                 _settings(),
             )
         self.assertNotIn(secret, str(caught.exception))
+
+
+class LivePlacementTests(unittest.TestCase):
+    """The live bridge must equal the file oracle without touching the editor."""
+
+    class _Version:
+        major = 10
+        minor = 0
+        patch = 5
+
+    class _Board:
+        def __init__(self, source: str) -> None:
+            self.source = source
+            self.reads = 0
+
+        def get_as_string(self) -> str:
+            self.reads += 1
+            return self.source
+
+        def __getattr__(self, name: str) -> Any:
+            if name in {
+                "save",
+                "save_as",
+                "move",
+                "set_position",
+                "update_items",
+                "begin_commit",
+                "push_commit",
+                "refill_zones",
+            }:
+                raise AssertionError(f"live placement called forbidden mutator: {name}")
+            raise AttributeError(name)
+
+    class _Client:
+        def __init__(self, board: Any) -> None:
+            self.board = board
+
+        def get_version(self) -> Any:
+            return LivePlacementTests._Version()
+
+        def get_api_version(self) -> Any:
+            return LivePlacementTests._Version()
+
+        def check_version(self) -> bool:
+            return True
+
+        def get_board(self) -> Any:
+            return self.board
+
+    def _live(self, board: str = "placement-legal.kicad_pcb") -> tuple[dict[str, Any], Any]:
+        source = (FIXTURES / board).read_text(encoding="utf-8")
+        proposal = [
+            {
+                "subject": SUBJECTS[0],
+                "offset_x_nm": 1_234_567,
+                "offset_y_nm": 0,
+            }
+        ]
+        file_document = _preview(board, proposals=proposal)
+        assert file_document["snapshot_digest"] is not None
+        request = _request(
+            "live",
+            expect_board_revision=file_document["board_revision"],
+            expect_snapshot_digest=file_document["snapshot_digest"],
+            proposals=proposal,
+        )
+        board_object = self._Board(source)
+
+        def factory(**_: Any) -> Any:
+            return self._Client(board_object)
+
+        return request, (factory, file_document, board_object)
+
+    def test_live_candidate_matches_the_file_oracle_and_is_read_only(self) -> None:
+        request, (factory, file_document, board_object) = self._live()
+        live = preview_live_placement(request, _settings(), client_factory=factory).to_dict()
+        self.assertEqual(live["status"], file_document["status"])
+        self.assertEqual(live["candidate"], file_document["candidate"])
+        self.assertEqual(live["board_revision"], file_document["board_revision"])
+        self.assertEqual(live["snapshot_digest"], file_document["snapshot_digest"])
+        self.assertEqual(live["board_path"], "live")
+        self.assertEqual(board_object.reads, 2)
+        self.assertNotIn("kicad_pcb", repr(live))
+
+    def test_stale_board_revision_refuses_after_capture_before_conversion(self) -> None:
+        request, (factory, _, board_object) = self._live()
+        request["expect_board_revision"] = "sha256:" + "0" * 64
+        result = preview_live_placement(request, _settings(), client_factory=factory).to_dict()
+        self.assertEqual(result["diagnostic"]["code"], "stale_revision")
+        self.assertIsNone(result["snapshot_digest"])
+        self.assertEqual(board_object.reads, 2)
+
+    def test_stale_snapshot_digest_refuses_before_placement_view(self) -> None:
+        request, (factory, _, _board_object) = self._live()
+        request["expect_snapshot_digest"] = "sha256:" + "1" * 64
+        result = preview_live_placement(request, _settings(), client_factory=factory).to_dict()
+        self.assertEqual(result["diagnostic"]["code"], "stale_revision")
+        self.assertIsNotNone(result["snapshot_digest"])
+        self.assertIsNone(result["candidate"])
+
+    def test_unknown_action_field_is_rejected_before_ipc(self) -> None:
+        request, (factory, _, board_object) = self._live()
+        request["include_apply_token"] = True
+        with self.assertRaises(PlacementError):
+            preview_live_placement(request, _settings(), client_factory=factory)
+        self.assertEqual(board_object.reads, 0)
+
+    def test_live_result_survives_the_actual_mcp_boundary(self) -> None:
+        request, (factory, _, _) = self._live()
+        service_result = preview_live_placement(request, _settings(), client_factory=factory)
+        with patch.object(
+            _server, "preview_live_placement_service_raw", return_value=service_result
+        ):
+            with patch.object(_server, "_SETTINGS", _settings()):
+                result = asyncio.run(
+                    _server.mcp.call_tool("preview_live_placement", {"request": request})
+                )
+        self.assertFalse(result.is_error)
+        assert result.structured_content is not None
+        self.assertEqual(result.structured_content["board_path"], "live")
+        PlacementPreviewToolResponse.model_validate(result.structured_content)
 
     def test_an_unresolved_subject_is_a_typed_refusal_not_an_exception(self) -> None:
         document = _preview(
