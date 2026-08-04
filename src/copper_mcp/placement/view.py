@@ -56,10 +56,17 @@ class PlacementView:
     footprints: Mapping[str, FootprintView]
     #: Reverse index, so a rule naming a pad can be resolved to the footprint that owns it.
     owner_by_pad: Mapping[str, str] = field(default_factory=dict)
+    #: Footprints that exist in Board IR but own no copper pad, so this version cannot place
+    #: them. They are kept out of ``footprints`` because a ``FootprintView`` is by definition
+    #: placeable - it must have a pad hull to evaluate rules against - but their identity is
+    #: retained so a caller naming one is told it cannot be placed rather than that it does not
+    #: exist. The second answer would be false: Board IR carries it and the scene reports it.
+    padless_refs: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "footprints", MappingProxyType(dict(self.footprints)))
         object.__setattr__(self, "owner_by_pad", MappingProxyType(dict(self.owner_by_pad)))
+        object.__setattr__(self, "padless_refs", frozenset(self.padless_refs))
 
     def resolve(self, ref_id: str) -> FootprintView | None:
         """Resolve a footprint reference, or the footprint owning a pad reference."""
@@ -69,6 +76,11 @@ class PlacementView:
             return direct
         owner = self.owner_by_pad.get(ref_id)
         return None if owner is None else self.footprints.get(owner)
+
+    def is_padless(self, ref_id: str) -> bool:
+        """Whether a reference names a real footprint this version cannot place."""
+
+        return ref_id in self.padless_refs
 
 
 def build_placement_view(
@@ -100,6 +112,7 @@ def build_placement_view(
     pads_by_id: dict[str, Pad] = {pad.id: pad for pad in snapshot.content.pads}
     owner_by_pad: dict[str, str] = {}
     footprints: dict[str, FootprintView] = {}
+    padless_refs: set[str] = set()
 
     for footprint in snapshot.content.footprints:
         hull: Rect | None = None
@@ -117,7 +130,9 @@ def build_placement_view(
 
         if not footprint.pad_ids or hull is None:
             # A graphics-only footprint is faithfully present in Board IR, but this placement
-            # version has no copper hull with which to evaluate its legacy pad-based rules.
+            # version has no copper hull with which to evaluate its pad-based rules. Its
+            # identity is kept so naming it is refused as unplaceable rather than as unknown.
+            padless_refs.add(footprint.id)
             continue
         footprints[footprint.id] = FootprintView(
             ref_id=footprint.id,
@@ -139,6 +154,7 @@ def build_placement_view(
         snapshot_digest=snapshot.snapshot_digest,
         footprints=footprints,
         owner_by_pad=owner_by_pad,
+        padless_refs=frozenset(padless_refs),
     )
 
 

@@ -65,6 +65,20 @@ class _UnresolvedError(RuntimeError):
     """Raised when a rule names something the board does not contain."""
 
 
+def _reject_padless(view: PlacementView, ref: str) -> None:
+    """Refuse a reference that names a real footprint carrying no copper pad.
+
+    Board IR v0.2 keeps graphics-only footprints and the scene reports them, so telling a
+    caller such a reference "does not exist" would be a false statement about their board. The
+    honest answer is that it exists and this version cannot place it.
+    """
+
+    if view.is_padless(ref):
+        raise _UnsupportedError(
+            "a placement subject owns no copper pad, so it cannot be placed in v0.1"
+        )
+
+
 class _UnsupportedError(RuntimeError):
     """Raised when the geometry is outside what this version models."""
 
@@ -135,6 +149,7 @@ def _place(
     proposals = {proposal.subject: proposal for proposal in intent.proposals}
     for ref in (*intent.subject_refs, *proposals):
         if view.resolve(ref) is None:
+            _reject_padless(view, ref)
             raise _UnresolvedError("a placement subject does not exist on this board")
 
     placed: list[_PlacedFootprint] = []
@@ -149,6 +164,7 @@ def _place(
                 raise _UnsupportedError("moving a locked footprint is not authorized")
             anchor = footprint if proposal.anchor is None else view.resolve(proposal.anchor)
             if anchor is None:
+                _reject_padless(view, proposal.anchor or "")
                 raise _UnresolvedError("a proposal anchors to an object that does not exist")
             base = _anchor_point(anchor.hull, proposal.anchor_point)
             origin = PointNM(
@@ -336,6 +352,7 @@ def _resolve_bounds(
             for pad in parent.pads:
                 if pad.pad.id == ref:
                     return pad.bounds
+    _reject_padless(view, ref)
     raise _UnresolvedError("a rule names an object that does not exist on this board")
 
 
@@ -408,11 +425,13 @@ def _evaluate_rule(
     elif isinstance(rule, OrientationRule):
         footprint = placed_by_ref.get(rule.subject)
         if footprint is None:
+            _reject_padless(view, rule.subject)
             raise _UnresolvedError("an orientation rule names an object that is not a footprint")
         residual = 0 if footprint.orientation_udeg in rule.allowed else 1
     elif isinstance(rule, SideRule):
         footprint = placed_by_ref.get(rule.subject)
         if footprint is None:
+            _reject_padless(view, rule.subject)
             raise _UnresolvedError("a side rule names an object that is not a footprint")
         residual = 0 if footprint.side == rule.side else 1
     else:  # pragma: no cover - the union is exhaustive

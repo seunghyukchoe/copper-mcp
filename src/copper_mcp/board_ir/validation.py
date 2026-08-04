@@ -16,6 +16,44 @@ _SCHEMA_MAX_RING_POINTS = 100_000
 _SCHEMA_MAX_COURTYARDS_PER_FOOTPRINT = 64
 
 
+def _require_rectangular_courtyard(ring: Ring, locator: str) -> None:
+    """Reject any courtyard that is not an axis-aligned rectangle.
+
+    Board IR 0.2 promises rectangular courtyard rings, and the KiCad adapter honours that by
+    importing only ``fp_rect`` primitives: it emits exactly four corners and transforms them by
+    a quarter turn, which keeps the result axis-aligned. Validation has to enforce the same
+    shape, or externally-produced JSON could carry a triangle or an arbitrary simple polygon
+    that decodes and digest-verifies while no adapter could ever have produced it - the codec
+    path and the adapter path would then disagree about what a courtyard is.
+
+    The message names the contract rather than echoing the offending geometry.
+    """
+
+    points = ring.points
+    if len(points) != 4:
+        raise BoardIRValidationError(
+            "unsupported.topology",
+            "Board IR v0.2 courtyards must be rectangles with exactly four corners",
+            locator,
+        )
+    if len({point.x for point in points}) != 2 or len({point.y for point in points}) != 2:
+        raise BoardIRValidationError(
+            "unsupported.topology",
+            "Board IR v0.2 courtyards must be axis-aligned rectangles",
+            locator,
+        )
+    for index, start in enumerate(points):
+        end = points[(index + 1) % 4]
+        # Exactly one coordinate changes along an axis-aligned edge. A diagonal edge, or a
+        # repeated corner, fails this and so cannot masquerade as a rectangle.
+        if (start.x == end.x) == (start.y == end.y):
+            raise BoardIRValidationError(
+                "unsupported.topology",
+                "Board IR v0.2 courtyard edges must be axis-aligned",
+                locator,
+            )
+
+
 @dataclass(frozen=True, slots=True)
 class BoardIRValidationError(ValueError):
     """A stable validation failure suitable for an adapter diagnostic."""
@@ -268,11 +306,11 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
         )
     rings.extend((f"{zone.id}.boundary", zone.boundary) for zone in content.zones)
     rings.extend((f"{keepout.id}.boundary", keepout.boundary) for keepout in content.keepouts)
-    rings.extend(
-        (f"{footprint.id}.courtyards[{index}]", courtyard)
-        for footprint in content.footprints
-        for index, courtyard in enumerate(footprint.courtyards)
-    )
+    for footprint in content.footprints:
+        for index, courtyard in enumerate(footprint.courtyards):
+            locator = f"{footprint.id}.courtyards[{index}]"
+            _require_rectangular_courtyard(courtyard, locator)
+            rings.append((locator, courtyard))
     total_vertices = sum(len(ring.points) for _, ring in rings)
     if total_vertices > limits.max_total_vertices:
         raise BoardIRValidationError("budget.exceeded", "total vertex budget exceeded")

@@ -44,6 +44,10 @@ ROTATION_BOARD = ROOT / "tests" / "fixtures" / "board-ir-v0.1" / "footprint-rota
 FOOTPRINT_V02_BOARD = (
     ROOT / "tests" / "fixtures" / "board-ir-v0.2" / "footprint-pose-courtyard.kicad_pcb"
 )
+PADLESS_BOARD = ROOT / "tests" / "fixtures" / "board-ir-v0.2" / "padless-footprint.kicad_pcb"
+#: The graphics-only footprint in ``PADLESS_BOARD``: real in Board IR, reported by the scene,
+#: but owning no copper pad.
+PADLESS_REF = "footprint:kicad:93000000-0000-0000-0000-000000000011"
 COPPERTONE = ROOT / "hardware" / "coppertone-buffer" / "coppertone-buffer.kicad_pcb"
 REAL_KICAD_CLI = Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli")
 
@@ -200,6 +204,110 @@ class FootprintV02PlacementRegressionTests(unittest.TestCase):
         assert result.diagnostic is not None
         self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
         self.assertEqual(result.diagnostic.message, "moving a locked footprint is not authorized")
+
+
+class PadlessFootprintTests(unittest.TestCase):
+    """A footprint with no copper pads exists; refusing it must not deny that.
+
+    Board IR v0.2 keeps graphics-only footprints and the scene reports them, so answering
+    ``unresolved_ref`` - "does not exist on this board" - would be a false statement about the
+    caller's board. The honest answer is that it exists and this version cannot place it.
+    """
+
+    def test_the_view_records_a_padless_footprint_instead_of_forgetting_it(self) -> None:
+        _, snapshot, view = _board(PADLESS_BOARD)
+
+        board_ir_refs = {footprint.id for footprint in snapshot.content.footprints}
+        self.assertIn(PADLESS_REF, board_ir_refs, "the fixture must carry a padless footprint")
+        # It is not placeable, so it is deliberately absent from the placeable mapping...
+        self.assertNotIn(PADLESS_REF, view.footprints)
+        self.assertIsNone(view.resolve(PADLESS_REF))
+        # ...but its identity survives, which is what lets the refusal be truthful.
+        self.assertTrue(view.is_padless(PADLESS_REF))
+        self.assertFalse(view.is_padless("footprint:kicad:not-on-this-board"))
+
+    def test_naming_a_padless_subject_is_refused_as_unplaceable_not_as_unknown(self) -> None:
+        _, snapshot, view = _board(PADLESS_BOARD)
+
+        result = evaluate_placement(
+            _intent(view, PADLESS_BOARD.name, subjects=[PADLESS_REF]), snapshot, view
+        )
+
+        self.assertEqual(result.status, "refused")
+        assert result.diagnostic is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+        self.assertIn("no copper pad", result.diagnostic.message)
+        self.assertNotIn("does not exist", result.diagnostic.message)
+
+    def test_a_padless_anchor_and_rule_subject_are_refused_the_same_way(self) -> None:
+        _, snapshot, view = _board(PADLESS_BOARD)
+        placeable = sorted(view.footprints)[0]
+
+        anchored = evaluate_placement(
+            _intent(
+                view,
+                PADLESS_BOARD.name,
+                subjects=[placeable],
+                proposals=[{"subject": placeable, "anchor": PADLESS_REF, "offset_x_nm": 0}],
+            ),
+            snapshot,
+            view,
+        )
+        assert anchored.diagnostic is not None
+        self.assertEqual(anchored.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+        self.assertIn("no copper pad", anchored.diagnostic.message)
+
+        ruled = evaluate_placement(
+            _intent(
+                view,
+                PADLESS_BOARD.name,
+                subjects=[placeable],
+                rules=[
+                    {
+                        "kind": "alignment",
+                        "axis": "x",
+                        "members": [placeable, PADLESS_REF],
+                    }
+                ],
+            ),
+            snapshot,
+            view,
+        )
+        assert ruled.diagnostic is not None
+        self.assertEqual(ruled.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+        self.assertIn("no copper pad", ruled.diagnostic.message)
+
+    def test_a_genuinely_absent_reference_is_still_unresolved(self) -> None:
+        """Guard the guard: the honest refusal must not swallow the real unknown-ref case."""
+
+        _, snapshot, view = _board(PADLESS_BOARD)
+
+        result = evaluate_placement(
+            _intent(
+                view,
+                PADLESS_BOARD.name,
+                subjects=["footprint:kicad:00000000-0000-0000-0000-00000000ffff"],
+            ),
+            snapshot,
+            view,
+        )
+
+        assert result.diagnostic is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNRESOLVED_REF)
+        self.assertIn("does not exist", result.diagnostic.message)
+
+    def test_the_padless_board_still_places_its_real_footprint(self) -> None:
+        """The padless footprint must not block placement of the rest of the board."""
+
+        _, snapshot, view = _board(PADLESS_BOARD)
+        placeable = sorted(view.footprints)[0]
+
+        result = evaluate_placement(
+            _intent(view, PADLESS_BOARD.name, subjects=[placeable]), snapshot, view
+        )
+
+        self.assertEqual(result.status, "previewed")
+        assert result.candidate is not None
 
 
 class RequestBoundaryTests(unittest.TestCase):

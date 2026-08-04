@@ -722,3 +722,83 @@ def test_geometry_package_has_no_mcp_gui_filesystem_or_adapter_imports() -> None
             for imported in imports
             for item in forbidden
         ), f"forbidden Board IR import in {source_path}: {sorted(imports)}"
+
+
+def test_board_ir_v0_2_rejects_non_rectangular_courtyards() -> None:
+    """Externally-produced Board IR must obey the same courtyard contract as the adapter.
+
+    The 0.2 contract promises rectangular courtyard rings, and the KiCad adapter enforces that
+    by importing only ``fp_rect`` primitives. Without the same check in validation, hand-written
+    or third-party JSON could carry a triangle or an arbitrary simple polygon that validates,
+    decodes and digest-verifies - so the codec path and the adapter path would disagree about
+    what a courtyard is.
+    """
+
+    content = sample_content()
+    footprint = content.footprints[0]
+
+    triangle = _ring(((1_000_000, 1_000_000), (7_000_000, 1_000_000), (4_000_000, 4_000_000)))
+    with pytest.raises(BoardIRValidationError) as triangle_error:
+        make_snapshot(
+            replace(
+                content,
+                footprints=(replace(footprint, courtyards=(triangle,)), *content.footprints[1:]),
+            )
+        )
+    assert triangle_error.value.code == "unsupported.topology"
+
+    # A four-vertex ring is not enough: the corners must form an axis-aligned rectangle.
+    skewed = _ring(
+        (
+            (1_000_000, 1_000_000),
+            (7_000_000, 1_500_000),
+            (7_000_000, 4_000_000),
+            (1_000_000, 4_000_000),
+        )
+    )
+    with pytest.raises(BoardIRValidationError) as skew_error:
+        make_snapshot(
+            replace(
+                content,
+                footprints=(replace(footprint, courtyards=(skewed,)), *content.footprints[1:]),
+            )
+        )
+    assert skew_error.value.code == "unsupported.topology"
+
+    # The refusal names the contract, never the caller's geometry.
+    for error in (triangle_error, skew_error):
+        assert "1000000" not in error.value.message
+
+
+def test_board_ir_v0_2_accepts_rectangular_courtyards_at_every_quarter_turn() -> None:
+    """Guard the guard: the rectangularity check must not reject legitimate rotated courtyards.
+
+    A quarter turn maps an axis-aligned rectangle onto another axis-aligned rectangle, which is
+    exactly what the adapter emits, so all four orientations must validate.
+    """
+
+    content = sample_content()
+    footprint = content.footprints[0]
+    corners = (
+        (1_000_000, 2_000_000),
+        (7_000_000, 2_000_000),
+        (7_000_000, 5_000_000),
+        (1_000_000, 5_000_000),
+    )
+
+    for turn in range(4):
+        rotated: list[tuple[int, int]] = []
+        for x, y in corners:
+            for _ in range(turn):
+                x, y = y, -x
+            rotated.append((x, y))
+        snapshot = make_snapshot(
+            replace(
+                content,
+                footprints=(
+                    replace(footprint, courtyards=(_ring(tuple(rotated)),)),
+                    *content.footprints[1:],
+                ),
+            )
+        )
+        assert decode_snapshot_json(encode_snapshot(snapshot)) == snapshot
