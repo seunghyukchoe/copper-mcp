@@ -36,6 +36,8 @@ import pytest
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.board_ir import (
     BoardIRSnapshot,
+    Footprint,
+    FootprintSide,
     Keepout,
     NetClass,
     Pad,
@@ -133,6 +135,19 @@ def transform_snapshot(
             copper_layers=content.copper_layers,
             nets=content.nets,
             constraints=content.constraints,
+            footprints=tuple(
+                replace(
+                    footprint,
+                    origin=transform(footprint.origin),
+                    rotation_udeg=_pad_rotation(
+                        footprint.rotation_udeg, added_udeg, orientation_preserving
+                    ),
+                    courtyards=tuple(
+                        _ring(courtyard, transform) for courtyard in footprint.courtyards
+                    ),
+                )
+                for footprint in content.footprints
+            ),
             pads=tuple(
                 replace(
                     pad,
@@ -223,6 +238,17 @@ def _board(
                 assignments=(
                     NetClassAssignment(net_id=NET_ID, net_class_id=net_class.id),
                     NetClassAssignment(net_id=OTHER_NET_ID, net_class_id=other.id),
+                ),
+            ),
+            footprints=(
+                Footprint(
+                    id="footprint:metamorphic-fixture",
+                    origin=PointNM(2_000, 2_500),
+                    rotation_udeg=90_000_000,
+                    side=FootprintSide.FRONT,
+                    pad_ids=tuple(pad.id for pad in pads),
+                    courtyards=(_rectangle(1_000, 1_000, 3_000, 4_000),),
+                    locked=True,
                 ),
             ),
             pads=pads,
@@ -430,6 +456,30 @@ def test_routing_outcome_is_invariant_under_rigid_transforms(relation: str, boar
 
 
 @pytest.mark.parametrize("relation", sorted(RELATIONS))
+def test_footprint_pose_ownership_and_courtyard_are_rigid_transform_equivariant(
+    relation: str,
+) -> None:
+    transform, added_udeg, orientation_preserving = RELATIONS[relation]
+    original = _straight()
+    moved = transform_snapshot(original, transform, added_udeg, orientation_preserving)
+    before = original.content.footprints[0]
+    after = moved.content.footprints[0]
+
+    assert after.id == before.id
+    assert after.origin == transform(before.origin)
+    assert after.rotation_udeg == _pad_rotation(
+        before.rotation_udeg, added_udeg, orientation_preserving
+    )
+    assert after.side is before.side
+    assert after.pad_ids == before.pad_ids
+    assert after.locked is before.locked
+    assert len(before.courtyards) == len(after.courtyards) == 1
+    assert set(after.courtyards[0].points) == {
+        transform(point) for point in before.courtyards[0].points
+    }
+
+
+@pytest.mark.parametrize("relation", sorted(RELATIONS))
 @pytest.mark.parametrize("board", sorted(UNIQUE_OPTIMUM))
 def test_a_unique_optimum_maps_back_exactly_through_the_inverse(relation: str, board: str) -> None:
     """Where only one route is optimal, the transformed route must be the transformed route.
@@ -475,6 +525,7 @@ def test_swapping_the_two_endpoints_reverses_the_route_without_changing_its_cost
             copper_layers=content.copper_layers,
             nets=content.nets,
             constraints=content.constraints,
+            footprints=content.footprints,
             pads=tuple(
                 replace(pad, center=second.center)
                 if pad.id == first.id
@@ -624,7 +675,18 @@ def test_adapter_places_rotated_footprint_pads_equivariantly() -> None:
     after = {pad.id: pad for pad in turned.content.pads}
     assert set(before) == set(after)
 
+    footprints_before = {item.id: item for item in original.content.footprints}
+    footprints_after = {item.id: item for item in turned.content.footprints}
+    assert set(footprints_before) == set(footprints_after)
+
     width_nm = 44_000_000
+    for footprint_id, footprint in footprints_before.items():
+        moved = footprints_after[footprint_id]
+        assert moved.origin == PointNM(footprint.origin.y, width_nm - footprint.origin.x)
+        assert moved.rotation_udeg == (footprint.rotation_udeg + 90_000_000) % FULL_TURN_UDEG
+        assert moved.side is footprint.side
+        assert moved.pad_ids == footprint.pad_ids
+        assert moved.locked is footprint.locked
     for pad_id, pad in before.items():
         expected = PointNM(pad.center.y, width_nm - pad.center.x)
         assert after[pad_id].center == expected, pad_id

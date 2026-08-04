@@ -13,6 +13,7 @@ _SCHEMA_MAX_NET_CLASSES = 10_000
 _SCHEMA_MAX_DIFFERENTIAL_PAIRS = 10_000
 _SCHEMA_MAX_OBJECTS = 250_000
 _SCHEMA_MAX_RING_POINTS = 100_000
+_SCHEMA_MAX_COURTYARDS_PER_FOOTPRINT = 64
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,11 +97,11 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
     limits = limits or ParseLimits()
     if len(content.outline) != 1:
         raise BoardIRValidationError(
-            "unsupported.topology", "Board IR v0.1 requires exactly one outline contour", "outline"
+            "unsupported.topology", "Board IR v0.2 requires exactly one outline contour", "outline"
         )
     if content.outline[0].holes:
         raise BoardIRValidationError(
-            "unsupported.topology", "Board IR v0.1 does not support outline holes", "outline"
+            "unsupported.topology", "Board IR v0.2 does not support outline holes", "outline"
         )
     if len(content.copper_layers) > _SCHEMA_MAX_COPPER_LAYERS:
         raise BoardIRValidationError(
@@ -124,6 +125,7 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
         content.constraints.assignments,
         content.constraints.differential_pairs,
         content.constraints.length_rules,
+        content.footprints,
         content.pads,
         content.vias,
         content.segments,
@@ -185,6 +187,7 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
 
     identity_groups: tuple[tuple[str, ...], ...] = (
         tuple(item.id for item in content.outline),
+        tuple(item.id for item in content.footprints),
         tuple(item.id for item in content.pads),
         tuple(item.id for item in content.vias),
         tuple(item.id for item in content.segments),
@@ -193,6 +196,31 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
         tuple(item.id for item in content.keepouts),
     )
     _require_unique((item for group in identity_groups for item in group), kind="geometry ID")
+
+    pad_ids = {pad.id for pad in content.pads}
+    owned_pad_ids: list[str] = []
+    for footprint in content.footprints:
+        if len(footprint.courtyards) > _SCHEMA_MAX_COURTYARDS_PER_FOOTPRINT:
+            raise BoardIRValidationError(
+                "schema.limit",
+                "footprint courtyard limit exceeded",
+                footprint.id,
+            )
+        _require_unique(footprint.pad_ids, kind=f"pad ownership in {footprint.id}")
+        if not set(footprint.pad_ids) <= pad_ids:
+            raise BoardIRValidationError(
+                "reference.unknown",
+                "footprint references an unknown pad",
+                footprint.id,
+            )
+        owned_pad_ids.extend(footprint.pad_ids)
+    owned_pad_set = _require_unique(owned_pad_ids, kind="footprint pad ownership")
+    if owned_pad_set != pad_ids:
+        raise BoardIRValidationError(
+            "reference.unowned",
+            "every pad must belong to exactly one footprint",
+            "footprints",
+        )
 
     def require_net(net_id: str | None, locator: str) -> None:
         if net_id is not None and net_id not in net_ids:
@@ -240,6 +268,11 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
         )
     rings.extend((f"{zone.id}.boundary", zone.boundary) for zone in content.zones)
     rings.extend((f"{keepout.id}.boundary", keepout.boundary) for keepout in content.keepouts)
+    rings.extend(
+        (f"{footprint.id}.courtyards[{index}]", courtyard)
+        for footprint in content.footprints
+        for index, courtyard in enumerate(footprint.courtyards)
+    )
     total_vertices = sum(len(ring.points) for _, ring in rings)
     if total_vertices > limits.max_total_vertices:
         raise BoardIRValidationError("budget.exceeded", "total vertex budget exceeded")

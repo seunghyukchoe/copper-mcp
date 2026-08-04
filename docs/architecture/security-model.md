@@ -35,6 +35,7 @@ future work, not a current property.
 | AI output → policy | Prompt injection, invalid commands, cost exhaustion | Allowlisted typed actions, deterministic validation, token/iteration budgets |
 | Router → KiCad | Candidate/source/context misbinding, stale state, unsafe copper | Exact replay, immutable multi-revision evidence, live-context recheck, private candidate snapshot, separate apply authorization |
 | MCP input → preview | Unbounded search, unsupported-subset confusion, geometry disclosure, unverified candidates | Strict typed request parsing, caller-supplied constraints, wall-clock deadline over integer ceilings, fail-closed conversion with code-only diagnostics, opt-in authoritative DRC that fails closed, no write or job side effect |
+| Board IR scene → placement preview | Proprietary geometry disclosure, cross-revision subject confusion, truncated detail mistaken for complete geometry, unsupported courtyards treated as legal, locked-footprint movement | Region and object/detail ceilings, typed reference durability, quarantined author text, source/snapshot revision equality, fail-closed footprint conversion, explicit `not_modelled` legality, locked-move refusal, no placement apply |
 | Benchmark catalog → offline runner | Licence laundering, fabricated capability claims, copied third-party circuits, path/symlink escape, artifact substitution or replacement races, hidden network intake | Reference-only source records, no downloader, strict bounded schema, single-read validation snapshot, repository-confined paths, artifact and licence hashes, evidence-derived claims, explicit safety/derivation fields, original or separately open fixtures only |
 | Circuit Intent → schematic renderer | Malformed or oversized model topology, reference confusion, incomplete connectivity, S-expression injection, output amplification, false electrical/PCB claims | Strict bounded codec, typed IDs, complete-pin validation, canonical digest, escaped strings, original embedded symbols, deterministic 1 MB pure renderer, empty footprints, `on_board=no`, explicit non-claims |
 | MCP schematic build → artifact resource | Proprietary topology in model context, guessable capability, cross-client disclosure, unbounded retention, digest used as authorization, TTL mistaken for secure erasure | Redacted tool result, independent 256-bit opaque token, stdio-only process-local store, no listing/logging/persistence, 15-minute access expiry with documented lazy reclamation, 16-entry/16 MiB limits, 1 MB (1,000,000 bytes) artifact limit, uniform unavailable error, digest recheck |
@@ -155,12 +156,20 @@ run preserves exact nets and reduces ERC warnings from seven to four—two isola
 labels and two missing private-library-configuration warnings—but is neither per-build evidence nor
 an ERC-clean claim.
 
-A future Circuit Scene IR adds another disclosure boundary: semantic and visual observation may
-reveal placement and connectivity even without source files. It must therefore be bounded,
-versioned, redacted by capability, and revision-bound. AI output remains typed placement intent;
-deterministic code constructs and validates immutable previews/candidates, and explicit apply stays
-separate. Direct model-generated KiCad mutation remains prohibited. This describes the high-fidelity
-north star only; none of those Circuit Scene or placement surfaces currently exists.
+Circuit Scene IR `0.2.0` is a current disclosure boundary: structured observation and its optional
+render can reveal placement and connectivity without returning source files. Scene requests are
+region-scoped and revision-bound; objects and footprint pad relationships/courtyard vertices consume
+explicit object/detail ceilings, reference durability is typed, and board-author text is quarantined
+as untrusted annotation data. The normalized render is digest-bound and advisory rather than
+geometric authority.
+
+The active KiCad adapter accepts only front-side footprints with orthogonal transforms and unfilled
+rectangular `fp_rect` courtyard centerlines on matching `F.CrtYd`; unsupported footprint or
+courtyard forms fail closed before a scene or placement view exists. Placement subjects are
+projected from the same Board IR snapshot, and the supplied source bytes must match its source
+revision. AI output remains typed placement intent, a locked footprint cannot be moved, and
+`courtyard_overlap` remains the one-value `not_modelled` result because no bounded side-aware
+evaluator has run. Direct model-generated KiCad mutation and placement apply remain prohibited.
 
 MCP schematic delivery validates a closed outer wrapper, closed Circuit Intent content, and closed
 structured output. Scalars, lists, and extra fields at those boundaries fail without echoing the
@@ -183,8 +192,10 @@ same version and an append-only `Ready` release-ledger row naming the exact comm
 full gate. Authorization permits tagging only; it does not claim a built artifact or published
 release.
 
-## Security acceptance for future mutation
+## Security acceptance for future placement mutation
 
-An `apply_candidate` implementation is blocked until it has authorization tests, revision-race
-tests, one-commit undo behavior, complete audit metadata, KiCad DRC verification, cancellation tests,
-and a security-ledger review.
+Placement apply remains blocked until Board IR can preserve and replay every source span affected by
+a pose edit, including the currently omitted author text, fabrication graphics, library identity,
+properties, and 3D-model pose. It additionally needs explicit authorization, revision-race tests,
+transaction or recoverable-undo behavior, complete audit metadata, KiCad verification,
+cancellation tests, and a dedicated security-ledger review.

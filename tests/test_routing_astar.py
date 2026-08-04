@@ -9,6 +9,8 @@ import pytest
 from copper_mcp.board_ir import (
     BoardIRSnapshot,
     ConstraintSet,
+    Footprint,
+    FootprintSide,
     Keepout,
     Layer,
     LengthRule,
@@ -260,6 +262,15 @@ def _snapshot(
             )
             if length_rule
             else (),
+        ),
+        footprints=(
+            Footprint(
+                id="footprint:routing-fixture",
+                origin=PointNM(*start),
+                rotation_udeg=start_pad_rotation_udeg,
+                side=FootprintSide.FRONT,
+                pad_ids=tuple(pad.id for pad in pads),
+            ),
         ),
         pads=tuple(pads),
         segments=segments,
@@ -2424,6 +2435,7 @@ def test_a_multi_pin_pad_off_the_lattice_is_still_reached_through_its_core() -> 
             copper_layers=content.copper_layers,
             nets=content.nets,
             constraints=content.constraints,
+            footprints=content.footprints,
             pads=tuple(
                 replace(pad, center=PointNM(pad.center.x + 100, pad.center.y + 100))
                 if pad.id == "pad:03"

@@ -432,7 +432,8 @@ class SceneToolSurfaceTests(unittest.TestCase):
         self.assertFalse(result.is_error)
         structured = result.structured_content
         assert isinstance(structured, dict)
-        self.assertEqual(structured["scene_version"], "0.1.0")
+        self.assertEqual(structured["scene_version"], "0.2.0")
+        self.assertTrue(structured["static"]["footprints"])
         self.assertEqual(structured["region"]["source"], "explicit")
         self.assertEqual(len(structured["static"]["pads"]), 1)
         self.assertEqual(structured["annotations"], [])

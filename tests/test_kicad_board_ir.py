@@ -31,6 +31,9 @@ TEST_ROOT = Path(__file__).parent
 REPOSITORY_ROOT = TEST_ROOT.parent
 SUBSET_BOARD = TEST_ROOT / "fixtures" / "board-ir-v0.1" / "subset.kicad_pcb"
 ROTATION_BOARD = TEST_ROOT / "fixtures" / "board-ir-v0.1" / "footprint-rotation.kicad_pcb"
+FOOTPRINT_V02_BOARD = (
+    TEST_ROOT / "fixtures" / "board-ir-v0.2" / "footprint-pose-courtyard.kicad_pcb"
+)
 MALFORMED_BOARD = TEST_ROOT / "fixtures" / "board-ir-v0.1" / "malformed-unbalanced.kicad_pcb"
 _DISCOVERED_KICAD_CLI = shutil.which("kicad-cli")
 REAL_KICAD_CLI = (
@@ -224,6 +227,169 @@ def _insert_root(source: bytes, expression: bytes) -> bytes:
     closing = source.rfind(b"\n)")
     assert closing > 0
     return source[:closing] + b"\n  " + expression + source[closing:]
+
+
+def test_v02_footprints_preserve_exact_pose_pad_ownership_and_lock() -> None:
+    snapshot = parse_success(FOOTPRINT_V02_BOARD.read_bytes(), constraint_profile())
+
+    assert {
+        footprint.id: (
+            footprint.origin,
+            footprint.rotation_udeg,
+            footprint.side.value,
+            footprint.locked,
+            footprint.pad_ids,
+        )
+        for footprint in snapshot.content.footprints
+    } == {
+        "footprint:kicad:92000000-0000-0000-0000-000000000001": (
+            PointNM(15_000_000, 15_000_000),
+            0,
+            "front",
+            True,
+            (
+                "pad:kicad:92000000-0000-0000-0000-000000000002",
+                "pad:kicad:92000000-0000-0000-0000-000000000003",
+            ),
+        ),
+        "footprint:kicad:92000000-0000-0000-0000-000000000011": (
+            PointNM(45_000_000, 15_000_000),
+            90_000_000,
+            "front",
+            False,
+            (
+                "pad:kicad:92000000-0000-0000-0000-000000000012",
+                "pad:kicad:92000000-0000-0000-0000-000000000013",
+            ),
+        ),
+        "footprint:kicad:92000000-0000-0000-0000-000000000021": (
+            PointNM(15_000_000, 35_000_000),
+            180_000_000,
+            "front",
+            False,
+            (
+                "pad:kicad:92000000-0000-0000-0000-000000000022",
+                "pad:kicad:92000000-0000-0000-0000-000000000023",
+            ),
+        ),
+        "footprint:kicad:92000000-0000-0000-0000-000000000031": (
+            PointNM(45_000_000, 35_000_000),
+            270_000_000,
+            "front",
+            False,
+            (
+                "pad:kicad:92000000-0000-0000-0000-000000000032",
+                "pad:kicad:92000000-0000-0000-0000-000000000033",
+            ),
+        ),
+    }
+
+    assert {pad.id: (pad.center, pad.locked) for pad in snapshot.content.pads} == {
+        "pad:kicad:92000000-0000-0000-0000-000000000002": (
+            PointNM(14_000_000, 14_500_000),
+            True,
+        ),
+        "pad:kicad:92000000-0000-0000-0000-000000000003": (
+            PointNM(17_000_000, 16_000_000),
+            True,
+        ),
+        "pad:kicad:92000000-0000-0000-0000-000000000012": (
+            PointNM(44_500_000, 16_000_000),
+            False,
+        ),
+        "pad:kicad:92000000-0000-0000-0000-000000000013": (
+            PointNM(46_000_000, 13_000_000),
+            False,
+        ),
+        "pad:kicad:92000000-0000-0000-0000-000000000022": (
+            PointNM(16_000_000, 35_500_000),
+            False,
+        ),
+        "pad:kicad:92000000-0000-0000-0000-000000000023": (
+            PointNM(13_000_000, 34_000_000),
+            False,
+        ),
+        "pad:kicad:92000000-0000-0000-0000-000000000032": (
+            PointNM(45_500_000, 34_000_000),
+            False,
+        ),
+        "pad:kicad:92000000-0000-0000-0000-000000000033": (
+            PointNM(44_000_000, 37_000_000),
+            False,
+        ),
+    }
+
+
+def test_v02_rectangular_courtyards_transform_into_exact_board_coordinates() -> None:
+    snapshot = parse_success(FOOTPRINT_V02_BOARD.read_bytes(), constraint_profile())
+
+    assert {
+        footprint.rotation_udeg: footprint.courtyards[0].points
+        for footprint in snapshot.content.footprints
+    } == {
+        0: (
+            PointNM(12_000_000, 13_000_000),
+            PointNM(19_000_000, 13_000_000),
+            PointNM(19_000_000, 17_500_000),
+            PointNM(12_000_000, 17_500_000),
+        ),
+        90_000_000: (
+            PointNM(43_000_000, 11_000_000),
+            PointNM(47_500_000, 11_000_000),
+            PointNM(47_500_000, 18_000_000),
+            PointNM(43_000_000, 18_000_000),
+        ),
+        180_000_000: (
+            PointNM(11_000_000, 32_500_000),
+            PointNM(18_000_000, 32_500_000),
+            PointNM(18_000_000, 37_000_000),
+            PointNM(11_000_000, 37_000_000),
+        ),
+        270_000_000: (
+            PointNM(42_500_000, 32_000_000),
+            PointNM(47_000_000, 32_000_000),
+            PointNM(47_000_000, 39_000_000),
+            PointNM(42_500_000, 39_000_000),
+        ),
+    }
+
+
+def test_v02_footprint_without_a_courtyard_has_an_explicit_empty_state() -> None:
+    source = _replace(
+        FOOTPRINT_V02_BOARD.read_bytes(),
+        b'(layer "F.CrtYd")',
+        b'(layer "F.SilkS")',
+    )
+    snapshot = parse_success(source, constraint_profile())
+
+    assert snapshot.content.footprints[0].courtyards == ()
+    assert all(len(footprint.courtyards) == 1 for footprint in snapshot.content.footprints[1:])
+
+
+def test_v02_mismatched_courtyard_layer_fails_closed() -> None:
+    source = _replace(
+        FOOTPRINT_V02_BOARD.read_bytes(),
+        b'(layer "F.CrtYd")',
+        b'(layer "B.CrtYd")',
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile())
+
+    assert result.snapshot is None
+    assert len(result.diagnostics) == 1
+    assert result.diagnostics[0].code == "unsupported.transform"
+    assert "does not match its footprint side" in result.diagnostics[0].message
+
+
+def test_v02_unsupported_courtyard_primitive_fails_closed() -> None:
+    source = _replace(FOOTPRINT_V02_BOARD.read_bytes(), b"    (fp_rect\n", b"    (fp_line\n")
+
+    result = parse_kicad_bytes(source, constraint_profile())
+
+    assert result.snapshot is None
+    assert len(result.diagnostics) == 1
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert "courtyard primitive is unsupported" in result.diagnostics[0].message
 
 
 def _four_layer_source() -> bytes:

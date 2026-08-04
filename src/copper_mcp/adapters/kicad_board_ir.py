@@ -1,4 +1,4 @@
-"""Fail-closed, read-only KiCad S-expression to Board IR v0.1 adapter."""
+"""Fail-closed, read-only KiCad S-expression to Board IR v0.2 adapter."""
 
 from __future__ import annotations
 
@@ -24,6 +24,8 @@ from copper_mcp.board_ir.types import (
     Arc,
     ConstraintSet,
     DifferentialPairRule,
+    Footprint,
+    FootprintSide,
     Keepout,
     Layer,
     LengthRule,
@@ -52,6 +54,7 @@ _PLAIN_DECIMAL = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _UNSIGNED_INTEGER = re.compile(r"^(?:0|[1-9][0-9]*)$")
 _SIGNED_INTEGER_TOKEN = re.compile(r"^[+-]?[0-9]+$")
 _SUPPORTED_KICAD_PCB_VERSIONS = frozenset({"20260206"})
+_COURTYARD_LAYERS = frozenset({"F.CrtYd", "B.CrtYd"})
 _ROOT_METADATA_HEADS = frozenset(
     {
         "embedded_fonts",
@@ -306,7 +309,7 @@ class _Converter:
         return values[0]
 
     def _semantic_preflight(self) -> None:
-        """Reject physical semantics that the v0.1 model cannot preserve."""
+        """Reject physical semantics that the v0.2 model cannot preserve."""
 
         for item in self.root.items[1:]:
             if not isinstance(item, SExpr) or item.head is None:
@@ -383,6 +386,15 @@ class _Converter:
                     )
                 if head.startswith("fp_") or head == "property":
                     layer = self._graphic_layer(item, f"{locator}.graphic")
+                    if layer in _COURTYARD_LAYERS:
+                        if head != "fp_rect":
+                            self.fail(
+                                "unsupported.construct",
+                                "courtyard primitive is unsupported by Board IR v0.2",
+                                f"{locator}.courtyard",
+                                object_kind="footprint",
+                            )
+                        continue
                     if self._is_routing_layer(layer):
                         self.fail(
                             "unsupported.construct",
@@ -727,7 +739,7 @@ class _Converter:
         if rotation_udeg % quarter:
             self.fail(
                 "unsupported.transform",
-                "Board IR v0.1 supports orthogonal footprint transforms only",
+                "Board IR v0.2 adapter supports orthogonal footprint transforms only",
                 locator,
             )
         return (rotation_udeg // quarter) % 4
@@ -774,14 +786,97 @@ class _Converter:
             self.fail("integer.precision", "roundrect radius is not an exact nanometre", locator)
         return radius
 
-    def _pads(self) -> tuple[Pad, ...]:
-        result: list[Pad] = []
+    def _courtyards(
+        self,
+        footprint: SExpr,
+        *,
+        footprint_locator: str,
+        origin: PointNM,
+        turn: int,
+        side: FootprintSide,
+    ) -> tuple[Ring, ...]:
+        """Import exact rectangular courtyard centerlines in the board frame.
+
+        Other courtyard primitives fail during semantic preflight. This makes an empty tuple
+        mean that no courtyard was present, never that an existing shape was silently ignored.
+        """
+
+        expected_layer = "F.CrtYd" if side is FootprintSide.FRONT else "B.CrtYd"
+        result: list[Ring] = []
+        for index, rectangle in enumerate(children(footprint, "fp_rect")):
+            locator = f"{footprint_locator}.courtyard[{index}]"
+            layer = self._graphic_layer(rectangle, locator)
+            if layer not in _COURTYARD_LAYERS:
+                continue
+            if layer != expected_layer:
+                self.fail(
+                    "unsupported.transform",
+                    "courtyard layer does not match its footprint side",
+                    locator,
+                    object_kind="footprint",
+                )
+            if len(result) >= 64:
+                self.fail(
+                    "budget.exceeded",
+                    "footprint courtyard limit exceeded",
+                    locator,
+                    object_kind="footprint",
+                )
+            self._reject_unknown_children(
+                rectangle,
+                frozenset({"end", "fill", "layer", "locked", "start", "stroke", "tstamp", "uuid"}),
+                locator,
+            )
+            self._validate_direct_atoms(
+                rectangle,
+                positional_atoms=0,
+                allowed=frozenset({"locked"}),
+                locator=locator,
+            )
+            fill = self._values(
+                rectangle,
+                "fill",
+                locator,
+                minimum=1,
+                maximum=1,
+                required=False,
+            )
+            if fill and fill != ("none",):
+                self.fail(
+                    "unsupported.construct",
+                    "filled courtyard rectangle is unsupported",
+                    locator,
+                    object_kind="footprint",
+                )
+            start = self._point(rectangle, "start", locator)
+            end = self._point(rectangle, "end", locator)
+            if start.x == end.x or start.y == end.y:
+                self.fail(
+                    "geometry.invalid",
+                    "courtyard rectangle must have non-zero width and height",
+                    locator,
+                    object_kind="footprint",
+                )
+            local_points = (
+                start,
+                PointNM(end.x, start.y),
+                end,
+                PointNM(start.x, end.y),
+            )
+            result.append(
+                Ring(tuple(self._transform(point, origin, turn, locator) for point in local_points))
+            )
+        return tuple(result)
+
+    def _footprints_and_pads(self) -> tuple[tuple[Footprint, ...], tuple[Pad, ...]]:
+        footprints: list[Footprint] = []
+        pads: list[Pad] = []
         for footprint_index, footprint in enumerate(children(self.root, "footprint")):
             footprint_locator = f"kicad_pcb.footprint[{footprint_index}]"
             if children(footprint, "net_tie_pad_groups"):
                 self.fail(
                     "unsupported.construct",
-                    "net-tie footprints are unsupported in Board IR adapter v0.1",
+                    "net-tie footprints are unsupported in Board IR adapter v0.2",
                     footprint_locator,
                     object_kind="footprint",
                 )
@@ -796,7 +891,7 @@ class _Converter:
             if jumper_values and jumper_values != ("no",):
                 self.fail(
                     "unsupported.construct",
-                    "jumper pad-number semantics are unsupported in Board IR adapter v0.1",
+                    "jumper pad-number semantics are unsupported in Board IR adapter v0.2",
                     footprint_locator,
                     object_kind="footprint",
                 )
@@ -804,7 +899,7 @@ class _Converter:
             if layer != "F.Cu":
                 self.fail(
                     "unsupported.transform",
-                    "Board IR v0.1 supports front-side footprints only",
+                    "Board IR v0.2 adapter supports front-side footprints only",
                     footprint_locator,
                     object_kind="footprint",
                 )
@@ -818,6 +913,9 @@ class _Converter:
             )
             turn = self._quarter_turn(footprint_rotation, footprint_locator)
             footprint_locked = self._locked(footprint, positional_atoms=1)
+            footprint_id = self._identity("footprint", footprint, footprint_locator)
+            side = FootprintSide.FRONT
+            owned_pad_ids: list[str] = []
             for pad_index, pad in enumerate(children(footprint, "pad")):
                 locator = f"{footprint_locator}.pad[{pad_index}]"
                 self._reject_unknown_children(
@@ -954,24 +1052,41 @@ class _Converter:
                     else:
                         self.fail("syntax.invalid", "pad drill is malformed", locator)
                 net_name = self._net_name(pad, locator)
-                result.append(
-                    Pad(
-                        id=self._identity("pad", pad, locator),
-                        net_id=net_id_for_name(net_name) if net_name is not None else None,
-                        center=center,
-                        rotation_udeg=rotation,
-                        shape=shape,
-                        kind=kind,
-                        size_x_nm=size_x,
-                        size_y_nm=size_y,
-                        roundrect_radius_nm=radius,
-                        drill_x_nm=drill_x,
-                        drill_y_nm=drill_y,
-                        layer_ids=self._layer_ids(pad, locator),
-                        locked=footprint_locked or self._locked(pad, positional_atoms=3),
-                    )
+                pad_item = Pad(
+                    id=self._identity("pad", pad, locator),
+                    net_id=net_id_for_name(net_name) if net_name is not None else None,
+                    center=center,
+                    rotation_udeg=rotation,
+                    shape=shape,
+                    kind=kind,
+                    size_x_nm=size_x,
+                    size_y_nm=size_y,
+                    roundrect_radius_nm=radius,
+                    drill_x_nm=drill_x,
+                    drill_y_nm=drill_y,
+                    layer_ids=self._layer_ids(pad, locator),
+                    locked=footprint_locked or self._locked(pad, positional_atoms=3),
                 )
-        return tuple(result)
+                pads.append(pad_item)
+                owned_pad_ids.append(pad_item.id)
+            footprints.append(
+                Footprint(
+                    id=footprint_id,
+                    origin=origin,
+                    rotation_udeg=footprint_rotation,
+                    side=side,
+                    pad_ids=tuple(owned_pad_ids),
+                    courtyards=self._courtyards(
+                        footprint,
+                        footprint_locator=footprint_locator,
+                        origin=origin,
+                        turn=turn,
+                        side=side,
+                    ),
+                    locked=footprint_locked,
+                )
+            )
+        return tuple(footprints), tuple(pads)
 
     def _segments(self) -> tuple[Segment, ...]:
         result: list[Segment] = []
@@ -1538,6 +1653,7 @@ class _Converter:
         nets = self._nets()
         constraints = self._constraints(nets)
         zones, keepouts = self._zones_and_keepouts()
+        footprints, pads = self._footprints_and_pads()
         content = make_content(
             source=SourceInfo(
                 format="kicad_pcb",
@@ -1549,7 +1665,8 @@ class _Converter:
             copper_layers=self.layers,
             nets=nets,
             constraints=constraints,
-            pads=self._pads(),
+            footprints=footprints,
+            pads=pads,
             vias=self._vias(),
             segments=self._segments(),
             arcs=self._arcs(),

@@ -311,11 +311,11 @@ def test_candidate_board_render_enforces_output_budget_before_round_trip() -> No
 
 def test_candidate_board_render_enforces_total_object_budget() -> None:
     source, profile, candidate = _snapshot_and_candidate()
-    limits = replace(ParseLimits(), max_objects=8)
+    limits = replace(ParseLimits(), max_objects=10)
     base_over_budget = parse_kicad_bytes(
         source,
         profile,
-        replace(limits, max_objects=7),
+        replace(limits, max_objects=9),
     )
     assert base_over_budget.snapshot is None
     assert tuple(item.code for item in base_over_budget.diagnostics) == ("budget.exceeded",)

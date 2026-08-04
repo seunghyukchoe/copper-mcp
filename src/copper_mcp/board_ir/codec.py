@@ -1,4 +1,4 @@
-"""Strict JSON decoder for the versioned Board IR v0.1 envelope."""
+"""Strict JSON decoder for the versioned Board IR v0.2 envelope."""
 
 from __future__ import annotations
 
@@ -19,6 +19,8 @@ from copper_mcp.board_ir.types import (
     BoardIRSnapshot,
     ConstraintSet,
     DifferentialPairRule,
+    Footprint,
+    FootprintSide,
     Keepout,
     Layer,
     LengthRule,
@@ -488,8 +490,52 @@ def _decode_content(value: object) -> BoardIRContent:
     )
     items = _object(
         item["items"],
-        required={"pads", "vias", "segments", "arcs", "zones", "keepouts"},
+        required={"footprints", "pads", "vias", "segments", "arcs", "zones", "keepouts"},
         path="content.items",
+    )
+
+    def decode_footprint(raw: object, entry_path: str) -> Footprint:
+        entry = _object(
+            raw,
+            required={
+                "id",
+                "origin",
+                "rotation_udeg",
+                "side",
+                "pad_ids",
+                "courtyards",
+                "locked",
+            },
+            path=entry_path,
+        )
+        courtyard_values = _array(entry["courtyards"], f"{entry_path}.courtyards")
+        if len(courtyard_values) > 64:
+            raise BoardIRValidationError(
+                "schema.limit",
+                "footprint courtyard limit exceeded",
+                entry_path,
+            )
+        return Footprint(
+            id=_string(entry["id"], f"{entry_path}.id"),
+            origin=_point(entry["origin"], f"{entry_path}.origin"),
+            rotation_udeg=_integer(entry["rotation_udeg"], f"{entry_path}.rotation_udeg"),
+            side=_enum_value(FootprintSide, entry["side"], f"{entry_path}.side"),
+            pad_ids=tuple(
+                _string(pad_id, f"{entry_path}.pad_ids[{pad_index}]")
+                for pad_index, pad_id in enumerate(
+                    _array(entry["pad_ids"], f"{entry_path}.pad_ids")
+                )
+            ),
+            courtyards=tuple(
+                _ring(courtyard, f"{entry_path}.courtyards[{courtyard_index}]")
+                for courtyard_index, courtyard in enumerate(courtyard_values)
+            ),
+            locked=_boolean(entry["locked"], f"{entry_path}.locked"),
+        )
+
+    footprints = tuple(
+        decode_footprint(raw, f"content.items.footprints[{index}]")
+        for index, raw in enumerate(_array(items["footprints"], "content.items.footprints"))
     )
     pads = tuple(
         Pad(
@@ -692,6 +738,7 @@ def _decode_content(value: object) -> BoardIRContent:
         copper_layers=layers,
         nets=nets,
         constraints=_constraints(item["constraints"], "content.constraints"),
+        footprints=footprints,
         pads=pads,
         vias=vias,
         segments=segments,
@@ -780,7 +827,7 @@ def decode_snapshot_json(payload: bytes, limits: ParseLimits | None = None) -> B
         ) from error
     except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as error:
         raise BoardIRValidationError(
-            "schema.invalid", "JSON does not conform to Board IR v0.1", "json"
+            "schema.invalid", "JSON does not conform to Board IR v0.2", "json"
         ) from error
     if validation_code == "budget.exceeded":
         raise BoardIRValidationError(

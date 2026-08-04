@@ -15,6 +15,7 @@ from copper_mcp.board_ir.types import (
     BoardIRContent,
     BoardIRSnapshot,
     ConstraintSet,
+    Footprint,
     Keepout,
     Layer,
     Net,
@@ -129,6 +130,18 @@ def _outline(contour: OutlineContour) -> dict[str, JsonValue]:
     }
 
 
+def _footprint(item: Footprint) -> dict[str, JsonValue]:
+    return {
+        "courtyards": [_ring(courtyard) for courtyard in item.courtyards],
+        "id": item.id,
+        "locked": item.locked,
+        "origin": _point(item.origin),
+        "pad_ids": list(item.pad_ids),
+        "rotation_udeg": item.rotation_udeg,
+        "side": item.side.value,
+    }
+
+
 def _pad(item: Pad, order: dict[str, int]) -> dict[str, JsonValue]:
     return {
         "center": _point(item.center),
@@ -229,6 +242,9 @@ def _content_payload(content: BoardIRContent) -> dict[str, JsonValue]:
         ],
         "items": {
             "arcs": [_arc(item) for item in sorted(content.arcs, key=lambda item: item.id)],
+            "footprints": [
+                _footprint(item) for item in sorted(content.footprints, key=lambda item: item.id)
+            ],
             "keepouts": [
                 _keepout(item, order) for item in sorted(content.keepouts, key=lambda item: item.id)
             ],
@@ -307,6 +323,27 @@ def normalize_content(content: BoardIRContent) -> BoardIRContent:
         copper_layers=layers,
         nets=tuple(sorted(content.nets, key=lambda item: item.id)),
         constraints=normalized_constraints,
+        footprints=tuple(
+            sorted(
+                (
+                    replace(
+                        item,
+                        pad_ids=tuple(sorted(item.pad_ids)),
+                        courtyards=tuple(
+                            sorted(
+                                (
+                                    Ring(_normalize_ring(courtyard, clockwise=False))
+                                    for courtyard in item.courtyards
+                                ),
+                                key=lambda ring: ring.points,
+                            )
+                        ),
+                    )
+                    for item in content.footprints
+                ),
+                key=lambda item: item.id,
+            )
+        ),
         pads=tuple(
             sorted(
                 (replace(item, layer_ids=ordered_layers(item.layer_ids)) for item in content.pads),
@@ -389,6 +426,7 @@ def make_content(
     copper_layers: tuple[Layer, ...],
     nets: tuple[Net, ...],
     constraints: ConstraintSet,
+    footprints: tuple[Footprint, ...] = (),
     pads: tuple[Pad, ...] = (),
     vias: tuple[Via, ...] = (),
     segments: tuple[Segment, ...] = (),
@@ -406,6 +444,7 @@ def make_content(
         copper_layers=copper_layers,
         nets=nets,
         constraints=constraints,
+        footprints=footprints,
         pads=pads,
         vias=vias,
         segments=segments,

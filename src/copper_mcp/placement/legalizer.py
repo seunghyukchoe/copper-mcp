@@ -145,6 +145,8 @@ def _place(
         origin, orientation, side = footprint.origin, footprint.orientation_udeg, footprint.side
         moved = False
         if proposal is not None:
+            if footprint.locked:
+                raise _UnsupportedError("moving a locked footprint is not authorized")
             anchor = footprint if proposal.anchor is None else view.resolve(proposal.anchor)
             if anchor is None:
                 raise _UnresolvedError("a proposal anchors to an object that does not exist")

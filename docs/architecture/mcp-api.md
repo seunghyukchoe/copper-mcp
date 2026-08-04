@@ -54,10 +54,12 @@ a radius, or reversed bounds is rejected before any file is read. There is no wh
 The resolved window is echoed back with a `source` of `explicit` or `around_ref`.
 
 Objects are returned in two collections rather than flagged, each object additionally reporting
-`locked` so pinned copper is distinguishable from copper a proposal may move (`null` for kinds with
-no such concept, such as an outline contour or a net class). `static` holds `outline`, `pads`,
-`keepouts` and `rules` — what a proposal must take as given — and `mutable` holds `segments`,
-`arcs`, `vias` and `zones`. Each object carries the Board IR `ref_id` it already has, its
+`locked` so pinned geometry is distinguishable from geometry a proposal may move (`null` for kinds
+with no such concept, such as an outline contour or a net class). `static` holds `outline`,
+`footprints`, `pads`, `keepouts` and `rules` — what a proposal must take as given — and `mutable`
+holds `segments`, `arcs`, `vias` and `zones`. A footprint reports its Board IR origin, rotation,
+side, owned pad references, courtyard rings and lock state. Each object carries the Board IR
+`ref_id` it already has, its
 `layer_ids`, exact integer `geometry`, and a `ref_stability` of `native` (a KiCad UUID, stable under
 unrelated edits), `content_derived` (a geometry hash, which moves when its object changes), or
 `request_scoped` (an id belonging to the request rather than the board). A scene-level
@@ -69,8 +71,10 @@ in one place whether the references it is about to store will survive.
 something was dropped, naming `max_scene_objects`, `max_scene_vertices` or `max_scene_annotations`.
 `ceiling_hit` names the first ceiling reached, so the two `*_omitted` counts are the authoritative
 signal - objects and annotations are charged against separate budgets and both can truncate in one
-response. Every ceiling is configurable; the object default of 2,000 is provisional and about
-sixteen times the size of this repository's own board.
+response. Footprint origin, pad relationships and courtyard vertices consume the scene-vertex
+budget as well as the footprint consuming one scene-object slot. Every ceiling is configurable;
+the object default of 2,000 is provisional and about sixteen times the size of this repository's
+own board.
 
 Object bounds over-approximate on purpose. An arc is bounded including the bulge between its
 sample points, and a pad rotated off the quarter turns is bounded by its circumscribed circle, both
@@ -132,14 +136,17 @@ centre; there is no field anywhere in the language that accepts an absolute coor
 position in a response was derived by the server and snapped to the placement grid.
 
 A `previewed` response carries an immutable candidate bound to **both** digests - `base_revision`
-for the board geometry and `view_revision` for the footprint grouping, which is recovered out of
-band and so is not covered by the snapshot digest - together with evidence holding per-rule
-residuals and the legality record. `pad_overlap` is **three-valued**: `proven_clear` when pad
+for the source board and `view_revision` for the placement projection. The placement view is
+derived from the same Board IR 0.2 snapshot after the service verifies that the source bytes match
+the snapshot's source revision; it is no longer recovered by a second parser. The response also
+carries evidence holding per-rule residuals and the legality record. `pad_overlap` is
+**three-valued**: `proven_clear` when pad
 bounds are disjoint, `violated` when pad cores overlap, and `inconclusive` in between.
 `inconclusive` is not a failure and a candidate is still produced; it means neither clearance nor
-collision could be proven. `courtyard_overlap` has exactly one permitted value, `not_modelled`,
-because Board IR carries no courtyard geometry - there is deliberately no vocabulary in which a
-response could claim a courtyard was checked.
+collision could be proven. `courtyard_overlap` has exactly one permitted value, `not_modelled`.
+Board IR 0.2 carries bounded courtyard geometry for the supported subset, but the placement
+legalizer has no side-aware courtyard legality evaluator yet; there is deliberately no vocabulary
+in which a response could claim that check was performed.
 
 A `refused` response carries a typed code: `unresolved_ref`, `infeasible_constraints`,
 `budget_exhausted`, `unsupported_geometry`, `illegal_placement`, `stale_revision` or
@@ -149,6 +156,10 @@ the work ran out - and only syntactic contradictions are claimed as infeasible. 
 `illegal_placement` refusal includes the legality record that condemned it, so a caller never has
 to guess which of the three independent checks failed. `satisfied_within_tolerance` appears only
 when the caller supplied a `tolerance_nm`; an unstated tolerance means exact.
+
+A proposal that would move a footprint whose Board IR `locked` field is true is refused as
+`unsupported_geometry` before a candidate is issued. Unlocking or applying that move is never
+implicit.
 
 **The tool never applies a placement, and a placement candidate is not bound to KiCad DRC.** What
 it claims is exactly what the deterministic legalizer proved. Moving a footprint moves its pads,

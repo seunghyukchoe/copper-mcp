@@ -24,6 +24,7 @@ from copper_mcp.adapters.sexpr import SExpr, SExprError, children, parse_sexpr
 from copper_mcp.board_ir import (
     Arc,
     BoardIRSnapshot,
+    Footprint,
     Keepout,
     NetClass,
     Pad,
@@ -53,10 +54,10 @@ from copper_mcp.request_boundary import (
 from copper_mcp.scene_render import SceneRenderEvidence
 from copper_mcp.security import read_workspace_file
 
-SCENE_VERSION = "0.1.0"
+SCENE_VERSION = "0.2.0"
 
 #: Objects the router treats as given, versus objects a proposal could add or change.
-_STATIC_KINDS = ("outline", "pads", "keepouts", "rules")
+_STATIC_KINDS = ("outline", "footprints", "pads", "keepouts", "rules")
 _MUTABLE_KINDS = ("segments", "arcs", "vias", "zones")
 
 _REQUIRED_FIELDS = ("board", "constraints", "region")
@@ -476,6 +477,23 @@ def _object_bounds(
             pad.center.x + half_x,
             pad.center.y + half_y,
         )
+    for footprint in content.footprints:
+        footprint_boxes = [bounds[pad_id] for pad_id in footprint.pad_ids]
+        footprint_boxes.extend(_ring_bounds(ring) for ring in footprint.courtyards)
+        if footprint_boxes:
+            bounds[footprint.id] = (
+                min(box[0] for box in footprint_boxes),
+                min(box[1] for box in footprint_boxes),
+                max(box[2] for box in footprint_boxes),
+                max(box[3] for box in footprint_boxes),
+            )
+        else:
+            bounds[footprint.id] = (
+                footprint.origin.x,
+                footprint.origin.y,
+                footprint.origin.x,
+                footprint.origin.y,
+            )
     for via in content.vias:
         half = (via.diameter_nm + 1) // 2
         bounds[via.id] = (
@@ -565,6 +583,24 @@ def _pad_object(pad: Pad) -> SceneObject:
         },
         ref_stability=_ref_stability(pad.id),
         locked=pad.locked,
+    )
+
+
+def _footprint_object(footprint: Footprint) -> SceneObject:
+    layer_id = "layer:F.Cu" if footprint.side.value == "front" else "layer:B.Cu"
+    return SceneObject(
+        ref_id=footprint.id,
+        kind="footprint",
+        layer_ids=(layer_id,),
+        geometry={
+            "origin_nm": [footprint.origin.x, footprint.origin.y],
+            "rotation_udeg": footprint.rotation_udeg,
+            "side": footprint.side.value,
+            "pad_ids": list(footprint.pad_ids),
+            "courtyards_nm": [_points(ring) for ring in footprint.courtyards],
+        },
+        ref_stability=_ref_stability(footprint.id),
+        locked=footprint.locked,
     )
 
 
@@ -876,6 +912,17 @@ def observe_board_scene(payload: Any, settings: Settings) -> CircuitScene:
             every_layer,
             len(contour.outer.points),
             static["outline"],
+        )
+    for footprint in content.footprints:
+        layer_ids = ("layer:F.Cu",) if footprint.side.value == "front" else ("layer:B.Cu",)
+        detail_units = (
+            1 + len(footprint.pad_ids) + sum(len(ring.points) for ring in footprint.courtyards)
+        )
+        consider(
+            _footprint_object(footprint),
+            layer_ids,
+            detail_units,
+            static["footprints"],
         )
     for pad in content.pads:
         consider(_pad_object(pad), tuple(pad.layer_ids), 4, static["pads"])

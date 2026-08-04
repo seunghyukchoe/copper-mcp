@@ -13,7 +13,7 @@ route multiple nets, run durable jobs, persist or export candidate boards, or ap
 
 | Surface | First-slice contract |
 |---|---|
-| Snapshot | Canonical, digest-verified Board IR `0.1.0` |
+| Snapshot | Canonical, digest-verified Board IR `0.2.0` |
 | Request | One stable net ID, one stable signal-layer ID, exact base revision, seed, integer settings |
 | Connectivity | Exactly two pads belonging to the net; both accessible on the selected layer |
 | Constraints | One net-class width/clearance assignment; no selected-net length or differential-pair rule |
@@ -66,7 +66,7 @@ Each is inflated by the routed half-width plus the stricter of the routed net's 
 net's class clearance, so a board mixing net classes cannot be routed to the looser rule.
 
 A through via outside the routed net contributes the bounding box of its outer diameter; Board IR
-v0.1 admits through vias only, so every via provably crosses the routed layer. Drill diameter is
+v0.2 admits through vias only, so every via provably crosses the routed layer. Drill diameter is
 ignored because copper, not the hole, is what a track must clear. A via on the routed net still
 refuses *routing*, because a layer change is not something this single-layer search can model, but
 it no longer hides the net: it is a connectivity joint, as described under vias below.
@@ -251,12 +251,12 @@ The circular `candidate_id` field is excluded from those bytes, then set to thei
 
 `render_kicad_candidate_board()` first reproduces the supplied Board IR from the original KiCad bytes
 and constraint profile. It verifies candidate identity, reruns the bounded A* request, and requires an
-exact candidate match. Every modeled source geometry object must have a native UUID/tstamp; the
-bridge rejects revision-derived geometry IDs because rewriting derivative metadata would otherwise
-change them. Each compressed route edge becomes one root-level KiCad segment with exact decimal
-units and a deterministic UUIDv5 derived from candidate identity and edge order. Native UUID/tstamp
-identities are collected once for constant-time collision checks, and the derivative records
-`copper-mcp` plus its package version as its KiCad writer.
+exact candidate match. Every modeled source geometry object, including a footprint, must have a
+native UUID/tstamp; the bridge rejects revision-derived geometry IDs because rewriting derivative
+metadata would otherwise change them. Each compressed route edge becomes one root-level KiCad
+segment with exact decimal units and a deterministic UUIDv5 derived from candidate identity and edge
+order. Native UUID/tstamp identities are collected once for constant-time collision checks, and the
+derivative records `copper-mcp` plus its package version as its KiCad writer.
 
 The rendered bytes stay under the same parser, byte, and total-object budgets and are parsed back
 through the supported KiCad adapter. The complete modeled content must equal the base snapshot after
@@ -406,7 +406,7 @@ what neither yet reaches. Measured against the repository's own
 
 | Stage | Result |
 |---|---|
-| Board IR conversion | Supported — 2 copper layers, 14 nets, 55 pads, 53 segments, 9 vias, 2 zones, 2 keepouts |
+| Board IR conversion | Supported — 2 copper layers, 14 nets, 26 footprints, 55 pads, 53 segments, 9 vias, 2 zones, 2 keepouts |
 | Nets reaching a terminal outcome on `F.Cu` | 14 of 14, all `already_connected` (`GND` needs `include_fill_authority`) |
 | Nets routed on `F.Cu` | 0 of 14 |
 
