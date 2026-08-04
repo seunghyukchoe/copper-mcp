@@ -240,6 +240,12 @@ class _Work:
     obstacle_checks: int = 0
 
 
+@dataclass(frozen=True, slots=True)
+class _ValidationFailure:
+    code: LayeredFailureCode
+    message: str
+
+
 def _invalid(message: str) -> LayeredAStarResult:
     return LayeredAStarResult(
         path=None,
@@ -271,7 +277,9 @@ def _integer(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def _validate(request: object) -> tuple[LayeredAStarRequest, tuple[int, int], _Bounds] | str:
+def _validate(
+    request: object,
+) -> tuple[LayeredAStarRequest, tuple[int, int], _Bounds] | _ValidationFailure | str:
     if not isinstance(request, LayeredAStarRequest):
         return "request must be a LayeredAStarRequest"
     if not isinstance(request.board_revision, str) or not 1 <= len(request.board_revision) <= 256:
@@ -337,7 +345,10 @@ def _validate(request: object) -> tuple[LayeredAStarRequest, tuple[int, int], _B
         if not _integer(value) or not 1 <= value <= maximum:
             return f"{name} must be a positive integer"
     if len(obstacles) + len(via_obstacles) > settings.max_obstacles:
-        return "obstacle count exceeds the configured obstacle budget"
+        return _ValidationFailure(
+            LayeredFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+            "obstacle count exceeds the configured obstacle budget",
+        )
     for obstacle_obj in (*obstacles, *via_obstacles):
         obstacle: object = obstacle_obj
         if not isinstance(obstacle, LayeredObstacle):
@@ -445,6 +456,8 @@ def route_layered(
     """
 
     validated = _validate(request)
+    if isinstance(validated, _ValidationFailure):
+        return _failure(validated.code, validated.message, _Work())
     if isinstance(validated, str):
         if (
             isinstance(request, LayeredAStarRequest)

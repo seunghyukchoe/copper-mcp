@@ -75,6 +75,10 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Placement candidate rendering now preserves arbitrary exact Board IR pad angles while retaining
+  the orthogonal-only restriction on parent footprint poses. Layered A* now reports a distinct
+  obstacle-count budget diagnostic when a structurally valid request exceeds its configured ceiling.
+
 - Added an internal, Board IR-bound two-layer routing proposal adapter. It resolves exact
   nanometre grid geometry, net-class width/clearance/via dimensions, foreign physical envelopes,
   track versus via-only keepouts, immutable candidate identity, and fail-closed stale/off-grid/

@@ -103,8 +103,21 @@ def _rotation_degrees(rotation_udeg: int) -> int:
     return rotation_udeg // 1_000_000
 
 
+def _rotation_token(rotation_udeg: int) -> str:
+    """Render any exact Board IR angle for a pad, including non-orthogonal angles."""
+
+    whole, fraction = divmod(rotation_udeg, 1_000_000)
+    if fraction == 0:
+        return str(whole)
+    return f"{whole}.{fraction:06d}".rstrip("0")
+
+
 def _render_pose(x_nm: int, y_nm: int, rotation_udeg: int) -> str:
     return f"(at {nm_to_mm(x_nm)} {nm_to_mm(y_nm)} {_rotation_degrees(rotation_udeg)})"
+
+
+def _render_pad_pose(x_nm: int, y_nm: int, rotation_udeg: int) -> str:
+    return f"(at {nm_to_mm(x_nm)} {nm_to_mm(y_nm)} {_rotation_token(rotation_udeg)})"
 
 
 def _quarter_turn(point: PointNM, turn: int) -> PointNM:
@@ -367,7 +380,7 @@ def render_kicad_placement_candidate_board(
             indentation = line_indent(root_text, start)
             x = mm_to_nm(values[0])
             y = mm_to_nm(values[1])
-            splices.append(Splice(start, end, indentation + _render_pose(x, y, next_rotation)))
+            splices.append(Splice(start, end, indentation + _render_pad_pose(x, y, next_rotation)))
 
     if len(splices) > limits.max_nodes:
         _fail("placement patch exceeds the edit budget")

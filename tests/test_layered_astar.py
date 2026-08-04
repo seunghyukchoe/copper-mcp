@@ -212,3 +212,18 @@ def test_resource_limits_reject_unbounded_obstacle_scans() -> None:
 
     assert oversized.diagnostic is not None
     assert oversized.diagnostic.code is LayeredFailureCode.INVALID_REQUEST
+
+
+def test_obstacle_count_exhaustion_has_a_typed_budget_diagnostic() -> None:
+    result = route_layered(
+        _request(
+            obstacles=(
+                LayeredObstacle(0, 4, 4, 4, 4),
+                LayeredObstacle(1, 4, 4, 4, 4),
+            ),
+            settings=LayeredAStarSettings(max_obstacles=1),
+        )
+    )
+
+    assert result.diagnostic is not None
+    assert result.diagnostic.code is LayeredFailureCode.OBSTACLE_BUDGET_EXCEEDED

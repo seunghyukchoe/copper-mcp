@@ -101,6 +101,26 @@ def test_render_is_deterministic_source_preserving_and_round_trips() -> None:
     assert patched.snapshot.content.source.revision != snapshot.content.source.revision
 
 
+def test_render_preserves_non_orthogonal_board_frame_pad_angle() -> None:
+    source = FIXTURE.read_bytes().replace(b"(at -1 -0.5 90)", b"(at -1 -0.5 45)", 1)
+    source, snapshot, profile, candidate, _ = _candidate(source)
+
+    rendered = render_kicad_placement_candidate_board(source, snapshot, candidate, profile)
+
+    # The parent footprint moves by 90 degrees, but the pad's original 45-degree board-frame
+    # angle is preserved as 135 degrees instead of being rejected as a non-orthogonal footprint.
+    assert b"(at -1 -0.5 135)" in rendered
+    patched = parse_kicad_bytes(rendered, profile)
+    assert patched.diagnostics == ()
+    assert patched.snapshot is not None
+    target_pad = next(
+        pad
+        for pad in patched.snapshot.content.pads
+        if pad.id.endswith(":kicad:92000000-0000-0000-0000-000000000012")
+    )
+    assert target_pad.rotation_udeg == 135_000_000
+
+
 def test_render_rejects_stale_tampered_unknown_and_budgeted_inputs() -> None:
     source, snapshot, profile, candidate, _ = _candidate()
     with pytest.raises(KiCadPlacementPatchError, match="stale"):
