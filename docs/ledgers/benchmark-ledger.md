@@ -370,8 +370,8 @@ result or a general performance comparison.
 
 | Field | Recorded evidence |
 |---|---|
-| Run ID | `sha256:6f81f9f13ef38db8055594433715f4dc29f80ab8a252e3da2d5aca58b50ce8a8` |
-| Date and commit | 2026-08-04 18:03:46 UTC; `92b70a52c371f48e9df4319b2983e096374a3308`; measured with the live implementation and fake-IPC closure remediation in the worktree |
+| Run ID | `sha256:722d55fc1df22a711219dfa7c12cc07103575fe0dda192809f9e76e102489a40` |
+| Date and commit | 2026-08-04 18:10:26 UTC; `ceba0c907d127f2aadec69145eb55a0da876fa82`; measured after the live implementation commit |
 | Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad IPC server was not invoked |
 | Dataset | Independently authored `tests/fixtures/route-candidate/blocked-pad.kicad_pcb`; two selected-net pads, a front-layer blocker, and two signal layers; no external or proprietary board data |
 | Configuration | `copper-mcp/benchmark/live-layered-route-preview/v1`; ten fake official-client replays; source, Board IR, and hashed session CAS; remaining route deadline passed to IPC; CPU-only |
