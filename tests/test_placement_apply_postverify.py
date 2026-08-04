@@ -112,3 +112,7 @@ def test_concurrent_post_publish_change_is_applied_but_unverified(
     assert result.board_revision_after == f"sha256:{hashlib.sha256(concurrent_content).hexdigest()}"
     assert board.read_bytes() == concurrent_content
     assert (settings.workspace / str(result.backup_path)).read_bytes() == source
+    replay = apply_placement_candidate(_request(preview, board), settings, authority)
+    assert replay.status == "refused"
+    assert replay.diagnostic is not None
+    assert replay.diagnostic.code == "token_already_used"

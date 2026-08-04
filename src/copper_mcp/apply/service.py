@@ -836,12 +836,19 @@ def apply_placement_candidate(
         # Never roll back bytes merely because they were observed after our rename: they may
         # belong to a concurrent writer.  Restoration is allowed only if the board still holds
         # the exact output this operation published.
+        # The rename already spent the capability, even when the guarded restore succeeds.
+        token_authority.consume(verified)
         restored = _guarded_restore(settings, board, applied.result_revision)
+        final_revision = _observed_revision(
+            settings,
+            board,
+            fallback=published_revision,
+        )
         return PlacementApplyResult(
             status="applied_but_unverified",
             board_path=board.relative_path,
             board_revision_before=board.revision,
-            board_revision_after=published_revision,
+            board_revision_after=final_revision,
             snapshot_digest_before=snapshot.snapshot_digest,
             base_revision=candidate.base_revision,
             candidate_id=candidate.candidate_id,
