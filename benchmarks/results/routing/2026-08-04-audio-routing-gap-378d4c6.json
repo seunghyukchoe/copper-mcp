@@ -1,0 +1,46 @@
+{
+  "date_utc": "2026-08-04T23:42:44+00:00",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+    "python": "3.14.2"
+  },
+  "fixture": "benchmarks/audio/fixtures/rc-low-pass-routing-v1.kicad_pcb",
+  "metrics": {
+    "authoritative_drc_performed": false,
+    "candidate_applied": false,
+    "candidate_edge_count": 1,
+    "candidate_id": "sha256:b902f1cd7440d72003ba5155386ff49a7e411f54f568972ab3c4e469a8729244",
+    "candidate_pad_count": 2,
+    "candidate_path_count": 1,
+    "candidate_total_cost_nm": 8000000,
+    "candidate_wire_length_nm": 8000000,
+    "derivative_written": false,
+    "deterministic_candidate_id": true,
+    "deterministic_derivative_bytes": true,
+    "fixture_derivation_statement": "Independently authored synthetic connectivity fixture; no external schematic, values, layout, artwork, or download was used.",
+    "fixture_id": "rc-low-pass-routing-v1",
+    "fixture_license_sha256": "947af68b9ff8f542f5bba7a084e343573274741f4d7e4cbe1e4e9668a89331de",
+    "fixture_license_spdx": "Apache-2.0",
+    "fixture_origin": "coppermcp-original",
+    "fixture_source_sha256": "8cfea1dbcedbfede05905cdeb36160aa41f1022245f4dfe5c1e723aa503a758b",
+    "kicad_invoked": false,
+    "new_copper_length_nm": 8000000,
+    "new_copper_segment_count": 1,
+    "not_claimed": [
+      "external-or-production-board-coverage",
+      "candidate-drc",
+      "apply",
+      "manufacturability",
+      "fabrication-readiness",
+      "hardware-measurement"
+    ],
+    "original_segment_count": 0,
+    "rendered_segment_count": 1,
+    "repetitions": 10,
+    "source_unchanged": true
+  },
+  "run_id": "sha256:e325c4efb649984540cc797e8ccaea92e507906ef8ae4160b2de8ae7cbb1d613",
+  "schema": "copper-mcp/benchmark/audio-routing-gap/v1",
+  "script": "scripts/benchmark_audio_routing_gap.py",
+  "source_commit": "378d4c6b7adb47fdd1b33a010048e5839cfa1366"
+}
