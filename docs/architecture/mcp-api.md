@@ -251,12 +251,17 @@ the request names a single layer. It returns no geometry and no diagnostic, and 
 deliberately has no `RouteFailureCode`. Clients that switch exhaustively over the previous three
 statuses need a fourth branch.
 
-Setting `include_fill_authority` allows poured zone copper to count as connectivity evidence. KiCad
-refills a private disposable copy and the recomputed pour must reproduce the board's cache exactly;
-matching returns the claim with a `fill_authority` record carrying both digests, the KiCad version
-and the island and vertex counts, while a mismatch is refused with the typed `stale_fill` diagnostic
-rather than answering from either version. The workspace board is never refilled. The flag is opt-in
-because it spawns KiCad, and it changes nothing for a board without zones on the requested net.
+Setting `include_fill_authority` allows freshness-verified poured copper to participate in routing.
+KiCad refills a private disposable copy and the recomputed pour must reproduce the board's cache
+exactly; matching returns a `fill_authority` record carrying both digests, the KiCad version, island
+and vertex counts, and a `routing_effect` literal. On a routed result, `foreign_zone_obstacles`
+means exact islands replaced the conservative foreign-zone envelope, `connectivity_evidence` means
+same-net islands were available to prove contact, `both` means both roles were present, and
+`verified_context` means the selected-layer cache was verified but contained no island relevant to
+the route. On an `already_connected` result the effect is `connectivity_evidence`. A mismatch is
+refused with the typed `stale_fill` diagnostic rather than answering from either version. The
+workspace board is never refilled. The flag is opt-in because it spawns KiCad, and it changes
+nothing for a board without zones on the requested layer.
 
 Setting `include_drc` binds the proposal to candidate-bound authoritative KiCad DRC evidence, which
 returns the same aggregate, redacted summary as `run_board_drc` plus the candidate, source, patched

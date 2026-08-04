@@ -380,8 +380,10 @@ uses the polygon itself with exact integer geometry. Pad and track cores stay un
 only the pour is exact. Reading is bounded by `max_fill_vertices`, default 50,000; CopperTone's pour
 is 4,314 vertices across two layers. B-021 measures the narrow fill-aware routing core on a
 synthetic corridor: ten deterministic replays reduce wire length from 14,000 nm to 8,000 nm. The
-public preview still needs a response contract before it advertises fill-aware routed-candidate
-provenance.
+public preview now carries the same freshness evidence on routed candidates when
+`include_fill_authority` is set, with a typed `routing_effect` so an AI host can distinguish exact
+foreign-zone obstacles from same-net connectivity evidence. This is provenance, not a DRC or
+fabrication guarantee.
 
 ## Multi-pin trees
 

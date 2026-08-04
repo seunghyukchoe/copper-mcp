@@ -1023,6 +1023,10 @@ class RouteRealKiCadOutputTests(unittest.TestCase):
         self.assertEqual(document["status"], "already_connected")
         self.assertGreater(document["connection"]["fill_polygons"], 0)
         self.assertEqual(document["fill_authority"]["source_revision"], document["board_revision"])
+        self.assertEqual(
+            document["fill_authority"]["routing_effect"],
+            "connectivity_evidence",
+        )
         self.assertEqual(board.read_bytes(), before)
 
 

@@ -15,9 +15,10 @@ import pytest
 import copper_mcp.kicad_cli as kicad_cli
 import copper_mcp.request_boundary as request_boundary
 import copper_mcp.route_preview as route_preview
+from copper_mcp.adapters import net_id_for_name
 from copper_mcp.board_ir import PointNM
 from copper_mcp.config import Settings
-from copper_mcp.kicad_cli import KiCadCliError, RouteCandidateDrcEvidence
+from copper_mcp.kicad_cli import KiCadCliError, RouteCandidateDrcEvidence, ZoneFillAuthority
 from copper_mcp.models import DrcSummary
 from copper_mcp.route_preview import (
     RoutePreview,
@@ -28,6 +29,7 @@ from copper_mcp.route_preview import (
     preview_route,
 )
 from copper_mcp.routing import RouteConnection, RouteDiagnostic, RouteFailureCode
+from copper_mcp.zone_fill import FillIsland
 
 FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "two-pad.kicad_pcb"
 _DISCOVERED_KICAD_CLI = shutil.which("kicad-cli")
@@ -208,6 +210,49 @@ def test_preview_routes_around_a_zone_outline_without_mutating_the_source(
         for point in first.candidate.patch.paths[0].vertices
     )
     assert _entries(tmp_path) == before
+
+
+def test_preview_exposes_fresh_foreign_fill_as_routing_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A routed candidate must tell an MCP caller when exact fill islands shaped the search."""
+
+    fixture = FIXTURE.parent / "blocked-zone.kicad_pcb"
+    board = tmp_path / fixture.name
+    board.write_bytes(fixture.read_bytes())
+    settings = Settings(workspace=tmp_path, max_drc_report_bytes=4096)
+    board_revision = f"sha256:{hashlib.sha256(board.read_bytes()).hexdigest()}"
+    authority = ZoneFillAuthority(
+        source_revision=board_revision,
+        context_revision=f"sha256:{'a' * 64}",
+        source_fill_digest=f"sha256:{'b' * 64}",
+        refilled_fill_digest=f"sha256:{'b' * 64}",
+        kicad_version="10.0.5",
+        fill_polygon_count=1,
+        fill_vertex_count=4,
+    )
+    island = FillIsland(
+        net_id=net_id_for_name("POWER"),
+        layer_id="layer:F.Cu",
+        points=(
+            PointNM(18_000_000, 11_000_000),
+            PointNM(22_000_000, 11_000_000),
+            PointNM(22_000_000, 14_000_000),
+            PointNM(18_000_000, 14_000_000),
+        ),
+    )
+    monkeypatch.setattr(route_preview, "run_zone_fill_authority", lambda *_: (authority, (island,)))
+
+    preview = preview_route(
+        _request(board=fixture.name, include_fill_authority=True),
+        settings,
+    )
+
+    assert preview.status is RoutePreviewStatus.ROUTED
+    assert preview.candidate is not None
+    assert preview.fill_authority is authority
+    assert preview.fill_routing_effect == "foreign_zone_obstacles"
+    assert preview.to_dict()["fill_authority"]["routing_effect"] == "foreign_zone_obstacles"
 
 
 def _copy_fixture(tmp_path: Path, name: str) -> Settings:

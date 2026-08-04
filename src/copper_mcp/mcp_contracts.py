@@ -814,6 +814,8 @@ class RouteCandidateDrcEvidenceContract(_ClosedContract):
 
 
 class RouteFillAuthorityContract(_ClosedContract):
+    """Fresh KiCad fill evidence and the deterministic role it played in routing."""
+
     source_revision: Digest
     context_revision: Digest
     source_fill_digest: Digest
@@ -824,6 +826,12 @@ class RouteFillAuthorityContract(_ClosedContract):
     ]
     fill_polygon_count: NonNegativeInteger
     fill_vertex_count: NonNegativeInteger
+    routing_effect: Literal[
+        "foreign_zone_obstacles",
+        "connectivity_evidence",
+        "both",
+        "verified_context",
+    ]
 
 
 class _RoutePreviewResponseCommonContract(_ClosedContract):
@@ -862,7 +870,7 @@ class RoutedRoutePreviewContract(_RoutePreviewResponseCommonContract):
     conversion_diagnostic_counts: EmptyRouteDiagnosticCounts
     drc_evidence: RouteCandidateDrcEvidenceContract | None
     apply_token: RouteApplyToken | None
-    fill_authority: None
+    fill_authority: RouteFillAuthorityContract | None
 
 
 class ConnectedRoutePreviewContract(_RoutePreviewResponseCommonContract):

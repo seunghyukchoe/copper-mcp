@@ -313,3 +313,16 @@ result or a general performance comparison.
 | Metrics | Deterministic conservative 10/10; deterministic fill-aware 10/10; conservative wire length 14,000 nm; fill-aware wire length 8,000 nm; reduction 6,000 nm; matching zone required `true`; KiCad invocation `false`; DRC `false` |
 | Artifact | [`2026-08-05-fill-aware-routing.json`](../../benchmarks/results/routing/2026-08-05-fill-aware-routing.json) |
 | Interpretation | This measures a meaningful route-quality improvement in the internal bounded routing core. It does not establish fresh-fill behavior on a real KiCad board, whole-board completion, electrical correctness, fabrication readiness, or FreeRouting parity; the public routed-candidate provenance contract remains open. |
+
+### B-022 — Public routed fill-provenance contract
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:cb227469da7c33fcc601553eea5886699f5d498d655a00b26efb527b10c15c96` |
+| Date and commit | 2026-08-04 16:39:37 UTC; `ee60b62f1bf54e0e7eee128dc92cfe1eb34791c3`; measured before the provenance contract commit |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
+| Dataset | Independently authored `blocked-zone.kicad_pcb`; two AUDIO pads, one POWER zone, and a synthetic freshness-bound upper fill island; no proprietary board data |
+| Configuration | `fill-preview-provenance-v1`; ten repeated public-service calls; closed `RoutePreviewToolResponse` validation; private temporary workspace; foreign-zone evidence injected only at the tested authority seam |
+| Metrics | Routed outcomes 10/10; foreign-zone provenance outcomes 10/10; schema-valid outputs 10/10; deterministic candidate IDs `true`; workspace unchanged `true`; KiCad invocation `false`; DRC `false` |
+| Artifact | [`2026-08-05-fill-preview-provenance.json`](../../benchmarks/results/routing/2026-08-05-fill-preview-provenance.json) |
+| Interpretation | This proves that an MCP caller can distinguish a routed candidate shaped by freshness-bound foreign fill without receiving raw island geometry or mutation authority. It is contract evidence, not KiCad refill, DRC, whole-board, electrical, fabrication, performance, or FreeRouting evidence. |

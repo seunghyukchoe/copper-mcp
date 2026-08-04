@@ -128,9 +128,11 @@ These are not style preferences. Most of them were paid for with a bug. Preserve
    in-memory document to a file digest; the research doc lays out the constraints.
 5. **`v0.5.0` release** once the unreleased surfaces have soaked, following the ledger discipline in
    `docs/ledgers/release-ledger.md`.
-6. **Deferred quality items**: fill-aware routing obstacles (currently connectivity only),
-   durable routing jobs and candidate persistence, the `PlacementBackend` solver seam, and the
-   `ordering_policy` seam for RSMT-guided topology. All are additive behind existing contracts.
+6. **Deferred quality items**: durable routing jobs and candidate persistence, negotiated
+   congestion/rip-up, the `PlacementBackend` solver seam, and the `ordering_policy` seam for
+   RSMT-guided topology. Fill-aware routing obstacles and their opt-in MCP provenance are now
+   complete for the bounded single-layer contract; all remaining items are additive behind
+   existing contracts.
 
 `R-033` (board regeneration) and issues #8 and #11 remain open on GitHub.
 

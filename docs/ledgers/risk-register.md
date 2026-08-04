@@ -41,6 +41,7 @@
 | R-037 | A layered candidate could be rendered with missing vias, reversed layer spans, stale geometry, or an identity collision and then be mistaken for KiCad-valid copper. | High | High | Require the original request replay, verify candidate identity and native identities, restrict to two signal layers/full-stack through-vias, canonicalize stack order, bound output/object counts, and require a Board IR round trip. Keep DRC, MCP, and apply authority deferred. | Mitigated / serializer; DRC open |
 | R-038 | A layered candidate could pass the internal lattice and serializer checks while KiCad rejects its clearance, via, or connectivity semantics, or the DRC evidence could describe a changed private context. | High | High | Require the original request replay before rendering; run the derivative through the existing fixed-argument private KiCad DRC snapshot; bind candidate, Board IR, source, patched board, and complete context revisions; accept only strict aggregate evidence with process/report agreement; recapture the live context and refuse on any change. Keep the boundary internal and read-only. | Mitigated / layered candidate DRC; public routing remains open |
 | R-039 | A stale or orphaned `filled_polygon` island could be treated as exact copper and open a corridor that KiCad no longer pours, or a large island set could bypass routing budgets. | High | High | Accept fill only from the explicit freshness-bound authority; require source revision and matching Board IR zone/net/layer for every island; replace a conservative zone only when matching evidence exists; inflate exact polygon obstacles with the strictest clearance; charge islands to object and edge budgets; refuse malformed provenance and keep public fill-aware provenance unadvertised until its response contract is reviewed. | Mitigated / internal fill-aware core; public provenance open |
+| R-040 | An AI host could receive a fresh-fill record but misunderstand whether it shaped routing or only proved connectivity. | Medium | High | Keep fill opt-in; return only aggregate source/context/fill digests; require a closed `routing_effect` literal (`foreign_zone_obstacles`, `connectivity_evidence`, `both`, or `verified_context`); bind evidence to the board revision; never return raw islands or mutation authority; cover the public schema and source-preservation path in B-022. | Mitigated / routing |
 
 > **Amendment — 2026-08-03:** ADR-0008 and R-014 supersede R-011's “separate future
 > candidate-evidence contract” clause. The internal evidence boundary now exists; durable export,
@@ -53,6 +54,10 @@
 > **Amendment — 2026-08-03:** ADR-0015 and R-022 supersede R-021's “no MCP/CLI/file-writing
 > surface” mitigation. The bounded public service now exists; its only durable effect is one
 > explicitly requested new schematic file, while MCP delivery remains ephemeral and stdio-only.
+
+> **Amendment — 2026-08-05:** ADR-0040 and R-040 supersede R-039's final clause. The public
+> `preview_route` response now advertises freshness-bound fill provenance when explicitly requested;
+> stale/orphan/source-mismatched evidence remains fail-closed and the disclosure is aggregate only.
 
 > **Amendment — 2026-08-03:** R-025 clarifies R-022's “15-minute lifetime” wording: capability
 > access expires at the deadline, while stale in-process bytes are reclaimed lazily and secure

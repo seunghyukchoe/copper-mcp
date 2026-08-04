@@ -56,3 +56,9 @@ refusal and stale-source regression keep the boundary fail closed.
 - [KiCad command-line interface: PCB DRC and refill](https://docs.kicad.org/10.0/en/cli/cli.html#pcb_drc)
 - [ADR-0021: Zone fill authority](0021-zone-fill-authority.md)
 - [B-021](../ledgers/benchmark-ledger.md)
+
+## Follow-up
+
+ADR-0040 promotes the freshness record to routed `preview_route` responses when explicitly
+requested, with a typed `routing_effect`; this does not change the pure-router or fail-closed
+boundaries decided here.

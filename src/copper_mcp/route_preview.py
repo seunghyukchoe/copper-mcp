@@ -78,6 +78,9 @@ _OPTIONAL_FIELDS = (
     "include_apply_token",
 )
 _SETTINGS_FIELDS = tuple(AStarSettings.__dataclass_fields__)
+_FILL_ROUTING_EFFECTS = frozenset(
+    {"foreign_zone_obstacles", "connectivity_evidence", "both", "verified_context"}
+)
 
 
 class RoutePreviewError(RequestError):
@@ -301,6 +304,31 @@ def _candidate_to_dict(candidate: RouteCandidate) -> dict[str, Any]:
     }
 
 
+def _fill_routing_effect(
+    fills: tuple[VerifiedFill, ...],
+    routed_net_id: str,
+    routed_layer_id: str,
+) -> str:
+    """Describe how freshness-bound islands affected one routed preview.
+
+    The deterministic router remains the authority for geometry. This label only makes the
+    already-verified evidence legible to an MCP caller: foreign islands become exact obstacles,
+    same-net islands can prove connectivity, and an empty selected-layer cache is still a
+    verified context rather than an inferred absence of copper.
+    """
+
+    selected = tuple(fill for fill in fills if fill.layer_id == routed_layer_id)
+    foreign = any(fill.net_id != routed_net_id for fill in selected)
+    same_net = any(fill.net_id == routed_net_id for fill in selected)
+    if foreign and same_net:
+        return "both"
+    if foreign:
+        return "foreign_zone_obstacles"
+    if same_net:
+        return "connectivity_evidence"
+    return "verified_context"
+
+
 @dataclass(frozen=True, slots=True)
 class RoutePreview:
     """One immutable, side-effect-free preview of a proposed route candidate."""
@@ -313,6 +341,7 @@ class RoutePreview:
     candidate: RouteCandidate | None = None
     connection: RouteConnection | None = None
     fill_authority: ZoneFillAuthority | None = None
+    fill_routing_effect: str | None = None
     diagnostic: RouteDiagnostic | None = None
     conversion_diagnostic_counts: Mapping[str, int] = field(default_factory=dict)
     drc_evidence: RouteCandidateDrcEvidence | None = None
@@ -412,12 +441,16 @@ class RoutePreview:
         if self.fill_authority is not None:
             if not isinstance(self.fill_authority, ZoneFillAuthority):
                 raise RoutePreviewError("fill authority is malformed")
-            if self.status is not RoutePreviewStatus.ALREADY_CONNECTED:
-                raise RoutePreviewError("fill authority requires a connected routing outcome")
+            if self.status not in (RoutePreviewStatus.ROUTED, RoutePreviewStatus.ALREADY_CONNECTED):
+                raise RoutePreviewError("fill authority requires a routing outcome")
             if not self.request.include_fill_authority:
                 raise RoutePreviewError("fill authority was not requested")
             if self.fill_authority.source_revision != self.board_revision:
                 raise RoutePreviewError("fill authority is not bound to the previewed board")
+            if self.fill_routing_effect not in _FILL_ROUTING_EFFECTS:
+                raise RoutePreviewError("fill authority routing effect is malformed")
+        elif self.fill_routing_effect is not None:
+            raise RoutePreviewError("fill routing effect requires fill authority")
         if (
             self.status is RoutePreviewStatus.ALREADY_CONNECTED
             and self.connection is not None
@@ -479,7 +512,12 @@ class RoutePreview:
             "drc_evidence": (None if self.drc_evidence is None else self.drc_evidence.to_dict()),
             "apply_token": self.apply_token,
             "fill_authority": (
-                None if self.fill_authority is None else self.fill_authority.to_dict()
+                None
+                if self.fill_authority is None
+                else {
+                    **self.fill_authority.to_dict(),
+                    "routing_effect": self.fill_routing_effect,
+                }
             ),
         }
 
@@ -606,7 +644,7 @@ def preview_route(
     verified_fill: tuple[VerifiedFill, ...] = ()
     fill_authority: ZoneFillAuthority | None = None
     if request.include_fill_authority and any(
-        zone.net_id == request.net_id for zone in snapshot.content.zones
+        zone.layer_id == request.layer_id for zone in snapshot.content.zones
     ):
         # Poured copper may only be believed when KiCad has just confirmed the board's cache
         # still describes it. Refill happens on a private disposable copy, never here.
@@ -659,6 +697,9 @@ def preview_route(
             snapshot_digest=snapshot.snapshot_digest,
             connection=result.connected,
             fill_authority=fill_authority if result.connected.fill_polygons else None,
+            fill_routing_effect=(
+                "connectivity_evidence" if result.connected.fill_polygons else None
+            ),
         )
     if result.candidate is None:
         return RoutePreview(
@@ -706,6 +747,16 @@ def preview_route(
         request=request,
         snapshot_digest=snapshot.snapshot_digest,
         candidate=result.candidate,
+        fill_authority=fill_authority,
+        fill_routing_effect=(
+            _fill_routing_effect(
+                verified_fill,
+                request.net_id,
+                request.layer_id,
+            )
+            if fill_authority is not None
+            else None
+        ),
         drc_evidence=evidence,
         apply_token=apply_token,
     )
