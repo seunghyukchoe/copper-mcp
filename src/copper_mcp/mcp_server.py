@@ -219,10 +219,10 @@ def inspect_live_editor_context(
 ) -> LiveEditorContextToolResponse:
     """Inspect the active layer and selected native item refs without mutation.
 
-    The request must carry the board and snapshot digests from a live scene/observation.
-    An optional context digest makes a follow-up compare-and-swap read fail closed if the
-    operator changes the selection or active layer.  No board text, coordinates, net names,
-    selection strings, project tokens, or write APIs are read or returned.
+    The request must carry the raw board serialization digest from a live observation. An
+    optional context digest makes a follow-up compare-and-swap read fail closed if the operator
+    changes the selection or active layer. No board text, coordinates, net names, selection
+    strings, project tokens, or write APIs are read or returned.
     """
 
     context = inspect_live_editor_context_service_raw(request, _SETTINGS)

@@ -84,6 +84,8 @@ documentation, ledger updates, and benchmark evidence.
   same-net zone, whose fill is not trusted.
 - [ ] Routing *through* vias, which needs a layer-aware lattice, a via-insertion cost, and a
   via-placement contract. Connectivity is multilayer today; path search is not.
+  - [ ] First acceleration milestone: bounded two-signal-layer `(x, y, layer)` A* with explicit
+    through-via transitions, positive via cost, per-layer obstacles, and deterministic budgets.
 - [x] Attachment to existing same-net copper and bounded partial-route completion.
 - [ ] Multilayer vias and keepouts.
 - [ ] Negotiated-congestion multi-net routing.
@@ -142,10 +144,11 @@ and the policy-plugin work.
   implemented. A locked footprint cannot be moved. `preview_live_placement` adds the same
   candidate-only pipeline over a byte-confirmed active KiCad snapshot; it requires both scene
   digests and never writes or grants apply authority. Nothing applies a placement.
-- [ ] Authoritative KiCad DRC binding for placement candidates. Deferred deliberately: a
-  footprint-move serializer would still have to rewrite properties, text, fabrication graphics,
-  library identity, and 3D-model pose that Board IR cannot verify, so the route patch's equality
-  assertion would remain blind to part of the edit.
+- [~] Authoritative KiCad DRC binding for placement candidates. A narrow internal
+  source-preserving serializer now covers front-side, orthogonal, unfilled-courtyard footprints
+  and reparses its disposable result; authoritative DRC remains deferred until unsupported
+  properties, text, fabrication graphics, library identity, and 3D-model pose are either modeled
+  or explicitly refused at the transaction boundary.
 - [~] Deterministic snapping, connectivity, clearance, rule, provenance, and revision validation for
   every placement candidate. Grid snapping, rule residuals, three-valued pad overlap, outline
   containment, keepout respect and dual-digest binding are implemented. Board IR now carries the

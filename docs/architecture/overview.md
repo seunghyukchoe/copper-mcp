@@ -33,6 +33,7 @@ live revision before it can release the synchronous connection.
 | `circuit_ir/` | Canonical logical topology snapshots, strict codec, semantic validation, and digests. |
 | `adapters/kicad_board_ir.py` | Bounded, read-only conversion of the documented KiCad subset. |
 | `adapters/kicad_route_patch.py` | Pure replay-bound serialization to new disposable KiCad bytes. |
+| `adapters/kicad_placement_patch.py` | Internal, source-preserving projection of supported placement candidates to disposable KiCad bytes. |
 | `adapters/kicad_schematic.py` | Pure deterministic rendering of the Circuit Intent subset to new in-memory KiCad schematic bytes. |
 | `circuit_intent_service.py` | Validate or normalize Circuit Intent and require byte-identical double rendering before delivery. |
 | `schematic_artifacts.py` | Bounded process-local capability store for stdio schematic resource delivery. |
@@ -117,6 +118,13 @@ topology and back-side footprints fail closed. A locked footprint cannot be move
 not because the supported contour is absent. Placement apply remains deferred. Models never write
 KiCad syntax, mutate a live editor, or bypass deterministic candidate validation and explicit
 revision-checked authorization.
+
+An internal placement projection now follows the route adapter's source-preserving pattern for
+the supported front-side, orthogonal, unfilled-courtyard subset. It splices only changed footprint
+poses and owned absolute pad angles, preserves padless mechanical footprints and all unrelated
+bytes, and reparses the disposable result against the expected Board IR transform. This is a
+candidate derivative only: placement DRC, live compare-and-swap, KiCad undo, and post-action
+observation remain separate gates.
 
 ## Candidate lifecycle
 

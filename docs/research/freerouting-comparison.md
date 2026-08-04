@@ -36,6 +36,21 @@ superiority. CopperMCP must not claim to beat FreeRouting on general-board compl
 systems produce outputs from the same KiCad-authored corpus and the outputs are re-imported and
 checked by the same KiCad version.
 
+## Acceleration track toward comparable routing fundamentals
+
+The fastest capability gap to close is not unbounded brute force. It is a bounded two-signal-layer
+search over `(x, y, layer)` with explicit through-via transitions and a positive via cost. That
+milestone gives CopperMCP a fair chance on boards where a single-layer route is impossible, while
+preserving deterministic budgets and the candidate-first boundary. It should precede negotiated
+multi-net congestion, rip-up, fanout, and post-route optimization.
+
+Acceptance should require a held-out, licence-cleared corpus with at least three via-required
+cases, 100% zero-new-error KiCad DRC for successful renders, 50 byte-identical replays, unchanged
+single-layer candidate IDs, and fail-closed stale, unsupported-layer, via-rule, budget, and
+cancellation tests. The scoped estimate is 55–85 agent-hours; it is a capability step, not
+FreeRouting parity. The current source-preserving placement projection is a prerequisite for
+high-fidelity editor communication but does not change this routing comparison.
+
 ## Fair comparison protocol
 
 1. Start with KiCad-authored unrouted `.kicad_pcb` files and preserve their project/rule context.

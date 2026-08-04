@@ -110,9 +110,16 @@ All notable changes are documented here. The format follows
 ### Added
 
 - `inspect_live_editor_context`, a read-only MCP surface for the active KiCad layer and bounded
-  native selection refs, bound to board/snapshot/context digests. The FreeRouting comparison note
-  documents its heuristic maze/rip-up architecture and a common-board benchmark protocol; no
-  general routing-quality superiority claim is made.
+  native selection refs, bound to the raw board serialization and editor-context digests. It now
+  avoids treating a constraint-profile-dependent Circuit Scene snapshot as an IPC serialization
+  precondition. The FreeRouting comparison note documents its heuristic maze/rip-up architecture
+  and a common-board benchmark protocol; no general routing-quality superiority claim is made.
+
+- An internal source-preserving KiCad placement projection for the supported front-side,
+  orthogonal, unfilled-courtyard footprint subset. It is candidate-only, revision-bound, rejects
+  forged or incomplete placeable sets, preserves padless mechanical footprints and unrelated
+  source bytes, and reparses the disposable result against the expected Board IR transform.
+  Placement DRC, live editor mutation, undo, and post-action observation remain separate gates.
 
 - `preview_live_placement`, a deterministic placement proposal over one byte-confirmed active
   KiCad IPC snapshot. It reuses the file-backed legalizer and requires both Circuit Scene digests;
@@ -183,6 +190,11 @@ All notable changes are documented here. The format follows
   `--expect-board-revision` compare-and-swap the operator states explicitly.
 
 ### Fixed
+
+- `inspect_live_editor_context` no longer treats a Circuit Scene's constraint-profile-dependent
+  `snapshot_digest` as the raw IPC serialization precondition. The context read now binds to the
+  observed `board_revision`; its response alias remains explicit, and `context_digest` still
+  protects follow-up selection/layer reads.
 
 - Added a revision-bound `inspect_live_editor_context` MCP surface that reports only KiCad's
   active layer and bounded native selection references. Unknown/empty selections, raw selection

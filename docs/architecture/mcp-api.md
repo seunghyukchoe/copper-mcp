@@ -161,15 +161,17 @@ apply-token, or editor-write authority. The fake-client B-014 oracle covers cand
 with the file-backed path, deterministic replay, stale preconditions, and zero mutating calls;
 it does not claim success against a running KiCad GUI session.
 
-`inspect_live_editor_context` requires `board: "live"` plus board and snapshot SHA-256
-preconditions. It reads only the official Board `get_active_layer()`, `get_layer_name()`, and
+`inspect_live_editor_context` requires `board: "live"` plus the raw board-serialization SHA-256
+precondition. It reads only the official Board `get_active_layer()`, `get_layer_name()`, and
 `get_selection()` APIs, confirms the board and editor context twice, and returns a context digest
 for follow-up compare-and-swap calls. Only allow-listed wrapper types with a validated native KIID
 become typed refs (`pad:kicad:<uuid>`, `segment:kicad:<uuid>`, and similar); unknown, empty,
 malformed, or over-budget selections fail closed. The service never calls
 `get_selection_as_string()`, returns no board text, coordinates, net names, or tokens, and exposes
-no write, DRC, placement, or routing authority. The context snapshot digest intentionally aliases
-the confirmed serialization digest until a caller-supplied Board IR profile is introduced.
+no write, DRC, placement, or routing authority. Its response `snapshot_digest` intentionally
+aliases the confirmed serialization digest; it does not accept a scene `snapshot_digest`, which is
+constraint-profile dependent and cannot be compared without receiving that same profile. Chain
+the scene's `board_revision` into this read, then use `context_digest` for subsequent CAS.
 
 `preview_placement` takes one request object with a workspace-relative `board`, integer
 `constraints`, and `subjects` - the footprint references a proposal may move - plus optional

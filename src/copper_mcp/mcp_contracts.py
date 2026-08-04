@@ -223,11 +223,10 @@ class LiveBoardObservationToolResponse(_ClosedContract):
 
 
 class LiveEditorContextRequestContract(_ClosedContract):
-    """Revision-bound request for the active KiCad editor layer and selection."""
+    """Serialization-revision-bound request for the active KiCad editor layer and selection."""
 
     board: Literal["live"]
     expect_board_revision: Digest
-    expect_snapshot_digest: Digest
     expect_context_digest: Digest | None = None
     max_selection: Annotated[int, Field(ge=1, le=256)] = 256
 

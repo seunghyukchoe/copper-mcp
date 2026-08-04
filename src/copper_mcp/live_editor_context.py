@@ -28,7 +28,7 @@ from copper_mcp.request_boundary import (
 LIVE_EDITOR_CONTEXT_VERSION = "0.1.0"
 _SHA256_DIGEST = re.compile(r"^sha256:[a-f0-9]{64}$")
 _MAX_SELECTION = 256
-_REQUIRED_FIELDS = ("board", "expect_board_revision", "expect_snapshot_digest")
+_REQUIRED_FIELDS = ("board", "expect_board_revision")
 _OPTIONAL_FIELDS = ("expect_context_digest", "max_selection")
 
 
@@ -49,7 +49,6 @@ class LiveEditorContextRequest:
 
     board: str
     expect_board_revision: str
-    expect_snapshot_digest: str
     expect_context_digest: str | None = None
     max_selection: int = _MAX_SELECTION
 
@@ -57,7 +56,6 @@ class LiveEditorContextRequest:
         if self.board != "live":
             raise LiveEditorContextError("live editor context requests must set board to 'live'")
         _digest("expect_board_revision", self.expect_board_revision)
-        _digest("expect_snapshot_digest", self.expect_snapshot_digest)
         if self.expect_context_digest is not None:
             _digest("expect_context_digest", self.expect_context_digest)
         if not 1 <= self.max_selection <= _MAX_SELECTION:
@@ -72,7 +70,6 @@ def parse_live_editor_context_request(payload: Any) -> LiveEditorContextRequest:
     known_fields("request", fields, frozenset((*_REQUIRED_FIELDS, *_OPTIONAL_FIELDS)))
     board = text("request.board", fields["board"], maximum=8)
     expected_board = _digest("request.expect_board_revision", fields["expect_board_revision"])
-    expected_snapshot = _digest("request.expect_snapshot_digest", fields["expect_snapshot_digest"])
     expected_context = (
         _digest("request.expect_context_digest", fields["expect_context_digest"])
         if "expect_context_digest" in fields
@@ -91,7 +88,6 @@ def parse_live_editor_context_request(payload: Any) -> LiveEditorContextRequest:
     return LiveEditorContextRequest(
         board=board,
         expect_board_revision=expected_board,
-        expect_snapshot_digest=expected_snapshot,
         expect_context_digest=expected_context,
         max_selection=max_selection,
     )
@@ -180,8 +176,6 @@ def inspect_live_editor_context_raw(
     )
     if request.expect_board_revision != snapshot.board_digest:
         raise LiveEditorContextError("live board revision is stale")
-    if request.expect_snapshot_digest != snapshot.board_digest:
-        raise LiveEditorContextError("live Board IR snapshot is stale")
     context_digest = _context_digest(snapshot)
     if (
         request.expect_context_digest is not None

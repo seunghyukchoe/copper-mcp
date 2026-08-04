@@ -15,6 +15,7 @@ from copper_mcp.live_editor_context import (
     LiveEditorContextError,
     inspect_live_editor_context_raw,
 )
+from copper_mcp.request_boundary import RequestError
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -103,7 +104,6 @@ class LiveEditorContextTests(unittest.TestCase):
         request = {
             "board": "live",
             "expect_board_revision": captured.board_digest,
-            "expect_snapshot_digest": captured.board_digest,
         }
         first = inspect_live_editor_context_raw(
             request, _settings(), client_factory=_factory(board)
@@ -123,7 +123,6 @@ class LiveEditorContextTests(unittest.TestCase):
         request = {
             "board": "live",
             "expect_board_revision": captured.board_digest,
-            "expect_snapshot_digest": captured.board_digest,
         }
         first = inspect_live_editor_context_raw(
             request, _settings(), client_factory=_factory(board)
@@ -139,10 +138,9 @@ class LiveEditorContextTests(unittest.TestCase):
         base = {
             "board": "live",
             "expect_board_revision": captured.board_digest,
-            "expect_snapshot_digest": captured.board_digest,
         }
         context = inspect_live_editor_context_raw(base, _settings(), client_factory=_factory(board))
-        for field in ("expect_board_revision", "expect_snapshot_digest", "expect_context_digest"):
+        for field in ("expect_board_revision", "expect_context_digest"):
             with self.subTest(field=field):
                 with self.assertRaises(LiveEditorContextError):
                     inspect_live_editor_context_raw(
@@ -157,6 +155,20 @@ class LiveEditorContextTests(unittest.TestCase):
                     expect_context_digest=context.context_digest[:-1]
                     + ("1" if context.context_digest[-1] != "1" else "2"),
                 ),
+                _settings(),
+                client_factory=_factory(board),
+            )
+
+    def test_scene_snapshot_digest_is_not_accepted_as_an_ipc_precondition(self) -> None:
+        board = _Board()
+        captured = capture_live_editor_context(_settings(), client_factory=_factory(board))
+        with self.assertRaises(RequestError):
+            inspect_live_editor_context_raw(
+                {
+                    "board": "live",
+                    "expect_board_revision": captured.board_digest,
+                    "expect_snapshot_digest": "sha256:" + "0" * 64,
+                },
                 _settings(),
                 client_factory=_factory(board),
             )
@@ -207,6 +219,6 @@ class LiveEditorMcpSchemaTests(unittest.TestCase):
         self.assertEqual(request["properties"]["board"]["const"], "live")
         self.assertEqual(
             set(request["required"]),
-            {"board", "expect_board_revision", "expect_snapshot_digest"},
+            {"board", "expect_board_revision"},
         )
         self.assertNotIn("get_selection_as_string", repr(tool.input_schema))
