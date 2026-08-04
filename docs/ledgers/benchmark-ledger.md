@@ -583,3 +583,16 @@ historical evidence; these runs were generated from the clean implementation com
 | Evidence | Exact ordered query identities match `256/256`, not merely hit counts; legacy relation checks `131,072` versus indexed `31` (`99.9763%` reduction); median fixture query speedup `14.134x`; source ordinals are the comparison authority. |
 | Correction | The historical B-033 row's route-differential metrics are not reproduced by this artifact and are withdrawn as unsupported by the recorded script. This row supports only exact conservative query equivalence and fixture-bounded relation reduction. |
 | Limits | Synthetic uniform-grid fixture only; no whole-board scaling, congestion, DRC, fabrication, electrical, or FreeRouting claim. |
+
+#### B-036 — deterministic negotiated-congestion KiCad-fixture replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:ee3320444a09e1a1e80023220eec96b75897d8518847b98390434119e6d9d6da` |
+| Date and commit | 2026-08-05; source commit `a68968d96a55b6f191c19bf668a356edfe13c8e1`; tracked tree clean except the pre-existing untracked `docs/HANDOFF-CODEX.md` |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad GUI/CLI not invoked; Board IR adapter exercised |
+| Dataset | [`negotiated-crossing-v1.kicad_pcb`](../../audio/fixtures/negotiated-crossing-v1.kicad_pcb), fixture SHA-256 `dbbfc5179cca7f644b90303ff3bc695f191ba94f7e5bbc8b4b1437d810ec83c7`; two orthogonal two-pin nets on a common 1 mm lattice |
+| Configuration | `negotiated-congestion-kicad-crossing-v1`; present penalty `20,000,000 nm`; history penalty `5,000,000 nm`; eight-iteration ceiling; total expansion/obstacle-check ceilings `2,000,000` / `10,000,000`; three deterministic replays |
+| Metrics | Sequential baseline overflow `1` lattice unit and wire length `16,000,000 nm`; negotiated status `completed`, overflow `0`, wire length `26,000,000 nm`, iterations `1`, rip-ups `0`; candidate IDs and serialized outcomes identical across `3/3` replays |
+| Artifact | [`2026-08-05-negotiated-congestion.json`](../../benchmarks/results/routing/2026-08-05-negotiated-congestion.json) |
+| Interpretation | This is a measurable first negotiated-congestion slice: it removes the shared lattice resource on the committed KiCad fixture at a known wire-length tradeoff. The metric is structural occupancy only; it does not establish exact pairwise clearance, multilayer capacity, KiCad DRC, electrical/fabrication correctness, general-board scaling, or FreeRouting parity. |
