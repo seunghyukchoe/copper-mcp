@@ -75,14 +75,28 @@ def _candidate() -> tuple[
     return source, profile, snapshot, request, result.candidate
 
 
-def _report(source: str) -> dict[str, object]:
+def _finding(violation_type: str, severity: str) -> dict[str, object]:
+    return {
+        "type": violation_type,
+        "severity": severity,
+        "description": "private test finding",
+        "items": [{"description": "private geometry"}],
+        "excluded": False,
+    }
+
+
+def _report(
+    source: str,
+    *,
+    violations: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
     return {
         "$schema": "https://schemas.kicad.org/drc.v1.json",
         "source": source,
         "date": "2026-08-05T12:00:00+09:00",
         "coordinate_units": "mm",
         "kicad_version": "10.0.5",
-        "violations": [],
+        "violations": violations or [],
         "unconnected_items": [],
         "schematic_parity": [],
         "included_severities": ["error", "warning", "exclusion"],
@@ -154,6 +168,43 @@ def test_binds_layered_candidate_to_private_drc_context(
     assert capture["snapshot_bytes"] == rendered
     assert capture["temporary_root"].exists() is False
     assert board.read_bytes() == source
+
+
+def test_warning_only_authority_is_bound_but_not_advertised_as_clean(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, profile, _, request, candidate = _candidate()
+    board = tmp_path / FIXTURE.name
+    shutil.copy2(FIXTURE, board)
+
+    def warning_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        del kwargs
+        report_path = Path(command[command.index("--output") + 1])
+        report_path.write_text(
+            json.dumps(
+                _report(
+                    Path(command[-1]).name,
+                    violations=[_finding("courtyard_overlap", "warning")],
+                )
+            ),
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 5)
+
+    _install_fake_kicad(monkeypatch, warning_run)
+    evidence = run_layered_route_candidate_drc(
+        board.name,
+        candidate,
+        profile,
+        Settings(workspace=tmp_path, max_drc_report_bytes=4096),
+        request=request,
+    )
+
+    assert evidence.summary.passed is True
+    assert evidence.summary.clean is False
+    assert evidence.summary.warning_count == 1
+    assert evidence.summary.violation_type_counts == {"courtyard_overlap": 1}
 
 
 def test_rejects_stale_or_malformed_layered_candidates_before_kicad(

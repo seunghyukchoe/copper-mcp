@@ -457,6 +457,16 @@ def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]
                 raise LayeredRoutePreviewError(
                     "authoritative layered DRC evidence is unavailable"
                 ) from error
+            if not isinstance(evidence, LayeredRouteCandidateDrcEvidence):
+                raise LayeredRoutePreviewError("authoritative layered DRC evidence is malformed")
+            if (
+                evidence.candidate_id != result.candidate.candidate_id
+                or evidence.candidate_base_revision != result.candidate.base_revision
+                or evidence.source_revision != board_revision
+            ):
+                raise LayeredRoutePreviewError(
+                    "authoritative layered DRC evidence is not bound to this candidate"
+                )
         return _empty_result(
             "routed",
             request,

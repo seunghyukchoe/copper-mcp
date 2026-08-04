@@ -48,12 +48,14 @@ content digest. The adapter:
   readiness.
 
 The renderer performs no filesystem, subprocess, or network operation and caps output at 1 MB. A
-committed original RC low-pass fixture is rendered byte-for-byte deterministically. An optional
-integration test asks a discovered KiCad CLI to export SVG and `kicadxml`, then verifies that the
-exported component-pin connectivity matches the source intent without changing the fixture. The
-reviewed KiCad 10.0.5 run reduced ERC warnings from seven to four without changing the intended
-nets. The four remaining warnings are two isolated external-port labels and two missing
-private-library-configuration warnings; this is warning reduction, not an ERC-clean result.
+committed original RC low-pass fixture is rendered byte-for-byte deterministically. The reusable
+`kicad_schematic_parity` verifier first requires that exact renderer replay, then accepts only the
+bounded KiCad format-E `kicadxml` export and checks component, pin, and net-node parity against the
+Circuit Intent snapshot. This is a source/connectivity oracle for the passive subset, not an ERC
+engine or a source-to-PCB parity proof. The reviewed KiCad 10.0.5 run reduced ERC warnings from
+seven to four without changing the intended nets. The four remaining warnings are two isolated
+external-port labels and two missing private-library-configuration warnings; this is warning
+reduction, not an ERC-clean result.
 
 The spacing baseline is deliberately mechanical. It keeps the reviewed passive fixture's symbol
 bodies, pin labels, and visible properties distinct and keeps the 64-component schema ceiling on
@@ -97,15 +99,17 @@ digest is never used as authorization. Tool and resource registration are disabl
 HTTP until principal and session isolation exists.
 
 Each build reports topology, artifact-digest, provenance-binding, and deterministic-replay checks
-as `passed`. It reports per-build KiCad parsing, ERC, schematic-to-board parity, and electrical
-validation as `not_run`, and board readiness as `false`. Retrieving the resource necessarily reveals
+as `passed`. It reports per-build KiCad parsing and the bounded schematic component/connectivity
+parity oracle separately; authoritative ERC, schematic-to-PCB parity, and electrical validation
+remain `not_run`, and board readiness is `false`. Retrieving the resource necessarily reveals
 the accepted circuit, so the host—not CopperMCP—decides whether those bytes enter model context.
 
 ## Deliberate non-claims
 
-Structural validity and a successful KiCad parse/netlist export do not establish electrical value
-correctness, ERC, simulation, symbol certification, footprint selection, BOM quality, schematic-to-
-PCB parity, placement, routing, manufacturability, fabrication safety, or measured audio behavior.
+Structural validity, the bounded component/connectivity parity oracle, and a successful KiCad
+parse/netlist export do not establish electrical value correctness, authoritative ERC, simulation,
+symbol certification, footprint selection, BOM quality, schematic-to-PCB parity, placement, routing,
+manufacturability, fabrication safety, or measured audio behavior.
 The public delivery surfaces create only a schematic derivative: they do not generate a board,
 select footprints, inspect KiCad on each build, or bridge into the board routing workflow.
 

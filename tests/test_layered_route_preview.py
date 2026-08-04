@@ -189,6 +189,138 @@ def test_include_drc_fails_closed_when_authority_is_unavailable(
         )
 
 
+def test_include_drc_distinguishes_warning_only_authority_from_clean(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    board, settings, start, end, snapshot_digest = _workspace(tmp_path)
+    board_revision = f"sha256:{hashlib.sha256(board.read_bytes()).hexdigest()}"
+
+    def warning_drc(
+        _requested_path: str,
+        candidate: object,
+        _profile: object,
+        _settings: Settings,
+        *,
+        request: object,
+    ) -> LayeredRouteCandidateDrcEvidence:
+        del request
+        candidate_id = candidate.candidate_id  # type: ignore[attr-defined]
+        base_revision = candidate.base_revision  # type: ignore[attr-defined]
+        patched_revision = "sha256:" + "b" * 64
+        context_revision = "sha256:" + "c" * 64
+        return LayeredRouteCandidateDrcEvidence(
+            candidate_id=candidate_id,
+            candidate_base_revision=base_revision,
+            source_revision=board_revision,
+            patched_board_revision=patched_revision,
+            patched_drc_context_revision=context_revision,
+            summary=DrcSummary(
+                base_revision=patched_revision,
+                drc_context_revision=context_revision,
+                kicad_version="10.0.5",
+                drc_schema="https://schemas.kicad.org/drc.v1.json",
+                coordinate_units="mm",
+                error_count=0,
+                warning_count=1,
+                exclusion_count=0,
+                ignored_check_count=0,
+                unconnected_count=0,
+                violation_type_counts={"courtyard_overlap": 1},
+                passed=True,
+            ),
+        )
+
+    monkeypatch.setattr(layered_preview, "run_layered_route_candidate_drc", warning_drc)
+    result = layered_preview.preview_layered_route(
+        _request(board, start, end, board_revision, snapshot_digest, include_drc=True),
+        settings,
+    )
+
+    evidence = result["drc_evidence"]
+    assert isinstance(evidence, dict)
+    summary = evidence["summary"]
+    assert summary["passed"] is True
+    assert summary["clean"] is False
+    assert summary["warning_count"] == 1
+    assert summary["violation_type_counts"] == {"courtyard_overlap": 1}
+
+
+@pytest.mark.parametrize(
+    "authority_result, expected_message",
+    [
+        (KiCadCliError("KiCad DRC timed out"), "evidence is unavailable"),
+        (object(), "evidence is malformed"),
+    ],
+)
+def test_include_drc_refuses_timeout_or_malformed_authority(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    authority_result: object,
+    expected_message: str,
+) -> None:
+    board, settings, start, end, snapshot_digest = _workspace(tmp_path)
+    board_revision = f"sha256:{hashlib.sha256(board.read_bytes()).hexdigest()}"
+
+    def authority(*_args: object, **_kwargs: object) -> object:
+        if isinstance(authority_result, BaseException):
+            raise authority_result
+        return authority_result
+
+    monkeypatch.setattr(layered_preview, "run_layered_route_candidate_drc", authority)
+    with pytest.raises(LayeredRoutePreviewError, match=expected_message):
+        layered_preview.preview_layered_route(
+            _request(board, start, end, board_revision, snapshot_digest, include_drc=True),
+            settings,
+        )
+
+
+def test_include_drc_refuses_evidence_bound_to_a_different_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    board, settings, start, end, snapshot_digest = _workspace(tmp_path)
+    board_revision = f"sha256:{hashlib.sha256(board.read_bytes()).hexdigest()}"
+
+    def foreign_drc(
+        _requested_path: str,
+        candidate: object,
+        _profile: object,
+        _settings: Settings,
+        *,
+        request: object,
+    ) -> LayeredRouteCandidateDrcEvidence:
+        del request
+        patched_revision = "sha256:" + "b" * 64
+        context_revision = "sha256:" + "c" * 64
+        return LayeredRouteCandidateDrcEvidence(
+            candidate_id="sha256:" + "d" * 64,
+            candidate_base_revision=candidate.base_revision,  # type: ignore[attr-defined]
+            source_revision=board_revision,
+            patched_board_revision=patched_revision,
+            patched_drc_context_revision=context_revision,
+            summary=DrcSummary(
+                base_revision=patched_revision,
+                drc_context_revision=context_revision,
+                kicad_version="10.0.5",
+                drc_schema="https://schemas.kicad.org/drc.v1.json",
+                coordinate_units="mm",
+                error_count=0,
+                warning_count=0,
+                exclusion_count=0,
+                ignored_check_count=0,
+                unconnected_count=0,
+                violation_type_counts={},
+                passed=True,
+            ),
+        )
+
+    monkeypatch.setattr(layered_preview, "run_layered_route_candidate_drc", foreign_drc)
+    with pytest.raises(LayeredRoutePreviewError, match="not bound"):
+        layered_preview.preview_layered_route(
+            _request(board, start, end, board_revision, snapshot_digest, include_drc=True),
+            settings,
+        )
+
+
 def test_board_revision_cas_is_checked_before_conversion(tmp_path: Path) -> None:
     board, settings, start, end, snapshot_digest = _workspace(tmp_path)
     stale = _request(board, start, end, "sha256:" + "0" * 64, snapshot_digest)

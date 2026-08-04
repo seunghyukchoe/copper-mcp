@@ -609,3 +609,16 @@ historical evidence; these runs were generated from the clean implementation com
 | Metrics | Linear candidate checks `131,072`; indexed candidates examined `636`; predicate-work reduction `99.5148%`; exact query matches `256/256`; indexed buckets `136`; median fixture speedup `13.037x` on this host |
 | Artifact | [`2026-08-05-spatial-index.json`](../../benchmarks/results/routing/2026-08-05-spatial-index.json) |
 | Interpretation | This supersedes the historical `31` indexed-hit metric as current performance evidence. It measures candidate filtering work on one synthetic fixture only; it does not establish whole-board scaling, congestion/rip-up, DRC, electrical/fabrication readiness, or FreeRouting parity. |
+
+#### B-038 — layered public DRC evidence hardening
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:398b17f57e8525808e6ce3c3247327c76acd0155eb0d6f9679085cc3c3544c65` |
+| Date and commit | 2026-08-05; source commit `896c88d9405cfed469d60d45e1b80fd9bdfad2ad` before this uncommitted hardening slice |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad not invoked by the benchmark |
+| Dataset | `tests/fixtures/route-candidate/two-pad.kicad_pcb`, fixture digest `sha256:5f88ebcf52cf8f1548990bdbdc1c52ac7a30f39c013366f79b161ec15e1caae2` |
+| Configuration | `copper-mcp/benchmark/layered-drc-preview/v1`; omitted-flag replay, clean fake authority, warning-only fake authority, and malformed authority through public `preview_layered_route` |
+| Metrics | Omitted DRC calls `0`; requested calls `1`; candidate/source CAS binding `true`; clean signal `true`; warning-only `clean=false` while hard-gate `passed=true`; malformed authority refused `true`; source unchanged `true`; workspace mutations `0` |
+| Artifact | [`2026-08-05-layered-drc-hardening.json`](../../benchmarks/results/routing/2026-08-05-layered-drc-hardening.json) |
+| Interpretation | This closes a presentation-boundary ambiguity: warning/exclusion findings remain machine-visible but cannot be represented as clean, and malformed or unbound authority cannot cross the MCP response boundary. It is not KiCad quality, whole-board DRC, fabrication, electrical, or FreeRouting evidence. |

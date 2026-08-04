@@ -169,9 +169,10 @@ explicit object/detail ceilings, reference durability is typed, and board-author
 as untrusted annotation data. The normalized render is digest-bound and advisory rather than
 geometric authority.
 
-The active KiCad adapter accepts only front-side footprints with orthogonal transforms and unfilled
-rectangular `fp_rect` courtyard centerlines on matching `F.CrtYd`; unsupported footprint or
-courtyard forms fail closed before a scene or placement view exists. Placement subjects are
+The active KiCad adapter accepts front- or back-side footprints with orthogonal transforms and
+unfilled rectangular `fp_rect` courtyard centerlines on matching `F.CrtYd`/`B.CrtYd`; unsupported
+footprint or courtyard forms fail closed before a scene or placement view exists. KiCad-authored
+board-frame child coordinates are imported without a second back-side mirror. Placement subjects are
 projected from the same Board IR snapshot, and the supplied source bytes must match its source
 revision. AI output remains typed placement intent, a locked footprint cannot be moved, and
 `courtyard_overlap` remains the one-value `not_modelled` result because no bounded side-aware
@@ -181,6 +182,11 @@ MCP schematic delivery validates a closed outer wrapper, closed Circuit Intent c
 structured output. Scalars, lists, and extra fields at those boundaries fail without echoing the
 offending field name or value. This prevents transport coercion or error text from bypassing the
 redacted build record.
+
+The optional schematic parity oracle treats KiCad `kicadxml` as hostile input: DTDs, entities,
+processing instructions, unknown structures, duplicate connectivity, and oversized XML fail before
+semantic comparison. Evidence contains only fixed passed literals, digests, and counts; it does not
+echo component names, net names, values, or raw XML.
 
 The KiCad report is opened through a no-follow, nonblocking descriptor and accepted only when
 descriptor metadata identifies a regular file. Its JSON decoder rejects duplicate keys, non-finite

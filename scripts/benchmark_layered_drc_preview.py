@@ -26,6 +26,7 @@ from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.board_ir import NetClass
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import LayeredRouteCandidateDrcEvidence
+from copper_mcp.layered_route_preview import LayeredRoutePreviewError
 from copper_mcp.models import DrcSummary
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -119,6 +120,33 @@ def _run() -> dict[str, Any]:
                 ),
             )
 
+        def warning_drc(*args: Any, **kwargs: Any) -> LayeredRouteCandidateDrcEvidence:
+            del kwargs
+            candidate = args[1]
+            patched = "sha256:" + "e" * 64
+            context = "sha256:" + "f" * 64
+            return LayeredRouteCandidateDrcEvidence(
+                candidate_id=candidate.candidate_id,
+                candidate_base_revision=candidate.base_revision,
+                source_revision=revision,
+                patched_board_revision=patched,
+                patched_drc_context_revision=context,
+                summary=DrcSummary(
+                    base_revision=patched,
+                    drc_context_revision=context,
+                    kicad_version="10.0.5",
+                    drc_schema="https://schemas.kicad.org/drc.v1.json",
+                    coordinate_units="mm",
+                    error_count=0,
+                    warning_count=1,
+                    exclusion_count=0,
+                    ignored_check_count=0,
+                    unconnected_count=0,
+                    violation_type_counts={"courtyard_overlap": 1},
+                    passed=True,
+                ),
+            )
+
         with patch.object(layered_preview, "run_layered_route_candidate_drc", fake_drc):
             omitted = layered_preview.preview_layered_route(request, settings)
             omitted_calls = calls
@@ -144,6 +172,34 @@ def _run() -> dict[str, Any]:
         )
         if not candidate_binding or calls != 1:
             raise RuntimeError("DRC evidence binding or call count is incorrect")
+        clean_summary = evidence.get("summary")
+        if not isinstance(clean_summary, dict) or clean_summary.get("clean") is not True:
+            raise RuntimeError("clean DRC evidence did not advertise clean=true")
+
+        with patch.object(layered_preview, "run_layered_route_candidate_drc", warning_drc):
+            warning = layered_preview.preview_layered_route(
+                {**request, "include_drc": True}, settings
+            )
+        warning_evidence = warning.get("drc_evidence")
+        if not isinstance(warning_evidence, dict):
+            raise RuntimeError("warning DRC evidence was not serialized")
+        warning_summary = warning_evidence.get("summary")
+        if (
+            not isinstance(warning_summary, dict)
+            or warning_summary.get("passed") is not True
+            or warning_summary.get("clean") is not False
+        ):
+            raise RuntimeError("warning-only evidence was advertised as clean")
+
+        with patch.object(
+            layered_preview, "run_layered_route_candidate_drc", return_value=object()
+        ):
+            try:
+                layered_preview.preview_layered_route({**request, "include_drc": True}, settings)
+            except LayeredRoutePreviewError as error:
+                malformed_refusal = "evidence is malformed" in str(error)
+            else:
+                malformed_refusal = False
         if before != after:
             raise RuntimeError("public preview mutated its source board")
         return {
@@ -151,6 +207,11 @@ def _run() -> dict[str, Any]:
             "omitted_drc_calls": omitted_calls,
             "requested_drc_calls": calls,
             "candidate_evidence_binding": candidate_binding,
+            "clean_evidence_signal": clean_summary.get("clean") is True,
+            "warning_not_clean": warning_summary.get("clean") is False
+            if isinstance(warning_summary, dict)
+            else False,
+            "malformed_authority_refused": malformed_refusal,
             "source_unchanged": True,
             "workspace_mutations": 0,
             "kicad_invoked": False,

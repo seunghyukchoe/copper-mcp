@@ -46,3 +46,5 @@ from the decision ledger.
 - [ADR-0053: Bind the supported placement subset to private KiCad DRC](0053-private-placement-candidate-drc.md)
 - [ADR-0054: Close review-bot boundary gaps in routing and live observation](0054-review-boundary-hardening.md)
 - [ADR-0055: Add a bounded negotiated-congestion coordinator](0055-bounded-negotiated-congestion.md)
+- [ADR-0056: Verify bounded Circuit Intent schematic parity](0056-kicad-schematic-parity.md)
+- [ADR-0057: Observe bounded front/back footprint poses](0057-front-back-footprint-observation.md)

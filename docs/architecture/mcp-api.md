@@ -282,6 +282,12 @@ non-routed status `drc_evidence` is `null`; no DRC is run without a candidate. P
 file, creates no job, and never returns source board bytes; it does return the geometry it generated,
 so a host that must not disclose generated copper to a model should not enable this tool.
 
+The aggregate `passed` field is the compatibility hard gate: it means no active errors or
+unconnected items. The stricter `clean` field is true only when there are no errors, warnings,
+exclusions, ignored checks, unconnected items, or violation types. A warning-only result can
+therefore be `passed=true` and `clean=false`; neither field is a whole-board, fabrication, or
+FreeRouting-quality claim.
+
 When present, `drc_evidence.statement` is a deterministic unsigned in-toto Statement payload. Its
 subject is the candidate digest; Link v0.3 materials are fixed names for the source, Board IR base,
 patched board, and patched DRC context digests; and the byproducts contain only the existing

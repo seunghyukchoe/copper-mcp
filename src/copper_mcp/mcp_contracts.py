@@ -12,7 +12,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel, WithJsonSchema
+from pydantic import BaseModel, ConfigDict, Field, RootModel, WithJsonSchema, model_validator
 
 
 class _ClosedContract(BaseModel):
@@ -810,7 +810,26 @@ class RouteDrcSummaryContract(_ClosedContract):
     unconnected_count: NonNegativeInteger
     violation_type_counts: Annotated[dict[str, NonNegativeInteger], Field(max_length=1_000)]
     passed: bool
+    clean: bool
     schema_version: Literal["1.0"]
+
+    @model_validator(mode="after")
+    def _consistent_status(self) -> RouteDrcSummaryContract:
+        """Reject authority summaries that lie about hard-pass or clean semantics."""
+
+        expected_pass = self.error_count == 0 and self.unconnected_count == 0
+        expected_clean = (
+            expected_pass
+            and self.warning_count == 0
+            and self.exclusion_count == 0
+            and self.ignored_check_count == 0
+            and not self.violation_type_counts
+        )
+        if self.passed is not expected_pass:
+            raise ValueError("passed does not match the aggregate DRC findings")
+        if self.clean is not expected_clean:
+            raise ValueError("clean does not match the aggregate DRC findings")
+        return self
 
 
 class InTotoResourceDescriptorContract(_ClosedContract):

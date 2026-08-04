@@ -163,6 +163,7 @@ class KiCadCliTests(unittest.TestCase):
             ):
                 summary = run_board_drc(self.board.name, self.settings)
         self.assertTrue(summary.passed)
+        self.assertTrue(summary.clean)
 
     def test_accepts_warning_and_exclusion_findings_with_violation_exit(self) -> None:
         report = drc_report(
@@ -181,6 +182,7 @@ class KiCadCliTests(unittest.TestCase):
                 summary = run_board_drc(self.board.name, self.settings)
 
         self.assertTrue(summary.passed)
+        self.assertFalse(summary.clean)
         self.assertEqual(summary.warning_count, 1)
         self.assertEqual(summary.exclusion_count, 1)
 

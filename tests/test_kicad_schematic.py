@@ -19,6 +19,7 @@ from copper_mcp.adapters.kicad_schematic import (
     KiCadSchematicArtifact,
     render_kicad_schematic,
 )
+from copper_mcp.adapters.kicad_schematic_parity import verify_kicad_schematic_parity
 from copper_mcp.circuit_ir import (
     Component,
     ComponentKind,
@@ -365,18 +366,11 @@ def test_kicad_10_0_5_exports_svg_and_exact_logical_nets(tmp_path: Path) -> None
     svg_root = ET.fromstring(svg_files[0].read_bytes())  # noqa: S314
     assert svg_root.tag.endswith("svg")
 
-    netlist_root = ET.fromstring(netlist.read_bytes())  # noqa: S314
-    actual_nets = {
-        net.attrib["name"]: {
-            (node.attrib["ref"], node.attrib["pin"]) for node in net.findall("node")
-        }
-        for net in netlist_root.findall("./nets/net")
-    }
-    assert actual_nets == {
-        "AUDIO_IN": {("R1", "1")},
-        "AUDIO_OUT": {("C1", "1"), ("R1", "2")},
-        "GND": {("C1", "2")},
-    }
+    parity = verify_kicad_schematic_parity(_snapshot(), artifact.content, netlist.read_bytes())
+    assert parity.source_replay == "passed"
+    assert parity.component_parity == "passed"
+    assert parity.connectivity_parity == "passed"
+    assert (parity.component_count, parity.net_count, parity.connection_count) == (2, 3, 4)
     assert _file_state(schematic) == schematic_before
     assert _file_state(FIXTURE) == fixture_before
     _assert_private_kicad_state(state_root)

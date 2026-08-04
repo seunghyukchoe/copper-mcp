@@ -22,10 +22,13 @@ uses only the existing disposable, read-only DRC path; it does not add a Board A
 `preview_layered_route` accepts an explicit boolean `include_drc` for file-backed requests.  When
 the result contains a candidate, the service replays the exact candidate with the same bounded
 deadline and returns only `RouteCandidateDrcEvidence`: candidate ID, base/source/patched/context
-digests, KiCad version, and an aggregate redacted summary.  The service fails closed when the
-authoritative check cannot run or when the deadline expires before it starts.  The workspace board
-is not modified, and no raw report, board bytes, net names, or geometry outside the existing
-candidate response crosses the boundary.
+digests, KiCad version, and an aggregate redacted summary.  The summary's compatibility `passed`
+field means no active errors or unconnected items; its stricter `clean` field additionally
+requires zero warnings, exclusions, ignored checks, and violation types.  This distinction keeps
+warning-only evidence from being advertised as a clean board.  The service fails closed when the
+authoritative check cannot run, the evidence is malformed or candidate-unbound, or the deadline
+expires before it starts.  The workspace board is not modified, and no raw report, board bytes,
+net names, or geometry outside the existing candidate response crosses the boundary.
 
 `preview_live_layered_route` and durable routing jobs force `include_drc` to `false`; direct job
 preparation rejects a true value as well, so a caller cannot persist an option that a worker would
@@ -34,7 +37,9 @@ carry `drc_evidence: null`.
 
 ## Evidence and limits
 
-`B-032` measures the public schema and binding/replay contract without invoking KiCad.  The
+`B-032` measures the public schema and binding/replay contract without invoking KiCad.  `B-038`
+adds warning-only and malformed-authority regression evidence, including the strict `clean`
+signal and structured-output validator.  The
 blocked-pad integration fixture separately exercises the public service with KiCad 10.0.5 and
 records `passed=true`, zero errors, zero warnings, and zero unconnected items while preserving
 source bytes, inode, and mtime.  This is evidence for the supported two-layer, full-stack-via

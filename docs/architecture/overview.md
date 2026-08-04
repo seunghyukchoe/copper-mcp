@@ -83,7 +83,9 @@ symbols, empty footprints, and no board eligibility. A protocol-independent serv
 normalizes the logical content, renders twice, and returns a redacted build record. The CLI may
 explicitly create one new workspace schematic without overwrite; the stdio-only MCP adapter returns
 the same metadata plus one opaque, expiring resource capability. Neither delivery path performs a
-per-build KiCad parse, ERC, electrical validation, or schematic-to-board parity check. Capability
+per-build KiCad parse, ERC, electrical validation, or schematic-to-board parity check; the reusable
+passive-subset verifier can separately check exact render replay plus KiCad component/connectivity
+parity. Capability
 access expires after 15 minutes, but expired bytes are reclaimed lazily on later store activity or
 process exit; no secure memory-erasure claim is made. See the
 [Circuit Intent and schematic contract](circuit-intent.md) and
@@ -121,9 +123,10 @@ success are separate future gates. A live action compare-and-swap remains a sepa
 contract.
 
 Placement preview resolves its subjects from the same Board IR snapshot and refuses source bytes
-whose revision does not match. The current KiCad footprint subset is deliberately strict: front
-side, orthogonal rotations, and unfilled `fp_rect` geometry on matching `F.CrtYd`; unsupported
-topology and back-side footprints fail closed. A locked footprint cannot be moved.
+whose revision does not match. Observation now accepts the bounded front- and back-side,
+orthogonal, unfilled-rectangular-courtyard subset and imports KiCad's authored child coordinates
+without a second mirror. The placement derivative remains deliberately stricter: front side only,
+with unsupported topology and back-side edits failing closed. A locked footprint cannot be moved.
 `courtyard_overlap` remains `not_modelled` because no bounded, side-aware legality evaluator exists,
 not because the supported contour is absent. Placement apply remains deferred. Models never write
 KiCad syntax, mutate a live editor, or bypass deterministic candidate validation and explicit

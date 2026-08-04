@@ -21,6 +21,7 @@ import copper_mcp.mcp_server as _server
 from copper_mcp.adapters import net_id_for_name
 from copper_mcp.apply.tokens import ApplyTokenAuthority
 from copper_mcp.circuit_intent_service import build_schematic_from_content
+from copper_mcp.mcp_contracts import RouteDrcSummaryContract
 from copper_mcp.mcp_server import mcp
 from copper_mcp.scene_render import SceneRenderStore
 from copper_mcp.schematic_artifacts import SchematicArtifactStore
@@ -410,6 +411,7 @@ class McpServerTests(unittest.TestCase):
                     "unconnected_count": 0,
                     "violation_type_counts": {},
                     "passed": True,
+                    "clean": True,
                     "schema_version": "1.0",
                 },
             },
@@ -466,6 +468,30 @@ class McpServerTests(unittest.TestCase):
         output_schema = tools["preview_layered_route"].output_schema
         assert isinstance(output_schema, dict)
         self.assertEqual(list(Draft202012Validator(output_schema).iter_errors(structured)), [])
+
+    def test_layered_drc_contract_rejects_a_false_clean_claim(self) -> None:
+        digest = "sha256:" + "a" * 64
+        summary = {
+            "base_revision": digest,
+            "drc_context_revision": digest,
+            "kicad_version": "10.0.5",
+            "drc_schema": "https://schemas.kicad.org/drc.v1.json",
+            "coordinate_units": "mm",
+            "error_count": 0,
+            "warning_count": 1,
+            "exclusion_count": 0,
+            "ignored_check_count": 0,
+            "unconnected_count": 0,
+            "violation_type_counts": {"courtyard_overlap": 1},
+            "passed": True,
+            "clean": False,
+            "schema_version": "1.0",
+        }
+        validated = RouteDrcSummaryContract.model_validate(summary)
+        self.assertFalse(validated.clean)
+        summary["clean"] = True
+        with self.assertRaises(ValueError):
+            RouteDrcSummaryContract.model_validate(summary)
 
     def test_render_tool_declares_structured_content_and_security_annotations(self) -> None:
         tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}

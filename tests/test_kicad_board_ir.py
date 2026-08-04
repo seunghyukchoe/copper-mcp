@@ -16,6 +16,7 @@ from copper_mcp.adapters import KiCadConstraintProfile, net_id_for_name, parse_k
 from copper_mcp.adapters.sexpr import SExprError, parse_sexpr
 from copper_mcp.board_ir import (
     BoardIRSnapshot,
+    FootprintSide,
     NetClass,
     Pad,
     PadShape,
@@ -33,6 +34,9 @@ SUBSET_BOARD = TEST_ROOT / "fixtures" / "board-ir-v0.1" / "subset.kicad_pcb"
 ROTATION_BOARD = TEST_ROOT / "fixtures" / "board-ir-v0.1" / "footprint-rotation.kicad_pcb"
 FOOTPRINT_V02_BOARD = (
     TEST_ROOT / "fixtures" / "board-ir-v0.2" / "footprint-pose-courtyard.kicad_pcb"
+)
+FRONT_BACK_FOOTPRINT_V02_BOARD = (
+    TEST_ROOT / "fixtures" / "board-ir-v0.2" / "footprint-front-back-pose.kicad_pcb"
 )
 MALFORMED_BOARD = TEST_ROOT / "fixtures" / "board-ir-v0.1" / "malformed-unbalanced.kicad_pcb"
 _DISCOVERED_KICAD_CLI = shutil.which("kicad-cli")
@@ -352,6 +356,60 @@ def test_v02_rectangular_courtyards_transform_into_exact_board_coordinates() -> 
             PointNM(42_500_000, 39_000_000),
         ),
     }
+
+
+def test_v02_back_side_footprints_preserve_authored_pose_and_matching_courtyard() -> None:
+    snapshot = parse_success(FRONT_BACK_FOOTPRINT_V02_BOARD.read_bytes(), constraint_profile())
+
+    assert [footprint.side for footprint in snapshot.content.footprints] == [
+        FootprintSide.FRONT,
+        FootprintSide.BACK,
+    ]
+    assert [footprint.origin for footprint in snapshot.content.footprints] == [
+        PointNM(20_000_000, 20_000_000),
+        PointNM(60_000_000, 20_000_000),
+    ]
+    assert [pad.center for pad in snapshot.content.pads] == [
+        PointNM(18_000_000, 19_000_000),
+        PointNM(21_000_000, 22_000_000),
+        PointNM(58_000_000, 19_000_000),
+        PointNM(61_000_000, 22_000_000),
+    ]
+    assert [pad.layer_ids for pad in snapshot.content.pads] == [
+        ("layer:F.Cu",),
+        ("layer:F.Cu",),
+        ("layer:B.Cu",),
+        ("layer:B.Cu",),
+    ]
+    assert [footprint.courtyards[0].points for footprint in snapshot.content.footprints] == [
+        (
+            PointNM(17_000_000, 18_000_000),
+            PointNM(24_000_000, 18_000_000),
+            PointNM(24_000_000, 23_000_000),
+            PointNM(17_000_000, 23_000_000),
+        ),
+        (
+            PointNM(57_000_000, 18_000_000),
+            PointNM(64_000_000, 18_000_000),
+            PointNM(64_000_000, 23_000_000),
+            PointNM(57_000_000, 23_000_000),
+        ),
+    ]
+
+
+def test_v02_back_side_requires_a_matching_back_courtyard_layer() -> None:
+    source = _replace(
+        FRONT_BACK_FOOTPRINT_V02_BOARD.read_bytes(),
+        b'(layer "B.CrtYd")',
+        b'(layer "F.CrtYd")',
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile())
+
+    assert result.snapshot is None
+    assert len(result.diagnostics) == 1
+    assert result.diagnostics[0].code == "unsupported.transform"
+    assert "does not match its footprint side" in result.diagnostics[0].message
 
 
 def test_v02_footprint_without_a_courtyard_has_an_explicit_empty_state() -> None:
@@ -985,6 +1043,46 @@ def test_real_kicad_confirms_the_footprint_rotation_ground_truth(tmp_path: Path)
     # quarter turn would put that track on the neighbouring pad, which is a different net.
     assert payload["violations"] == []
     assert payload["unconnected_items"] == []
+
+
+@pytest.mark.skipif(not REAL_KICAD_CLI.is_file(), reason="KiCad CLI is not installed")
+def test_real_kicad_accepts_front_and_back_observation_fixture(tmp_path: Path) -> None:
+    """KiCad's DRC accepts both observed sides and the asymmetric geometry unchanged."""
+
+    board = tmp_path / FRONT_BACK_FOOTPRINT_V02_BOARD.name
+    board.write_bytes(FRONT_BACK_FOOTPRINT_V02_BOARD.read_bytes())
+    report = tmp_path / "drc.json"
+
+    completed = subprocess.run(  # noqa: S603 - fixed local argv, trusted discovered CLI
+        [
+            str(REAL_KICAD_CLI),
+            "pcb",
+            "drc",
+            "--format",
+            "json",
+            "--units",
+            "mm",
+            "--severity-all",
+            "--exit-code-violations",
+            "--output",
+            str(report),
+            str(board),
+        ],
+        check=False,
+        capture_output=True,
+        timeout=120,
+    )
+
+    assert completed.returncode == 0
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    assert payload["violations"] == []
+    assert payload["unconnected_items"] == []
+
+    snapshot = parse_success(FRONT_BACK_FOOTPRINT_V02_BOARD.read_bytes(), constraint_profile())
+    assert [footprint.side for footprint in snapshot.content.footprints] == [
+        FootprintSide.FRONT,
+        FootprintSide.BACK,
+    ]
 
 
 def _drawn_rectangles(svg: bytes) -> dict[tuple[float, float], tuple[float, float]]:

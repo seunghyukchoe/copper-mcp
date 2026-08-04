@@ -744,6 +744,26 @@ class _Converter:
             )
         return (rotation_udeg // quarter) % 4
 
+    def _footprint_side(self, layer: str, locator: str) -> FootprintSide:
+        """Map a KiCad footprint layer to the immutable Board IR side.
+
+        KiCad stores a flipped footprint's child coordinates in the saved file already.  The
+        adapter must therefore only observe the side here and must not mirror local geometry a
+        second time.  Keeping the mapping explicit also makes unsupported inner-layer
+        footprint placement fail closed instead of silently being treated as front-side.
+        """
+
+        if layer == "F.Cu":
+            return FootprintSide.FRONT
+        if layer == "B.Cu":
+            return FootprintSide.BACK
+        self.fail(
+            "unsupported.transform",
+            "Board IR v0.2 adapter supports only front- and back-side footprints",
+            locator,
+            object_kind="footprint",
+        )
+
     def _transform(self, local: PointNM, origin: PointNM, turn: int, locator: str) -> PointNM:
         """Place one footprint-local point using KiCad's own rotation convention.
 
@@ -896,13 +916,7 @@ class _Converter:
                     object_kind="footprint",
                 )
             layer = self._values(footprint, "layer", footprint_locator, minimum=1, maximum=1)[0]
-            if layer != "F.Cu":
-                self.fail(
-                    "unsupported.transform",
-                    "Board IR v0.2 adapter supports front-side footprints only",
-                    footprint_locator,
-                    object_kind="footprint",
-                )
+            side = self._footprint_side(layer, footprint_locator)
             at = self._values(footprint, "at", footprint_locator, minimum=2, maximum=3)
             origin = PointNM(
                 self._mm(at[0], f"{footprint_locator}.at.x"),
@@ -914,7 +928,6 @@ class _Converter:
             turn = self._quarter_turn(footprint_rotation, footprint_locator)
             footprint_locked = self._locked(footprint, positional_atoms=1)
             footprint_id = self._identity("footprint", footprint, footprint_locator)
-            side = FootprintSide.FRONT
             owned_pad_ids: list[str] = []
             for pad_index, pad in enumerate(children(footprint, "pad")):
                 locator = f"{footprint_locator}.pad[{pad_index}]"

@@ -8,6 +8,16 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added a bounded `kicad_schematic_parity` verifier for the passive Circuit Intent subset. It
+  requires exact renderer replay and checks real KiCad format-E `kicadxml` component, pin, and
+  net-node parity with bounded hostile-input handling; authoritative ERC and schematic-to-PCB
+  parity remain open. The fixture and evidence are recorded under ADR-0056 and B-039.
+
+- Added front/back (`F.Cu`/`B.Cu`) observation for orthogonal footprints with matching rectangular
+  courtyard centerlines. The adapter preserves KiCad's authored board-frame child coordinates and
+  does not apply a second mirror; GUI flip-save, general courtyard topology, placement legality,
+  and apply remain open. The source/CLI oracle is recorded under ADR-0057 and B-040.
+
 - Added a bounded, deterministic negotiated-congestion coordinator for two-pin nets on one
   signal-layer lattice. It uses present and historical edge/vertex pressure to reroute conflicted
   candidates, binds each accepted candidate to the policy digest, and records structural overflow
@@ -35,6 +45,12 @@ All notable changes are documented here. The format follows
   DRC-context revisions while returning only aggregate findings; live layered preview and durable
   routing jobs reject the flag instead of silently ignoring it. This remains a narrow two-signal-
   layer proposal signal, not whole-board, refill, fabrication, or FreeRouting authority.
+
+- Hardened layered DRC evidence with a strict `clean` signal distinct from the hard-gate
+  compatibility field `passed`: warning, exclusion, unconnected, or ignored-check findings can no
+  longer be presented as a clean report. The public boundary now rejects malformed or
+  candidate-unbound authority, with warning-only and malformed-authority regressions recorded in
+  B-038.
 
 - Added a bounded `batched-1-steiner-v1` ordering policy for low-degree multi-pin nets. It keeps
   the deterministic A* core and all geometry validation authoritative while reducing the recorded

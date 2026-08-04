@@ -29,7 +29,10 @@ documentation, ledger updates, and benchmark evidence.
 - [x] Deterministic passive-layout readability baseline with wider grid placement, extended leads,
   separated labels/properties, real KiCad SVG inspection, and a structural regression.
 - [x] Descriptor-anchored workspace reads and exact-lowercase create-only schematic output.
-- [ ] Schematic round trip, authoritative ERC, and source-to-board connectivity parity.
+- [~] Schematic round trip, authoritative ERC, and source-to-board connectivity parity. The
+  bounded passive subset now has exact deterministic schematic replay plus real KiCad `kicadxml`
+  component/connectivity parity through the reusable `kicad_schematic_parity` verifier. Authoritative
+  ERC, source-to-PCB connectivity parity, and broader symbol/library coverage remain open.
 - [~] Live KiCad IPC snapshot to Circuit Scene and route-proposal binding. `observe_live_board_scene`
   converts the exact captured IPC serialization through Board IR, and `preview_live_route` now
   returns a deterministic read-only candidate from a scene `net_ref_id` with both stale-session
@@ -214,8 +217,11 @@ and the policy-plugin work.
   containment, keepout respect and dual-digest binding are implemented. Board IR now carries the
   supported rectangular courtyard rings, but side-aware bounded courtyard legality is still
   reported as `not_modelled`; connectivity after a placement is future work.
-- [ ] General courtyard line-chain/polygon topology and back-side footprint observation, pinned to
-  KiCad-authored front/back flip and DRC oracle fixtures without applying a second mirror.
+- [~] General courtyard line-chain/polygon topology and back-side footprint observation, pinned to
+  KiCad-authored front/back flip and DRC oracle fixtures without applying a second mirror. The
+  adapter now observes bounded `F.Cu`/`B.Cu` footprints with rectangular courtyards and a real
+  KiCad CLI DRC fixture; GUI-authored flip serialization, line-chain/polygon topology, and the
+  no-second-mirror claim remain open until a live desktop oracle is available.
 - [ ] Separately authorized placement apply; direct AI mutation of KiCad remains prohibited.
 - [ ] Heuristic policy baseline and trace dataset.
 - [ ] Typed net-ordering, corridor, and repair policy interface.
