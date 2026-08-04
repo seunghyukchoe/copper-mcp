@@ -36,6 +36,10 @@ as it returns, avoids ten additional collection materializations, and applies bo
 S-expression input/token/node limits while deriving counts. An isolated worker is still required
 for a hard memory boundary around an untrusted or remote session.
 
+The count grammar is intentionally conservative: only direct `kicad_pcb` `(net ...)` declarations
+contribute to `nets`; nested pad/copper net references are not declarations, and the supported
+graphical heads include `gr_circle`. B-012 covers this topology oracle with a nested-net fixture.
+
 The B-008 benchmark uses a fake `KiCad` client so CI measures deterministic behavior without
 requiring a GUI, token, or global KiCad setting. The current desktop KiCad IPC server was observed
 disabled, so no live-session success is claimed in that benchmark.

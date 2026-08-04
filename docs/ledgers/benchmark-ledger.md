@@ -166,3 +166,16 @@ not routing-quality or throughput claims.
 | Metrics | Deterministic valid replays 10/10; median end-to-end capture/convert latency 3,840,021 ns; scene version `0.2.0`; objects returned 10; stale board/snapshot refusals 1/1; malformed request refusal 1/1; IPC client calls for malformed request `0`; raw source returned `false` |
 | Artifact | [`2026-08-04-live-scene-preflight.json`](../../benchmarks/results/mcp/2026-08-04-live-scene-preflight.json) |
 | Interpretation | This isolates an application-boundary denial-of-service guard: a malformed live-scene request is rejected before any fake KiCad client is opened, while valid revision-bound scene behavior remains deterministic. It does not establish a live GUI session, placement/routing authority, DRC, ERC, electrical behavior, fabrication readiness, or real-session resource behavior. |
+
+### B-012 — Corrected serialized IPC topology counts
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:338ba88873edc23bebd90652c86d57c1f7d1f16e0a8ffc917a29b3af28df7172` |
+| Date and commit | 2026-08-04 13:22:16 UTC; `461322f55d2f79685d7681cd91d560e7de1758a4`; tracked tree clean, one pre-existing untracked user handoff file |
+| Environment | Apple arm64 CPU; no accelerator; 38,654,705,664 physical bytes; macOS 26.5.2; Python 3.12.13; `mcp` 2.0.0; `pydantic` 2.13.4; `kicad-python` not installed; KiCad IPC server disabled and not invoked |
+| Dataset | Deterministic 105-byte fake official-client serialization with one direct board net declaration, one nested pad net reference, one footprint/pad, and one `gr_circle`; private-marker collection getters remain available only as leakage sentinels; no external or proprietary board; no train/test split |
+| Configuration | `kicad-ipc-observer-v1`; ten repetitions; local fake-client transport; 64 MiB board ceiling; source script SHA-256 `18c9630485633284d0a58ab0d21217a3c7473566471d2c40f9d6e725b7f77fec`; CPU-only |
+| Metrics | Deterministic replays 10/10; median observation latency 41,292 ns; board digest `sha256:8641a71e350494ce284c46b3a4b7e768d8ad6c5d78009f308a212ecdd54343a0`; serialized-source counts `nets=1`, `footprints=1`, `pads=1`, `shapes=1`, all other categories `0`; false/future version refusals 1/1; TCP endpoint refusals 1; raw board/object content returned `false/false` |
+| Artifact | [`2026-08-04-kicad-ipc-counts.json`](../../benchmarks/results/mcp/2026-08-04-kicad-ipc-counts.json) |
+| Interpretation | Corrective replacement for B-010's count implementation after review: only direct board-level `(net ...)` declarations count as nets, nested copper references do not inflate topology, and `gr_circle` is classified as a shape. It remains a fake-client contract baseline with no live-session, placement, routing, DRC, electrical, fabrication, or throughput claim. |

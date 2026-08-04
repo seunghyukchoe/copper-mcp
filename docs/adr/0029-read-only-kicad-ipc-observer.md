@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-04
 - Owners: `@seunghyukchoe`
-- Related: ADR-0002, ADR-0005, ADR-0022, SEC-023, SEC-025, B-008, B-010
+- Related: ADR-0002, ADR-0005, ADR-0022, SEC-023, SEC-025, SEC-027, B-008, B-010, B-012
 
 ## Context
 
