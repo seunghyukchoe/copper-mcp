@@ -25,6 +25,7 @@ from copper_mcp.board_ir import (
     verify_snapshot,
 )
 from copper_mcp.routing.contracts import (
+    BATCHED_ONE_STEINER_ORDERING,
     COMPONENT_MST_ORDERING,
     SINGLE_PATH_ORDERING,
     AStarSettings,
@@ -40,8 +41,9 @@ from copper_mcp.routing.contracts import (
     RouteRequest,
     RouteResult,
 )
+from copper_mcp.routing.steiner_ordering import batched_one_steiner_order
 
-ROUTER_VERSION = "astar-grid/0.4.0"
+ROUTER_VERSION = "astar-grid/0.5.0"
 ROUTING_POLICY = "orthogonal-a-star-v1"
 _EMPTY_DIGEST = f"sha256:{'0' * 64}"
 
@@ -1947,6 +1949,14 @@ def _merge_order(
     return tuple(order)
 
 
+def _steiner_merge_order(
+    components: tuple[tuple[_Rect, ...], ...], work: _WorkBudget
+) -> tuple[tuple[int, int], ...]:
+    """Return the bounded one-Steiner-guided merge order for low-degree nets."""
+
+    return batched_one_steiner_order(components, checkpoint=work.obstacle_check)
+
+
 def _emitted_cores(leg: _Leg, half_width_nm: int) -> tuple[_Rect, ...]:
     """Return exact cores for one emitted leg, which is orthogonal by construction."""
 
@@ -1998,7 +2008,16 @@ def _route_tree(problem: _Problem, work: _WorkBudget) -> RouteCandidate:
 
     half_width_nm = problem.width_nm // 2
     legs: list[_Leg] = []
-    for first, second in _merge_order(problem.components, work):
+    if len(problem.components) <= 9:
+        merge_order = _steiner_merge_order(problem.components, work)
+        ordering_policy = BATCHED_ONE_STEINER_ORDERING
+    else:
+        # The cubic topology guide is intentionally limited to low-degree nets.  Large nets
+        # retain the previous bounded MST order until a separately budgeted decomposition policy
+        # exists; this keeps a hostile pad count from consuming the whole request on ordering.
+        merge_order = _merge_order(problem.components, work)
+        ordering_policy = COMPONENT_MST_ORDERING
+    for first, second in merge_order:
         left, right = find(first), find(second)
         if left == right:
             continue
@@ -2053,7 +2072,7 @@ def _route_tree(problem: _Problem, work: _WorkBudget) -> RouteCandidate:
         problem,
         tuple(legs),
         pad_count=problem.pad_count,
-        ordering_policy=COMPONENT_MST_ORDERING,
+        ordering_policy=ordering_policy,
         work=work,
     )
 

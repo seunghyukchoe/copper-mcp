@@ -739,7 +739,7 @@ class RouteCandidateContract(_ClosedContract):
     policy: Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._/\-]{0,127}$")]
     seed: NonNegativeInteger
     pad_count: Annotated[int, Field(ge=2, le=100_000)]
-    ordering_policy: Literal["single-path", "component-mst-v1"]
+    ordering_policy: Literal["single-path", "component-mst-v1", "batched-1-steiner-v1"]
     patch: RoutePatchContract
     cost: RouteCostContract
     metrics: RouteMetricsContract

@@ -169,19 +169,22 @@ the obstacle-check budget, so the every-64-checks cancellation cadence applies u
 Connectivity is asked of nets of any width. When every pad of the net lands in one component the
 router returns a typed `RouteConnection` instead of a candidate, whatever the pad count; its
 `pad_count` field distinguishes the cases, and its `start_pad_id`/`end_pad_id` are the
-lexicographically first and last pads, which bound the set rather than naming a route. Routing a
-multi-pin net remains unsupported: a net that is not fully connected and has more than two pads gets
-the unchanged `invalid_two_pin_net` refusal. A net carrying a same-net via or zone is never claimed
-connected, because that copper is not represented here; a two-pin net names the via or zone
-directly, while a wider one is refused for its pad count, which is the more useful fact about it.
+lexicographically first and last pads, which bound the set rather than naming a route. A multi-pin
+net that is not fully connected now enters the bounded tree path, which supports up to nine evolving
+components. Larger or unsupported cases still fail closed with the typed `invalid_two_pin_net`
+diagnostic. A net carrying a same-net via or zone is never claimed connected, because that copper
+is not represented here; a two-pin net names the via or zone directly, while a wider one is refused
+for its pad count, which is the more useful fact about it.
 
 If both pads land in one component the router returns a typed `RouteConnection` instead of a
 candidate: the net is already connected on the selected layer and there is nothing to route. That is
 a terminal success, not a `RouteFailureCode`. Otherwise the search is seeded from every lattice node
 the source component's segment cores cover and terminates on any node the target component's cores
 cover; a rectangle's covered index range is solved directly rather than by scanning the lattice, and
-each emitted node charges the obstacle budget. Pads contribute only their centre node, so a board
-without same-net copper produces byte-identical geometry to the single-source contract.
+each emitted node charges the obstacle budget. Pads contribute only their centre node for two-pin
+routing, so a board without same-net copper produces byte-identical geometry to the single-source
+contract. Multi-pin attachment seeds from pad cores so off-grid pad centres do not make a valid tree
+impossible.
 
 Because two components cannot both contain the same node without having been unioned, the seed and
 target sets are provably disjoint and the emitted patch always has at least one edge. The heuristic
@@ -398,19 +401,22 @@ fabrication guarantee.
 ## Multi-pin trees
 
 A net with more than two pads is routed by sequential component merging. Connectivity analysis
-produces the net's initial components; those components are spanned by a minimum spanning tree with
-edges weighted by the exact integer rectilinear gap between component bounding boxes and ordered by
-`(gap, lower index, higher index)`, so the order is a pure function of the snapshot. Each edge is
-one leg, routed by the same multi-source/multi-target search a two-pin stub attachment uses: the
+produces the net's initial components. For at most nine evolving components, the clean-room
+`batched-1-steiner-v1` policy scores component pairs by the exact bounding-box gap minus a bounded
+median-point one-Steiner savings term, with stable index tie-breaks. It is a topology *ordering*
+guide, not a FLUTE lookup-table implementation or an optimality certificate. Larger nets retain the
+`component-mst-v1` order until a separately budgeted decomposition policy exists. Each ordered edge
+is one leg, routed by the same multi-source/multi-target search a two-pin stub attachment uses: the
 source component's copper supplies the seeds and the target component's the goals. A routed leg's
 copper joins the merged component, so later legs may attach anywhere along it, and because legs are
 same-net copper they are never obstacles to one another.
 
 What that claims is narrow and worth stating exactly: every pad ends in one component, each leg is
 optimal for the obstacles present *at the time that leg was routed*, and the whole result is
-reproducible. It does not claim Steiner optimality, and it does not revisit an earlier leg once a
-later one is routed. The ordering policy is recorded in candidate identity as `component-mst-v1`, so
-a FLUTE-guided or learned topology can be added later as a new policy without changing the contract.
+reproducible. It does not claim Steiner optimality, a global tree optimum, or FreeRouting parity,
+and it does not revisit an earlier leg once a later one is routed. The selected ordering policy is
+recorded in candidate identity, so a future FLUTE-guided, learned, or decomposed topology can be
+added as a new policy without changing the contract.
 
 Multi-pin legs seed from pad **cores** rather than pad centres. Requiring every pad centre to sit on
 one lattice is unworkable in practice: on this repository's own CopperTone board the largest grid

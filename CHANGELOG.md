@@ -8,6 +8,11 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added a bounded `batched-1-steiner-v1` ordering policy for low-degree multi-pin nets. It keeps
+  the deterministic A* core and all geometry validation authoritative while reducing the recorded
+  four-pad fixture's wire length from 48 mm to 42 mm; no Steiner-optimality or FreeRouting parity
+  claim is made.
+
 - Added a bounded, restart-safe routing-job repository and ordinary MCP lifecycle surface. The
   file-backed two-signal-layer queue persists deep-frozen normalized requests, redacted manifests,
   and separately authorized content-addressed candidate geometry behind TTL/capacity limits;

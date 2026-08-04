@@ -399,7 +399,7 @@ def test_straight_route_is_exact_replayable_and_content_addressed() -> None:
     second = _candidate(router.propose(snapshot, request))
 
     assert router.name == "orthogonal-a-star-v1"
-    assert first.router_version == "astar-grid/0.4.0"
+    assert first.router_version == "astar-grid/0.5.0"
     assert first == second
     assert first.patch.paths[0].vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
     assert first.patch.width_nm == 200
@@ -2023,7 +2023,7 @@ def test_a_partly_connected_multi_pin_net_is_routed_as_a_tree() -> None:
 
     assert candidate == router.propose(snapshot, request).candidate
     assert candidate.pad_count == 3
-    assert candidate.ordering_policy == "component-mst-v1"
+    assert candidate.ordering_policy == "batched-1-steiner-v1"
     # Two components, so exactly one merge.
     assert len(candidate.patch.paths) == 1
     assert candidate.metrics.unrouted_connections == 0
@@ -2170,7 +2170,7 @@ def test_a_disconnected_multi_pin_net_is_routed_as_a_deterministic_tree() -> Non
     assert first == second
     assert canonical_candidate_bytes(first) == canonical_candidate_bytes(second)
     assert first.pad_count == 3
-    assert first.ordering_policy == "component-mst-v1"
+    assert first.ordering_policy == "batched-1-steiner-v1"
     # Three isolated pads are three components, so a spanning tree needs exactly two merges.
     assert len(first.patch.paths) == 2
     assert first.cost.length_nm == sum(path.length_nm for path in first.patch.paths)

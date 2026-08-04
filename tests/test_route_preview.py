@@ -1243,7 +1243,10 @@ def test_preview_routes_a_four_pad_net_as_a_tree(tmp_path: Path) -> None:
     assert first.status is RoutePreviewStatus.ROUTED
     assert first.candidate is not None
     assert first.candidate.pad_count == 4
-    assert first.candidate.ordering_policy == "component-mst-v1"
+    assert first.candidate.ordering_policy == "batched-1-steiner-v1"
+    # The topology guide shortens this four-pad tree from the recorded component-MST baseline
+    # (48 mm) to 42 mm while the real KiCad DRC oracle still accepts it.
+    assert first.candidate.cost.length_nm == 42_000_000
     # Four isolated pads are four components, so a spanning tree is exactly three merges.
     assert len(first.candidate.patch.paths) == 3
     document = first.to_dict()

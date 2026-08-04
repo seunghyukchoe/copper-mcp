@@ -39,3 +39,4 @@ from the decision ledger.
 - [ADR-0034: Keep placement candidate rendering source-preserving and subset-bound](0034-source-preserving-placement-candidates.md)
 - [ADR-0035: Keep the layered A* search seam internal until board fidelity exists](0035-internal-layered-search-oracle.md)
 - [ADR-0048: Durable layered routing request, result, and export boundary](0048-durable-routing-request-result-export.md)
+- [ADR-0049: Add a bounded one-Steiner topology ordering policy](0049-batched-one-steiner-ordering.md)

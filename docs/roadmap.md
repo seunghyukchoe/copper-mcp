@@ -92,8 +92,10 @@ documentation, ledger updates, and benchmark evidence.
     is recognised rather than refused.
   - [x] Routing a multi-pin net as a deterministic spanning tree over its components
     (`component-mst-v1`); Steiner-optimal topology is explicitly not claimed.
-  - [ ] Steiner-quality topology (FLUTE-guided or learned ordering) behind the recorded
-    `ordering_policy` seam.
+  - [x] Bounded one-Steiner-quality topology ordering behind the recorded `ordering_policy` seam
+    (`batched-1-steiner-v1` for at most nine evolving components, with a measured 12.5% wire-
+    length reduction on the four-pad fixture). This is not a FLUTE implementation or optimality
+    claim; higher-degree decomposition and learned policies remain future work.
 - [x] Via-aware connectivity, so a net joined through another layer is recognised rather than
   refused. On CopperTone this resolved `VCC` and `L_OUT`; `GND` remains refused because it carries a
   same-net zone, whose fill is not trusted.

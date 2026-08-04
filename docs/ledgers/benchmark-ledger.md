@@ -430,3 +430,16 @@ result or a general performance comparison.
 | Metrics | The artifact records queued-before-worker, deterministic job-ID idempotency, completed candidate, explicit geometry export, wrong-context refusal, restart recovery of the terminal job and normalized request, deep/redacted persistence, live-request refusal, median lookup/export latency, board mutation `false`, and MCP Tasks `false`. |
 | Artifact | [`2026-08-05-routing-job-request-result-export.json`](../../benchmarks/results/routing/2026-08-05-routing-job-request-result-export.json) |
 | Interpretation | This is contract and restart evidence for the narrow file-backed two-signal queue. It demonstrates a measurable durable handoff and a separately authorized geometry disclosure, not general routing quality, throughput, KiCad DRC, live GUI compatibility, MCP Tasks interoperability, electrical behavior, fabrication readiness, or FreeRouting parity. |
+
+### B-031 — Bounded one-Steiner topology ordering
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:1c4eb4567825483a82ef14b1fc6495f56bd706d4e466e22917fc3c7c3faf8b6f` |
+| Date and commit | 2026-08-05; source commit `6d9e632` recorded before this implementation commit; dirty tree during local benchmark generation |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
+| Dataset | Independently authored `tests/fixtures/route-candidate/tree-star.kicad_pcb`; four-pad multi-pin synthetic fixture; no external or proprietary design data |
+| Configuration | `batched-1-steiner-v1`; ten deterministic public `preview_route` replays against the same bounded A* and budgets; baseline replay swaps only the topology-ordering seam to `component-mst-v1` |
+| Metrics | Baseline wire length 48,000,000 nm; one-Steiner ordering 42,000,000 nm; reduction 6,000,000 nm (12.5%); deterministic heuristic candidate `true`; deterministic baseline candidate `true`; source bytes/inode/mtime unchanged `true`; KiCad invocation `false`; optimality claim `false`; FreeRouting parity claim `false` |
+| Artifact | [`2026-08-05-steiner-ordering.json`](../../benchmarks/results/routing/2026-08-05-steiner-ordering.json) |
+| Interpretation | This is a narrow topology-ordering improvement on one synthetic four-pad fixture, measured through the real route-preview service and the same obstacle-aware A* budgets. It is not a FLUTE implementation, a Steiner-optimality certificate, a whole-board result, KiCad DRC evidence, electrical/fabrication evidence, or a FreeRouting comparison. |
