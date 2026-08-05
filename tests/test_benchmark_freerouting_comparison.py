@@ -986,6 +986,49 @@ def test_harness_result_drc_uses_private_copy_and_refuses_tampered_source(
     assert observed == []
 
 
+def test_harness_preflight_failure_confines_fallback_freerouting_result_drc(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    paths = _comparison_inputs(tmp_path)
+    kicad_python = tmp_path / "kicad-python"
+    kicad_python.write_bytes(b"tool")
+    capability = _workspace_capability(tmp_path)
+    observed: list[tuple[Path, Path]] = []
+
+    def private_drc(
+        _cli: Path, board: Path, _timeout: int, cwd: Path, **_kwargs: object
+    ) -> dict[str, int | str]:
+        observed.append((board, cwd))
+        return {"status": "ok", "hard_violations": 0, "unconnected": 0}
+
+    monkeypatch.setattr(benchmark, "private_workspace_capability", lambda: capability)
+    monkeypatch.setattr(
+        benchmark,
+        "preflight",
+        lambda **_kwargs: {"available": False, "reasons": ["refused"], "probes": {}},
+    )
+    monkeypatch.setattr(benchmark, "drc_metrics", private_drc)
+    report = benchmark.build_report(
+        **_build_kwargs(paths),
+        kicad_python=kicad_python,
+        copper_board=None,
+        freerouting_board=paths["board"],
+        copper_receipt=None,
+        freerouting_receipt=None,
+        copper_command=None,
+        seed=1,
+        timeout_seconds=1,
+    )
+
+    fallback = next(item for item in report["results"] if item["name"] == "freerouting")
+    assert fallback["drc"]["status"] == "ok"
+    assert observed and all(
+        board.is_relative_to(capability.root) and cwd.is_relative_to(capability.root)
+        for board, cwd in observed
+    )
+    assert all(board != paths["board"] for board, _cwd in observed)
+
+
 def test_harness_transaction_refuses_an_importer_that_mutates_its_source_copy(
     tmp_path: Path, monkeypatch: object
 ) -> None:
