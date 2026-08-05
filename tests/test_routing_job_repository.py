@@ -25,7 +25,14 @@ from copper_mcp.routing.job_repository import (
     RoutingCandidateExportUnavailableError,
     RoutingJobRequestUnavailableError,
 )
-from copper_mcp.routing.jobs import RoutingJobError, RoutingJobSpec, RoutingJobStatus
+from copper_mcp.routing.jobs import (
+    RoutingJobConflictError,
+    RoutingJobError,
+    RoutingJobFailureCode,
+    RoutingJobSpec,
+    RoutingJobStateError,
+    RoutingJobStatus,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "blocked-pad.kicad_pcb"
 F_CU = "layer:F.Cu"
@@ -359,6 +366,74 @@ def test_worker_publication_preflight_rejects_invalid_candidate_without_artifact
         assert result.status is RoutingJobStatus.FAILED
         assert result.diagnostic_code.value == "invalid_request"
         assert result.candidate_id is None
+        assert _candidate_artifact_counts(path) == (0, 0)
+
+
+@pytest.mark.parametrize(
+    "state",
+    ("queued", "completed", "failed", "cancelled", "cancel_requested", "wrong_revision"),
+)
+def test_direct_publication_requires_current_running_lifecycle_before_artifacts(
+    tmp_path: Path, state: str
+) -> None:
+    """Lifecycle preflight prevents state/refusal orphans before artifact persistence."""
+
+    candidate, spec, request, authorization = _candidate_and_spec()
+    path = tmp_path / f"direct-lifecycle-preflight-{state}.sqlite3"
+    with RoutingJobRepository(path) as repository:
+        queued = repository.create(spec, request, authorization, now_ms=100)
+        expected_revision = queued.revision
+        before = queued
+        if state == "cancelled":
+            before = repository.jobs.request_cancel(
+                spec.job_id,
+                expected_revision=queued.revision,
+                now_ms=101,
+            )
+            expected_revision = before.revision
+        elif state != "queued":
+            running = repository.jobs.start(
+                spec.job_id, expected_revision=queued.revision, now_ms=101
+            )
+            before = running
+            expected_revision = running.revision
+            if state == "completed":
+                before = repository.jobs.complete(
+                    spec.job_id,
+                    candidate,
+                    expected_revision=running.revision,
+                    now_ms=102,
+                )
+                expected_revision = before.revision
+            elif state == "failed":
+                before = repository.jobs.fail(
+                    spec.job_id,
+                    RoutingJobFailureCode.WORKER_ERROR,
+                    "routing worker failed",
+                    expected_revision=running.revision,
+                    now_ms=102,
+                )
+                expected_revision = before.revision
+            elif state == "cancel_requested":
+                before = repository.jobs.request_cancel(
+                    spec.job_id,
+                    expected_revision=running.revision,
+                    now_ms=102,
+                )
+                expected_revision = before.revision
+            elif state == "wrong_revision":
+                expected_revision += 1
+
+        with pytest.raises((RoutingJobStateError, RoutingJobConflictError)):
+            repository.publish_candidate(
+                spec.job_id,
+                candidate,
+                expected_revision=expected_revision,
+                authorization_digest=authorization,
+                now_ms=103,
+            )
+
+        assert repository.jobs.get(spec.job_id, now_ms=103) == before
         assert _candidate_artifact_counts(path) == (0, 0)
 
 

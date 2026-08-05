@@ -322,6 +322,14 @@ class RoutingJobWorker:
             )
         if probe.is_cancelled():
             return self._cancel_or_expire(lease)
+        try:
+            current = self._store.get(job_id, now_ms=self._now())
+            current.validate_completion_eligibility(expected_revision=lease.revision)
+        except (RoutingJobConflictError, RoutingJobStateError):
+            return self._resolve_publish_race(lease)
+        except RoutingJobNotFoundError:
+            self._active = None
+            raise
         if before_complete is not None:
             try:
                 before_complete(candidate)

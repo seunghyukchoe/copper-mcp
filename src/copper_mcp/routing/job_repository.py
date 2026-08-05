@@ -44,7 +44,6 @@ from copper_mcp.routing.job_worker import (
 )
 from copper_mcp.routing.jobs import (
     Candidate,
-    RoutingJobConflictError,
     RoutingJobError,
     RoutingJobFailureCode,
     RoutingJobNotFoundError,
@@ -847,8 +846,7 @@ class RoutingJobRepository:
         timestamp = _now_ms() if now_ms is None else now_ms
         with self._lock:
             record, envelope = self.get(job_id, authorization_digest, now_ms=timestamp)
-            if record.revision != expected_revision:
-                raise RoutingJobConflictError("routing job revision conflict")
+            record.validate_completion_eligibility(expected_revision=expected_revision)
             validate_candidate_for_job(candidate, record.spec)
             self._publish_candidate_artifacts(
                 candidate,

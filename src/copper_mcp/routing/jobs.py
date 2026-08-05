@@ -645,11 +645,21 @@ class RoutingJobRecord:
             diagnostic_message="routing job cancellation acknowledged",
         )
 
+    def validate_completion_eligibility(self, *, expected_revision: int) -> None:
+        """Prove the immutable state/revision prerequisites for candidate publication.
+
+        This is a non-mutating preflight only.  The completion CAS invokes it again because a
+        concurrent lifecycle transition can invalidate this observation before publication.
+        """
+
+        if self.status is not RoutingJobStatus.RUNNING:
+            raise RoutingJobStateError("only a running job can publish a candidate")
+        self._check_revision(expected_revision)
+
     def complete(
         self, candidate: Candidate, *, expected_revision: int, now_ms: int
     ) -> RoutingJobRecord:
-        if self.status is not RoutingJobStatus.RUNNING:
-            raise RoutingJobStateError("only a running job can publish a candidate")
+        self.validate_completion_eligibility(expected_revision=expected_revision)
         candidate_id, candidate_revision = validate_candidate_for_job(candidate, self.spec)
         return self._transition(
             expected_revision=expected_revision,

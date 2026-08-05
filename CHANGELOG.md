@@ -197,10 +197,12 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
-- Durable routing jobs now validate every immutable candidate-to-job completion binding before
-  writing bounded, owner-bound candidate artifacts, then revalidate at the final lifecycle CAS.
-  Invalid candidates leave no export or manifest; a worker returns a fixed invalid-request failure
-  while the direct publisher leaves its revision-bound job retryable. Valid artifacts still publish
+- Durable routing jobs now validate every immutable candidate-to-job completion binding and the
+  exact `RUNNING` lifecycle revision before writing bounded, owner-bound candidate artifacts, then
+  revalidate at the final lifecycle CAS. Invalid candidates, and direct queued, terminal,
+  cancel-requested, or stale-revision calls, leave no export or manifest; a worker returns a fixed
+  invalid-request failure while the direct publisher leaves its revision-bound job retryable.
+  Valid artifacts still publish
   before completion, so capacity/serialization failure cannot create a completed job without an
   export. A concurrent completion race can leave only an unreadable TTL-bounded orphan. Request
   expiry and invalid cancellation text now also reach both request and lifecycle retention cleanup
