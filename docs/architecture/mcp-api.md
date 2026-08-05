@@ -344,11 +344,12 @@ uses `board: "live"`, two `pad:` references, the net-class/layer/search bounds, 
 Board IR, and redacted KiCad-session compare-and-swap digests. The service captures one bounded
 `Board.get_as_string()` serialization, confirms it byte-for-byte, closes the official IPC client,
 converts those exact bytes through the Board IR adapter, and infers the net only from the two pads.
-The session revision is `hmac-sha256:<64 lowercase hex>`: a domain-separated HMAC-SHA256 over
-`KICAD_API_TOKEN` with a fresh process-local 256-bit key, rather than a public token hash. It is
-constant-time compared after fixed-format validation and intentionally fails after a fresh process
-or restart; neither token nor key is returned. The remaining route deadline is passed to IPC and
-search, checked between synchronous IPC calls, and checked during bounded serialized-item counting.
+The session revision is `pbkdf2-hmac-sha256:<64 lowercase hex>`: fixed-work PBKDF2-HMAC-SHA256
+over `KICAD_API_TOKEN`, with a domain-separated fresh process-local 256-bit salt, rather than a
+public token hash. It is constant-time compared after fixed-format validation and intentionally
+fails after a fresh process or restart; neither token nor salt is returned. The remaining route
+deadline is passed to IPC and search, checked between synchronous IPC calls, and checked during
+bounded serialized-item counting.
 A stale session/source/snapshot refuses before candidate work,
 and the live candidate is compared against the file-backed oracle in B-026. The official wrapper
 is synchronous, so a third-party IPC call cannot be forcibly pre-empted by this Python process;

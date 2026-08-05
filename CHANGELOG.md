@@ -256,6 +256,13 @@ All notable changes are documented here. The format follows
   the session CAS checks, and deliberately refuse preconditions from a fresh process/restart.
   The token and process key remain absent from outputs, errors, logs, candidates, and ledgers.
 
+- Superseded the prior HMAC session-revision derivation with fixed-work
+  `pbkdf2-hmac-sha256:<64 lowercase hex>`. The process-local 256-bit salt is domain-separated
+  and non-persistent; the fixed 200,000-iteration PBKDF2-HMAC-SHA256 derivation keeps
+  limited-input token guesses computationally expensive and remains bounded for local CAS.
+  The HMAC history remains recorded in D-127/SEC-103/R-102; legacy HMAC and unkeyed SHA-256 wire
+  values are refused.
+
 - Durable routing jobs now validate every immutable candidate-to-job completion binding and the
   exact `RUNNING` lifecycle revision before writing bounded, owner-bound candidate artifacts, then
   revalidate at the final lifecycle CAS. Invalid candidates, and direct queued, terminal,

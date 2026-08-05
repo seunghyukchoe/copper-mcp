@@ -116,9 +116,9 @@ editor mutation. A live action compare-and-swap remains a separate future contra
 `preview_live_placement` now adds the equivalent ref-anchored placement proposal edge over the
 same snapshot and deterministic legalizer, with both scene digests required and no editor-write
 authority. `preview_live_layered_route` now adds the via-capable two-signal-layer edge over the
-same exact serialization, requiring an opaque process-local HMAC-SHA256 session revision over
-`KICAD_API_TOKEN` in addition to source and Board IR CAS. It closes official IPC clients and
-passes the remaining bounded deadline,
+same exact serialization, requiring an opaque fixed-work process-local PBKDF2-HMAC-SHA256 session
+revision over `KICAD_API_TOKEN` in addition to source and Board IR CAS. It closes official IPC
+clients and passes the remaining bounded deadline,
 but remains candidate-only: endpoint-via legality, DRC, serializer/export, apply, and real-GUI
 success are separate future gates. A live action compare-and-swap remains a separate future
 contract.

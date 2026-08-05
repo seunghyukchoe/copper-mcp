@@ -62,8 +62,11 @@ that every product feature, price, or repository release will remain current.
   source-to-Board-IR-to-Scene digest probe, capability outcomes, deadline boundary, and
   workstation evidence without claiming a live-editor result.
 - [KiCad session-revision HMAC boundary](./kicad-session-revision-hmac.md) records why the
-  live-session CAS uses a process-local keyed fingerprint instead of an offline-testable token
-  hash, including the deliberate restart refusal.
+  prior HMAC live-session CAS replaced an offline-testable token hash, including the deliberate
+  restart refusal. It is retained as historical evidence.
+- [KiCad session-revision PBKDF2 boundary](./kicad-session-revision-pbkdf2.md) records the current
+  fixed-work, process-local-salt derivation, CodeQL remediation rationale, latency measurement,
+  and deliberate restart refusal.
 - [Safe apply references](./safe-apply-references.md) grounds compare-and-swap, atomic publication,
   editor-lock, recovery, and explicit-authorization decisions for file-backed mutation.
 - [Apply-token retention](./apply-token-retention.md) records nonce-expiry and bounded-retention

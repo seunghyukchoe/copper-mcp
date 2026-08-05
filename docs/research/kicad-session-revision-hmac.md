@@ -2,6 +2,11 @@
 
 **Snapshot date:** 2026-08-05
 
+> **Superseded implementation record — 2026-08-05:** D-129/SEC-105/R-104 replace this HMAC wire
+> derivation with `pbkdf2-hmac-sha256` to satisfy the current CodeQL limited-input-secret rule.
+> This document is retained unchanged below as historical HMAC remediation evidence; see
+> [the PBKDF2 boundary](./kicad-session-revision-pbkdf2.md) for the current contract.
+
 ## Question
 
 How can a read-only live KiCad route proposal distinguish a restarted editor session with identical

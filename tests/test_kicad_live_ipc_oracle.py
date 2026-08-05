@@ -282,7 +282,7 @@ def test_oracle_detects_a_session_change_after_capture_without_board_text() -> N
     assert result.to_dict()["board_digest"] is None
 
 
-def test_live_snapshot_refuses_legacy_unkeyed_session_revision() -> None:
+def test_live_snapshot_refuses_legacy_hmac_session_revision() -> None:
     source = FIXTURE.read_bytes()
     digest = f"sha256:{hashlib.sha256(source).hexdigest()}"
     with pytest.raises(KicadIpcPayloadError, match="session revision is invalid"):
@@ -297,5 +297,5 @@ def test_live_snapshot_refuses_legacy_unkeyed_session_revision() -> None:
                 socket_kind="configured-local-ipc",
             ),
             source=source,
-            session_revision="sha256:" + "0" * 64,
+            session_revision="hmac-sha256:" + "0" * 64,
         )
