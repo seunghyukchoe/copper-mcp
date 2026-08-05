@@ -6,6 +6,7 @@ import pytest
 
 from copper_mcp.routing.task_bridge import (
     DEFAULT_TASK_HANDLE_RETENTION_SECONDS,
+    MAX_TASK_HANDLES,
     MCPTasksCompatibility,
     RoutingTaskHandleBroker,
     TaskHandleUnavailableError,
@@ -24,6 +25,10 @@ class Clock:
 
     def __call__(self) -> float:
         return self.now
+
+
+class UnhashableText(str):
+    __hash__ = None  # type: ignore[assignment]
 
 
 def test_broker_mints_unguessable_handle_distinct_from_deterministic_job_id() -> None:
@@ -58,6 +63,27 @@ def test_broker_requires_original_caller_context_without_handle_or_owner_oracle(
     assert broker.resolve(task_id=handle.task_id, authorization_digest=_digest(b"owner")) == handle
 
 
+@pytest.mark.parametrize(
+    ("task_id", "authorization_digest"),
+    (
+        ([], _digest(b"owner")),
+        ({"unhashable": "task"}, _digest(b"owner")),
+        ("x" * 43, []),
+        ("x" * 43, {"unhashable": "owner"}),
+        (UnhashableText("x" * 43), _digest(b"owner")),
+        ("x" * 43, UnhashableText(_digest(b"owner"))),
+    ),
+)
+def test_broker_rejects_hostile_non_string_handles_before_dictionary_lookup(
+    task_id: object,
+    authorization_digest: object,
+) -> None:
+    broker = RoutingTaskHandleBroker()
+
+    with pytest.raises(TaskHandleUnavailableError, match=r"^routing task handle is unavailable$"):
+        broker.resolve(task_id=task_id, authorization_digest=authorization_digest)  # type: ignore[arg-type]
+
+
 def test_broker_purges_expired_handles_before_lookup_and_capacity_check() -> None:
     clock = Clock()
     broker = RoutingTaskHandleBroker(retention_seconds=5, max_handles=1, clock=clock)
@@ -71,6 +97,42 @@ def test_broker_purges_expired_handles_before_lookup_and_capacity_check() -> Non
 
     assert second.task_id != first.task_id
     assert broker.active_handle_count() == 1
+
+
+@pytest.mark.parametrize("retention_seconds", (True, False, 1.5, "5"))
+def test_broker_rejects_non_integer_retention_limits(retention_seconds: object) -> None:
+    with pytest.raises(ValueError):
+        RoutingTaskHandleBroker(retention_seconds=retention_seconds)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("max_handles", (True, False, 1.5, "5", MAX_TASK_HANDLES + 1))
+def test_broker_rejects_boolean_non_integer_and_oversize_capacity(max_handles: object) -> None:
+    with pytest.raises(ValueError):
+        RoutingTaskHandleBroker(max_handles=max_handles)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("bad_clock", (None, 3, "clock"))
+def test_broker_rejects_non_callable_clock(bad_clock: object) -> None:
+    with pytest.raises(TypeError):
+        RoutingTaskHandleBroker(clock=bad_clock)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("bad_time", (float("nan"), float("inf"), float("-inf"), True, "now"))
+def test_broker_fails_closed_for_non_finite_or_non_numeric_clock_values(bad_time: object) -> None:
+    broker = RoutingTaskHandleBroker(clock=lambda: bad_time)  # type: ignore[arg-type]
+
+    with pytest.raises(TaskHandleUnavailableError, match=r"^routing task handle is unavailable$"):
+        broker.mint(job_id=_digest(b"job"), authorization_digest=_digest(b"owner"))
+
+
+def test_broker_fails_closed_when_clock_moves_backwards() -> None:
+    clock = Clock()
+    broker = RoutingTaskHandleBroker(clock=clock)
+    broker.mint(job_id=_digest(b"first"), authorization_digest=_digest(b"owner"))
+    clock.now -= 1
+
+    with pytest.raises(TaskHandleUnavailableError, match=r"^routing task handle is unavailable$"):
+        broker.mint(job_id=_digest(b"second"), authorization_digest=_digest(b"owner"))
 
 
 def test_broker_cancellation_never_calls_delegate_before_authorization() -> None:
@@ -128,6 +190,43 @@ def test_explicit_compatibility_gate_requires_every_security_and_runtime_seam() 
         "owner_bound_lookup_unavailable",
         "durable_task_handle_store_unavailable",
     )
+
+
+@pytest.mark.parametrize(
+    "field",
+    (
+        "has_extension_api",
+        "has_task_wire_types",
+        "has_task_dispatcher",
+        "has_owner_bound_task_lookup",
+        "has_durable_task_handle_store",
+    ),
+)
+def test_compatibility_gate_rejects_truthy_non_boolean_flags(field: str) -> None:
+    values: dict[str, object] = {
+        "mcp_version": "9.9.9",
+        "has_extension_api": True,
+        "has_task_wire_types": True,
+        "has_task_dispatcher": True,
+        "has_owner_bound_task_lookup": True,
+        "has_durable_task_handle_store": True,
+    }
+    values[field] = "yes"
+
+    with pytest.raises(TypeError, match="flags must be booleans"):
+        assess_mcp_tasks_compatibility(**values)  # type: ignore[arg-type]
+
+
+def test_compatibility_gate_rejects_non_text_version() -> None:
+    with pytest.raises(TypeError, match="version must be text or absent"):
+        assess_mcp_tasks_compatibility(
+            mcp_version=1,  # type: ignore[arg-type]
+            has_extension_api=True,
+            has_task_wire_types=True,
+            has_task_dispatcher=True,
+            has_owner_bound_task_lookup=True,
+            has_durable_task_handle_store=True,
+        )
 
 
 def test_installed_runtime_probe_refuses_to_overclaim_task_support() -> None:

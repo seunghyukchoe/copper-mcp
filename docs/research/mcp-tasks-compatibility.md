@@ -53,7 +53,7 @@ not an MCP Tasks adapter.  It:
   unauthorized handles;
 - bounds retention to 1 second–24 hours (900 seconds by default) and purges on
   all access; and
-- caps live in-memory handles (1,024 by default).
+- caps live in-memory handles (1,024 by default; 4,096 maximum).
 
 It is intentionally unsuitable as a `CreateTaskResult` store: memory-only
 records disappear on restart and cannot satisfy the draft's durable

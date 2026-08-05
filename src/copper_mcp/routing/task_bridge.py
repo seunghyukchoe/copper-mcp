@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hmac
 import importlib
+import math
 import re
 import secrets
 import threading
@@ -24,6 +25,7 @@ TASKS_EXTENSION_IDENTIFIER: Final = "io.modelcontextprotocol/tasks"
 DEFAULT_TASK_HANDLE_RETENTION_SECONDS: Final = 900
 MAX_TASK_HANDLE_RETENTION_SECONDS: Final = 86_400
 DEFAULT_MAX_TASK_HANDLES: Final = 1_024
+MAX_TASK_HANDLES: Final = 4_096
 _TASK_ID_RE: Final = re.compile(r"^[A-Za-z0-9_-]{43}$")
 _SHA256_RE: Final = re.compile(r"^sha256:[0-9a-f]{64}$")
 _Result = TypeVar("_Result")
@@ -52,6 +54,23 @@ class MCPTasksCompatibility:
     has_task_dispatcher: bool
     has_owner_bound_task_lookup: bool
     has_durable_task_handle_store: bool
+
+    def __post_init__(self) -> None:
+        """Reject dynamic values that could otherwise make the gate truthy."""
+
+        if self.mcp_version is not None and not isinstance(self.mcp_version, str):
+            raise TypeError("MCP version must be text or absent")
+        if any(
+            type(value) is not bool
+            for value in (
+                self.has_extension_api,
+                self.has_task_wire_types,
+                self.has_task_dispatcher,
+                self.has_owner_bound_task_lookup,
+                self.has_durable_task_handle_store,
+            )
+        ):
+            raise TypeError("MCP Tasks compatibility flags must be booleans")
 
     @property
     def supports_safe_wire_contract(self) -> bool:
@@ -189,13 +208,18 @@ class RoutingTaskHandleBroker:
         max_handles: int = DEFAULT_MAX_TASK_HANDLES,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        if not 1 <= retention_seconds <= MAX_TASK_HANDLE_RETENTION_SECONDS:
+        if type(retention_seconds) is not int or not (
+            1 <= retention_seconds <= MAX_TASK_HANDLE_RETENTION_SECONDS
+        ):
             raise ValueError("task handle retention is outside the supported bound")
-        if max_handles < 1:
-            raise ValueError("task handle capacity must be positive")
+        if type(max_handles) is not int or not 1 <= max_handles <= MAX_TASK_HANDLES:
+            raise ValueError("task handle capacity is outside the supported bound")
+        if not callable(clock):
+            raise TypeError("task handle clock must be callable")
         self._retention_seconds = retention_seconds
         self._max_handles = max_handles
         self._clock = clock
+        self._last_clock_value: float | None = None
         self._entries: dict[str, tuple[RoutingTaskHandle, str]] = {}
         self._lock = threading.RLock()
 
@@ -210,7 +234,7 @@ class RoutingTaskHandleBroker:
 
         self._validate_binding(job_id, authorization_digest)
         with self._lock:
-            now = self._clock()
+            now = self._now_locked()
             self._purge_locked(now)
             if len(self._entries) >= self._max_handles:
                 raise TaskHandleUnavailableError("routing task handle is unavailable")
@@ -235,15 +259,12 @@ class RoutingTaskHandleBroker:
         one fixed error so callers cannot enumerate jobs or owners.
         """
 
+        if not self._is_task_id(task_id) or not self._is_digest(authorization_digest):
+            raise TaskHandleUnavailableError("routing task handle is unavailable")
         with self._lock:
-            self._purge_locked(self._clock())
+            self._purge_locked(self._now_locked())
             entry = self._entries.get(task_id)
-            if (
-                entry is None
-                or _TASK_ID_RE.fullmatch(task_id) is None
-                or _SHA256_RE.fullmatch(authorization_digest) is None
-                or not hmac.compare_digest(entry[1], authorization_digest)
-            ):
+            if entry is None or not hmac.compare_digest(entry[1], authorization_digest):
                 raise TaskHandleUnavailableError("routing task handle is unavailable")
             return entry[0]
 
@@ -263,8 +284,22 @@ class RoutingTaskHandleBroker:
         """Return the live count for bounded-capacity tests and local diagnostics."""
 
         with self._lock:
-            self._purge_locked(self._clock())
+            self._purge_locked(self._now_locked())
             return len(self._entries)
+
+    def _now_locked(self) -> float:
+        """Read a finite, non-decreasing clock before mutating retained state."""
+
+        raw_now: object = self._clock()
+        if isinstance(raw_now, bool) or not isinstance(raw_now, int | float):
+            raise TaskHandleUnavailableError("routing task handle is unavailable")
+        now = float(raw_now)
+        if not math.isfinite(now) or (
+            self._last_clock_value is not None and now < self._last_clock_value
+        ):
+            raise TaskHandleUnavailableError("routing task handle is unavailable")
+        self._last_clock_value = now
+        return now
 
     def _purge_locked(self, now: float) -> None:
         expired = [
@@ -276,9 +311,16 @@ class RoutingTaskHandleBroker:
             del self._entries[task_id]
 
     @staticmethod
-    def _validate_binding(job_id: str, authorization_digest: str) -> None:
-        if (
-            _SHA256_RE.fullmatch(job_id) is None
-            or _SHA256_RE.fullmatch(authorization_digest) is None
+    def _validate_binding(job_id: object, authorization_digest: object) -> None:
+        if not RoutingTaskHandleBroker._is_digest(job_id) or not RoutingTaskHandleBroker._is_digest(
+            authorization_digest
         ):
             raise TaskHandleUnavailableError("routing task handle is unavailable")
+
+    @staticmethod
+    def _is_task_id(value: object) -> bool:
+        return type(value) is str and _TASK_ID_RE.fullmatch(value) is not None
+
+    @staticmethod
+    def _is_digest(value: object) -> bool:
+        return type(value) is str and _SHA256_RE.fullmatch(value) is not None
