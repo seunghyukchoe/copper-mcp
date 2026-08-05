@@ -42,6 +42,8 @@ from copper_mcp.kicad_cli import (
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = "copper-mcp/benchmark/freerouting-comparison/v1"
 FREEROUTING_LICENSE = "GPL-3.0-only"
+FREEROUTING_RELEASE_SCHEMA = "copper-mcp/freerouting-release-provenance/v1"
+_FREEROUTING_RELEASE_URL = "https://github.com/freerouting/freerouting/releases/download/"
 REDACTED = "[redacted]"
 _SECRET = re.compile(r"(?i)(bearer\s+|token=|password=|api[_-]?key=)[^\s]+")
 _PATH = re.compile(r"(?<![A-Za-z0-9])(?:/[A-Za-z0-9._~+@%=-]+){2,}|[A-Za-z]:\\[^\s]+")
@@ -62,6 +64,7 @@ MAX_BOARD_ITEMS = 100_000
 FREEROUTING_RECEIPT_SCHEMA = "copper-mcp/freerouting-ses-import-receipt/v1"
 COPPER_RECEIPT_SCHEMA = "copper-mcp/candidate-runner-receipt/v1"
 _RECEIPT_SHA256 = re.compile(r"^sha256:[a-f0-9]{64}$")
+_RELEASE_TAG = re.compile(r"^v(\d+\.\d+\.\d+)$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,9 +113,25 @@ def _output_text(value: str | bytes | None) -> str:
 
 
 def freerouting_argv(java: Path, jar: Path, dsn: Path, ses: Path) -> tuple[str, ...]:
-    """Return the documented FreeRouting v2 DSN-to-SES command, without a shell."""
+    """Return a headless documented FreeRouting v2 DSN-to-SES command, without a shell.
 
-    return (str(java), "-jar", str(jar), "-de", str(dsn), "-do", str(ses), "-l", "en")
+    The official JAR initializes Swing before it sees the DSN arguments.  The JVM headless flag
+    prevents a physical-display requirement from silently turning a CLI benchmark into a macOS
+    graphics-pipeline failure; it does not alter FreeRouting's DSN/SES protocol.
+    """
+
+    return (
+        str(java),
+        "-Djava.awt.headless=true",
+        "-jar",
+        str(jar),
+        "-de",
+        str(dsn),
+        "-do",
+        str(ses),
+        "-l",
+        "en",
+    )
 
 
 def copper_argv(
@@ -262,6 +281,46 @@ def _provenance(path: Path | None) -> tuple[dict[str, Any] | None, list[str]]:
     return {"license_spdx": value["license_spdx"], "origin": origin}, []
 
 
+def freerouting_release_provenance(
+    path: Path | None, jar: Path | None
+) -> tuple[dict[str, str] | None, str]:
+    """Bind one official GitHub-release JAR to a bounded public provenance record.
+
+    This proves that the evaluated local bytes match the caller-recorded SHA-256 and names the
+    official release URL.  It does not claim an upstream signature or substitute for a published
+    checksum, neither of which FreeRouting currently supplies with the JAR asset.
+    """
+
+    if path is None:
+        return None, "unavailable"
+    try:
+        value = _strict_json(read_bounded_bytes(path, MAX_PROVENANCE_BYTES), "release provenance")
+    except (OSError, ValueError):
+        return None, "invalid"
+    if not isinstance(value, dict) or value.get("schema") != FREEROUTING_RELEASE_SCHEMA:
+        return None, "invalid"
+    keys = ("release_tag", "asset_name", "asset_sha256", "source_url", "license_spdx")
+    if any(not isinstance(value.get(key), str) or not value[key] for key in keys):
+        return None, "invalid"
+    if any(len(value[key]) > 512 for key in keys):
+        return None, "invalid"
+    tag_match = _RELEASE_TAG.fullmatch(value["release_tag"])
+    if tag_match is None or value["license_spdx"] != FREEROUTING_LICENSE:
+        return None, "invalid"
+    expected_asset = f"freerouting-{tag_match.group(1)}.jar"
+    expected_url = _FREEROUTING_RELEASE_URL + f"{value['release_tag']}/{expected_asset}"
+    if value["asset_name"] != expected_asset or value["source_url"] != expected_url:
+        return None, "invalid"
+    if not _RECEIPT_SHA256.fullmatch(value["asset_sha256"]):
+        return None, "invalid"
+    actual_hash = _hash_or_none(jar, MAX_JAR_BYTES)
+    if actual_hash is None:
+        return None, "unavailable"
+    if actual_hash != value["asset_sha256"]:
+        return None, "mismatch"
+    return {key: value[key] for key in keys}, "verified"
+
+
 def _strict_json(payload: bytes, label: str) -> Any:
     try:
         text = payload.decode("utf-8", errors="strict")
@@ -353,6 +412,7 @@ def preflight(
     kicad_cli: Path | None,
     provenance: Path | None,
     cwd: Path,
+    release_provenance: Path | None = None,
 ) -> dict[str, Any]:
     """Return all prerequisite failures in one truthful, serializable record."""
 
@@ -370,6 +430,9 @@ def preflight(
             reasons.append(f"{label} exceeds its byte limit")
     _, provenance_reasons = _provenance(provenance)
     reasons.extend(provenance_reasons)
+    _, release_status = freerouting_release_provenance(release_provenance, jar)
+    if release_status not in {"unavailable", "verified"}:
+        reasons.append("FreeRouting release provenance is invalid or does not match its JAR")
     probes: dict[str, Any] = {}
     if java is not None and java.is_file() and java.stat().st_size <= MAX_EXECUTABLE_BYTES:
         probes["java"] = version_probe(java, cwd)
@@ -455,7 +518,9 @@ def drc_metrics(kicad_cli: Path, board: Path, timeout_seconds: int, cwd: Path) -
                 return_code=result.returncode,
                 base_revision=sha256_file(board, MAX_BOARD_BYTES),
                 drc_context_revision=sha256_file(board, MAX_BOARD_BYTES),
-                expected_source=str(board),
+                # KiCad CLI v10 records only the input basename in a board-only DRC report.
+                # Comparing that stable value still prevents substituting another board result.
+                expected_source=board.name,
             )
         except (KiCadCliError, ValueError, OSError):
             output["status"] = "failed"
@@ -539,6 +604,7 @@ def build_report(
     copper_command: tuple[str, ...] | None,
     seed: int,
     timeout_seconds: int,
+    release_provenance: Path | None = None,
     timestamp: datetime | None = None,
 ) -> dict[str, Any]:
     """Run available bounded stages and return content-addressed evidence; never mutate source."""
@@ -551,9 +617,11 @@ def build_report(
         kicad_cli=kicad_cli,
         provenance=provenance,
         cwd=ROOT,
+        release_provenance=release_provenance,
     )
     source_before = _hash_or_none(source, MAX_BOARD_BYTES)
     fixture, _ = _provenance(provenance)
+    release, release_status = freerouting_release_provenance(release_provenance, jar)
     free_receipt, free_receipt_status = _receipt(freerouting_receipt, FREEROUTING_RECEIPT_SCHEMA)
     copper_run_receipt, copper_receipt_status = _receipt(copper_receipt, COPPER_RECEIPT_SCHEMA)
     report: dict[str, Any] = {
@@ -568,6 +636,8 @@ def build_report(
         "toolchain": {
             "freerouting_license": FREEROUTING_LICENSE,
             "freerouting_jar_sha256": _hash_or_none(jar, MAX_JAR_BYTES),
+            "freerouting_release_provenance": release,
+            "freerouting_release_provenance_status": release_status,
             "java_sha256": _hash_or_none(java, MAX_EXECUTABLE_BYTES),
             "kicad_cli_sha256": _hash_or_none(kicad_cli, MAX_EXECUTABLE_BYTES),
             "platform": platform.platform(),
@@ -718,6 +788,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--java", type=_path, default=Path(shutil.which("java") or "java"))
     parser.add_argument("--freerouting-jar", type=_path)
     parser.add_argument(
+        "--freerouting-release-provenance",
+        type=_path,
+        help=(
+            "Optional bounded record binding the JAR to the official FreeRouting GitHub "
+            "release URL and its SHA-256."
+        ),
+    )
+    parser.add_argument(
         "--kicad-cli", type=_path, default=Path(shutil.which("kicad-cli") or "kicad-cli")
     )
     parser.add_argument("--copper-board", type=_path, help="CopperMCP's disposable result board.")
@@ -756,6 +834,7 @@ def main() -> int:
             copper_command=_parse_template(args.copper_command_json),
             seed=args.seed,
             timeout_seconds=args.timeout_seconds,
+            release_provenance=args.freerouting_release_provenance,
         )
     except (OSError, ValueError, json.JSONDecodeError) as error:
         raise SystemExit(

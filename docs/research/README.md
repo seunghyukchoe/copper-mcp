@@ -29,6 +29,8 @@ that every product feature, price, or repository release will remain current.
   the owner-bound, durable-storage gates that keep experimental wire Tasks disabled.
 - [FreeRouting comparison boundary](./freerouting-comparison.md) documents the GPL-isolated,
   receipt-bound comparison harness and why it cannot yet declare a result.
+- [FreeRouting real-run evidence](./freerouting-real-run-v2.md) records the first public,
+  KiCad-DRC-gated DSN/SES run while retaining the harness's no-parity/no-closure boundary.
 - [Circuit Scene to route action closure](./scene-action-closure-references.md) reproduces the
   opaque-reference integration failure, defines the revision-bound MCP contract, and records its
   exact hidden-name equivalence oracle and limitations.

@@ -14,6 +14,13 @@ benchmark = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = benchmark
 SPEC.loader.exec_module(benchmark)
 
+RUNNER = Path(__file__).parents[1] / "scripts" / "run_copper_two_pad_fixture.py"
+RUNNER_SPEC = importlib.util.spec_from_file_location("run_copper_two_pad_fixture", RUNNER)
+assert RUNNER_SPEC is not None and RUNNER_SPEC.loader is not None
+runner = importlib.util.module_from_spec(RUNNER_SPEC)
+sys.modules[RUNNER_SPEC.name] = runner
+RUNNER_SPEC.loader.exec_module(runner)
+
 
 def test_freerouting_command_uses_documented_dsn_ses_boundary(tmp_path: Path) -> None:
     command = benchmark.freerouting_argv(
@@ -30,6 +37,7 @@ def test_freerouting_command_uses_documented_dsn_ses_boundary(tmp_path: Path) ->
         "-l",
         "en",
     )
+    assert "-Djava.awt.headless=true" in command
     assert "shell" not in " ".join(command)
 
 
@@ -95,6 +103,30 @@ def test_malformed_drc_report_fails_closed_without_report_diagnostics(
     assert "parse_error" not in result
 
 
+def test_drc_metrics_accepts_kicad_cli_v10_basename_source_field(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    board = tmp_path / "result.kicad_pcb"
+    board.write_text("(kicad_pcb (version 20240108))\n", encoding="utf-8")
+    observed: dict[str, str] = {}
+
+    def fake_run(argv: tuple[str, ...], _timeout: int, _cwd: Path) -> object:
+        report = Path(argv[argv.index("--output") + 1])
+        report.write_text("{}", encoding="utf-8")
+        return benchmark.ProcessResult(argv, 1, 0, "ok", "", "")
+
+    def fake_parse(payload: bytes, **kwargs: object) -> object:
+        observed["source"] = str(kwargs["expected_source"])
+        raise benchmark.KiCadCliError("stop after inspecting the source contract")
+
+    monkeypatch.setattr(benchmark, "run_process", fake_run)
+    monkeypatch.setattr(benchmark, "_parse_drc_report", fake_parse)
+    result = benchmark.drc_metrics(tmp_path / "kicad-cli", board, 1, tmp_path)
+
+    assert result["status"] == "failed"
+    assert observed == {"source": "result.kicad_pcb"}
+
+
 def test_report_process_evidence_never_includes_private_argv_or_child_output() -> None:
     result = benchmark.ProcessResult(
         ("/private/customer/token=never",),
@@ -117,6 +149,107 @@ def test_minimal_child_environment_does_not_inherit_provider_tokens(
     environment = benchmark.minimal_environment(tmp_path)
     assert "OPENAI_API_KEY" not in environment
     assert set(environment) == {"HOME", "LANG", "LC_ALL", "PATH", "TMPDIR"}
+
+
+def test_official_release_provenance_binds_the_exact_jar(tmp_path: Path) -> None:
+    jar = tmp_path / "freerouting-2.2.2.jar"
+    jar.write_bytes(b"official-release-bytes")
+    provenance = tmp_path / "freerouting-release.json"
+    provenance.write_text(
+        json.dumps(
+            {
+                "schema": benchmark.FREEROUTING_RELEASE_SCHEMA,
+                "release_tag": "v2.2.2",
+                "asset_name": "freerouting-2.2.2.jar",
+                "asset_sha256": _sha(jar.read_bytes()),
+                "source_url": (
+                    "https://github.com/freerouting/freerouting/releases/download/"
+                    "v2.2.2/freerouting-2.2.2.jar"
+                ),
+                "license_spdx": "GPL-3.0-only",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    record, status = benchmark.freerouting_release_provenance(provenance, jar)
+
+    assert status == "verified"
+    assert record == {
+        "asset_name": "freerouting-2.2.2.jar",
+        "asset_sha256": _sha(jar.read_bytes()),
+        "license_spdx": "GPL-3.0-only",
+        "release_tag": "v2.2.2",
+        "source_url": (
+            "https://github.com/freerouting/freerouting/releases/download/"
+            "v2.2.2/freerouting-2.2.2.jar"
+        ),
+    }
+
+
+def test_official_release_provenance_rejects_a_jar_hash_mismatch(tmp_path: Path) -> None:
+    jar = tmp_path / "freerouting-2.2.2.jar"
+    jar.write_bytes(b"different-binary")
+    provenance = tmp_path / "freerouting-release.json"
+    provenance.write_text(
+        json.dumps(
+            {
+                "schema": benchmark.FREEROUTING_RELEASE_SCHEMA,
+                "release_tag": "v2.2.2",
+                "asset_name": "freerouting-2.2.2.jar",
+                "asset_sha256": _sha(b"official-release-bytes"),
+                "source_url": (
+                    "https://github.com/freerouting/freerouting/releases/download/"
+                    "v2.2.2/freerouting-2.2.2.jar"
+                ),
+                "license_spdx": "GPL-3.0-only",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    record, status = benchmark.freerouting_release_provenance(provenance, jar)
+
+    assert record is None
+    assert status == "mismatch"
+
+
+def test_public_two_pad_runner_uses_preview_then_pure_apply_without_mutating_source(
+    tmp_path: Path,
+) -> None:
+    source = (
+        Path(__file__).parents[1]
+        / "benchmarks"
+        / "routing"
+        / "fixtures"
+        / "freerouting-common-two-pad-v1.kicad_pcb"
+    )
+    copied = tmp_path / "source.kicad_pcb"
+    copied.write_bytes(source.read_bytes())
+    before = copied.read_bytes()
+
+    result = runner.route_fixture(copied, tmp_path / "result.kicad_pcb", seed=0)
+
+    assert copied.read_bytes() == before
+    assert result.count(b"(segment") >= 1
+
+
+def test_committed_real_run_remains_explicitly_incomplete_evidence() -> None:
+    artifact = (
+        Path(__file__).parents[1]
+        / "benchmarks"
+        / "results"
+        / "routing"
+        / "2026-08-05-freerouting-common-two-pad.json"
+    )
+    report = json.loads(artifact.read_text(encoding="utf-8"))
+
+    assert report["schema"] == benchmark.SCHEMA
+    assert report["comparison_closed"] is False
+    assert report["status"] == "unavailable_or_incomplete"
+    assert report["incomplete_reason"] == "self_attested_unverified"
+    assert report["toolchain"]["freerouting_release_provenance_status"] == "verified"
+    assert all(item["drc"]["status"] == "ok" for item in report["results"])
 
 
 def _sha(payload: bytes) -> str:
