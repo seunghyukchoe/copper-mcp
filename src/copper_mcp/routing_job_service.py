@@ -304,6 +304,11 @@ def cancel_routing_job(
         ("job_id", "authorization_digest"),
         optional=("reason",),
     )
+    job_id = fields["job_id"]
+    authorization = fields["authorization_digest"]
+    # Resolve through the repository before validating optional cancellation text so malformed
+    # input cannot bypass the request/lifecycle stores' purge-first retention boundary.
+    record, _ = _lookup_job(repository, job_id, authorization)
     reason = fields.get("reason", "caller_requested")
     if (
         not isinstance(reason, str)
@@ -311,9 +316,6 @@ def cancel_routing_job(
         or any(ord(character) < 0x20 for character in reason)
     ):
         raise RoutingJobServiceError("cancellation reason is malformed")
-    job_id = fields["job_id"]
-    authorization = fields["authorization_digest"]
-    record, _ = _lookup_job(repository, job_id, authorization)
     cancelled = repository.jobs.request_cancel(
         job_id,
         expected_revision=record.revision,

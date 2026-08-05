@@ -232,6 +232,25 @@ def test_repository_execute_publishes_candidate_artifacts_after_completion(
         assert repository.manifests.get(candidate.candidate_id).job_id == spec.job_id
 
 
+def test_repository_execute_fails_before_completion_when_artifact_persistence_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Worker execution must not expose a completed job without its candidate export."""
+
+    candidate, spec, request, authorization = _candidate_and_spec()
+    with RoutingJobRepository(tmp_path / "execute-export-failure.sqlite3") as repository:
+        repository.create(spec, request, authorization)
+
+        def fail_export(*_args: object, **_kwargs: object) -> dict[str, object]:
+            raise RoutingJobError("candidate export store capacity is exhausted")
+
+        monkeypatch.setattr(repository.exports, "put", fail_export)
+        result = repository.execute(spec.job_id, authorization, lambda _probe: candidate)
+
+        assert result.status is RoutingJobStatus.FAILED
+        assert result.candidate_id is None
+
+
 def test_request_and_export_expiry_are_uniform(tmp_path: Path) -> None:
     candidate, spec, request, authorization = _candidate_and_spec()
     path = tmp_path / "routing.sqlite3"
@@ -247,6 +266,67 @@ def test_request_and_export_expiry_are_uniform(tmp_path: Path) -> None:
         with pytest.raises(RoutingCandidateExportUnavailableError) as unknown:
             repository.exports.get(_digest("f"), _digest("f"), authorization, now_ms=110)
         assert str(missing.value) == str(unknown.value)
+
+
+def test_repository_lookup_purges_expired_lifecycle_with_request(tmp_path: Path) -> None:
+    """A request expiry cannot retain its matching lifecycle metadata."""
+
+    _, spec, request, authorization = _candidate_and_spec()
+    path = tmp_path / "expired-repository-request.sqlite3"
+    with RoutingJobRepository(path, ttl_ms=10) as repository:
+        repository.create(spec, request, authorization, now_ms=100)
+
+        with pytest.raises(RoutingJobRequestUnavailableError):
+            repository.get(spec.job_id, authorization, now_ms=110)
+
+        with sqlite3.connect(path) as connection:
+            request_row = connection.execute(
+                "SELECT job_id FROM routing_job_requests WHERE job_id = ?", (spec.job_id,)
+            ).fetchone()
+            lifecycle_row = connection.execute(
+                "SELECT job_id FROM routing_jobs WHERE job_id = ?", (spec.job_id,)
+            ).fetchone()
+        assert request_row is None
+        assert lifecycle_row is None
+
+
+def test_export_capacity_refuses_before_lifecycle_completion(tmp_path: Path) -> None:
+    """A valid candidate cannot make a completed job if geometry persistence is full."""
+
+    candidate, spec, request, authorization = _candidate_and_spec()
+    path = tmp_path / "full-export-before-completion.sqlite3"
+    with RoutingJobRepository(path, max_records=1, ttl_ms=1_000) as repository:
+        queued = repository.create(spec, request, authorization, now_ms=100)
+        running = repository.jobs.start(spec.job_id, expected_revision=queued.revision, now_ms=101)
+        with sqlite3.connect(path) as connection:
+            connection.execute(
+                "INSERT INTO routing_candidate_exports(candidate_id, job_id, base_revision, "
+                "kind, authorization_digest, created_at_ms, expires_at_ms, candidate_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    _digest("d"),
+                    _digest("c"),
+                    candidate.base_revision,
+                    "layered",
+                    authorization,
+                    100,
+                    1_000,
+                    sqlite3.Binary(b'{"candidate_id":"retained-capacity"}'),
+                ),
+            )
+
+        with pytest.raises(RoutingJobError, match="candidate export store capacity"):
+            repository.publish_candidate(
+                spec.job_id,
+                candidate,
+                expected_revision=running.revision,
+                authorization_digest=authorization,
+                now_ms=102,
+            )
+
+        record = repository.jobs.get(spec.job_id, now_ms=102)
+        assert record.status is RoutingJobStatus.RUNNING
+        assert record.candidate_id is None
 
 
 def test_expired_request_is_deleted_before_uniform_unavailable_response(tmp_path: Path) -> None:

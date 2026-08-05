@@ -197,6 +197,14 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Durable routing jobs now publish their bounded, owner-bound candidate artifacts before the final
+  lifecycle completion CAS. A worker artifact capacity or serialization failure therefore returns
+  a terminal worker failure rather than a completed job without an export; the direct publisher
+  instead refuses before completion and leaves its revision-bound job retryable. A concurrent
+  completion race can leave only an unreadable TTL-bounded orphan. Request expiry and invalid
+  cancellation text now also reach both request and lifecycle retention cleanup before their fixed
+  refusal.
+
 - Corrected the public policy benchmark provenance contract to name the artifact's
   `evidence_harness_commit` field: the stable source/harness commit used by the embedded replay
   command. The separately recorded artifact materialization commit remains distinct; no replay

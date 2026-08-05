@@ -44,7 +44,6 @@ from copper_mcp.routing.jobs import (
     RoutingJobNotFoundError,
     RoutingJobRecord,
     RoutingJobSpec,
-    RoutingJobStatus,
     RoutingJobStore,
 )
 from copper_mcp.routing.layered_contracts import (
@@ -809,9 +808,20 @@ class RoutingJobRepository:
         *,
         now_ms: int | None = None,
     ) -> tuple[RoutingJobRecord, RoutingJobRequestEnvelope]:
-        envelope = self.requests.get(job_id, authorization_digest, now_ms=now_ms)
+        timestamp = _now_ms() if now_ms is None else now_ms
         try:
-            record = self.jobs.get(job_id, now_ms=now_ms)
+            envelope = self.requests.get(job_id, authorization_digest, now_ms=timestamp)
+        except RoutingJobRequestUnavailableError:
+            # Request and lifecycle rows share the same retention boundary.  Preserve the
+            # uniform unavailable result, but let the lifecycle store durably purge matching
+            # expired redacted metadata before returning it.
+            try:
+                self.jobs.get(job_id, now_ms=timestamp)
+            except RoutingJobNotFoundError:
+                pass
+            raise
+        try:
+            record = self.jobs.get(job_id, now_ms=timestamp)
         except RoutingJobNotFoundError as error:
             raise RoutingJobRequestUnavailableError("routing request is unavailable") from error
         if record.spec.request_digest != envelope.request_digest:
@@ -827,23 +837,23 @@ class RoutingJobRepository:
         authorization_digest: str,
         now_ms: int | None = None,
     ) -> RoutingJobRecord:
-        record, envelope = self.get(job_id, authorization_digest, now_ms=now_ms)
-        if record.revision != expected_revision:
-            raise RoutingJobConflictError("routing job revision conflict")
         timestamp = _now_ms() if now_ms is None else now_ms
-        completed = self.jobs.complete(
-            job_id,
-            candidate,
-            expected_revision=expected_revision,
-            now_ms=timestamp,
-        )
-        self._publish_candidate_artifacts(
-            candidate,
-            spec=completed.spec,
-            authorization_digest=envelope.authorization_digest,
-            now_ms=timestamp,
-        )
-        return completed
+        with self._lock:
+            record, envelope = self.get(job_id, authorization_digest, now_ms=timestamp)
+            if record.revision != expected_revision:
+                raise RoutingJobConflictError("routing job revision conflict")
+            self._publish_candidate_artifacts(
+                candidate,
+                spec=record.spec,
+                authorization_digest=envelope.authorization_digest,
+                now_ms=timestamp,
+            )
+            return self.jobs.complete(
+                job_id,
+                candidate,
+                expected_revision=expected_revision,
+                now_ms=timestamp,
+            )
 
     def execute(
         self,
@@ -860,25 +870,20 @@ class RoutingJobRepository:
                 lease_ms=max(1, min(30_000, record.spec.limits.max_runtime_ms)),
             ),
         )
-        candidate: Candidate | None = None
 
         def wrapped(probe: object) -> Candidate:
-            nonlocal candidate
-            candidate = executor(cast(Any, probe))
-            return candidate
+            return executor(cast(Any, probe))
 
-        completed = worker.execute(job_id, wrapped)
-        if completed.status is not RoutingJobStatus.COMPLETED:
-            return completed
-        if candidate is None:  # pragma: no cover - worker completion requires a candidate
-            raise RoutingJobError("completed routing job is missing its candidate")
-        self._publish_candidate_artifacts(
-            candidate,
-            spec=completed.spec,
-            authorization_digest=envelope.authorization_digest,
-            now_ms=_now_ms(),
-        )
-        return completed
+        def publish_artifacts(result: Candidate) -> None:
+            with self._lock:
+                self._publish_candidate_artifacts(
+                    result,
+                    spec=record.spec,
+                    authorization_digest=envelope.authorization_digest,
+                    now_ms=_now_ms(),
+                )
+
+        return worker.execute(job_id, wrapped, before_complete=publish_artifacts)
 
     def _publish_candidate_artifacts(
         self,
@@ -888,7 +893,7 @@ class RoutingJobRepository:
         authorization_digest: str,
         now_ms: int,
     ) -> None:
-        """Persist explicit geometry only after lifecycle completion has won its CAS race."""
+        """Persist explicit geometry before the lifecycle completion CAS can publish it."""
 
         self.exports.put(
             candidate,
