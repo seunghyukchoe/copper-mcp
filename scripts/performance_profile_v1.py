@@ -257,6 +257,10 @@ def _validate_report(document: Mapping[str, Any]) -> None:
     expected_identity_digest = _sha256(_canonical_bytes(document["identity"]))
     if document.get("identity_digest") != expected_identity_digest:
         raise ValueError("performance profile identity digest is malformed")
+    report_without_run_id = dict(document)
+    run_id = report_without_run_id.pop("run_id", None)
+    if run_id != _sha256(_canonical_bytes(report_without_run_id)):
+        raise ValueError("performance profile run identifier is malformed")
     scenarios = document.get("scenarios")
     if not isinstance(scenarios, dict) or set(scenarios) != {"placement", "routing", "scene"}:
         raise ValueError("performance profile scenarios are malformed")
@@ -322,6 +326,7 @@ def build_report(*, warmups: int, samples: int) -> dict[str, Any]:
         },
     }
     document["monotonic_run_span_ns"] = time.monotonic_ns() - run_started
+    document["run_id"] = _sha256(_canonical_bytes(document))
     _validate_report(document)
     return document
 

@@ -9,6 +9,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "performance_profile_v1.py"
+COMMITTED_REPORT = (
+    ROOT / "benchmarks" / "results" / "performance" / "2026-08-05-performance-profile-v1.json"
+)
 
 
 def _canonical_digest(value: object) -> str:
@@ -16,6 +19,12 @@ def _canonical_digest(value: object) -> str:
         "ascii"
     )
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+def _run_digest(report: dict[str, object]) -> str:
+    payload = dict(report)
+    payload.pop("run_id")
+    return _canonical_digest(payload)
 
 
 def _report(tmp_path: Path) -> dict[str, object]:
@@ -58,6 +67,7 @@ def test_performance_profile_has_fixed_identity_and_three_replayable_scenarios(
         "warmups": 1,
     }
     assert report["identity_digest"] == _canonical_digest(identity)
+    assert report["run_id"] == _run_digest(report)
     scenarios = report["scenarios"]
     assert isinstance(scenarios, dict)
     assert set(scenarios) == {"placement", "routing", "scene"}
@@ -91,3 +101,20 @@ def test_performance_profile_redacts_paths_and_orders_hotspots_by_cumulative_tim
         assert all(
             "/" not in item["function"] and "\\" not in item["function"] for item in hotspots
         )
+
+
+def test_committed_performance_profile_keeps_provenance_outside_deterministic_identity() -> None:
+    report = json.loads(COMMITTED_REPORT.read_text(encoding="utf-8"))
+
+    assert report["identity_digest"] == _canonical_digest(report["identity"])
+    assert report["run_id"] == _run_digest(report)
+    assert report["identity"]["measurement_configuration"] == {
+        "hotspot_limit": 8,
+        "samples": 5,
+        "warmups": 2,
+    }
+    assert len(report["provenance"]["git_head"]) == 40
+    rendered = json.dumps(report, sort_keys=True)
+    assert str(ROOT) not in rendered
+    for scenario in report["scenarios"].values():
+        assert all("/" not in item["function"] for item in scenario["hotspots_cumulative"])
