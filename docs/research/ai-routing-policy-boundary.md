@@ -91,6 +91,28 @@ board mutation capability.  The future integration point is a coordinator that c
 choices before deterministic route construction, candidate verification, authoritative DRC, and
 explicit apply authorization.
 
+## Accepted initial integration contract
+
+[ADR-0064](../adr/0064-policy-bound-initial-negotiated-order.md) accepts a narrow future wiring:
+after a negotiated envelope and its requests have passed deterministic validation, the coordinator
+may resolve one internal `policy_profile` through a private immutable allowlist (initially only
+`deterministic-reference-v1` mapped to `DeterministicReferencePolicy`), derive one bounded
+coordinator-owned feature input, and apply only its first-pass net-order permutation.  Callers
+cannot supply policy objects, factories, plugin paths, endpoints, or model output.  The input uses
+PolicyBounds(0, 0, 0, 0) as a neutral fixed window and no corridor/repair options; it contains no
+board geometry or copper.  The policy decision remains input-digest-bound.  Policy-enabled candidates carry the explicit
+`negotiated-congestion-policy-order-v3` identity label and bind a versioned composite of the
+negotiated-envelope and policy-decision digests; no-profile candidates retain their existing v2
+identity.  Subsequent conflict retries remain the deterministic coordinator order.
+
+This is an architectural contract, not a claim that `negotiate_routes` is already wired to a
+policy.  An absent profile returns the exact existing base `NegotiatedRoutingResult` shape and
+preserves byte-for-byte behavior and v2 identities; profile-enabled runs use a separate result
+extension with their evidence.  A throwing, invalid, unknown, or cancelled profile transaction
+fails closed before any router call and never falls back.  The synchronous in-process seam makes
+no hard timeout claim.  Model, plugin, remote, and subprocess evaluators remain future work behind
+a registered isolated bounded-worker adapter.
+
 ## Public benchmark provenance
 
 The accompanying replay artifact records `implementation_commit` for the public policy contract

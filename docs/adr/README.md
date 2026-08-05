@@ -50,3 +50,4 @@ from the decision ledger.
 - [ADR-0057: Observe bounded front/back footprint poses](0057-front-back-footprint-observation.md)
 - [ADR-0058: Check same-side rectangular courtyard legality](0058-rectangular-courtyard-legality.md)
 - [ADR-0059: Separately authorize bounded placement application](0059-separately-authorized-placement-apply.md)
+- [ADR-0064: Bind a closed routing-policy decision to the initial negotiated order](0064-policy-bound-initial-negotiated-order.md)
