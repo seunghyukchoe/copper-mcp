@@ -1,0 +1,24 @@
+{
+  "artifact": "ac-coupled-signal-chain-v1.kicad_pcb",
+  "artifact_sha256": "2afcfabf4b6d910a21d507978686da1f24d5801521fbf6923724d4abd276b64f",
+  "derivation_statement": "Independently authored, synthetic low-voltage signal-chain topology for test evaluation. It was designed from generic interconnect categories only; it copies no third-party schematic, PCB layout, artwork, values, BOM, construction text, or project description.",
+  "external_references": [
+    {
+      "access": "reference-only",
+      "name": "Elliott Sound Products project catalog",
+      "url": "https://sound-au.com/p-cat.htm"
+    },
+    {
+      "access": "reference-only",
+      "name": "diyAudioProjects.com terms of service",
+      "url": "https://www.diyaudioprojects.com/tos.htm"
+    }
+  ],
+  "license_file": "LICENSE",
+  "license_sha256": "7ad27bd3d842c3cb15e67e107f51d6d5496470bc7b82f4fb91294721a75b6351",
+  "license_spdx": "Apache-2.0",
+  "origin": "coppermcp-original",
+  "rights_holder": "CopperMCP Contributors",
+  "safety_class": "synthetic-low-voltage",
+  "third_party_content_included": false
+}
