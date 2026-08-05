@@ -464,6 +464,7 @@ def main() -> None:
         raise SystemExit(f"Held-out audio evaluation failed: {error}") from error
     rendered = json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n"
     if args.output is not None:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(rendered, encoding="utf-8")
     print(rendered, end="")
 
