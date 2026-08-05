@@ -47,12 +47,17 @@ _COUNT_NAMES = (
 )
 _SHAPE_HEADS = {"gr_line", "gr_rect", "gr_arc", "gr_poly", "gr_curve", "gr_circle"}
 _MAX_EDITOR_SELECTION = 256
-_SESSION_REVISION_PREFIX = "hmac-sha256:"
+_SESSION_REVISION_PREFIX = "pbkdf2-hmac-sha256:"
 _SESSION_REVISION_HEX_LENGTH = 64
-# This key is intentionally process-local and never serialized.  KiCad documents that the
-# plugin token identifies one running editor; binding it with a fresh 256-bit local key makes
-# the public session precondition opaque and intentionally invalid after a fresh process start.
-_SESSION_REVISION_KEY = secrets.token_bytes(32)
+# This salt is intentionally process-local and never serialized. KiCad documents that the plugin
+# token identifies one running editor; binding it with fresh 256-bit local entropy makes the
+# public session precondition opaque and intentionally invalid after a fresh process start.
+_SESSION_REVISION_SALT = secrets.token_bytes(32)
+# Python's hashlib documentation recommends hundreds of thousands of SHA-256 PBKDF2 iterations
+# for limited-input secrets. Keep this fixed, CPU-only cost bounded for the local live-CAS path.
+_SESSION_REVISION_ITERATIONS = 200_000
+_SESSION_REVISION_DKLEN = 32
+_SESSION_REVISION_SALT_DOMAIN = b"copper-mcp:kicad-ipc-session-revision:v2\x00"
 _LAYER_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 _UUID = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
@@ -180,12 +185,13 @@ def _socket_path() -> tuple[str | None, str]:
 
 
 def _session_revision() -> str | None:
-    """Return an opaque, process-local HMAC binding for KiCad's instance token.
+    """Return an opaque, process-local PBKDF2 binding for KiCad's instance token.
 
     The token itself is a credential, not a password verifier.  A plain SHA-256 fingerprint
-    would let an observer test candidate token values offline.  HMAC with a non-persistent
-    process key keeps the wire value suitable only for same-process CAS; a fresh process cannot
-    reproduce a prior value and must refuse it as stale.
+    would let an observer test candidate token values offline. PBKDF2-HMAC-SHA256 with a
+    non-persistent process salt makes offline guesses deliberately expensive and keeps the wire
+    value suitable only for same-process CAS; a fresh process cannot reproduce a prior value and
+    must refuse it as stale.
     """
 
     raw = os.environ.get("KICAD_API_TOKEN", "")
@@ -197,8 +203,13 @@ def _session_revision() -> str | None:
         encoded = raw.encode("utf-8", errors="strict")
     except UnicodeError as error:
         raise KicadIpcConfigurationError("KICAD_API_TOKEN is invalid") from error
-    message = b"copper-mcp:kicad-ipc-session-revision:v1\x00" + encoded
-    tag = hmac.new(_SESSION_REVISION_KEY, message, "sha256").hexdigest()
+    tag = hashlib.pbkdf2_hmac(
+        "sha256",
+        encoded,
+        _SESSION_REVISION_SALT_DOMAIN + _SESSION_REVISION_SALT,
+        _SESSION_REVISION_ITERATIONS,
+        dklen=_SESSION_REVISION_DKLEN,
+    ).hex()
     return f"{_SESSION_REVISION_PREFIX}{tag}"
 
 

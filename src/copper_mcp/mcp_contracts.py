@@ -64,7 +64,7 @@ PortId = Annotated[
     Field(pattern=r"^port:[a-z0-9][a-z0-9._-]{0,63}$"),
 ]
 Digest = Annotated[str, Field(pattern=r"^sha256:[0-9a-f]{64}$")]
-SessionRevision = Annotated[str, Field(pattern=r"^hmac-sha256:[0-9a-f]{64}$")]
+SessionRevision = Annotated[str, Field(pattern=r"^pbkdf2-hmac-sha256:[0-9a-f]{64}$")]
 
 
 class InTotoDigestContract(_ClosedContract):

@@ -60,7 +60,7 @@ def parse_live_layered_route_preview_request(payload: Any) -> LayeredRoutePrevie
         raise LayeredRoutePreviewError("expect_session_revision is required")
     if not _is_session_revision(session_revision):
         raise LayeredRoutePreviewError(
-            "expect_session_revision must be an hmac-sha256 session revision"
+            "expect_session_revision must be a pbkdf2-hmac-sha256 session revision"
         )
     return replace(request, expect_session_revision=session_revision)
 

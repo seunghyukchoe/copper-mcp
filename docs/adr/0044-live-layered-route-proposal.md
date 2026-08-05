@@ -86,3 +86,13 @@ Trade-offs and residuals:
   `benchmarks/results/routing/2026-08-05-live-layered-route-preview.json`: ten fake-IPC replays,
   deterministic candidate IDs, stale/capture-race refusal, closure, and explicit no-GUI/no-DRC
   metrics.
+
+## Superseding amendment — 2026-08-05
+
+D-129 supersedes only the HMAC derivation in decision item 1. The current session revision is
+`pbkdf2-hmac-sha256:<64 lowercase hex>`: PBKDF2-HMAC-SHA256 with `KICAD_API_TOKEN` as the
+limited-input input, a domain-separated fresh 256-bit process-local salt, fixed 200,000 iterations,
+and a 32-byte derived value. The prior HMAC wording remains as historical evidence in D-127,
+SEC-103, and R-102. Strict format validation and constant-time CAS comparison remain unchanged;
+previous HMAC and unkeyed SHA-256 wire values fail closed. This amendment changes no IPC mutation,
+candidate, source/snapshot CAS, routing, DRC, or apply authority.
