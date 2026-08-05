@@ -149,3 +149,27 @@ def test_final_observation_catches_write_after_verification(tmp_path: Path, monk
     assert replay.status == "refused"
     assert replay.diagnostic is not None
     assert replay.diagnostic.code == "token_already_used"
+
+
+def test_unreadable_final_board_is_not_reported_as_applied(tmp_path: Path, monkeypatch) -> None:
+    board, _, settings, authority, preview = _preview(tmp_path)
+    original_verify = apply_service.verify_published_placement_board
+
+    def verify_then_remove(*args, **kwargs):
+        original_verify(*args, **kwargs)
+        board.unlink()
+
+    monkeypatch.setattr(apply_service, "verify_published_placement_board", verify_then_remove)
+
+    result = apply_placement_candidate(_request(preview, board), settings, authority)
+
+    assert result.status == "applied_but_unverified"
+    assert result.board_revision_after is None
+    assert result.diagnostic is not None
+    assert result.diagnostic.code == "apply_verification_failed"
+    assert "could not be observed" in result.diagnostic.message
+    board.write_bytes(b"(kicad_pcb)\n")
+    replay = apply_placement_candidate(_request(preview, board), settings, authority)
+    assert replay.status == "refused"
+    assert replay.diagnostic is not None
+    assert replay.diagnostic.code == "token_already_used"

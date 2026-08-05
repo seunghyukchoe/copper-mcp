@@ -374,10 +374,10 @@ class ApplyResult:
       refusal came before the board was ever read (a disabled flag, a malformed request).
     * ``applied_but_unverified`` - the rename happened but a later step could not be confirmed.
       ``board_revision_after`` is the digest observed at the end of recovery/final observation;
-      it may equal ``board_revision_before`` when a guarded rollback restored the original, or
-      differ when the authorized bytes or a concurrent writer remain. Clients must use that
-      digest together with the diagnostic rather than infer that publication created a new
-      revision. Reporting this as ``refused`` would be a lie.
+      it may equal ``board_revision_before`` when a guarded rollback restored the original, differ
+      when the authorized bytes or a concurrent writer remain, or be ``None`` when the board is
+      missing/unreadable. Clients must use that value together with the diagnostic rather than
+      infer that publication created a new revision. Reporting this as ``refused`` would be a lie.
     """
 
     status: str
@@ -413,10 +413,8 @@ class ApplyResult:
             if self.board_revision_after == self.board_revision_before:
                 raise ApplyRequestError("an applied board must differ from the board it replaced")
         elif self.status == "applied_but_unverified":
-            if self.diagnostic is None or self.board_revision_after is None:
-                raise ApplyRequestError(
-                    "an unverified apply must report both what changed and why it is unverified"
-                )
+            if self.diagnostic is None:
+                raise ApplyRequestError("an unverified apply must report why it is unverified")
         else:  # refused
             if self.diagnostic is None:
                 raise ApplyRequestError("a refusal must carry a diagnostic")
@@ -449,8 +447,8 @@ class PlacementApplyResult:
 
     ``applied_but_unverified`` means that publication occurred, not that the authorized bytes
     are necessarily still present. Its ``board_revision_after`` is the best-effort final digest
-    observed after verification and any guarded recovery, so it can describe a restored original
-    revision or a concurrent writer as well as the authorized placement.
+    observed after verification and any guarded recovery; it can describe a restored original
+    revision or a concurrent writer, and is ``None`` when the board cannot be observed.
     """
 
     status: str
@@ -488,9 +486,9 @@ class PlacementApplyResult:
             if self.footprints_moved < 1:
                 raise ApplyRequestError("an applied placement must move a footprint")
         elif self.status == "applied_but_unverified":
-            if self.diagnostic is None or self.board_revision_after is None:
+            if self.diagnostic is None:
                 raise ApplyRequestError(
-                    "an unverified placement apply must report what changed and why"
+                    "an unverified placement apply must report why it is unverified"
                 )
         else:
             if self.diagnostic is None or self.board_revision_after is not None:

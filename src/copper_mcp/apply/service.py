@@ -875,12 +875,8 @@ def apply_placement_candidate(
     # can still win the tiny interval after verification.  We cannot eliminate that last
     # nanosecond without a longer transaction, but we can refuse to claim success when the
     # reproducible race is visible and preserve the concurrent bytes.
-    final_revision = _observed_revision(
-        settings,
-        board,
-        fallback=published_revision,
-    )
-    if final_revision != published_revision:
+    final_revision = _try_observed_revision(settings, board)
+    if final_revision is None or final_revision != published_revision:
         token_authority.consume(verified)
         return PlacementApplyResult(
             status="applied_but_unverified",
@@ -897,9 +893,14 @@ def apply_placement_candidate(
             diagnostic=ApplyDiagnostic(
                 code=ApplyFailureCode.APPLY_VERIFICATION_FAILED,
                 message=(
-                    "the authorized placement was verified once, but the final observed board "
-                    "revision changed before return; concurrent bytes were left in place; "
-                    "restore the pre-apply copy if needed"
+                    "the authorized placement was verified once, but "
+                    + (
+                        "the final board revision could not be observed; the board may be "
+                        "missing or unreadable; restore the pre-apply copy if needed"
+                        if final_revision is None
+                        else "the final observed board revision changed before return; "
+                        "concurrent bytes were left in place; restore the pre-apply copy if needed"
+                    )
                 ),
             ),
         )
@@ -1067,6 +1068,20 @@ def _observed_revision(settings: Settings, board: _Board, *, fallback: str) -> s
         return _read_board(settings, board.relative_path).revision
     except (WorkspaceViolationError, OSError):
         return fallback
+
+
+def _try_observed_revision(settings: Settings, board: _Board) -> str | None:
+    """Return the final board digest, or ``None`` when the board cannot be observed.
+
+    A missing or unreadable board is not equivalent to the bytes we published.  Callers at the
+    success boundary therefore use this non-fallback form and report an unverified outcome rather
+    than inventing a digest for a file that is no longer observable.
+    """
+
+    try:
+        return _read_board(settings, board.relative_path).revision
+    except (WorkspaceViolationError, OSError):
+        return None
 
 
 __all__ = [
