@@ -241,6 +241,15 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Placement validation now preflights every explicit proposal anchor that names a known padless
+  footprint after rule references and before syntactic contradiction analysis. For each supported
+  anchor point (`center`, `north`, `south`, `east`, and `west`), that mixed request returns the
+  established `unsupported_geometry` refusal with no candidate instead of allowing unrelated
+  contradictory side rules to mask it as `infeasible_constraints`. Self-anchored proposals and
+  pure contradictions retain their existing behavior. This changes validation ordering only: it
+  adds no anchor geometry, padless placement, non-padless placement behavior, DRC, apply, or board
+  mutation capability.
+
 - Replaced the public unkeyed `sha256(KICAD_API_TOKEN)` live-session fingerprint with the fixed
   `hmac-sha256:<64 lowercase hex>` wire type. A fresh 256-bit process-local key and
   domain-separated HMAC-SHA256 make this precondition opaque, use constant-time comparison at

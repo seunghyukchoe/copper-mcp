@@ -38,6 +38,9 @@ that every product feature, price, or repository release will remain current.
 - [Bounded placement-heuristic baseline](./placement-heuristic-baseline.md) records the
   legalizer-gated local/beam search, its connectivity proxy, reproducible fixture evidence, and
   the limits that keep it advisory.
+- [Padless proposal-anchor validation order](./padless-anchor-validation-order.md) records why an
+  explicit anchor naming a known padless footprint refuses `unsupported_geometry` before an
+  unrelated syntactic contradiction, without extending anchor geometry or padless placeability.
 - [AI routing-policy boundary](./ai-routing-policy-boundary.md) defines a closed, redacted policy
   contract for ordering and coordinator-supplied options without direct copper authority.
 - [Isolated reference policy-worker protocol](./isolated-policy-worker-protocol.md) records the
