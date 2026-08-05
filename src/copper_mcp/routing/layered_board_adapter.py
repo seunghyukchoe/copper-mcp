@@ -557,6 +557,10 @@ class LayeredBoardRouter:
             any(item.net_id == request.net_id for item in snapshot.content.segments)
             or any(item.net_id == request.net_id for item in snapshot.content.vias)
             or any(item.net_id == request.net_id for item in snapshot.content.zones)
+            # This adapter keeps its own rectangle-only obstacle model, which refuses even a
+            # diagonal foreign segment and never derives an arc obstacle. The blanket arc
+            # refusal is what makes that safe, so it deliberately stays stricter than the
+            # polygon-capable single-layer router until this model grows an arc obstacle too.
             or snapshot.content.arcs
         ):
             return _diagnostic(

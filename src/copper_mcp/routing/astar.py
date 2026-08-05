@@ -12,6 +12,7 @@ from typing import TypeAlias, cast
 
 from copper_mcp.board_ir import (
     UDEG_PER_DEGREE,
+    Arc,
     BoardIRSnapshot,
     BoardIRValidationError,
     NetClass,
@@ -590,25 +591,31 @@ def _segment_extent(segment: Segment) -> _Rect | None:
     )
 
 
-def _segment_envelope(segment: Segment) -> tuple[PointNM, ...] | None:
-    """Return a conservative integer envelope of a diagonal track, or None when orthogonal.
+def _swept_square_envelope(start: PointNM, end: PointNM, radius_nm: int) -> tuple[PointNM, ...]:
+    """Return the Minkowski sum of the segment start-end with an axis-aligned square.
 
-    A track is a stadium: every point within half its width of the centreline. Sweeping an
-    axis-aligned square of that half width along the centreline instead of a disc gives the
-    convex hull of the two squares at the endpoints, which contains the stadium because the
-    disc is inscribed in the square. Every vertex is therefore an exact integer with no
-    rounding step at all, and the envelope is provably a superset rather than an approximation
-    that happens to be close. The cost is over-approximating the perpendicular extent by at
-    most (sqrt(2) - 1) half widths, which can only refuse a route, never permit a violation.
+    The square has half side ``radius_nm``, so the result contains every point within
+    ``radius_nm`` of the centreline: the disc of that radius is inscribed in the square.
+    Every vertex is an exact integer with no rounding step at all, because a square's
+    corners are integer offsets from integer endpoints. The alternative constructions all
+    need an irrational unit vector along the segment and therefore a rounding rule that has
+    to be argued correct separately.
     """
 
-    start, end = segment.start, segment.end
     if start.x == end.x or start.y == end.y:
-        return None
+        # An axis-aligned sweep degenerates from a hexagon to the rectangle of the two
+        # squares, and a rectangle keeps its exact square-cornered extent.
+        min_x, max_x = min(start.x, end.x), max(start.x, end.x)
+        min_y, max_y = min(start.y, end.y), max(start.y, end.y)
+        return (
+            PointNM(min_x - radius_nm, min_y - radius_nm),
+            PointNM(max_x + radius_nm, min_y - radius_nm),
+            PointNM(max_x + radius_nm, max_y + radius_nm),
+            PointNM(min_x - radius_nm, max_y + radius_nm),
+        )
     # Sweeping is symmetric, so orienting left-to-right leaves only two sign cases.
     if start.x > end.x:
         start, end = end, start
-    radius_nm = (segment.width_nm + 1) // 2
     if start.y < end.y:
         return (
             PointNM(start.x - radius_nm, start.y - radius_nm),
@@ -626,6 +633,97 @@ def _segment_envelope(segment: Segment) -> tuple[PointNM, ...] | None:
         PointNM(start.x + radius_nm, start.y + radius_nm),
         PointNM(start.x - radius_nm, start.y + radius_nm),
     )
+
+
+def _segment_envelope(segment: Segment) -> tuple[PointNM, ...] | None:
+    """Return a conservative integer envelope of a diagonal track, or None when orthogonal.
+
+    A track is a stadium: every point within half its width of the centreline. Sweeping an
+    axis-aligned square of that half width along the centreline instead of a disc gives the
+    convex hull of the two squares at the endpoints, which contains the stadium because the
+    disc is inscribed in the square. The envelope is provably a superset rather than an
+    approximation that happens to be close. The cost is over-approximating the perpendicular
+    extent by at most (sqrt(2) - 1) half widths, which can only refuse a route, never permit
+    a violation.
+    """
+
+    if segment.start.x == segment.end.x or segment.start.y == segment.end.y:
+        return None
+    return _swept_square_envelope(segment.start, segment.end, (segment.width_nm + 1) // 2)
+
+
+def _arc_spans_at_most_half_turn(start: PointNM, mid: PointNM, end: PointNM) -> bool:
+    """Return whether the arc through ``mid`` spans at most half a turn.
+
+    By the inscribed-angle theorem the angle subtended at ``mid`` by the chord is half the
+    arc that does *not* contain ``mid``, so that angle is at least a right angle exactly
+    when the arc through ``mid`` is the minor one. The test is therefore one integer dot
+    product with no division, no square root, and no tolerance. A semicircle gives exactly
+    zero and is admitted, which is the inclusive side: the containment argument below holds
+    with equality at half a turn.
+    """
+
+    return (start.x - mid.x) * (end.x - mid.x) + (start.y - mid.y) * (end.y - mid.y) <= 0
+
+
+def _arc_sagitta_bound_nm(start: PointNM, mid: PointNM, end: PointNM) -> int:
+    """Return an exact integer upper bound on a minor arc's distance from its own chord.
+
+    Every point of a minor arc projects onto its chord segment and lies within the sagitta
+    of it, so bounding the sagitta bounds the arc against the chord. The circumcentre of
+    three integer points is rational, which makes the sagitta ``r - h`` a difference of two
+    square roots of rationals; evaluating that difference would need a rounding rule whose
+    correctness has to be argued. Instead the bound is the smallest integer ``k`` proved to
+    satisfy the sufficient integer condition
+
+        k * denominator * chord_floor + height >= radius_chord_ceiling >= sqrt(P * L2),
+
+    where ``chord_floor <= sqrt(L2)`` and ``radius_chord_ceiling > sqrt(P * L2)``. Each
+    substitution can only make the required ``k`` larger, so the result is an upper bound
+    by construction rather than by numerical accident. In practice it lands within a
+    nanometre or two of the true sagitta.
+    """
+
+    mid_x, mid_y = mid.x - start.x, mid.y - start.y
+    end_x, end_y = end.x - start.x, end.y - start.y
+    cross = mid_x * end_y - mid_y * end_x
+    if cross == 0:
+        # Collinear control points describe their own chord and bulge nowhere. Board IR
+        # rejects such an arc, so this only guards direct callers of the helper.
+        return 0
+    mid_square = mid_x * mid_x + mid_y * mid_y
+    chord_square = end_x * end_x + end_y * end_y
+    # Twice the circumcentre offset from ``start``, scaled by ``2 * cross``.
+    centre_x = mid_square * end_y - chord_square * mid_y
+    centre_y = chord_square * mid_x - mid_square * end_x
+    denominator = 2 * abs(cross)
+    radius_square = centre_x * centre_x + centre_y * centre_y
+    height = abs(end_x * centre_y - end_y * centre_x)
+    chord_floor = isqrt(chord_square)
+    shortfall = isqrt(radius_square * chord_square) + 1 - height
+    if shortfall <= 0:
+        return 0
+    return -(-shortfall // (denominator * chord_floor))
+
+
+def _arc_envelope(arc: Arc) -> tuple[PointNM, ...] | None:
+    """Return a conservative integer envelope of a track arc, or None when unmodeled.
+
+    A minor arc lies within its own sagitta of the chord segment, so the arc track — the
+    arc swept with a disc of its half width — lies within the chord swept with a disc of
+    the half width plus that sagitta. Sweeping a square of the same radius instead is a
+    superset of that, so the envelope contains the real arc track for the same reason the
+    diagonal-segment envelope contains a straight one.
+
+    A major arc is refused rather than enveloped: past half a turn the arc leaves the
+    chord's own span, so the chord-based containment argument stops holding and there is no
+    honest envelope to build from these three points.
+    """
+
+    if not _arc_spans_at_most_half_turn(arc.start, arc.mid, arc.end):
+        return None
+    radius_nm = (arc.width_nm + 1) // 2 + _arc_sagitta_bound_nm(arc.start, arc.mid, arc.end)
+    return _swept_square_envelope(arc.start, arc.end, radius_nm)
 
 
 def _segment_core_extent(segment: Segment) -> _Rect | None:
@@ -1141,11 +1239,18 @@ def _prepare(
     for index, arc in enumerate(content.arcs):
         if index % 64 == 0:
             work.checkpoint()
-        if arc.layer_id == request.layer_id:
-            raise _fail(
-                RouteFailureCode.UNSUPPORTED_GEOMETRY,
-                "selected-layer arcs are outside the supported obstacle model",
-            )
+        if arc.net_id != request.net_id:
+            # Foreign arcs are conservative polygon envelopes, built with the obstacles below.
+            continue
+        # An obstacle may be over-approximated, but attachment copper must be
+        # under-approximated or the router would claim a connection the board does not have.
+        # An arc has no exact integer inner core yet, so a selected-net arc cannot be
+        # attachment copper and stays a refusal. Like the same-net zone gate below, this
+        # covers every copper layer, because connectivity is a multilayer question.
+        raise _fail(
+            RouteFailureCode.UNSUPPORTED_GEOMETRY,
+            "the selected net carries a track arc, which is not modeled as attachment copper",
+        )
     blocking_zones: list[Zone] = []
     same_net_zone = False
     verified_fill_zone_keys = frozenset(
@@ -1480,6 +1585,31 @@ def _prepare(
                 points=envelope,
                 bounds=_polygon_bounds(envelope, work),
                 margin_nm=half_width_nm + governing_clearance_nm(segment.net_id),
+            )
+        )
+
+    for index, arc in enumerate(content.arcs):
+        if index % 64 == 0:
+            work.checkpoint()
+        if arc.layer_id != request.layer_id:
+            continue
+        # Selected-net arcs were refused above, so every arc reaching here is foreign copper
+        # and may be over-approximated. The margin is the same rule the straight-track path
+        # uses, and offsetting an envelope that already contains the arc track is a superset
+        # of offsetting the arc track itself, so the inflation composes without a new proof.
+        envelope = _arc_envelope(arc)
+        if envelope is None:
+            raise _fail(
+                RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                "a selected-layer arc spans more than half a turn and is not modeled exactly",
+            )
+        ensure_obstacle_capacity()
+        polygon_obstacles.append(
+            _PolygonObstacle(
+                source_id=arc.id,
+                points=envelope,
+                bounds=_polygon_bounds(envelope, work),
+                margin_nm=half_width_nm + governing_clearance_nm(arc.net_id),
             )
         )
 
