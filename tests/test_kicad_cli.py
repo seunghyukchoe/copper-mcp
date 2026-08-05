@@ -8,7 +8,6 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from typing import BinaryIO, cast
 from unittest.mock import patch
 
 from copper_mcp.config import Settings
@@ -80,12 +79,9 @@ class KiCadCliTests(unittest.TestCase):
     ) -> object:
         def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
             self.assertFalse(kwargs["shell"])
-            stdout = cast(BinaryIO, kwargs["stdout"])
-            stderr = cast(BinaryIO, kwargs["stderr"])
-            self.assertTrue(stdout.writable())
-            self.assertTrue(stderr.writable())
-            stdout.write(b"fake kicad stdout")
-            stderr.write(b"fake kicad stderr")
+            self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
+            self.assertIs(kwargs["stdout"], subprocess.DEVNULL)
+            self.assertIs(kwargs["stderr"], subprocess.DEVNULL)
             self.assertNotIn("preexec_fn", kwargs)
             self.assertNotIn("--refill-zones", command)
             self.assertNotIn("--save-board", command)
@@ -342,26 +338,6 @@ class KiCadCliTests(unittest.TestCase):
                 "copper_mcp.kicad_cli.subprocess.run",
                 side_effect=self._completed_run(b"x" * 1025),
             ):
-                with self.assertRaisesRegex(KiCadCliError, "configured limit"):
-                    run_board_drc(self.board.name, self.settings)
-
-    def test_rejects_oversized_stdout_or_stderr_before_report_decode(self) -> None:
-        def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-            stdout = kwargs["stdout"]
-            stderr = kwargs["stderr"]
-            assert hasattr(stdout, "write") and hasattr(stderr, "write")
-            stdout.write(b"x" * 1025)
-            stderr.write(b"y" * 1025)
-            stdout.flush()
-            stderr.flush()
-            report_path = Path(command[command.index("--output") + 1])
-            report_path.write_text(json.dumps(drc_report()), encoding="utf-8")
-            return subprocess.CompletedProcess(command, 0)
-
-        with patch(
-            "copper_mcp.kicad_cli.discover_kicad_cli", return_value=Path("/trusted/kicad-cli")
-        ):
-            with patch("copper_mcp.kicad_cli.subprocess.run", side_effect=run):
                 with self.assertRaisesRegex(KiCadCliError, "configured limit"):
                     run_board_drc(self.board.name, self.settings)
 

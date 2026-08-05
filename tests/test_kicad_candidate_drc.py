@@ -9,7 +9,7 @@ import subprocess
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, BinaryIO, cast
+from typing import Any
 
 import pytest
 
@@ -140,12 +140,8 @@ def _fake_completed_run(
     def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         assert kwargs["shell"] is False
         assert kwargs["stdin"] == subprocess.DEVNULL
-        stdout = cast(BinaryIO, kwargs["stdout"])
-        stderr = cast(BinaryIO, kwargs["stderr"])
-        assert stdout.writable()
-        assert stderr.writable()
-        stdout.write(b"fake kicad stdout")
-        stderr.write(b"fake kicad stderr")
+        assert kwargs["stdout"] == subprocess.DEVNULL
+        assert kwargs["stderr"] == subprocess.DEVNULL
         assert "preexec_fn" not in kwargs
         assert "--save-board" not in command
         assert "--refill-zones" not in command

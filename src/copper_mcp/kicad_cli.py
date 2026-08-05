@@ -868,8 +868,6 @@ def _run_captured_drc(
         context.clear()
         snapshot_board = (workspace_snapshot / board_relative).resolve(strict=True)
         report_path = temporary_root / "drc.json"
-        stdout_path = temporary_root / "stdout.log"
-        stderr_path = temporary_root / "stderr.log"
         private_state = temporary_root / "process-state"
         try:
             child_environment = _private_kicad_environment(private_state)
@@ -897,34 +895,27 @@ def _run_captured_drc(
             *kicad_command,
         ]
         try:
-            with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
-                completed = subprocess.run(  # noqa: S603
-                    command,
-                    stdin=subprocess.DEVNULL,
-                    stdout=stdout,
-                    stderr=stderr,
-                    check=False,
-                    shell=False,
-                    timeout=settings.kicad_timeout_seconds,
-                    env=child_environment,
-                    cwd=child_environment["TMPDIR"],
-                )
+            # SEC-113: untrusted child diagnostics keep a zero-byte parent capture budget, so a
+            # chatty-but-valid run cannot spend the RLIMIT_FSIZE report budget on unread bytes.
+            completed = subprocess.run(  # noqa: S603
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                shell=False,
+                timeout=settings.kicad_timeout_seconds,
+                env=child_environment,
+                cwd=child_environment["TMPDIR"],
+            )
         except subprocess.TimeoutExpired as error:
             raise KiCadCliError("KiCad DRC timed out") from error
         _validate_private_kicad_state(private_state, settings)
         _validate_snapshot_tree(workspace_snapshot, expected_snapshot_files, settings)
         if completed.returncode == -signal.SIGXFSZ:
-            raise KiCadCliError("KiCad DRC output exceeds the configured limit")
+            raise KiCadCliError("KiCad DRC report exceeds the configured limit")
         if completed.returncode not in _ACCEPTED_DRC_RETURN_CODES:
             raise KiCadCliError(f"KiCad DRC failed with exit code {completed.returncode}")
-        try:
-            if any(
-                path.stat().st_size > settings.max_drc_report_bytes
-                for path in (stdout_path, stderr_path)
-            ):
-                raise KiCadCliError("KiCad DRC output exceeds the configured limit")
-        except OSError as error:
-            raise KiCadCliError("KiCad DRC output could not be bounded") from error
         try:
             private_context_after = _drc_context(
                 snapshot_board,
