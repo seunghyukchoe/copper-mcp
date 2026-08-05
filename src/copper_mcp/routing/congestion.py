@@ -27,6 +27,10 @@ from copper_mcp.routing.contracts import (
     RouteFailureCode,
     RouteRequest,
 )
+from copper_mcp.routing.physical_clearance import (
+    PhysicalClearanceFailure,
+    verify_negotiated_physical_clearance,
+)
 
 _EMPTY_DIGEST = f"sha256:{'0' * 64}"
 _MAX_NETS = 32
@@ -37,9 +41,10 @@ _MAX_DIAGNOSTIC = 256
 _MAX_UNIT_RESOURCES = 2_000_000
 _MAX_TOTAL_EXPANSIONS = 10_000_000
 _MAX_TOTAL_OBSTACLE_CHECKS = 50_000_000
+_MAX_TOTAL_PHYSICAL_CHECKS = 10_000_000
 _SHA256 = re.compile(r"^sha256:[a-f0-9]{64}$")
-NEGOTIATED_ROUTER_VERSION = "negotiated-grid-0.1.0"
-NEGOTIATED_ROUTING_POLICY = "negotiated-congestion-v1"
+NEGOTIATED_ROUTER_VERSION = "negotiated-grid-0.2.0"
+NEGOTIATED_ROUTING_POLICY = "negotiated-congestion-v2"
 
 ResourceKey: TypeAlias = tuple[str, PointNM, PointNM]
 
@@ -75,6 +80,7 @@ class NegotiatedRoutingRequest:
     history_penalty_nm: int = 5_000_000
     max_total_expansions: int = 2_000_000
     max_total_obstacle_checks: int = 10_000_000
+    max_total_physical_checks: int = 2_000_000
 
     def __post_init__(self) -> None:
         if not isinstance(self.board_revision, str) or not _SHA256.fullmatch(self.board_revision):
@@ -101,6 +107,12 @@ class NegotiatedRoutingRequest:
             self.max_total_obstacle_checks,
             minimum=1,
             maximum=_MAX_TOTAL_OBSTACLE_CHECKS,
+        )
+        _integer(
+            "total physical-clearance budget",
+            self.max_total_physical_checks,
+            minimum=1,
+            maximum=_MAX_TOTAL_PHYSICAL_CHECKS,
         )
         net_ids = [item.net_id for item in self.requests]
         if len(set(net_ids)) != len(net_ids):
@@ -134,6 +146,7 @@ class NegotiatedRoutingRequest:
             "max_iterations": self.max_iterations,
             "max_total_expansions": self.max_total_expansions,
             "max_total_obstacle_checks": self.max_total_obstacle_checks,
+            "max_total_physical_checks": self.max_total_physical_checks,
             "present_penalty_nm": self.present_penalty_nm,
             "requests": [
                 {
@@ -191,6 +204,7 @@ class NegotiatedRoutingResult:
     overflow_resources: tuple[CongestionResource, ...] = ()
     overflow_units: int = 0
     total_wire_length_nm: int = 0
+    total_physical_checks: int = 0
     diagnostic: str | None = None
     policy_digest: str = _EMPTY_DIGEST
 
@@ -228,6 +242,7 @@ class NegotiatedRoutingResult:
             raise ValueError("overflow resources must be sorted immutable evidence")
         _integer("negotiated overflow units", self.overflow_units)
         _integer("negotiated wire length", self.total_wire_length_nm)
+        _integer("negotiated physical-clearance checks", self.total_physical_checks)
         if self.diagnostic is not None and (
             not isinstance(self.diagnostic, str) or not 1 <= len(self.diagnostic) <= _MAX_DIAGNOSTIC
         ):
@@ -503,7 +518,9 @@ def negotiate_routes(
     ripups = 0
     total_expansions = 0
     total_obstacle_checks = 0
+    total_physical_checks = 0
     current_order = ordered
+    final_failure_message: str | None = None
 
     for iteration in range(1, checked_envelope.max_iterations + 1):
         if _cancelled(cancellation_check):
@@ -518,6 +535,7 @@ def negotiate_routes(
                 overflow_resources=(),
                 overflow_units=0,
                 total_wire_length_nm=0,
+                total_physical_checks=total_physical_checks,
                 diagnostic="negotiated routing was cancelled before the next bounded iteration",
                 policy_digest=checked_envelope.policy_digest,
             )
@@ -593,6 +611,7 @@ def negotiate_routes(
                 overflow_resources=(),
                 overflow_units=0,
                 total_wire_length_nm=0,
+                total_physical_checks=total_physical_checks,
                 diagnostic="negotiated routing was cancelled during a bounded iteration",
                 policy_digest=checked_envelope.policy_digest,
             )
@@ -600,6 +619,38 @@ def negotiate_routes(
         candidates = tuple(sorted(working.values(), key=lambda item: item.patch.net_id))
         connected = tuple(sorted(connections.values(), key=lambda item: item.start_pad_id))
         unrouted_tuple = tuple(sorted(unrouted))
+        physical = verify_negotiated_physical_clearance(
+            checked_snapshot,
+            candidates,
+            layer_id=checked_envelope.layer_id,
+            max_pair_checks=checked_envelope.max_total_physical_checks - total_physical_checks,
+            cancelled=cancellation_check,
+        )
+        total_physical_checks += physical.pair_checks
+        if physical.failure is PhysicalClearanceFailure.CANCELLED:
+            return NegotiatedRoutingResult(
+                status=NegotiatedRoutingStatus.CANCELLED,
+                board_revision=checked_envelope.board_revision,
+                candidates=(),
+                connections=(),
+                unrouted_nets=tuple(item.net_id for item in ordered),
+                iterations=iterations,
+                ripups=ripups,
+                overflow_resources=(),
+                overflow_units=0,
+                total_wire_length_nm=0,
+                total_physical_checks=total_physical_checks,
+                diagnostic="negotiated physical-clearance verification was cancelled",
+                policy_digest=checked_envelope.policy_digest,
+            )
+        if physical.failure is not None:
+            # A lattice-clean allocation can still be physically illegal.  Never let this
+            # iteration contribute candidate copper to the best result or published response.
+            unrouted.update(item.patch.net_id for item in candidates)
+            unrouted_tuple = tuple(sorted(unrouted))
+            candidates = ()
+            present_overflow = ()
+            final_failure_message = physical.diagnostic
         score = _best_key(candidates, unrouted_tuple, present_overflow)
         if best_key is None or score < best_key:
             best_key = score
@@ -618,6 +669,7 @@ def negotiate_routes(
                 overflow_resources=(),
                 overflow_units=0,
                 total_wire_length_nm=sum(item.patch.length_nm for item in candidates),
+                total_physical_checks=total_physical_checks,
                 policy_digest=checked_envelope.policy_digest,
             )
         ledger.update_history()
@@ -640,6 +692,7 @@ def negotiate_routes(
                 overflow_resources=(),
                 overflow_units=0,
                 total_wire_length_nm=0,
+                total_physical_checks=total_physical_checks,
                 diagnostic=failure_message,
                 policy_digest=checked_envelope.policy_digest,
             )
@@ -648,7 +701,10 @@ def negotiate_routes(
     diagnostic = "negotiated routing reached its bounded iteration budget"
     if best_unrouted and not best_candidates and not best_connections:
         status = NegotiatedRoutingStatus.NO_PATH
-        diagnostic = "no negotiated net produced a candidate within the bounded budget"
+        diagnostic = (
+            final_failure_message
+            or "no negotiated net produced a candidate within the bounded budget"
+        )
     return NegotiatedRoutingResult(
         status=status,
         board_revision=checked_envelope.board_revision,
@@ -660,6 +716,7 @@ def negotiate_routes(
         overflow_resources=best_overflow,
         overflow_units=sum(item.usage - 1 for item in best_overflow),
         total_wire_length_nm=sum(item.patch.length_nm for item in best_candidates),
+        total_physical_checks=total_physical_checks,
         diagnostic=diagnostic,
         policy_digest=checked_envelope.policy_digest,
     )
