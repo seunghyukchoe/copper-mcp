@@ -204,6 +204,11 @@ All notable changes are documented here. The format follows
   boundary. When cancellation is observed, it returns an empty ranked-candidate set rather than
   exposing a partially explored ranking; this does not hard-interrupt already-running work.
 
+- Unavailable routing-request lookups and unauthorized live candidate-export lookups now commit
+  any prior TTL cleanup before returning their uniform unavailable response. An unauthorized
+  live export remains intact, while unrelated expired private records are removed; decode and
+  integrity failures still roll back, and TTL is not secure erasure.
+
 ### Changed
 
 - Corrected the spatial-index benchmark to count bucket candidates examined by the exact bounds

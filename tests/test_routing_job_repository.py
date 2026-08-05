@@ -249,6 +249,36 @@ def test_request_and_export_expiry_are_uniform(tmp_path: Path) -> None:
         assert str(missing.value) == str(unknown.value)
 
 
+def test_expired_request_is_deleted_before_uniform_unavailable_response(tmp_path: Path) -> None:
+    """TTL expiry removes the request payload even when lookup deliberately raises."""
+
+    _, spec, request, authorization = _candidate_and_spec()
+    path = tmp_path / "expired-request.sqlite3"
+    with RoutingJobRepository(path, ttl_ms=10) as repository:
+        repository.create(spec, request, authorization, now_ms=100)
+
+        with sqlite3.connect(path) as connection:
+            stored = connection.execute(
+                "SELECT request_json FROM routing_job_requests WHERE job_id = ?",
+                (spec.job_id,),
+            ).fetchone()
+        assert stored is not None
+        assert isinstance(stored[0], bytes)
+
+        with pytest.raises(RoutingJobRequestUnavailableError) as expired:
+            repository.requests.get(spec.job_id, authorization, now_ms=110)
+        with pytest.raises(RoutingJobRequestUnavailableError) as unknown:
+            repository.requests.get(_digest("f"), authorization, now_ms=110)
+        assert str(expired.value) == str(unknown.value)
+
+        with sqlite3.connect(path) as connection:
+            retained = connection.execute(
+                "SELECT request_json FROM routing_job_requests WHERE job_id = ?",
+                (spec.job_id,),
+            ).fetchone()
+        assert retained is None
+
+
 def test_expired_candidate_export_is_deleted_before_unavailable_response(tmp_path: Path) -> None:
     """An expired geometry export is removed even though lookup reports a uniform miss."""
 
@@ -291,3 +321,66 @@ def test_expired_candidate_export_is_deleted_before_unavailable_response(tmp_pat
                 (candidate.candidate_id,),
             ).fetchone()
         assert retained is None
+
+
+def test_unauthorized_live_export_lookup_commits_other_expired_export_purges(
+    tmp_path: Path,
+) -> None:
+    """An authorization miss cannot roll back expiry cleanup for a different export."""
+
+    candidate, spec, request, authorization = _candidate_and_spec()
+    path = tmp_path / "unauthorized-export-purge.sqlite3"
+    expired_candidate_id = _digest("d")
+    with RoutingJobRepository(path, ttl_ms=10) as repository:
+        queued = repository.create(spec, request, authorization, now_ms=100)
+        running = repository.jobs.start(spec.job_id, expected_revision=queued.revision, now_ms=101)
+        repository.publish_candidate(
+            spec.job_id,
+            candidate,
+            expected_revision=running.revision,
+            authorization_digest=authorization,
+            now_ms=102,
+        )
+        with sqlite3.connect(path) as connection:
+            connection.execute(
+                "INSERT INTO routing_candidate_exports(candidate_id, job_id, base_revision, "
+                "kind, authorization_digest, created_at_ms, expires_at_ms, candidate_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    expired_candidate_id,
+                    spec.job_id,
+                    candidate.base_revision,
+                    "layered",
+                    authorization,
+                    100,
+                    110,
+                    sqlite3.Binary(b'{"private_geometry":"must-expire"}'),
+                ),
+            )
+
+        with pytest.raises(RoutingCandidateExportUnavailableError) as unauthorized:
+            repository.exports.get(
+                _digest("f"),
+                candidate.candidate_id,
+                _digest("f"),
+                now_ms=111,
+            )
+        with pytest.raises(RoutingCandidateExportUnavailableError) as unknown:
+            repository.exports.get(_digest("f"), _digest("f"), _digest("f"), now_ms=111)
+        assert str(unauthorized.value) == str(unknown.value)
+
+        with sqlite3.connect(path) as connection:
+            expired = connection.execute(
+                "SELECT candidate_json FROM routing_candidate_exports WHERE candidate_id = ?",
+                (expired_candidate_id,),
+            ).fetchone()
+            live = connection.execute(
+                "SELECT authorization_digest, candidate_json FROM routing_candidate_exports "
+                "WHERE candidate_id = ?",
+                (candidate.candidate_id,),
+            ).fetchone()
+        assert expired is None
+        assert live is not None
+        assert live[0] == authorization
+        assert isinstance(live[1], bytes)
+        assert b'"vertices"' in live[1]

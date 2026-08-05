@@ -435,10 +435,14 @@ class RoutingJobRequestStore:
                     "WHERE job_id = ?",
                     (job_id,),
                 ).fetchone()
-                if row is None:
-                    raise RoutingJobRequestUnavailableError("routing request is unavailable")
-                envelope = self._decode(cast(tuple[object, ...], row))
-                if envelope.authorization_digest != authorization_digest:
+                unavailable = row is None
+                if row is not None:
+                    envelope = self._decode(cast(tuple[object, ...], row))
+                    unavailable = envelope.authorization_digest != authorization_digest
+                if unavailable:
+                    # A lookup miss may have just crossed the retention boundary.  Commit its
+                    # purge before reporting the intentionally uniform public error.
+                    self._commit()
                     raise RoutingJobRequestUnavailableError("routing request is unavailable")
                 self._commit()
                 return envelope
@@ -652,15 +656,12 @@ class RoutingCandidateExportStore:
                     "routing_candidate_exports WHERE candidate_id = ?",
                     (candidate_id,),
                 ).fetchone()
-                if row is None:
-                    # Expiry is a retention boundary, not a speculative lookup side effect.
-                    # Commit the purge before returning the deliberately uniform unavailable
-                    # response; the exception handler must not resurrect private geometry.
+                unavailable = row is None or row[0] != job_id or row[1] != authorization_digest
+                if unavailable:
+                    # A lookup miss (including an unauthorized live target) may have purged
+                    # unrelated expired private geometry.  Commit only that retention work
+                    # before returning the deliberately uniform unavailable response.
                     self._connection.commit()
-                    raise RoutingCandidateExportUnavailableError(
-                        "routing candidate export is unavailable"
-                    )
-                if row[0] != job_id or row[1] != authorization_digest:
                     raise RoutingCandidateExportUnavailableError(
                         "routing candidate export is unavailable"
                     )
