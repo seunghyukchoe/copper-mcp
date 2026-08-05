@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import sys
 from dataclasses import asdict, fields, replace
 from types import MappingProxyType
 
@@ -48,6 +49,8 @@ from copper_mcp.routing import (
     canonical_candidate_bytes,
     negotiate_routes,
 )
+from copper_mcp.routing import policy_worker as policy_worker_module
+from copper_mcp.routing.congestion import ISOLATED_REFERENCE_POLICY_PROFILE
 from copper_mcp.routing.physical_clearance import (
     PhysicalClearanceFailure,
     PhysicalClearanceVerificationResult,
@@ -1325,4 +1328,175 @@ def test_negotiated_policy_cancellation_publishes_no_binding_or_route(
     assert after_policy.candidates == ()
     assert after_policy.connections == ()
     assert policy.calls == 1
+    assert router.calls == []
+
+
+def test_isolated_reference_profile_matches_in_process_order_and_result() -> None:
+    snapshot = _crossing_snapshot()
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_requests(snapshot),
+        max_iterations=1,
+    )
+    in_process_router = _RecordingRouter()
+    isolated_router = _RecordingRouter()
+
+    in_process = negotiate_routes(
+        snapshot,
+        envelope,
+        router=in_process_router,
+        policy_profile=REFERENCE_POLICY_PROFILE,
+    )
+    isolated = negotiate_routes(
+        snapshot,
+        envelope,
+        router=isolated_router,
+        policy_profile=ISOLATED_REFERENCE_POLICY_PROFILE,
+    )
+
+    assert isinstance(in_process, PolicyNegotiatedRoutingResult)
+    assert isinstance(isolated, PolicyNegotiatedRoutingResult)
+    assert in_process_router.calls == isolated_router.calls
+    assert isolated.candidates == in_process.candidates
+    assert isolated.connections == in_process.connections
+    assert isolated.unrouted_nets == in_process.unrouted_nets
+    assert isolated.iterations == in_process.iterations
+    assert isolated.ripups == in_process.ripups
+    assert isolated.overflow_resources == in_process.overflow_resources
+    assert isolated.total_physical_checks == in_process.total_physical_checks
+    assert isolated.policy_evidence is not None
+    assert in_process.policy_evidence is not None
+    assert isolated.policy_evidence.policy_profile == ISOLATED_REFERENCE_POLICY_PROFILE
+    assert in_process.policy_evidence.policy_profile == REFERENCE_POLICY_PROFILE
+    assert (
+        replace(
+            isolated,
+            policy_evidence=replace(
+                isolated.policy_evidence,
+                policy_profile=REFERENCE_POLICY_PROFILE,
+            ),
+        )
+        == in_process
+    )
+
+
+def test_isolated_policy_worker_noncanonical_output_fails_before_router_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot = _crossing_snapshot()
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_requests(snapshot),
+    )
+    router = _RecordingRouter()
+
+    def noncanonical_worker_frame(
+        frame: bytes,
+        *,
+        timeout_seconds: float,
+        cancelled: object,
+    ) -> bytes:
+        del timeout_seconds, cancelled
+        return policy_worker_module._serve_reference_once(frame) + b" "
+
+    monkeypatch.setattr(policy_worker_module, "_run_closed_frame", noncanonical_worker_frame)
+    result = negotiate_routes(
+        snapshot,
+        envelope,
+        router=router,
+        policy_profile=ISOLATED_REFERENCE_POLICY_PROFILE,
+    )
+
+    assert result.status is NegotiatedRoutingStatus.INVALID_REQUEST
+    assert result.diagnostic == "the negotiated routing policy was rejected"
+    assert result.candidates == ()
+    assert result.connections == ()
+    assert router.calls == []
+
+
+def test_isolated_policy_worker_timeout_or_cancellation_fails_before_router_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot = _crossing_snapshot()
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_requests(snapshot),
+    )
+    timeout_router = _RecordingRouter()
+    monkeypatch.setattr(congestion_module, "_ISOLATED_POLICY_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(
+        policy_worker_module,
+        "_worker_command",
+        lambda: (sys.executable, "-I", "-c", "import time; time.sleep(60)"),
+    )
+
+    timeout_result = negotiate_routes(
+        snapshot,
+        envelope,
+        router=timeout_router,
+        policy_profile=ISOLATED_REFERENCE_POLICY_PROFILE,
+    )
+
+    assert timeout_result.status is NegotiatedRoutingStatus.INVALID_REQUEST
+    assert timeout_result.diagnostic == "the negotiated routing policy was rejected"
+    assert timeout_router.calls == []
+
+    calls = 0
+
+    def cancelled() -> bool:
+        nonlocal calls
+        calls += 1
+        return calls >= 2
+
+    cancelled_router = _RecordingRouter()
+    cancelled_result = negotiate_routes(
+        snapshot,
+        envelope,
+        router=cancelled_router,
+        policy_profile=ISOLATED_REFERENCE_POLICY_PROFILE,
+        cancelled=cancelled,
+    )
+
+    assert cancelled_result.status is NegotiatedRoutingStatus.CANCELLED
+    assert cancelled_result.candidates == ()
+    assert cancelled_result.connections == ()
+    assert cancelled_router.calls == []
+    assert calls >= 2
+
+
+def test_isolated_policy_result_is_revalidated_before_router_construction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot = _crossing_snapshot()
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_requests(snapshot),
+    )
+    router = _RecordingRouter()
+
+    def wrong_input_binding(
+        policy_input: RoutingPolicyInput, **_kwargs: object
+    ) -> RoutingPolicyDecision:
+        return RoutingPolicyDecision(
+            policy_id=REFERENCE_POLICY_ID,
+            input_digest=f"sha256:{'0' * 64}",
+            net_order=tuple(net.net_id for net in policy_input.nets),
+        )
+
+    monkeypatch.setattr(
+        congestion_module,
+        "evaluate_reference_policy_in_worker",
+        wrong_input_binding,
+    )
+    result = negotiate_routes(
+        snapshot,
+        envelope,
+        router=router,
+        policy_profile=ISOLATED_REFERENCE_POLICY_PROFILE,
+    )
+
+    assert result.status is NegotiatedRoutingStatus.INVALID_REQUEST
+    assert result.diagnostic == "the negotiated routing policy was rejected"
+    assert result.candidates == ()
+    assert result.connections == ()
     assert router.calls == []

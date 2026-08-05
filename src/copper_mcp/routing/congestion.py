@@ -47,11 +47,13 @@ from copper_mcp.routing.policy import (
     PolicyBounds,
     PolicyFactory,
     PolicyNet,
+    RoutingPolicyDecision,
     RoutingPolicyInput,
     evaluate_policy,
     policy_decision_digest,
     policy_input_digest,
 )
+from copper_mcp.routing.policy_worker import evaluate_reference_policy_in_worker
 
 _EMPTY_DIGEST = f"sha256:{'0' * 64}"
 _MAX_NETS = 32
@@ -68,9 +70,11 @@ NEGOTIATED_ROUTER_VERSION = "negotiated-grid-0.2.0"
 NEGOTIATED_ROUTING_POLICY = "negotiated-congestion-v2"
 POLICY_NEGOTIATED_ROUTING_POLICY = "negotiated-congestion-policy-order-v3"
 REFERENCE_POLICY_PROFILE = "deterministic-reference-v1"
+ISOLATED_REFERENCE_POLICY_PROFILE = "deterministic-reference-worker-v1"
 NEGOTIATED_POLICY_BINDING_SCHEMA = "copper-mcp.negotiated-policy-binding.v1"
 NEGOTIATED_POLICY_EVIDENCE_SCHEMA = "copper-mcp.negotiated-policy-evidence.v1"
 _POLICY_ID = re.compile(r"^[a-z0-9][a-z0-9._/-]{0,127}$")
+_ISOLATED_POLICY_TIMEOUT_SECONDS = 1.0
 
 # This intentionally private, immutable registry is the only policy-admission boundary.  It
 # keeps callers from supplying arbitrary in-process objects, callables, model adapters, or remote
@@ -795,6 +799,31 @@ def _derive_policy_input(
     )
 
 
+def _evaluate_policy_profile(
+    profile: str,
+    policy_input: RoutingPolicyInput,
+    *,
+    cancelled: CancellationCheck | None,
+) -> RoutingPolicyDecision:
+    """Evaluate one private profile without admitting caller-selected worker authority.
+
+    The isolated profile is a separate, fixed profile name rather than a factory supplied by the
+    caller.  Its worker receives the same neutral, coordinator-derived order-only input as the
+    in-process reference profile.  It cannot carry windows or any geometry/copper capability.
+    """
+
+    if profile == ISOLATED_REFERENCE_POLICY_PROFILE:
+        return evaluate_reference_policy_in_worker(
+            policy_input,
+            timeout_seconds=_ISOLATED_POLICY_TIMEOUT_SECONDS,
+            cancelled=cancelled,
+        )
+    policy_factory = _POLICY_PROFILE_REGISTRY.get(profile)
+    if policy_factory is None:
+        raise ValueError("unknown negotiated policy profile")
+    return evaluate_policy(policy_factory(), policy_input)
+
+
 def _policy_cancelled_result(envelope: NegotiatedRoutingRequest) -> NegotiatedRoutingResult:
     """Return the atomic pre-routing cancellation result without policy provenance."""
 
@@ -883,12 +912,12 @@ def negotiate_routes(
     if policy_requested:
         try:
             assert policy_profile is not None
-            policy_factory = _POLICY_PROFILE_REGISTRY.get(policy_profile)
-            if policy_factory is None:
-                raise ValueError("unknown negotiated policy profile")
-            selected_policy = policy_factory()
             policy_input = _derive_policy_input(checked_snapshot, checked_envelope)
-            decision = evaluate_policy(selected_policy, policy_input)
+            decision = _evaluate_policy_profile(
+                policy_profile,
+                policy_input,
+                cancelled=cancellation_check,
+            )
             input_digest = policy_input_digest(policy_input)
             expected_net_ids = tuple(net.net_id for net in policy_input.nets)
             if (
@@ -914,8 +943,10 @@ def negotiate_routes(
             by_net_id = {request.net_id: request for request in checked_envelope.requests}
             initial_order = tuple(by_net_id[net_id] for net_id in decision.net_order)
         except Exception:
-            # This is an untrusted in-process boundary.  Do not expose exception text, raw
-            # policy output, or a partial policy binding before the first router call.
+            # This is an untrusted policy boundary.  Do not expose exception text, raw policy
+            # output, or a partial policy binding before the first router call.
+            if _cancelled(cancellation_check):
+                return _policy_cancelled_result(checked_envelope)
             return _invalid_result(
                 "the negotiated routing policy was rejected",
                 board_revision=checked_envelope.board_revision,
@@ -1263,6 +1294,7 @@ def negotiate_routes(
 
 
 __all__ = [
+    "ISOLATED_REFERENCE_POLICY_PROFILE",
     "NEGOTIATED_POLICY_BINDING_SCHEMA",
     "POLICY_NEGOTIATED_ROUTING_POLICY",
     "REFERENCE_POLICY_PROFILE",
