@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import shutil
+import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -12,6 +16,68 @@ import pytest
 from scripts import benchmark_audio_heldout_evaluation as benchmark
 
 ARTIFACT = benchmark.ROOT / benchmark.ARTIFACT_PATH
+
+
+def _replay_artifact_in_clean_detached_worktree(
+    artifact: dict[str, object], tmp_path: Path
+) -> dict[str, object]:
+    """Run the strict artifact CLI outside the caller's potentially dirty checkout."""
+
+    evidence = artifact["evidence"]
+    assert isinstance(evidence, dict)
+    source_commit = evidence["evidence_source_commit"]
+    assert isinstance(source_commit, str)
+    evaluation = evidence["evaluation"]
+    assert isinstance(evaluation, dict)
+    repetitions = evaluation["repetitions"]
+    assert isinstance(repetitions, int)
+    git = shutil.which("git")
+    assert git is not None
+    detached = tmp_path / "clean-evidence-clone"
+    output = tmp_path / "replayed-artifact.json"
+    cloned = subprocess.run(  # noqa: S603 - fixed local Git argv; writes only below tmp_path
+        [git, "clone", "--no-local", "--no-checkout", str(benchmark.ROOT), str(detached)],
+        cwd=benchmark.ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert cloned.returncode == 0, cloned.stderr
+    checked_out = subprocess.run(  # noqa: S603 - fixed local Git argv
+        [git, "checkout", "--detach", source_commit],
+        cwd=detached,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert checked_out.returncode == 0, checked_out.stderr
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(detached / "src")
+    replay = subprocess.run(  # noqa: S603 - fixed local interpreter and repository script
+        [
+            sys.executable,
+            str(detached / benchmark.SCRIPT_PATH),
+            "--repetitions",
+            str(repetitions),
+            "--reproducible-artifact",
+            "--evidence-source-commit",
+            source_commit,
+            "--output",
+            str(output),
+        ],
+        cwd=detached,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+    assert replay.returncode == 0, replay.stderr
+    value = json.loads(output.read_text(encoding="utf-8"))
+    assert isinstance(value, dict)
+    return value
 
 
 def test_protocol_binds_original_fixture_license_and_exclusive_heldout_split() -> None:
@@ -168,13 +234,8 @@ def test_reproducible_artifact_binds_all_inputs_without_host_observations(
     )
 
 
-def test_committed_artifact_replays_from_its_clean_evidence_source() -> None:
+def test_committed_artifact_replays_from_its_clean_evidence_source(tmp_path: Path) -> None:
     artifact = json.loads(ARTIFACT.read_text(encoding="utf-8"))
-    evidence = artifact["evidence"]
+    assert isinstance(artifact, dict)
 
-    replay = benchmark.build_reproducible_artifact(
-        evidence["evaluation"]["repetitions"],
-        evidence_source_commit=evidence["evidence_source_commit"],
-    )
-
-    assert replay == artifact
+    assert _replay_artifact_in_clean_detached_worktree(artifact, tmp_path) == artifact
