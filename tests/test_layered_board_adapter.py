@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
+from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.board_ir import (
     BoardIRSnapshot,
     ConstraintSet,
@@ -31,6 +33,7 @@ from copper_mcp.routing import (
     LayeredBoardRouter,
     LayeredRouteFailureCode,
     LayeredRouteRequest,
+    canonical_layered_candidate_bytes,
     verify_layered_candidate_id,
 )
 
@@ -39,6 +42,27 @@ OTHER_REVISION = f"sha256:{'b' * 64}"
 BACK_LAYER_ID = "layer:B.Cu"
 INNER_LAYER_ID = "layer:In1.Cu"
 NET_ID = "net:audio"
+
+_FIXTURES = Path(__file__).parent / "fixtures" / "route-candidate"
+BLOCKED_PAD_FIXTURE = _FIXTURES / "blocked-pad.kicad_pcb"
+FOUR_LAYER_FIXTURE = _FIXTURES / "four-layer-blocked-outers.kicad_pcb"
+REAL_FIXTURE_NET_CLASS = NetClass(
+    id="class:default",
+    name="Default",
+    clearance_nm=250_000,
+    track_width_nm=250_000,
+    via_diameter_nm=800_000,
+    via_drill_nm=400_000,
+)
+
+# Committed candidate identities.  These are the whole point of a content-addressed candidate: if
+# either digest changes, persisted candidates stop verifying and the change is a breaking one that
+# must bump LAYERED_ROUTER_VERSION and be declared in the ADR, the ledger, and the CHANGELOG.
+LEGACY_TWO_LAYER_CANDIDATE_ID = (
+    "sha256:5ea134fc319c5a7fa4b7d64b9e6cc47b8439f60c821391c3c3e4c46678f82818"
+)
+FOUR_LAYER_CANDIDATE_ID = "sha256:dc1fcf371857653df95fd7f9a7a2f7fcb16dbc19308144864cd1e23eeb63ab0e"
+THREE_LAYER_CANDIDATE_ID = "sha256:31c68bbe5333a1eea0d7894df1799338718f72d90276d857741d1fcb8ce3c3ac"
 
 
 def _rectangle(min_x: int, min_y: int, max_x: int, max_y: int) -> Ring:
@@ -258,6 +282,109 @@ def test_three_layer_board_routes_only_through_the_inner_signal_layer() -> None:
 
     assert {path.layer_id for path in candidate.patch.paths} == {LAYER_ID, INNER_LAYER_ID}
     assert candidate.cost.via_count == 2
+    assert all(
+        (via.start_layer_id, via.end_layer_id) == (LAYER_ID, BACK_LAYER_ID)
+        for via in candidate.patch.vias
+    )
+    # Committed three-layer identity; see the module-level note on why these digests are pinned.
+    assert candidate.candidate_id == THREE_LAYER_CANDIDATE_ID
+    assert verify_layered_candidate_id(candidate)
+
+
+def test_two_layer_return_via_pins_its_committed_candidate_identity() -> None:
+    """Pin the exact bytes of a two-layer candidate whose second via is a RETURN transition.
+
+    Layered candidates are content-addressed and are persisted by ADR-0043 durable jobs, ADR-0047
+    manifests, and ADR-0048 exports.  A candidate recorded before the ordered-layer seam states its
+    via span in traversal order, so this route's second via reads ``B.Cu -> F.Cu``.  Nothing else in
+    the suite compares a candidate against a committed digest, so a normalization that reorders that
+    pair changes 32 bytes of a 1,527-byte payload, keeps the length identical, and silently
+    invalidates every persisted candidate while 1,500 tests stay green.  This pin is that alarm.
+    """
+
+    profile = KiCadConstraintProfile(
+        net_classes=(REAL_FIXTURE_NET_CLASS,), default_net_class_id=REAL_FIXTURE_NET_CLASS.id
+    )
+    conversion = parse_kicad_bytes(BLOCKED_PAD_FIXTURE.read_bytes(), profile)
+    assert conversion.diagnostics == ()
+    assert conversion.snapshot is not None
+    snapshot = conversion.snapshot
+    net_id = snapshot.content.pads[0].net_id
+    pads = tuple(pad for pad in snapshot.content.pads if pad.net_id == net_id)
+
+    candidate = _candidate(
+        LayeredBoardRouter().propose(
+            snapshot,
+            LayeredRouteRequest(
+                board_revision=snapshot.snapshot_digest,
+                net_id=pads[0].net_id,
+                start_pad_id=pads[0].id,
+                end_pad_id=pads[1].id,
+                start_layer_id=LAYER_ID,
+                end_layer_id=LAYER_ID,
+                grid_step_nm=1_000,
+                settings=LayeredAStarSettings(via_cost=2),
+            ),
+        )
+    )
+
+    assert len(canonical_layered_candidate_bytes(candidate)) == 1_527
+    assert candidate.candidate_id == LEGACY_TWO_LAYER_CANDIDATE_ID
+    assert [(via.start_layer_id, via.end_layer_id) for via in candidate.patch.vias] == [
+        (LAYER_ID, BACK_LAYER_ID),
+        (BACK_LAYER_ID, LAYER_ID),
+    ]
+    assert verify_layered_candidate_id(candidate)
+
+
+def test_real_four_layer_fixture_pins_its_committed_candidate_identity() -> None:
+    """Pin a candidate built from a committed, KiCad 10.0.5-accepted four-layer board.
+
+    Three or more layers have no legacy identity to preserve, and a traversed inner pair would
+    misstate a full-stack through via as a blind/buried one Board IR v0.2 cannot represent, so the
+    recorded span is the canonical outer pair.  Pinning the digest makes that rule a committed
+    contract rather than an implementation detail.
+    """
+
+    profile = KiCadConstraintProfile(
+        net_classes=(REAL_FIXTURE_NET_CLASS,), default_net_class_id=REAL_FIXTURE_NET_CLASS.id
+    )
+    conversion = parse_kicad_bytes(FOUR_LAYER_FIXTURE.read_bytes(), profile)
+    assert conversion.diagnostics == ()
+    assert conversion.snapshot is not None
+    snapshot = conversion.snapshot
+    assert [layer.id for layer in snapshot.content.copper_layers] == [
+        LAYER_ID,
+        INNER_LAYER_ID,
+        "layer:In2.Cu",
+        BACK_LAYER_ID,
+    ]
+    endpoints = tuple(
+        pad for pad in snapshot.content.pads if pad.center.x in (10_000_000, 30_000_000)
+    )
+
+    candidate = _candidate(
+        LayeredBoardRouter().propose(
+            snapshot,
+            LayeredRouteRequest(
+                board_revision=snapshot.snapshot_digest,
+                net_id=endpoints[0].net_id,
+                start_pad_id=endpoints[0].id,
+                end_pad_id=endpoints[1].id,
+                start_layer_id=LAYER_ID,
+                end_layer_id=LAYER_ID,
+                grid_step_nm=1_000_000,
+                settings=LayeredAStarSettings(via_cost=2),
+            ),
+        )
+    )
+
+    assert candidate.candidate_id == FOUR_LAYER_CANDIDATE_ID
+    assert [path.layer_id for path in candidate.patch.paths] == [
+        LAYER_ID,
+        INNER_LAYER_ID,
+        LAYER_ID,
+    ]
     assert all(
         (via.start_layer_id, via.end_layer_id) == (LAYER_ID, BACK_LAYER_ID)
         for via in candidate.patch.vias

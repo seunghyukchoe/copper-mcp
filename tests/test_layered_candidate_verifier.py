@@ -5,6 +5,8 @@ from dataclasses import replace
 from itertools import pairwise
 from pathlib import Path
 
+import pytest
+
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.board_ir import (
     BoardIRSnapshot,
@@ -43,7 +45,12 @@ from copper_mcp.routing.layered_candidate_verifier import (
 F_CU = "layer:F.Cu"
 B_CU = "layer:B.Cu"
 NET_ID = "net:audio"
+IN1_CU = "layer:In1.Cu"
+IN2_CU = "layer:In2.Cu"
 FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "blocked-pad.kicad_pcb"
+FOUR_LAYER_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "route-candidate" / "four-layer-blocked-outers.kicad_pcb"
+)
 
 
 def _rectangle(min_x: int, min_y: int, max_x: int, max_y: int) -> Ring:
@@ -245,6 +252,46 @@ def _via_chain_patch(candidate: object, via_count: int):
         for index, center in enumerate(centers)
     )
     return replace(candidate.patch, paths=tuple(paths), vias=vias)
+
+
+def _four_layer_candidate() -> tuple[BoardIRSnapshot, object]:
+    """Route the committed, KiCad 10.0.5-accepted four-layer fixture with no monkeypatching."""
+
+    profile = KiCadConstraintProfile(
+        net_classes=(
+            NetClass(
+                id="class:default",
+                name="Default",
+                clearance_nm=250_000,
+                track_width_nm=250_000,
+                via_diameter_nm=800_000,
+                via_drill_nm=400_000,
+            ),
+        ),
+        default_net_class_id="class:default",
+    )
+    conversion = parse_kicad_bytes(FOUR_LAYER_FIXTURE.read_bytes(), profile)
+    assert conversion.diagnostics == ()
+    assert conversion.snapshot is not None
+    snapshot = conversion.snapshot
+    endpoints = tuple(
+        pad for pad in snapshot.content.pads if pad.center.x in (10_000_000, 30_000_000)
+    )
+    result = LayeredBoardRouter().propose(
+        snapshot,
+        LayeredRouteRequest(
+            board_revision=snapshot.snapshot_digest,
+            net_id=endpoints[0].net_id,
+            start_pad_id=endpoints[0].id,
+            end_pad_id=endpoints[1].id,
+            start_layer_id=F_CU,
+            end_layer_id=F_CU,
+            grid_step_nm=1_000_000,
+            settings=LayeredAStarSettings(via_cost=2),
+        ),
+    )
+    assert result.candidate is not None
+    return snapshot, result.candidate
 
 
 def test_verifies_simple_candidate_and_exposes_physical_nonclaim() -> None:
@@ -470,3 +517,64 @@ def test_caps_intersection_work_before_pair_scan() -> None:
     # One straight path has no pair to scan, so a tiny pair budget remains valid.  This guards the
     # bounded-limit object itself without making an unverifiable performance claim.
     assert result.ok
+
+
+def test_accepts_a_legacy_two_layer_return_via_recorded_in_traversal_order() -> None:
+    """A full-stack via span is unordered, so both recorded orderings must verify.
+
+    Every two-layer candidate ever issued records its span in traversal order, so a route that
+    returns to the front layer carries a ``B.Cu -> F.Cu`` via.  The KiCad serializer has always
+    compared this pair as a set and always writes the canonical outer ordering, so the recorded
+    order carries no physical meaning.  Reading it as ordered would make every persisted ADR-0043
+    job, ADR-0047 manifest, and ADR-0048 export un-verifiable and therefore un-DRC-able.
+    """
+
+    snapshot, candidate = _blocked_candidate(end_on_back=False)
+    recorded = [(via.start_layer_id, via.end_layer_id) for via in candidate.patch.vias]
+    assert recorded == [(F_CU, B_CU), (B_CU, F_CU)]
+    assert verify_layered_candidate(candidate, snapshot).ok
+
+    normalized = _restamp(
+        candidate,
+        patch=replace(
+            candidate.patch,
+            vias=tuple(
+                replace(via, start_layer_id=F_CU, end_layer_id=B_CU) for via in candidate.patch.vias
+            ),
+        ),
+    )
+    assert normalized.candidate_id != candidate.candidate_id
+    assert verify_layered_candidate(normalized, snapshot).ok
+    # Order-independence is not permissiveness: the span must still be the outer stack pair.  A
+    # degenerate span cannot even be constructed, and an inner span is refused on the four-layer
+    # fixture by test_real_four_layer_fixture_verifies_and_keeps_full_stack_spans.
+    with pytest.raises(ValueError, match="two distinct layers"):
+        replace(candidate.patch.vias[0], start_layer_id=B_CU, end_layer_id=B_CU)
+
+
+def test_real_four_layer_fixture_verifies_and_keeps_full_stack_spans() -> None:
+    """Prove the multilayer guards on real KiCad bytes, not a hand-built snapshot."""
+
+    snapshot, candidate = _four_layer_candidate()
+
+    assert [layer.id for layer in snapshot.content.copper_layers] == [F_CU, IN1_CU, IN2_CU, B_CU]
+    assert [path.layer_id for path in candidate.patch.paths] == [F_CU, IN1_CU, F_CU]
+    assert all(
+        (via.start_layer_id, via.end_layer_id) == (F_CU, B_CU) for via in candidate.patch.vias
+    )
+    assert verify_layered_candidate(candidate, snapshot).ok
+
+    inner_span = _restamp(
+        candidate,
+        patch=replace(
+            candidate.patch,
+            vias=tuple(
+                replace(via, start_layer_id=F_CU, end_layer_id=IN1_CU)
+                for via in candidate.patch.vias
+            ),
+        ),
+    )
+    assert (
+        verify_layered_candidate(inner_span, snapshot).diagnostic.code
+        is LayeredCandidateVerificationCode.VIA_DISCONTINUITY
+    )

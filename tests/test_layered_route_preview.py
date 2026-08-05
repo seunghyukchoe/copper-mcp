@@ -23,6 +23,9 @@ FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "two-pad.kica
 BLOCKED_PAD_FIXTURE = (
     Path(__file__).parent / "fixtures" / "route-candidate" / "blocked-pad.kicad_pcb"
 )
+FOUR_LAYER_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "route-candidate" / "four-layer-blocked-outers.kicad_pcb"
+)
 REAL_KICAD_CLI = Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli")
 DEFAULT = NetClass(
     id="class:request",
@@ -132,6 +135,43 @@ def test_file_preview_refuses_internal_three_layer_router_snapshot(
 
     result = preview_layered_route(
         _request(board, start, end, board_revision, internal_snapshot.snapshot_digest), settings
+    )
+
+    assert result["status"] == "unsupported_board"
+    assert result["candidate"] is None
+    assert result["diagnostic"]["code"] == "unsupported_geometry"  # type: ignore[index]
+
+
+def test_file_preview_refuses_a_real_four_layer_board(tmp_path: Path) -> None:
+    """Prove the public two-layer boundary on committed KiCad bytes, not a patched snapshot.
+
+    Every other boundary regression monkeypatches ``parse_kicad_bytes`` with a hand-built stack, so
+    none of them can observe a real parse producing four copper layers.  This one routes the
+    committed, KiCad 10.0.5-accepted four-layer fixture through the real public entry point.
+    """
+
+    board = tmp_path / FOUR_LAYER_FIXTURE.name
+    source = FOUR_LAYER_FIXTURE.read_bytes()
+    board.write_bytes(source)
+    profile = KiCadConstraintProfile(net_classes=(DEFAULT,), default_net_class_id=DEFAULT.id)
+    conversion = parse_kicad_bytes(source, profile)
+    assert conversion.diagnostics == ()
+    assert conversion.snapshot is not None
+    assert len(conversion.snapshot.content.copper_layers) == 4
+    endpoints = tuple(
+        pad for pad in conversion.snapshot.content.pads if pad.center.x in (10_000_000, 30_000_000)
+    )
+
+    result = preview_layered_route(
+        _request(
+            board,
+            endpoints[0].id,
+            endpoints[1].id,
+            f"sha256:{hashlib.sha256(source).hexdigest()}",
+            conversion.snapshot.snapshot_digest,
+            grid_step_nm=1_000_000,
+        ),
+        Settings(workspace=tmp_path),
     )
 
     assert result["status"] == "unsupported_board"

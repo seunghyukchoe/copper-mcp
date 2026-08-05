@@ -37,6 +37,9 @@ from copper_mcp.routing_job_service import (
 )
 
 FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "two-pad.kicad_pcb"
+FOUR_LAYER_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "route-candidate" / "four-layer-blocked-outers.kicad_pcb"
+)
 
 
 def _digest(value: bytes) -> str:
@@ -248,6 +251,42 @@ def test_durable_job_refuses_internal_three_layer_router_snapshot(
     ):
         with pytest.raises(RoutingJobUnsupportedError, match="exactly two signal layers"):
             _prepare_layered_job(request, settings)
+
+
+def test_durable_job_refuses_a_real_four_layer_board(tmp_path: Path) -> None:
+    """The durable boundary must refuse a real four-layer parse, not only a patched snapshot."""
+
+    settings, request, _ = _workspace(tmp_path)
+    source = FOUR_LAYER_FIXTURE.read_bytes()
+    board = tmp_path / FOUR_LAYER_FIXTURE.name
+    board.write_bytes(source)
+    constraints = NetClass(
+        id="class:request",
+        name="Request",
+        clearance_nm=250_000,
+        track_width_nm=250_000,
+        via_diameter_nm=800_000,
+        via_drill_nm=400_000,
+    )
+    conversion = parse_kicad_bytes(
+        source,
+        KiCadConstraintProfile(net_classes=(constraints,), default_net_class_id=constraints.id),
+    )
+    assert conversion.diagnostics == ()
+    assert conversion.snapshot is not None
+    assert len(conversion.snapshot.content.copper_layers) == 4
+    endpoints = tuple(
+        pad for pad in conversion.snapshot.content.pads if pad.center.x in (10_000_000, 30_000_000)
+    )
+    request["board"] = board.name
+    request["start_pad_id"] = endpoints[0].id
+    request["end_pad_id"] = endpoints[1].id
+    request["expect_board_revision"] = _digest(source)
+    request["expect_snapshot_digest"] = conversion.snapshot.snapshot_digest
+    request["grid_step_nm"] = 1_000_000
+
+    with pytest.raises(RoutingJobUnsupportedError, match="exactly two signal layers"):
+        _prepare_layered_job(request, settings)
 
 
 def test_job_worker_persists_result_and_explicit_geometry_export(tmp_path: Path) -> None:

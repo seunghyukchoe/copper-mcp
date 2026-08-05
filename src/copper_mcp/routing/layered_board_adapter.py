@@ -26,6 +26,8 @@ from copper_mcp.board_ir import (
 )
 from copper_mcp.board_ir.types import Layer, NetClass
 from copper_mcp.routing.layered_astar import (
+    MAX_EXPLICIT_VIAS,
+    MAX_LAYERS,
     LayeredAStarRequest,
     LayeredAStarResult,
     LayeredAStarSettings,
@@ -171,7 +173,7 @@ def _invalid_request(request: object) -> str | None:
     if settings_obj.max_vias is not None and (
         isinstance(settings_obj.max_vias, bool)
         or not isinstance(settings_obj.max_vias, int)
-        or not 0 <= settings_obj.max_vias <= 256
+        or not 0 <= settings_obj.max_vias <= MAX_EXPLICIT_VIAS
     ):
         return "via budget must be a non-negative integer"
     return None
@@ -325,6 +327,27 @@ def _compress(points: list[PointNM]) -> tuple[PointNM, ...]:
     return tuple(compressed)
 
 
+def _via_span(layer_ids: tuple[str, ...], from_layer: int, to_layer: int) -> tuple[str, str]:
+    """Return the recorded layer pair of one full-stack through via.
+
+    Board IR v0.2 models only the full-stack through via, and every consumer reads the recorded
+    pair as an unordered span: the KiCad serializer and the structural verifier both compare it as
+    a set, and the serializer always writes the canonical outer ordering.  The order of the pair
+    therefore carries no physical meaning.
+
+    On exactly two signal layers the traversed pair *is* the outer stack span, so the historical
+    traversal ordering is retained verbatim.  That ordering is part of the candidate identity bytes
+    of every two-layer candidate ever issued, so changing it would silently invalidate persisted
+    ADR-0043 jobs, ADR-0047 manifests, and ADR-0048 exports.  On three through eight layers there
+    is no legacy identity and a traversed inner pair would misstate a full-stack via as a
+    blind/buried one, so the canonical outer span is recorded instead.
+    """
+
+    if len(layer_ids) == 2:
+        return layer_ids[from_layer], layer_ids[to_layer]
+    return layer_ids[0], layer_ids[-1]
+
+
 def _paths_and_vias(
     steps: tuple[LayeredStep, ...],
     *,
@@ -362,17 +385,15 @@ def _paths_and_vias(
             # so a future mode cannot manufacture a degenerate path segment.
             if len(current_points) >= 2:
                 paths.append(LayeredRoutePath(layer_ids[current_layer], _compress(current_points)))
+            span = _via_span(layer_ids, previous.layer, current.layer)
             vias.append(
                 LayeredRouteVia(
                     id=f"via:layered:{len(vias):04d}",
                     center=physical(previous),
                     diameter_nm=via_diameter_nm,
                     drill_nm=via_drill_nm,
-                    # Board IR v0.2 represents only full-stack through vias.  The search may
-                    # enter or leave on any routable layer, but the physical via span remains
-                    # the two outer stack layers.
-                    start_layer_id=layer_ids[0],
-                    end_layer_id=layer_ids[-1],
+                    start_layer_id=span[0],
+                    end_layer_id=span[1],
                 )
             )
             current_layer = current.layer
@@ -443,7 +464,7 @@ class LayeredBoardRouter:
         cancellation_check = cast(CancellationCheck | None, cancelled_obj)
 
         layers = _layer_order(snapshot)
-        if not 2 <= len(layers) <= 8 or any(layer.kind != "signal" for layer in layers):
+        if not 2 <= len(layers) <= MAX_LAYERS or any(layer.kind != "signal" for layer in layers):
             return _diagnostic(
                 LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY,
                 "layered routing requires two through eight ordered signal layers",

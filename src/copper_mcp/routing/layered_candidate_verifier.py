@@ -23,7 +23,11 @@ from math import isqrt
 from typing import Final
 
 from copper_mcp.board_ir import BoardIRSnapshot, Pad, PointNM, verify_snapshot
-from copper_mcp.routing.layered_astar import effective_max_vias
+from copper_mcp.routing.layered_astar import (
+    MAX_EXPLICIT_VIAS,
+    MAX_LAYERS,
+    effective_max_vias,
+)
 from copper_mcp.routing.layered_contracts import LayeredRouteCandidate, verify_layered_candidate_id
 
 _MAX_SAFE_INT: Final = (1 << 53) - 1
@@ -252,7 +256,7 @@ def _validate_candidate_budget(
     if settings.max_vias is not None and (
         isinstance(settings.max_vias, bool)
         or not isinstance(settings.max_vias, int)
-        or not 0 <= settings.max_vias <= 256
+        or not 0 <= settings.max_vias <= MAX_EXPLICIT_VIAS
     ):
         return "via budget exceeds the finite layered budget"
     if len(candidate.patch.paths) > limits.max_paths:
@@ -446,7 +450,11 @@ def verify_layered_candidate(
             vertex_count=vertex_count,
             via_count=via_count,
         )
-    ordered_layers = tuple(sorted(snapshot.content.copper_layers, key=lambda layer: layer.index))
+    # The canonical stack order must be the one the adapter and the KiCad serializer use, so an
+    # index collision cannot make the verifier read a different outer span than the constructor.
+    ordered_layers = tuple(
+        sorted(snapshot.content.copper_layers, key=lambda layer: (layer.index, layer.id))
+    )
     layer_ids = {layer.id for layer in ordered_layers}
     signal_layer_ids = {layer.id for layer in ordered_layers if layer.kind == "signal"}
     if not layer_ids or not signal_layer_ids:
@@ -458,7 +466,7 @@ def verify_layered_candidate(
             vertex_count=vertex_count,
             via_count=via_count,
         )
-    if not 2 <= len(ordered_layers) <= 8 or len(signal_layer_ids) != len(ordered_layers):
+    if not 2 <= len(ordered_layers) <= MAX_LAYERS or len(signal_layer_ids) != len(ordered_layers):
         return _failure(
             LayeredCandidateVerificationCode.LAYER_MISMATCH,
             "layered candidate verification requires two through eight ordered signal layers",
@@ -467,6 +475,7 @@ def verify_layered_candidate(
             vertex_count=vertex_count,
             via_count=via_count,
         )
+    outer_span = {ordered_layers[0].id, ordered_layers[-1].id}
     via_limit = effective_max_vias(candidate.settings, len(ordered_layers))
     if via_limit is not None and via_count > via_limit:
         return _failure(
@@ -641,9 +650,11 @@ def verify_layered_candidate(
             or via.center != previous_path.vertices[-1]
             or via.center != next_path.vertices[0]
             # Board IR v0.2 has only full-stack vias.  A route may transition between any two
-            # signal layers, but the via record must state the canonical outer stack span.
-            or via.start_layer_id != ordered_layers[0].id
-            or via.end_layer_id != ordered_layers[-1].id
+            # signal layers, but the via record must span the outer stack.  The pair is compared
+            # as a set, exactly as the KiCad serializer compares it: the recorded order carries no
+            # physical meaning, and two-layer candidates issued before the ordered-layer seam
+            # record it in traversal order.
+            or {via.start_layer_id, via.end_layer_id} != outer_span
             or previous_path.layer_id == next_path.layer_id
         ):
             return _failure(
