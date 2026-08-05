@@ -591,7 +591,7 @@ historical evidence; these runs were generated from the clean implementation com
 | Run ID | `sha256:ee3320444a09e1a1e80023220eec96b75897d8518847b98390434119e6d9d6da` |
 | Date and commit | 2026-08-05; source commit `a68968d96a55b6f191c19bf668a356edfe13c8e1`; tracked tree clean except the pre-existing untracked `docs/HANDOFF-CODEX.md` |
 | Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad GUI/CLI not invoked; Board IR adapter exercised |
-| Dataset | [`negotiated-crossing-v1.kicad_pcb`](../../benchmarks/audio/fixtures/negotiated-crossing-v1.kicad_pcb), fixture SHA-256 `dbbfc5179cca7f644b90303ff3bc695f191ba94f7e5bbc8b4b1437d810ec83c7`; two orthogonal two-pin nets on a common 1 mm lattice |
+| Dataset | [`negotiated-crossing-v1.kicad_pcb`](../../audio/fixtures/negotiated-crossing-v1.kicad_pcb), fixture SHA-256 `dbbfc5179cca7f644b90303ff3bc695f191ba94f7e5bbc8b4b1437d810ec83c7`; two orthogonal two-pin nets on a common 1 mm lattice |
 | Configuration | `negotiated-congestion-kicad-crossing-v1`; present penalty `20,000,000 nm`; history penalty `5,000,000 nm`; eight-iteration ceiling; total expansion/obstacle-check ceilings `2,000,000` / `10,000,000`; three deterministic replays |
 | Metrics | Sequential baseline overflow `1` lattice unit and wire length `16,000,000 nm`; negotiated status `completed`, overflow `0`, wire length `26,000,000 nm`, iterations `1`, rip-ups `0`; candidate IDs and serialized outcomes identical across `3/3` replays |
 | Artifact | [`2026-08-05-negotiated-congestion.json`](../../benchmarks/results/routing/2026-08-05-negotiated-congestion.json) |
@@ -832,7 +832,7 @@ are the audit copies for the original run IDs.
 
 | Field | Recorded evidence |
 |---|---|
-| Correction | In B-056, “clean tree before artifact generation” means the tracked repository tree matched the recorded `source_commit`; the user-owned untracked `docs/HANDOFF-CODEX.md` was intentionally excluded from staging and does not belong to the benchmark workspace. |
+| Correction | In B-056, “clean tree before artifact generation” means the tracked repository tree matched the recorded `source_commit`; the user-owned untracked [`docs/HANDOFF-CODEX.md`](HANDOFF-CODEX.md) was intentionally excluded from staging and does not belong to the benchmark workspace. |
 | Scope | No B-056 artifact bytes, run ID, metrics, or source commit change. This append-only note narrows the provenance wording without exposing or modifying the handoff contents. |
 
 #### B-058 — negotiated physical-clearance acceptance replay
@@ -1035,13 +1035,14 @@ are the audit copies for the original run IDs.
 | Replay guard | The detached clean-worktree regression now proves, using only local Git ancestry, that the artifact source is an ancestor of the checkout before cloning or checkout. It does not fetch, skip, xfail, or relax the clean-source byte replay. |
 | Interpretation | This is a provenance and CI-availability correction only. It adds no fixture, capability, quality, KiCad, network, model, electrical, fabrication, or hardware claim. |
 
-#### B-076 — recorded-link path corrections
+#### B-076 — recorded-link target corrections for B-036 and B-057
 
 | Field | Recorded evidence |
 |---|---|
-| Correction | Two Markdown link *targets* in this ledger did not resolve. B-036's dataset link pointed at `../../audio/fixtures/negotiated-crossing-v1.kicad_pcb`, which omits the `benchmarks/` path segment; it now points at `../../benchmarks/audio/fixtures/negotiated-crossing-v1.kicad_pcb`. B-057's reference to the user-owned untracked `docs/HANDOFF-CODEX.md` was a link to a path that has never existed in this repository; it is now plain inline code. |
-| Scope | Link targets only. No run ID, digest, fixture name, metric, source commit, interpretation, or displayed text changes in B-036 or B-057, and both remain immutable history. Recorded on 2026-08-06 under issue #70 (repository professionalization). |
-| Interpretation | This is a documentation-navigability correction with no measurement, capability, KiCad, electrical, fabrication, or hardware claim. It exists so `scripts/check_doc_links.py` passes against a ledger whose evidence is unchanged. |
+| Correction | Two Markdown link *targets* recorded in this ledger do not resolve, and this entry records where each was meant to point. B-036's `Dataset` link target `../../audio/fixtures/negotiated-crossing-v1.kicad_pcb` omits the `benchmarks/` path segment; the fixture it names is at [`benchmarks/audio/fixtures/negotiated-crossing-v1.kicad_pcb`](../../benchmarks/audio/fixtures/negotiated-crossing-v1.kicad_pcb). B-057's `Correction` link target `HANDOFF-CODEX.md` resolves to `docs/ledgers/HANDOFF-CODEX.md`, a path that has never existed here; the document it names is the user-owned untracked `docs/HANDOFF-CODEX.md`, which is deliberately not in the repository and therefore has no correct in-repository target. |
+| Scope | B-036 and B-057 are unchanged, byte for byte. Nothing in this ledger's history was rewritten: this is a new dated entry recorded on 2026-08-06 under issue #70 (repository professionalization), which is the only way a correction is recorded here. No run ID, digest, fixture name, metric, source commit, interpretation, or displayed text changes anywhere. |
+| Checker exemption | `scripts/check_doc_links.py` carries these two targets as its only exemptions, each keyed to the exact document and target string and each naming this entry. The exemption list is closed: a target is exempt only while it appears there, an exemption that stops matching a real link fails the check, and no new broken link can be added without editing the checker. |
+| Interpretation | This is a documentation-navigability record with no measurement, capability, KiCad, electrical, fabrication, or hardware claim. It exists so a reader who follows a stale target learns where it pointed, without the ledger's append-only history being edited to hide that it was stale. |
 
 #### B-079 — bounded composed route-bundle KiCad replay
 

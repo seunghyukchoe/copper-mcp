@@ -42,7 +42,11 @@ The rules:
 3. **A correction gets a new ID.** Because rows are append-only, a superseding or clarifying entry
    is a new entry that names what it corrects — never an edit to the original. `B-075`
    ("held-out audio evidence-source provenance correction") is the model: it states what it
-   supersedes, what it leaves immutable, and what it does not claim.
+   supersedes, what it leaves immutable, and what it does not claim. This holds even when the
+   original is *plainly* wrong and the fix is *trivially* safe: `B-076` records the corrected
+   targets for two broken Markdown links rather than repointing them in place, and
+   `scripts/check_doc_links.py` carries those two targets as named exemptions. Convenience is
+   exactly the pressure this rule exists to resist — a record that can be tidied is not a record.
 4. **A replay of an existing benchmark reuses that benchmark's ID**, as a `####` sub-entry whose
    heading reads `B-0NN — <what changed> replay`. A replay that measures something new is a new
    `B-` number instead. The benchmark ledger is organized by topic, so a replay sub-entry sits with

@@ -143,20 +143,45 @@ to write an absolute coordinate — so every position in the response was derive
 snapped to an explicit grid. The seven rule kinds carry exact integer parameters, and the language
 has no way to state an absolute coordinate or to permit an overlap.
 
-The response proves three things and claims nothing else: pad overlap, board-outline containment,
-and keepout respect. `pad_overlap` is three-valued, so `inconclusive` means neither clearance nor
-collision could be proven rather than that something is wrong. Courtyard overlap is reported as
-`not_modelled` because the bounded side-aware evaluator is not implemented yet, and
+The response proves four things and claims nothing else: pad overlap, board-outline containment,
+keepout respect, and courtyard overlap. `pad_overlap` is three-valued, so `inconclusive` means
+neither clearance nor collision could be proven rather than that something is wrong.
 `infeasible_constraints` is never conflated with `budget_exhausted`. Locked footprints reject
 movement proposals.
+
+`courtyard_overlap` **is evaluated** — it is two-valued, `proven_clear` or `violated`, and a
+violation makes the candidate illegal. Read it for exactly what it covers:
+
+- It compares rings between footprints **on the same physical side**. Front and back courtyards are
+  independent physical layers, so cross-side contact is not a collision.
+- It covers the Board IR `0.2` courtyard subset only: simple closed orthogonal rings — unfilled
+  `fp_rect`, unfilled `fp_poly`, and degree-two closed `fp_line` chains. Curves, diagonals, fills,
+  and open or branching chains are refused by the Board IR contract before a placement view exists,
+  so an unsupported courtyard is a refusal rather than a silent pass.
+- Within that subset the integer strip predicate is exact for *positive-area* intersection,
+  including full containment. Edge and corner contact are legal, matching KiCad's zero-clearance
+  default.
+
+Two things are out of scope today, and neither is implied by a `proven_clear` result. There is no
+configurable courtyard clearance: the check answers overlap, not separation, so it cannot express a
+"keep 0.2 mm between parts" rule. And general courtyard topology is not modelled —
+[issue #74](https://github.com/seunghyukchoe/copper-mcp/issues/74) tracks same-footprint ring
+nesting, where a donut authored as an outer plus an inner ring is treated as two solid shapes, so a
+part legitimately sitting in the hole is refused. [Issue #72](https://github.com/seunghyukchoe/copper-mcp/issues/72)
+records the measured fidelity band against real KiCad: KiCad polygonizes courtyards and contracts
+its cached outlines by about 5,000 nm, so KiCad registers a collision only past roughly 10,000 nm of
+penetration while this predicate reports overlap from 1 nm. Both errors point the same way — toward
+refusing a placement KiCad would accept, not toward accepting one it would reject.
 
 **The preview never applies a placement and is not bound to KiCad DRC evidence.** A placement also
 invalidates any route candidate bound to the same board revision.
 
 ## Apply a route candidate
 
-Apply a previewed route candidate to a board. **This is the only command that changes a board
-file**, it is disabled unless you opt in, and it applies route patches only:
+Apply a previewed route candidate to a board. **This is the only CLI command that changes a board
+file**, it is disabled unless you opt in, and it applies route patches only. CopperMCP has exactly
+one other mutating operation, the MCP-only `apply_placement_candidate` described
+[below](#apply-a-placement-candidate); there is no CLI equivalent for it.
 
 ```bash
 COPPER_MCP_ALLOW_APPLY=1 copper-mcp --workspace /absolute/path/to/boards \
@@ -185,6 +210,34 @@ so a model cannot apply anything you did not preview.
 An applied board carries no DRC evidence: what is verified is that every untouched byte is
 identical, that the result reparses, and that its Board IR is the original plus the patch. There is
 no merge, no lock override, and no batch apply.
+
+## Apply a placement candidate
+
+`apply_placement_candidate` is CopperMCP's **second and last** mutating operation, and it exists
+only as an MCP tool — there is no CLI equivalent. It writes a footprint pose rather than copper.
+
+It is gated exactly like route apply and then some. The same `COPPER_MCP_ALLOW_APPLY=1` flag must be
+set, and the tool additionally requires its own single-use token, issued by `preview_placement` with
+`include_apply_token: true` and bound to the exact candidate, board revision, and path. The token's
+operation domain is placement, so a route token can never authorize a placement write and a
+placement token can never authorize a route write. Neither the flag nor a token can be minted by a
+model. The request takes `board`, the `candidate` manifest from the preview, `apply_token`,
+`expect_board_revision`, and `constraints`.
+
+The write discipline is the same as route apply: lockfile refusal, the board digest compared before
+the edit and again immediately before replacement, a timestamped pre-apply copy as the only undo,
+byte-preserving splice, and an atomic replace that is verified afterwards.
+
+What it admits is narrower than route apply. Only the source-preserving front-side orthogonal
+footprint subset replays: a footprint must be on the front side, at an orthogonal rotation, carry
+exactly one native KiCad identity, and use unfilled rectangular `fp_rect` courtyard centerlines. A
+side flip, a locked footprint, a non-orthogonal angle, a derived identity, a no-op candidate, or any
+unsupported property, text, fabrication graphic, library identity, or 3D-model pose refuses before a
+single byte is written. The response reports `footprints_moved` and `bytes_changed`; the KiCad-open
+and DRC stages report `not_run`.
+
+Moving a footprint moves its pads, so applying a placement invalidates any route candidate bound to
+the same base revision.
 
 ## Build a schematic from Circuit Intent
 

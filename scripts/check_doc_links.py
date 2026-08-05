@@ -6,6 +6,15 @@ file or directory that exists in this repository? It deliberately refuses to
 answer anything else. It does not fetch network URLs, does not validate heading
 anchors, and does not judge whether a link is the *right* target -- only that a
 reader following it offline will not land on a missing path.
+
+One exception exists, and it is closed. `docs/ledgers/` is append-only: a
+recorded entry is never rewritten, so a stale link target inside a historical
+entry cannot be fixed in place. Those targets are listed in `EXEMPT_TARGETS`
+below, each one keyed to its exact document and target string and each naming
+the ledger entry that records where it was meant to point. The list is not a
+suppression mechanism: an exemption that no longer matches a real link is itself
+a failure, so a target cannot be silenced and then quietly forgotten, and a newly
+broken link still fails until someone edits this file and says why.
 """
 
 from __future__ import annotations
@@ -34,6 +43,20 @@ EXTERNAL_SCHEMES = (
     "data:",
     "pcb://",
 )
+
+# Unresolvable targets inside append-only ledger history, which may not be
+# rewritten. Keyed by (document, exact target); the value names the ledger entry
+# that records the corrected target. Adding to this list requires a ledger entry.
+EXEMPT_TARGETS: dict[tuple[str, str], str] = {
+    (
+        "docs/ledgers/benchmark-ledger.md",
+        "../../audio/fixtures/negotiated-crossing-v1.kicad_pcb",
+    ): "B-036, corrected target recorded in B-076",
+    (
+        "docs/ledgers/benchmark-ledger.md",
+        "HANDOFF-CODEX.md",
+    ): "B-057, corrected target recorded in B-076",
+}
 
 
 def _tracked_markdown() -> list[Path]:
@@ -75,7 +98,7 @@ def _is_external(target: str) -> bool:
     return lowered.startswith(EXTERNAL_SCHEMES) or lowered.startswith("//")
 
 
-def _check_document(path: Path, failures: list[str]) -> None:
+def _check_document(path: Path, failures: list[str], used_exemptions: set[tuple[str, str]]) -> None:
     relative = path.relative_to(ROOT).as_posix()
     text = _strip_code_fences(path.read_text(encoding="utf-8"))
     for raw in _targets(text):
@@ -83,6 +106,9 @@ def _check_document(path: Path, failures: list[str]) -> None:
         if target.startswith("<") and target.endswith(">"):
             target = target[1:-1].strip()
         if not target or target.startswith("#") or _is_external(target):
+            continue
+        if (relative, target) in EXEMPT_TARGETS:
+            used_exemptions.add((relative, target))
             continue
         # Drop any fragment; anchors are out of scope for this checker.
         location = target.split("#", 1)[0]
@@ -103,13 +129,23 @@ def _check_document(path: Path, failures: list[str]) -> None:
 
 def main() -> int:
     failures: list[str] = []
+    used_exemptions: set[tuple[str, str]] = set()
     documents = _tracked_markdown()
     for path in documents:
         if path.is_file():
-            _check_document(path, failures)
+            _check_document(path, failures, used_exemptions)
+    for key in sorted(set(EXEMPT_TARGETS) - used_exemptions):
+        document, target = key
+        failures.append(
+            f"{document}: exemption for {target!r} ({EXEMPT_TARGETS[key]}) "
+            "matched no link; remove it"
+        )
     if failures:
         raise SystemExit("Documentation link check failed:\n- " + "\n- ".join(failures))
-    print(f"Documentation link check passed ({len(documents)} Markdown files).")
+    print(
+        f"Documentation link check passed ({len(documents)} Markdown files, "
+        f"{len(EXEMPT_TARGETS)} recorded ledger-history exemptions)."
+    )
     return 0
 
 

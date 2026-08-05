@@ -25,7 +25,7 @@ this handoff as approval.
 | See (semantics) | `observe_board_scene` | Circuit Scene 0.2, footprint pose/ownership/courtyards, stable ref ids, region-scoped, text quarantined |
 | Look | `observe_board_scene` with `include_render` | normalized SVG, digest-bound, stdio only |
 | Trace | `preview_route` | multi-pin trees, exact integer geometry, optional authoritative KiCad DRC evidence |
-| Judge placement | `preview_placement` | Board IR-projected subjects, locked-move refusal, seven-rule intent language, three-valued legality |
+| Judge placement | `preview_placement` | Board IR-projected subjects, locked-move refusal, seven-rule intent language, three-valued pad overlap, same-side orthogonal courtyard overlap |
 | Build | `render_circuit_schematic` | deterministic KiCad schematic from Circuit Intent IR |
 | Check | `run_board_drc` | fixed-argument headless DRC, read-only |
 | **Apply route** | `apply_candidate` | route candidates written to the real file, **default off** |
@@ -43,10 +43,13 @@ These are not style preferences. Most of them were paid for with a bug. Preserve
 1. **AI proposes, deterministic code disposes.** No model output reaches a board without being
    recomputed, replayed, and verified by code that does not consult a model.
 2. **Every claim is bound to evidence or listed as an explicit non-claim.** ERC, board parity,
-   electrical validation, courtyard legality, and fabrication readiness are all reported as
-   `not_run` or `not_modelled` one-value literals rather than implied. Board IR carrying a supported
-   courtyard contour is not evidence that an overlap evaluator ran. A field that can only hold one
-   value cannot be quietly upgraded.
+   electrical validation, and fabrication readiness are all reported as `not_run` or `not_modelled`
+   one-value literals rather than implied. A field that can only hold one value cannot be quietly
+   upgraded — and when an evaluator does land, the literal is widened deliberately rather than
+   reinterpreted. Courtyard legality is the worked example: it was a one-value non-claim until the
+   bounded same-side orthogonal evaluator existed, and `courtyard_overlap` is now two-valued.
+   Its scope is still stated rather than implied — same side only, simple orthogonal rings only,
+   overlap rather than clearance.
 3. **Direction of error is a design decision, stated everywhere.** Obstacles over-approximate;
    connectivity proofs under-approximate. A wrong answer must cost a redundant route, never a
    false connection. Legality verdicts are three-valued because `inconclusive` is honest and

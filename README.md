@@ -77,8 +77,8 @@ Never place provider keys or proprietary board contents in committed MCP configu
 [`.env.example`](.env.example) and the [security policy](SECURITY.md).
 
 **The [usage guide](docs/usage.md) covers every command and MCP tool** — DRC, scene observation,
-deterministic renders, route and placement previews, schematic building, route apply, and the
-read-only live KiCad IPC observer — with the limits each one declares.
+deterministic renders, route and placement previews, schematic building, both apply operations, and
+the read-only live KiCad IPC observer — with the limits each one declares.
 
 ## What it can do today
 
@@ -127,19 +127,33 @@ context, without writing a candidate file into the source workspace.
 **Judge a placement.** A typed placement-intent contract and deterministic legalizer, surfaced as a
 non-mutating preview. Seven rule kinds name objects only by scene references and carry exact integer
 parameters; the language has no way to state an absolute coordinate or to permit an overlap. A
-candidate proves exactly three things: pad overlap, board-outline containment, and keepout respect.
+candidate proves exactly four things: pad overlap, board-outline containment, keepout respect, and —
+for Board IR `0.2`'s simple orthogonal courtyard rings, between footprints on the same physical
+side — courtyard overlap.
 
 **Build a schematic.** Immutable Circuit Intent IR `0.1.0` for bounded two-pin resistor/capacitor
 topology, with a strict codec, canonical content digest, and deterministic in-memory KiCad
 `20250114` schematic renderer using original embedded symbols. The shared build service requires two
 byte-identical renders.
 
-**Apply a route — the only mutating operation.** Off by default behind an exact
-`COPPER_MCP_ALLOW_APPLY` flag; over MCP it additionally needs a single-use token bound to the exact
-candidate, board revision, and path, verified against a key that exists only inside the running
-process. The patch is spliced in so every untouched byte stays bit-identical, the board digest is
-compared twice, a timestamped pre-apply copy is written first, and publication is an atomic replace
-that is verified afterwards and rolled back if it fails.
+**Write to a board — the two mutating operations.** `apply_candidate` writes a route patch and
+`apply_placement_candidate` writes a footprint pose. Those are the only operations in CopperMCP that
+modify a file; everything else above reads. Both are off by default behind the same exact
+`COPPER_MCP_ALLOW_APPLY` flag, and over MCP each additionally needs its own single-use token, issued
+by that operation's preview and bound to the exact candidate, board revision, and path, verified
+against a key that exists only inside the running process. The token domains are separate: a route
+token can never authorize a placement write, or the reverse. Neither the flag nor a token can be
+produced by a model.
+
+Both share the same write discipline. The change is spliced in so every untouched byte stays
+bit-identical, the board digest is compared twice, a timestamped pre-apply copy is written first, and
+publication is an atomic replace that is verified afterwards and rolled back if it fails.
+
+Route apply admits additive route patches only. **Placement apply is narrower still**: it replays a
+pose only for front-side, orthogonally rotated footprints carrying exactly one native KiCad identity
+and unfilled rectangular `fp_rect` courtyard centerlines. A back-side footprint, a side change, a
+non-orthogonal angle, a filled or non-rectangular courtyard, an ambiguous identity, or any
+unsupported property refuses before a single byte is written.
 
 **Watch a live editor, read-only.** An optional official `kicad-python` IPC observer and KiCad
 PCB-editor plugin that report only a live board digest, version compatibility, and bounded object
@@ -170,16 +184,25 @@ modelled as a one-value literal (`not_run`, `not_modelled`, `inconclusive`) rath
 
 **Placement.**
 
-- **There is no placement solver, and nothing applies a placement** through the released surface.
-- Courtyard overlap is reported as `not_modelled` — the side-aware legality evaluator is not
-  implemented.
+- **There is no placement solver.** Placement is judged, not searched: you propose, CopperMCP rules
+  on it.
+- Courtyard overlap **is** evaluated, but only for simple orthogonal rings, only between footprints
+  on the same physical side, and only as overlap — there is no configurable courtyard clearance.
+  General topology is open: same-footprint ring nesting treats a donut courtyard as solid
+  ([#74](https://github.com/seunghyukchoe/copper-mcp/issues/74)), and KiCad's own cached-outline
+  inset means it registers a collision only past roughly 10,000 nm of penetration where this
+  predicate reports overlap from 1 nm ([#72](https://github.com/seunghyukchoe/copper-mcp/issues/72)).
+  Both gaps err toward refusing a placement KiCad would accept.
 - Pad overlap is deliberately three-valued: `inconclusive` means neither clearance nor collision
   could be proven, not that something is wrong.
-- A placement candidate is **not** bound to KiCad DRC evidence.
+- A placement candidate is bound to KiCad DRC evidence only when a preview is asked for it with
+  `include_drc`; by default that evidence is absent rather than assumed.
 
 **Apply.**
 
-- Route patches only. There is no merge, no lock override, and no batch apply.
+- Route apply takes route patches only. There is no merge, no lock override, and no batch apply.
+- Placement apply replays a pose only for the front-side, orthogonal, single-native-identity,
+  unfilled-rectangular-courtyard footprint subset, and refuses everything else before writing.
 - The pre-apply copy is **not a KiCad undo step**. Restoring it means copying it back yourself.
 - An applied board carries **no DRC evidence**. What is verified is that every untouched byte is
   identical, that the result reparses, and that its Board IR is the original plus the patch.
@@ -267,9 +290,9 @@ The longer-term MCP north star is a versioned **Circuit Scene IR** that joins se
 meaning with bounded visual observation. Models may propose placement intent and compare immutable
 placement previews or candidates; deterministic code remains responsible for snapping, connectivity,
 clearance, provenance, validation, and any separately authorized apply. Circuit Scene IR, placement
-preview/candidates, the read-only live IPC observer, and the read-only IPC-to-scene bridge now
-exist; live placement/routing action gates, placement apply, and direct AI mutation remain future
-work.
+preview/candidates, the read-only live IPC observer, the read-only IPC-to-scene bridge, and the
+separately authorized bounded placement apply now exist; live placement/routing action gates and
+direct AI mutation remain future work.
 
 ## Documentation
 
