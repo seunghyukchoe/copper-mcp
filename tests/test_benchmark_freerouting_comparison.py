@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import json
 import sys
+import types
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -20,6 +21,13 @@ assert RUNNER_SPEC is not None and RUNNER_SPEC.loader is not None
 runner = importlib.util.module_from_spec(RUNNER_SPEC)
 sys.modules[RUNNER_SPEC.name] = runner
 RUNNER_SPEC.loader.exec_module(runner)
+
+ADAPTER = Path(__file__).parents[1] / "scripts" / "kicad_specctra_transaction.py"
+ADAPTER_SPEC = importlib.util.spec_from_file_location("kicad_specctra_transaction", ADAPTER)
+assert ADAPTER_SPEC is not None and ADAPTER_SPEC.loader is not None
+adapter = importlib.util.module_from_spec(ADAPTER_SPEC)
+sys.modules[ADAPTER_SPEC.name] = adapter
+ADAPTER_SPEC.loader.exec_module(adapter)
 
 
 def _gui_drc_report(board_name: str, unconnected: int = 1) -> str:
@@ -118,6 +126,24 @@ def test_copper_template_has_only_explicit_placeholders(tmp_path: Path) -> None:
         raise AssertionError("unknown template placeholder must fail")
 
 
+def test_kicad_adapter_refuses_false_save_result(tmp_path: Path, monkeypatch: object) -> None:
+    fake_pcbnew = types.SimpleNamespace(
+        LoadBoard=lambda _path: object(),
+        ImportSpecctraSES=lambda _board, _ses: True,
+        SaveBoard=lambda _output, _board: False,
+    )
+    monkeypatch.setitem(sys.modules, "pcbnew", fake_pcbnew)
+
+    try:
+        adapter.import_ses(
+            tmp_path / "source.kicad_pcb", tmp_path / "route.ses", tmp_path / "out.kicad_pcb"
+        )
+    except ValueError as error:
+        assert "save" in str(error).lower()
+    else:
+        raise AssertionError("false SaveBoard result must fail closed")
+
+
 def test_process_timeout_and_redaction_are_truthful(tmp_path: Path) -> None:
     result = benchmark.run_process(
         (sys.executable, "-u", "-c", "import time; print('token=super-secret'); time.sleep(2)"),
@@ -139,6 +165,40 @@ def test_process_kills_on_bounded_output_and_never_buffers_the_full_stream(tmp_p
     assert len(result.stdout) <= benchmark.MAX_PROCESS_OUTPUT_BYTES
 
 
+def test_process_prevents_an_oversized_child_file_before_it_can_complete(tmp_path: Path) -> None:
+    result = benchmark.run_process(
+        (
+            sys.executable,
+            "-c",
+            "from pathlib import Path; Path('oversized.bin').write_bytes(b'x' * (2 * 1024 * 1024))",
+        ),
+        3,
+        tmp_path,
+        file_limit_bytes=1024 * 1024,
+    )
+
+    assert result.status == "failed"
+    assert (tmp_path / "oversized.bin").stat().st_size <= 1024 * 1024
+
+
+def test_process_uses_private_cwd_home_and_tmpdir(tmp_path: Path) -> None:
+    result = benchmark.run_process(
+        (
+            sys.executable,
+            "-c",
+            "import json, os; from pathlib import Path; "
+            "Path('environment.json').write_text(json.dumps({'cwd': os.getcwd(), "
+            "'home': os.environ['HOME'], 'tmpdir': os.environ['TMPDIR']}))",
+        ),
+        3,
+        tmp_path,
+    )
+
+    assert result.status == "ok"
+    environment = json.loads((tmp_path / "environment.json").read_text(encoding="utf-8"))
+    assert environment == {"cwd": str(tmp_path), "home": str(tmp_path), "tmpdir": str(tmp_path)}
+
+
 def test_untrusted_file_reads_have_explicit_byte_ceiling(tmp_path: Path) -> None:
     oversized = tmp_path / "oversized"
     oversized.write_bytes(b"x" * 17)
@@ -156,7 +216,7 @@ def test_malformed_drc_report_fails_closed_without_report_diagnostics(
     board = tmp_path / "result.kicad_pcb"
     board.write_text("(kicad_pcb (version 20240108))\n", encoding="utf-8")
 
-    def fake_run(argv: tuple[str, ...], _timeout: int, _cwd: Path) -> object:
+    def fake_run(argv: tuple[str, ...], _timeout: int, _cwd: Path, **_kwargs: object) -> object:
         report = Path(argv[argv.index("--output") + 1])
         report.write_text("{not JSON", encoding="utf-8")
         return benchmark.ProcessResult(argv, 1, 0, "ok", "", "")
@@ -167,6 +227,30 @@ def test_malformed_drc_report_fails_closed_without_report_diagnostics(
     assert "parse_error" not in result
 
 
+def test_drc_report_and_child_are_confined_to_given_workspace(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    board = tmp_path / "result.kicad_pcb"
+    board.write_text("(kicad_pcb (version 20240108))\n", encoding="utf-8")
+    observed: dict[str, Path] = {}
+
+    def fake_run(argv: tuple[str, ...], _timeout: int, cwd: Path, **_kwargs: object) -> object:
+        observed["cwd"] = cwd
+        report = Path(argv[argv.index("--output") + 1])
+        assert report.parent.parent == tmp_path
+        report.write_text("{}", encoding="utf-8")
+        return benchmark.ProcessResult(argv, 1, 0, "ok", "", "")
+
+    monkeypatch.setattr(benchmark, "run_process", fake_run)
+    monkeypatch.setattr(
+        benchmark,
+        "_parse_drc_report",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(benchmark.KiCadCliError("stop")),
+    )
+    assert benchmark.drc_metrics(tmp_path / "kicad-cli", board, 1, tmp_path)["status"] == "failed"
+    assert observed == {"cwd": tmp_path}
+
+
 def test_drc_metrics_accepts_kicad_cli_v10_basename_source_field(
     tmp_path: Path, monkeypatch: object
 ) -> None:
@@ -174,7 +258,7 @@ def test_drc_metrics_accepts_kicad_cli_v10_basename_source_field(
     board.write_text("(kicad_pcb (version 20240108))\n", encoding="utf-8")
     observed: dict[str, str] = {}
 
-    def fake_run(argv: tuple[str, ...], _timeout: int, _cwd: Path) -> object:
+    def fake_run(argv: tuple[str, ...], _timeout: int, _cwd: Path, **_kwargs: object) -> object:
         report = Path(argv[argv.index("--output") + 1])
         report.write_text("{}", encoding="utf-8")
         return benchmark.ProcessResult(argv, 1, 0, "ok", "", "")
@@ -661,9 +745,12 @@ def test_harness_owned_transaction_binds_export_router_import_and_result_drc(
     monkeypatch.setattr(
         benchmark, "preflight", lambda **_kwargs: {"available": True, "reasons": [], "probes": {}}
     )
+    monkeypatch.setattr(
+        benchmark, "aggregate_workspace_containment", lambda: {"status": "available"}
+    )
     monkeypatch.setattr(benchmark, "drc_metrics", _clean_drc)
 
-    def transaction_tools(argv: tuple[str, ...], *_args: object) -> object:
+    def transaction_tools(argv: tuple[str, ...], *_args: object, **_kwargs: object) -> object:
         if "export-dsn" in argv:
             Path(argv[argv.index("--output") + 1]).write_text("(pcb exported)\n", encoding="utf-8")
         elif "-do" in argv:
@@ -696,6 +783,78 @@ def test_harness_owned_transaction_binds_export_router_import_and_result_drc(
     assert freerouting_result["board_sha256"] == _sha(board_bytes)
     assert report["comparison_closed"] is False
     assert report["incomplete_reason"] == "copper_runner_self_attested_unverified"
+
+
+def test_harness_transaction_fails_closed_without_aggregate_workspace_quota(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    paths = _comparison_inputs(tmp_path)
+    kicad_python = tmp_path / "kicad-python"
+    kicad_python.write_bytes(b"tool")
+    monkeypatch.setattr(
+        benchmark,
+        "aggregate_workspace_containment",
+        lambda: {"status": "unavailable", "reason": "no aggregate quota"},
+    )
+    monkeypatch.setattr(
+        benchmark,
+        "run_process",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must not execute")),
+    )
+
+    transaction, result = benchmark._harness_freerouting_transaction(
+        source=paths["source"],
+        java=paths["java"],
+        jar=paths["jar"],
+        kicad_python=kicad_python,
+        kicad_cli=paths["kicad"],
+        timeout_seconds=1,
+        source_sha256=_sha(paths["source"].read_bytes()),
+        cwd=tmp_path,
+    )
+
+    assert transaction["status"] == "unavailable"
+    assert transaction["containment"]["status"] == "unavailable"
+    assert result is None
+
+
+def test_harness_transaction_refuses_an_importer_that_mutates_its_source_copy(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    paths = _comparison_inputs(tmp_path)
+    kicad_python = tmp_path / "kicad-python"
+    kicad_python.write_bytes(b"tool")
+    monkeypatch.setattr(
+        benchmark, "aggregate_workspace_containment", lambda: {"status": "available"}
+    )
+
+    def mutating_importer(argv: tuple[str, ...], *_args: object, **_kwargs: object) -> object:
+        if "export-dsn" in argv:
+            Path(argv[argv.index("--output") + 1]).write_text("(pcb exported)\n", encoding="utf-8")
+        elif "-do" in argv:
+            Path(argv[argv.index("-do") + 1]).write_text("(session)\n", encoding="utf-8")
+        elif "import-ses" in argv:
+            Path(argv[argv.index("--source") + 1]).write_text("tampered", encoding="utf-8")
+            Path(argv[argv.index("--output") + 1]).write_text(
+                "(kicad_pcb (version 20240108))\n", encoding="utf-8"
+            )
+        return benchmark.ProcessResult(argv, 1, 0, "ok", "", "")
+
+    monkeypatch.setattr(benchmark, "run_process", mutating_importer)
+    transaction, result = benchmark._harness_freerouting_transaction(
+        source=paths["source"],
+        java=paths["java"],
+        jar=paths["jar"],
+        kicad_python=kicad_python,
+        kicad_cli=paths["kicad"],
+        timeout_seconds=1,
+        source_sha256=_sha(paths["source"].read_bytes()),
+        cwd=tmp_path,
+    )
+
+    assert transaction["status"] == "failed"
+    assert transaction["kicad_import"]["source_copy_preserved"] is False
+    assert result is None
 
 
 def test_metric_priority_prefers_connectivity_and_drc_before_quality() -> None:
