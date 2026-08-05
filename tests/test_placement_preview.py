@@ -16,6 +16,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
@@ -537,6 +538,38 @@ class LivePlacementTests(unittest.TestCase):
         request["include_drc"] = True
         with self.assertRaisesRegex(PlacementError, "cannot request authoritative DRC"):
             preview_live_placement(request, _settings(), client_factory=factory)
+        self.assertEqual(board_object.reads, 0)
+
+    def test_live_capture_is_clamped_to_the_placement_deadline(self) -> None:
+        request, (factory, file_document, board_object) = self._live()
+        source = (FIXTURES / "placement-legal.kicad_pcb").read_bytes()
+        snapshot_digest = file_document["snapshot_digest"]
+        assert snapshot_digest is not None
+        baseline = preview_placement(_request("placement-legal.kicad_pcb"), _settings())
+        captured = SimpleNamespace(
+            observation=SimpleNamespace(board_digest=file_document["board_revision"]), source=source
+        )
+
+        with (
+            patch("copper_mcp.placement_preview.time.monotonic", side_effect=(100.0, 100.25)),
+            patch(
+                "copper_mcp.placement_preview.capture_live_board", return_value=captured
+            ) as capture,
+            patch("copper_mcp.placement_preview._preview_placement_source", return_value=baseline),
+        ):
+            result = preview_live_placement(
+                request,
+                _settings(max_placement_seconds=1),
+                client_factory=factory,
+            )
+
+        self.assertEqual(result.snapshot_digest, snapshot_digest)
+        capture.assert_called_once_with(
+            _settings(max_placement_seconds=1),
+            client_factory=factory,
+            timeout_ms=750,
+            deadline=101.0,
+        )
         self.assertEqual(board_object.reads, 0)
 
     def test_live_result_survives_the_actual_mcp_boundary(self) -> None:

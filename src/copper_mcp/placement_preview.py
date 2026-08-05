@@ -235,6 +235,17 @@ def _placement_drc_settings(settings: Settings, deadline: float) -> Settings:
     return replace(settings, kicad_timeout_seconds=min(settings.kicad_timeout_seconds, remaining))
 
 
+def _live_capture_timeout_ms(deadline: float) -> int:
+    """Keep KiCad IPC connection setup within the placement operation's remaining budget."""
+
+    remaining_ms = int((deadline - time.monotonic()) * 1_000)
+    if remaining_ms < 1:
+        raise PlacementPreviewError("the placement preview deadline expired before live capture")
+    # Match the bounded capture adapter's normal two-second connection cap while never allowing
+    # a live IPC request to consume more than this placement preview has left.
+    return min(2_000, remaining_ms)
+
+
 def preview_live_placement(
     payload: Any,
     settings: Settings,
@@ -260,7 +271,13 @@ def preview_live_placement(
     if intent.board != "live":
         raise PlacementError("live placement requests must set board to 'live'")
 
-    captured = capture_live_board(settings, client_factory=client_factory)
+    deadline = time.monotonic() + float(settings.max_placement_seconds)
+    captured = capture_live_board(
+        settings,
+        client_factory=client_factory,
+        timeout_ms=_live_capture_timeout_ms(deadline),
+        deadline=deadline,
+    )
     board_revision = captured.observation.board_digest
     if intent.expect_board_revision != board_revision:
         return PlacementResult(
