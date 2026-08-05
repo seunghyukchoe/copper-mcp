@@ -116,7 +116,10 @@ a registered isolated bounded-worker adapter.
 ## Public benchmark provenance
 
 The accompanying replay artifact records `implementation_commit` for the public policy contract
-and a distinct `evidence_source_commit` for the later revision containing the exact replay harness
-and fixture.  Both values are part of the content-addressed report, alongside script and fixture
-hashes.  This keeps implementation lineage and reproducible evidence explicit rather than assigning
-replay authority to an unreachable pre-integration branch commit.
+and the distinct `evidence_harness_commit`: the stable source/harness commit used by its embedded
+`evidence_harness_command` to replay the exact script and fixtures. Both values are part of the
+content-addressed report alongside script and fixture hashes. B-063 separately records an artifact
+materialization commit in the benchmark ledger; it identifies the revision that materialized the
+committed report and neither replaces `evidence_harness_commit` nor identifies the source used by
+the replay command. This keeps implementation lineage and reproducible evidence explicit rather
+than assigning replay authority to an unreachable pre-integration branch commit.

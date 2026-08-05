@@ -197,6 +197,11 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Corrected the public policy benchmark provenance contract to name the artifact's
+  `evidence_harness_commit` field: the stable source/harness commit used by the embedded replay
+  command. The separately recorded artifact materialization commit remains distinct; no replay
+  artifact, measurement, policy authority, or routing behavior changed.
+
 - Expired routing-candidate geometry exports now commit their TTL purge before returning the
   deliberately uniform unavailable response. This preserves the access-retention boundary for
   stored `candidate_json`; TTL is not a secure-erasure guarantee for SQLite, backups, or copies a

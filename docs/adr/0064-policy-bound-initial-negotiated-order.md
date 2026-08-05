@@ -161,6 +161,16 @@ Implementation is accepted only when targeted tests demonstrate all of the follo
   deterministic validation, or KiCad DRC outcomes. A policy is not physically valid or better
   merely because it returns an ordering.
 
+### Public benchmark provenance
+
+The B-063 replay artifact records `implementation_commit` for the public policy contract and the
+distinct `evidence_harness_commit`: the stable source/harness commit used by its embedded
+`evidence_harness_command` to replay the exact script and fixtures. Both values are part of the
+content-addressed report alongside script and fixture hashes. B-063 separately records an
+artifact materialization commit in the benchmark ledger; it identifies the revision that
+materialized the committed report and neither replaces `evidence_harness_commit` nor identifies
+the source used by the replay command.
+
 ## Alternatives considered
 
 - **Let a policy control every iteration.** Rejected: it would replace congestion-feedback repair

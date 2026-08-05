@@ -15,6 +15,10 @@ from scripts import benchmark_routing_policy_order as benchmark
 
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT = ROOT / "benchmarks" / "results" / "routing" / "2026-08-05-routing-policy-order.json"
+PUBLIC_POLICY_PROVENANCE_DOCUMENTS = (
+    ROOT / "docs" / "adr" / "0064-policy-bound-initial-negotiated-order.md",
+    ROOT / "docs" / "research" / "ai-routing-policy-boundary.md",
+)
 TEST_EVIDENCE_HARNESS_COMMIT = "f" * 40
 
 
@@ -50,6 +54,16 @@ def test_policy_order_report_has_complete_candidate_only_schema() -> None:
         assert profile["geometry"]["sha256"].startswith("sha256:")
         assert isinstance(baseline["overflow_resources"], list)
         assert isinstance(profile["observed_iteration_orders"], list)
+
+
+def test_public_policy_provenance_uses_the_artifact_harness_key() -> None:
+    for document in PUBLIC_POLICY_PROVENANCE_DOCUMENTS:
+        contents = document.read_text(encoding="utf-8")
+
+        assert "`evidence_harness_commit`" in contents
+        assert "`evidence_harness_command`" in contents
+        assert "materialization commit" in contents
+        assert "evidence_source_commit" not in contents
 
 
 def test_policy_order_harness_resolves_a_symlinked_worktree_path(tmp_path: Path) -> None:
