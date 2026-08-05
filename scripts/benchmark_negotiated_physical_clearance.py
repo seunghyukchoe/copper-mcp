@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -30,21 +31,19 @@ from copper_mcp.board_ir import (
 from copper_mcp.routing import (
     AStarSettings,
     CongestionLedger,
-    NegotiatedRoutingRequest,
     RouteCandidate,
     RouteCost,
     RouteMetrics,
     RoutePatch,
     RoutePath,
-    RouteRequest,
-    RouteResult,
-    negotiate_routes,
+    canonical_candidate_bytes,
 )
+from copper_mcp.routing.physical_clearance import verify_negotiated_physical_clearance
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = Path(__file__).relative_to(ROOT)
 OUTPUT = ROOT / "benchmarks/results/routing/2026-08-05-negotiated-physical-clearance.json"
-SOURCE_COMMIT = "5dc97b16c30dc5662c6606dc17f742153c08bd21"
+SOURCE_COMMIT = "62a267e01c4cdbcafb0985d876bb7b54e7b9691b"
 SOURCE_REVISION = f"sha256:{'c' * 64}"
 LAYER = "layer:F.Cu"
 HORIZONTAL = "net:horizontal"
@@ -160,7 +159,7 @@ def _candidate(snapshot: Any, net_id: str, y_nm: int) -> RouteCandidate:
         width_nm=600_000,
         paths=(RoutePath((PointNM(1_000_000, y_nm), PointNM(9_000_000, y_nm))),),
     )
-    return RouteCandidate(
+    candidate = RouteCandidate(
         candidate_id=f"sha256:{'0' * 64}",
         base_revision=snapshot.snapshot_digest,
         start_pad_id="pad:h1" if net_id == HORIZONTAL else "pad:v1",
@@ -187,7 +186,11 @@ def _candidate(snapshot: Any, net_id: str, y_nm: int) -> RouteCandidate:
         settings=_settings(),
         router_version="benchmark",
         policy="benchmark",
-        seed=1,
+        seed=1 if net_id == HORIZONTAL else 2,
+    )
+    return replace(
+        candidate,
+        candidate_id=("sha256:" + hashlib.sha256(canonical_candidate_bytes(candidate)).hexdigest()),
     )
 
 
@@ -206,53 +209,34 @@ def _run(replays: int) -> dict[str, Any]:
         ledger.add_candidate(candidate)
     overflow_units = sum(item.usage - 1 for item in ledger.overflow_resources())
 
-    class ParallelRouter:
-        def propose(
-            self, _snapshot: object, request: RouteRequest, **_kwargs: object
-        ) -> RouteResult:
-            return RouteResult(
-                candidate=candidates[0] if request.net_id == HORIZONTAL else candidates[1]
-            )
-
-    requests = tuple(
-        RouteRequest(snapshot.snapshot_digest, net_id, LAYER, seed, _settings())
-        for net_id, seed in ((HORIZONTAL, 1), (VERTICAL, 2))
-    )
-    envelope = NegotiatedRoutingRequest(
-        board_revision=snapshot.snapshot_digest,
-        requests=requests,
-        max_iterations=1,
-    )
     outcomes = [
-        negotiate_routes(snapshot, envelope, router=ParallelRouter()) for _ in range(replays)
+        verify_negotiated_physical_clearance(
+            snapshot,
+            candidates,
+            layer_id=LAYER,
+            max_pair_checks=1,
+        )
+        for _ in range(replays)
     ]
     first = outcomes[0]
     summary = {
-        "candidates_published": len(first.candidates),
-        "connections_published": len(first.connections),
+        "accepted": first.accepted,
         "diagnostic": first.diagnostic,
-        "overflow_units": first.overflow_units,
-        "status": first.status.value,
-        "total_physical_checks": first.total_physical_checks,
-        "unrouted_nets": list(first.unrouted_nets),
-        "wire_length_nm": first.total_wire_length_nm,
+        "failure": None if first.failure is None else first.failure.value,
+        "pair_checks": first.pair_checks,
     }
     if any(
         {
-            "candidates_published": len(item.candidates),
-            "connections_published": len(item.connections),
+            "accepted": item.accepted,
             "diagnostic": item.diagnostic,
-            "overflow_units": item.overflow_units,
-            "status": item.status.value,
-            "total_physical_checks": item.total_physical_checks,
-            "unrouted_nets": list(item.unrouted_nets),
-            "wire_length_nm": item.total_wire_length_nm,
+            "failure": None if item.failure is None else item.failure.value,
+            "pair_checks": item.pair_checks,
         }
         != summary
         for item in outcomes[1:]
     ):
         raise RuntimeError("physical-clearance benchmark replay was not deterministic")
-    if overflow_units != 0 or first.candidates or first.connections:
+    if overflow_units != 0 or first.accepted:
         raise RuntimeError("benchmark no longer demonstrates the intended acceptance delta")
     return {
         "available_clearance_nm": 300_000,
@@ -274,7 +258,7 @@ def main() -> None:
     if not 3 <= args.replays <= 20:
         raise SystemExit("--replays must be between 3 and 20")
     payload: dict[str, Any] = {
-        "benchmark": "negotiated-physical-clearance-v1",
+        "benchmark": "negotiated-physical-clearance-v2",
         "environment": "deterministic CPU-only; no external EDA tool invoked",
         "metrics": _run(args.replays),
         "non_claims": [
@@ -283,7 +267,7 @@ def main() -> None:
             "fabrication clearance or FreeRouting parity",
         ],
         "replays": args.replays,
-        "schema": "copper-mcp/benchmark/negotiated-physical-clearance/v1",
+        "schema": "copper-mcp/benchmark/negotiated-physical-clearance/v2",
         "script": SCRIPT_PATH.as_posix(),
         "script_sha256": hashlib.sha256(SCRIPT_PATH.read_bytes()).hexdigest(),
         "source_commit": SOURCE_COMMIT,

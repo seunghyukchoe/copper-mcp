@@ -22,6 +22,12 @@ published response.  The coordinator continues within its ordinary bounded itera
 does not yet feed the physical conflict back as a spatial reroute penalty.  This is acceptance
 fidelity, not a complete negotiated physical router.
 
+The `v2` benchmark calls this pure gate directly on self-identified synthetic candidates.  It no
+longer injects a scripted candidate through the negotiated-router seam: generic router results are
+now checked against a same-budget deterministic A* replay before the coordinator can publish or
+account for them.  The direct benchmark therefore isolates the physical-clearance delta, while the
+router-boundary tests cover candidate provenance and obstacle legality separately.
+
 ## Primary sources and design implications
 
 - [KiCad PCB Editor: net classes](https://docs.kicad.org/master/en/pcbnew/pcbnew.html#net-classes)
