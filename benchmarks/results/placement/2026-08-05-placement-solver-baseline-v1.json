@@ -1,0 +1,32 @@
+{
+  "date_utc": "2026-08-05",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+    "python": "3.14.2"
+  },
+  "fixture": "tests/fixtures/board-ir-v0.1/footprint-rotation.kicad_pcb",
+  "metrics": {
+    "all_legalizer_candidates_legal": true,
+    "best_connectivity_manhattan_nm": 10000000,
+    "connectivity_improvement_nm": 2000000,
+    "deterministic_replays": true,
+    "initial_connectivity_manhattan_nm": 12000000,
+    "median_elapsed_ns": 2349664041,
+    "repetitions": 3,
+    "solver_settings": {
+      "beam_width": 4,
+      "max_evaluations": 128,
+      "max_rounds": 5,
+      "step_nm": 1000000
+    }
+  },
+  "not_claimed": [
+    "optimal placement or an approximation guarantee",
+    "DRC, electrical, timing, signal-integrity, thermal, or fabrication readiness",
+    "KiCad file mutation, editor mutation, apply authority, undo, or live-editor behavior",
+    "routing feasibility, route length, congestion, impedance, or manufacturing clearance"
+  ],
+  "run_id": "sha256:2213e8b8ab8e052b24b79ff42bd5073fd0682408dc537e1b54731eb67a7831a8",
+  "schema": "copper-mcp/benchmark/placement-solver-baseline/v1",
+  "source_commit": "3bdd5122c43d2250b6fe1c08b3bdc108d9705f7f"
+}
