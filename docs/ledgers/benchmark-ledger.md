@@ -711,3 +711,58 @@ historical evidence; these runs were generated from the clean implementation com
 | Metrics | Three observations bind to one returned post-apply board revision and one scene/DRC context; post-apply board bytes preserved by the observer; post-observer workspace mutations `0`; hard DRC pass `true`, clean `false` due to five ignored checks; median latency `378,795,500 ns`. |
 | Artifact | [`2026-08-05-post-placement-observation.json`](../../benchmarks/results/placement/2026-08-05-post-placement-observation.json) |
 | Interpretation | This demonstrates a legal file-backed apply followed by three read-only observations of the exact revision returned by apply. It does not provide cryptographic mutation provenance beyond that revision CAS, live editor CAS, ERC/electrical/fabrication readiness, or FreeRouting parity. |
+
+### Append-only artifact-preservation amendments
+
+These entries preserve superseded content-addressed benchmark artifacts when a historical result
+path was later reused by a replay. No earlier ledger row is rewritten; the recovered files below
+are the audit copies for the original run IDs.
+
+#### B-046 — preserve superseded B-033 spatial-index artifact
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:0375d0e76d5aedbd0dd7dbed082d07f07fc8793ea38cb87ee92faade91993631` |
+| Historical source | `62f10efcd82a8a6e0974e15d69e56573d4115c6e` |
+| Artifact | [`2026-08-05-spatial-index-historical-b033.json`](../../benchmarks/results/routing/2026-08-05-spatial-index-historical-b033.json) |
+| Reason | The original B-033 path was reused by the corrected B-037 replay. This recovered copy preserves the exact old bytes and run ID; B-037 remains the current predicate-work evidence. |
+
+#### B-047 — preserve superseded B-038 layered DRC artifact
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:398b17f57e8525808e6ce3c3247327c76acd0155eb0d6f9679085cc3c3544c65` |
+| Historical source | `896c88d9405cfed469d60d45e1b80fd9bdfad2ad` |
+| Artifact | [`2026-08-05-layered-drc-hardening-historical-b038.json`](../../benchmarks/results/routing/2026-08-05-layered-drc-hardening-historical-b038.json) |
+| Reason | The original B-038 path was reused by the replay that corrected its source provenance. This recovered copy preserves the superseded payload without changing the historical row. |
+
+#### B-048 — preserve superseded B-043 audio-routing artifact
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:e4b1409098de79f6ebf496ac7c53ba3be7763c84e1fb8bfd2f01eda26dad88d4` |
+| Historical source | `ceb4e9f31cd348d976c46fdd76c08a19d6648fda` |
+| Artifact | [`2026-08-04-audio-routing-gap-historical-b043.json`](../../benchmarks/results/routing/2026-08-04-audio-routing-gap-historical-b043.json) |
+| Reason | The original B-043 path was reused by a later clean-tree replay. This recovered copy preserves the earlier candidate-only audio microcase evidence and its exact run ID. |
+
+#### B-049 — preserve superseded B-044 public placement DRC artifact
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:bed5fb0c00fdbea3083d4cfcf305d0745da9de5ecdc7130dc43ccc7e30041745` |
+| Historical source | `6959bc22b45ce6a2a4550ef3ce375cc9f332fb8e` |
+| Artifact | [`2026-08-05-public-placement-drc-historical-b044.json`](../../benchmarks/results/placement/2026-08-05-public-placement-drc-historical-b044.json) |
+| Reason | The original B-044 path was reused by a later aggregate-count transparency replay. This recovered copy preserves the superseded public-preview evidence and exact run ID. |
+
+#### B-050 — stationary padless-courtyard collision replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:dd2d7f54bea51d2f1ce5d67ad463c6ecfd325eb6251bca7a19d0aedd73501ee5` |
+| Date and commit | 2026-08-05; source commit `b6caf55da825494c0818062421cb8d24f478815b` |
+| Environment | Apple arm64 CPU; Python 3.12.13; KiCad not invoked |
+| Dataset | [`padless-footprint.kicad_pcb`](../../tests/fixtures/board-ir-v0.2/padless-footprint.kicad_pcb), one pad-owning footprint and one graphics-only rectangular-courtyard footprint |
+| Configuration | `copper-mcp/benchmark/padless-courtyard/v1`; one baseline preview and one deterministic proposed move into the stationary padless courtyard |
+| Metrics | Baseline `previewed`; collision `refused`; `stationary_padless_courtyards=1`; `collision_courtyard_overlap=violated`; source SHA-256 `sha256:cd235d2a11a12ef68e9f8039f05f790494f7e4969e190c495396f13fcbd77102`; workspace mutations `0` |
+| Artifact | [`2026-08-05-padless-courtyard.json`](../../benchmarks/results/placement/2026-08-05-padless-courtyard.json) |
+| Interpretation | This measures the bounded fix prompted by KiCad's courtyard-placement semantics and the review-bot reproduction. It covers only rectangular Board IR v0.2 courtyards; custom clearance, arbitrary topology, DRC, apply, fabrication, and FreeRouting parity remain unclaimed. |

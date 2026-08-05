@@ -1,0 +1,21 @@
+{
+  "date_utc": "2026-08-05",
+  "fixture": "tests/fixtures/board-ir-v0.2/padless-footprint.kicad_pcb",
+  "metrics": {
+    "baseline_status": "previewed",
+    "collision_courtyard_overlap": "violated",
+    "collision_status": "refused",
+    "source_sha256": "sha256:cd235d2a11a12ef68e9f8039f05f790494f7e4969e190c495396f13fcbd77102",
+    "stationary_padless_courtyards": 1,
+    "workspace_mutations": 0
+  },
+  "not_claimed": [
+    "custom courtyard-clearance values",
+    "non-rectangular courtyard topology",
+    "KiCad DRC or fabrication readiness",
+    "apply or FreeRouting parity"
+  ],
+  "run_id": "sha256:dd2d7f54bea51d2f1ce5d67ad463c6ecfd325eb6251bca7a19d0aedd73501ee5",
+  "schema": "copper-mcp/benchmark/padless-courtyard/v1",
+  "source_commit": "b6caf55da825494c0818062421cb8d24f478815b"
+}
