@@ -35,13 +35,20 @@ The nontrivial cases are the three- and four-pad summing/supply nets. They exerc
 bounded multi-pin ordering path rather than merely a two-pad line. Each preview starts from the
 same unrouted source board; no individual candidate is merged with another candidate.
 
+## Recorded KiCad observation
+
+On 2026-08-05, the local KiCad 10.0.5 CLI JSON DRC was run against a private copy of the exact
+fixture source (`sha256:749adc8b4d26b7f7ef878f9cf681521a8efdf446b9f0bf559243918e6e1957a9`).
+The zero-copper source reported 14 violations and 24 unconnected items. Eight disposable
+derivatives were then serialized independently, one for each preview candidate and each beginning
+from that unchanged source snapshot. They retained 14 violations and reported, in declaration
+order, 23, 23, 22, 22, 23, 23, 21, and 21 unconnected items. The benchmark did not merge or apply
+candidates, and its source-copy preservation check remained true.
+
 ## Explicit nonclaims
 
-This is not an electrically validated NE5532 design, an ERC result, a KiCad DRC result, a
-combined-net autoroute result, a fabrication-ready board, a hardware measurement, or a FreeRouting
-comparison. The local workstation used for this evidence had no `kicad-cli`, so the report records
-authoritative DRC as `not_run`; it never substitutes parser acceptance for a KiCad DRC pass.
-
-Future work may run a separately provenance-bound KiCad DRC on a disposable candidate derivative,
-then must record that operation's exact binary/version, source and derivative hashes, and the
-authority boundary separately.
+This is not an electrically validated NE5532 design, an ERC result, a clean KiCad DRC result, a
+whole-board or combined-net route-feasibility result, a fabrication-ready board, a hardware
+measurement, or a FreeRouting comparison. The recorded DRC observation is non-clean and limited to
+independent, disposable single-candidate derivatives; it never substitutes parser acceptance or a
+reduced unconnected count for electrical, fabrication, or completed-board evidence.
