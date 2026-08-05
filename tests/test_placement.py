@@ -389,6 +389,80 @@ class PadlessFootprintTests(unittest.TestCase):
         self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
         self.assertIn("no copper pad", result.diagnostic.message)
 
+    def test_padless_proximity_target_precedes_an_unrelated_contradiction(self) -> None:
+        """Both operands of a proximity rule are unavailable when they are padless."""
+
+        _, snapshot, view = _board(PADLESS_BOARD)
+        placeable = sorted(view.footprints)[0]
+
+        result = evaluate_placement(
+            _intent(
+                view,
+                PADLESS_BOARD.name,
+                subjects=[placeable],
+                rules=[
+                    {
+                        "kind": "proximity",
+                        "subject": placeable,
+                        "target": PADLESS_REF,
+                        "max_distance_nm": 0,
+                    },
+                    {"kind": "side", "subject": placeable, "side": "front"},
+                    {"kind": "side", "subject": placeable, "side": "back"},
+                ],
+            ),
+            snapshot,
+            view,
+        )
+
+        self.assertEqual(result.status, "refused")
+        self.assertIsNone(result.candidate)
+        assert result.diagnostic is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+        self.assertEqual(
+            result.diagnostic.message,
+            "a placement subject owns no copper pad, so it cannot be placed in v0.1",
+        )
+
+    def test_proximity_target_preflight_stops_at_the_first_unknown_reference(self) -> None:
+        """A later padless target cannot overwrite an earlier unknown-target refusal."""
+
+        _, snapshot, view = _board(PADLESS_BOARD)
+        placeable = sorted(view.footprints)[0]
+        unknown_ref = "footprint:kicad:00000000-0000-0000-0000-00000000ffff"
+
+        for first, second, expected in (
+            (unknown_ref, PADLESS_REF, PlacementFailureCode.UNRESOLVED_REF),
+            (PADLESS_REF, unknown_ref, PlacementFailureCode.UNSUPPORTED_GEOMETRY),
+        ):
+            with self.subTest(first=first, second=second):
+                result = evaluate_placement(
+                    _intent(
+                        view,
+                        PADLESS_BOARD.name,
+                        subjects=[placeable],
+                        rules=[
+                            {
+                                "kind": "proximity",
+                                "subject": placeable,
+                                "target": first,
+                                "max_distance_nm": 0,
+                            },
+                            {
+                                "kind": "proximity",
+                                "subject": placeable,
+                                "target": second,
+                                "max_distance_nm": 0,
+                            },
+                        ],
+                    ),
+                    snapshot,
+                    view,
+                )
+
+                assert result.diagnostic is not None
+                self.assertEqual(result.diagnostic.code, expected)
+
     def test_every_padless_proposal_anchor_precedes_an_unrelated_contradiction(self) -> None:
         """Unsupported proposal anchors must not be masked by syntactic rule analysis."""
 
