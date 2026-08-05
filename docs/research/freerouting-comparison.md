@@ -84,6 +84,23 @@ provider tokens and general inherited environment variables are not passed throu
 executable remains user-authorized code execution: process isolation here bounds lifecycle,
 output, and resource effects, but is not sandbox containment for malicious code.
 
+### Harness-owned transaction containment status
+
+The optional `--kicad-python` route is deliberately disabled unless an internal, reviewed platform
+provider creates an exact private workspace with a sufficient aggregate quota. The harness then
+canonicalizes that root and rejects it unless it is a non-symlink directory owned by the current
+user with no group/other permissions; each transaction directory, process `cwd`, `HOME`, and
+`TMPDIR` is created under that provider root. Source DRC, when run by this route, uses a private
+source copy in the same provider boundary. The CLI does not accept a workspace argument.
+
+No such provider is enabled today. On refusal, the harness fails before **all** child-launch
+seams: Java/KiCad version probes, source/result DRC, DSN export, FreeRouting, SES import, and the
+optional CopperMCP runner. This protects the meaning of a failed preflight; it does not demonstrate
+that KiCad or Java are sandboxed. The macOS `sandbox-exec` experiments remain insufficient because
+KiCad export required a broad host-read rule; Linux tmpfs/mount-namespace/cgroup providers are not
+implemented. Consequently this repository makes no sandbox, FreeRouting parity, performance, or
+comparison-closure claim from the capability seam or its unit tests.
+
 ## Reproduction procedure
 
 1. Create an Apache-2.0 or otherwise independently licensed fixture and record `origin`,
