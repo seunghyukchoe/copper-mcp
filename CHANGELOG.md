@@ -6,6 +6,8 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-05
+
 ### Fixed
 
 - Rebound the held-out audio benchmark artifact to the reachable merged-main source commit after
