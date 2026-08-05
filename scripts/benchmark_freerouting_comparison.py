@@ -66,10 +66,10 @@ COPPER_RECEIPT_SCHEMA = "copper-mcp/candidate-runner-receipt/v1"
 _RECEIPT_SHA256 = re.compile(r"^sha256:[a-f0-9]{64}$")
 _RELEASE_TAG = re.compile(r"^v(\d+\.\d+\.\d+)$")
 _GUI_DRC_HEADER = re.compile(r"^\*\* Drc report for (?P<board>[^\n]+) \*\*$", re.MULTILINE)
-_GUI_DRC_COUNT = re.compile(
-    r"^\*\* Found (?P<count>\d+) (?P<kind>DRC violations|unconnected pads) \*\*$",
-    re.MULTILINE,
-)
+_GUI_DRC_INCLUDES = re.compile(r"^\*\* Report includes: Errors, Warnings \*\*$", re.MULTILINE)
+_GUI_DRC_COUNT = re.compile(r"^\*\* Found (?P<count>\d+) (?P<kind>[^*\n]+) \*\*$", re.MULTILINE)
+_GUI_DRC_END = re.compile(r"^\*\* End of Report \*\*$", re.MULTILINE)
+_GUI_DRC_COUNT_KINDS = frozenset({"DRC violations", "unconnected pads", "Footprint errors"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -618,7 +618,12 @@ def source_drc_binding(
     source_drc: dict[str, Any],
     expectation: dict[str, int] | None,
 ) -> dict[str, int | str]:
-    """Bind authoritative source DRC to a declared exact pre-route fixture baseline."""
+    """Compare a source DRC observation with its declared exact fixture baseline.
+
+    A KiCad GUI report names only a board basename, so it cannot causally bind its report digest
+    to the source bytes.  A retained attestation containing both exact hashes would be needed to
+    strengthen that GUI evidence beyond a self-attested observation.
+    """
 
     if source_sha256 is None or expectation is None or source_drc.get("status") != "ok":
         return {"status": "unavailable"}
@@ -633,17 +638,19 @@ def source_drc_binding(
         or not isinstance(unconnected, int)
     ):
         return {"status": "unavailable"}
+    matches = (
+        actual_source == source_sha256
+        and hard_violations == expectation["hard_violations"]
+        and unconnected == expectation["intentional_unconnected_items"]
+    )
     output: dict[str, int | str] = {
-        "status": "bound"
-        if (
-            actual_source == source_sha256
-            and hard_violations == expectation["hard_violations"]
-            and unconnected == expectation["intentional_unconnected_items"]
-        )
-        else "mismatch",
+        "status": "mismatch" if not matches else "bound",
         "expected_hard_violations": expectation["hard_violations"],
         "expected_intentional_unconnected_items": expectation["intentional_unconnected_items"],
     }
+    if matches and source_drc.get("workflow") == "kicad-gui-drc-report":
+        output["status"] = "self_attested_unverified"
+        output["evidence_limit"] = "GUI report header identifies only a board basename"
     return output
 
 
@@ -663,14 +670,27 @@ def gui_drc_metrics(board: Path, report: Path | None) -> dict[str, Any]:
         text = payload.decode("utf-8", errors="strict")
     except (OSError, UnicodeDecodeError, ValueError):
         return {"status": "failed"}
-    header = _GUI_DRC_HEADER.search(text)
-    if header is None or header.group("board") != board.name:
+    headers = list(_GUI_DRC_HEADER.finditer(text))
+    includes = list(_GUI_DRC_INCLUDES.finditer(text))
+    counts = list(_GUI_DRC_COUNT.finditer(text))
+    endings = list(_GUI_DRC_END.finditer(text))
+    if (
+        len(headers) != 1
+        or headers[0].group("board") != board.name
+        or len(includes) != 1
+        or len(endings) != 1
+        or not headers[0].start() < includes[0].start() < endings[0].start()
+    ):
         return {"status": "failed"}
-    counts = {
-        match.group("kind"): int(match.group("count")) for match in _GUI_DRC_COUNT.finditer(text)
-    }
-    if set(counts) != {"DRC violations", "unconnected pads"}:
+    count_kinds = [match.group("kind") for match in counts]
+    if (
+        len(counts) != len(_GUI_DRC_COUNT_KINDS)
+        or set(count_kinds) != _GUI_DRC_COUNT_KINDS
+        or len(set(count_kinds)) != len(count_kinds)
+        or any(not includes[0].start() < match.start() < endings[0].start() for match in counts)
+    ):
         return {"status": "failed"}
+    observed_counts = {match.group("kind"): int(match.group("count")) for match in counts}
     try:
         board_sha256 = sha256_file(board, MAX_BOARD_BYTES)
         report_sha256 = sha256_file(report, MAX_DRC_REPORT_BYTES)
@@ -678,10 +698,11 @@ def gui_drc_metrics(board: Path, report: Path | None) -> dict[str, Any]:
         return {"status": "failed"}
     return {
         "board_sha256": board_sha256,
-        "hard_violations": counts["DRC violations"],
+        "footprint_errors": observed_counts["Footprint errors"],
+        "hard_violations": observed_counts["DRC violations"],
         "report_sha256": report_sha256,
         "status": "ok",
-        "unconnected": counts["unconnected pads"],
+        "unconnected": observed_counts["unconnected pads"],
         "workflow": "kicad-gui-drc-report",
     }
 

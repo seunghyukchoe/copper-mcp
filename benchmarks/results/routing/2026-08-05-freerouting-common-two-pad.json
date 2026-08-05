@@ -1,7 +1,7 @@
 {
   "comparison_closed": false,
   "copper_process": {
-    "elapsed_ns": 217019417,
+    "elapsed_ns": 226415708,
     "output_sha256": "sha256:fa8478e410daf85145203f331db0f7161a9b3c9e94507dbc93092db181ff8276",
     "output_status": "valid",
     "returncode": 0,
@@ -28,7 +28,7 @@
     "status": "bound"
   },
   "freerouting_process": {
-    "elapsed_ns": 2901804459,
+    "elapsed_ns": 2913016209,
     "returncode": 0,
     "role": "freerouting_dsn_ses",
     "ses_sha256": "sha256:eb016ba1a7a4e680c472787dcf49b5f115c969d33603951b9b9fb3e94ba8fc4a",
@@ -57,19 +57,20 @@
     },
     "reasons": []
   },
-  "recorded_at_utc": "2026-08-05T07:30:18+00:00",
+  "recorded_at_utc": "2026-08-05T07:35:24+00:00",
   "results": [
     {
       "board_sha256": "sha256:fa8478e410daf85145203f331db0f7161a9b3c9e94507dbc93092db181ff8276",
       "drc": {
         "board_sha256": "sha256:fa8478e410daf85145203f331db0f7161a9b3c9e94507dbc93092db181ff8276",
+        "footprint_errors": 0,
         "hard_violations": 0,
         "report_sha256": "sha256:9722a51f2d676f65d7eafb0976a6ccd94e5ad1740af7a2925ec73fc274f4f428",
         "status": "ok",
         "unconnected": 0,
         "workflow": "kicad-gui-drc-report"
       },
-      "elapsed_ns": 217019417,
+      "elapsed_ns": 226415708,
       "length_nm": 20000000,
       "name": "copper_mcp",
       "status": "ok",
@@ -79,24 +80,26 @@
       "board_sha256": "sha256:99a6c10f975b155363e5386d2c2906c5d600bfaef02414b6be2b7d01b5c61755",
       "drc": {
         "board_sha256": "sha256:99a6c10f975b155363e5386d2c2906c5d600bfaef02414b6be2b7d01b5c61755",
+        "footprint_errors": 0,
         "hard_violations": 0,
         "report_sha256": "sha256:c14c15720e5fcad576859e795b59cbe53297eefd154924fe719534d024beeff4",
         "status": "ok",
         "unconnected": 0,
         "workflow": "kicad-gui-drc-report"
       },
-      "elapsed_ns": 2901804459,
+      "elapsed_ns": 2913016209,
       "length_nm": 20000000,
       "name": "freerouting",
       "status": "ok",
       "vias": 0
     }
   ],
-  "run_id": "sha256:03d7d5b951165ba843170afa191bb7b1db5de8420f18d264cd342a5635a446b9",
+  "run_id": "sha256:e7dd3deb411e9d1c00c57a4fea613256643003713c85dad9d85c6b4bd55b2a63",
   "schema": "copper-mcp/benchmark/freerouting-comparison/v1",
   "seed": 0,
   "source_drc": {
     "board_sha256": "sha256:f2bb74d00f9195237ecebbf15d55c1e0175c38cc0ca65b3281edf64a3ee45c9c",
+    "footprint_errors": 0,
     "hard_violations": 0,
     "report_sha256": "sha256:6dbc0a14a5ba8594246db23ad81ca5bff1900694bb6ebdf02ea52f8c494378d7",
     "status": "ok",
@@ -104,9 +107,10 @@
     "workflow": "kicad-gui-drc-report"
   },
   "source_drc_binding": {
+    "evidence_limit": "GUI report header identifies only a board basename",
     "expected_hard_violations": 0,
     "expected_intentional_unconnected_items": 1,
-    "status": "bound"
+    "status": "self_attested_unverified"
   },
   "source_preserved": true,
   "status": "unavailable_or_incomplete",

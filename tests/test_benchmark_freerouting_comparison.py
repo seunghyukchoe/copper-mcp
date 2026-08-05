@@ -136,9 +136,13 @@ def test_source_drc_binding_requires_declared_exact_baseline_and_source_hash() -
         "hard_violations": 0,
         "unconnected": 1,
         "report_sha256": "sha256:" + "b" * 64,
+        "workflow": "kicad-gui-drc-report",
     }
 
-    assert benchmark.source_drc_binding(source_sha, drc, expectation)["status"] == "bound"
+    assert (
+        benchmark.source_drc_binding(source_sha, drc, expectation)["status"]
+        == "self_attested_unverified"
+    )
     assert benchmark.source_drc_binding(source_sha, drc, None)["status"] == "unavailable"
     assert (
         benchmark.source_drc_binding(
@@ -158,7 +162,7 @@ def test_source_drc_binding_requires_declared_exact_baseline_and_source_hash() -
     )
 
 
-def test_gui_source_drc_requires_named_report_and_exact_report_counts(tmp_path: Path) -> None:
+def test_gui_source_drc_requires_unambiguous_expected_report_structure(tmp_path: Path) -> None:
     source = tmp_path / "source.kicad_pcb"
     source.write_text("(kicad_pcb (version 20240108))\n", encoding="utf-8")
     report = tmp_path / "source.rpt"
@@ -166,8 +170,11 @@ def test_gui_source_drc_requires_named_report_and_exact_report_counts(tmp_path: 
         "\n".join(
             (
                 "** Drc report for source.kicad_pcb **",
+                "** Report includes: Errors, Warnings **",
                 "** Found 0 DRC violations **",
                 "** Found 1 unconnected pads **",
+                "** Found 0 Footprint errors **",
+                "** End of Report **",
             )
         ),
         encoding="utf-8",
@@ -180,9 +187,37 @@ def test_gui_source_drc_requires_named_report_and_exact_report_counts(tmp_path: 
     assert evidence["report_sha256"] == _sha(report.read_bytes())
     assert evidence["hard_violations"] == 0
     assert evidence["unconnected"] == 1
+    assert evidence["footprint_errors"] == 0
     assert benchmark.gui_source_drc_metrics(source, None)["status"] == "unavailable"
     report.write_text("** Drc report for another.kicad_pcb **", encoding="utf-8")
     assert benchmark.gui_source_drc_metrics(source, report)["status"] == "failed"
+
+
+def test_gui_source_drc_rejects_duplicate_or_conflicting_counts(tmp_path: Path) -> None:
+    source = tmp_path / "source.kicad_pcb"
+    source.write_text("(kicad_pcb (version 20240108))\n", encoding="utf-8")
+    report = tmp_path / "source.rpt"
+    valid = (
+        "** Drc report for source.kicad_pcb **\n"
+        "** Report includes: Errors, Warnings **\n"
+        "** Found 0 DRC violations **\n"
+        "** Found 1 unconnected pads **\n"
+        "** Found 0 Footprint errors **\n"
+        "** End of Report **\n"
+    )
+    for malformed in (
+        valid.replace(
+            "** Found 0 DRC violations **\n",
+            "** Found 7 DRC violations **\n** Found 0 DRC violations **\n",
+        ),
+        valid.replace(
+            "** End of Report **", "** Drc report for source.kicad_pcb **\n** End of Report **"
+        ),
+        valid.replace("** End of Report **", "** Found 0 Other errors **\n** End of Report **"),
+        valid.replace("** End of Report **", ""),
+    ):
+        report.write_text(malformed, encoding="utf-8")
+        assert benchmark.gui_source_drc_metrics(source, report)["status"] == "failed"
 
 
 def test_dsn_export_relationship_is_never_inferred_from_separate_hashes(tmp_path: Path) -> None:
@@ -326,7 +361,7 @@ def test_committed_real_run_remains_explicitly_incomplete_evidence() -> None:
     assert report["source_drc"]["status"] == "ok"
     assert report["source_drc"]["hard_violations"] == 0
     assert report["source_drc"]["unconnected"] == 1
-    assert report["source_drc_binding"]["status"] == "bound"
+    assert report["source_drc_binding"]["status"] == "self_attested_unverified"
     assert report["fixture"]["dsn_source_export_binding"]["status"] == "self_attested_unverified"
     assert all(item["drc"]["status"] == "ok" for item in report["results"])
 

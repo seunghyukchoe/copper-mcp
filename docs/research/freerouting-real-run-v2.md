@@ -32,7 +32,7 @@ KiCad DRC found 0 hard violations and 1 unconnected item.
 The bounded external process emitted a valid SES (`sha256:eb016ba1a7a4e680c472787dcf49b5f115c969d33603951b9b9fb3e94ba8fc4a`).
 That SES was imported through KiCad's GUI into a disposable copy and saved. KiCad GUI DRC reports
 then verified that imported board and a CopperMCP workspace-preview plus pure-
-`apply_route_candidate` kernel result. The harness bounds, parses, hashes, and binds those reports
+`apply_route_candidate` kernel result. The harness bounds, parses, and hashes those reports
 because this macOS installation's `kicad-cli pcb drc` aborts before emitting JSON. The latter does
 not exercise MCP transport, operator authorization, apply tokens, CAS, backups, or atomic
 publication, so it is not evidence about the public apply-service workflow.
@@ -47,10 +47,13 @@ The committed machine-readable record is
 
 The record also binds the release asset and each result board to content hashes, reports bounded
 process timing, and confirms that source bytes remained unchanged. It records the source's KiCad
-GUI DRC report under the same bounded parsing and hashing gate, then binds its declared baseline
-of 0 hard violations and 1 intentional unconnected item. The DSN/source-export statement remains
-self-attested: separate source and DSN hashes do not demonstrate that KiCad exported one from the
-other. The FreeRouting import and CopperMCP runner receipts are deliberately self-attested; the harness consequently sets
+GUI DRC report under the same bounded parsing and hashing gate; the observed counts match the
+declared baseline of 0 hard violations and 1 intentional unconnected item. A GUI report header
+identifies only a board basename, not source bytes, so the source/report relationship is
+self-attested and non-causal unless a retained GUI attestation bundles both exact hashes. The
+DSN/source-export statement remains self-attested: separate source and DSN hashes do not
+demonstrate that KiCad exported one from the other. The FreeRouting import and CopperMCP runner
+receipts are deliberately self-attested; the harness consequently sets
 `comparison_closed: false` and `status: unavailable_or_incomplete` with
 `self_attested_unverified`. This evidence demonstrates a live file/process/KiCad bridge on a
 trivial board only. A harness-owned SES import and constrained candidate-runner transaction remain
