@@ -167,6 +167,19 @@ run preserves exact nets and reduces ERC warnings from seven to four—two isola
 labels and two missing private-library-configuration warnings—but is neither per-build evidence nor
 an ERC-clean claim.
 
+`verify_circuit_schematic_erc` adds a second bounded KiCad subprocess surface alongside board DRC,
+reviewed as [SEC-119](../ledgers/security-ledger.md). Its exposure is strictly lower: the input is
+CopperMCP's own deterministic render of Circuit Intent the caller just submitted, so no workspace
+snapshot, library-table discovery, or user file the model did not already provide reaches the child.
+Both `sch erc` and `sch export netlist` share one helper with a fixed argument vector—`--define-var`
+is never exposed—a private read-only snapshot, the same `RLIMIT_FSIZE` wrapper and private
+`HOME`/config environment as DRC, and post-run tree revalidation that refuses a mutated input or an
+unexpected side effect. Only digests, counts, and KiCad's violation-type keys are returned. This
+surface makes **no** containment or privacy claim about the subprocess beyond what board DRC already
+makes; the `sandbox-exec` boundary explored in the
+[2026-08-05 containment experiment](../research/kicad-schematic-erc-containment.md) is not
+reintroduced, and no path-taking ERC tool exists.
+
 Circuit Scene IR `0.2.0` is a current disclosure boundary: structured observation and its optional
 render can reveal placement and connectivity without returning source files. Scene requests are
 region-scoped and revision-bound; objects and footprint pad relationships/courtyard vertices consume

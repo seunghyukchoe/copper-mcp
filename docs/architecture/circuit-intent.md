@@ -104,6 +104,16 @@ parity oracle separately; authoritative ERC, schematic-to-PCB parity, and electr
 remain `not_run`, and board readiness is `false`. Retrieving the resource necessarily reveals
 the accepted circuit, so the host—not CopperMCP—decides whether those bytes enter model context.
 
+Authoritative ERC is a *separate* surface, not part of a build. `verify_circuit_schematic_erc` and
+`copper-mcp schematic-erc` render the same intent and hand those exact bytes to `kicad-cli sch erc`,
+then re-read them through `kicad-cli sch export netlist` and drive the parity oracle above. That
+result reports `erc: completed` with `passed` and `clean` as two separate signals, and upgrades
+`kicad_cli_parse` to `passed` because KiCad cannot check a schematic it failed to load.
+Schematic-to-board parity, electrical validation, and board readiness stay non-claims there too.
+Keeping ERC out of the build path is deliberate: rendering must remain usable with no KiCad
+install, and a render is not the place to spend a subprocess budget the caller did not ask for.
+See [ADR-0070](../adr/0070-authoritative-schematic-erc.md).
+
 ## Deliberate non-claims
 
 Structural validity, the bounded component/connectivity parity oracle, and a successful KiCad

@@ -83,9 +83,10 @@ symbols, empty footprints, and no board eligibility. A protocol-independent serv
 normalizes the logical content, renders twice, and returns a redacted build record. The CLI may
 explicitly create one new workspace schematic without overwrite; the stdio-only MCP adapter returns
 the same metadata plus one opaque, expiring resource capability. Neither delivery path performs a
-per-build KiCad parse, ERC, electrical validation, or schematic-to-board parity check; the reusable
-passive-subset verifier can separately check exact render replay plus KiCad component/connectivity
-parity. Capability
+per-build KiCad parse, ERC, electrical validation, or schematic-to-board parity check; a separate
+`verify_circuit_schematic_erc` surface runs authoritative `kicad-cli sch erc` on the rendered bytes
+and drives the passive-subset verifier with a real KiCad netlist export, reporting `passed` and
+`clean` independently and leaving schematic-to-board parity a non-claim. Capability
 access expires after 15 minutes, but expired bytes are reclaimed lazily on later store activity or
 process exit; no secure memory-erasure claim is made. See the
 [Circuit Intent and schematic contract](circuit-intent.md) and
