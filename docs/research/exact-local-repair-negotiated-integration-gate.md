@@ -149,13 +149,15 @@ changed, and the predeclared >=10% negotiated-quality threshold above remains un
 
 ## Safe next slice
 
-The next implementation must first add a separately reviewed, deterministic reference-router
-contract that accepts a *coordinator-derived* lattice path and independently validates it against
-the same immutable Board IR obstacle model with explicit obstacle/cancellation budgets. Only after
-that validator has a replayable test corpus should a new, opt-in negotiated-repair profile derive
-versioned windows and occupancy, meter local work, bind both repair and validation evidence into a
-new candidate identity, and pass the normal candidate-pair physical gate. It must retain the
-no-profile `NegotiatedRoutingResult` shape and v2 candidate identity byte-for-byte.
+The reviewed internal validator is now the starting point, not a future prerequisite. The next
+implementation must add a separately reviewed, opt-in coordinator transaction that derives
+versioned repair windows and a width-and-clearance-aware occupancy projection from the immutable
+Board IR and rejected allocation. It must meter both local-repair and validator work in one
+independent envelope, bind the resulting repair and validation evidence into a new candidate
+identity, and then require the normal candidate-pair physical-clearance gate. A held-out fixture
+must meet the predeclared >=10% negotiated-quality criterion before any improvement claim. The
+no-profile `NegotiatedRoutingResult` shape and v2 candidate identity must remain byte-for-byte
+unchanged.
 
 ## Nonclaims
 
