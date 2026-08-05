@@ -541,9 +541,9 @@
     "quality_claim": false,
     "rule": "a quality claim requires both asymmetric-primary and independent-control to show at least 10% lower router expansions or obstacle checks with no higher wire length, or fewer iterations/ripups without completion, overflow, or wire-length regression"
   },
-  "evidence_harness_command": "PYTHONPATH=src python3 scripts/benchmark_routing_policy_order.py --replays 10 --evidence-harness-commit 1fab7136591dc8b4c96e719e36a49781503df2d2 --output benchmarks/results/routing/2026-08-05-routing-policy-order.json",
-  "evidence_harness_commit": "1fab7136591dc8b4c96e719e36a49781503df2d2",
-  "implementation_commit": "d5b6c407a7937a50dd96d25d6e706947a99bba79",
+  "evidence_harness_command": "PYTHONPATH=src python3 scripts/benchmark_routing_policy_order.py --replays 10 --evidence-harness-commit 2d249640bc2c6abfd0ad5a89d21af7b89366ef4a --output benchmarks/results/routing/2026-08-05-routing-policy-order.json",
+  "evidence_harness_commit": "2d249640bc2c6abfd0ad5a89d21af7b89366ef4a",
+  "implementation_commit": "cde2f9adc3a6436dbe99a20a12946cc70616f232",
   "kicad_drc": "not_run",
   "non_claims": [
     "candidate geometry is not applied to a board",
@@ -554,9 +554,9 @@
   "policy_id": "deterministic-routing-policy-v1",
   "policy_profile": "deterministic-reference-v1",
   "replay_minimum": 10,
-  "run_id": "sha256:c404ced69c2f1cfca5986ee82eef2fa0361d7860e5958fbd4218f0420a622a25",
+  "run_id": "sha256:c63409d9429c345c70817ae5516d8b73d3055f01074a1bbff3e4e9765c22c7fa",
   "schema": "copper-mcp/benchmark/routing-policy-order/v1",
   "script": "scripts/benchmark_routing_policy_order.py",
-  "script_sha256": "b1cee85ff2180bbbb6040450b6381dac42f098dd55cd668ab7efda731bb28d39",
-  "typed_harness_base_commit": "b821fd2cfed06ab8e0a66062c76d598ce63211ae"
+  "script_sha256": "1edcb4d4d5eab284782b207fb34e8d0f6bf32c7571318ad79cdd7d71c65e1337",
+  "typed_harness_base_commit": "62570d5bcbe4d812028f77380cef8230241a1785"
 }
