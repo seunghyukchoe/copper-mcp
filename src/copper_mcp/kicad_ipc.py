@@ -68,6 +68,12 @@ _KICAD_PCB_ROOT = "kicad_pcb"
 _LIVE_IPC_DISABLED_MESSAGE = (
     "live KiCad IPC observation is disabled; set COPPER_MCP_ALLOW_LIVE_IPC=1 to enable it"
 )
+# UTF-8 code-unit bounds, used to settle the clear cases of a byte-budget test in constant time.
+_UTF8_MIN_BYTES_PER_CHARACTER = 1
+_UTF8_MAX_BYTES_PER_CHARACTER = 4
+# Slice width for the exact measurement. Large enough that the loop is a handful of iterations
+# for a realistic board, small enough that the transient encoded slice stays a fixed cost.
+_UTF8_MEASURE_CHUNK_CHARACTERS = 65_536
 _LAYER_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 _UUID = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
@@ -270,6 +276,55 @@ def _close_ipc_client(client: object) -> None:
         close()
     except Exception:
         return
+
+
+def _exceeds_utf8_budget(text: str, max_bytes: int) -> bool:
+    """Report whether ``text`` is over a UTF-8 *byte* ceiling without materializing an encoding.
+
+    ``COPPER_MCP_MAX_BOARD_BYTES`` is a byte budget: the first read is charged in bytes and
+    ``board_bytes`` is reported in bytes, so the confirmation has to be charged in bytes too.
+    ``len(text)`` counts code points, and board text is external-tool output that is routinely
+    non-ASCII -- accented silkscreen, a CJK net class -- so a confirmation can sit under the
+    character count while being up to four times over the byte ceiling. That is the same
+    character-versus-byte confusion this repository already hit once at an offset boundary.
+
+    Encoding the whole string to measure it would be byte-exact but would reintroduce the
+    unbudgeted second copy this gate exists to prevent, and gating on ``len(text) * 4`` alone
+    would be memory-safe but not byte-exact -- it would refuse in-budget boards. A cheap
+    upper-bound pre-check followed by an exact encode "only when ambiguous" is no better,
+    because the ambiguous case is precisely the common one (a board near its ceiling) and the
+    fallback still encodes the whole string.
+
+    So: settle the two unambiguous cases with the constant-time code-unit bounds, and settle
+    the rest by encoding bounded slices, stopping the moment the running total passes the
+    ceiling. That is byte-exact *and* caps the transient buffer at one slice
+    (``_UTF8_MEASURE_CHUNK_CHARACTERS`` code points) regardless of how long the string is.
+    Slicing a ``str`` is by code point, so a slice boundary can never split a character and no
+    incremental-encoder state is needed.
+    """
+
+    if len(text) * _UTF8_MIN_BYTES_PER_CHARACTER > max_bytes:
+        return True
+    if len(text) * _UTF8_MAX_BYTES_PER_CHARACTER <= max_bytes:
+        return False
+    total = 0
+    for start in range(0, len(text), _UTF8_MEASURE_CHUNK_CHARACTERS):
+        chunk = text[start : start + _UTF8_MEASURE_CHUNK_CHARACTERS]
+        total += len(chunk.encode("utf-8", errors="strict"))
+        if total > max_bytes:
+            return True
+    return False
+
+
+def _confirmation_within_budget(confirmation: str, max_bytes: int) -> None:
+    """Charge one confirmation read against the observation byte budget, or refuse."""
+
+    try:
+        over_budget = _exceeds_utf8_budget(confirmation, max_bytes)
+    except UnicodeError as error:
+        raise KicadIpcPayloadError("KiCad returned invalid board text") from error
+    if over_budget:
+        raise KicadIpcPayloadError("KiCad board confirmation exceeds the observation budget")
 
 
 def _count_serialized_items(
@@ -611,11 +666,10 @@ def _capture_live_editor_context_from_client(
         raise KicadIpcConnectionError("KiCad editor context observation failed") from error
     if not isinstance(confirmation, str):
         raise KicadIpcPayloadError("KiCad returned a non-text board snapshot")
-    # Same budget rule as the first read: charge the confirmation before encoding it, so an
+    # Same budget rule as the first read, and in the same unit: charge UTF-8 bytes, so an
     # oversized second read is refused as a payload-budget violation rather than encoded in
     # full and then reported as if the operator had edited the board.
-    if len(confirmation) > max_bytes:
-        raise KicadIpcPayloadError("KiCad board confirmation exceeds the observation budget")
+    _confirmation_within_budget(confirmation, max_bytes)
     if confirmation != source:
         raise KicadIpcConnectionError("KiCad board changed during editor context observation")
     if (active_index, active_name, selection) != (
@@ -764,13 +818,11 @@ def _capture_live_board_from_client(
         ) from error
     if not isinstance(confirmation, str):
         raise KicadIpcPayloadError("KiCad returned a non-text board snapshot")
-    # Charge the confirmation against the same budget as the first read, and do it before
-    # encoding rather than after. UTF-8 never encodes a character to fewer than one byte, so a
-    # character count over the byte ceiling is already over the byte ceiling; refusing here
-    # keeps an oversized second read a payload-budget refusal instead of mis-reporting it as a
-    # concurrent board edit, and never materializes an unbudgeted encoded copy of it.
-    if len(confirmation) > max_bytes:
-        raise KicadIpcPayloadError("KiCad board confirmation exceeds the observation budget")
+    # Charge the confirmation against the same budget as the first read, in the same unit, and
+    # without materializing a whole second encoding of it. Refusing here keeps an oversized
+    # second read a payload-budget refusal instead of mis-reporting it as a concurrent board
+    # edit; see ``_exceeds_utf8_budget`` for why the measurement is sliced rather than whole.
+    _confirmation_within_budget(confirmation, max_bytes)
     if confirmation != source:
         raise KicadIpcConnectionError("KiCad board changed during observation")
     confirmed_session_revision = _session_revision()

@@ -37,10 +37,17 @@ All notable changes are documented here. The format follows
   IPC read enforced `max_board_bytes`; the confirming read was UTF-8 encoded with no length check,
   so with `max_board_bytes=4096` an 11 MB second read was materialized in full and then surfaced
   as `KicadIpcConnectionError` ("KiCad board changed during observation") — a resource refusal
-  reported as a concurrent edit. The confirmation is now length-checked before any encode and
-  compared as text, so an oversized second read is a `KicadIpcPayloadError` budget refusal and no
-  unbudgeted encoded copy is created. An in-budget mid-observation edit is still the
-  connection-class refusal it was. The same fix applies to the editor-context capture. (#76)
+  reported as a concurrent edit. The confirmation is now charged against the budget before any
+  full encode and compared as text, so an oversized second read is a `KicadIpcPayloadError` budget
+  refusal and no unbudgeted encoded copy is created. `COPPER_MCP_MAX_BOARD_BYTES` is a byte
+  ceiling, so the confirmation is measured in **UTF-8 bytes**, not code points: board text is
+  external-tool output and is routinely non-ASCII, and a code-point count would let a
+  600-character run of `é` clear a 1024-byte budget at 1200 bytes and be mis-reported as a
+  concurrent edit again. The measurement settles the unambiguous cases with the 1- and 4-byte
+  UTF-8 code-unit bounds and otherwise encodes bounded slices, stopping at the ceiling, so it is
+  byte-exact while the transient buffer stays a fixed cost. An in-budget mid-observation edit is
+  still the connection-class refusal it was. The same fix applies to the editor-context
+  capture. (#76)
 
 ### Added
 

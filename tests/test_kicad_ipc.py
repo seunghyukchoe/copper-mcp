@@ -17,6 +17,7 @@ from copper_mcp.circuit_scene import (
 )
 from copper_mcp.config import Settings
 from copper_mcp.kicad_ipc import (
+    _UTF8_MEASURE_CHUNK_CHARACTERS,
     KicadIpcConfigurationError,
     KicadIpcConnectionError,
     KicadIpcDeadlineError,
@@ -25,6 +26,7 @@ from copper_mcp.kicad_ipc import (
     KicadIpcUnavailableError,
     KicadIpcVersionError,
     _count_serialized_items,
+    _exceeds_utf8_budget,
     capture_live_board,
     capture_live_editor_context,
     inspect_live_board,
@@ -595,6 +597,10 @@ class ConfirmationBudgetTests(unittest.TestCase):
     """#76: the second read is charged against the same budget as the first."""
 
     OVERSIZED = "y" * (11 * 1024 * 1024)
+    # 600 code points of U+00E9 encode to 1200 UTF-8 bytes. Against a 1024-byte budget the
+    # character count is comfortably *under* the ceiling while the byte length is nearly 20%
+    # over it, so a gate written as ``len(text) > max_bytes`` waves this through.
+    MULTIBYTE_OVERSIZED = '(kicad_pcb (gr_text "' + "é" * 600 + '"))'
 
     class _GrowingBoard(_Board):
         def __init__(self, source: str, confirmation: str) -> None:
@@ -637,6 +643,56 @@ class ConfirmationBudgetTests(unittest.TestCase):
             )
         self.assertNotIsInstance(caught.exception, KicadIpcConnectionError)
 
+    def test_a_multibyte_confirmation_is_charged_in_bytes_not_characters(self) -> None:
+        """#86 review: COPPER_MCP_MAX_BOARD_BYTES is a byte budget, so charge UTF-8 bytes.
+
+        Board text is external-tool output and is routinely non-ASCII (accented silkscreen,
+        CJK net classes). Counting code points lets such a confirmation clear the gate while
+        being over the byte ceiling, and the refusal then arrives as "the board changed" --
+        a false report of operator activity in place of the budget refusal #76 introduced.
+        """
+
+        self.assertLessEqual(len(self.MULTIBYTE_OVERSIZED), 1024)
+        self.assertGreater(len(self.MULTIBYTE_OVERSIZED.encode("utf-8")), 1024)
+        board = self._GrowingBoard('(kicad_pcb (net 1 "N"))', self.MULTIBYTE_OVERSIZED)
+        with self.assertRaises(KicadIpcPayloadError) as caught:
+            inspect_live_board(
+                _settings(max_board_bytes=1024),
+                client_factory=lambda **_: _KiCad(board=board),
+            )
+        self.assertNotIsInstance(caught.exception, KicadIpcConnectionError)
+        self.assertIn("budget", str(caught.exception))
+
+    def test_a_multibyte_editor_context_confirmation_is_charged_in_bytes(self) -> None:
+        class GrowingContextBoard(_ContextBoard):
+            def __init__(self, source: str, confirmation: str) -> None:
+                super().__init__(source=source)
+                self.confirmation = confirmation
+                self.reads = 0
+
+            def get_as_string(self) -> str:
+                self.reads += 1
+                return self.source if self.reads == 1 else self.confirmation
+
+        board = GrowingContextBoard('(kicad_pcb (net 1 "N"))', self.MULTIBYTE_OVERSIZED)
+        with self.assertRaises(KicadIpcPayloadError) as caught:
+            capture_live_editor_context(
+                _settings(max_board_bytes=1024),
+                client_factory=lambda **_: _KiCad(board=board),
+            )
+        self.assertNotIsInstance(caught.exception, KicadIpcConnectionError)
+        self.assertIn("budget", str(caught.exception))
+
+    def test_a_multibyte_confirmation_inside_the_byte_budget_is_still_compared(self) -> None:
+        """The byte-exact measurement must not turn an in-budget edit into a budget refusal."""
+
+        board = self._GrowingBoard('(kicad_pcb (net 1 "é"))', '(kicad_pcb (net 2 "é"))')
+        with self.assertRaises(KicadIpcConnectionError):
+            inspect_live_board(
+                _settings(max_board_bytes=1024),
+                client_factory=lambda **_: _KiCad(board=board),
+            )
+
     def test_an_in_budget_edit_during_observation_is_still_a_connection_refusal(self) -> None:
         """The budget check must not swallow the compare-and-swap it sits in front of."""
 
@@ -646,6 +702,25 @@ class ConfirmationBudgetTests(unittest.TestCase):
                 _settings(max_board_bytes=4096),
                 client_factory=lambda **_: _KiCad(board=board),
             )
+
+    def test_the_sliced_measurement_agrees_with_a_whole_string_encode(self) -> None:
+        """The slicing must be byte-exact at the boundary, including across a slice edge."""
+
+        astral = "\U0001d11e"  # 4 UTF-8 bytes, so slices land mid-run of a multi-byte character
+        samples = (
+            "",
+            "(kicad_pcb)",
+            "é" * 600,
+            astral * (_UTF8_MEASURE_CHUNK_CHARACTERS + 17),
+            "a" + astral * _UTF8_MEASURE_CHUNK_CHARACTERS,
+        )
+        for text in samples:
+            exact = len(text.encode("utf-8"))
+            for budget in (exact - 1, exact, exact + 1):
+                if budget < 1:
+                    continue
+                with self.subTest(characters=len(text), budget=budget):
+                    self.assertEqual(_exceeds_utf8_budget(text, budget), exact > budget)
 
     def test_a_non_text_confirmation_is_refused_without_being_compared(self) -> None:
         board = self._GrowingBoard('(kicad_pcb (net 1 "N"))', None)  # type: ignore[arg-type]
