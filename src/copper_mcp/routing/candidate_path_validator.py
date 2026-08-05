@@ -367,6 +367,34 @@ def _canonical_candidate(value: object, stop: _StopChecks) -> RouteCandidate | N
     return candidate
 
 
+def _preparation_independent_binding_failure(
+    request: RouteRequest,
+    candidate: RouteCandidate,
+) -> CandidatePathValidationFailure | None:
+    """Reject request-bound candidate claims before Board-IR preparation.
+
+    ``_prepare`` remains the authority for canonical snapshot verification and every
+    problem-derived fact. These comparisons need neither authority: a candidate that disagrees
+    with its declared request cannot become valid because a snapshot happens to be routable.
+    Keeping them ahead of preparation prevents a stale or mismatched untrusted candidate from
+    consuming the Board-IR obstacle budget.
+    """
+
+    if (
+        candidate.base_revision != request.board_revision
+        or candidate.patch.net_id != request.net_id
+        or candidate.patch.layer_id != request.layer_id
+        or candidate.settings != request.settings
+        or candidate.seed != request.seed
+        or candidate.pad_count != 2
+        or candidate.ordering_policy != SINGLE_PATH_ORDERING
+        or len(candidate.patch.paths) != 1
+        or candidate.metrics.vias != 0
+    ):
+        return CandidatePathValidationFailure.INVALID_CANDIDATE
+    return None
+
+
 def _failure_from_router(
     error: _ExpectedFailureError, stop: _StopChecks
 ) -> CandidatePathValidationFailure:
@@ -464,6 +492,12 @@ def validate_candidate_path(
             0,
             stop.observed or CandidatePathValidationFailure.INVALID_CANDIDATE,
         )
+    binding_failure = _preparation_independent_binding_failure(
+        checked_request,
+        checked_candidate,
+    )
+    if binding_failure is not None:
+        return _result(None, 0, binding_failure)
 
     bounded_request = replace(
         checked_request,
@@ -471,26 +505,16 @@ def validate_candidate_path(
     )
     work = _WorkBudget(settings=bounded_request.settings, cancelled=stop)
     try:
-        problem = _prepare(checked_snapshot := snapshot, bounded_request, work)
+        problem = _prepare(snapshot, bounded_request, work)
     except _ExpectedFailureError as error:
         return _result(work, 0, _failure_from_router(error, stop))
     except Exception:  # pragma: no cover - the private reference boundary must not escape
         return _result(work, 0, CandidatePathValidationFailure.INVALID_REQUEST)
 
     if (
-        checked_candidate.base_revision != checked_snapshot.snapshot_digest
-        or checked_candidate.base_revision != checked_request.board_revision
-        or checked_candidate.patch.net_id != checked_request.net_id
-        or checked_candidate.patch.layer_id != checked_request.layer_id
-        or checked_candidate.settings != checked_request.settings
-        or checked_candidate.seed != checked_request.seed
-        or checked_candidate.patch.width_nm != problem.width_nm
-        or checked_candidate.pad_count != 2
-        or checked_candidate.ordering_policy != SINGLE_PATH_ORDERING
-        or len(checked_candidate.patch.paths) != 1
+        checked_candidate.patch.width_nm != problem.width_nm
         or checked_candidate.start_pad_id != problem.start_pad.id
         or checked_candidate.end_pad_id != problem.end_pad.id
-        or checked_candidate.metrics.vias != 0
     ):
         return _result(work, 0, CandidatePathValidationFailure.INVALID_CANDIDATE)
 
