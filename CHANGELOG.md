@@ -8,6 +8,10 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Rebound the held-out audio benchmark artifact to the reachable merged-main source commit after
+  PR #51's squash merge. Its strict detached replay now proves the locally available source is in
+  checkout ancestry before checkout; all bound inputs and recorded benchmark metrics are unchanged.
+
 - Hardened the optional NE5532 KiCad DRC benchmark observation against untrusted report output.
   Reports are now descriptor-anchored and byte-bounded before UTF-8/JSON decoding, then reuse the
   adapter's duplicate-key, non-finite, nesting, and structural budgets. Normal aggregate counts,
