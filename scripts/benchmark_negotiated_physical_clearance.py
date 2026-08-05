@@ -43,7 +43,9 @@ from copper_mcp.routing.physical_clearance import verify_negotiated_physical_cle
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = Path(__file__).relative_to(ROOT)
 OUTPUT = ROOT / "benchmarks/results/routing/2026-08-05-negotiated-physical-clearance.json"
-SOURCE_COMMIT = "62a267e01c4cdbcafb0985d876bb7b54e7b9691b"
+# The routing implementation measured by this fixture is public and reachable from this branch.
+# Evidence is intentionally recorded separately because the benchmark harness was introduced later.
+IMPLEMENTATION_COMMIT = "e6634a72e7e1ec1204b38c5907a93b4a2e15e4ba"
 SOURCE_REVISION = f"sha256:{'c' * 64}"
 LAYER = "layer:F.Cu"
 HORIZONTAL = "net:horizontal"
@@ -250,30 +252,52 @@ def _run(replays: int) -> dict[str, Any]:
     }
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--replays", type=int, default=3)
-    parser.add_argument("--output", type=Path, default=OUTPUT)
-    args = parser.parse_args()
-    if not 3 <= args.replays <= 20:
-        raise SystemExit("--replays must be between 3 and 20")
+def _commit(value: str, *, option: str) -> str:
+    if len(value) != 40 or any(character not in "0123456789abcdef" for character in value):
+        raise ValueError(f"{option} must be a lowercase 40-character Git commit ID")
+    return value
+
+
+def build_report(*, evidence_source_commit: str, replays: int = 3) -> dict[str, Any]:
+    """Build a deterministic report bound to a replayable harness revision."""
+
+    if not 3 <= replays <= 20:
+        raise ValueError("replays must be between 3 and 20")
+    evidence_source_commit = _commit(evidence_source_commit, option="evidence_source_commit")
     payload: dict[str, Any] = {
-        "benchmark": "negotiated-physical-clearance-v2",
+        "benchmark": "negotiated-physical-clearance-v3",
         "environment": "deterministic CPU-only; no external EDA tool invoked",
-        "metrics": _run(args.replays),
+        "evidence_source_commit": evidence_source_commit,
+        "implementation_commit": IMPLEMENTATION_COMMIT,
+        "metrics": _run(replays),
         "non_claims": [
             "KiCad DRC or KiCad geometry parity",
             "multilayer, pads, vias, arcs, zones, or board-wide clearance",
             "fabrication clearance or FreeRouting parity",
         ],
-        "replays": args.replays,
-        "schema": "copper-mcp/benchmark/negotiated-physical-clearance/v2",
+        "replays": replays,
+        "schema": "copper-mcp/benchmark/negotiated-physical-clearance/v3",
         "script": SCRIPT_PATH.as_posix(),
         "script_sha256": hashlib.sha256(SCRIPT_PATH.read_bytes()).hexdigest(),
-        "source_commit": SOURCE_COMMIT,
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     payload["run_id"] = "sha256:" + hashlib.sha256(canonical).hexdigest()
+    return payload
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--evidence-source-commit", required=True)
+    parser.add_argument("--replays", type=int, default=3)
+    parser.add_argument("--output", type=Path, default=OUTPUT)
+    args = parser.parse_args()
+    try:
+        payload = build_report(
+            evidence_source_commit=args.evidence_source_commit,
+            replays=args.replays,
+        )
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(payload, indent=2, sort_keys=True))

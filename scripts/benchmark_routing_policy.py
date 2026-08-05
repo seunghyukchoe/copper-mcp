@@ -28,11 +28,9 @@ from copper_mcp.routing.policy import (
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "routing-policy" / "reference-input.json"
 SCRIPT_PATH = Path(__file__).relative_to(ROOT)
-# The first commit supplied the privacy/documentation/test behavior this benchmark measures.  This
-# harness and its artifact are intentionally committed afterwards so the evidence source cannot
-# accidentally name a pre-hardening implementation.
-EVIDENCE_SOURCE_COMMIT = "849325a4409ecc721077476b7db7107b15fdfd58"
-INITIAL_IMPLEMENTATION_COMMIT = "7a5bae2f5d39ad1cb014d4036b40451b914a2309"
+# The policy implementation measured by this fixture is public and reachable from this branch.
+# Evidence is intentionally recorded separately because the benchmark harness was introduced later.
+IMPLEMENTATION_COMMIT = "f1af095bfd6712969b0f9fb29933cd48aedef0dc"
 REPLAY_COUNT = 10
 
 
@@ -96,13 +94,19 @@ def _metrics() -> dict[str, Any]:
     }
 
 
-def build_report() -> dict[str, Any]:
+def _commit(value: str, *, option: str) -> str:
+    if len(value) != 40 or any(character not in "0123456789abcdef" for character in value):
+        raise ValueError(f"{option} must be a lowercase 40-character Git commit ID")
+    return value
+
+
+def build_report(*, evidence_source_commit: str) -> dict[str, Any]:
     """Build one content-addressed, locally reproducible policy-boundary report."""
 
     report: dict[str, Any] = {
-        "schema": "copper-mcp/benchmark/routing-policy/v1",
-        "evidence_source_commit": EVIDENCE_SOURCE_COMMIT,
-        "initial_implementation_commit": INITIAL_IMPLEMENTATION_COMMIT,
+        "schema": "copper-mcp/benchmark/routing-policy/v2",
+        "evidence_source_commit": _commit(evidence_source_commit, option="evidence_source_commit"),
+        "implementation_commit": IMPLEMENTATION_COMMIT,
         "script": SCRIPT_PATH.as_posix(),
         "script_sha256": hashlib.sha256(SCRIPT_PATH.read_bytes()).hexdigest(),
         "fixture": FIXTURE.relative_to(ROOT).as_posix(),
@@ -124,9 +128,13 @@ def build_report() -> dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--evidence-source-commit", required=True)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    report = build_report()
+    try:
+        report = build_report(evidence_source_commit=args.evidence_source_commit)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
     rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if args.output is not None:
         args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -28,6 +28,15 @@ now checked against a same-budget deterministic A* replay before the coordinator
 account for them.  The direct benchmark therefore isolates the physical-clearance delta, while the
 router-boundary tests cover candidate provenance and obstacle legality separately.
 
+## Public benchmark provenance
+
+The benchmark artifact records two non-interchangeable, reachable Git revisions.  Its
+`implementation_commit` names the public router code containing the physical-clearance behavior;
+its `evidence_source_commit` names the later revision containing the exact benchmark harness and
+fixture used to generate the artifact.  The run ID covers both values and the SHA-256 of the script.
+This avoids asserting that an earlier router-only commit can reproduce a script that did not exist
+there, while retaining a direct link to the measured implementation.
+
 ## Primary sources and design implications
 
 - [KiCad PCB Editor: net classes](https://docs.kicad.org/master/en/pcbnew/pcbnew.html#net-classes)

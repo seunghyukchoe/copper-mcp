@@ -90,3 +90,11 @@ PCB routing; it does not model all PCB constraints; and it does not add a public
 board mutation capability.  The future integration point is a coordinator that consumes advisory
 choices before deterministic route construction, candidate verification, authoritative DRC, and
 explicit apply authorization.
+
+## Public benchmark provenance
+
+The accompanying replay artifact records `implementation_commit` for the public policy contract
+and a distinct `evidence_source_commit` for the later revision containing the exact replay harness
+and fixture.  Both values are part of the content-addressed report, alongside script and fixture
+hashes.  This keeps implementation lineage and reproducible evidence explicit rather than assigning
+replay authority to an unreachable pre-integration branch commit.
