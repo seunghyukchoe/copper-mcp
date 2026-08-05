@@ -20,6 +20,7 @@ compositionally verified plan without creating an implicit apply/export channel?
   application service. [ADR-0055](../adr/0055-bounded-negotiated-congestion.md) supplies the
   existing bounded present/history occupancy coordinator and its PathFinder provenance
   ([McMurchie and Ebeling, 1995](https://doi.org/10.1109/fpga.1995.242049)).
+  [ADR-0066](../adr/0066-atomic-route-bundle-preview.md) records the resulting public contract.
 
 ## Decision
 
@@ -31,8 +32,19 @@ has a two-pin candidate, no connection/unrouted result remains, no lattice overf
 the core's cross-net swept-disc physical-clearance gate accepted the allocation.
 
 The input order is retained in the plan identity and seeds, while candidate storage remains
-canonical by net ID. This prevents an untrusted caller from changing the coordinator's stable
-canonical output merely by permuting JSON fields.
+canonical by net ID. Only the *storage* order is canonicalized: whatever order the references
+arrive in, the published candidate list and the digest's candidate-ID list are sorted by net ID, so
+a caller cannot alter the shape of the response by reordering the request.
+
+Reference order is deliberately not neutralized, because it is semantically meaningful. Each
+reference derives its per-net search seed from its index, so permuting `net_ref_ids` permutes the
+seeds and genuinely produces different candidate IDs and a different `bundle_id`. That is a
+different request, not a different rendering of the same one. The request boundary therefore caps
+the accepted seed so every derived `seed + index` stays inside the supported integer range.
+
+The identity also binds the coordinator's `policy_digest`, which covers the iteration ceiling and
+the penalty/budget envelope, so bundles composed from the same references under different
+coordinator policy cannot collide.
 
 For public-fixture evidence, an internal serializer verifies the plan identity and repeats the
 bounded physical-clearance gate before emitting one disposable, source-preserving combined board.

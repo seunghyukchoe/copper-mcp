@@ -8,9 +8,39 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Route-bundle preview now refuses a seed whose derived per-net value would leave the supported
+  integer range. The request boundary and the published JSON Schema both reserve headroom for the
+  largest reachable reference index, so a schema-valid request can no longer escape the service as
+  an untyped error instead of a typed refusal.
+
+- An expired route-bundle time budget is now reported as budget exhaustion rather than as a
+  deterministic-replay mismatch. The two negotiation runs share one deadline, so an expiry between
+  them is a resource outcome; the replay-mismatch diagnostic is now reserved for genuine structural
+  differences.
+
+- Restored `DEVNULL` for the bounded KiCad DRC child's stdout and stderr, reverting an unrelated
+  change to never-read on-disk capture files. SEC-113's zero-byte parent capture budget is the
+  governing mitigation, and the capture had reintroduced a file-size failure mode for a chatty but
+  valid KiCad run. Report bounding, timeout, private child environment, and aggregate evidence are
+  unchanged.
+
 - Rebound the route-bundle benchmark artifact to released CopperMCP `0.5.0`. Its provenance now
   records the source version explicitly, while retaining exact script, fixture, combined-derivative,
   DRC-context, and self-digest bindings.
+
+### Changed
+
+- The route-bundle plan digest now binds the coordinator's policy-envelope digest, and the plan
+  publishes it as `policy_digest`. Bundles composed from the same references under different
+  coordinator iteration or penalty limits no longer share one `bundle_id`. The recorded benchmark
+  identity and combined-derivative revisions are regenerated accordingly; every measured metric is
+  unchanged.
+
+### Added
+
+- [ADR-0066](docs/adr/0066-atomic-route-bundle-preview.md) records the public route-bundle contract:
+  the all-or-nothing publication rule, the double-negotiation determinism requirement, the digest
+  binding, and the explicit non-claims.
 
 ## [0.5.0] - 2026-08-05
 
