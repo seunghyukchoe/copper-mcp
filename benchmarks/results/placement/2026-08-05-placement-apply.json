@@ -29,7 +29,7 @@
     "live IPC mutation or undo integration",
     "fabrication, electrical, or FreeRouting parity"
   ],
-  "run_id": "sha256:baf7af2d303d72bc59159425dc680cc320497a08cd564ea32e7204e5e7d1c016",
+  "run_id": "sha256:096c9bcb467871e1c24611aa0240aa3294e4cb02b9d81ab0d4725a2ede33e301",
   "schema": "copper-mcp/benchmark/placement-apply/v1",
-  "source_commit": "ceb4e9f31cd348d976c46fdd76c08a19d6648fda"
+  "source_commit": "d0fbc09a86565d30c834e7b33c9245212e485a9c"
 }

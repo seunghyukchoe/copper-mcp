@@ -1,8 +1,8 @@
 {
   "date_utc": "2026-08-05",
   "environment": {
-    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
-    "python": "3.14.2"
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
   },
   "fixture": "placement-v0.1/placement-legal.kicad_pcb",
   "metrics": {
@@ -11,7 +11,7 @@
     "context_binding": true,
     "deterministic_evidence_digests": 1,
     "kicad_version": "10.x",
-    "median_public_preview_drc_ns": 426619458,
+    "median_public_preview_drc_ns": 690878042,
     "passed_drc_runs": 3,
     "repetitions": 3,
     "source_bytes_inode_mtime_preserved": true,
@@ -23,7 +23,7 @@
     "electrical or fabrication readiness",
     "FreeRouting parity"
   ],
-  "run_id": "sha256:bed5fb0c00fdbea3083d4cfcf305d0745da9de5ecdc7130dc43ccc7e30041745",
+  "run_id": "sha256:cc347454b154a73eeb73287b65fd3841c6340e5148947dfb009abaad5cc9a9e5",
   "schema": "copper-mcp/benchmark/public-placement-preview-drc/v1",
-  "source_commit": "6959bc22b45ce6a2a4550ef3ce375cc9f332fb8e"
+  "source_commit": "d0fbc09a86565d30c834e7b33c9245212e485a9c"
 }

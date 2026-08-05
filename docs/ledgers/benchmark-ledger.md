@@ -666,8 +666,8 @@ historical evidence; these runs were generated from the clean implementation com
 
 | Field | Recorded evidence |
 |---|---|
-| Run ID | `sha256:baf7af2d303d72bc59159425dc680cc320497a08cd564ea32e7204e5e7d1c016` |
-| Date and commit | 2026-08-05; source commit `ceb4e9f31cd348d976c46fdd76c08a19d6648fda` |
+| Run ID | `sha256:096c9bcb467871e1c24611aa0240aa3294e4cb02b9d81ab0d4725a2ede33e301` |
+| Date and commit | 2026-08-05; source commit `d0fbc09a86565d30c834e7b33c9245212e485a9c` |
 | Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad and live IPC not invoked |
 | Dataset | [`placement-legal.kicad_pcb`](../../tests/fixtures/placement-v0.1/placement-legal.kicad_pcb), one committed front-side orthogonal footprint fixture |
 | Configuration | `copper-mcp/benchmark/placement-apply/v1`; explicit placement-scoped token; operator apply enabled only in an isolated temporary workspace; source/snapshot/candidate CAS; lock/backup/atomic service; route-token cross-domain replay |
@@ -679,11 +679,24 @@ historical evidence; these runs were generated from the clean implementation com
 
 | Field | Recorded evidence |
 |---|---|
-| Run ID | `sha256:e4b1409098de79f6ebf496ac7c53ba3be7763c84e1fb8bfd2f01eda26dad88d4` |
-| Date and commit | 2026-08-05; source commit `ceb4e9f31cd348d976c46fdd76c08a19d6648fda` |
+| Run ID | `sha256:d57b448c4fb6982686230bf9c9bda98751fb5de451147dd9755d21c4f2e8fd98` |
+| Date and commit | 2026-08-05; source commit `d0fbc09a86565d30c834e7b33c9245212e485a9c` |
 | Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad and live IPC not invoked |
 | Dataset | [`rc-low-pass-routing-v1.kicad_pcb`](../../benchmarks/audio/fixtures/rc-low-pass-routing-v1.kicad_pcb), CopperMCP-original synthetic two-pad RC microcase with Apache-2.0 catalog metadata |
 | Configuration | `copper-mcp/benchmark/audio-routing-gap/v1`; ten deterministic route previews, candidate identity replay, disposable source-preserving serialization, and Board IR reparse |
 | Metrics | Candidate deterministic `true`; derivative bytes deterministic `true`; original segments `0`; rendered segments `1`; new copper segments `1`; new copper length `8,000,000 nm`; source unchanged `true`; candidate applied `false`; authoritative DRC `false` |
 | Artifact | [`2026-08-04-audio-routing-gap-378d4c6.json`](../../benchmarks/results/routing/2026-08-04-audio-routing-gap-378d4c6.json) |
 | Interpretation | This is a deterministic candidate-to-disposable-copper regression for a synthetic low-voltage audio-shaped RC net. It does not establish external-board coverage, circuit correctness, KiCad DRC, apply, manufacturability, fabrication readiness, hardware behavior, or FreeRouting parity. |
+
+#### B-044 — public file-backed placement preview with opt-in KiCad DRC
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:cc347454b154a73eeb73287b65fd3841c6340e5148947dfb009abaad5cc9a9e5` |
+| Date and commit | 2026-08-05; source commit `d0fbc09a86565d30c834e7b33c9245212e485a9c` |
+| Environment | Apple arm64 CPU; Python 3.12.13; KiCad 10.x headless CLI DRC |
+| Dataset | [`placement-legal.kicad_pcb`](../../tests/fixtures/placement-v0.1/placement-legal.kicad_pcb), the committed front-side orthogonal rectangular-courtyard placement fixture |
+| Configuration | `copper-mcp/benchmark/public-placement-preview-drc/v1`; three public `preview_placement` calls with `include_drc=true`, private disposable KiCad JSON DRC, candidate/source/patched-board/context binding, and source preservation checks |
+| Metrics | `passed_drc_runs=3`; `clean_drc_runs=0` (warning-bearing fixture); deterministic evidence digests `1`; candidate/context binding `true`; source bytes/inode/mtime preserved `true`; workspace mutations `0`; median preview+DRC `690,878,042 ns` |
+| Artifact | [`2026-08-05-public-placement-drc.json`](../../benchmarks/results/placement/2026-08-05-public-placement-drc.json) |
+| Interpretation | This measures the new public disclosure boundary and private replay, not a clean-board claim: hard-gate `passed` is distinct from strict `clean`. It does not establish general footprint fidelity, live editor CAS, apply, ERC/electrical correctness, fabrication readiness, hardware behavior, or FreeRouting parity. |
