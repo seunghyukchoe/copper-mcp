@@ -16,12 +16,18 @@ apply tokens, model prompts, provider credentials, endpoints, or plugins.
 ## Protocol and checks
 
 One UTF-8 JSON request and one UTF-8 JSON response are each capped at 32,768 bytes, have closed
-object shapes, reject duplicate keys at every nesting level, reject non-finite constants, and are
-canonicalized with sorted keys and SHA-256.  A 256-bit nonce and the request digest bind the reply
-to this exact invocation.  The parent additionally checks the reference policy identity, the
-policy-input digest, exact net-set permutation, empty window selections, and decision digest.  Any
-bad frame, child exit, timeout, cancellation, extra output, identity mismatch, or validation
-failure becomes the single fixed `POLICY_WORKER_REJECTED` error; child diagnostics are discarded.
+object shapes, reject duplicate keys at every nesting level, and reject non-finite constants.  The
+request grammar deliberately accepts a bounded valid JSON representation with a different member
+order or insignificant whitespace, then reconstructs canonical sorted-key bytes before deriving
+its SHA-256 digest.  The response grammar is stricter: after closed-schema/type/digest validation,
+the raw child bytes must be byte-for-byte equal to the canonical sorted-key encoding, including its
+single trailing newline.  Trailing whitespace, alternate member order, alternate spacing, or extra
+bytes therefore fail closed instead of becoming a second representation of the same receipt.  A
+256-bit nonce and the request digest bind the reply to this exact invocation.  The parent
+additionally checks the reference policy identity, the policy-input digest, exact net-set
+permutation, empty window selections, and decision digest.  Any bad frame, child exit, timeout,
+cancellation, extra output, identity mismatch, or validation failure becomes the single fixed
+`POLICY_WORKER_REJECTED` error; child diagnostics are discarded.
 
 The worker launches only `sys.executable` with an argument sequence, `shell=False`, isolated
 Python mode, a replacement three-variable locale/timezone environment, `close_fds=True`, no

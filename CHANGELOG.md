@@ -33,6 +33,12 @@ All notable changes are documented here. The format follows
   the initial negotiated net order; no-profile v2 result shape and candidate identity are
   unchanged. This adds no MCP, model, corridor, repair, or apply authority.
 
+- Added an internal one-shot isolated worker protocol for the fixed deterministic routing-policy
+  reference backend. It accepts only neutral, scalar, order-only inputs; uses nonce- and
+  digest-bound canonical responses with bounded timeout/cancellation and sanitized child process
+  state; and fails closed on malformed or noncanonical worker output. It adds no model, MCP,
+  negotiated-routing, KiCad, candidate, copper, or apply authority, and it is not an OS sandbox.
+
 - Added a bounded external-process FreeRouting comparison harness with bounded input/output handling,
   minimal child environment, KiCad-DRC evidence requirements, and self-attested receipt bindings.
   The receipts deliberately cannot close a comparison; no real FreeRouting/KiCad comparison has
