@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
+import sys
 from datetime import UTC, datetime
 
 import pytest
@@ -60,6 +62,59 @@ def test_drc_summary_rejects_malformed_or_overdeep_reports(tmp_path, payload: by
 
     with pytest.raises(benchmark.AudioRoutingBenchmarkError, match="cannot be parsed"):
         benchmark._drc_summary(tmp_path, report, max_report_bytes=1024)
+
+
+def test_drc_runner_discards_noisy_child_diagnostics_without_changing_counts(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    shim = tmp_path / "noisy-kicad"
+    shim.write_text(
+        "\n".join(
+            [
+                f"#!{sys.executable}",
+                "from pathlib import Path",
+                "import json",
+                "import sys",
+                "sys.stdout.write('o' * 1000000)",
+                "sys.stderr.write('e' * 1000000)",
+                "report = Path(sys.argv[sys.argv.index('--output') + 1])",
+                "board = Path(sys.argv[-1])",
+                "unconnected = 24 if board.name == 'source-drc.kicad_pcb' else 23",
+                "report.write_text(json.dumps({",
+                "    'violations': [{}] * 14,",
+                "    'unconnected_items': [{}] * unconnected,",
+                "}))",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    shim.chmod(0o700)
+    monkeypatch.setattr(benchmark, "KICAD_CLI", shim)
+    original_run = subprocess.run
+    process_options: list[tuple[object, object, bool]] = []
+
+    def observing_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        process_options.append((kwargs["stdout"], kwargs["stderr"], kwargs["shell"]))
+        return original_run(*args, **kwargs)  # type: ignore[arg-type, return-value]
+
+    monkeypatch.setattr(benchmark.subprocess, "run", observing_run)
+
+    metrics = benchmark.run_benchmark(1, include_kicad_drc=True)
+
+    assert process_options == [(subprocess.DEVNULL, subprocess.DEVNULL, False)] * 9
+    assert metrics["authoritative_drc"] == {
+        "attempted": True,
+        "status": "completed-not-clean",
+        "authority": "KiCad CLI JSON DRC over independent disposable single-net derivatives",
+        "kicad_cli_path": str(shim),
+        "source": {"violations": 14, "unconnected_items": 24},
+        "candidates": [
+            {"net": net, "violations": 14, "unconnected_items": 23}
+            for net in ("L_IN", "R_IN", "L_SUM", "R_SUM", "L_OUT", "R_OUT", "VPOS", "VNEG")
+        ],
+        "combined_candidate_board": False,
+        "clean": False,
+    }
 
 
 def test_original_unrouted_ne5532_fixture_has_pinned_public_route_evidence() -> None:
