@@ -32,6 +32,32 @@ cancellation, extra output, identity mismatch, or validation failure becomes the
 These SHA-256 values and nonce are content/correlation bindings only. They are not a signature,
 authentication mechanism, or proof of the worker's origin.
 
+## Negotiated-routing admission
+
+The only worker-backed coordinator integration profile is the private literal
+`deterministic-reference-worker-v1`.  It derives the same neutral, scalar, no-window input as
+ADR-0064's in-process `deterministic-reference-v1` baseline, sends that one input to the fixed
+worker, then rechecks the returned policy input digest, complete known-net permutation, empty
+window selections, policy identity, decision digest, and composite candidate binding before any
+router is constructed.  A worker timeout, cancellation, exception, noncanonical response, or any
+failed recheck returns the coordinator's existing fixed rejection (or cancellation) with zero
+router calls, candidates, or connections.  The profile can only alter the first pass's request
+order; retries continue to use the coordinator's exact congestion order and retain all of its
+iteration, expansion, obstacle-check, and physical-clearance budgets.
+
+The worker profile does not add a model, plugin, endpoint, provider credential, corridor, repair
+window, geometry, copper, MCP tool, KiCad operation, candidate authority, or apply authority.
+Python documents isolated mode with `-I` as ignoring Python environment variables and user site
+configuration; this is one part of the child-process boundary, not an OS sandbox. Source:
+[Python isolated-mode documentation](https://docs.python.org/3/using/cmdline.html#cmdoption-I).
+
+PathFinder is the primary source for keeping repeated congestion repair coordinator-owned rather
+than giving a policy arbitrary iterative routing control; its FPGA model is not PCB clearance or
+manufacturing evidence. Source: [McMurchie and Ebeling (1995)](https://doi.org/10.1109/FPGA.1995.242049).
+The policy-order experiment is also not a claim that learned routing is physically valid: the
+primary global-routing learning work only motivates evaluating constrained choices against a
+deterministic baseline. Source: [Liao et al.](https://arxiv.org/abs/1906.08809).
+
 The worker launches only `sys.executable` with an argument sequence, `shell=False`, isolated
 Python mode, a replacement three-variable locale/timezone environment, `close_fds=True`, no
 passed descriptors, a temporary working directory, and a new POSIX session.  It has no
