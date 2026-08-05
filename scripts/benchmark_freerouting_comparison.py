@@ -13,9 +13,12 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import platform
 import re
+import selectors
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -23,18 +26,39 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import IO, Any, cast
+
+from copper_mcp.kicad_cli import (
+    _BOUNDED_EXEC,
+    KiCadCliError,
+    _drc_object_pairs,
+    _finite_json_float,
+    _parse_drc_report,
+    _preflight_drc_json,
+    _reject_json_constant,
+    _validate_drc_json_tree,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = "copper-mcp/benchmark/freerouting-comparison/v1"
 FREEROUTING_LICENSE = "GPL-3.0-only"
 REDACTED = "[redacted]"
 _SECRET = re.compile(r"(?i)(bearer\s+|token=|password=|api[_-]?key=)[^\s]+")
+_PATH = re.compile(r"(?<![A-Za-z0-9])(?:/[A-Za-z0-9._~+@%=-]+){2,}|[A-Za-z]:\\[^\s]+")
+_VERSION = re.compile(r"\b\d+\.\d+(?:\.\d+)?(?:[-+][A-Za-z0-9._-]+)?\b")
 _VIA = re.compile(r"\(via\b")
 _SEGMENT = re.compile(
     r"\(segment\s+\(start\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\)"
     r"\s+\(end\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\)",
 )
+MAX_PROCESS_OUTPUT_BYTES = 8 * 1024
+MAX_BOARD_BYTES = 32 * 1024 * 1024
+MAX_DSN_BYTES = 64 * 1024 * 1024
+MAX_PROVENANCE_BYTES = 128 * 1024
+MAX_DRC_REPORT_BYTES = 32 * 1024 * 1024
+MAX_JAR_BYTES = 512 * 1024 * 1024
+MAX_EXECUTABLE_BYTES = 128 * 1024 * 1024
+MAX_BOARD_ITEMS = 100_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,20 +71,33 @@ class ProcessResult:
     stderr: str
 
 
-def sha256_file(path: Path) -> str:
-    """Hash a file without interpreting its content."""
+def read_bounded_bytes(path: Path, maximum: int) -> bytes:
+    """Read an untrusted regular file only after enforcing a byte ceiling."""
+
+    if maximum <= 0 or not path.is_file():
+        raise ValueError("required file is unavailable")
+    if path.stat().st_size > maximum:
+        raise ValueError("input exceeds its configured byte limit")
+    with path.open("rb") as source:
+        payload = source.read(maximum + 1)
+    if len(payload) > maximum:
+        raise ValueError("input exceeds its configured byte limit")
+    return payload
+
+
+def sha256_file(path: Path, maximum: int) -> str:
+    """Hash an untrusted file only after enforcing its relevant byte ceiling."""
 
     digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
+    digest.update(read_bounded_bytes(path, maximum))
     return "sha256:" + digest.hexdigest()
 
 
 def redact(value: str) -> str:
-    """Keep bounded process diagnostics while removing common credentials."""
+    """Remove secrets and private paths before retaining bounded diagnostics."""
 
-    return _SECRET.sub(lambda match: match.group(1) + REDACTED, value)[:8_000]
+    value = _SECRET.sub(lambda match: match.group(1) + REDACTED, value)
+    return _PATH.sub(REDACTED, value)[:MAX_PROCESS_OUTPUT_BYTES]
 
 
 def _output_text(value: str | bytes | None) -> str:
@@ -87,44 +124,84 @@ def copper_argv(
         raise ValueError(f"unsupported CopperMCP command placeholder: {error.args[0]}") from error
 
 
+def _kill_process(process: subprocess.Popen[bytes]) -> None:
+    if os.name == "posix":
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+            return
+        except ProcessLookupError:
+            return
+    process.kill()
+
+
 def run_process(argv: tuple[str, ...], timeout_seconds: int, cwd: Path) -> ProcessResult:
-    """Run one process with no shell and return redacted, bounded evidence."""
+    """Run one process with bounded streaming capture and group termination on failure."""
 
     started = time.perf_counter_ns()
     try:
-        completed = subprocess.run(  # noqa: S603 - argv is explicit, shell is never used
+        process = subprocess.Popen(  # noqa: S603 - argv is explicit, shell is never used
             argv,
             cwd=cwd,
-            capture_output=True,
-            check=False,
-            text=True,
-            timeout=timeout_seconds,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=os.name == "posix",
         )
-    except subprocess.TimeoutExpired as error:
-        return ProcessResult(
-            argv=argv,
-            elapsed_ns=time.perf_counter_ns() - started,
-            returncode=None,
-            status="timeout",
-            stdout=redact(_output_text(error.stdout)),
-            stderr=redact(_output_text(error.stderr)),
-        )
-    except OSError as error:
+    except OSError:
         return ProcessResult(
             argv=argv,
             elapsed_ns=time.perf_counter_ns() - started,
             returncode=None,
             status="unavailable",
             stdout="",
-            stderr=redact(str(error)),
+            stderr="",
         )
+    stdout_stream = process.stdout
+    stderr_stream = process.stderr
+    assert stdout_stream is not None and stderr_stream is not None
+    streams: tuple[IO[Any], IO[Any]] = (stdout_stream, stderr_stream)
+    captured: dict[IO[Any], bytearray] = {stream: bytearray() for stream in streams}
+    status = "ok"
+    deadline = time.monotonic() + timeout_seconds
+    with selectors.DefaultSelector() as selector:
+        for stream in captured:
+            selector.register(stream, selectors.EVENT_READ)
+        while selector.get_map():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                status = "timeout"
+                _kill_process(process)
+                break
+            for key, _ in selector.select(min(remaining, 0.1)):
+                stream = cast(IO[Any], key.fileobj)
+                chunk = os.read(stream.fileno(), 4096)
+                if not chunk:
+                    selector.unregister(stream)
+                    continue
+                target = captured[stream]
+                if len(target) + len(chunk) > MAX_PROCESS_OUTPUT_BYTES:
+                    status = "output_limit"
+                    _kill_process(process)
+                    break
+                target.extend(chunk)
+            if status != "ok":
+                break
+    try:
+        returncode = process.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        _kill_process(process)
+        returncode = process.wait(timeout=1)
+        status = "timeout"
+    finally:
+        for stream in streams:
+            stream.close()
     return ProcessResult(
         argv=argv,
         elapsed_ns=time.perf_counter_ns() - started,
-        returncode=completed.returncode,
-        status="ok" if completed.returncode == 0 else "failed",
-        stdout=redact(completed.stdout),
-        stderr=redact(completed.stderr),
+        returncode=returncode,
+        status=status if status != "ok" else ("ok" if returncode == 0 else "failed"),
+        stdout=redact(_output_text(bytes(captured[stdout_stream]))),
+        stderr=redact(_output_text(bytes(captured[stderr_stream]))),
     )
 
 
@@ -132,13 +209,14 @@ def version_probe(executable: Path, cwd: Path) -> dict[str, Any]:
     """Capture a local executable version as diagnostic evidence, never a requirement."""
 
     result = run_process((str(executable), "--version"), 10, cwd)
-    return {"status": result.status, "stdout": result.stdout, "stderr": result.stderr}
+    match = _VERSION.search(result.stdout)
+    return {"status": result.status, "version": match.group(0) if match else "unknown"}
 
 
 def _parse_template(path: Path | None) -> tuple[str, ...] | None:
     if path is None:
         return None
-    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw = _strict_json(read_bounded_bytes(path, MAX_PROVENANCE_BYTES), "command template")
     if (
         not isinstance(raw, list)
         or not raw
@@ -152,17 +230,36 @@ def _provenance(path: Path | None) -> tuple[dict[str, Any] | None, list[str]]:
     if path is None:
         return None, ["fixture provenance JSON is required"]
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        return None, [f"fixture provenance cannot be read: {error}"]
+        value = _strict_json(read_bounded_bytes(path, MAX_PROVENANCE_BYTES), "fixture provenance")
+    except (OSError, ValueError):
+        return None, ["fixture provenance cannot be read safely"]
     if not isinstance(value, dict):
         return None, ["fixture provenance must be a JSON object"]
-    missing = [
-        key for key in ("license_spdx", "origin", "derivation_statement") if not value.get(key)
-    ]
-    if value.get("origin") in {"third-party", "unknown"}:
-        missing.append("fixture provenance must say independently authored or coppermcp-original")
-    return value, missing
+    fields = ("license_spdx", "origin", "derivation_statement")
+    if any(not isinstance(value.get(key), str) or not value[key] for key in fields):
+        return None, ["fixture provenance has required malformed fields"]
+    if any(len(value[key]) > 256 for key in fields):
+        return None, ["fixture provenance field exceeds its length limit"]
+    origin = value["origin"]
+    if origin not in {"coppermcp-original", "independently-authored"}:
+        return None, ["fixture provenance must identify an independently authored fixture"]
+    return {"license_spdx": value["license_spdx"], "origin": origin}, []
+
+
+def _strict_json(payload: bytes, label: str) -> Any:
+    try:
+        text = payload.decode("utf-8", errors="strict")
+        _preflight_drc_json(text)
+        value = json.loads(
+            text,
+            object_pairs_hook=_drc_object_pairs,
+            parse_constant=_reject_json_constant,
+            parse_float=_finite_json_float,
+        )
+        _validate_drc_json_tree(value)
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError, ValueError) as error:
+        raise ValueError(f"{label} is not bounded valid JSON") from error
+    return value
 
 
 def preflight(
@@ -178,58 +275,61 @@ def preflight(
     """Return all prerequisite failures in one truthful, serializable record."""
 
     reasons: list[str] = []
-    for label, path in (
-        ("source board", source),
-        ("DSN", dsn),
-        ("Java", java),
-        ("FreeRouting JAR", jar),
-        ("KiCad CLI", kicad_cli),
+    for label, path, maximum in (
+        ("source board", source, MAX_BOARD_BYTES),
+        ("DSN", dsn, MAX_DSN_BYTES),
+        ("Java", java, MAX_EXECUTABLE_BYTES),
+        ("FreeRouting JAR", jar, MAX_JAR_BYTES),
+        ("KiCad CLI", kicad_cli, MAX_EXECUTABLE_BYTES),
     ):
         if path is None or not path.is_file():
             reasons.append(f"{label} is unavailable")
+        elif path.stat().st_size > maximum:
+            reasons.append(f"{label} exceeds its byte limit")
     _, provenance_reasons = _provenance(provenance)
     reasons.extend(provenance_reasons)
     probes: dict[str, Any] = {}
-    if java is not None and java.is_file():
+    if java is not None and java.is_file() and java.stat().st_size <= MAX_EXECUTABLE_BYTES:
         probes["java"] = version_probe(java, cwd)
         if probes["java"]["status"] != "ok":
             reasons.append("Java runtime did not execute --version")
-    if kicad_cli is not None and kicad_cli.is_file():
+    if (
+        kicad_cli is not None
+        and kicad_cli.is_file()
+        and kicad_cli.stat().st_size <= MAX_EXECUTABLE_BYTES
+    ):
         probes["kicad_cli"] = version_probe(kicad_cli, cwd)
         if probes["kicad_cli"]["status"] != "ok":
             reasons.append("KiCad CLI did not execute --version")
     return {"available": not reasons, "reasons": reasons, "probes": probes}
 
 
+def _hash_or_none(path: Path | None, maximum: int) -> str | None:
+    if path is None:
+        return None
+    try:
+        return sha256_file(path, maximum)
+    except (OSError, ValueError):
+        return None
+
+
 def board_metrics(board: Path) -> dict[str, int | str]:
     """Count board-text vias and segment length only after KiCad DRC remains authoritative."""
 
-    content = board.read_text(encoding="utf-8")
+    content = read_bounded_bytes(board, MAX_BOARD_BYTES).decode("utf-8", errors="strict")
+    segments = _SEGMENT.findall(content)
+    vias = _VIA.findall(content)
+    if len(segments) > MAX_BOARD_ITEMS or len(vias) > MAX_BOARD_ITEMS:
+        raise ValueError("board routing item count exceeds its limit")
     length_mm = sum(
         math.hypot(float(end_x) - float(start_x), float(end_y) - float(start_y))
-        for start_x, start_y, end_x, end_y in _SEGMENT.findall(content)
+        for start_x, start_y, end_x, end_y in segments
     )
     return {
-        "board_sha256": sha256_file(board),
+        "board_sha256": sha256_file(board, MAX_BOARD_BYTES),
         "length_nm": round(length_mm * 1_000_000),
-        "vias": len(_VIA.findall(content)),
+        "vias": len(vias),
     }
-
-
-def _walk_drc(value: Any) -> tuple[int, int]:
-    """Best-effort count of hard violations and unconnected evidence from KiCad JSON."""
-
-    if isinstance(value, dict):
-        values = list(value.values())
-        text = " ".join(str(item).lower() for item in values if isinstance(item, str))
-        hard = 1 if value.get("severity") == "error" else 0
-        unconnected = 1 if "unconnected" in text else 0
-        nested = [_walk_drc(item) for item in values]
-        return hard + sum(item[0] for item in nested), unconnected + sum(item[1] for item in nested)
-    if isinstance(value, list):
-        nested = [_walk_drc(item) for item in value]
-        return sum(item[0] for item in nested), sum(item[1] for item in nested)
-    return 0, 0
 
 
 def drc_metrics(kicad_cli: Path, board: Path, timeout_seconds: int, cwd: Path) -> dict[str, Any]:
@@ -237,40 +337,65 @@ def drc_metrics(kicad_cli: Path, board: Path, timeout_seconds: int, cwd: Path) -
 
     with tempfile.TemporaryDirectory(prefix="copper-mcp-freerouting-drc-") as directory:
         report = Path(directory) / "drc.json"
-        result = run_process(
-            (str(kicad_cli), "pcb", "drc", "--format", "json", "--output", str(report), str(board)),
-            timeout_seconds,
-            cwd,
+        command = (
+            sys.executable,
+            "-I",
+            str(_BOUNDED_EXEC),
+            str(MAX_DRC_REPORT_BYTES),
+            str(kicad_cli),
+            "pcb",
+            "drc",
+            "--format",
+            "json",
+            "--units",
+            "mm",
+            "--severity-all",
+            "--exit-code-violations",
+            "--output",
+            str(report),
+            str(board),
         )
-        output: dict[str, Any] = {"process": process_record(result), "status": result.status}
-        if result.status != "ok" or not report.is_file():
+        result = run_process(command, timeout_seconds, cwd)
+        output: dict[str, Any] = {
+            "process": process_record(result, "kicad_drc"),
+            "status": result.status,
+        }
+        if result.status != "ok" and result.returncode != 5:
+            return output
+        assert result.returncode is not None
+        if not report.is_file():
+            output["status"] = "failed"
             return output
         try:
-            parsed = json.loads(report.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as error:
+            payload = read_bounded_bytes(report, MAX_DRC_REPORT_BYTES)
+            summary = _parse_drc_report(
+                payload,
+                return_code=result.returncode,
+                base_revision=sha256_file(board, MAX_BOARD_BYTES),
+                drc_context_revision=sha256_file(board, MAX_BOARD_BYTES),
+                expected_source=str(board),
+            )
+        except (KiCadCliError, ValueError, OSError):
             output["status"] = "failed"
-            output["parse_error"] = str(error)
             return output
-        hard, unconnected = _walk_drc(parsed)
         output.update(
             {
-                "hard_violations": hard,
-                "report_sha256": sha256_file(report),
+                "hard_violations": summary.error_count,
+                "kicad_version": summary.kicad_version,
+                "report_sha256": sha256_file(report, MAX_DRC_REPORT_BYTES),
                 "status": "ok",
-                "unconnected": unconnected,
+                "unconnected": summary.unconnected_count,
             }
         )
         return output
 
 
-def process_record(result: ProcessResult) -> dict[str, Any]:
+def process_record(result: ProcessResult, role: str) -> dict[str, Any]:
     return {
-        "argv": list(result.argv),
+        "role": role,
         "elapsed_ns": result.elapsed_ns,
         "returncode": result.returncode,
         "status": result.status,
-        "stderr": result.stderr,
-        "stdout": result.stdout,
     }
 
 
@@ -300,12 +425,15 @@ def _result_for_board(
 ) -> dict[str, Any]:
     if board is None or not board.is_file():
         return {"name": name, "status": "unavailable", "reason": "result board is unavailable"}
-    metrics: dict[str, Any] = {
-        "name": name,
-        "elapsed_ns": elapsed_ns,
-        "status": "ok",
-        **board_metrics(board),
-    }
+    try:
+        metrics: dict[str, Any] = {
+            "name": name,
+            "elapsed_ns": elapsed_ns,
+            "status": "ok",
+            **board_metrics(board),
+        }
+    except (OSError, UnicodeDecodeError, ValueError):
+        return {"name": name, "status": "failed", "reason": "result board exceeds safe limits"}
     metrics["drc"] = (
         drc_metrics(kicad_cli, board, timeout_seconds, cwd)
         if kicad_cli
@@ -331,7 +459,6 @@ def build_report(
 ) -> dict[str, Any]:
     """Run available bounded stages and return content-addressed evidence; never mutate source."""
 
-    source_before = sha256_file(source) if source.is_file() else None
     gate = preflight(
         source=source,
         dsn=dsn,
@@ -341,26 +468,22 @@ def build_report(
         provenance=provenance,
         cwd=ROOT,
     )
+    source_before = _hash_or_none(source, MAX_BOARD_BYTES)
     fixture, _ = _provenance(provenance)
     report: dict[str, Any] = {
         "schema": SCHEMA,
         "recorded_at_utc": (timestamp or datetime.now(UTC)).replace(microsecond=0).isoformat(),
         "fixture": {
             "source_sha256": source_before,
-            "dsn_sha256": sha256_file(dsn) if dsn and dsn.is_file() else None,
-            "provenance_sha256": sha256_file(provenance)
-            if provenance and provenance.is_file()
-            else None,
+            "dsn_sha256": _hash_or_none(dsn, MAX_DSN_BYTES),
+            "provenance_sha256": _hash_or_none(provenance, MAX_PROVENANCE_BYTES),
             "provenance": fixture,
         },
         "toolchain": {
             "freerouting_license": FREEROUTING_LICENSE,
-            "freerouting_jar_name": jar.name if jar else None,
-            "freerouting_jar_sha256": sha256_file(jar) if jar and jar.is_file() else None,
-            "java_sha256": sha256_file(java) if java and java.is_file() else None,
-            "kicad_cli_sha256": sha256_file(kicad_cli)
-            if kicad_cli and kicad_cli.is_file()
-            else None,
+            "freerouting_jar_sha256": _hash_or_none(jar, MAX_JAR_BYTES),
+            "java_sha256": _hash_or_none(java, MAX_EXECUTABLE_BYTES),
+            "kicad_cli_sha256": _hash_or_none(kicad_cli, MAX_EXECUTABLE_BYTES),
             "platform": platform.platform(),
             "python": platform.python_version(),
         },
@@ -382,8 +505,8 @@ def build_report(
                 freerouting_argv(java, jar, dsn, ses), timeout_seconds, workspace
             )
             report["freerouting_process"] = {
-                **process_record(freerouting_process),
-                "ses_sha256": sha256_file(ses) if ses.is_file() else None,
+                **process_record(freerouting_process, "freerouting_dsn_ses"),
+                "ses_sha256": _hash_or_none(ses, MAX_DSN_BYTES),
             }
     else:
         report["freerouting_process"] = {
@@ -393,24 +516,24 @@ def build_report(
 
     copper_elapsed = 0
     generated_copper: Path | None = copper_board
-    if copper_command is not None and source.is_file():
+    if copper_command is not None and source_before is not None:
         with tempfile.TemporaryDirectory(prefix="copper-mcp-copper-runner-") as directory:
             workspace = Path(directory)
             private_source = workspace / source.name
-            private_source.write_bytes(source.read_bytes())
+            private_source.write_bytes(read_bounded_bytes(source, MAX_BOARD_BYTES))
             output = workspace / "copper-result.kicad_pcb"
             copper_process = run_process(
                 copper_argv(copper_command, private_source, output, seed),
                 timeout_seconds,
                 workspace,
             )
-            report["copper_process"] = process_record(copper_process)
+            report["copper_process"] = process_record(copper_process, "copper_runner")
             copper_elapsed = copper_process.elapsed_ns
             if copper_process.status == "ok" and output.is_file():
                 persisted = workspace / "result-copy.kicad_pcb"
-                persisted.write_bytes(output.read_bytes())
+                persisted.write_bytes(read_bounded_bytes(output, MAX_BOARD_BYTES))
                 # The process output is ephemeral; an explicit board is required for DRC evidence.
-                report["copper_process"]["output_sha256"] = sha256_file(persisted)
+                report["copper_process"]["output_sha256"] = sha256_file(persisted, MAX_BOARD_BYTES)
     report["results"] = [
         _result_for_board(
             "copper_mcp", generated_copper, kicad_cli, timeout_seconds, ROOT, copper_elapsed
@@ -425,7 +548,7 @@ def build_report(
         ),
     ]
     report["results"].sort(key=metric_priority)
-    source_after = sha256_file(source) if source.is_file() else None
+    source_after = _hash_or_none(source, MAX_BOARD_BYTES)
     report["source_preserved"] = source_before is not None and source_before == source_after
     report["comparison_closed"] = bool(
         gate["available"]

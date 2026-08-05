@@ -42,8 +42,10 @@ result must be persisted explicitly as `--copper-board` before DRC, which preven
 worker output from being silently substituted for evidence.
 
 The report has a content-addressed `run_id`, source/provenance/DSN/JAR/result hashes, seed,
-timeouts, Java/KiCad probes, bounded redacted stdout/stderr, process times, and whether source
-bytes were preserved.  The ranking is intentionally lexicographic:
+timeouts, Java/KiCad version probes, fixed process roles/timing/exit status, and whether source
+bytes were preserved. It deliberately omits raw argv, paths, and child stdout/stderr. Untrusted
+inputs have byte/count/schema ceilings; process output is captured with an 8 KiB ceiling and the
+process group is killed on overflow or timeout. The ranking is intentionally lexicographic:
 
 1. completion and zero KiCad-reported unconnected items;
 2. zero KiCad hard violations;

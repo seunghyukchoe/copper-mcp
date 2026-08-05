@@ -56,6 +56,59 @@ def test_process_timeout_and_redaction_are_truthful(tmp_path: Path) -> None:
     assert "[redacted]" in result.stdout
 
 
+def test_process_kills_on_bounded_output_and_never_buffers_the_full_stream(tmp_path: Path) -> None:
+    result = benchmark.run_process(
+        (sys.executable, "-u", "-c", "import sys; sys.stdout.write('x' * 20000)"),
+        3,
+        tmp_path,
+    )
+    assert result.status == "output_limit"
+    assert len(result.stdout) <= benchmark.MAX_PROCESS_OUTPUT_BYTES
+
+
+def test_untrusted_file_reads_have_explicit_byte_ceiling(tmp_path: Path) -> None:
+    oversized = tmp_path / "oversized"
+    oversized.write_bytes(b"x" * 17)
+    try:
+        benchmark.read_bounded_bytes(oversized, 16)
+    except ValueError as error:
+        assert "byte limit" in str(error)
+    else:
+        raise AssertionError("oversized untrusted input must fail closed")
+
+
+def test_malformed_drc_report_fails_closed_without_report_diagnostics(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    board = tmp_path / "result.kicad_pcb"
+    board.write_text("(kicad_pcb (version 20240108))\n", encoding="utf-8")
+
+    def fake_run(argv: tuple[str, ...], _timeout: int, _cwd: Path) -> object:
+        report = Path(argv[argv.index("--output") + 1])
+        report.write_text("{not JSON", encoding="utf-8")
+        return benchmark.ProcessResult(argv, 1, 0, "ok", "", "")
+
+    monkeypatch.setattr(benchmark, "run_process", fake_run)
+    result = benchmark.drc_metrics(tmp_path / "kicad-cli", board, 1, tmp_path)
+    assert result["status"] == "failed"
+    assert "parse_error" not in result
+
+
+def test_report_process_evidence_never_includes_private_argv_or_child_output() -> None:
+    result = benchmark.ProcessResult(
+        ("/private/customer/token=never",),
+        1,
+        1,
+        "failed",
+        "password=never /private/customer/board.kicad_pcb",
+        "",
+    )
+    evidence = json.dumps(benchmark.process_record(result, "freerouting_dsn_ses"))
+    assert "/private" not in evidence
+    assert "never" not in evidence
+    assert "argv" not in evidence
+
+
 def test_metric_priority_prefers_connectivity_and_drc_before_quality() -> None:
     clean = {
         "status": "ok",
