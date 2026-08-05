@@ -112,6 +112,7 @@ class McpServerTests(unittest.TestCase):
                 "cancel_routing_job",
                 "export_routing_candidate",
                 "validate_candidate",
+                "verify_circuit_schematic_erc",
             },
         )
 
@@ -932,6 +933,20 @@ asyncio.run(main())
         inventory = json.loads(result.stdout)
         self.assertNotIn("render_circuit_schematic", inventory["tools"])
         self.assertNotIn(RESOURCE_TEMPLATE, inventory["templates"])
+        # The ERC tool is deliberately available here: it returns digests and counts, and issues
+        # no artifact capability, so it needs none of the stdio-only isolation.
+        self.assertIn("verify_circuit_schematic_erc", inventory["tools"])
+
+    def test_schematic_erc_tool_rejects_unknown_arguments(self) -> None:
+        with self.assertRaises(ToolError) as raised:
+            asyncio.run(
+                mcp.call_tool(
+                    "verify_circuit_schematic_erc",
+                    {"content": _content(), "severity": "error"},
+                )
+            )
+
+        self.assertIn("arguments are malformed", str(raised.exception))
 
 
 class SceneToolSurfaceTests(unittest.TestCase):

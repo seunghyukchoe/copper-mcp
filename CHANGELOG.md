@@ -51,6 +51,33 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **Authoritative KiCad ERC and a real round trip for generated schematics.** A new
+  `verify_circuit_schematic_erc` MCP tool and `copper-mcp schematic-erc` CLI command take the same
+  Circuit Intent content as `render_circuit_schematic`, render it deterministically, and hand those
+  exact bytes to `kicad-cli sch erc`. KiCad decides what an electrical rule violation is; CopperMCP
+  transports the verdict and never reimplements ERC. The schematic is then re-read through
+  `kicad-cli sch export netlist --format kicadxml` and compared against the source intent by the
+  existing parity verifier, which until now had no caller — so the components and nets KiCad
+  recovers are checked against the intent that produced them.
+
+  Results carry **two** signals, not one: `passed` means KiCad reported no error-severity violation,
+  while `clean` is true only when there are no findings and no ignored checks at all. The bounded
+  passive fixture is `passed: true, clean: false` on KiCad 10.0.5 — it genuinely produces four
+  warnings — and that pair is pinned by a test so it cannot be quietly promoted. `kicad_cli_parse`
+  moves from `not_run` to `passed`, since KiCad cannot run ERC on a schematic it failed to load;
+  `schematic_board_parity`, `electrical_validation`, and `board_ready` remain explicit non-claims.
+
+  The subject is always CopperMCP's own render, never a workspace file, so the subprocess receives
+  no user design data that did not arrive through the tool argument. Both `sch` commands share one
+  bounded helper with the fixed argument vector, private read-only snapshot, `RLIMIT_FSIZE` wrapper,
+  and private environment the board DRC adapter already uses; `--define-var` is never exposed. Only
+  digests, counts, and KiCad's violation-type keys are returned — never schematic bytes, net or
+  component names, values, coordinates, or UUIDs. Because the checked snapshot carries no
+  `.kicad_pro`, KiCad applies its default severities: no user project can weaken the verdict, and
+  equally the verdict is not necessarily what that user's project would report. A missing KiCad CLI
+  is a typed refusal, never a verdict.
+  ([ADR-0070](docs/adr/0070-authoritative-schematic-erc.md), D-144, SEC-119, #66)
+
 - `scripts/check_ledgers.py` now validates ledger identifier allocation, and a new sibling
   `scripts/check_adr_numbers.py` validates ADR numbers. Both run in `make lint` and CI. A duplicate
   ID, a badly padded ID, a row that goes backwards in a strictly increasing ledger, two files
