@@ -16,10 +16,27 @@ All notable changes are documented here. The format follows
   cooperative deadline spans capture and both conversion stages. This adds no MCP action, editor
   mutation, DRC, routing, placement, apply, or live-editor success claim.
 
+- Added the first content-addressed held-out audio project-family evaluation. Its independently
+  authored Apache-2.0 fixture is isolated from the predeclared training family by a hash-bound
+  train/tune/held-out split, and the evaluator reads only the held-out board. Three exact replays
+  recorded Board IR support, eight legal placement candidates after 96 bounded evaluations, and
+  candidate-preview completion for 6/6 nets with no source mutation. No model, network, KiCad,
+  DRC/ERC, policy-quality, routing-quality, external-project, fabrication, or hardware claim is
+  inferred from this one-family baseline.
+
+- Added a clean-worktree performance-profile baseline for file-backed routing, bounded placement,
+  and Circuit Scene observation. Each scenario uses two warmups, five unprofiled timing samples
+  with an invariant output digest, and one separate bounded `cProfile` pass with stable redacted
+  function labels. The artifact identifies placement containment/intersection work as the largest
+  measured seam on its single arm64/Python 3.14.2 environment; it adds no Rust, SIMD, GPU,
+  acceleration, cross-machine, KiCad, DRC, or hardware-performance claim.
+
 - Added a packaged standalone deterministic exact local-repair operator for a conventionally
   coordinator-supplied bounded lattice window. It emits only request-bound immutable local
-  proposals with fixed failure/cancellation states and is not wired into negotiated routing, MCP,
-  KiCad, candidate application, or board mutation.
+  proposals with fixed failure/cancellation states. The predeclared 5 × 5 detour fixture replays
+  identically 10/10 times at eight unit steps, two bends, and 50 expanded states; a one-expansion
+  budget and cancellation publish no route. It remains outside negotiated routing, MCP, Board IR,
+  KiCad, physical clearance, DRC, candidate application, and board mutation.
 
 - Added a bounded, in-memory routing-task handle broker and a runtime MCP Tasks compatibility
   probe. The reference environment observed `mcp 2.0.0`, but the supported dependency range
@@ -46,11 +63,15 @@ All notable changes are documented here. The format follows
   the initial negotiated net order; no-profile v2 result shape and candidate identity are
   unchanged. This adds no MCP, model, corridor, repair, or apply authority.
 
-- Added an internal one-shot isolated worker protocol for the fixed deterministic routing-policy
-  reference backend. It accepts only neutral, scalar, order-only inputs; uses nonce- and
+- Added an internal one-shot isolated worker protocol and admitted only its fixed
+  `deterministic-reference-worker-v1` backend to negotiated routing's initial net order. It accepts
+  the same neutral scalar, no-window input as the in-process reference; uses nonce- and
   digest-bound canonical responses with bounded timeout/cancellation and sanitized child process
-  state; and fails closed on malformed or noncanonical worker output. It adds no model, MCP,
-  negotiated-routing, KiCad, candidate, copper, or apply authority, and it is not an OS sandbox.
+  state; and rechecks the fixed policy identity, input digest, complete known-net permutation,
+  empty selections, and composite candidate binding before router construction. Any worker failure
+  refuses with no fallback or router call. Retry order, geometry, validation, and every routing
+  budget remain coordinator-owned. This adds no model, plugin, MCP, corridor, repair, KiCad,
+  copper, or apply authority, and it is not an OS sandbox.
 
 - Added a bounded external-process FreeRouting comparison harness with bounded input/output handling,
   minimal child environment, KiCad-DRC evidence requirements, and self-attested receipt bindings.
@@ -231,6 +252,11 @@ All notable changes are documented here. The format follows
   `evidence_harness_commit` field: the stable source/harness commit used by the embedded replay
   command. The separately recorded artifact materialization commit remains distinct; no replay
   artifact, measurement, policy authority, or routing behavior changed.
+
+- Hosted CI now checks out full Git history before running tests, so benchmark regressions that
+  replay an immutable `evidence_harness_commit` with `git show` do not fail only because the source
+  commit was omitted by a shallow clone. A workflow regression pins `fetch-depth: 0`; this proves
+  repository configuration, not hosted-run success or the correctness of a benchmark artifact.
 
 - Expired routing-candidate geometry exports now commit their TTL purge before returning the
   deliberately uniform unavailable response. This preserves the access-retention boundary for
