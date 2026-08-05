@@ -8,6 +8,12 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Corrected the exact-local-repair gate evidence. The preserved B-071 historical artifact used a
+  related KiCad-derived fixture with 512 grid nodes, 20,000 expansions, 128 obstacles, and
+  200,000 obstacle checks, so it is not the predeclared semantic experiment. B-072 independently
+  reconstructs and equivalence-checks the pinned 256/5,000/64/100,000 source-`965d8fc` builder.
+  Routing behavior and public surfaces remain unchanged.
+
 - Restored deterministic render and apply replay for valid low-degree multi-pin candidates made
   before `batched-1-steiner-v1`. Replay now selects the candidate's recorded
   `astar-grid/0.4.0` component-MST behavior instead of reinterpreting it with the current

@@ -1,0 +1,245 @@
+{
+  "benchmark": "exact-local-repair-negotiated-gate-v2",
+  "candidate_identity": {
+    "no_profile_candidate_identity": "negotiated-congestion-v2 (unchanged)",
+    "no_profile_result_shape": "NegotiatedRoutingResult (unchanged)"
+  },
+  "configuration": {
+    "envelope": {
+      "max_iterations": 4,
+      "max_total_expansions": 2000000,
+      "max_total_obstacle_checks": 10000000,
+      "max_total_physical_checks": 2000000
+    },
+    "settings": {
+      "bend_penalty_nm": 500000,
+      "grid_step_nm": 1000000,
+      "max_expansions": 5000,
+      "max_grid_nodes": 256,
+      "max_obstacle_checks": 100000,
+      "max_obstacles": 64,
+      "proximity_penalty_nm": 0
+    }
+  },
+  "dataset": {
+    "expected_snapshot_digest": "sha256:9ad048f6f439a7e71be4c1f115d8a205f00c92f0853e0c140725906c1acdb245",
+    "fixture_helper": "scripts/exact_local_repair_gate_fixture.py",
+    "fixture_helper_sha256": "b2d5f82711faa82ce68c1a60000714a98e809af6863682debeb0c0b05d57c04a",
+    "pinned_source_commit": "965d8fc97ddeb720251cb7863c7b62310637f301",
+    "predeclared_in": "docs/research/exact-local-repair-negotiated-integration-gate.md",
+    "provenance": "Committed semantic helper equivalence-tested against the original builder."
+  },
+  "gate": {
+    "baseline_gates_hold": true,
+    "minimum_improvement_percent": 10,
+    "named_coordinator_metric": "iterations",
+    "result": "declined",
+    "transaction_admitted": false,
+    "why": "The no-profile coordinator completed with zero overflow in one iteration, so no complete rejected allocation exists. A repair window, occupancy projection, local repair search, validator invocation, and candidate-v3 binding are not admissible."
+  },
+  "metering": {
+    "candidate_path_edge_checks": 0,
+    "candidate_path_obstacle_checks": 0,
+    "local_repair_expanded_states": 0,
+    "reason": "No rejected allocation exists; no repair or validator work was performed."
+  },
+  "replay_count": 10,
+  "replay_deterministic": true,
+  "replays": [
+    {
+      "candidate_ids": [
+        "sha256:9a6af627be11bd6c9938f4f0c9b3e00918ff63323af6ecaf088ffe9775b8142e",
+        "sha256:04d23efc8616af3e06f97966d27f35660ab10c176d0512734495422c6959b2ff"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:9a6af627be11bd6c9938f4f0c9b3e00918ff63323af6ecaf088ffe9775b8142e",
+        "sha256:04d23efc8616af3e06f97966d27f35660ab10c176d0512734495422c6959b2ff"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:9a6af627be11bd6c9938f4f0c9b3e00918ff63323af6ecaf088ffe9775b8142e",
+        "sha256:04d23efc8616af3e06f97966d27f35660ab10c176d0512734495422c6959b2ff"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:9a6af627be11bd6c9938f4f0c9b3e00918ff63323af6ecaf088ffe9775b8142e",
+        "sha256:04d23efc8616af3e06f97966d27f35660ab10c176d0512734495422c6959b2ff"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:9a6af627be11bd6c9938f4f0c9b3e00918ff63323af6ecaf088ffe9775b8142e",
+        "sha256:04d23efc8616af3e06f97966d27f35660ab10c176d0512734495422c6959b2ff"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:9a6af627be11bd6c9938f4f0c9b3e00918ff63323af6ecaf088ffe9775b8142e",
+        "sha256:04d23efc8616af3e06f97966d27f35660ab10c176d0512734495422c6959b2ff"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:9a6af627be11bd6c9938f4f0c9b3e00918ff63323af6ecaf088ffe9775b8142e",
+        "sha256:04d23efc8616af3e06f97966d27f35660ab10c176d0512734495422c6959b2ff"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:9a6af627be11bd6c9938f4f0c9b3e00918ff63323af6ecaf088ffe9775b8142e",
+        "sha256:04d23efc8616af3e06f97966d27f35660ab10c176d0512734495422c6959b2ff"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:9a6af627be11bd6c9938f4f0c9b3e00918ff63323af6ecaf088ffe9775b8142e",
+        "sha256:04d23efc8616af3e06f97966d27f35660ab10c176d0512734495422c6959b2ff"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:9a6af627be11bd6c9938f4f0c9b3e00918ff63323af6ecaf088ffe9775b8142e",
+        "sha256:04d23efc8616af3e06f97966d27f35660ab10c176d0512734495422c6959b2ff"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    }
+  ],
+  "run_id": "sha256:318c98afa5cfc2fecf5f61d711d439d651393778c820201353a2c39434ff8c68",
+  "schema": "copper-mcp/benchmark/exact-local-repair-gate/v2",
+  "script": "scripts/benchmark_exact_local_repair_integration_gate.py",
+  "script_sha256": "af123076672bf90ed149aac9c29170db96aeb5062e2c4e6610c8cf720cc1a244",
+  "snapshot_digest": "sha256:9ad048f6f439a7e71be4c1f115d8a205f00c92f0853e0c140725906c1acdb245"
+}

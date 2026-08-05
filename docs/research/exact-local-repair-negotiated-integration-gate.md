@@ -165,3 +165,22 @@ This declined experiment makes no claim of routing improvement, FreeRouting pari
 manufacturing validity, model effectiveness, live-KiCad control, or safe board apply. It records
 why those claims would be less safe if the current abstract local operator were directly wired
 into publication.
+
+## Gate evidence attribution correction — 2026-08-05
+
+B-071 preserves the historical replay of a related KiCad-derived fixture with 512 grid nodes,
+20,000 expansions, 128 obstacles, and 200,000 obstacle checks. Those settings are not equivalent
+to the predeclared semantic `_crossing_snapshot` and `_requests` experiment, so B-071 remains
+audit history but is not relied on for that attribution.
+
+B-072 supersedes only that attribution. Its benchmark helper independently reconstructs source
+commit `965d8fc97ddeb720251cb7863c7b62310637f301`, pins the expected snapshot digest
+`sha256:9ad048f6f439a7e71be4c1f115d8a205f00c92f0853e0c140725906c1acdb245`, and uses the
+predeclared 256-node / 5,000-expansion / 64-obstacle / 100,000-obstacle-check settings. A focused
+regression compares the helper's Board IR, requests, digest, and settings with the original
+builder; the benchmark imports no test code.
+
+The corrected replay remains declined: all ten replays complete with zero overflow in one
+iteration, zero ripups, and no rejected allocation. It consequently performs zero local-repair or
+path-validator work. This correction introduces no transaction, profile, public surface, routing
+integration, or routing-quality claim. See [B-072](../ledgers/benchmark-ledger.md).
