@@ -8,9 +8,7 @@ never written, and raw KiCad findings are reduced to the redacted :class:`DrcSum
 
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass, replace
-from typing import Any
+from dataclasses import replace
 
 import copper_mcp.kicad_cli as kicad_cli
 from copper_mcp.adapters.kicad_board_ir import KiCadConstraintProfile, parse_kicad_bytes
@@ -20,53 +18,8 @@ from copper_mcp.adapters.kicad_placement_patch import (
 )
 from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
-from copper_mcp.models import DrcSummary
-from copper_mcp.placement.contracts import PlacementCandidate
+from copper_mcp.placement.contracts import PlacementCandidate, PlacementCandidateDrcEvidence
 from copper_mcp.security import read_workspace_file
-
-_SHA256_ID = re.compile(r"^sha256:[a-f0-9]{64}$")
-
-
-@dataclass(frozen=True, slots=True)
-class PlacementCandidateDrcEvidence:
-    """Immutable, redacted KiCad DRC evidence bound to one placement candidate."""
-
-    candidate_id: str
-    candidate_base_revision: str
-    source_revision: str
-    patched_board_revision: str
-    patched_drc_context_revision: str
-    summary: DrcSummary
-
-    def __post_init__(self) -> None:
-        for name in (
-            "candidate_id",
-            "candidate_base_revision",
-            "source_revision",
-            "patched_board_revision",
-            "patched_drc_context_revision",
-        ):
-            value = getattr(self, name)
-            if not isinstance(value, str) or not _SHA256_ID.fullmatch(value):
-                raise ValueError(f"{name} must be content-addressed with sha256")
-        if not isinstance(self.summary, DrcSummary):
-            raise ValueError("summary must be strict KiCad DRC evidence")
-        if self.summary.base_revision != self.patched_board_revision:
-            raise ValueError("DRC summary is not bound to the patched board revision")
-        if self.summary.drc_context_revision != self.patched_drc_context_revision:
-            raise ValueError("DRC summary is not bound to the patched context revision")
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return only digest bindings and redacted aggregate findings."""
-
-        return {
-            "candidate_id": self.candidate_id,
-            "candidate_base_revision": self.candidate_base_revision,
-            "source_revision": self.source_revision,
-            "patched_board_revision": self.patched_board_revision,
-            "patched_drc_context_revision": self.patched_drc_context_revision,
-            "summary": self.summary.to_dict(),
-        }
 
 
 def run_placement_candidate_drc(

@@ -1508,6 +1508,17 @@ class PlacementCandidateContract(_ClosedContract):
     evidence: PlacementEvidenceContract
 
 
+class PlacementCandidateDrcEvidenceContract(_ClosedContract):
+    """Aggregate KiCad DRC evidence for one disposable placement candidate board."""
+
+    candidate_id: Digest
+    candidate_base_revision: Digest
+    source_revision: Digest
+    patched_board_revision: Digest
+    patched_drc_context_revision: Digest
+    summary: RouteDrcSummaryContract
+
+
 class PlacementApplyToolRequestContract(_ClosedContract):
     """Closed destructive request for the bounded placement apply surface."""
 
@@ -1560,6 +1571,7 @@ class PlacementRequestEchoContract(_ClosedContract):
     expect_board_revision: Digest | None = None
     expect_snapshot_digest: Digest | None = None
     include_apply_token: bool = False
+    include_drc: bool = False
 
 
 class PlacementRuleInputContract(_ClosedContract):
@@ -1607,6 +1619,34 @@ class PlacementProposalInputContract(_ClosedContract):
     side: Literal["front", "back"] | None = None
 
 
+class PlacementPreviewRequestContract(_ClosedContract):
+    """Closed, file-backed request shape for the read-only placement preview."""
+
+    board: Annotated[
+        str,
+        Field(min_length=1, max_length=4096, pattern=r"^[^\u0000-\u001f\u007f]+$"),
+    ]
+    constraints: RouteConstraintsContract
+    subjects: Annotated[list[RefId], Field(min_length=1, max_length=64)]
+    rules: Annotated[list[PlacementRuleInputContract], Field(max_length=256)] = Field(
+        default_factory=list
+    )
+    proposals: Annotated[list[PlacementProposalInputContract], Field(max_length=64)] = Field(
+        default_factory=list
+    )
+    placement_grid_nm: PositiveNanometres = 1_000
+    expect_board_revision: Digest | None = None
+    expect_snapshot_digest: Digest | None = None
+    include_apply_token: bool = False
+    include_drc: bool = False
+
+
+PlacementPreviewToolRequest = Annotated[
+    Any,
+    WithJsonSchema(_inline_json_schema(PlacementPreviewRequestContract)),
+]
+
+
 class LivePlacementRequestContract(_ClosedContract):
     """Closed read-only placement proposal request for the active KiCad document."""
 
@@ -1622,6 +1662,7 @@ class LivePlacementRequestContract(_ClosedContract):
     placement_grid_nm: PositiveNanometres = 1_000
     expect_board_revision: Digest
     expect_snapshot_digest: Digest
+    include_drc: Literal[False] = False
 
 
 LivePlacementToolRequest = Annotated[
@@ -1642,6 +1683,7 @@ class PlacementPreviewToolResponse(_ClosedContract):
     candidate: PlacementCandidateContract | None
     diagnostic: PlacementDiagnosticContract | None
     apply_token: Annotated[str, Field(min_length=1, max_length=512)] | None = None
+    drc_evidence: PlacementCandidateDrcEvidenceContract | None
     conversion_diagnostic_counts: dict[str, int]
 
 
@@ -1751,6 +1793,7 @@ __all__ = [
     "PlacementApplyToolRequest",
     "PlacementApplyToolRequestContract",
     "PlacementApplyToolResponse",
+    "PlacementPreviewToolRequest",
     "RoutePreviewToolRequest",
     "RoutePreviewToolResponse",
     "RoutingCandidateExportToolRequest",

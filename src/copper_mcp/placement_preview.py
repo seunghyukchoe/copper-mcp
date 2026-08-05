@@ -10,6 +10,7 @@ configured workspace, and the request is validated before any file is touched.
 from __future__ import annotations
 
 import hashlib
+import time
 from collections import Counter
 from dataclasses import replace
 from typing import Any
@@ -22,6 +23,7 @@ from copper_mcp.adapters.kicad_placement_patch import (
 from copper_mcp.apply.tokens import ApplyBinding, ApplyTokenAuthority
 from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
+from copper_mcp.kicad_cli import KiCadCliError
 from copper_mcp.kicad_ipc import capture_live_board
 from copper_mcp.placement import build_placement_view, evaluate_placement
 from copper_mcp.placement.contracts import (
@@ -29,10 +31,12 @@ from copper_mcp.placement.contracts import (
     PlacementDiagnostic,
     PlacementError,
     PlacementFailureCode,
+    PlacementPreviewError,
     PlacementResult,
     parse_placement_intent,
 )
 from copper_mcp.placement.view import PlacementViewError
+from copper_mcp.placement_drc import PlacementCandidateDrcEvidence, run_placement_candidate_drc
 from copper_mcp.security import read_workspace_file
 
 
@@ -82,6 +86,8 @@ def _preview_placement_source(
     token_authority: ApplyTokenAuthority | None = None,
 ) -> PlacementResult:
     """Run the deterministic placement pipeline over one already-bound source."""
+
+    deadline = time.monotonic() + float(settings.max_placement_seconds)
 
     # A caller may bind a file-backed request to a previously observed revision as well as a
     # live request.  Honor that precondition before parsing so a stale request cannot echo its
@@ -162,6 +168,29 @@ def _preview_placement_source(
         deadline_seconds=float(settings.max_placement_seconds),
         board_path=relative_path,
     )
+    if result.status == "previewed" and result.candidate is not None and intent.include_drc:
+        try:
+            evidence = run_placement_candidate_drc(
+                relative_path,
+                result.candidate,
+                intent.profile(),
+                _placement_drc_settings(settings, deadline),
+            )
+        except KiCadCliError as error:
+            raise PlacementPreviewError(
+                "authoritative placement DRC evidence is unavailable"
+            ) from error
+        if not isinstance(evidence, PlacementCandidateDrcEvidence):
+            raise PlacementPreviewError("authoritative placement DRC evidence is malformed")
+        if (
+            evidence.candidate_id != result.candidate.candidate_id
+            or evidence.candidate_base_revision != result.candidate.base_revision
+            or evidence.source_revision != board_revision
+        ):
+            raise PlacementPreviewError(
+                "authoritative placement DRC evidence is not bound to this candidate"
+            )
+        result = replace(result, drc_evidence=evidence)
     if (
         result.status == "previewed"
         and result.candidate is not None
@@ -195,6 +224,15 @@ def _preview_placement_source(
             )
             result = replace(result, apply_token=token)
     return result
+
+
+def _placement_drc_settings(settings: Settings, deadline: float) -> Settings:
+    """Clamp disposable KiCad DRC to the placement preview's remaining deadline."""
+
+    remaining = int(deadline - time.monotonic())
+    if remaining < 1:
+        raise PlacementPreviewError("the placement preview deadline expired before DRC could run")
+    return replace(settings, kicad_timeout_seconds=min(settings.kicad_timeout_seconds, remaining))
 
 
 def preview_live_placement(

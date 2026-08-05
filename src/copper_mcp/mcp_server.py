@@ -46,6 +46,7 @@ from copper_mcp.mcp_contracts import (
     LiveRoutePreviewToolRequest,
     PlacementApplyToolRequest,
     PlacementApplyToolResponse,
+    PlacementPreviewToolRequest,
     PlacementPreviewToolResponse,
     RoutePreviewToolRequest,
     RoutePreviewToolResponse,
@@ -181,6 +182,7 @@ class CopperMCPServer(MCPServer[None]):
                 "render_circuit_schematic",
                 "observe_live_board_scene",
                 "preview_live_placement",
+                "preview_placement",
                 "inspect_live_editor_context",
             }:
                 result.append(tool)
@@ -212,6 +214,8 @@ class CopperMCPServer(MCPServer[None]):
             raise ToolError("live scene tool arguments are malformed")
         if name == "preview_live_placement" and set(arguments) != {"request"}:
             raise ToolError("live placement tool arguments are malformed")
+        if name == "preview_placement" and set(arguments) != {"request"}:
+            raise ToolError("placement tool arguments are malformed")
         if name == "inspect_live_editor_context" and set(arguments) != {"request"}:
             raise ToolError("live editor context tool arguments are malformed")
         if name == "start_routing" and set(arguments) != {"request", "authorization_digest"}:
@@ -673,7 +677,7 @@ def observe_board_scene(request: dict[str, Any]) -> CircuitSceneToolResponse:
     ),
     structured_output=True,
 )
-def preview_placement(request: dict[str, Any]) -> PlacementPreviewToolResponse:
+def preview_placement(request: PlacementPreviewToolRequest) -> PlacementPreviewToolResponse:
     """Validate a proposed footprint placement against a board, without changing anything.
 
     ``request`` takes ``board``, ``constraints``, and ``subjects`` (the footprint references
@@ -689,7 +693,9 @@ def preview_placement(request: dict[str, Any]) -> PlacementPreviewToolResponse:
     neither clearance nor collision could be proven, and is not a failure. Courtyard overlap is
     reported as ``proven_clear`` or ``violated`` for the bounded same-side rectangular-courtyard
     subset. Unsupported courtyard topology fails closed. This tool never applies a
-    placement, and a placement is not bound to KiCad DRC evidence in this version.
+    placement. ``include_drc`` is an opt-in, file-backed replay through KiCad DRC. It returns
+    only aggregate findings and digest bindings for a disposable patched board; it never grants
+    placement apply authority or exposes board bytes. Live placement does not support DRC.
     """
 
     # Both transports, like preview_route: one self-contained response, no server-side state,

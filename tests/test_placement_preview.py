@@ -9,6 +9,7 @@ read.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import io
 import json
 import unittest
@@ -22,7 +23,12 @@ import copper_mcp.mcp_server as _server
 from copper_mcp.cli import main
 from copper_mcp.config import Settings
 from copper_mcp.mcp_contracts import PlacementPreviewToolResponse
-from copper_mcp.placement.contracts import PlacementError
+from copper_mcp.models import DrcSummary
+from copper_mcp.placement.contracts import (
+    PlacementCandidateDrcEvidence,
+    PlacementError,
+    PlacementPreviewError,
+)
 from copper_mcp.placement_preview import preview_live_placement, preview_placement
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -66,6 +72,40 @@ def _preview(board: str, **overrides: Any) -> dict[str, Any]:
     # widened response cannot pass by only being checked field by field.
     PlacementPreviewToolResponse.model_validate(document)
     return document
+
+
+def _drc_evidence(
+    candidate: Any,
+    source_revision: str,
+    *,
+    warning: bool = False,
+    foreign: bool = False,
+) -> PlacementCandidateDrcEvidence:
+    """Build redacted fake authority evidence with only content-addressed bindings."""
+
+    patched = "sha256:" + "a" * 64
+    context = "sha256:" + "b" * 64
+    return PlacementCandidateDrcEvidence(
+        candidate_id=("sha256:" + "c" * 64) if foreign else candidate.candidate_id,
+        candidate_base_revision=candidate.base_revision,
+        source_revision=source_revision,
+        patched_board_revision=patched,
+        patched_drc_context_revision=context,
+        summary=DrcSummary(
+            base_revision=patched,
+            drc_context_revision=context,
+            kicad_version="10.0.5",
+            drc_schema="https://schemas.kicad.org/drc.v1.json",
+            coordinate_units="mm",
+            error_count=0,
+            warning_count=int(warning),
+            exclusion_count=0,
+            ignored_check_count=0,
+            unconnected_count=0,
+            violation_type_counts={"warning": 1} if warning else {},
+            passed=True,
+        ),
+    )
 
 
 class ServiceTests(unittest.TestCase):
@@ -131,6 +171,128 @@ class ServiceTests(unittest.TestCase):
         PlacementPreviewToolResponse.model_validate(document)
         assert document["diagnostic"] is not None
         self.assertEqual(document["diagnostic"]["code"], "budget_exhausted")
+
+    def test_drc_is_not_invoked_unless_explicitly_requested(self) -> None:
+        with patch(
+            "copper_mcp.placement_preview.run_placement_candidate_drc",
+            side_effect=AssertionError("DRC ran without opt-in"),
+        ) as runner:
+            document = _preview("placement-legal.kicad_pcb")
+
+        self.assertFalse(runner.called)
+        self.assertIsNone(document["drc_evidence"])
+
+    def test_three_opted_in_drc_replays_are_deterministic_and_bound(self) -> None:
+        calls: list[tuple[str, str, int]] = []
+
+        def fake_drc(path: str, candidate: Any, _profile: Any, settings: Settings) -> Any:
+            source = (FIXTURES / path).read_bytes()
+            source_revision = "sha256:" + hashlib.sha256(source).hexdigest()
+            calls.append((path, candidate.candidate_id, settings.kicad_timeout_seconds))
+            return _drc_evidence(candidate, source_revision)
+
+        with patch("copper_mcp.placement_preview.run_placement_candidate_drc", fake_drc):
+            documents = [_preview("placement-legal.kicad_pcb", include_drc=True) for _ in range(3)]
+
+        self.assertEqual(documents[0], documents[1])
+        self.assertEqual(documents[1], documents[2])
+        self.assertEqual(len(calls), 3)
+        for document in documents:
+            candidate = document["candidate"]
+            evidence = document["drc_evidence"]
+            assert candidate is not None and evidence is not None
+            self.assertEqual(evidence["candidate_id"], candidate["candidate_id"])
+            self.assertEqual(evidence["candidate_base_revision"], candidate["base_revision"])
+            self.assertEqual(evidence["source_revision"], document["board_revision"])
+            self.assertEqual(
+                evidence["summary"]["base_revision"], evidence["patched_board_revision"]
+            )
+            self.assertEqual(
+                evidence["summary"]["drc_context_revision"],
+                evidence["patched_drc_context_revision"],
+            )
+
+    def test_opted_in_drc_preview_leaves_the_workspace_source_untouched(self) -> None:
+        board = FIXTURES / "placement-legal.kicad_pcb"
+        before = board.stat()
+        source = board.read_bytes()
+
+        def bound_drc(path: str, candidate: Any, _profile: Any, _settings: Settings) -> Any:
+            return _drc_evidence(
+                candidate,
+                "sha256:" + hashlib.sha256((FIXTURES / path).read_bytes()).hexdigest(),
+            )
+
+        with patch("copper_mcp.placement_preview.run_placement_candidate_drc", bound_drc):
+            document = _preview("placement-legal.kicad_pcb", include_drc=True)
+
+        after = board.stat()
+        self.assertIsNotNone(document["drc_evidence"])
+        self.assertEqual(board.read_bytes(), source)
+        self.assertEqual(after.st_ino, before.st_ino)
+        self.assertEqual(after.st_mtime_ns, before.st_mtime_ns)
+
+    def test_warning_only_drc_is_passed_but_not_clean(self) -> None:
+        def warning_drc(path: str, candidate: Any, _profile: Any, _settings: Settings) -> Any:
+            source = (FIXTURES / path).read_bytes()
+            return _drc_evidence(
+                candidate,
+                "sha256:" + hashlib.sha256(source).hexdigest(),
+                warning=True,
+            )
+
+        with patch("copper_mcp.placement_preview.run_placement_candidate_drc", warning_drc):
+            document = _preview("placement-legal.kicad_pcb", include_drc=True)
+
+        evidence = document["drc_evidence"]
+        assert evidence is not None
+        self.assertTrue(evidence["summary"]["passed"])
+        self.assertFalse(evidence["summary"]["clean"])
+
+    def test_malformed_foreign_and_expired_drc_evidence_fail_closed(self) -> None:
+        baseline = preview_placement(_request("placement-legal.kicad_pcb"), _settings())
+        assert baseline.candidate is not None
+
+        def foreign_drc(path: str, candidate: Any, _profile: Any, _settings: Settings) -> Any:
+            source = (FIXTURES / path).read_bytes()
+            return _drc_evidence(
+                candidate,
+                "sha256:" + __import__("hashlib").sha256(source).hexdigest(),
+                foreign=True,
+            )
+
+        with (
+            self.subTest("foreign binding"),
+            patch("copper_mcp.placement_preview.run_placement_candidate_drc", foreign_drc),
+        ):
+            with self.assertRaisesRegex(PlacementPreviewError, "not bound"):
+                preview_placement(
+                    _request("placement-legal.kicad_pcb", include_drc=True), _settings()
+                )
+
+        with (
+            self.subTest("malformed evidence"),
+            patch(
+                "copper_mcp.placement_preview.run_placement_candidate_drc", return_value=object()
+            ),
+        ):
+            with self.assertRaisesRegex(PlacementPreviewError, "malformed"):
+                preview_placement(
+                    _request("placement-legal.kicad_pcb", include_drc=True), _settings()
+                )
+
+        with (
+            self.subTest("expired deadline"),
+            patch("copper_mcp.placement_preview.evaluate_placement", return_value=baseline),
+            patch("copper_mcp.placement_preview.time.monotonic", side_effect=(0.0, 2.0)),
+            patch("copper_mcp.placement_preview.run_placement_candidate_drc") as runner,
+        ):
+            with self.assertRaisesRegex(PlacementPreviewError, "deadline expired"):
+                preview_placement(
+                    _request("placement-legal.kicad_pcb", include_drc=True),
+                    _settings(max_placement_seconds=1),
+                )
+        self.assertFalse(runner.called)
 
     def test_file_backed_revision_preconditions_are_honored_before_work(self) -> None:
         baseline = _preview("placement-legal.kicad_pcb")
@@ -370,6 +532,13 @@ class LivePlacementTests(unittest.TestCase):
             preview_live_placement(request, _settings(), client_factory=factory)
         self.assertEqual(board_object.reads, 0)
 
+    def test_live_preview_rejects_drc_opt_in_before_ipc(self) -> None:
+        request, (factory, _, board_object) = self._live()
+        request["include_drc"] = True
+        with self.assertRaisesRegex(PlacementError, "cannot request authoritative DRC"):
+            preview_live_placement(request, _settings(), client_factory=factory)
+        self.assertEqual(board_object.reads, 0)
+
     def test_live_result_survives_the_actual_mcp_boundary(self) -> None:
         request, (factory, _, _) = self._live()
         service_result = preview_live_placement(request, _settings(), client_factory=factory)
@@ -418,8 +587,14 @@ class McpSurfaceTests(unittest.TestCase):
                 "diagnostic",
                 "conversion_diagnostic_counts",
                 "apply_token",
+                "drc_evidence",
             },
         )
+        input_schema = tool.input_schema
+        self.assertIn("include_drc", json.dumps(input_schema, sort_keys=True))
+        live = next(item for item in tools if item.name == "preview_live_placement")
+        live_request = live.input_schema["properties"]["request"]
+        self.assertEqual(live_request["properties"]["include_drc"]["const"], False)
 
     def test_the_tool_is_annotated_read_only(self) -> None:
         tools = asyncio.run(_server.mcp.list_tools())

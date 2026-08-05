@@ -24,6 +24,7 @@ from typing import Any
 
 from copper_mcp.adapters import KiCadConstraintProfile
 from copper_mcp.board_ir import NetClass
+from copper_mcp.models import DrcSummary
 from copper_mcp.request_boundary import (
     CONSTRAINT_FIELDS,
     MAX_JSON_SAFE_INTEGER,
@@ -57,6 +58,10 @@ ANCHOR_POINTS = ("center", "north", "south", "east", "west")
 
 class PlacementError(ValueError):
     """Raised when an untrusted placement request violates its declared contract."""
+
+
+class PlacementPreviewError(PlacementError):
+    """Raised when an opt-in placement preview operation cannot be honoured safely."""
 
 
 class PlacementFailureCode(StrEnum):
@@ -248,6 +253,8 @@ class PlacementIntent:
     #: Explicit capability request. A token is issued only by the file-backed preview when the
     #: operator has enabled apply and the pure placement replay accepts the candidate.
     include_apply_token: bool = False
+    #: Request private, disposable KiCad DRC evidence for a file-backed candidate.
+    include_drc: bool = False
 
     def profile(self) -> KiCadConstraintProfile:
         """The constraint profile this intent's board must be converted under."""
@@ -272,6 +279,7 @@ class PlacementIntent:
             "expect_board_revision": self.expect_board_revision,
             "expect_snapshot_digest": self.expect_snapshot_digest,
             "include_apply_token": self.include_apply_token,
+            "include_drc": self.include_drc,
         }
 
     def __post_init__(self) -> None:
@@ -283,6 +291,8 @@ class PlacementIntent:
             raise PlacementError("a placement grid must be positive")
         if type(self.include_apply_token) is not bool:
             raise PlacementError("include_apply_token must be boolean")
+        if type(self.include_drc) is not bool:
+            raise PlacementError("include_drc must be boolean")
         for name, revision in (
             ("expect_board_revision", self.expect_board_revision),
             ("expect_snapshot_digest", self.expect_snapshot_digest),
@@ -309,6 +319,7 @@ _OPTIONAL_FIELDS = (
     "expect_board_revision",
     "expect_snapshot_digest",
     "include_apply_token",
+    "include_drc",
 )
 
 
@@ -498,8 +509,11 @@ def parse_placement_intent(
         include_apply_token = boolean(
             "include_apply_token", fields.get("include_apply_token", False)
         )
+        include_drc = boolean("include_drc", fields.get("include_drc", False))
         if allow_live and include_apply_token:
             raise PlacementError("live placement proposals cannot request apply authority")
+        if allow_live and include_drc:
+            raise PlacementError("live placement proposals cannot request authoritative DRC")
         if require_revisions and (
             expected_board_revision is None or expected_snapshot_digest is None
         ):
@@ -529,6 +543,7 @@ def parse_placement_intent(
             expect_board_revision=expected_board_revision,
             expect_snapshot_digest=expected_snapshot_digest,
             include_apply_token=include_apply_token,
+            include_drc=include_drc,
         )
     except PlacementError:
         raise
@@ -743,6 +758,48 @@ class PlacementDiagnostic:
 
 
 @dataclass(frozen=True, slots=True)
+class PlacementCandidateDrcEvidence:
+    """Redacted, candidate-bound KiCad DRC evidence for a disposable placement board."""
+
+    candidate_id: str
+    candidate_base_revision: str
+    source_revision: str
+    patched_board_revision: str
+    patched_drc_context_revision: str
+    summary: DrcSummary
+
+    def __post_init__(self) -> None:
+        for name in (
+            "candidate_id",
+            "candidate_base_revision",
+            "source_revision",
+            "patched_board_revision",
+            "patched_drc_context_revision",
+        ):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not _SHA256_DIGEST.fullmatch(value):
+                raise ValueError(f"{name} must be content-addressed with sha256")
+        if not isinstance(self.summary, DrcSummary):
+            raise ValueError("summary must be strict KiCad DRC evidence")
+        if self.summary.base_revision != self.patched_board_revision:
+            raise ValueError("DRC summary is not bound to the patched board revision")
+        if self.summary.drc_context_revision != self.patched_drc_context_revision:
+            raise ValueError("DRC summary is not bound to the patched context revision")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return digest bindings and aggregate findings without board-private details."""
+
+        return {
+            "candidate_id": self.candidate_id,
+            "candidate_base_revision": self.candidate_base_revision,
+            "source_revision": self.source_revision,
+            "patched_board_revision": self.patched_board_revision,
+            "patched_drc_context_revision": self.patched_drc_context_revision,
+            "summary": self.summary.to_dict(),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class PlacementResult:
     """Either a candidate or a typed refusal - never both, never neither."""
 
@@ -754,6 +811,7 @@ class PlacementResult:
     candidate: PlacementCandidate | None = None
     diagnostic: PlacementDiagnostic | None = None
     apply_token: str | None = None
+    drc_evidence: PlacementCandidateDrcEvidence | None = None
     conversion_diagnostic_counts: Mapping[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -773,6 +831,17 @@ class PlacementResult:
                 raise PlacementError("placement apply authority requires a candidate")
             if self.request is None or not self.request.include_apply_token:
                 raise PlacementError("placement apply authority was not requested")
+        if self.drc_evidence is not None:
+            if self.status != "previewed" or self.candidate is None:
+                raise PlacementError("placement DRC evidence requires a candidate")
+            if self.request is None or not self.request.include_drc:
+                raise PlacementError("placement DRC evidence was not requested")
+            if (
+                self.drc_evidence.candidate_id != self.candidate.candidate_id
+                or self.drc_evidence.candidate_base_revision != self.candidate.base_revision
+                or self.drc_evidence.source_revision != self.board_revision
+            ):
+                raise PlacementError("placement DRC evidence is not bound to this candidate")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -785,6 +854,7 @@ class PlacementResult:
             "candidate": None if self.candidate is None else self.candidate.to_dict(),
             "diagnostic": None if self.diagnostic is None else self.diagnostic.to_dict(),
             "apply_token": self.apply_token,
+            "drc_evidence": None if self.drc_evidence is None else self.drc_evidence.to_dict(),
             "conversion_diagnostic_counts": dict(self.conversion_diagnostic_counts),
         }
 
@@ -804,12 +874,14 @@ __all__ = [
     "FootprintPlacement",
     "OrientationRule",
     "PlacementCandidate",
+    "PlacementCandidateDrcEvidence",
     "PlacementDiagnostic",
     "PlacementError",
     "PlacementEvidence",
     "PlacementFailureCode",
     "PlacementIntent",
     "PlacementLegality",
+    "PlacementPreviewError",
     "PlacementProposal",
     "PlacementResult",
     "PlacementRule",
