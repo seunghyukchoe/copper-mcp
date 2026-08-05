@@ -1,0 +1,36 @@
+{
+  "date_utc": "2026-08-05",
+  "environment": {
+    "kicad_cli": "10.0.5",
+    "python": "3.14.2"
+  },
+  "fixture": {
+    "path": "tests/fixtures/board-ir-v0.2/courtyard-orthogonal-chains.kicad_pcb",
+    "sha256": "706554b6dca241a0793b389c412d7208680a669132c690feb67cf111e1a93220"
+  },
+  "metrics": {
+    "baseline_adapter_outcome": "unsupported.construct",
+    "current_snapshot_success": true,
+    "kicad_drc_unconnected": 0,
+    "kicad_drc_violations": 0,
+    "line_chain_vertices": 4,
+    "overlap_courtyard_overlap": "violated",
+    "overlap_offset_x_nm": -20000000,
+    "overlap_status": "refused",
+    "polygon_vertices": 8,
+    "source_mutations": 0,
+    "unchanged_courtyard_overlap": "proven_clear",
+    "unchanged_status": "previewed"
+  },
+  "not_claimed": [
+    "arcs, curves, or diagonal courtyard geometry",
+    "custom courtyard-clearance values",
+    "DRC of a moved placement candidate",
+    "placement serialization or apply",
+    "GUI or live KiCad IPC evidence",
+    "electrical, fabrication, or FreeRouting parity"
+  ],
+  "run_id": "sha256:2a2c3a4c687722cf8fea232573a64ac16ee78d55dcc34cb6ea6ddcfd0e6e9701",
+  "schema": "copper-mcp/benchmark/orthogonal-courtyard-topology/v1",
+  "source_commit": "48069f03cc1c3687d82434c8bc397cadcf36c08e"
+}
