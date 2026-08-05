@@ -758,8 +758,8 @@ are the audit copies for the original run IDs.
 
 | Field | Recorded evidence |
 |---|---|
-| Run ID | `sha256:dd2d7f54bea51d2f1ce5d67ad463c6ecfd325eb6251bca7a19d0aedd73501ee5` |
-| Date and commit | 2026-08-05; source commit `b6caf55da825494c0818062421cb8d24f478815b` |
+| Run ID | `sha256:7681e24b5362769ae432c0eaa5d059d331c53e443f58d942b29e62e16c3e08f0` |
+| Date and commit | 2026-08-05; source commit `94700092f51f4825deb794ba9256be58f05cc1d5` |
 | Environment | Apple arm64 CPU; Python 3.12.13; KiCad not invoked |
 | Dataset | [`padless-footprint.kicad_pcb`](../../tests/fixtures/board-ir-v0.2/padless-footprint.kicad_pcb), one pad-owning footprint and one graphics-only rectangular-courtyard footprint |
 | Configuration | `copper-mcp/benchmark/padless-courtyard/v1`; one baseline preview and one deterministic proposed move into the stationary padless courtyard |

@@ -15,7 +15,7 @@
     "KiCad DRC or fabrication readiness",
     "apply or FreeRouting parity"
   ],
-  "run_id": "sha256:dd2d7f54bea51d2f1ce5d67ad463c6ecfd325eb6251bca7a19d0aedd73501ee5",
+  "run_id": "sha256:7681e24b5362769ae432c0eaa5d059d331c53e443f58d942b29e62e16c3e08f0",
   "schema": "copper-mcp/benchmark/padless-courtyard/v1",
-  "source_commit": "b6caf55da825494c0818062421cb8d24f478815b"
+  "source_commit": "94700092f51f4825deb794ba9256be58f05cc1d5"
 }
