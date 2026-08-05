@@ -464,10 +464,19 @@ def _take_per_net(
     return tuple(selected)
 
 
-def _token(input_digest: str, value: str) -> str:
-    """Return a stable opaque trace token without retaining the source identifier."""
+def _token(category: str, coordinator_ordinal: int, decision_position: int) -> str:
+    """Return a stable token derived only from public action positions.
 
-    return hashlib.sha256(f"{input_digest}\x00{value}".encode()).hexdigest()[:24]
+    The ordinal is the coordinator's canonical tuple position, while ``decision_position`` is the
+    action's position in the published tuple.  Neither raw IDs, bounds, scores, nor any digest of
+    them participates, so a trace reader cannot test a guessed net name or window JSON against it.
+    """
+
+    _integer("trace coordinator ordinal", coordinator_ordinal, maximum=_MAX_WINDOWS)
+    _integer("trace decision position", decision_position, maximum=_MAX_NETS * _MAX_ACTIONS_PER_NET)
+    return hashlib.sha256(
+        f"routing-policy-trace-token-v1\x00{category}\x00{coordinator_ordinal}\x00{decision_position}".encode()
+    ).hexdigest()[:24]
 
 
 @dataclass(frozen=True, slots=True)
@@ -542,6 +551,13 @@ def redacted_policy_trace(
 
     _assert_selected_candidates(policy_input, decision)
     input_digest = policy_input_digest(policy_input)
+    net_ordinals = {net.net_id: ordinal for ordinal, net in enumerate(policy_input.nets)}
+    corridor_ordinals = {
+        candidate: ordinal for ordinal, candidate in enumerate(policy_input.corridor_candidates)
+    }
+    repair_ordinals = {
+        candidate: ordinal for ordinal, candidate in enumerate(policy_input.repair_candidates)
+    }
     return RoutingPolicyTrace(
         input_digest=input_digest,
         decision_digest=policy_decision_digest(decision),
@@ -549,14 +565,17 @@ def redacted_policy_trace(
         net_count=len(decision.net_order),
         corridor_hint_count=len(decision.corridor_hints),
         repair_window_count=len(decision.repair_windows),
-        ordered_net_tokens=tuple(_token(input_digest, net_id) for net_id in decision.net_order),
+        ordered_net_tokens=tuple(
+            _token("net-order", net_ordinals[net_id], position)
+            for position, net_id in enumerate(decision.net_order)
+        ),
         corridor_hint_tokens=tuple(
-            _token(input_digest, _canonical_bytes(candidate.as_json()).decode("ascii"))
-            for candidate in decision.corridor_hints
+            _token("corridor-hint", corridor_ordinals[candidate], position)
+            for position, candidate in enumerate(decision.corridor_hints)
         ),
         repair_window_tokens=tuple(
-            _token(input_digest, _canonical_bytes(candidate.as_json()).decode("ascii"))
-            for candidate in decision.repair_windows
+            _token("repair-window", repair_ordinals[candidate], position)
+            for position, candidate in enumerate(decision.repair_windows)
         ),
     )
 

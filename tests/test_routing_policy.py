@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
@@ -60,6 +61,33 @@ def test_redacted_trace_is_repeatable_and_excludes_source_sensitive_values() -> 
     assert "board_revision" not in serialized
     assert "vertices" not in serialized
     assert first.net_count == 2
+
+
+def test_trace_tokens_cannot_be_reproduced_from_raw_names_or_window_json() -> None:
+    policy_input = _input()
+    decision = evaluate_policy(DeterministicReferencePolicy(), policy_input)
+    trace = redacted_policy_trace(policy_input, decision)
+    input_digest = policy_input_digest(policy_input)
+    guessed_net_token = hashlib.sha256(f"{input_digest}\x00net:clock".encode()).hexdigest()[:24]
+    guessed_window = (
+        json.dumps(
+            decision.corridor_hints[0].as_json(),
+            allow_nan=False,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    )
+    guessed_window_token = hashlib.sha256(
+        f"{input_digest}\x00{guessed_window}".encode()
+    ).hexdigest()[:24]
+
+    assert guessed_net_token not in trace.ordered_net_tokens
+    assert guessed_window_token not in trace.corridor_hint_tokens
+    assert (
+        trace.ordered_net_tokens == redacted_policy_trace(policy_input, decision).ordered_net_tokens
+    )
 
 
 def test_contracts_are_frozen_and_windows_are_only_coordinator_supplied_options() -> None:

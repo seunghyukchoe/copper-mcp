@@ -31,10 +31,14 @@ bounded, integer-only, and rejects booleans used as numbers.  Inputs are frozen 
 cap nets, candidate windows, action windows, coordinates, and scores.
 
 The training-oriented `RoutingPolicyTrace` retains only input/decision digests, policy identity,
-counts, and deterministic opaque 24-hex-character action tokens.  It excludes net IDs, revision,
-coordinates, bounds, scalar features, pads, paths, widths, board bytes, prompts, model output, and
-candidate geometry.  It is a reproducibility label for an offline local corpus, not a board export
-or a claim that a selected policy action is physically valid.
+counts, and deterministic opaque 24-hex-character action tokens.  Tokens are derived solely from
+the coordinator's canonical option ordinal, action category, and published decision position—not
+from an input digest plus a net ID, window JSON, coordinate, or scalar feature.  This prevents a
+reader from dictionary-testing low-entropy raw names or candidate windows against a published
+token.  The trace excludes net IDs, revision, coordinates, bounds, scalar features, pads, paths,
+widths, board bytes, prompts, model output, and candidate geometry.  It is a reproducibility label
+for an offline local corpus, not a board export or a claim that a selected policy action is
+physically valid.
 
 ## Evidence and transfer limits
 

@@ -1,0 +1,21 @@
+{
+  "fixture": "tests/fixtures/routing-policy/reference-input.json",
+  "metrics": {
+    "closed_decision_accepted": true,
+    "copper_emitted": false,
+    "decision_bytes_sha256": "sha256:f32c14376c8ced7c110199ba139dd94d3ca7f6a386213d56b4d3f3dc5e07ece7",
+    "decision_digest": "sha256:f32c14376c8ced7c110199ba139dd94d3ca7f6a386213d56b4d3f3dc5e07ece7",
+    "deterministic_decision": true,
+    "deterministic_trace": true,
+    "hostile_decision_refused": true,
+    "physical_validity_claim": false,
+    "replay_count": 10,
+    "routing_invoked": false,
+    "routing_quality_claim": false,
+    "trace_bytes_sha256": "sha256:a0ca2e4fdd273b8113b1b51dcb04a7f5d09f0f6b55f59f70b51c7167d803cb10"
+  },
+  "run_id": "sha256:4b9c769c1cdb35b2fe7460d558569035dfaa5dda1df6d43b9125a83da70f47de",
+  "schema": "copper-mcp/benchmark/routing-policy/v1",
+  "script": "scripts/benchmark_routing_policy.py",
+  "source_commit": "7a5bae2f5d39ad1cb014d4036b40451b914a2309"
+}
