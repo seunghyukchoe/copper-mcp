@@ -64,6 +64,8 @@ contract.
 
 - [Board IR 0.1 → 0.2 migration](migrations/board-ir-0.2.md) — why 0.1 snapshots are re-converted
   from the source board rather than auto-migrated.
+- [CopperMCP 0.6.0 migration](migrations/copper-mcp-0.6.0.md) — the default-off live IPC opt-in and
+  the new `unsupported.document` diagnostic code.
 - [Public media assets](assets/README.md) — project media, with provenance; not routing or
   benchmark evidence.
 

@@ -6,6 +6,14 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-06
+
+Upgrading from 0.5.0: see the [0.6.0 migration notes](docs/migrations/copper-mcp-0.6.0.md).
+Live KiCad IPC observation is now off by default and requires `COPPER_MCP_ALLOW_LIVE_IPC=1`; a
+serialization whose root is not `kicad_pcb` reports the new `unsupported.document` diagnostic code
+instead of `syntax.invalid`; and a digest taken over rendered board or schematic bytes is
+reproducible only by the version that recorded it.
+
 ### Security
 
 - **Live KiCad IPC observation now requires an explicit operator opt-in and is off by default.**
@@ -298,6 +306,22 @@ All notable changes are documented here. The format follows
 - [ADR-0066](docs/adr/0066-atomic-route-bundle-preview.md) records the public route-bundle contract:
   the all-or-nothing publication rule, the double-negotiation determinism requirement, the digest
   binding, and the explicit non-claims.
+
+### Fixed
+
+- Named the version-coupled evidence that a release has to re-pin, and re-pinned it. CopperMCP
+  writes `(generator_version "<package version>")` into every board and schematic it renders, so
+  two committed content addresses move on any version bump: the golden schematic artifact digest in
+  `tests/test_golden_identities.py`, and the private combined-derivative `base_revision` and
+  DRC-context revision recorded in the route-bundle benchmark artifact. Bumping to `0.6.0` made
+  both fail, in CI as well as locally, which would have made the project unreleasable without
+  either weakening a pin or silently rewriting evidence. The route-bundle artifact is regenerated
+  under `0.6.0` — every measured quantity, including the bundle identity, is unchanged, and `B-085`
+  records that the `0.5.0` revisions remain correct for `0.5.0` — the schematic pin is re-pinned
+  with a comment saying it is the one version-coupled pin in that module, and `docs/releasing.md`
+  now carries the re-pin as an explicit numbered step rather than as folklore. Every other golden
+  identity is version-independent and did not move.
+
 
 ## [0.5.0] - 2026-08-05
 
@@ -1680,7 +1704,8 @@ All notable changes are documented here. The format follows
   lifetimes, timeouts, strict contract parsing, and before/after DRC-context revision checks.
 - The development dependency floor excludes pytest versions affected by `PYSEC-2026-1845`.
 
-[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.2.0...v0.3.0
