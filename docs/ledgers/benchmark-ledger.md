@@ -827,3 +827,10 @@ are the audit copies for the original run IDs.
 | Metrics | Three observations; one scene/DRC binding signature; hard DRC pass `true`; clean `false` due five ignored checks; median latency `388,642,375 ns`; board bytes preserved `true`; workspace state before/after both `sha256:aa1aad576600947b500c18fdd06737288d20d43656594ae645b0a86aa79e632a` with two entries; `workspace_mutations=false` derived from metadata-sensitive snapshots. |
 | Artifact | [`2026-08-05-post-placement-observation-replay-b056.json`](../../benchmarks/results/placement/2026-08-05-post-placement-observation-replay-b056.json) |
 | Interpretation | This is an append-only evidence correction to B-045/B-052: it detects content, mode, symlink-target, inode, and nanosecond-mtime changes in the disposable workspace. It does not provide filesystem transaction provenance, live/editor CAS, ERC/electrical/fabrication signoff, or FreeRouting parity. |
+
+#### B-057 — B-056 tracked-tree provenance qualifier
+
+| Field | Recorded evidence |
+|---|---|
+| Correction | In B-056, “clean tree before artifact generation” means the tracked repository tree matched the recorded `source_commit`; the user-owned untracked [`docs/HANDOFF-CODEX.md`](HANDOFF-CODEX.md) was intentionally excluded from staging and does not belong to the benchmark workspace. |
+| Scope | No B-056 artifact bytes, run ID, metrics, or source commit change. This append-only note narrows the provenance wording without exposing or modifying the handoff contents. |
