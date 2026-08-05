@@ -14,11 +14,12 @@ from pathlib import Path
 
 import pytest
 
-from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
+from copper_mcp.adapters import KiCadConstraintProfile, net_id_for_name, parse_kicad_bytes
 from copper_mcp.apply import ApplyEngineError, ApplyVerification, apply_route_candidate
-from copper_mcp.board_ir import NetClass, ParseLimits, PointNM
+from copper_mcp.board_ir import BoardIRSnapshot, NetClass, ParseLimits, PointNM
 from copper_mcp.config import Settings
 from copper_mcp.route_preview import preview_route
+from copper_mcp.routing import AStarRouter, RouteCandidate, RouteRequest
 from copper_mcp.routing.contracts import RoutePath
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -61,6 +62,49 @@ def _routed(board: str, net: str = "AUDIO", workspace: Path | None = None) -> tu
     conversion = parse_kicad_bytes(source, _profile(), ParseLimits())
     assert conversion.snapshot is not None
     return source, conversion.snapshot, preview.candidate
+
+
+def _pre_batched_three_pad_candidate() -> tuple[bytes, BoardIRSnapshot, RouteCandidate]:
+    source = (
+        (CANDIDATE_FIXTURES / "two-pad.kicad_pcb")
+        .read_bytes()
+        .replace(
+            b"  (gr_rect",
+            b"""  (footprint "CopperMCP_RoutePad"
+    (layer "F.Cu")
+    (uuid "20000000-0000-0000-0000-000000000006")
+    (at 20 22 0)
+    (pad "1" smd rect
+      (at 0 0 0)
+      (size 2 2)
+      (layers "F.Cu" "F.Mask" "F.Paste")
+      (net "AUDIO")
+      (uuid "20000000-0000-0000-0000-000000000007")
+    )
+  )
+  (gr_rect""",
+        )
+    )
+    conversion = parse_kicad_bytes(source, _profile(), ParseLimits())
+    assert conversion.snapshot is not None
+    assert conversion.diagnostics == ()
+    snapshot = conversion.snapshot
+    result = AStarRouter.for_replay(
+        router_version="astar-grid/0.4.0",
+        policy="orthogonal-a-star-v1",
+        ordering_policy="component-mst-v1",
+        pad_count=3,
+    ).propose(
+        snapshot,
+        RouteRequest(
+            board_revision=snapshot.snapshot_digest,
+            net_id=net_id_for_name("AUDIO"),
+            layer_id="layer:F.Cu",
+            seed=0,
+        ),
+    )
+    assert result.candidate is not None
+    return source, snapshot, result.candidate
 
 
 class AppliedBytesTests(unittest.TestCase):
@@ -150,6 +194,21 @@ class AppliedBytesTests(unittest.TestCase):
         second = apply_route_candidate(source, snapshot, candidate, _profile())
         self.assertEqual(first.content, second.content)
         self.assertEqual(first.result_revision, second.result_revision)
+
+    def test_apply_replays_a_pre_batched_multi_pin_candidate_without_upgrading_it(self) -> None:
+        source, snapshot, candidate = _pre_batched_three_pad_candidate()
+
+        first = apply_route_candidate(source, snapshot, candidate, _profile())
+        second = apply_route_candidate(source, snapshot, candidate, _profile())
+
+        self.assertEqual(candidate.router_version, "astar-grid/0.4.0")
+        self.assertEqual(candidate.ordering_policy, "component-mst-v1")
+        self.assertEqual(first.content, second.content)
+        self.assertEqual(first.candidate_id, candidate.candidate_id)
+        self.assertEqual(
+            first.segments_added,
+            sum(len(path.vertices) - 1 for path in candidate.patch.paths),
+        )
 
     def test_the_verification_record_cannot_claim_an_unperformed_stage(self) -> None:
         for field, value in (

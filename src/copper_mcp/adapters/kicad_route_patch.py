@@ -14,7 +14,6 @@ from copper_mcp.board_ir import BoardIRSnapshot, ParseLimits, Segment, nm_to_mm
 from copper_mcp.routing import (
     AStarRouter,
     RouteCandidate,
-    RouteRequest,
     verify_candidate_id,
 )
 
@@ -173,14 +172,10 @@ def _render_segment(
 
 
 def _replay_candidate(snapshot: BoardIRSnapshot, candidate: RouteCandidate) -> None:
-    request = RouteRequest(
-        board_revision=snapshot.snapshot_digest,
-        net_id=candidate.patch.net_id,
-        layer_id=candidate.patch.layer_id,
-        seed=candidate.seed,
-        settings=candidate.settings,
-    )
-    replay = AStarRouter().propose(snapshot, request)
+    try:
+        replay = AStarRouter().replay(snapshot, candidate)
+    except ValueError as error:
+        raise KiCadRoutePatchError("candidate router compatibility is unsupported") from error
     if replay.candidate != candidate:
         raise KiCadRoutePatchError("candidate does not match a deterministic router replay")
 

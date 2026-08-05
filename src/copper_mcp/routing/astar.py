@@ -47,6 +47,9 @@ from copper_mcp.routing.steiner_ordering import batched_one_steiner_order
 
 ROUTER_VERSION = "astar-grid/0.6.0"
 ROUTING_POLICY = "orthogonal-a-star-spatial-index-v1"
+_PRE_BATCHED_ROUTER_VERSION = "astar-grid/0.4.0"
+_PRE_SPATIAL_INDEX_ROUTER_VERSION = "astar-grid/0.5.0"
+_PRE_SPATIAL_INDEX_POLICY = "orthogonal-a-star-v1"
 _EMPTY_DIGEST = f"sha256:{'0' * 64}"
 _SPATIAL_INDEX_MIN_ENTRIES = 8
 _MAX_CONGESTION_PENALTY = 1_000_000_000
@@ -65,6 +68,43 @@ _DIRECTIONS: tuple[tuple[int, int], ...] = (
     (0, 1),  # south
 )
 _NO_DIRECTION = len(_DIRECTIONS)
+
+
+@dataclass(frozen=True, slots=True)
+class _RouterIdentity:
+    """One supported deterministic router behavior recorded in candidate identity."""
+
+    router_version: str
+    policy: str
+    use_spatial_index: bool
+
+
+_CURRENT_ROUTER_IDENTITY = _RouterIdentity(ROUTER_VERSION, ROUTING_POLICY, True)
+_REPLAY_IDENTITIES = {
+    (ROUTER_VERSION, ROUTING_POLICY): _CURRENT_ROUTER_IDENTITY,
+    (_PRE_SPATIAL_INDEX_ROUTER_VERSION, _PRE_SPATIAL_INDEX_POLICY): _RouterIdentity(
+        _PRE_SPATIAL_INDEX_ROUTER_VERSION,
+        _PRE_SPATIAL_INDEX_POLICY,
+        False,
+    ),
+    (_PRE_BATCHED_ROUTER_VERSION, _PRE_SPATIAL_INDEX_POLICY): _RouterIdentity(
+        _PRE_BATCHED_ROUTER_VERSION,
+        _PRE_SPATIAL_INDEX_POLICY,
+        False,
+    ),
+}
+
+
+def _ordering_policy_for(identity: _RouterIdentity, pad_count: int) -> str:
+    """Return the only ordering policy this recorded router behavior can reproduce."""
+
+    if pad_count == 2:
+        return SINGLE_PATH_ORDERING
+    if identity.router_version == _PRE_BATCHED_ROUTER_VERSION:
+        return COMPONENT_MST_ORDERING
+    if pad_count <= 9:
+        return BATCHED_ONE_STEINER_ORDERING
+    return COMPONENT_MST_ORDERING
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +130,7 @@ class _Problem:
     polygon_obstacles: tuple[_PolygonObstacle, ...]
     rect_index: ConservativeSpatialIndex[_Rect]
     polygon_index: ConservativeSpatialIndex[_PolygonObstacle]
+    use_spatial_index: bool
     min_ix: int
     max_ix: int
     min_iy: int
@@ -416,13 +457,19 @@ def _edge_is_legal(
 ) -> bool:
     if not _inside_closed(start, problem.safe_board) or not _inside_closed(end, problem.safe_board):
         return False
-    work.checkpoint()
-    edge_bounds = _point_bounds(start, end)
-    for obstacle in problem.rect_index.query(edge_bounds):
+    if problem.use_spatial_index:
+        work.checkpoint()
+        edge_bounds = _point_bounds(start, end)
+        rect_obstacles = problem.rect_index.query(edge_bounds)
+        polygon_obstacles = problem.polygon_index.query(edge_bounds)
+    else:
+        rect_obstacles = problem.rect_obstacles
+        polygon_obstacles = problem.polygon_obstacles
+    for obstacle in rect_obstacles:
         work.obstacle_check()
         if _edge_enters_open_rectangle(start, end, obstacle):
             return False
-    for polygon in problem.polygon_index.query(edge_bounds):
+    for polygon in polygon_obstacles:
         if _edge_within_polygon_offset(start, end, polygon, work):
             return False
     return True
@@ -433,16 +480,22 @@ def _proximity_step(point: PointNM, problem: _Problem, work: _WorkBudget) -> int
     min_x, min_y, max_x, max_y = problem.safe_board
     if min(point.x - min_x, max_x - point.x, point.y - min_y, max_y - point.y) < step:
         return 1
-    work.checkpoint()
-    proximity_bounds = (point.x - step, point.y - step, point.x + step, point.y + step)
-    for obstacle in problem.rect_index.query(proximity_bounds):
+    if problem.use_spatial_index:
+        work.checkpoint()
+        proximity_bounds = (point.x - step, point.y - step, point.x + step, point.y + step)
+        rect_obstacles = problem.rect_index.query(proximity_bounds)
+        polygon_obstacles = problem.polygon_index.query(proximity_bounds)
+    else:
+        rect_obstacles = problem.rect_obstacles
+        polygon_obstacles = problem.polygon_obstacles
+    for obstacle in rect_obstacles:
         work.obstacle_check()
         obstacle_min_x, obstacle_min_y, obstacle_max_x, obstacle_max_y = obstacle
         dx = max(obstacle_min_x - point.x, 0, point.x - obstacle_max_x)
         dy = max(obstacle_min_y - point.y, 0, point.y - obstacle_max_y)
         if max(dx, dy) < step:
             return 1
-    for polygon in problem.polygon_index.query(proximity_bounds):
+    for polygon in polygon_obstacles:
         if _point_within_polygon_offset(
             point,
             polygon,
@@ -992,6 +1045,7 @@ def _prepare(
     work: _WorkBudget,
     verified_fill: tuple[VerifiedFill, ...] = (),
     congestion_penalty: CongestionPenalty | None = None,
+    use_spatial_index: bool = True,
 ) -> _Problem:
     work.checkpoint()
     try:
@@ -1577,6 +1631,7 @@ def _prepare(
         polygon_obstacles=polygon_obstacle_tuple,
         rect_index=rect_index,
         polygon_index=polygon_index,
+        use_spatial_index=use_spatial_index,
         min_ix=min_ix,
         max_ix=max_ix,
         min_iy=min_iy,
@@ -1745,6 +1800,7 @@ def _build_candidate(
     *,
     pad_count: int,
     ordering_policy: str,
+    identity: _RouterIdentity,
     work: _WorkBudget,
 ) -> RouteCandidate:
     settings = problem.request.settings
@@ -1793,8 +1849,8 @@ def _build_candidate(
             obstacle_checks=work.obstacle_checks,
         ),
         settings=settings,
-        router_version=ROUTER_VERSION,
-        policy=ROUTING_POLICY,
+        router_version=identity.router_version,
+        policy=identity.policy,
         seed=problem.request.seed,
     )
     digest = f"sha256:{hashlib.sha256(canonical_candidate_bytes(candidate)).hexdigest()}"
@@ -2095,7 +2151,7 @@ def _emitted_cores(leg: _Leg, half_width_nm: int) -> tuple[_Rect, ...]:
     return tuple(cores)
 
 
-def _route_tree(problem: _Problem, work: _WorkBudget) -> RouteCandidate:
+def _route_tree(problem: _Problem, work: _WorkBudget, identity: _RouterIdentity) -> RouteCandidate:
     """Merge the net's components one leg at a time until a single component remains."""
 
     if problem.pad_count == 2:
@@ -2104,6 +2160,7 @@ def _route_tree(problem: _Problem, work: _WorkBudget) -> RouteCandidate:
             (_search(problem, work),),
             pad_count=2,
             ordering_policy=SINGLE_PATH_ORDERING,
+            identity=identity,
             work=work,
         )
 
@@ -2120,15 +2177,16 @@ def _route_tree(problem: _Problem, work: _WorkBudget) -> RouteCandidate:
 
     half_width_nm = problem.width_nm // 2
     legs: list[_Leg] = []
-    if len(problem.components) <= 9:
+    ordering_policy = _ordering_policy_for(identity, problem.pad_count)
+    if ordering_policy == BATCHED_ONE_STEINER_ORDERING:
         merge_order = _steiner_merge_order(problem.components, work)
-        ordering_policy = BATCHED_ONE_STEINER_ORDERING
-    else:
+    elif ordering_policy == COMPONENT_MST_ORDERING:
         # The cubic topology guide is intentionally limited to low-degree nets.  Large nets
         # retain the previous bounded MST order until a separately budgeted decomposition policy
         # exists; this keeps a hostile pad count from consuming the whole request on ordering.
         merge_order = _merge_order(problem.components, work)
-        ordering_policy = COMPONENT_MST_ORDERING
+    else:  # pragma: no cover - every identity is closed above this boundary
+        raise RuntimeError("internal router identity has no multi-pin ordering policy")
     for first, second in merge_order:
         left, right = find(first), find(second)
         if left == right:
@@ -2185,6 +2243,7 @@ def _route_tree(problem: _Problem, work: _WorkBudget) -> RouteCandidate:
         tuple(legs),
         pad_count=problem.pad_count,
         ordering_policy=ordering_policy,
+        identity=identity,
         work=work,
     )
 
@@ -2232,6 +2291,43 @@ def _validate_public_inputs(
 class AStarRouter:
     """Pure CPU reference backend for one exact two-pin route candidate."""
 
+    def __init__(self, identity: _RouterIdentity | None = None) -> None:
+        self._identity = identity or _CURRENT_ROUTER_IDENTITY
+
+    @classmethod
+    def for_replay(
+        cls,
+        *,
+        router_version: str,
+        policy: str,
+        ordering_policy: str,
+        pad_count: int,
+    ) -> AStarRouter:
+        """Select one recorded router behavior, refusing unknown historical combinations."""
+
+        identity = _REPLAY_IDENTITIES.get((router_version, policy))
+        if identity is None or ordering_policy != _ordering_policy_for(identity, pad_count):
+            raise ValueError("candidate router version and ordering policy are unsupported")
+        return cls(identity)
+
+    def replay(self, snapshot: BoardIRSnapshot, candidate: RouteCandidate) -> RouteResult:
+        """Replay one immutable candidate under its own closed router identity."""
+
+        router = self.for_replay(
+            router_version=candidate.router_version,
+            policy=candidate.policy,
+            ordering_policy=candidate.ordering_policy,
+            pad_count=candidate.pad_count,
+        )
+        request = RouteRequest(
+            board_revision=snapshot.snapshot_digest,
+            net_id=candidate.patch.net_id,
+            layer_id=candidate.patch.layer_id,
+            seed=candidate.seed,
+            settings=candidate.settings,
+        )
+        return router.propose(snapshot, request)
+
     @property
     def name(self) -> str:
         return ROUTING_POLICY
@@ -2264,8 +2360,9 @@ class AStarRouter:
                 work,
                 verified_fill,
                 checked_penalty,
+                self._identity.use_spatial_index,
             )
-            return RouteResult(candidate=_route_tree(problem, work))
+            return RouteResult(candidate=_route_tree(problem, work, self._identity))
         except _AlreadyConnectedError as connection:
             return RouteResult(
                 connected=RouteConnection(

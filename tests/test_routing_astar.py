@@ -2178,6 +2178,33 @@ def test_a_disconnected_multi_pin_net_is_routed_as_a_deterministic_tree() -> Non
     assert first.metrics.unrouted_connections == 0
 
 
+def test_pre_batched_multi_pin_replay_uses_the_recorded_component_mst_profile() -> None:
+    # Eight distant keepouts activate today's spatial index.  They stay far from the route, so
+    # the historical linear scan changes only recorded work, not legal geometry.
+    snapshot = _snapshot(
+        third_target=True,
+        keepouts=tuple((500 + index * 1_000, 500, 700 + index * 1_000, 700) for index in range(8)),
+    )
+    request = _request(snapshot)
+    legacy = _candidate(
+        AStarRouter.for_replay(
+            router_version="astar-grid/0.4.0",
+            policy="orthogonal-a-star-v1",
+            ordering_policy="component-mst-v1",
+            pad_count=3,
+        ).propose(snapshot, request)
+    )
+
+    replayed = _candidate(AStarRouter().replay(snapshot, legacy))
+    current = _candidate(AStarRouter().propose(snapshot, request))
+
+    assert legacy.ordering_policy == "component-mst-v1"
+    assert replayed == legacy
+    assert canonical_candidate_bytes(replayed) == canonical_candidate_bytes(legacy)
+    assert current.ordering_policy == "batched-1-steiner-v1"
+    assert legacy.metrics.obstacle_checks > current.metrics.obstacle_checks
+
+
 def test_every_tree_leg_starts_on_copper_that_already_belongs_to_the_net() -> None:
     """A leg that floats free of its source component would make the merge a fiction."""
 

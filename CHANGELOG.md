@@ -6,6 +6,14 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Restored deterministic render and apply replay for valid low-degree multi-pin candidates made
+  before `batched-1-steiner-v1`. Replay now selects the candidate's recorded
+  `astar-grid/0.4.0` component-MST behavior instead of reinterpreting it with the current
+  one-Steiner default. Candidate bytes and identities are never refreshed; unknown or impossible
+  historical router/order combinations refuse before rendering or applying copper.
+
 ### Added
 
 - Added a read-only live KiCad IPC fidelity oracle. When launched by a KiCad plugin with the
