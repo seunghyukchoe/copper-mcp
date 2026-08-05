@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import copper_mcp
 from copper_mcp.adapters import KiCadConstraintProfile, net_id_for_name, parse_kicad_bytes
 from copper_mcp.adapters.kicad_route_bundle_patch import render_kicad_route_bundle_board
 from copper_mcp.board_ir import NetClass
@@ -213,6 +214,7 @@ def build_report() -> dict[str, Any]:
     baseline_overflow = _baseline(conversion.snapshot)
     report = {
         "schema": "copper-mcp/benchmark/route-bundle/v1",
+        "copper_mcp_version": copper_mcp.__version__,
         "recorded_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
         "fixture": FIXTURE.relative_to(ROOT).as_posix(),
         "fixture_sha256": hashlib.sha256(source).hexdigest(),

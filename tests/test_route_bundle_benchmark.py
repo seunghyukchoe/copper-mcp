@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+import copper_mcp
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import KiCadCliError
 from scripts import benchmark_route_bundle as benchmark
@@ -25,6 +26,8 @@ def test_committed_route_bundle_artifact_binds_its_inputs_and_clean_kicad_eviden
             ).encode()
         ).hexdigest()
     )
+    assert report["copper_mcp_version"] == "0.5.0"
+    assert report["copper_mcp_version"] == copper_mcp.__version__
     assert report["fixture"] == benchmark.FIXTURE.relative_to(benchmark.ROOT).as_posix()
     assert report["fixture_sha256"] == hashlib.sha256(benchmark.FIXTURE.read_bytes()).hexdigest()
     assert report["script"] == benchmark.SCRIPT.as_posix()
