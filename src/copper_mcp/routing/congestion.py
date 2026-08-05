@@ -13,10 +13,12 @@ import hashlib
 import json
 import re
 from collections import Counter, defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from itertools import pairwise
-from typing import TypeAlias, cast
+from types import MappingProxyType
+from typing import Any, TypeAlias, cast
 
 from copper_mcp.board_ir import (
     BoardIRSnapshot,
@@ -40,6 +42,16 @@ from copper_mcp.routing.physical_clearance import (
     PhysicalClearanceFailure,
     verify_negotiated_physical_clearance,
 )
+from copper_mcp.routing.policy import (
+    DeterministicReferencePolicy,
+    PolicyBounds,
+    PolicyFactory,
+    PolicyNet,
+    RoutingPolicyInput,
+    evaluate_policy,
+    policy_decision_digest,
+    policy_input_digest,
+)
 
 _EMPTY_DIGEST = f"sha256:{'0' * 64}"
 _MAX_NETS = 32
@@ -54,6 +66,18 @@ _MAX_TOTAL_PHYSICAL_CHECKS = 10_000_000
 _SHA256 = re.compile(r"^sha256:[a-f0-9]{64}$")
 NEGOTIATED_ROUTER_VERSION = "negotiated-grid-0.2.0"
 NEGOTIATED_ROUTING_POLICY = "negotiated-congestion-v2"
+POLICY_NEGOTIATED_ROUTING_POLICY = "negotiated-congestion-policy-order-v3"
+REFERENCE_POLICY_PROFILE = "deterministic-reference-v1"
+NEGOTIATED_POLICY_BINDING_SCHEMA = "copper-mcp.negotiated-policy-binding.v1"
+NEGOTIATED_POLICY_EVIDENCE_SCHEMA = "copper-mcp.negotiated-policy-evidence.v1"
+_POLICY_ID = re.compile(r"^[a-z0-9][a-z0-9._/-]{0,127}$")
+
+# This intentionally private, immutable registry is the only policy-admission boundary.  It
+# keeps callers from supplying arbitrary in-process objects, callables, model adapters, or remote
+# evaluators through ``negotiate_routes``.
+_POLICY_PROFILE_REGISTRY: Mapping[str, PolicyFactory] = MappingProxyType(
+    {REFERENCE_POLICY_PROFILE: DeterministicReferencePolicy}
+)
 
 ResourceKey: TypeAlias = tuple[str, PointNM, PointNM]
 
@@ -199,6 +223,54 @@ class CongestionResource:
         _integer("congestion resource usage", self.usage, minimum=2)
 
 
+def _policy_binding_digest(envelope_digest: str, decision_digest: str) -> str:
+    """Return the versioned candidate binding for one accepted policy decision."""
+
+    payload = {
+        "candidate_identity_policy": POLICY_NEGOTIATED_ROUTING_POLICY,
+        "negotiated_envelope_digest": envelope_digest,
+        "policy_decision_digest": decision_digest,
+        "schema": NEGOTIATED_POLICY_BINDING_SCHEMA,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+
+
+@dataclass(frozen=True, slots=True)
+class NegotiatedPolicyEvidence:
+    """Redacted binding evidence for one accepted, pre-routing policy decision."""
+
+    envelope_digest: str
+    input_digest: str
+    decision_digest: str
+    composite_digest: str
+    policy_id: str
+    policy_profile: str
+    schema: str = NEGOTIATED_POLICY_EVIDENCE_SCHEMA
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("negotiated envelope digest", self.envelope_digest),
+            ("policy input digest", self.input_digest),
+            ("policy decision digest", self.decision_digest),
+            ("policy composite digest", self.composite_digest),
+        ):
+            if not isinstance(value, str) or not _SHA256.fullmatch(value):
+                raise ValueError(f"{name} is malformed")
+        if not isinstance(self.policy_id, str) or not _POLICY_ID.fullmatch(self.policy_id):
+            raise ValueError("negotiated policy ID is malformed")
+        if not isinstance(self.policy_profile, str) or not _POLICY_ID.fullmatch(
+            self.policy_profile
+        ):
+            raise ValueError("negotiated policy profile is malformed")
+        if self.schema != NEGOTIATED_POLICY_EVIDENCE_SCHEMA:
+            raise ValueError("negotiated policy evidence schema is unsupported")
+        if self.composite_digest != _policy_binding_digest(
+            self.envelope_digest, self.decision_digest
+        ):
+            raise ValueError("negotiated policy composite digest is not bound to its evidence")
+
+
 @dataclass(frozen=True, slots=True)
 class NegotiatedRoutingResult:
     """Immutable evidence from one bounded negotiated-routing replay."""
@@ -268,6 +340,34 @@ class NegotiatedRoutingResult:
         """Return true only for a fully routed, structurally conflict-free proposal."""
 
         return self.status is NegotiatedRoutingStatus.COMPLETED and not self.overflow_resources
+
+
+@dataclass(frozen=True, slots=True)
+class PolicyNegotiatedRoutingResult(NegotiatedRoutingResult):
+    """A negotiated result with accepted closed-policy provenance.
+
+    The legacy base result deliberately has no optional evidence field so its dataclass fields,
+    repr, and wire representation remain byte-for-byte compatible when no profile is selected.
+    """
+
+    policy_evidence: NegotiatedPolicyEvidence | None = None
+
+    def __post_init__(self) -> None:
+        super(PolicyNegotiatedRoutingResult, self).__post_init__()
+        if not isinstance(self.policy_evidence, NegotiatedPolicyEvidence):
+            raise ValueError("negotiated policy evidence is malformed")
+        if self.policy_evidence.envelope_digest != self.policy_digest:
+            raise ValueError("negotiated policy evidence has a different envelope digest")
+
+
+def _published_result(
+    policy_evidence: NegotiatedPolicyEvidence | None, **values: object
+) -> NegotiatedRoutingResult:
+    """Construct the legacy or policy-enabled immutable result shape as appropriate."""
+
+    if policy_evidence is None:
+        return NegotiatedRoutingResult(**cast(Any, values))
+    return PolicyNegotiatedRoutingResult(**cast(Any, values), policy_evidence=policy_evidence)
 
 
 class CongestionLedger:
@@ -618,10 +718,12 @@ def _router_boundary_failure(
     iterations: int,
     ripups: int,
     total_physical_checks: int,
+    policy_evidence: NegotiatedPolicyEvidence | None = None,
 ) -> NegotiatedRoutingResult:
     """Fail closed without preserving a prefix from an unbound router invocation."""
 
-    return NegotiatedRoutingResult(
+    return _published_result(
+        policy_evidence,
         status=NegotiatedRoutingStatus.INVALID_REQUEST,
         board_revision=envelope.board_revision,
         candidates=(),
@@ -663,10 +765,59 @@ def _validate_snapshot_requests(
     return None
 
 
-def _reidentify_candidate(candidate: RouteCandidate, policy_digest: str) -> RouteCandidate:
+def _derive_policy_input(
+    snapshot: BoardIRSnapshot, envelope: NegotiatedRoutingRequest
+) -> RoutingPolicyInput:
+    """Derive the closed, neutral, pre-routing feature view owned by the coordinator."""
+
+    nets: list[PolicyNet] = []
+    for request in sorted(envelope.requests, key=lambda item: (item.net_id, item.seed)):
+        centres = _request_pad_centres(snapshot, request)
+        # The request has already passed ``_validate_snapshot_requests``.  Keep this guard so a
+        # future caller cannot turn a stale assumption into an exception at the policy boundary.
+        if centres is None:
+            raise ValueError("validated negotiated pads are unavailable")
+        distance = (abs(centres[0].x - centres[1].x) + abs(centres[0].y - centres[1].y)) // (
+            envelope.grid_step_nm
+        )
+        nets.append(
+            PolicyNet(
+                net_id=request.net_id,
+                criticality=0,
+                demand_cells=max(1, min(distance, 1_000_000)),
+                congestion_score=0,
+            )
+        )
+    return RoutingPolicyInput(
+        board_revision=envelope.board_revision,
+        bounds=PolicyBounds(0, 0, 0, 0),
+        nets=tuple(nets),
+    )
+
+
+def _policy_cancelled_result(envelope: NegotiatedRoutingRequest) -> NegotiatedRoutingResult:
+    """Return the atomic pre-routing cancellation result without policy provenance."""
+
+    return NegotiatedRoutingResult(
+        status=NegotiatedRoutingStatus.CANCELLED,
+        board_revision=envelope.board_revision,
+        unrouted_nets=tuple(sorted(item.net_id for item in envelope.requests)),
+        diagnostic="negotiated routing was cancelled before the next bounded iteration",
+        policy_digest=envelope.policy_digest,
+    )
+
+
+def _reidentify_candidate(
+    candidate: RouteCandidate, binding_digest: str, *, full_binding: bool = False
+) -> RouteCandidate:
     """Bind each accepted path to the negotiated policy envelope before publication."""
 
-    policy = f"{NEGOTIATED_ROUTING_POLICY}-{policy_digest.removeprefix('sha256:')[:16]}"
+    digest_suffix = binding_digest.removeprefix("sha256:")
+    if not full_binding:
+        # Keep historic no-policy candidate identities and labels byte-for-byte compatible.
+        digest_suffix = digest_suffix[:16]
+    policy_prefix = POLICY_NEGOTIATED_ROUTING_POLICY if full_binding else NEGOTIATED_ROUTING_POLICY
+    policy = f"{policy_prefix}-{digest_suffix}"
     marked = replace(
         candidate,
         candidate_id=_EMPTY_DIGEST,
@@ -698,8 +849,9 @@ def negotiate_routes(
     *,
     cancelled: object = None,
     router: AStarRouter | None = None,
+    policy_profile: str | None = None,
 ) -> NegotiatedRoutingResult:
-    """Run bounded deterministic rip-up/reroute and return immutable candidate evidence."""
+    """Run negotiated routing with an optional internal closed first-pass policy profile."""
 
     if not isinstance(snapshot, BoardIRSnapshot) or not isinstance(
         envelope, NegotiatedRoutingRequest
@@ -717,6 +869,62 @@ def negotiate_routes(
         return _invalid_result(validation_error, board_revision=checked_envelope.board_revision)
 
     cancellation_check = cast(CancellationCheck | None, cancelled)
+    policy_requested = policy_profile is not None
+    if policy_requested and _cancelled(cancellation_check):
+        return _policy_cancelled_result(checked_envelope)
+    if policy_profile is not None and type(policy_profile) is not str:
+        return _invalid_result(
+            "the negotiated routing policy was rejected",
+            board_revision=checked_envelope.board_revision,
+        )
+
+    policy_evidence: NegotiatedPolicyEvidence | None = None
+    initial_order: tuple[RouteRequest, ...] | None = None
+    if policy_requested:
+        try:
+            assert policy_profile is not None
+            policy_factory = _POLICY_PROFILE_REGISTRY.get(policy_profile)
+            if policy_factory is None:
+                raise ValueError("unknown negotiated policy profile")
+            selected_policy = policy_factory()
+            policy_input = _derive_policy_input(checked_snapshot, checked_envelope)
+            decision = evaluate_policy(selected_policy, policy_input)
+            input_digest = policy_input_digest(policy_input)
+            expected_net_ids = tuple(net.net_id for net in policy_input.nets)
+            if (
+                decision.input_digest != input_digest
+                or len(decision.net_order) != len(expected_net_ids)
+                or len(set(decision.net_order)) != len(decision.net_order)
+                or set(decision.net_order) != set(expected_net_ids)
+                or decision.corridor_hints
+                or decision.repair_windows
+            ):
+                raise ValueError("policy decision is outside the negotiated first-pass boundary")
+            decision_digest = policy_decision_digest(decision)
+            policy_evidence = NegotiatedPolicyEvidence(
+                envelope_digest=checked_envelope.policy_digest,
+                input_digest=input_digest,
+                decision_digest=decision_digest,
+                composite_digest=_policy_binding_digest(
+                    checked_envelope.policy_digest, decision_digest
+                ),
+                policy_id=decision.policy_id,
+                policy_profile=policy_profile,
+            )
+            by_net_id = {request.net_id: request for request in checked_envelope.requests}
+            initial_order = tuple(by_net_id[net_id] for net_id in decision.net_order)
+        except Exception:
+            # This is an untrusted in-process boundary.  Do not expose exception text, raw
+            # policy output, or a partial policy binding before the first router call.
+            return _invalid_result(
+                "the negotiated routing policy was rejected",
+                board_revision=checked_envelope.board_revision,
+            )
+        if _cancelled(cancellation_check):
+            return _policy_cancelled_result(checked_envelope)
+
+    # All policy/factory work precedes router construction.  The default path deliberately keeps
+    # the existing construction, ordering, and envelope-bound candidate identity unchanged.
     selected_router = router or AStarRouter()
     replay_custom_router = not _is_exact_reference_router(selected_router)
     reference_router = AStarRouter()
@@ -736,7 +944,12 @@ def negotiate_routes(
     total_expansions = 0
     total_obstacle_checks = 0
     total_physical_checks = 0
-    current_order = ordered
+    current_order = initial_order or ordered
+    candidate_binding_digest = (
+        policy_evidence.composite_digest
+        if policy_evidence is not None
+        else checked_envelope.policy_digest
+    )
     final_failure_message: str | None = None
 
     for iteration in range(1, checked_envelope.max_iterations + 1):
@@ -814,6 +1027,7 @@ def negotiate_routes(
                     iterations=iteration,
                     ripups=ripups,
                     total_physical_checks=total_physical_checks,
+                    policy_evidence=policy_evidence,
                 )
             if not _router_result_is_bound(result, checked_snapshot, bounded_request):
                 return _router_boundary_failure(
@@ -822,6 +1036,7 @@ def negotiate_routes(
                     iterations=iteration,
                     ripups=ripups,
                     total_physical_checks=total_physical_checks,
+                    policy_evidence=policy_evidence,
                 )
             if (
                 result.diagnostic is not None
@@ -848,6 +1063,7 @@ def negotiate_routes(
                         iterations=iteration,
                         ripups=ripups,
                         total_physical_checks=total_physical_checks,
+                        policy_evidence=policy_evidence,
                     )
                 if not _router_result_is_bound(
                     verification_result, checked_snapshot, bounded_request
@@ -858,6 +1074,7 @@ def negotiate_routes(
                         iterations=iteration,
                         ripups=ripups,
                         total_physical_checks=total_physical_checks,
+                        policy_evidence=policy_evidence,
                     )
                 if (
                     verification_result.diagnostic is not None
@@ -872,6 +1089,7 @@ def negotiate_routes(
                         iterations=iteration,
                         ripups=ripups,
                         total_physical_checks=total_physical_checks,
+                        policy_evidence=policy_evidence,
                     )
             result_expansions, result_obstacle_checks = _result_work(result)
             total_expansions += result_expansions
@@ -884,7 +1102,11 @@ def negotiate_routes(
                 total_obstacle_checks += verification_obstacle_checks
             if result.candidate is not None:
                 try:
-                    marked = _reidentify_candidate(result.candidate, checked_envelope.policy_digest)
+                    marked = _reidentify_candidate(
+                        result.candidate,
+                        candidate_binding_digest,
+                        full_binding=policy_evidence is not None,
+                    )
                     ledger.add_candidate(marked)
                 except Exception:  # pragma: no cover - reject malformed canonical route geometry
                     return _router_boundary_failure(
@@ -893,6 +1115,7 @@ def negotiate_routes(
                         iterations=iteration,
                         ripups=ripups,
                         total_physical_checks=total_physical_checks,
+                        policy_evidence=policy_evidence,
                     )
                 working[request.net_id] = marked
             elif result.connected is not None:
@@ -973,7 +1196,8 @@ def negotiate_routes(
             best_unrouted = unrouted_tuple
             best_overflow = present_overflow
         if not unrouted_tuple and not present_overflow:
-            return NegotiatedRoutingResult(
+            return _published_result(
+                policy_evidence,
                 status=NegotiatedRoutingStatus.COMPLETED,
                 board_revision=checked_envelope.board_revision,
                 candidates=candidates,
@@ -995,7 +1219,8 @@ def negotiate_routes(
             )
         )
         if failure_message is not None and not candidates and not connections:
-            return NegotiatedRoutingResult(
+            return _published_result(
+                policy_evidence,
                 status=NegotiatedRoutingStatus.NO_PATH,
                 board_revision=checked_envelope.board_revision,
                 candidates=(),
@@ -1019,7 +1244,8 @@ def negotiate_routes(
             final_failure_message
             or "no negotiated net produced a candidate within the bounded budget"
         )
-    return NegotiatedRoutingResult(
+    return _published_result(
+        policy_evidence,
         status=status,
         board_revision=checked_envelope.board_revision,
         candidates=best_candidates,
@@ -1037,10 +1263,15 @@ def negotiate_routes(
 
 
 __all__ = [
+    "NEGOTIATED_POLICY_BINDING_SCHEMA",
+    "POLICY_NEGOTIATED_ROUTING_POLICY",
+    "REFERENCE_POLICY_PROFILE",
     "CongestionLedger",
     "CongestionResource",
+    "NegotiatedPolicyEvidence",
     "NegotiatedRoutingRequest",
     "NegotiatedRoutingResult",
     "NegotiatedRoutingStatus",
+    "PolicyNegotiatedRoutingResult",
     "negotiate_routes",
 ]

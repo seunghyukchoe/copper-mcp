@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import replace
+from dataclasses import asdict, fields, replace
+from types import MappingProxyType
 
 import pytest
 
+import copper_mcp.routing.congestion as congestion_module
 from copper_mcp.board_ir import (
     ConstraintSet,
     Footprint,
@@ -25,11 +27,14 @@ from copper_mcp.board_ir import (
 )
 from copper_mcp.routing import (
     COMPONENT_MST_ORDERING,
+    REFERENCE_POLICY_PROFILE,
     AStarRouter,
     AStarSettings,
     CongestionLedger,
     NegotiatedRoutingRequest,
+    NegotiatedRoutingResult,
     NegotiatedRoutingStatus,
+    PolicyNegotiatedRoutingResult,
     RouteCandidate,
     RouteConnection,
     RouteCost,
@@ -45,7 +50,17 @@ from copper_mcp.routing import (
 )
 from copper_mcp.routing.physical_clearance import (
     PhysicalClearanceFailure,
+    PhysicalClearanceVerificationResult,
     verify_negotiated_physical_clearance,
+)
+from copper_mcp.routing.policy import (
+    REFERENCE_POLICY_ID,
+    CorridorCandidate,
+    PolicyBounds,
+    RepairWindowCandidate,
+    RoutingPolicyDecision,
+    RoutingPolicyInput,
+    policy_input_digest,
 )
 
 BOARD_SOURCE = f"sha256:{'c' * 64}"
@@ -191,6 +206,46 @@ def _assert_unbound_router_result(result: object) -> None:
     assert result.overflow_resources == ()
     assert result.total_wire_length_nm == 0
     assert result.diagnostic == "the negotiated router result failed identity validation"
+
+
+class _OrderedPolicy:
+    policy_id = "negotiated-policy-test-v1"
+
+    def __init__(self, net_order: tuple[str, ...]) -> None:
+        self.net_order = net_order
+        self.calls = 0
+        self.inputs: list[RoutingPolicyInput] = []
+
+    def propose(self, policy_input: RoutingPolicyInput) -> RoutingPolicyDecision:
+        self.calls += 1
+        self.inputs.append(policy_input)
+        return RoutingPolicyDecision(
+            policy_id=self.policy_id,
+            input_digest=policy_input_digest(policy_input),
+            net_order=self.net_order,
+        )
+
+
+class _RecordingRouter:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+        self._reference = AStarRouter()
+
+    def propose(self, snapshot: object, request: RouteRequest, **kwargs: object) -> RouteResult:
+        self.calls.append(request.net_id)
+        return self._reference.propose(snapshot, request, **kwargs)
+
+
+def _install_policy_profile(
+    monkeypatch: pytest.MonkeyPatch,
+    profile: str,
+    factory: object,
+) -> None:
+    monkeypatch.setattr(
+        congestion_module,
+        "_POLICY_PROFILE_REGISTRY",
+        MappingProxyType({profile: factory}),
+    )
 
 
 def test_negotiated_crossing_replay_removes_baseline_lattice_overflow() -> None:
@@ -495,11 +550,47 @@ def test_negotiated_router_accepts_reference_equivalent_custom_router_after_repl
         ) -> RouteResult:
             return self.reference.propose(router_snapshot, request, **kwargs)
 
-    result = negotiate_routes(snapshot, envelope, router=ReferenceEquivalentRouter())
+    result = negotiate_routes(
+        snapshot,
+        envelope,
+        router=ReferenceEquivalentRouter(),
+        policy_profile=REFERENCE_POLICY_PROFILE,
+    )
 
     assert result.status is NegotiatedRoutingStatus.COMPLETED
     assert result.ok
     assert len(result.candidates) == 2
+    assert isinstance(result, PolicyNegotiatedRoutingResult)
+    assert result.policy_evidence.policy_id == REFERENCE_POLICY_ID
+    assert result.policy_evidence.policy_profile == REFERENCE_POLICY_PROFILE
+
+
+def test_policy_enabled_physical_failure_retains_only_redacted_policy_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot = _crossing_snapshot()
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_requests(snapshot),
+        max_iterations=1,
+    )
+    monkeypatch.setattr(
+        congestion_module,
+        "verify_negotiated_physical_clearance",
+        lambda *_args, **_kwargs: PhysicalClearanceVerificationResult(
+            pair_checks=1,
+            failure=PhysicalClearanceFailure.CLEARANCE_VIOLATION,
+        ),
+    )
+
+    result = negotiate_routes(snapshot, envelope, policy_profile=REFERENCE_POLICY_PROFILE)
+
+    assert isinstance(result, PolicyNegotiatedRoutingResult)
+    assert result.status is NegotiatedRoutingStatus.NO_PATH
+    assert result.candidates == ()
+    assert result.connections == ()
+    assert result.policy_evidence.policy_id == REFERENCE_POLICY_ID
+    assert result.policy_evidence.policy_profile == REFERENCE_POLICY_PROFILE
 
 
 def test_negotiated_router_rejects_unbound_connections_and_router_failures_atomically() -> None:
@@ -887,3 +978,351 @@ def test_physical_clearance_accepts_exact_boundary_and_bounds_work() -> None:
     )
     assert cancelled.failure is PhysicalClearanceFailure.CANCELLED
     assert cancelled.pair_checks == 0
+
+
+def test_negotiated_policy_only_changes_first_pass_order_and_is_evaluated_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot = _crossing_snapshot()
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_requests(snapshot),
+        max_iterations=2,
+    )
+    policy = _OrderedPolicy((V_NET, H_NET))
+    _install_policy_profile(monkeypatch, "test-reverse", lambda: policy)
+    router = _RecordingRouter()
+
+    result = negotiate_routes(snapshot, envelope, router=router, policy_profile="test-reverse")
+
+    assert policy.calls == 1
+    assert isinstance(result, PolicyNegotiatedRoutingResult)
+    assert router.calls[:2] == [V_NET, H_NET]
+    # The crossing has equal exact congestion scores.  The coordinator's retry tie-break is
+    # independent of the policy's first-pass permutation.
+    assert router.calls[2:] == [H_NET, V_NET]
+    assert result.policy_digest == envelope.policy_digest
+    assert result.policy_evidence is not None
+    assert result.policy_evidence.policy_id == policy.policy_id
+    assert result.policy_evidence.policy_profile == "test-reverse"
+    assert result.policy_evidence.input_digest == policy_input_digest(policy.inputs[0])
+    assert policy.inputs[0].bounds == PolicyBounds(0, 0, 0, 0)
+    assert policy.inputs[0].corridor_candidates == ()
+    assert policy.inputs[0].repair_candidates == ()
+    assert [(net.criticality, net.congestion_score) for net in policy.inputs[0].nets] == [
+        (0, 0),
+        (0, 0),
+    ]
+    assert [net.demand_cells for net in policy.inputs[0].nets] == [8, 8]
+    expected_label = (
+        "negotiated-congestion-policy-order-v3-"
+        f"{result.policy_evidence.composite_digest.removeprefix('sha256:')}"
+    )
+    assert all(candidate.policy == expected_label for candidate in result.candidates)
+
+
+def test_negotiated_policy_binding_is_deterministic_and_preserves_no_policy_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot = _crossing_snapshot()
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_requests(snapshot),
+        max_iterations=1,
+    )
+    _install_policy_profile(
+        monkeypatch,
+        "test-reverse",
+        lambda: _OrderedPolicy((V_NET, H_NET)),
+    )
+    first = negotiate_routes(snapshot, envelope, policy_profile="test-reverse")
+    second = negotiate_routes(snapshot, envelope, policy_profile="test-reverse")
+    _install_policy_profile(
+        monkeypatch,
+        "test-forward",
+        lambda: _OrderedPolicy((H_NET, V_NET)),
+    )
+    forward = negotiate_routes(snapshot, envelope, policy_profile="test-forward")
+    legacy = negotiate_routes(snapshot, envelope)
+    legacy_replays = tuple(negotiate_routes(snapshot, envelope) for _ in range(10))
+
+    assert isinstance(first, PolicyNegotiatedRoutingResult)
+    assert isinstance(second, PolicyNegotiatedRoutingResult)
+    assert isinstance(forward, PolicyNegotiatedRoutingResult)
+    assert first.policy_evidence == second.policy_evidence
+    assert first.policy_evidence.composite_digest != forward.policy_evidence.composite_digest
+    assert tuple(candidate.candidate_id for candidate in first.candidates) == tuple(
+        candidate.candidate_id for candidate in second.candidates
+    )
+    assert tuple(candidate.candidate_id for candidate in first.candidates) != tuple(
+        candidate.candidate_id for candidate in forward.candidates
+    )
+    assert type(legacy) is NegotiatedRoutingResult
+    assert not hasattr(legacy, "policy_evidence")
+    assert all(replay == legacy for replay in legacy_replays)
+    assert all(
+        candidate.policy
+        == f"negotiated-congestion-v2-{envelope.policy_digest.removeprefix('sha256:')[:16]}"
+        for candidate in legacy.candidates
+    )
+
+
+def test_policy_binding_digest_has_a_versioned_candidate_identity_discriminator() -> None:
+    assert (
+        congestion_module._policy_binding_digest(
+            f"sha256:{'a' * 64}",
+            f"sha256:{'b' * 64}",
+        )
+        == "sha256:7c28a8b5159ec949b8fd8885f48df981c8cff63256f95d79fe54b392a06df882"
+    )
+
+
+def test_policy_id_is_not_an_admitted_profile_selector() -> None:
+    snapshot = _crossing_snapshot()
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_requests(snapshot),
+    )
+    router = _RecordingRouter()
+
+    result = negotiate_routes(
+        snapshot,
+        envelope,
+        router=router,
+        policy_profile=REFERENCE_POLICY_ID,
+    )
+
+    assert result.status is NegotiatedRoutingStatus.INVALID_REQUEST
+    assert result.diagnostic == "the negotiated routing policy was rejected"
+    assert router.calls == []
+
+
+def test_no_policy_result_preserves_legacy_dataclass_wire_and_repr_shape() -> None:
+    snapshot = _crossing_snapshot()
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_requests(snapshot),
+        max_iterations=1,
+    )
+
+    result = negotiate_routes(snapshot, envelope)
+
+    assert type(result) is NegotiatedRoutingResult
+    assert tuple(field.name for field in fields(result)) == (
+        "status",
+        "board_revision",
+        "candidates",
+        "connections",
+        "unrouted_nets",
+        "iterations",
+        "ripups",
+        "overflow_resources",
+        "overflow_units",
+        "total_wire_length_nm",
+        "total_physical_checks",
+        "diagnostic",
+        "policy_digest",
+    )
+    assert tuple(asdict(result)) == tuple(field.name for field in fields(result))
+    assert repr(result).startswith("NegotiatedRoutingResult(")
+
+
+def test_negotiated_policy_failures_are_redacted_and_prevent_router_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot = _crossing_snapshot()
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_requests(snapshot),
+    )
+
+    class ThrowingPolicy:
+        policy_id = "throwing-policy-v1"
+
+        def propose(self, _policy_input: RoutingPolicyInput) -> RoutingPolicyDecision:
+            raise RuntimeError("do not disclose this policy failure")
+
+    class ForeignNetPolicy:
+        policy_id = "foreign-policy-v1"
+
+        def propose(self, policy_input: RoutingPolicyInput) -> RoutingPolicyDecision:
+            return RoutingPolicyDecision(
+                policy_id=self.policy_id,
+                input_digest=policy_input_digest(policy_input),
+                net_order=(H_NET, "net:foreign"),
+            )
+
+    class WindowPolicy:
+        policy_id = "window-policy-v1"
+
+        def propose(self, policy_input: RoutingPolicyInput) -> RoutingPolicyDecision:
+            return RoutingPolicyDecision(
+                policy_id=self.policy_id,
+                input_digest=policy_input_digest(policy_input),
+                net_order=(H_NET, V_NET),
+                corridor_hints=(CorridorCandidate(H_NET, PolicyBounds(0, 0, 0, 0), 0, 0),),
+            )
+
+    class RepairWindowPolicy:
+        policy_id = "repair-window-policy-v1"
+
+        def propose(self, policy_input: RoutingPolicyInput) -> RoutingPolicyDecision:
+            return RoutingPolicyDecision(
+                policy_id=self.policy_id,
+                input_digest=policy_input_digest(policy_input),
+                net_order=(H_NET, V_NET),
+                repair_windows=(RepairWindowCandidate(H_NET, PolicyBounds(0, 0, 0, 0), 0),),
+            )
+
+    class WrongIdPolicy:
+        policy_id = "wrong-id-policy-v1"
+
+        def propose(self, policy_input: RoutingPolicyInput) -> RoutingPolicyDecision:
+            return RoutingPolicyDecision(
+                policy_id="different-policy-v1",
+                input_digest=policy_input_digest(policy_input),
+                net_order=(H_NET, V_NET),
+            )
+
+    class WrongDigestPolicy:
+        policy_id = "wrong-digest-policy-v1"
+
+        def propose(self, _policy_input: RoutingPolicyInput) -> RoutingPolicyDecision:
+            return RoutingPolicyDecision(
+                policy_id=self.policy_id,
+                input_digest=f"sha256:{'0' * 64}",
+                net_order=(H_NET, V_NET),
+            )
+
+    class MissingNetPolicy:
+        policy_id = "missing-net-policy-v1"
+
+        def propose(self, policy_input: RoutingPolicyInput) -> RoutingPolicyDecision:
+            return RoutingPolicyDecision(
+                policy_id=self.policy_id,
+                input_digest=policy_input_digest(policy_input),
+                net_order=(H_NET,),
+            )
+
+    class RepeatedNetPolicy:
+        policy_id = "repeated-policy-v1"
+
+        def propose(self, policy_input: RoutingPolicyInput) -> RoutingPolicyDecision:
+            # An in-process policy is an untrusted boundary and can deliberately bypass a frozen
+            # dataclass constructor.  The coordinator must still reject a repeated ordering.
+            decision = object.__new__(RoutingPolicyDecision)
+            for name, value in (
+                ("policy_id", self.policy_id),
+                ("input_digest", policy_input_digest(policy_input)),
+                ("net_order", (H_NET, V_NET, H_NET)),
+                ("corridor_hints", ()),
+                ("repair_windows", ()),
+                ("schema", "copper-mcp.routing-policy-decision.v1"),
+            ):
+                object.__setattr__(decision, name, value)
+            return decision
+
+    for supplied in (
+        ThrowingPolicy(),
+        ForeignNetPolicy(),
+        WindowPolicy(),
+        RepairWindowPolicy(),
+        WrongIdPolicy(),
+        WrongDigestPolicy(),
+        MissingNetPolicy(),
+        RepeatedNetPolicy(),
+    ):
+        router = _RecordingRouter()
+        _install_policy_profile(monkeypatch, "hostile", lambda supplied=supplied: supplied)
+        result = negotiate_routes(snapshot, envelope, router=router, policy_profile="hostile")
+        assert result.status is NegotiatedRoutingStatus.INVALID_REQUEST
+        assert result.diagnostic == "the negotiated routing policy was rejected"
+        assert result.candidates == ()
+        assert result.connections == ()
+        assert not hasattr(result, "policy_evidence")
+        assert router.calls == []
+
+    factory_calls = 0
+
+    def rejected_factory() -> object:
+        nonlocal factory_calls
+        factory_calls += 1
+        raise RuntimeError("do not disclose factory failure")
+
+    _install_policy_profile(monkeypatch, "throwing-factory", rejected_factory)
+    router = _RecordingRouter()
+    factory_result = negotiate_routes(
+        snapshot,
+        envelope,
+        router=router,
+        policy_profile="throwing-factory",
+    )
+    assert factory_calls == 1
+    assert factory_result.diagnostic == "the negotiated routing policy was rejected"
+    assert router.calls == []
+
+    _install_policy_profile(monkeypatch, "malformed-factory", lambda: object())
+    router = _RecordingRouter()
+    malformed_result = negotiate_routes(
+        snapshot,
+        envelope,
+        router=router,
+        policy_profile="malformed-factory",
+    )
+    assert malformed_result.diagnostic == "the negotiated routing policy was rejected"
+    assert router.calls == []
+
+    unknown_router = _RecordingRouter()
+    unknown_result = negotiate_routes(
+        snapshot,
+        envelope,
+        router=unknown_router,
+        policy_profile="unknown-profile",
+    )
+    assert unknown_result.diagnostic == "the negotiated routing policy was rejected"
+    assert unknown_router.calls == []
+
+
+def test_negotiated_policy_cancellation_publishes_no_binding_or_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot = _crossing_snapshot()
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_requests(snapshot),
+    )
+    policy = _OrderedPolicy((V_NET, H_NET))
+    _install_policy_profile(monkeypatch, "test-cancellation", lambda: policy)
+    router = _RecordingRouter()
+    before = negotiate_routes(
+        snapshot,
+        envelope,
+        router=router,
+        policy_profile="test-cancellation",
+        cancelled=lambda: True,
+    )
+
+    assert before.status is NegotiatedRoutingStatus.CANCELLED
+    assert before.iterations == 0
+    assert type(before) is NegotiatedRoutingResult
+    assert not hasattr(before, "policy_evidence")
+    assert before.candidates == ()
+    assert before.connections == ()
+    assert policy.calls == 0
+    assert router.calls == []
+
+    checks = iter((False, True))
+    after_policy = negotiate_routes(
+        snapshot,
+        envelope,
+        router=router,
+        policy_profile="test-cancellation",
+        cancelled=lambda: next(checks),
+    )
+    assert after_policy.status is NegotiatedRoutingStatus.CANCELLED
+    assert type(after_policy) is NegotiatedRoutingResult
+    assert not hasattr(after_policy, "policy_evidence")
+    assert after_policy.candidates == ()
+    assert after_policy.connections == ()
+    assert policy.calls == 1
+    assert router.calls == []
