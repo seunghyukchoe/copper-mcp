@@ -885,3 +885,15 @@ are the audit copies for the original run IDs.
 | Correction | B-058's `300,000 nm` is the available copper-edge clearance after two 600,000 nm track widths, not centreline clearance. The earlier wording is preserved above as append-only history. |
 | Safety gate | B-058/D-103's “generic linear verifier” wording was inaccurate: no generic linear independent candidate verifier is implemented. Exact deterministic A* replay is the current safety gate for custom negotiated-router output under the shared half-budget allocation. A generic linear independent verifier remains future acceleration work. |
 | Scope | No B-058 artifact bytes, run ID (`sha256:6b55bb5d8fc59c26bec6c657a5af68249703081cded6224a4103c1cb49183397`), implementation/evidence commits, or physical-gate result changes. This correction adds no KiCad DRC, board-wide clearance, or real FreeRouting comparison claim. |
+
+#### B-063 — negotiated policy initial-order replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:c63409d9429c345c70817ae5516d8b73d3055f01074a1bbff3e4e9765c22c7fa` |
+| Date and commits | 2026-08-05; implementation `cde2f9adc3a6436dbe99a20a12946cc70616f232`; typed harness base `62570d5bcbe4d812028f77380cef8230241a1785`; evidence harness `2d249640bc2c6abfd0ad5a89d21af7b89366ef4a`; artifact materialization `e0345a7bf2d65a8f3a8e75c4ba4f4ba64e146dca`. |
+| Configuration | `copper-mcp/benchmark/routing-policy-order/v1`; ten deterministic replays per synthetic fixture compare no-profile routing with the exact internal `deterministic-reference-v1` profile. The profile can affect only the first negotiated net order; retry ordering remains coordinator-owned. |
+| Metrics | All baseline/profile runs completed with zero overflow. Primary asymmetric fixture: baseline `185` expansions, `2,585` obstacle checks, `22 mm`, `1` iteration; profile `392`, `5,307`, `24 mm`, `2`. Independent control: baseline `121`, `1,625`, `18 mm`, `1`; profile `315`, `4,174`, `20 mm`, `2`. Neutral crossing control was equal at `197` expansions, `2,576` checks, `26 mm`, and `1` iteration. |
+| Artifact | [`2026-08-05-routing-policy-order.json`](../../benchmarks/results/routing/2026-08-05-routing-policy-order.json); the artifact records its script SHA-256, profile, policy ID, three fixture digests, and ten deterministic replays. |
+| Classification | `order-effect/no quality claim` |
+| Interpretation | This shows only that the bounded initial-order profile has a deterministic scheduling effect in synthetic fixtures; it makes no quality or routing-improvement claim. KiCad DRC was not run, apply was not invoked, and no learned/model output or model-generated copper was used. It provides no manufacturing, fabrication, board-mutation, or FreeRouting-parity evidence. |

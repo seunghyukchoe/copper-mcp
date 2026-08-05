@@ -261,9 +261,12 @@ placement, and the policy-plugin work.
 - [~] Typed net-ordering, corridor, and repair policy interface. The closed advisory
   `routing.policy` contract has deterministic reference decisions, bounded hostile JSON handling,
   canonical digest binding, and redacted ordinal-only action traces (B-060). It can only order
-  known nets and select coordinator-supplied options; it cannot emit copper and is not yet
-  integrated into negotiated routing or an MCP tool. The content digests are linkable bindings,
-  not secret redactions, and can support complete low-entropy-record dictionary tests.
+  known nets and select coordinator-supplied options; it cannot emit copper. The exact internal
+  `deterministic-reference-v1` profile now influences only the initial negotiated net order;
+  no-profile v2 result shape and candidate identity are unchanged, and retry ordering remains
+  coordinator-owned. It adds no MCP, model, corridor, repair, or apply authority. The content
+  digests are linkable bindings, not secret redactions, and can support complete low-entropy-record
+  dictionary tests. B-063 records synthetic order-effect evidence only, not a quality result.
 - [ ] Optional local GNN/RL reference policy.
 - [~] Prompt-injection and excessive-agency tests. Board-author text is quarantined in the scene
   and asserted absent by a whole-response grep against a hostile fixture, and every request

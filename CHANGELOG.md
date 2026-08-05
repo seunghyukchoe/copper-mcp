@@ -29,7 +29,9 @@ All notable changes are documented here. The format follows
   coordinator-supplied corridor/repair-window selection. Its bounded, redacted trace omits board
   geometry and raw identifiers; policy output cannot emit copper or bypass deterministic routing,
   validation, DRC, or explicit apply authorization. Content digests remain linkable and are not
-  secret redactions. It is not yet route-integrated.
+  secret redactions. The exact internal `deterministic-reference-v1` profile now influences only
+  the initial negotiated net order; no-profile v2 result shape and candidate identity are
+  unchanged. This adds no MCP, model, corridor, repair, or apply authority.
 
 - Added a bounded external-process FreeRouting comparison harness with bounded input/output handling,
   minimal child environment, KiCad-DRC evidence requirements, and self-attested receipt bindings.
