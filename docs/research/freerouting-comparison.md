@@ -90,8 +90,11 @@ The optional `--kicad-python` route is deliberately disabled unless an internal,
 provider creates an exact private workspace with a sufficient aggregate quota. The harness then
 canonicalizes that root and rejects it unless it is a non-symlink directory owned by the current
 user with no group/other permissions; each transaction directory, process `cwd`, `HOME`, and
-`TMPDIR` is created under that provider root. Source DRC, when run by this route, uses a private
-source copy in the same provider boundary. The CLI does not accept a workspace argument.
+`TMPDIR` is created under that provider root. Java/KiCad/KiCad-Python version probes also run in
+a provider child. Source DRC and any caller-supplied CopperMCP result-board **KiCad CLI** DRC use
+independently rehash-checked private board copies there, so KiCad receives neither a caller parent
+directory nor its relative project/rule context. A supplied GUI report is parsed locally without
+launching KiCad. The CLI does not accept a workspace argument.
 
 No such provider is enabled today. On refusal, the harness fails before **all** child-launch
 seams: Java/KiCad version probes, source/result DRC, DSN export, FreeRouting, SES import, and the

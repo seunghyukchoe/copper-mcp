@@ -908,6 +908,84 @@ def test_workspace_capability_rejects_shared_and_symlink_roots(
     assert containment["status"] == "unavailable"
 
 
+def test_harness_preflight_probes_use_only_a_provider_child_workspace(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    paths = _comparison_inputs(tmp_path)
+    kicad_python = tmp_path / "kicad-python"
+    kicad_python.write_bytes(b"tool")
+    capability = _workspace_capability(tmp_path)
+    observed: list[Path] = []
+
+    def probe(argv: tuple[str, ...], _timeout: int, cwd: Path, **_kwargs: object) -> object:
+        assert argv[-1] == "--version"
+        observed.append(cwd)
+        environment = benchmark.minimal_environment(cwd)
+        assert environment["HOME"] == str(cwd)
+        assert environment["TMPDIR"] == str(cwd)
+        return benchmark.ProcessResult(argv, 1, 0, "ok", "10.0.5", "")
+
+    monkeypatch.setattr(benchmark, "run_process", probe)
+    result = benchmark.preflight(
+        **_build_kwargs(paths),
+        cwd=benchmark.ROOT,
+        kicad_python=kicad_python,
+        harness_transaction=True,
+        containment={"status": "available"},
+        workspace_capability=capability,
+    )
+
+    assert result["available"] is True
+    assert len(observed) == 3
+    assert all(path.is_relative_to(capability.root) for path in observed)
+
+
+def test_harness_result_drc_uses_private_copy_and_refuses_tampered_source(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    board = tmp_path / "caller-result.kicad_pcb"
+    board.write_text("(kicad_pcb (version 20240108))\n", encoding="utf-8")
+    capability = _workspace_capability(tmp_path)
+    observed: list[tuple[Path, Path]] = []
+
+    def clean_drc(
+        _cli: Path, copied: Path, _timeout: int, cwd: Path, **_kwargs: object
+    ) -> dict[str, int | str]:
+        observed.append((copied, cwd))
+        return {"status": "ok", "hard_violations": 0, "unconnected": 0}
+
+    monkeypatch.setattr(benchmark, "drc_metrics", clean_drc)
+    result = benchmark.private_result_for_board(
+        "copper_mcp", board, capability, tmp_path / "kicad-cli", 1, 0, None
+    )
+    assert result["drc"]["status"] == "ok"
+    assert observed and all(
+        copied.is_relative_to(capability.root) and cwd.is_relative_to(capability.root)
+        for copied, cwd in observed
+    )
+    assert all(copied != board for copied, _cwd in observed)
+
+    original_copy = benchmark._private_copy
+
+    def copy_then_tamper(source: Path, destination: Path) -> str | None:
+        digest = original_copy(source, destination)
+        source.write_text("(kicad_pcb tampered)\n", encoding="utf-8")
+        return digest
+
+    observed.clear()
+    board.write_text("(kicad_pcb (version 20240108))\n", encoding="utf-8")
+    monkeypatch.setattr(benchmark, "_private_copy", copy_then_tamper)
+    refused = benchmark.private_result_for_board(
+        "copper_mcp", board, capability, tmp_path / "kicad-cli", 1, 0, None
+    )
+    assert refused == {
+        "name": "copper_mcp",
+        "status": "unavailable",
+        "reason": "result board changed",
+    }
+    assert observed == []
+
+
 def test_harness_transaction_refuses_an_importer_that_mutates_its_source_copy(
     tmp_path: Path, monkeypatch: object
 ) -> None:
