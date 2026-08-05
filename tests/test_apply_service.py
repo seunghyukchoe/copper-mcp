@@ -1095,6 +1095,34 @@ class TokenLifetimeTests(unittest.TestCase):
         authority.consume(authority.verify(second, binding))
         self.assertEqual(len(authority._consumed), 1, "the expired nonce must have been swept")
 
+    def test_sweep_removes_an_expired_nonce_consumed_after_a_newer_live_nonce(self) -> None:
+        """Consumption order cannot make an older expiry unreachable behind a live nonce."""
+
+        clock = [1_000_000.0]
+        authority = ApplyTokenAuthority(ttl_seconds=60, clock=lambda: clock[0])
+        binding = ApplyBinding("c", "sha256:" + "a" * 64, "sha256:" + "b" * 64, "b.kicad_pcb")
+
+        earlier = authority.issue(binding)
+        clock[0] += 30
+        later = authority.issue(binding)
+
+        later_verified = authority.verify(later, binding)
+        authority.consume(later_verified)
+        earlier_verified = authority.verify(earlier, binding)
+        authority.consume(earlier_verified)
+
+        # The earlier token expires first, but it was inserted second. Sweeping must remove it
+        # without deleting the later token, which remains a live replay refusal.
+        clock[0] += 31
+        trigger = authority.issue(binding)
+        authority.consume(authority.verify(trigger, binding))
+
+        self.assertNotIn(earlier_verified.identifier, authority._consumed)
+        self.assertIn(later_verified.identifier, authority._consumed)
+        with self.assertRaises(ApplyTokenError) as caught:
+            authority.verify(later, binding)
+        self.assertEqual(caught.exception.code, "token_already_used")
+
     def test_a_live_consumed_nonce_is_not_evicted_by_newer_arrivals(self) -> None:
         """A still-valid consumed nonce keeps rejecting replays while other tokens come and go."""
 

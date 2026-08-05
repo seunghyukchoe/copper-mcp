@@ -145,8 +145,6 @@ class ApplyTokenAuthority:
         for nonce, expires_at in list(self._consumed.items()):
             if now >= expires_at:
                 del self._consumed[nonce]
-            else:
-                break
 
     def issue(self, binding: ApplyBinding) -> str:
         """Mint one token for exactly this binding."""
