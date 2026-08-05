@@ -1,80 +1,90 @@
-# FreeRouting comparison and benchmark boundary
+# FreeRouting comparison boundary and reproducible harness
 
-Research date: 2026-08-04
+Research date: 2026-08-05
 
-## Finding
+## Scope and conclusion boundary
 
-FreeRouting is not an exhaustive brute-force enumerator. Its own architecture describes a two-stage
-pipeline: an autorouter searches for legal paths, then an optimizer temporarily rips up and
-reroutes selected connections, keeping improvements by score. The implementation uses a sorted
-maze/wave expansion queue with destination-distance and obstacle/via costs, bounded passes, and
-stagnation detection. In casual conversation it can feel brute-force because it tries many passes,
-but algorithmically it is heuristic search with backtracking and local optimization.
+CopperMCP is an Apache-2.0 candidate-first platform; FreeRouting is GPL-3.0.  The comparison
+is therefore deliberately process-isolated: this repository builds neither links nor vendors
+FreeRouting.  It only launches a user-supplied released JAR and exchanges user-supplied files.
+No report can claim a comparison is complete unless both result boards have the same KiCad CLI
+DRC evidence, their source hashes remain unchanged, and every version/hash/timeout is retained.
 
-Primary sources:
+The current reference release is **FreeRouting v2.2.4** (2026-05-13).  Its official README
+documents `java -jar freerouting-2.2.4.jar -de MyBoard.dsn -do MyBoard.ses -inc GND,VCC` and
+the release page identifies v2.2.4 as latest at research time.  FreeRouting is GPL-3.0 according
+to its repository license label.  Sources: [release](https://github.com/freerouting/freerouting/releases),
+[README CLI and JRE instructions](https://github.com/freerouting/freerouting#command-line-interface),
+and [repository licence label](https://github.com/freerouting/freerouting).
 
-- [FreeRouting architecture](https://raw.githubusercontent.com/freerouting/freerouting/master/docs/architecture.md)
-- [MazeSearchAlgo.java](https://raw.githubusercontent.com/freerouting/freerouting/master/src/main/java/app/freerouting/autoroute/MazeSearchAlgo.java)
-- [MazeListElement.java](https://raw.githubusercontent.com/freerouting/freerouting/master/src/main/java/app/freerouting/autoroute/MazeListElement.java)
-- [BatchAutorouter.java](https://raw.githubusercontent.com/freerouting/freerouting/master/src/main/java/app/freerouting/autoroute/BatchAutorouter.java)
-- [FreeRouting README and MCP guide](https://github.com/freerouting/freerouting)
-- [FreeRouting releases](https://github.com/freerouting/freerouting/releases)
+KiCad documents the matching workflow: export the *same* board to DSN, route it externally to
+SES, then import the SES into the existing board.  Import adds routing only; footprints, nets,
+and outline must match.  This is why the harness requires a KiCad-imported disposable
+FreeRouting board rather than pretending to parse or apply SES itself.  See [KiCad PCB Editor:
+Importing Specctra session files](https://docs.kicad.org/master/en/pcbnew/pcbnew.html#importing-specctra-session-files)
+and [Specctra DSN exporter](https://docs.kicad.org/master/en/pcbnew/pcbnew.html#specctra-dsn).
 
-## What is different today
+## Harness
 
-| Dimension | FreeRouting | CopperMCP (current evidence) |
-|---|---|---|
-| Primary job | Complete and optimize a board through DSN/SES exchange | Produce bounded, immutable proposals over Board IR and KiCad IPC snapshots |
-| Search | Maze/wave/A*-style expansion, rip-up/backtracking, multi-pass optimization | Deterministic bounded orthogonal A*; multi-pin component MST; first bounded present/history congestion coordinator (B-036), not general parity |
-| State | Stateful routing jobs and mutable in-memory board during a run | Candidate-only services; file apply is explicit and token-gated; live tools are read-only |
-| Validation | FreeRouting DRC and host re-import workflow | KiCad DRC is authoritative for supported file-backed route candidates; live route/placement proposals carry no DRC authority |
-| AI/editor grounding | DSN/SES or MCP job API; current editor focus is not CopperMCP's contract | Exact KiCad snapshot digest, Circuit Scene refs, active layer and native selection context; stale reads fail closed |
-| Claim supported by current tests | Routing quality and completion require a common-board benchmark | Safety, determinism, revision binding, and read-only observe-to-propose closure on fake IPC clients |
+`scripts/benchmark_freerouting_comparison.py` accepts:
 
-The honest near-term advantage is therefore a safer AI/editor control plane, not routing-quality
-superiority. CopperMCP must not claim to beat FreeRouting on general-board completion until both
-systems produce outputs from the same KiCad-authored corpus and the outputs are re-imported and
-checked by the same KiCad version.
+- an independently authored, provenance-described KiCad source board and its KiCad-exported
+  DSN;
+- a Java executable and a release JAR, recorded by SHA-256 and run with the documented DSN/SES
+  argv (never through a shell);
+- a CopperMCP disposable result board and a separate KiCad copy after the generated SES has
+  been imported; and
+- the exact `kicad-cli` used to run `pcb drc --format json` on each result.
 
-## Acceleration track toward comparable routing fundamentals
+The optional CopperMCP command-template boundary is a JSON argv array and supports only
+`{source}`, `{output}`, and `{seed}`.  It runs against a private temporary source copy.  The
+result must be persisted explicitly as `--copper-board` before DRC, which prevents an ephemeral
+worker output from being silently substituted for evidence.
 
-The first capability gap is not unbounded brute force. It is a bounded two-signal-layer search over
-`(x, y, layer)` with explicit through-via transitions and a positive via cost. CopperMCP now has
-that search, a Board IR binding, source-preserving segment/via serialization, and an internal
-replay-bound KiCad DRC gate. This gives a fair, evidence-producing chance on boards where a
-single-layer route is impossible while preserving deterministic budgets and the candidate-first
-boundary. A bounded two-net negotiated-congestion slice now exists, while multilayer capacity,
-fanout, post-route optimization, and broad quality comparison remain the next gaps.
+The report has a content-addressed `run_id`, source/provenance/DSN/JAR/result hashes, seed,
+timeouts, Java/KiCad probes, bounded redacted stdout/stderr, process times, and whether source
+bytes were preserved.  The ranking is intentionally lexicographic:
 
-Acceptance for the current narrow gate is recorded in B-020: ten fresh private-workspace runs,
-10/10 zero-error/zero-unconnected KiCad 10.0.5 reports, deterministic redacted evidence, and
-unchanged source/workspace state. The held-out corpus requirement remains for a production claim;
-this is a capability step, not FreeRouting parity. The current source-preserving placement
-projection is a prerequisite for high-fidelity editor communication but does not change this
-routing comparison.
+1. completion and zero KiCad-reported unconnected items;
+2. zero KiCad hard violations;
+3. via count, then routed segment length, then wall runtime.
 
-## Fair comparison protocol
+Board-text via/length values are secondary descriptive data.  KiCad DRC is authoritative;
+FreeRouting’s own score and CopperMCP’s internal checks are not substituted for it.
 
-1. Start with KiCad-authored unrouted `.kicad_pcb` files and preserve their project/rule context.
-2. Export DSN using KiCad's own Specctra exporter; do not hand-author a parallel DSN.
-3. Run a pinned FreeRouting release and import its SES output into a disposable board copy.
-4. Run CopperMCP's supported route path on the same source board; mark unsupported multilayer,
-via-through, or unsupported congestion cases as `not_applicable`, not as failures. B-036 is only a
-structural two-net crossing fixture; it is not a claim that CopperMCP now matches FreeRouting.
-5. Run the same `kicad-cli pcb drc --format json` version and refill policy on both outputs.
-6. Publish per-board results, not only averages: completion/unconnected count, hard DRC, clearance
-   and dangling items, total length, vias/layer changes, bends, wall time, peak memory, deterministic
-   replay hashes, and safety/editor-closure evidence.
+## Reproduction procedure
 
-The first corpus should include FreeRouting's public DAC2020 fixtures and issue regression boards,
-plus the repository's open audio boards and bounded synthetic stress families. Pin source, tool,
-KiCad, and machine digests; retain timeouts and no-path results.
+1. Create an Apache-2.0 or otherwise independently licensed fixture and record `origin`,
+   `license_spdx`, and `derivation_statement` in a JSON provenance file.  Do not use private or
+   third-party boards without an explicit reusable licence.
+2. In KiCad, make a disposable copy and use **File → Export → Specctra DSN**.  Retain the source
+   `.kicad_pcb`, project/rules, and DSN.  Do not hand-author a parallel DSN.
+3. Run the harness with `--java`, `--freerouting-jar`, `--dsn`, `--source`, and provenance.  It
+   emits a private `.ses` hash and FreeRouting process evidence.  Import that SES into another
+   disposable copy in KiCad as documented above.
+4. Produce CopperMCP’s competing disposable board using its supported candidate/replay path;
+   preserve its source relation and supply it with `--copper-board`.  Supply the imported board
+   with `--freerouting-board`, then provide `--kicad-cli` to DRC both.
+5. Treat `unavailable_or_incomplete` as a real outcome.  It means a prerequisite, an imported
+   result, or authoritative DRC evidence is absent; it is neither a routing failure nor a quality
+   win for either tool.
 
-## Planning estimate
+Example (paths are illustrative):
 
-A defensible scoped claim (for example, revision-bound read-only proposal safety on a specified
-two-pin class) needs roughly 150–300 additional agent-hours including the adapter and evidence
-harness. A broad claim of better routing across general boards needs roughly 400–700+ agent-hours,
-plus 25–80 human/lab hours for GUI, fabrication, and electrical checks. Current evidence supports
-the safety/reproducibility/editor-context distinction only; it does not support a general
-FreeRouting quality win.
+```sh
+PYTHONPATH=src python scripts/benchmark_freerouting_comparison.py \
+  --source fixtures/independent-v1.kicad_pcb \
+  --fixture-provenance fixtures/independent-v1.provenance.json \
+  --dsn work/independent-v1.dsn --java /path/to/java \
+  --freerouting-jar /path/to/freerouting-2.2.4.jar --kicad-cli /path/to/kicad-cli \
+  --copper-board work/copper.kicad_pcb --freerouting-board work/freerouting-imported.kicad_pcb \
+  --seed 23 --timeout-seconds 300 --output benchmarks/results/routing/freerouting/run.json
+```
+
+## Current local preflight
+
+On 2026-08-05, the development host resolved `/usr/bin/java` but macOS reported no installed Java
+runtime; `kicad-cli` was absent; and no released FreeRouting JAR was supplied.  No download was
+performed, no GPL source was copied, no fixture was added, and no actual routing comparison ran.
+The harness records this exact state as unavailable evidence rather than claiming comparison
+closure.
