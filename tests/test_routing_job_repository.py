@@ -247,3 +247,47 @@ def test_request_and_export_expiry_are_uniform(tmp_path: Path) -> None:
         with pytest.raises(RoutingCandidateExportUnavailableError) as unknown:
             repository.exports.get(_digest("f"), _digest("f"), authorization, now_ms=110)
         assert str(missing.value) == str(unknown.value)
+
+
+def test_expired_candidate_export_is_deleted_before_unavailable_response(tmp_path: Path) -> None:
+    """An expired geometry export is removed even though lookup reports a uniform miss."""
+
+    candidate, spec, request, authorization = _candidate_and_spec()
+    path = tmp_path / "expired-export.sqlite3"
+    with RoutingJobRepository(path, ttl_ms=10) as repository:
+        queued = repository.create(spec, request, authorization, now_ms=100)
+        running = repository.jobs.start(spec.job_id, expected_revision=queued.revision, now_ms=101)
+        repository.publish_candidate(
+            spec.job_id,
+            candidate,
+            expected_revision=running.revision,
+            authorization_digest=authorization,
+            now_ms=102,
+        )
+
+        with sqlite3.connect(path) as connection:
+            stored = connection.execute(
+                "SELECT candidate_json FROM routing_candidate_exports WHERE candidate_id = ?",
+                (candidate.candidate_id,),
+            ).fetchone()
+        assert stored is not None
+        assert isinstance(stored[0], bytes)
+        assert b'"vertices"' in stored[0]
+
+        with pytest.raises(RoutingCandidateExportUnavailableError) as expired:
+            repository.exports.get(
+                spec.job_id,
+                candidate.candidate_id,
+                authorization,
+                now_ms=112,
+            )
+        with pytest.raises(RoutingCandidateExportUnavailableError) as unknown:
+            repository.exports.get(_digest("f"), _digest("f"), authorization, now_ms=112)
+        assert str(expired.value) == str(unknown.value)
+
+        with sqlite3.connect(path) as connection:
+            retained = connection.execute(
+                "SELECT candidate_json FROM routing_candidate_exports WHERE candidate_id = ?",
+                (candidate.candidate_id,),
+            ).fetchone()
+        assert retained is None

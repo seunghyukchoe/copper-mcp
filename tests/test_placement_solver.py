@@ -204,6 +204,35 @@ def test_solver_drops_an_incomplete_score_when_cancelled_after_legalization() ->
     assert not result.ranked
 
 
+def test_solver_drops_already_scored_rankings_when_cancelled_during_successor_work(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot, view = _board(ROTATION_BOARD)
+    intent = _intent(view, ROTATION_BOARD)
+    cancellation_requested = False
+    score_calls = 0
+    actual_score = solver_module._score
+
+    def cancelled() -> bool:
+        return cancellation_requested
+
+    def cancel_during_successor_score(*args: object, **kwargs: object) -> object:
+        nonlocal cancellation_requested, score_calls
+        score_calls += 1
+        if score_calls == 2:
+            cancellation_requested = True
+        return actual_score(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(solver_module, "_score", cancel_during_successor_score)
+    result = solve_placement(intent, snapshot, view, settings=_settings(), cancelled=cancelled)
+
+    assert result.status == "cancelled"
+    assert result.evaluations == 2
+    assert result.initial is not None and result.initial.candidate is not None
+    assert result.initial_score is not None
+    assert not result.ranked
+
+
 def test_scoring_refuses_a_partial_result_after_deadline_exhaustion() -> None:
     snapshot, view = _board(ROTATION_BOARD)
     initial = solver_module.evaluate_placement(

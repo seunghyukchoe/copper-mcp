@@ -652,7 +652,15 @@ class RoutingCandidateExportStore:
                     "routing_candidate_exports WHERE candidate_id = ?",
                     (candidate_id,),
                 ).fetchone()
-                if row is None or row[0] != job_id or row[1] != authorization_digest:
+                if row is None:
+                    # Expiry is a retention boundary, not a speculative lookup side effect.
+                    # Commit the purge before returning the deliberately uniform unavailable
+                    # response; the exception handler must not resurrect private geometry.
+                    self._connection.commit()
+                    raise RoutingCandidateExportUnavailableError(
+                        "routing candidate export is unavailable"
+                    )
+                if row[0] != job_id or row[1] != authorization_digest:
                     raise RoutingCandidateExportUnavailableError(
                         "routing candidate export is unavailable"
                     )

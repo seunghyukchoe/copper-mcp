@@ -193,6 +193,17 @@ All notable changes are documented here. The format follows
   and redacted KiCad-session compare-and-swap digests, reuses the file-backed candidate oracle,
   and remains candidate-only with no DRC, refill, serializer, persistence, or apply authority.
 
+### Fixed
+
+- Expired routing-candidate geometry exports now commit their TTL purge before returning the
+  deliberately uniform unavailable response. This preserves the access-retention boundary for
+  stored `candidate_json`; TTL is not a secure-erasure guarantee for SQLite, backups, or copies a
+  caller already received.
+
+- The advisory placement solver now checks cooperative cancellation again at its publication
+  boundary. When cancellation is observed, it returns an empty ranked-candidate set rather than
+  exposing a partially explored ranking; this does not hard-interrupt already-running work.
+
 ### Changed
 
 - Corrected the spatial-index benchmark to count bucket candidates examined by the exact bounds

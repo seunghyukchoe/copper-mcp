@@ -291,9 +291,18 @@ def solve_placement(
             break
         frontier = tuple(sorted(next_states, key=_state_key)[: settings.beam_width])
 
-    retained: tuple[RankedPlacement, ...] = tuple(
-        sorted(known.values(), key=_rank_key)[: settings.max_ranked]
-    )
+    # A cancellation may arrive after a complete score but before the result is published.  A
+    # partially explored beam is not a useful proposal set: callers cannot distinguish it from
+    # a deliberately bounded, completed ranking.  Check once at the publication boundary and
+    # make cancellation atomic by withholding every ranked candidate.
+    final_status = stopped()
+    if final_status is not None:
+        status = final_status
+    retained: tuple[RankedPlacement, ...]
+    if status == "cancelled":
+        retained = ()
+    else:
+        retained = tuple(sorted(known.values(), key=_rank_key)[: settings.max_ranked])
     return PlacementSolveResult(status, initial, initial_ranked.score, retained, evaluations)
 
 
