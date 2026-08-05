@@ -25,7 +25,7 @@
     "KiCad file mutation, editor mutation, apply authority, undo, or live-editor behavior",
     "routing feasibility, route length, congestion, impedance, or manufacturing clearance"
   ],
-  "run_id": "sha256:889b2a6c73c90e4305727e74ed0fe1a29f0825fff73abe2ea8189628e21c3a7d",
+  "run_id": "sha256:591833be4d11e94e3d1891a051f99f7cfb8fd5ceb5d2b55db7fe4f43b5c22210",
   "schema": "copper-mcp/benchmark/placement-solver-baseline/v1",
-  "source_commit": "d7d646f4a0cb9897892cbd9f14be0230cd7aa8e4"
+  "source_commit": "70547de3c8faa265d2d9f7a0519c3353c9e8ed2e"
 }
