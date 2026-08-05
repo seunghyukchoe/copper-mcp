@@ -39,8 +39,11 @@ documentation, ledger updates, and benchmark evidence.
   digests. `preview_live_placement` now reuses the same exact snapshot → Board IR → legalizer
   path for a ref-anchored, read-only placement candidate. `preview_live_layered_route` now adds a
   session-token, source-digest, and Board IR-digest-bound via-capable proposal with fake-IPC
-  replay evidence. A real running-editor oracle and live action compare-and-swap before placement
-  or routing remain open because the workstation IPC server is disabled.
+  replay evidence. A local fidelity oracle now exercises source → Board IR → Circuit Scene digest
+  binding, redacted capability outcomes, and one cooperative deadline through a fake official-client
+  seam; the ordinary shell receives the canonical plugin-credential-absent skip. No successful
+  real-editor oracle run has been recorded, and live action compare-and-swap before placement or
+  routing remains open because the workstation IPC server is disabled.
 - [x] Canonical Board IR v0.2 contract with integer units, typed constraints, strict codecs,
   content digests, first-class footprint pose/side/lock/pad ownership, and bounded rectangular
   courtyard rings. The immutable v0.1 schema remains as legacy compatibility evidence.
@@ -170,7 +173,11 @@ documentation, ledger updates, and benchmark evidence.
 - [x] Durable routing jobs and cancellation. The bounded internal ledger, single-worker lease
   recovery, redacted candidate manifests, file-backed layered request/result persistence,
   authorization-bound geometry export, and ordinary MCP tools now exist. Single-layer/live jobs
-  and MCP Tasks negotiation remain open.
+  and MCP Tasks negotiation remain open. Candidate artifacts are preflighted against immutable job
+  bindings and the exact `RUNNING` revision before storage, then persisted before the completion
+  CAS; capacity or persistence failure cannot create a completed job without its export. A later
+  completion/cancellation race can still leave only an inaccessible TTL-bounded orphan, and TTL is
+  not secure erasure.
 - [~] MCP Tasks progressive enhancement. The reference environment observed `mcp 2.0.0` while
   the supported dependency range remains `<3`; a runtime probe finds generic extension support
   but no compatible current Tasks wire/dispatcher contract. A bounded, process-local 256-bit
@@ -262,23 +269,41 @@ placement, and the policy-plugin work.
   `routing.policy` contract has deterministic reference decisions, bounded hostile JSON handling,
   canonical digest binding, and redacted ordinal-only action traces (B-060). It can only order
   known nets and select coordinator-supplied options; it cannot emit copper. The exact internal
-  `deterministic-reference-v1` profile now influences only the initial negotiated net order;
+  `deterministic-reference-v1` profile and its separately named fixed-worker equivalent
+  `deterministic-reference-worker-v1` may influence only the initial negotiated net order;
   no-profile v2 result shape and candidate identity are unchanged, and retry ordering remains
-  coordinator-owned. It adds no MCP, model, corridor, repair, or apply authority. The content
-  digests are linkable bindings, not secret redactions, and can support complete low-entropy-record
-  dictionary tests. B-063 records synthetic order-effect evidence only, not a quality result.
+  coordinator-owned. The worker receives only the same neutral scalar, no-window input and fails
+  closed before router construction. It is defense in depth for the fixed reference backend, not
+  an OS sandbox or admission path for a model, plugin, endpoint, corridor, repair, MCP, or apply
+  authority. The content digests are linkable bindings, not secret redactions. B-063 records only
+  the in-process profile's synthetic order effect, not worker performance or routing quality.
 - [ ] Optional local GNN/RL reference policy.
 - [~] Prompt-injection and excessive-agency tests. Board-author text is quarantined in the scene
   and asserted absent by a whole-response grep against a hostile fixture, and every request
-  boundary has a hostile-input suite; a systematic excessive-agency evaluation is still missing.
-- [ ] Held-out project-family evaluation.
+  boundary has a hostile-input suite. B-065 now adds seven deterministic offline MCP cases for
+  schema closure, stale revisions, quotas, report disclosure, and unauthorized route/placement
+  apply; all 7/7 reached their predeclared safe disposition with no workspace change. This remains
+  partial because no model, network, remote principal/authorization, application logger, host log,
+  provider telemetry, or unknown-attack campaign was evaluated.
+- [~] Held-out project-family evaluation. B-066 records three exact replays over one independently
+  authored Apache-2.0 audio family that is hash-separated from the declared training family; the
+  evaluator reads neither training nor tuning fixtures. It is a first split/evidence baseline, not
+  a corpus: more independently licensed families, a frozen policy comparison, and separate KiCad
+  DRC evidence are required before this item can close.
 
 ## M5 — Performance and physics
 
-- [ ] Profile-guided Rust acceleration.
+- [~] Profile-guided Rust acceleration. B-068 establishes only the clean-worktree measurement
+  prerequisite: fixed routing, placement, and Circuit Scene fixtures; invariant output digests;
+  unprofiled timing samples; and a separate bounded cumulative profile. No Rust, SIMD, GPU, speedup,
+  cross-machine comparison, or public-contract change exists. Any acceleration experiment must
+  preserve the recorded outputs and beat a same-manifest baseline before this item advances.
 - [ ] Conflict-aware multicore scheduling.
 - [ ] Optional GPU candidate search after end-to-end profiling.
-- [ ] Local exact repair for bounded congestion windows.
+- [~] Local exact repair for bounded congestion windows. The standalone deterministic operator and
+  predeclared 5 × 5 detour regression now exist (B-067), but negotiated-router integration does
+  not. Coordinator-derived window provenance, Board IR/candidate binding, physical-clearance and
+  reference replay gates, plus broader held-out evidence remain required.
 - [ ] SI/PI/thermal/DFM surrogate hooks with authoritative signoff.
 
 ## M6 — Sustainable open-source project and supply-chain maturity (OpenSSF-informed)

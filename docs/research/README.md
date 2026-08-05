@@ -1,6 +1,6 @@
 # PCB autorouting research
 
-**Snapshot date:** 2026-08-04
+**Snapshot date:** 2026-08-05
 
 This package surveys current PCB autorouters and turns the evidence into an
 implementation direction for CopperMCP. It is a research snapshot, not a claim
@@ -14,21 +14,37 @@ that every product feature, price, or repository release will remain current.
 - [Modern algorithms and hardware](./modern-algorithms-and-hardware.md) separates
   mature PCB techniques from promising transfers and speculative research, then
   recommends a staged architecture and evaluation plan.
+- [Independent stack audit](./audit-2026-08-03.md) reviews the implemented deterministic,
+  KiCad, MCP, benchmark, and governance boundaries against their recorded evidence.
 - [Audio circuit benchmark intake](./audio-circuit-benchmarks.md) records why public DIY catalogs
   are reference-only and defines a licence-aware, original-fixture capability ladder for MCP-shared
   board inspection/routing tests plus MCP-independent Circuit Intent and schematic-rendering checks.
+- [Held-out audio project-family evaluation](./heldout-audio-project-family-evaluation.md) defines
+  the first hash-separated, independently authored family split and its one-family evidence limits.
+- [FreeRouting comparison boundary](./freerouting-comparison.md) documents the GPL-isolated,
+  receipt-bound comparison harness and why it cannot yet declare a result.
+- [Multi-pin routing references](./multi-pin-routing-references.md) grounds deterministic component
+  merging and the limits of the current topology policy.
 - [Negotiated physical-clearance acceptance](./negotiated-physical-clearance.md) defines the
   bounded exact-integer, same-layer candidate-pair gate that supplements lattice congestion
   accounting without claiming board-wide or KiCad physical verification.
+- [Bounded local exact repair](./bounded-local-exact-repair.md) defines the standalone verified
+  lattice operator and the gates still required before negotiated-routing integration.
+- [Performance profile v1](./performance-profile-v1.md) records the clean-worktree routing,
+  placement, and Circuit Scene measurement prerequisite for any future acceleration work.
 - [Bounded placement-heuristic baseline](./placement-heuristic-baseline.md) records the
   legalizer-gated local/beam search, its connectivity proxy, reproducible fixture evidence, and
   the limits that keep it advisory.
 - [AI routing-policy boundary](./ai-routing-policy-boundary.md) defines a closed, redacted policy
   contract for ordering and coordinator-supplied options without direct copper authority.
+- [Isolated reference policy-worker protocol](./isolated-policy-worker-protocol.md) records the
+  fixed order-only subprocess contract, initial-order admission, and explicit OS-sandbox non-claim.
 - [MCP Tasks compatibility](./mcp-tasks-compatibility.md) records the observed runtime facts and
   the owner-bound, durable-storage gates that keep experimental wire Tasks disabled.
-- [FreeRouting comparison boundary](./freerouting-comparison.md) documents the GPL-isolated,
-  receipt-bound comparison harness and why it cannot yet declare a result.
+- [MCP excessive-agency evaluation](./mcp-excessive-agency-evaluation.md) defines the seven-case
+  offline capability, disclosure, revision, and quota regression boundary.
+- [Circuit Scene IR references](./circuit-scene-ir-references.md) grounds the typed semantic/visual
+  observation contract and its disclosure limits.
 - [Circuit Scene to route action closure](./scene-action-closure-references.md) reproduces the
   opaque-reference integration failure, defines the revision-bound MCP contract, and records its
   exact hidden-name equivalence oracle and limitations.
@@ -37,6 +53,10 @@ that every product feature, price, or repository release will remain current.
 - [Live KiCad IPC fidelity oracle](./kicad-live-ipc-oracle.md) records the read-only
   source-to-Board-IR-to-Scene digest probe, capability outcomes, deadline boundary, and
   workstation evidence without claiming a live-editor result.
+- [Safe apply references](./safe-apply-references.md) grounds compare-and-swap, atomic publication,
+  editor-lock, recovery, and explicit-authorization decisions for file-backed mutation.
+- [Apply-token retention](./apply-token-retention.md) records nonce-expiry and bounded-retention
+  rules without treating TTL as secure erasure.
 - [OpenSSF criticality and supply-chain](./openssf-criticality-and-supply-chain.md) separates the
   Criticality activity proxy from Scorecard controls and maps the dated baseline to sustainable
   contributor, release, review, and adoption work.
