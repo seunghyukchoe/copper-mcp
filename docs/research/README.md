@@ -33,6 +33,9 @@ that every product feature, price, or repository release will remain current.
   accounting without claiming board-wide or KiCad physical verification.
 - [Bounded local exact repair](./bounded-local-exact-repair.md) defines the standalone verified
   lattice operator and the gates still required before negotiated-routing integration.
+- [Exact local-repair negotiated-integration gate](./exact-local-repair-negotiated-integration-gate.md)
+  records the internal exact per-edge Board-IR candidate-path acceptance prerequisite, its capped
+  same-net-aware subset, and why the predeclared >=10% gain gate still declines integration.
 - [Performance profile v1](./performance-profile-v1.md) records the clean-worktree routing,
   placement, and Circuit Scene measurement prerequisite for any future acceleration work.
 - [Bounded placement-heuristic baseline](./placement-heuristic-baseline.md) records the
