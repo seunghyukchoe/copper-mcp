@@ -972,3 +972,12 @@ are the audit copies for the original run IDs.
 | Binding and closure | `dsn_source_export_binding.status` and `source_drc_binding.status` are `self_attested_unverified`: separate hashes and a basename-only GUI report header do not causally prove the source/export or source/report relationships. SES-import and pure-kernel runner workflow receipts are also self-attested. The artifact therefore records `comparison_closed=false`, `status=unavailable_or_incomplete`, and `incomplete_reason=self_attested_unverified`. |
 | Artifact | [`2026-08-05-freerouting-common-two-pad.json`](../../benchmarks/results/routing/2026-08-05-freerouting-common-two-pad.json) and [real-run protocol/review note](../research/freerouting-real-run-v2.md). |
 | Interpretation | This is evidence that the public release process, DSN/SES bridge, disposable KiCad result checks, and CopperMCP pure kernel were exercised on one original two-pad smoke fixture. It does not establish causal workflow provenance, feature parity, comparative quality or performance, whole-board routing, MCP/apply-service safety, executable sandboxing, fabrication readiness, or comparison closure. A harness-owned constrained SES-import transaction and candidate-runner transaction remain required before closure. |
+
+#### B-070 — harness-owned transaction containment regression
+
+| Field | Recorded evidence |
+|---|---|
+| Scope | Focused test-only harness boundary regression; no KiCad, Java, FreeRouting JAR, board, network, or hardware execution occurred. |
+| Configuration | Provider capability is represented by an owner-private temporary root with the required aggregate-budget declaration. Fakes observe subprocess arguments without executing external tools. |
+| Metrics | 36 focused tests passed: absent capability observed zero process launches; provider-present Java/KiCad/KiCad-Python probes and every live caller-result DRC argument/CWD were provider descendants; source/import preservation and caller-result tamper checks refused before DRC. |
+| Interpretation | This is code-path evidence for fail-closed containment semantics only. It does not prove an OS quota, sandbox, KiCad/FreeRouting interoperability, routing quality, performance, parity, manufacturing readiness, or comparison closure. |

@@ -30,6 +30,16 @@ sys.modules[ADAPTER_SPEC.name] = adapter
 ADAPTER_SPEC.loader.exec_module(adapter)
 
 
+def _workspace_capability(tmp_path: Path) -> object:
+    root = tmp_path / "quota-backed-workspace"
+    root.mkdir(mode=0o700)
+    root.chmod(0o700)
+    return benchmark.PrivateWorkspaceCapability(
+        root=root,
+        quota_bytes=benchmark.MIN_PRIVATE_WORKSPACE_QUOTA_BYTES,
+    )
+
+
 def _gui_drc_report(board_name: str, unconnected: int = 1) -> str:
     """Return the exact KiCad 10.0.5 GUI-report grammar accepted by this benchmark."""
 
@@ -745,12 +755,22 @@ def test_harness_owned_transaction_binds_export_router_import_and_result_drc(
     monkeypatch.setattr(
         benchmark, "preflight", lambda **_kwargs: {"available": True, "reasons": [], "probes": {}}
     )
-    monkeypatch.setattr(
-        benchmark, "aggregate_workspace_containment", lambda: {"status": "available"}
-    )
-    monkeypatch.setattr(benchmark, "drc_metrics", _clean_drc)
+    capability = _workspace_capability(tmp_path)
+    monkeypatch.setattr(benchmark, "private_workspace_capability", lambda: capability)
+    drc_cwds: list[Path] = []
+
+    def clean_private_drc(*args: object, **kwargs: object) -> dict[str, object]:
+        cwd = args[3] if len(args) > 3 else kwargs["cwd"]
+        assert isinstance(cwd, Path)
+        drc_cwds.append(cwd)
+        return _clean_drc(*args, **kwargs)
+
+    monkeypatch.setattr(benchmark, "drc_metrics", clean_private_drc)
+    process_cwds: list[Path] = []
 
     def transaction_tools(argv: tuple[str, ...], *_args: object, **_kwargs: object) -> object:
+        assert len(_args) >= 2 and isinstance(_args[1], Path)
+        process_cwds.append(_args[1])
         if "export-dsn" in argv:
             Path(argv[argv.index("--output") + 1]).write_text("(pcb exported)\n", encoding="utf-8")
         elif "-do" in argv:
@@ -783,6 +803,8 @@ def test_harness_owned_transaction_binds_export_router_import_and_result_drc(
     assert freerouting_result["board_sha256"] == _sha(board_bytes)
     assert report["comparison_closed"] is False
     assert report["incomplete_reason"] == "copper_runner_self_attested_unverified"
+    assert process_cwds and drc_cwds
+    assert all(path.is_relative_to(capability.root) for path in process_cwds + drc_cwds)
 
 
 def test_harness_transaction_fails_closed_without_aggregate_workspace_quota(
@@ -818,6 +840,74 @@ def test_harness_transaction_fails_closed_without_aggregate_workspace_quota(
     assert result is None
 
 
+def test_unavailable_private_workspace_preflight_launches_no_external_seam(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    """Containment refusal happens before version probes, DRC, routing, import, or runner work."""
+
+    paths = _comparison_inputs(tmp_path)
+    kicad_python = tmp_path / "kicad-python"
+    kicad_python.write_bytes(b"tool")
+    launched: list[tuple[str, ...]] = []
+
+    def record_launch(argv: tuple[str, ...], *_args: object, **_kwargs: object) -> object:
+        launched.append(argv)
+        return benchmark.ProcessResult(argv, 1, 0, "ok", "", "")
+
+    monkeypatch.setattr(benchmark, "private_workspace_capability", lambda: None)
+    monkeypatch.setattr(benchmark, "run_process", record_launch)
+    report = benchmark.build_report(
+        **_build_kwargs(paths),
+        kicad_python=kicad_python,
+        copper_board=paths["board"],
+        freerouting_board=paths["board"],
+        copper_receipt=None,
+        freerouting_receipt=None,
+        copper_command=("candidate-runner", "{source}", "{output}", "{seed}"),
+        seed=1,
+        timeout_seconds=1,
+    )
+
+    assert launched == []
+    assert report["preflight"]["available"] is False
+    assert report["source_drc"]["status"] == "unavailable"
+    assert report["freerouting_process"]["status"] == "unavailable"
+    assert report["copper_process"]["status"] == "unavailable"
+    assert report["comparison_closed"] is False
+
+
+def test_workspace_capability_rejects_shared_and_symlink_roots(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    shared = tmp_path / "shared"
+    shared.mkdir(mode=0o755)
+    monkeypatch.setattr(
+        benchmark,
+        "private_workspace_capability",
+        lambda: benchmark.PrivateWorkspaceCapability(
+            root=shared, quota_bytes=benchmark.MIN_PRIVATE_WORKSPACE_QUOTA_BYTES
+        ),
+    )
+    capability, containment = benchmark.verified_private_workspace_capability()
+    assert capability is None
+    assert containment["status"] == "unavailable"
+
+    target = tmp_path / "target"
+    target.mkdir(mode=0o700)
+    alias = tmp_path / "alias"
+    alias.symlink_to(target, target_is_directory=True)
+    monkeypatch.setattr(
+        benchmark,
+        "private_workspace_capability",
+        lambda: benchmark.PrivateWorkspaceCapability(
+            root=alias, quota_bytes=benchmark.MIN_PRIVATE_WORKSPACE_QUOTA_BYTES
+        ),
+    )
+    capability, containment = benchmark.verified_private_workspace_capability()
+    assert capability is None
+    assert containment["status"] == "unavailable"
+
+
 def test_harness_transaction_refuses_an_importer_that_mutates_its_source_copy(
     tmp_path: Path, monkeypatch: object
 ) -> None:
@@ -825,7 +915,7 @@ def test_harness_transaction_refuses_an_importer_that_mutates_its_source_copy(
     kicad_python = tmp_path / "kicad-python"
     kicad_python.write_bytes(b"tool")
     monkeypatch.setattr(
-        benchmark, "aggregate_workspace_containment", lambda: {"status": "available"}
+        benchmark, "private_workspace_capability", lambda: _workspace_capability(tmp_path)
     )
 
     def mutating_importer(argv: tuple[str, ...], *_args: object, **_kwargs: object) -> object:
