@@ -121,7 +121,10 @@ All notable changes are documented here. The format follows
   boundary; post-rename and post-publication paths spend the capability exactly once; and the
   final board revision is re-read after guarded recovery so an observed rollback cannot report a
   stale published digest. Published placement bytes are re-rendered and reparsed before a success
-  response.
+  response, followed by a final best-effort digest observation that catches a visible rewrite after
+  verification. `applied_but_unverified` now explicitly permits a restored original revision or
+  concurrent bytes; clients use the reported digest and diagnostic rather than assuming that the
+  authorized revision remains on disk.
 
 - Routing-job and candidate-manifest TTL misses now commit their expiry purge before returning
   the uniform unavailable diagnostic, so expired board-derived metadata cannot reappear after a

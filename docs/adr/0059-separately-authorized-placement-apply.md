@@ -38,8 +38,10 @@ second compare-and-swap, atomic replacement, and truthful post-publication repor
 decoder bounds pose, grid, legality, and evidence fields before the board is parsed, and the MCP
 request exposes the same closed shape to clients. After publication the service re-renders the
 authorized bytes, reparses them, spends the capability exactly once even on an unverified write,
-and re-reads the final digest after guarded recovery. A refusal before publication never consumes
-its token; any operation that has published bytes consumes it once.
+and re-reads the final digest after guarded recovery. Before a successful response it takes one
+last best-effort digest observation, catching a visible concurrent rewrite after verification; the
+capability is still spent if that observation reports `applied_but_unverified`. A refusal before
+publication never consumes its token; any operation that has published bytes consumes it once.
 
 The pure engine calls the existing replay-verified placement serializer and returns only bytes
 that it proved reparsed and matched the source Board IR plus the transformed footprint poses,
@@ -70,7 +72,10 @@ validation and explicit operator authorization.
   segment counts.
 - Post-publication verification now checks the actual published bytes against a fresh authorized
   replay and Board IR parse. A concurrent writer or recovery-sync failure returns
-  `applied_but_unverified` with the digest observed on disk and cannot replay the same capability.
+  `applied_but_unverified` with the digest observed on disk and cannot replay the same capability;
+  that digest may equal the original when guarded rollback succeeded. A final best-effort
+  observation before success catches a visible rewrite after verification, while a longer editor
+  transaction would still be required to close the last nanosecond race.
 - A real KiCad DRC run, post-apply scene observation, side-aware flip serialization, arbitrary
   courtyard topology, and a genuine KiCad undo transaction remain open. The response reports
   KiCad-open and DRC stages as `not_run` until those checks are actually executed.

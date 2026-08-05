@@ -870,12 +870,46 @@ def apply_placement_candidate(
             ),
         )
 
+    # Take one final observation immediately before reporting success.  The publication lock is
+    # released by replace_workspace_file before this post-publication verification, so a writer
+    # can still win the tiny interval after verification.  We cannot eliminate that last
+    # nanosecond without a longer transaction, but we can refuse to claim success when the
+    # reproducible race is visible and preserve the concurrent bytes.
+    final_revision = _observed_revision(
+        settings,
+        board,
+        fallback=published_revision,
+    )
+    if final_revision != published_revision:
+        token_authority.consume(verified)
+        return PlacementApplyResult(
+            status="applied_but_unverified",
+            board_path=board.relative_path,
+            board_revision_before=board.revision,
+            board_revision_after=final_revision,
+            snapshot_digest_before=snapshot.snapshot_digest,
+            base_revision=candidate.base_revision,
+            candidate_id=candidate.candidate_id,
+            request=request,
+            backup_path=backup_path,
+            bytes_changed=applied.bytes_changed,
+            footprints_moved=applied.footprints_moved,
+            diagnostic=ApplyDiagnostic(
+                code=ApplyFailureCode.APPLY_VERIFICATION_FAILED,
+                message=(
+                    "the authorized placement was verified once, but the final observed board "
+                    "revision changed before return; concurrent bytes were left in place; "
+                    "restore the pre-apply copy if needed"
+                ),
+            ),
+        )
+
     token_authority.consume(verified)
     return PlacementApplyResult(
         status="applied",
         board_path=board.relative_path,
         board_revision_before=board.revision,
-        board_revision_after=applied.result_revision,
+        board_revision_after=final_revision,
         snapshot_digest_before=snapshot.snapshot_digest,
         base_revision=candidate.base_revision,
         candidate_id=candidate.candidate_id,

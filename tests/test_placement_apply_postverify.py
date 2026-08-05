@@ -116,3 +116,36 @@ def test_concurrent_post_publish_change_is_applied_but_unverified(
     assert replay.status == "refused"
     assert replay.diagnostic is not None
     assert replay.diagnostic.code == "token_already_used"
+
+
+def test_final_observation_catches_write_after_verification(tmp_path: Path, monkeypatch) -> None:
+    board, source, settings, authority, preview = _preview(tmp_path)
+    concurrent_content = b"(kicad_pcb)\n"
+    original_verify = apply_service.verify_published_placement_board
+    changed = False
+
+    def verify_then_concurrently_change(*args, **kwargs):
+        nonlocal changed
+        original_verify(*args, **kwargs)
+        if not changed:
+            changed = True
+            board.write_bytes(concurrent_content)
+
+    monkeypatch.setattr(
+        apply_service,
+        "verify_published_placement_board",
+        verify_then_concurrently_change,
+    )
+
+    result = apply_placement_candidate(_request(preview, board), settings, authority)
+
+    assert result.status == "applied_but_unverified"
+    assert result.diagnostic is not None
+    assert result.diagnostic.code == "apply_verification_failed"
+    assert result.board_revision_after == f"sha256:{hashlib.sha256(concurrent_content).hexdigest()}"
+    assert board.read_bytes() == concurrent_content
+    assert (settings.workspace / str(result.backup_path)).read_bytes() == source
+    replay = apply_placement_candidate(_request(preview, board), settings, authority)
+    assert replay.status == "refused"
+    assert replay.diagnostic is not None
+    assert replay.diagnostic.code == "token_already_used"

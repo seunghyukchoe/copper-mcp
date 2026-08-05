@@ -179,7 +179,11 @@ revision. AI output remains typed placement intent, a locked footprint cannot be
 subset; front/back courtyards are independent and unsupported topology fails before evaluation.
 Direct model-generated KiCad mutation remains prohibited. The bounded file-level placement apply
 tool is separately operator-gated and placement-token-scoped; unsupported source constructs and
-live IPC mutation still fail closed.
+live IPC mutation still fail closed. After publication it re-renders and reparses the authorized
+bytes, guards recovery against a concurrent digest, spends the capability exactly once, and takes
+a final best-effort digest observation before reporting success. An `applied_but_unverified`
+response therefore reports the observed final digest, which may be the restored original or a
+concurrent writer; it is not a promise that a new revision remains on disk.
 
 MCP schematic delivery validates a closed outer wrapper, closed Circuit Intent content, and closed
 structured output. Scalars, lists, and extra fields at those boundaries fail without echoing the

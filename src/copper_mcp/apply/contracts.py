@@ -373,8 +373,11 @@ class ApplyResult:
       there is no new revision, and ``board_revision_before`` may itself be absent when the
       refusal came before the board was ever read (a disabled flag, a malformed request).
     * ``applied_but_unverified`` - the rename happened but a later step could not be confirmed.
-      The board *is* changed, so ``board_revision_after`` is set truthfully and a diagnostic
-      explains what could not be verified. Reporting this as ``refused`` would be a lie.
+      ``board_revision_after`` is the digest observed at the end of recovery/final observation;
+      it may equal ``board_revision_before`` when a guarded rollback restored the original, or
+      differ when the authorized bytes or a concurrent writer remain. Clients must use that
+      digest together with the diagnostic rather than infer that publication created a new
+      revision. Reporting this as ``refused`` would be a lie.
     """
 
     status: str
@@ -442,7 +445,13 @@ class ApplyResult:
 
 @dataclass(frozen=True, slots=True)
 class PlacementApplyResult:
-    """Result vocabulary for the separately authorized placement mutation surface."""
+    """Result vocabulary for the separately authorized placement mutation surface.
+
+    ``applied_but_unverified`` means that publication occurred, not that the authorized bytes
+    are necessarily still present. Its ``board_revision_after`` is the best-effort final digest
+    observed after verification and any guarded recovery, so it can describe a restored original
+    revision or a concurrent writer as well as the authorized placement.
+    """
 
     status: str
     board_path: str
