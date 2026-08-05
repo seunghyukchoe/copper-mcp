@@ -1003,3 +1003,13 @@ are the audit copies for the original run IDs.
 | Artifact | [`2026-08-05-exact-local-repair-gate-correction-v2.json`](../../benchmarks/results/routing/2026-08-05-exact-local-repair-gate-correction-v2.json), [`benchmark_exact_local_repair_integration_gate.py`](../../scripts/benchmark_exact_local_repair_integration_gate.py), and [`exact_local_repair_gate_fixture.py`](../../scripts/exact_local_repair_gate_fixture.py). |
 | Classification | Declined; no integration or improvement claim. |
 | Interpretation | The helper is regression-checked against the original semantic builder and imports no test code. This is benchmark-attribution evidence only; it adds no profile, transaction, public behavior, routing integration, DRC, FreeRouting parity, apply, or board-mutation claim. |
+
+#### B-073 — exact orthogonal courtyard topology replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | Recorded in [`2026-08-05-orthogonal-courtyard-topology.json`](../../benchmarks/results/placement/2026-08-05-orthogonal-courtyard-topology.json). |
+| Dataset | KiCad 10.0.5-resaved `tests/fixtures/board-ir-v0.2/courtyard-orthogonal-chains.kicad_pcb`, containing one concave eight-vertex unfilled `fp_poly` courtyard and one unordered four-edge unfilled `fp_line` closed chain on `F.CrtYd`; no proprietary design data. |
+| Protocol | Parse the committed fixture through Board IR v0.2 and the placement view; evaluate unchanged placement and one fixed `-20,000,000 nm` offset of the line-chain footprint. Separately invoke fixed-argv KiCad 10.0.5 CLI DRC on the source fixture. |
+| Metrics | Baseline adapter outcome `unsupported.construct` (historical rectangular-only contract); current snapshot success `true`; observed polygon vertices `8`; observed line-chain vertices `4`; unchanged same-side result `proven_clear`; overlapping proposal result `courtyard_overlap=violated`; KiCad DRC violations `0`; unconnected items `0`; source mutation `false`. |
+| Interpretation | This is a measurable acceptance expansion for simple closed orthogonal courtyard observation and exact candidate legality. It is not general KiCad courtyard support, nonzero custom-clearance support, DRC of a proposed placement, placement apply, GUI/live IPC evidence, electrical/fabrication signoff, or FreeRouting parity. |

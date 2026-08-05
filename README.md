@@ -58,7 +58,7 @@ The non-negotiable boundary is simple:
 - Workspace confinement, including protection against parent-path and symlink escapes.
 - SHA-256 board revisions and versioned JSON schemas.
 - Immutable Board IR `0.2.0` with exact integer units, typed constraints, canonical digests,
-  first-class footprint pose/side/lock/pad ownership, rectangular courtyard rings, and a bounded
+  first-class footprint pose/side/lock/pad ownership, simple orthogonal courtyard rings, and a bounded
   fail-closed converter for a documented KiCad subset. The 0.1 schema remains available as immutable
   compatibility evidence; migration re-converts the original board rather than inventing parents.
 - Immutable Circuit Intent IR `0.1.0` for bounded two-pin resistor/capacitor topology, with a strict

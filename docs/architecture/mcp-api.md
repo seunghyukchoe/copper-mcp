@@ -202,10 +202,11 @@ carries evidence holding per-rule residuals and the legality record. `pad_overla
 **three-valued**: `proven_clear` when pad
 bounds are disjoint, `violated` when pad cores overlap, and `inconclusive` in between.
 `inconclusive` is not a failure and a candidate is still produced; it means neither clearance nor
-collision could be proven. `courtyard_overlap` is exact for Board IR 0.2's rectangular courtyard
-subset: `proven_clear` or `violated`. Only footprints on the same physical side are compared, and
-edge contact is not overlap. A Board IR conversion rejects non-rectangular courtyard topology
-before a placement view exists, so the result cannot silently claim fidelity outside that subset.
+collision could be proven. `courtyard_overlap` is exact for Board IR 0.2's simple orthogonal
+courtyard subset: `proven_clear` or `violated`. Only footprints on the same physical side are
+compared, and edge contact is not overlap. A Board IR conversion rejects unsupported courtyard
+topology before a placement view exists, so the result cannot silently claim fidelity outside that
+subset.
 Padless/graphics-only footprints remain unavailable as subjects and anchors, but their supported
 courtyards remain stationary collision envelopes and are included in this same-side check; they are
 not emitted in the candidate manifest.

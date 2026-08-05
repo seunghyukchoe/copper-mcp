@@ -16,36 +16,22 @@ _SCHEMA_MAX_RING_POINTS = 100_000
 _SCHEMA_MAX_COURTYARDS_PER_FOOTPRINT = 64
 
 
-def _require_rectangular_courtyard(ring: Ring, locator: str) -> None:
-    """Reject any courtyard that is not an axis-aligned rectangle.
+def _require_orthogonal_courtyard(ring: Ring, locator: str) -> None:
+    """Reject courtyard topology whose exact filled region we do not model.
 
-    Board IR 0.2 promises rectangular courtyard rings, and the KiCad adapter honours that by
-    importing only ``fp_rect`` primitives: it emits exactly four corners and transforms them by
-    a quarter turn, which keeps the result axis-aligned. Validation has to enforce the same
-    shape, or externally-produced JSON could carry a triangle or an arbitrary simple polygon
-    that decodes and digest-verifies while no adapter could ever have produced it - the codec
-    path and the adapter path would then disagree about what a courtyard is.
-
-    The message names the contract rather than echoing the offending geometry.
+    Board IR stores all courtyard contours as ordinary rings.  The accepted adapter subset is
+    deliberately smaller: a simple closed chain made only of horizontal and vertical segments.
+    That admits KiCad ``fp_rect``, unfilled orthogonal ``fp_poly``, and closed orthogonal
+    ``fp_line`` chains without pretending that an arc, a curve, a diagonal, or a partially open
+    construction has a trustworthy collision area.  General ring validation below still owns
+    non-zero-area and self-intersection checks.
     """
 
     points = ring.points
-    if len(points) != 4:
-        raise BoardIRValidationError(
-            "unsupported.topology",
-            "Board IR v0.2 courtyards must be rectangles with exactly four corners",
-            locator,
-        )
-    if len({point.x for point in points}) != 2 or len({point.y for point in points}) != 2:
-        raise BoardIRValidationError(
-            "unsupported.topology",
-            "Board IR v0.2 courtyards must be axis-aligned rectangles",
-            locator,
-        )
     for index, start in enumerate(points):
-        end = points[(index + 1) % 4]
-        # Exactly one coordinate changes along an axis-aligned edge. A diagonal edge, or a
-        # repeated corner, fails this and so cannot masquerade as a rectangle.
+        end = points[(index + 1) % len(points)]
+        # Exactly one coordinate changes along an axis-aligned edge.  A diagonal edge, or a
+        # repeated corner, fails this before it can reach the exact orthogonal overlap test.
         if (start.x == end.x) == (start.y == end.y):
             raise BoardIRValidationError(
                 "unsupported.topology",
@@ -309,7 +295,7 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
     for footprint in content.footprints:
         for index, courtyard in enumerate(footprint.courtyards):
             locator = f"{footprint.id}.courtyards[{index}]"
-            _require_rectangular_courtyard(courtyard, locator)
+            _require_orthogonal_courtyard(courtyard, locator)
             rings.append((locator, courtyard))
     total_vertices = sum(len(ring.points) for _, ring in rings)
     if total_vertices > limits.max_total_vertices:
