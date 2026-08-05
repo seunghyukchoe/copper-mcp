@@ -1,0 +1,343 @@
+"""Bounded exact local lattice repair for coordinator-owned windows.
+
+This is deliberately *not* a board mutator, a policy evaluator, or a RouteCandidate serializer.
+It turns a coordinator-supplied :class:`RepairWindowCandidate` plus a bounded, already-derived
+occupancy view into an immutable local route proposal.  A future negotiated coordinator may use
+the proposal only after it binds the geometry to Board IR and sends it through the ordinary
+candidate and physical-clearance gates.
+
+The search is Dijkstra over ``(cell, incoming direction)`` states with the lexicographic positive
+cost ``(unit steps, bends, cell sequence)``.  The direction state makes bend cost Markovian;
+positive unit-step edges preserve Dijkstra's optimality precondition.  The full cell sequence is
+included only as a capped deterministic tie-breaker, not as a user/model-provided route.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from collections.abc import Callable
+from dataclasses import dataclass
+from enum import StrEnum
+from heapq import heappop, heappush
+from typing import Final, TypeAlias, cast
+
+from copper_mcp.routing.policy import PolicyBounds, RepairWindowCandidate
+
+GridCell: TypeAlias = tuple[int, int]
+CancellationCheck: TypeAlias = Callable[[], bool]
+
+_MAX_WINDOW_CELLS: Final = 4_096
+_MAX_EXPANSIONS: Final = 4_096
+_DIRECTIONS: Final[tuple[GridCell, ...]] = ((-1, 0), (0, -1), (0, 1), (1, 0))
+_EMPTY_DIGEST: Final = f"sha256:{'0' * 64}"
+_SHA256_PREFIX_LENGTH: Final = len("sha256:") + 64
+
+
+class LocalRepairStatus(StrEnum):
+    """Terminal state for a bounded local-repair proposal."""
+
+    COMPLETED = "completed"
+    NO_PATH = "no_path"
+    BUDGET_EXHAUSTED = "budget_exhausted"
+    CANCELLED = "cancelled"
+    INVALID_REQUEST = "invalid_request"
+
+
+def _cell(name: str, value: object) -> GridCell:
+    if (
+        not isinstance(value, tuple)
+        or len(value) != 2
+        or any(
+            isinstance(coordinate, bool) or not isinstance(coordinate, int) for coordinate in value
+        )
+    ):
+        raise ValueError(f"{name} must be an integer grid cell")
+    return cast(GridCell, value)
+
+
+def _canonical_bytes(value: object) -> bytes:
+    return json.dumps(
+        value,
+        allow_nan=False,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("ascii")
+
+
+def _digest(value: object) -> str:
+    return f"sha256:{hashlib.sha256(_canonical_bytes(value)).hexdigest()}"
+
+
+def _within(bounds: PolicyBounds, cell: GridCell) -> bool:
+    return bounds.min_x <= cell[0] <= bounds.max_x and bounds.min_y <= cell[1] <= bounds.max_y
+
+
+@dataclass(frozen=True, slots=True)
+class LocalRepairRequest:
+    """Trusted coordinator input for one bounded local repair attempt.
+
+    ``blocked_cells`` must be a canonical occupancy projection from the deterministic core.  It is
+    intentionally not populated by an advisory policy, and neither it nor the result has Board
+    IR, pad IDs, widths, layers, or an apply capability.
+    """
+
+    repair_window: RepairWindowCandidate
+    start: GridCell
+    end: GridCell
+    blocked_cells: tuple[GridCell, ...] = ()
+    max_expansions: int = _MAX_EXPANSIONS
+    max_window_cells: int = _MAX_WINDOW_CELLS
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.repair_window, RepairWindowCandidate):
+            raise ValueError("local repair requires a coordinator-owned repair window")
+        start = _cell("local repair start", self.start)
+        end = _cell("local repair end", self.end)
+        if start == end:
+            raise ValueError("local repair endpoints must differ")
+        if not (
+            _within(self.repair_window.bounds, start) and _within(self.repair_window.bounds, end)
+        ):
+            raise ValueError("local repair endpoints must remain inside the repair window")
+        if (
+            not isinstance(self.max_expansions, int)
+            or isinstance(self.max_expansions, bool)
+            or not 1 <= self.max_expansions <= _MAX_EXPANSIONS
+        ):
+            raise ValueError("local repair expansion budget is unsupported")
+        if (
+            not isinstance(self.max_window_cells, int)
+            or isinstance(self.max_window_cells, bool)
+            or not 1 <= self.max_window_cells <= _MAX_WINDOW_CELLS
+        ):
+            raise ValueError("local repair window budget is unsupported")
+        width = self.repair_window.bounds.max_x - self.repair_window.bounds.min_x + 1
+        height = self.repair_window.bounds.max_y - self.repair_window.bounds.min_y + 1
+        if width * height > self.max_window_cells:
+            raise ValueError("local repair window exceeds the cell budget")
+        if (
+            not isinstance(self.blocked_cells, tuple)
+            or any(
+                not _within(self.repair_window.bounds, _cell("blocked local repair cell", cell))
+                for cell in self.blocked_cells
+            )
+            or tuple(sorted(self.blocked_cells)) != self.blocked_cells
+            or len(set(self.blocked_cells)) != len(self.blocked_cells)
+        ):
+            raise ValueError("local repair blocked cells must be canonical and in-window")
+        if start in self.blocked_cells or end in self.blocked_cells:
+            raise ValueError("local repair endpoints cannot be blocked")
+
+    @property
+    def input_digest(self) -> str:
+        """Return the content address of this exact local, candidate-only request."""
+
+        return _digest(
+            {
+                "blocked_cells": [list(cell) for cell in self.blocked_cells],
+                "end": list(self.end),
+                "max_expansions": self.max_expansions,
+                "max_window_cells": self.max_window_cells,
+                "repair_window": self.repair_window.as_json(),
+                "schema": "copper-mcp.local-exact-repair-input.v1",
+                "start": list(self.start),
+            }
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class LocalRepairResult:
+    """Immutable local route proposal with bounded, auditable work accounting."""
+
+    status: LocalRepairStatus
+    input_digest: str
+    route: tuple[GridCell, ...] = ()
+    expanded_states: int = 0
+    bend_count: int = 0
+    diagnostic: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.status, LocalRepairStatus):
+            raise ValueError("local repair status is malformed")
+        if (
+            not isinstance(self.input_digest, str)
+            or len(self.input_digest) != _SHA256_PREFIX_LENGTH
+            or not self.input_digest.startswith("sha256:")
+            or any(character not in "0123456789abcdef" for character in self.input_digest[7:])
+        ):
+            raise ValueError("local repair input digest is malformed")
+        if not isinstance(self.route, tuple) or any(
+            _cell("local repair route cell", cell) != cell for cell in self.route
+        ):
+            raise ValueError("local repair route is malformed")
+        if (
+            not isinstance(self.expanded_states, int)
+            or isinstance(self.expanded_states, bool)
+            or self.expanded_states < 0
+        ):
+            raise ValueError("local repair work accounting is malformed")
+        if (
+            not isinstance(self.bend_count, int)
+            or isinstance(self.bend_count, bool)
+            or self.bend_count < 0
+        ):
+            raise ValueError("local repair bend accounting is malformed")
+        if self.status is LocalRepairStatus.COMPLETED:
+            if len(self.route) < 2 or self.diagnostic is not None:
+                raise ValueError("completed local repair must contain a route and no diagnostic")
+        elif self.route or self.bend_count:
+            raise ValueError("non-completed local repair cannot publish a route")
+
+    @property
+    def route_digest(self) -> str:
+        """Return a content binding for a completed local candidate proposal, if any."""
+
+        if self.status is not LocalRepairStatus.COMPLETED:
+            return _EMPTY_DIGEST
+        return _digest(
+            {
+                "input_digest": self.input_digest,
+                "route": [list(cell) for cell in self.route],
+                "schema": "copper-mcp.local-exact-repair-route.v1",
+            }
+        )
+
+
+def _cancelled(cancelled: CancellationCheck | None) -> bool:
+    if cancelled is None:
+        return False
+    try:
+        return bool(cancelled())
+    except Exception:  # pragma: no cover - external cooperative callback fails closed
+        return True
+
+
+def _result(
+    request: LocalRepairRequest,
+    status: LocalRepairStatus,
+    *,
+    expanded_states: int = 0,
+    diagnostic: str | None = None,
+    route: tuple[GridCell, ...] = (),
+    bend_count: int = 0,
+) -> LocalRepairResult:
+    return LocalRepairResult(
+        status=status,
+        input_digest=request.input_digest,
+        route=route,
+        expanded_states=expanded_states,
+        bend_count=bend_count,
+        diagnostic=diagnostic,
+    )
+
+
+def exact_local_repair(
+    request: object,
+    *,
+    cancelled: object = None,
+) -> LocalRepairResult:
+    """Propose the exact shortest, then fewest-bend, route within one repair window.
+
+    Work is capped before every state expansion.  Cancellation is cooperative and atomic: a
+    cancelled result contains no route.  Invalid request/cancellation boundaries return fixed
+    diagnostics rather than exception content.  This function has no board, model, or apply I/O.
+    """
+
+    if not isinstance(request, LocalRepairRequest):
+        return LocalRepairResult(
+            status=LocalRepairStatus.INVALID_REQUEST,
+            input_digest=_EMPTY_DIGEST,
+            diagnostic="the local repair request is invalid",
+        )
+    if cancelled is not None and not callable(cancelled):
+        return _result(
+            request,
+            LocalRepairStatus.INVALID_REQUEST,
+            diagnostic="the local repair cancellation hook is invalid",
+        )
+    cancellation_check = cancelled
+    if _cancelled(cancellation_check):
+        return _result(
+            request,
+            LocalRepairStatus.CANCELLED,
+            diagnostic="local repair was cancelled before search",
+        )
+
+    blocked = frozenset(request.blocked_cells)
+    # State key includes direction so the incremental bend objective is exact.  Path itself is a
+    # bounded canonical tie-breaker for equal `(steps, bends)` states and final routes.
+    State: TypeAlias = tuple[GridCell, int | None]
+    Cost: TypeAlias = tuple[int, int, tuple[GridCell, ...]]
+    initial_state: State = (request.start, None)
+    initial_cost: Cost = (0, 0, (request.start,))
+    best: dict[State, Cost] = {initial_state: initial_cost}
+    queue: list[tuple[int, int, tuple[GridCell, ...], int, GridCell]] = [
+        (0, 0, (request.start,), -1, request.start)
+    ]
+    expanded_states = 0
+
+    while queue:
+        steps, bends, path, direction_key, cell = heappop(queue)
+        direction = None if direction_key < 0 else direction_key
+        state: State = (cell, direction)
+        cost: Cost = (steps, bends, path)
+        if best.get(state) != cost:
+            continue
+        if _cancelled(cancellation_check):
+            return _result(
+                request,
+                LocalRepairStatus.CANCELLED,
+                expanded_states=expanded_states,
+                diagnostic="local repair was cancelled during search",
+            )
+        if cell == request.end:
+            return _result(
+                request,
+                LocalRepairStatus.COMPLETED,
+                expanded_states=expanded_states,
+                route=path,
+                bend_count=bends,
+            )
+        if expanded_states >= request.max_expansions:
+            return _result(
+                request,
+                LocalRepairStatus.BUDGET_EXHAUSTED,
+                expanded_states=expanded_states,
+                diagnostic="local repair expansion budget was exhausted",
+            )
+        expanded_states += 1
+        for next_direction, (dx, dy) in enumerate(_DIRECTIONS):
+            next_cell = (cell[0] + dx, cell[1] + dy)
+            if not _within(request.repair_window.bounds, next_cell) or next_cell in blocked:
+                continue
+            next_cost: Cost = (
+                steps + 1,
+                bends + int(direction is not None and direction != next_direction),
+                (*path, next_cell),
+            )
+            next_state: State = (next_cell, next_direction)
+            if next_cost >= best.get(next_state, (1 << 60, 1 << 60, ())):
+                continue
+            best[next_state] = next_cost
+            heappush(
+                queue,
+                (*next_cost, next_direction, next_cell),
+            )
+
+    return _result(
+        request,
+        LocalRepairStatus.NO_PATH,
+        expanded_states=expanded_states,
+        diagnostic="local repair found no route inside the supplied window",
+    )
+
+
+__all__ = [
+    "GridCell",
+    "LocalRepairRequest",
+    "LocalRepairResult",
+    "LocalRepairStatus",
+    "exact_local_repair",
+]
