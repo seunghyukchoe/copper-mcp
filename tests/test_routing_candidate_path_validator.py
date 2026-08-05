@@ -297,8 +297,11 @@ def test_candidate_path_validator_distinguishes_stale_revision_from_infeasible_a
         (PointNM(1_000_000, 5_000_000), PointNM(9_000_000, 5_000_000)),
     )
     stale_request = replace(request, board_revision=f"sha256:{'e' * 64}")
+    stale_candidate = _with_candidate_identity(
+        replace(direct, base_revision=stale_request.board_revision)
+    )
 
-    stale = _validate(snapshot, stale_request, direct)
+    stale = _validate(snapshot, stale_request, stale_candidate)
     budget = validate_candidate_path(
         snapshot,
         request,
@@ -336,7 +339,7 @@ def test_candidate_path_validator_rejects_stale_candidate_before_board_ir_prepar
     assert result.edge_checks == result.obstacle_checks == 0
 
 
-def test_candidate_path_validator_rejects_stale_request_before_board_ir_preparation(
+def test_candidate_path_validator_defers_stale_request_until_board_ir_preparation(
     monkeypatch,
 ) -> None:
     snapshot = _snapshot()
@@ -346,15 +349,51 @@ def test_candidate_path_validator_rejects_stale_request_before_board_ir_preparat
         (PointNM(1_000_000, 5_000_000), PointNM(9_000_000, 5_000_000)),
     )
     stale_request = replace(request, board_revision=f"sha256:{'e' * 64}")
+    stale_candidate = _with_candidate_identity(
+        replace(direct, base_revision=stale_request.board_revision)
+    )
 
-    def prepare_must_not_run(*_: object) -> object:
-        raise AssertionError("stale requests must not prepare Board IR")
+    prepare_calls = 0
+    reference_prepare = validator_module._prepare
 
-    monkeypatch.setattr(validator_module, "_prepare", prepare_must_not_run)
+    def observe_prepare(*args: object) -> object:
+        nonlocal prepare_calls
+        prepare_calls += 1
+        return reference_prepare(*args)
 
-    result = _validate(snapshot, stale_request, direct)
+    monkeypatch.setattr(validator_module, "_prepare", observe_prepare)
 
+    result = _validate(snapshot, stale_request, stale_candidate)
+
+    assert prepare_calls == 1
     assert result.failure is CandidatePathValidationFailure.STALE_REVISION
+    assert result.edge_checks == result.obstacle_checks == 0
+
+
+def test_candidate_path_validator_defers_mutated_snapshot_digest_to_canonical_preparation(
+    monkeypatch,
+) -> None:
+    snapshot = _snapshot()
+    request = _request(snapshot)
+    direct = _candidate(
+        request,
+        (PointNM(1_000_000, 5_000_000), PointNM(9_000_000, 5_000_000)),
+    )
+    object.__setattr__(snapshot, "snapshot_digest", f"sha256:{'e' * 64}")
+    prepare_calls = 0
+    reference_prepare = validator_module._prepare
+
+    def observe_prepare(*args: object) -> object:
+        nonlocal prepare_calls
+        prepare_calls += 1
+        return reference_prepare(*args)
+
+    monkeypatch.setattr(validator_module, "_prepare", observe_prepare)
+
+    result = _validate(snapshot, request, direct)
+
+    assert prepare_calls == 1
+    assert result.failure is CandidatePathValidationFailure.INVALID_REQUEST
     assert result.edge_checks == result.obstacle_checks == 0
 
 

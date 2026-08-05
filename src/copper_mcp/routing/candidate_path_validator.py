@@ -477,8 +477,6 @@ def validate_candidate_path(
         or max_path_edges > checked_request.settings.max_grid_nodes
     ):
         return _result(None, 0, CandidatePathValidationFailure.INVALID_REQUEST)
-    if checked_request.board_revision != snapshot.snapshot_digest:
-        return _result(None, 0, CandidatePathValidationFailure.STALE_REVISION)
 
     raw_candidate_failure = _preflight_candidate(
         candidate,
