@@ -258,9 +258,11 @@ placement, and the policy-plugin work.
   remain future work.
 - [~] General courtyard line-chain/polygon topology and back-side footprint observation, pinned to
   KiCad-authored front/back flip and DRC oracle fixtures without applying a second mirror. The
-  adapter now observes bounded `F.Cu`/`B.Cu` footprints with rectangular courtyards and a real
-  KiCad CLI DRC fixture; GUI-authored flip serialization, line-chain/polygon topology, and the
-  no-second-mirror claim remain open until a live desktop oracle is available.
+  adapter now observes bounded `F.Cu`/`B.Cu` footprints with rectangles, unfilled orthogonal
+  polygons, and closed orthogonal line-chain courtyards; exact same-side positive-area legality is
+  measured on a KiCad-resaved DRC-clean fixture (B-073). Curves/arcs/diagonals, nonzero custom
+  clearance, GUI-authored flip serialization, side-aware placement apply, and a live desktop
+  no-second-mirror oracle remain open.
 - [~] Separately authorized placement apply; direct AI mutation of KiCad remains prohibited. The
   bounded file-level surface is implemented and measured, and file-backed post-placement
   DRC/scene observation is revision-bound; general footprint fidelity and live-editor action CAS

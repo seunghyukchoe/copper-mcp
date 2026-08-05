@@ -40,6 +40,7 @@ from copper_mcp.placement.contracts import (
 from copper_mcp.placement.geometry import (
     QUARTER_UDEG,
     Rect,
+    orthogonal_rings_overlap_open,
     pad_bounds,
     pad_core,
     rect_gap,
@@ -434,12 +435,12 @@ def _keepout_respect(
 
 
 def _courtyard_overlap(placed: tuple[_PlacedFootprint, ...], budget: _Budget) -> str:
-    """Check exact rectangular courtyards on the same physical side.
+    """Check exact orthogonal courtyards on the same physical side.
 
-    Board IR v0.2 admits only axis-aligned rectangular courtyard rings. Their closed bounds are
-    therefore the exact geometry, and an open rectangle overlap treats edge contact as legal, as
-    KiCad's zero-clearance default does. Front and back courtyards are independent physical layers;
-    an overlap across sides is not a same-layer courtyard collision.
+    Board IR v0.2 accepts simple closed horizontal/vertical courtyard rings.  The midpoint-strip
+    predicate proves positive-area intersection (including containment) with integer arithmetic;
+    edge or corner contact remains legal at KiCad's zero-clearance default.  Front and back
+    courtyards are independent physical layers, so cross-side contact is not a collision.
     """
 
     for first_index, first in enumerate(placed):
@@ -450,10 +451,9 @@ def _courtyard_overlap(placed: tuple[_PlacedFootprint, ...], budget: _Budget) ->
             if first.side != second.side or not second.courtyards:
                 continue
             for left in first.courtyards:
-                left_bounds = ring_bounds(left)
                 for right in second.courtyards:
                     budget.charge()
-                    if rects_overlap(left_bounds, ring_bounds(right)):
+                    if orthogonal_rings_overlap_open(left, right, charge=budget.charge):
                         return "violated"
     return "proven_clear"
 

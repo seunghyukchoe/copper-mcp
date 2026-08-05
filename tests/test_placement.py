@@ -48,6 +48,9 @@ FRONT_BACK_FOOTPRINT_V02_BOARD = (
     ROOT / "tests" / "fixtures" / "board-ir-v0.2" / "footprint-front-back-pose.kicad_pcb"
 )
 PADLESS_BOARD = ROOT / "tests" / "fixtures" / "board-ir-v0.2" / "padless-footprint.kicad_pcb"
+ORTHOGONAL_COURTYARD_BOARD = (
+    ROOT / "tests" / "fixtures" / "board-ir-v0.2" / "courtyard-orthogonal-chains.kicad_pcb"
+)
 #: The graphics-only footprint in ``PADLESS_BOARD``: real in Board IR, reported by the scene,
 #: but owning no copper pad.
 PADLESS_REF = "footprint:kicad:93000000-0000-0000-0000-000000000011"
@@ -724,6 +727,31 @@ class LegalityTests(unittest.TestCase):
         self.assertEqual(result.status, "previewed")
         assert result.candidate is not None
         self.assertEqual(result.candidate.evidence.legality.courtyard_overlap, "proven_clear")
+
+    def test_closed_line_chain_and_concave_polygon_courtyards_have_exact_legality(self) -> None:
+        """The held-out KiCad fixture moves from adapter refusal to exact clear/violation proof."""
+
+        _, snapshot, view = _board(ORTHOGONAL_COURTYARD_BOARD)
+        _polygon, line_chain = sorted(view.footprints)
+        clear = evaluate_placement(_intent(view, ORTHOGONAL_COURTYARD_BOARD.name), snapshot, view)
+        self.assertEqual(clear.status, "previewed")
+        assert clear.candidate is not None
+        self.assertEqual(clear.candidate.evidence.legality.courtyard_overlap, "proven_clear")
+
+        overlap = evaluate_placement(
+            _intent(
+                view,
+                ORTHOGONAL_COURTYARD_BOARD.name,
+                proposals=[{"subject": line_chain, "offset_x_nm": -20_000_000}],
+            ),
+            snapshot,
+            view,
+        )
+        self.assertEqual(overlap.status, "refused")
+        assert overlap.diagnostic is not None
+        assert overlap.diagnostic.legality is not None
+        self.assertEqual(overlap.diagnostic.code, PlacementFailureCode.ILLEGAL_PLACEMENT)
+        self.assertEqual(overlap.diagnostic.legality.courtyard_overlap, "violated")
 
     def test_each_illegality_is_reported_by_its_own_check(self) -> None:
         """Guard the guard: the three checks must be independent, not one flag in disguise."""

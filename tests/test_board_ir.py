@@ -724,14 +724,13 @@ def test_geometry_package_has_no_mcp_gui_filesystem_or_adapter_imports() -> None
         ), f"forbidden Board IR import in {source_path}: {sorted(imports)}"
 
 
-def test_board_ir_v0_2_rejects_non_rectangular_courtyards() -> None:
-    """Externally-produced Board IR must obey the same courtyard contract as the adapter.
+def test_board_ir_v0_2_accepts_only_orthogonal_courtyard_rings() -> None:
+    """Externally-produced Board IR must obey the adapter's exact courtyard subset.
 
-    The 0.2 contract promises rectangular courtyard rings, and the KiCad adapter enforces that
-    by importing only ``fp_rect`` primitives. Without the same check in validation, hand-written
-    or third-party JSON could carry a triangle or an arbitrary simple polygon that validates,
-    decodes and digest-verifies - so the codec path and the adapter path would disagree about
-    what a courtyard is.
+    The adapter can now import a simple closed line-chain or unfilled polygon, but only when it
+    is orthogonal.  Validation must accept the same bounded topology while continuing to refuse
+    diagonal geometry, otherwise a hand-written JSON snapshot could claim a collision region that
+    the deterministic legalizer does not model.
     """
 
     content = sample_content()
@@ -746,6 +745,29 @@ def test_board_ir_v0_2_rejects_non_rectangular_courtyards() -> None:
             )
         )
     assert triangle_error.value.code == "unsupported.topology"
+
+    concave_orthogonal = _ring(
+        (
+            (1_000_000, 1_000_000),
+            (7_000_000, 1_000_000),
+            (7_000_000, 7_000_000),
+            (5_000_000, 7_000_000),
+            (5_000_000, 4_000_000),
+            (3_000_000, 4_000_000),
+            (3_000_000, 7_000_000),
+            (1_000_000, 7_000_000),
+        )
+    )
+    snapshot = make_snapshot(
+        replace(
+            content,
+            footprints=(
+                replace(footprint, courtyards=(concave_orthogonal,)),
+                *content.footprints[1:],
+            ),
+        )
+    )
+    assert decode_snapshot_json(encode_snapshot(snapshot)) == snapshot
 
     # A four-vertex ring is not enough: the corners must form an axis-aligned rectangle.
     skewed = _ring(
@@ -770,12 +792,8 @@ def test_board_ir_v0_2_rejects_non_rectangular_courtyards() -> None:
         assert "1000000" not in error.value.message
 
 
-def test_board_ir_v0_2_accepts_rectangular_courtyards_at_every_quarter_turn() -> None:
-    """Guard the guard: the rectangularity check must not reject legitimate rotated courtyards.
-
-    A quarter turn maps an axis-aligned rectangle onto another axis-aligned rectangle, which is
-    exactly what the adapter emits, so all four orientations must validate.
-    """
+def test_board_ir_v0_2_accepts_orthogonal_courtyards_at_every_quarter_turn() -> None:
+    """Guard the guard: quarter turns must preserve valid orthogonal courtyard topology."""
 
     content = sample_content()
     footprint = content.footprints[0]
