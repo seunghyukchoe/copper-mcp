@@ -1,13 +1,22 @@
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import os
+import runpy
+from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
 from copper_mcp.config import Settings
+from copper_mcp.kicad_ipc import (
+    KicadIpcConfigurationError,
+    LiveBoardObservation,
+    LiveBoardSnapshot,
+)
 from copper_mcp.kicad_ipc_oracle import probe_live_kicad_ipc
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,6 +82,23 @@ def _environment(**values: str) -> dict[str, str]:
     return result
 
 
+def _captured_snapshot() -> LiveBoardSnapshot:
+    source = FIXTURE.read_bytes()
+    digest = f"sha256:{hashlib.sha256(source).hexdigest()}"
+    return LiveBoardSnapshot(
+        observation=LiveBoardObservation(
+            kicad_version="10.0.5",
+            api_version="10.0.5",
+            compatibility="compatible",
+            board_digest=digest,
+            board_bytes=len(source),
+            object_counts={},
+            socket_kind="configured-local-ipc",
+        ),
+        source=source,
+    )
+
+
 def test_oracle_skips_deterministically_when_not_launched_by_kicad() -> None:
     with patch.dict(os.environ, {"KICAD_API_SOCKET": "", "KICAD_API_TOKEN": ""}, clear=False):
         result = probe_live_kicad_ipc(_settings())
@@ -80,6 +106,34 @@ def test_oracle_skips_deterministically_when_not_launched_by_kicad() -> None:
     assert result.status == "skipped"
     assert result.capability == "kicad_plugin_environment_absent"
     assert result.to_dict()["board_digest"] is None
+
+
+def test_cli_skips_before_hostile_workspace_configuration_and_exits_without_traceback() -> None:
+    output = io.StringIO()
+    hostile_workspace = "/private/path-must-not-appear-or-be-resolved"
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "KICAD_API_SOCKET": "",
+                "KICAD_API_TOKEN": "",
+                "COPPER_MCP_WORKSPACE": hostile_workspace,
+            },
+            clear=False,
+        ),
+        redirect_stdout(output),
+    ):
+        try:
+            runpy.run_path(str(ROOT / "scripts" / "probe_kicad_live_ipc.py"), run_name="__main__")
+        except SystemExit as exit_code:
+            assert exit_code.code == 0
+        else:  # pragma: no cover - the script contract deliberately raises SystemExit
+            raise AssertionError("probe CLI did not exit")
+
+    document = json.loads(output.getvalue())
+    assert document["capability"] == "kicad_plugin_environment_absent"
+    assert "Traceback" not in output.getvalue()
+    assert hostile_workspace not in output.getvalue()
 
 
 def test_oracle_distinguishes_missing_socket_and_token() -> None:
@@ -158,6 +212,50 @@ def test_oracle_distinguishes_invalid_endpoint_and_unreachable_or_busy_server() 
         "kicad_api_server_unreachable_or_busy",
     )
     assert "private endpoint detail" not in repr(unreachable.to_dict())
+
+
+def test_oracle_classifies_token_timeout_and_generic_configuration_failures() -> None:
+    with patch.dict(os.environ, _environment(KICAD_API_TOKEN="opaque\ninvalid"), clear=False):
+        invalid_token = probe_live_kicad_ipc(
+            _settings(), client_factory=lambda **_: _KiCad(_Board(""))
+        )
+    with patch.dict(os.environ, _environment(), clear=False):
+        invalid_timeout = probe_live_kicad_ipc(_settings(), timeout_ms=0)
+        with patch(
+            "copper_mcp.kicad_ipc_oracle.capture_live_board",
+            side_effect=KicadIpcConfigurationError("fixed generic configuration failure"),
+        ):
+            generic = probe_live_kicad_ipc(_settings())
+
+    assert (invalid_token.status, invalid_token.capability) == (
+        "refused",
+        "kicad_token_configuration_invalid",
+    )
+    assert (invalid_timeout.status, invalid_timeout.capability) == (
+        "refused",
+        "kicad_timeout_or_budget_configuration_invalid",
+    )
+    assert (generic.status, generic.capability) == ("refused", "kicad_configuration_invalid")
+    assert "opaque" not in repr(invalid_token.to_dict())
+
+
+def test_oracle_deadline_refuses_after_capture_without_later_conversion_work() -> None:
+    with (
+        patch.dict(os.environ, _environment(), clear=False),
+        patch("copper_mcp.kicad_ipc_oracle.capture_live_board", return_value=_captured_snapshot()),
+        patch("copper_mcp.kicad_ipc_oracle.time.monotonic", side_effect=(100.0, 101.1)),
+        patch(
+            "copper_mcp.kicad_ipc_oracle.parse_kicad_bytes",
+            side_effect=AssertionError("Board IR conversion must not run after deadline"),
+        ),
+        patch(
+            "copper_mcp.kicad_ipc_oracle._observe_board_scene",
+            side_effect=AssertionError("scene conversion must not run after deadline"),
+        ),
+    ):
+        result = probe_live_kicad_ipc(_settings(), timeout_ms=1_000)
+
+    assert (result.status, result.capability) == ("refused", "live_ipc_oracle_deadline_exhausted")
 
 
 def test_oracle_detects_a_session_change_after_capture_without_board_text() -> None:

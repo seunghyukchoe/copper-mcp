@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -17,10 +18,11 @@ from typing import Any, Literal
 from copper_mcp.adapters import parse_kicad_bytes
 from copper_mcp.board_ir import ParseLimits
 from copper_mcp.circuit_scene import _observe_board_scene, parse_circuit_scene_request
-from copper_mcp.config import Settings
+from copper_mcp.config import ConfigurationError, Settings
 from copper_mcp.kicad_ipc import (
     KicadIpcConfigurationError,
     KicadIpcConnectionError,
+    KicadIpcDeadlineError,
     KicadIpcError,
     KicadIpcPayloadError,
     KicadIpcUnavailableError,
@@ -178,6 +180,32 @@ def _connection_capability(error: KicadIpcConnectionError) -> str:
     return "kicad_api_server_unreachable_or_busy"
 
 
+def _configuration_capability(error: KicadIpcConfigurationError) -> str:
+    """Map CopperMCP's own fixed configuration errors without exposing environment text."""
+
+    # ``kicad_ipc`` constructs these messages itself; no binding/server exception text is read.
+    message = str(error)
+    if message.startswith("KICAD_API_SOCKET"):
+        return "kicad_endpoint_configuration_invalid"
+    if message.startswith("KICAD_API_TOKEN"):
+        return "kicad_token_configuration_invalid"
+    if message.startswith("IPC timeout") or message.startswith("IPC deadline"):
+        return "kicad_timeout_or_budget_configuration_invalid"
+    return "kicad_configuration_invalid"
+
+
+def _operation_deadline(timeout_ms: int) -> float | None:
+    """Return the one cooperative deadline shared by capture and both conversions."""
+
+    if type(timeout_ms) is not int or not 1 <= timeout_ms <= 10_000:
+        return None
+    return time.monotonic() + timeout_ms / 1_000
+
+
+def _deadline_exhausted(deadline: float) -> bool:
+    return time.monotonic() >= deadline
+
+
 def _refused(
     capability: str,
     socket_configured: bool,
@@ -205,7 +233,6 @@ def probe_live_kicad_ipc(
     candidates, or retain/return serialized board text.
     """
 
-    active_settings = settings or Settings.from_env()
     socket_configured, token_configured, environment_problem = _environment_capability()
     if environment_problem is not None:
         return LiveIpcOracleResult(
@@ -214,25 +241,51 @@ def probe_live_kicad_ipc(
             socket_configured=socket_configured,
             token_configured=token_configured,
         )
+    deadline = _operation_deadline(timeout_ms)
+    if deadline is None:
+        return _refused(
+            "kicad_timeout_or_budget_configuration_invalid",
+            socket_configured,
+            token_configured,
+        )
+    try:
+        active_settings = settings or Settings.from_env()
+    except ConfigurationError:
+        return _refused(
+            "coppermcp_settings_configuration_invalid",
+            socket_configured,
+            token_configured,
+        )
+    if _deadline_exhausted(deadline):
+        return _refused("live_ipc_oracle_deadline_exhausted", socket_configured, token_configured)
     try:
         captured = capture_live_board(
             active_settings,
             client_factory=client_factory,
             timeout_ms=timeout_ms,
+            deadline=deadline,
         )
     except KicadIpcUnavailableError:
         return _refused("kicad_python_binding_unavailable", socket_configured, token_configured)
-    except KicadIpcConfigurationError:
-        return _refused("kicad_endpoint_configuration_invalid", socket_configured, token_configured)
+    except KicadIpcConfigurationError as error:
+        return _refused(
+            _configuration_capability(error),
+            socket_configured,
+            token_configured,
+        )
     except KicadIpcVersionError:
         return _refused("kicad_version_mismatch", socket_configured, token_configured)
     except KicadIpcPayloadError:
         return _refused("kicad_snapshot_refused_by_budget", socket_configured, token_configured)
+    except KicadIpcDeadlineError:
+        return _refused("live_ipc_oracle_deadline_exhausted", socket_configured, token_configured)
     except KicadIpcConnectionError as error:
         return _refused(_connection_capability(error), socket_configured, token_configured)
     except KicadIpcError:
         return _refused("kicad_ipc_observation_refused", socket_configured, token_configured)
 
+    if _deadline_exhausted(deadline):
+        return _refused("live_ipc_oracle_deadline_exhausted", socket_configured, token_configured)
     request = parse_circuit_scene_request(_SCENE_PAYLOAD)
     limits = ParseLimits(
         max_input_bytes=min(ParseLimits().max_input_bytes, active_settings.max_board_bytes)
@@ -240,6 +293,8 @@ def probe_live_kicad_ipc(
     conversion = parse_kicad_bytes(captured.source, request.profile(), limits)
     if conversion.snapshot is None or conversion.diagnostics:
         return _refused("board_ir_conversion_unsupported", socket_configured, token_configured)
+    if _deadline_exhausted(deadline):
+        return _refused("live_ipc_oracle_deadline_exhausted", socket_configured, token_configured)
     scene = _observe_board_scene(
         _SCENE_PAYLOAD,
         active_settings,
@@ -248,6 +303,8 @@ def probe_live_kicad_ipc(
     )
     if not scene.supported or scene.snapshot_digest is None:
         return _refused("circuit_scene_projection_unsupported", socket_configured, token_configured)
+    if _deadline_exhausted(deadline):
+        return _refused("live_ipc_oracle_deadline_exhausted", socket_configured, token_configured)
 
     source_digest = f"sha256:{hashlib.sha256(captured.source).hexdigest()}"
     board_digest = captured.observation.board_digest
