@@ -816,3 +816,14 @@ are the audit copies for the original run IDs.
 |---|---|
 | Correction | The shared review-remediation preface's `d69f3b0b9e563ef5d4d6c1e99a6ef47508fdf51b` wording applies to B-022, B-026, B-027, and B-032. The embedded source commits in the B-031 and original B-033 remediation artifacts are `43df15d62336a95d44f960181a9b0fe1e2279c2e`; artifact-level `source_commit` is authoritative. |
 | Scope | This corrects provenance description only. It changes neither historical artifact bytes nor the B-031 topology metrics; B-054 replaces the B-033 candidate-work metric claim. |
+
+#### B-056 — post-placement workspace metadata replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:bca66bf635e4f669b959f371dd098168ca8fe4633696f07f32c779f60d1af8b3` |
+| Date and commit | 2026-08-05; source commit `b49813027c8b024863847f53630dac7718cb0a48`; clean tree before artifact generation |
+| Configuration | Three required-revision post-placement observations over the bounded placement fixture; before/after workspace snapshots cover every visible file and symlink with `kind`, `path`, `mode`, `inode`, `mtime_ns`, `sha256`, `size`, and `target` fields where applicable. |
+| Metrics | Three observations; one scene/DRC binding signature; hard DRC pass `true`; clean `false` due five ignored checks; median latency `388,642,375 ns`; board bytes preserved `true`; workspace state before/after both `sha256:aa1aad576600947b500c18fdd06737288d20d43656594ae645b0a86aa79e632a` with two entries; `workspace_mutations=false` derived from metadata-sensitive snapshots. |
+| Artifact | [`2026-08-05-post-placement-observation-replay-b056.json`](../../benchmarks/results/placement/2026-08-05-post-placement-observation-replay-b056.json) |
+| Interpretation | This is an append-only evidence correction to B-045/B-052: it detects content, mode, symlink-target, inode, and nanosecond-mtime changes in the disposable workspace. It does not provide filesystem transaction provenance, live/editor CAS, ERC/electrical/fabrication signoff, or FreeRouting parity. |
