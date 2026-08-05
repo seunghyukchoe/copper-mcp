@@ -124,6 +124,11 @@ class McpServerTests(unittest.TestCase):
         self.assertIs(live.output_schema["additionalProperties"], False)
         self.assertEqual(live.output_schema["properties"]["source"]["const"], "kicad-ipc-live")
         self.assertEqual(live.output_schema["properties"]["read_only"]["const"], True)
+        self.assertIn("session_revision", live.output_schema["required"])
+        self.assertEqual(
+            live.output_schema["properties"]["session_revision"]["anyOf"][0]["pattern"],
+            "^pbkdf2-hmac-sha256:[0-9a-f]{64}$",
+        )
         assert live.annotations is not None
         self.assertIs(live.annotations.read_only_hint, True)
         self.assertIs(live.annotations.destructive_hint, False)
@@ -141,6 +146,7 @@ class McpServerTests(unittest.TestCase):
             "board_bytes": 128,
             "object_counts": {"nets": 2, "pads": 4},
             "socket_kind": "default-local-ipc",
+            "session_revision": "pbkdf2-hmac-sha256:" + "b" * 64,
             "read_only": True,
         }
         with patch.object(_server, "inspect_live_board_service", return_value=payload):

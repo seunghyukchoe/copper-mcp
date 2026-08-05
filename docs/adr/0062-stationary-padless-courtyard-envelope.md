@@ -22,6 +22,9 @@ support and no claim about arbitrary polygon/line-chain topology.
 
 - Stationary padless geometry is immutable and cannot grant an apply capability.
 - Placement and rule resolution continue to reject padless references as unsupported.
+- Placement preflight also checks declared subject references in request order before it makes a
+  syntactic infeasibility claim, so an unrelated front/back contradiction cannot mask a known
+  padless subject.
 - The candidate contains only movable, pad-owning footprints, while legality considers all supported
   same-side courtyard envelopes.
 - The regression and B-050 replay measure this boundary without invoking KiCad or mutating a board.

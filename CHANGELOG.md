@@ -241,6 +241,16 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- `inspect_live_board` now returns the opaque, fixed-format PBKDF2 session CAS as required
+  structured output when KiCad supplied a plugin token, or explicit `null` when it did not. This
+  makes the public inspection → live-scene → layered-preview flow composable while keeping the
+  token and process salt private; changed tokens and fresh CopperMCP processes still refuse stale
+  live-route requests.
+
+- Placement validation now preflights every declared subject in request order before syntactic
+  infeasibility analysis. A known padless subject paired with an unrelated front/back contradiction
+  now returns the established fixed `unsupported_geometry` refusal with no candidate.
+
 - Placement validation now preflights every explicit proposal anchor that names a known padless
   footprint after rule references and before syntactic contradiction analysis. For each supported
   anchor point (`center`, `north`, `south`, `east`, and `west`), that mixed request returns the

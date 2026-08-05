@@ -333,6 +333,10 @@ class LiveBoardObservation:
     board_bytes: int
     object_counts: Mapping[str, int]
     socket_kind: str
+    # ``None`` is a truthful capability result for an observation made without a plugin token.
+    # It is deliberately still serialized so a client can distinguish that state from a field
+    # omitted by an older or lossy transport, and will then fail closed for a live proposal.
+    session_revision: str | None = None
     read_only: bool = True
     schema_version: str = IPC_SCHEMA_VERSION
     source: str = "kicad-ipc-live"
@@ -346,6 +350,8 @@ class LiveBoardObservation:
             raise KicadIpcError("live observation compatibility is invalid")
         if not self.board_digest.startswith("sha256:") or len(self.board_digest) != 71:
             raise KicadIpcError("live board digest is invalid")
+        if self.session_revision is not None and not _is_session_revision(self.session_revision):
+            raise KicadIpcError("live board session revision is invalid")
         if not 1 <= self.board_bytes <= 64 * 1024 * 1024:
             raise KicadIpcError("live board size is outside the observation budget")
         frozen = dict(sorted(self.object_counts.items()))
@@ -373,6 +379,7 @@ class LiveBoardObservation:
             "board_bytes": self.board_bytes,
             "object_counts": dict(self.object_counts),
             "socket_kind": self.socket_kind,
+            "session_revision": self.session_revision,
             "read_only": self.read_only,
         }
 
@@ -400,6 +407,8 @@ class LiveBoardSnapshot:
             raise KicadIpcPayloadError("live board source digest is not bound to its observation")
         if self.session_revision is not None and not _is_session_revision(self.session_revision):
             raise KicadIpcPayloadError("live IPC session revision is invalid")
+        if self.session_revision != self.observation.session_revision:
+            raise KicadIpcPayloadError("live IPC session revision is not bound to its observation")
 
 
 @dataclass(frozen=True, slots=True)
@@ -738,6 +747,7 @@ def _capture_live_board_from_client(
         board_bytes=len(source_bytes),
         object_counts=counts,
         socket_kind=socket_kind,
+        session_revision=session_revision,
     )
     return LiveBoardSnapshot(
         observation=observation,

@@ -17,7 +17,7 @@
 | `inspect_board` | None | Bounded read-only inspection inside the configured workspace. |
 | `run_board_drc` | Temporary report only | Fixed-argument KiCad DRC with a bounded, redacted summary. |
 | `inspect_board_ir` | None | Read-only Board IR conversion check and structural description. |
-| `inspect_live_board` | None | Optional `kicad-python` IPC observation of the first open PCB; returns only numeric versions, a SHA-256 digest, byte count, and bounded object counts. |
+| `inspect_live_board` | None | Optional `kicad-python` IPC observation of the first open PCB; returns numeric versions, a SHA-256 digest, byte count, bounded object counts, and a nullable opaque session CAS. |
 | `observe_board_scene` | None, or a process-local render artifact when `include_render` is set | Bounded, region-scoped semantic scene of one board, with board text quarantined. |
 | `observe_post_placement` | None | Read-only exact-revision observation: one file/context capture supplies both bounded semantic scene and aggregate redacted KiCad DRC. No token, candidate, render, or mutation input is accepted. |
 | `observe_live_board_scene` | None | Bounded Circuit Scene `0.2.0` from the active KiCad IPC document; uses `board: "live"` and optional stale-digest compare values. |
@@ -62,8 +62,11 @@ identities, UUIDs, or source bytes.
 `inspect_live_board` is a separate, no-argument read-only probe for an already-running KiCad PCB
 Editor. It lazily loads the optional official `kicad-python` binding, accepts only KiCad's local
 IPC socket, checks the binding/API version, and returns a redacted `kicad-ipc-live` record with a
-board digest and bounded object counts. It never returns the live serialization, net names, UUIDs,
-coordinates, or tokens. KiCad 9/10 requires a GUI session with the IPC server enabled; a future
+board digest, bounded object counts, and required `session_revision`. With a plugin token this is
+the opaque fixed-format PBKDF2 session CAS required by `preview_live_layered_route`; without one it
+is explicitly `null`, which remains unrouteable. It never returns the live serialization, net
+names, UUIDs, coordinates, tokens, or process salt. KiCad 9/10 requires a GUI session with the IPC
+server enabled; a future
 KiCad version is refused by default. This record is metadata-only and does not act as a route or
 placement authority.
 
@@ -346,8 +349,10 @@ Board IR, and redacted KiCad-session compare-and-swap digests. The service captu
 converts those exact bytes through the Board IR adapter, and infers the net only from the two pads.
 The session revision is `pbkdf2-hmac-sha256:<64 lowercase hex>`: fixed-work PBKDF2-HMAC-SHA256
 over `KICAD_API_TOKEN`, with a domain-separated fresh process-local 256-bit salt, rather than a
-public token hash. It is constant-time compared after fixed-format validation and intentionally
-fails after a fresh process or restart; neither token nor salt is returned. The remaining route
+public token hash. `inspect_live_board` publishes this opaque value (or `null` without a plugin
+token) so its structured output composes with the scene's public digests and pad refs. It is
+constant-time compared after fixed-format validation and intentionally fails after a fresh process
+or restart; neither token nor salt is returned. The remaining route
 deadline is passed to IPC and search, checked between synchronous IPC calls, and checked during
 bounded serialized-item counting.
 A stale session/source/snapshot refuses before candidate work,
