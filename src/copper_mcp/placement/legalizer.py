@@ -83,13 +83,19 @@ def _reject_padless_preflight_refs(view: PlacementView, intent: PlacementIntent)
     """Reject unsupported placement references before syntactic analysis.
 
     Padless footprints are deliberately unavailable as placement subjects, anchors, and rule
-    references. Preserve the request's subject order, then the established rule-reference and
-    proposal-anchor order, before ``_check_infeasible`` so a contradictory rule set cannot hide
-    an unsupported placement reference behind an
+    references. Resolve subjects in request order before the established rule-reference and
+    proposal-anchor scans: an unknown subject must retain its earlier ``unresolved_ref`` outcome,
+    while an earlier known padless subject must precede syntactic infeasibility. This keeps a
+    contradictory rule set from hiding an unsupported placement reference behind an
     ``infeasible_constraints`` diagnostic.
     """
 
-    refs: list[str] = list(intent.subject_refs)
+    for ref in intent.subject_refs:
+        if view.resolve(ref) is None:
+            _reject_padless(view, ref)
+            raise _UnresolvedError("a placement subject does not exist on this board")
+
+    refs: list[str] = []
     for rule in intent.rules:
         if isinstance(rule, ProximityRule | EdgeRule | RegionRule | OrientationRule | SideRule):
             refs.append(rule.subject)
