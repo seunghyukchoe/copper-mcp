@@ -435,11 +435,15 @@ def build_reproducible_artifact(repetitions: int, *, evidence_source_commit: str
     if any(_tracked_sha256(commit, Path(path)) != digest for path, digest in inputs.items()):
         raise HeldoutEvaluationError("evidence source commit does not match current bound inputs")
     evidence = _evidence(repetitions, evidence_source_commit=commit)
-    return {
+    artifact: dict[str, Any] = {
         "schema": "copper-mcp/benchmark/heldout-audio-project-family/artifact-v1",
         "evidence": evidence,
         "evidence_run_id": _evidence_run_id(evidence),
     }
+    artifact["run_id"] = "sha256:" + _sha256(
+        json.dumps(artifact, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    )
+    return artifact
 
 
 def main() -> None:

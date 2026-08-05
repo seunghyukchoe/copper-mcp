@@ -157,6 +157,15 @@ def test_reproducible_artifact_binds_all_inputs_without_host_observations(
         "tests/fixtures/benchmarks/heldout-audio/split.json",
     }
     assert "observations" not in artifact
+    canonical = dict(artifact)
+    run_id = canonical.pop("run_id")
+    assert (
+        run_id
+        == "sha256:"
+        + hashlib.sha256(
+            json.dumps(canonical, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        ).hexdigest()
+    )
 
 
 def test_committed_artifact_replays_from_its_clean_evidence_source() -> None:
