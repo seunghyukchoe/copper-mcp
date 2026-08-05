@@ -204,11 +204,13 @@ src/copper_mcp/
   apply/                               tokens, pure engine, mutating service
   zone_fill.py, kicad_cli.py           fill authority, bounded KiCad execution
 docs/
-  adr/                                 ADR-0001 … ADR-0026, the decision record
-  architecture/                        board-ir, routing-baseline, mcp-api, security-model
-  ledgers/                             decision, risk, security, release (append-only)
+  README.md                            documentation index; start here
+  adr/                                 ADR-0001 … ADR-0065, the decision record
+  architecture/                        overview, board-ir, circuit-intent, routing-baseline,
+                                       mcp-api, security-model
+  ledgers/                             decision, risk, security, benchmark, release (append-only)
   research/                            literature and licensing surveys per arc
-  HANDOFF.md                           this document
+  handoff/                             project-state.md (this document), codex-onboarding.md
 tests/                                 regression and integration fixtures under tests/fixtures/
 ```
 

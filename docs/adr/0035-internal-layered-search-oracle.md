@@ -1,6 +1,8 @@
 # ADR-0035: Keep the layered A* search seam internal until board fidelity exists
 
-Date: 2026-08-04
+- Status: Accepted
+- Date: 2026-08-04
+- Related: [D-051](../ledgers/decision-ledger.md)
 
 ## Context
 

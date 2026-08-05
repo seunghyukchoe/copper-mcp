@@ -1,4 +1,19 @@
-"""Stable, JSON-serializable domain models for the public protocol boundary."""
+"""Stable, JSON-serializable domain models for the public protocol boundary.
+
+This module owns the small set of shapes that cross the wire: board counts and manifests, DRC
+summaries, and candidate metrics and summaries, together with their strict decoding and the
+correctness-first ranking order in which hard DRC and unrouted connections outrank wire length,
+via count, and runtime.
+
+Stability is the point. These shapes are versioned alongside the JSON schemas under `schemas/`,
+so a field may be added but not silently repurposed, and a value that could not be verified is
+carried as an explicit literal rather than as an absent field implying success.
+
+It refuses to be a domain layer. Nothing here reads a board, computes geometry, invokes KiCad,
+or decides whether a candidate is legal — decoding rejects a malformed payload and stops. Board
+IR, routing, placement, and scene types are deliberately not re-exported through this module;
+importing it must never pull in the deterministic core.
+"""
 
 from __future__ import annotations
 

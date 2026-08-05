@@ -6,7 +6,51 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Restructured repository documentation for a first-time reader. Added `docs/README.md` as the
+  documentation index, moved the two handoff documents into `docs/handoff/` as `project-state.md`
+  and `codex-onboarding.md` behind a `docs/handoff/README.md` that distinguishes them, and moved
+  the full CLI and MCP walkthrough out of `README.md` into a new `docs/usage.md`. `README.md` now
+  answers what CopperMCP is, why it exists, how to try it, what it does today, and — in one
+  consolidated section — what it does not claim. No capability text was deleted; the explicit
+  non-claims are now gathered rather than scattered. **No behavior changed.**
+
+- Completed and corrected the ADR index: 16 records (0036–0047, 0060–0063) were missing from
+  `docs/adr/README.md`, which is now a table carrying every number, title, and status, plus a
+  tombstone explaining the deliberate ADR-0027 gap and a thematic reading order. Added the absent
+  `Status: Accepted` line to ADR-0035 and ADR-0036, matching their accepted decision-ledger rows.
+
+- Documented how ledger IDs are allocated in `docs/ledgers/README.md`: allocate at merge rather
+  than in advance, never reuse a number, record corrections as new entries, and reuse a benchmark's
+  ID only for a replay of that benchmark. Nothing validated these IDs before, and nothing does now;
+  the convention is enforced by review.
+
+- Indexed the three research documents that were absent from `docs/research/README.md`, and stated
+  in that index that each survey is a dated evidence snapshot rather than a maintained summary.
+
+- Refreshed `CONTRIBUTING.md` and `GOVERNANCE.md` to match how the project actually works: the
+  per-target quality gate, ledger and ADR ID allocation, required conversation resolution, the
+  dedicated adversarial review for any surface that writes to a user's file, and the append-only
+  ledger record with its stated non-properties.
+
+- Expanded the module docstrings on `security.py`, `tools.py`, `models.py`,
+  `routing/contracts.py`, and `apply/contracts.py` to state what each module owns and what it
+  refuses, matching the convention the rest of `src/copper_mcp/` already follows. Documentation
+  only; no code, signature, or export changed.
+
+### Added
+
+- `scripts/check_doc_links.py` verifies that every relative Markdown link in tracked documentation
+  resolves to a real path. It is wired into `make lint` and CI, and passes on the current tree. It
+  deliberately does not fetch network URLs or validate heading anchors.
+
 ### Fixed
+
+- Corrected two unresolvable Markdown link targets in `docs/ledgers/benchmark-ledger.md` (B-036's
+  dataset path was missing its `benchmarks/` segment; B-057 linked to a path that never existed in
+  the repository). Recorded as append-only entry B-076. No run ID, digest, metric, source commit,
+  or displayed text changed.
 
 - Refused a non-orthogonal *saved* footprint pose with a typed `unsupported_geometry` diagnostic
   instead of an untyped exception. An orthogonal proposal previously masked the stored angle from
