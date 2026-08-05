@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-05
+- **Amended:** 2026-08-05
 - **Related:** [ADR-0055](0055-bounded-negotiated-congestion.md),
   [AI routing-policy boundary](../research/ai-routing-policy-boundary.md), B-036, B-060
 
@@ -31,17 +32,21 @@ and board mutation are not part of this slice.
 
 ### Closed pre-routing policy transaction
 
-`negotiate_routes` gains one optional internal `policy_profile: str | None` selector. It is
-resolved only through a private immutable allowlist/registry; callers cannot supply a policy
-object, factory, module path, model endpoint, or model output. The initial allowlist has exactly
-one entry, `deterministic-reference-v1`, mapped to `DeterministicReferencePolicy`. An absent
-profile preserves the existing deterministic coordinator. An unknown, malformed, disabled, or
-failed profile is rejected; it never falls back to ordinary routing.
+`negotiate_routes` gains one optional internal `policy_profile: str | None` selector. A private,
+closed coordinator dispatcher resolves it; callers cannot supply a policy object, factory, module
+path, model endpoint, worker command, or model output. The initial in-process registry has exactly
+one entry, `deterministic-reference-v1`, mapped to `DeterministicReferencePolicy`. The dispatcher
+also admits exactly one separately named, fixed worker-backed profile,
+`deterministic-reference-worker-v1`. That profile invokes only the in-package deterministic
+reference worker through its fixed protocol and a coordinator-owned bounded timeout/cancellation
+check; it is not a general subprocess or plugin mechanism. An absent profile preserves the
+existing deterministic coordinator. An unknown, malformed, disabled, or failed profile is
+rejected; it never falls back to ordinary routing.
 
-A future captured or isolated policy needs its own registered adapter and profile entry. The
-adapter, rather than a caller, owns construction and must satisfy a later isolated-worker
-resource/cancellation contract before it can enter the allowlist. This remains an internal
-integration seam, not a public plugin admission path.
+This remains an internal integration seam, not a public plugin admission path. A future captured,
+model, or plugin policy needs a separately reviewed fixed adapter, bounded isolated-worker
+contract, and explicit dispatcher admission; no caller-selected evaluator can enter through a
+profile name.
 
 After the coordinator validates the immutable snapshot, negotiated envelope, and every request
 against that snapshot, and before it constructs or calls a router, it performs this one
@@ -58,31 +63,35 @@ transaction:
    slice. It must not carry raw Board IR, board text/bytes, pad IDs or locations, net names,
    route/copper data, model prompts, or validator output. The coordinator, not the policy, derives
    every feature and clamps it through the existing closed dataclasses.
-3. Resolve the selected profile from the private immutable registry once and evaluate its
-   registered adapter once through `evaluate_policy`; then check cancellation again. The
-   decision must have the declared stable policy ID, the exact canonical input digest, a
-   permutation of every requested net exactly once, and only coordinator-supplied selections.
-   Because this slice supplies no windows, valid `corridor_hints` and `repair_windows` are
-   empty.
+3. Resolve the selected profile once through the private closed dispatcher. The in-process
+   reference profile evaluates its immutable-registry adapter through `evaluate_policy`. The
+   worker-backed reference profile sends the same one canonical input only to its fixed worker,
+   observes its bounded timeout/cancellation contract, validates the exact canonical
+   request/response binding, and returns only a closed `RoutingPolicyDecision`; child diagnostics
+   are discarded. The coordinator then checks cancellation and revalidates the decision's stable
+   policy ID, exact canonical input digest, permutation of every requested net exactly once, and
+   only coordinator-supplied selections. Because this slice supplies no windows, valid
+   `corridor_hints` and `repair_windows` are empty.
 4. Canonicalize and record both `policy_input_digest` and `policy_decision_digest`. Do not
    record raw features, IDs, window data, prompts, model text, exception text, or copper in results
    or traces. These digests are linkable content bindings, not secrecy claims.
 
-Any profile resolution/adapter error, policy exception, malformed/non-policy return, identity
-mismatch, digest mismatch, missing/repeated/foreign net, or non-empty/unsupplied selection fails
-closed as the existing fixed, redacted `INVALID_REQUEST` result. It publishes no candidates or
-connections and makes **zero** router calls. Error diagnostics must not include exception or model
-output. This does not add a `POLICY_REJECTED` terminal status: rejection occurs before routing
-and reusing the existing invalid-boundary status avoids public enum churn while retaining a fixed
-policy-rejected diagnostic for local callers.
+Any profile resolution/adapter error, worker timeout/cancellation/exception/noncanonical response,
+policy exception, malformed/non-policy return, identity mismatch, digest mismatch,
+missing/repeated/foreign net, or non-empty/unsupplied selection fails closed as the existing fixed,
+redacted `INVALID_REQUEST` result (or the atomic `CANCELLED` result when cancellation is observed).
+It publishes no candidates or connections and makes **zero** router calls. Error diagnostics must
+not include exception, child, or model output. This does not add a `POLICY_REJECTED` terminal
+status: rejection occurs before routing and reusing the existing invalid-boundary status avoids
+public enum churn while retaining a fixed policy-rejected diagnostic for local callers.
 
-The existing `RoutingPolicy` protocol has no deadline or cancellation parameter. This first
-integration therefore makes no hard-preemption claim for in-process policy code. It confines work
-to one registered bounded-input evaluation, observes cooperative cancellation on both sides of it,
-and preserves all existing negotiated iteration, expansion, obstacle-check, physical-check, and
-cancellation budgets. A model, external plugin, remote, or subprocess evaluator requires a later
-isolated-worker contract with an enforceable resource/time budget; it is not silently admitted
-through a profile name.
+The existing `RoutingPolicy` protocol has no deadline or cancellation parameter. The in-process
+reference profile therefore makes no hard-preemption claim. The fixed worker-backed reference
+profile adds only its coordinator-owned bounded wait and cancellation polling; it does not make an
+OS-sandbox claim. Both profiles preserve all existing negotiated iteration, expansion,
+obstacle-check, physical-check, and cancellation budgets. A model, external plugin, remote, or
+other subprocess evaluator requires a later isolated-worker contract with an enforceable
+resource/time budget; it is not silently admitted through a profile name.
 
 ### Ordering and retry authority
 
@@ -142,16 +151,18 @@ Implementation is accepted only when targeted tests demonstrate all of the follo
 - **Order scope:** an accepted reference/test policy changes the first router-call permutation to
   its `net_order`; a forced second iteration follows only the deterministic
   `(-conflict_score, net_id, seed)` ordering, and policy evaluation occurred exactly once.
-- **Boundary failure:** unknown/malformed profile, failed registered adapter/policy, malformed
-  output, changed ID, wrong input digest, foreign/repeated/missing net, and any window selection
-  each yield the fixed fail-closed result with zero router calls, candidates, and connections; none
-  falls back to no-profile routing.
+- **Boundary failure:** unknown/malformed profile, failed registered adapter/policy, worker
+  timeout/cancellation/noncanonical response, malformed output, changed ID, wrong input digest,
+  foreign/repeated/missing net, and any window selection each yield the fixed fail-closed result
+  (or cancellation result) with zero router calls, candidates, and connections; none falls back to
+  no-profile routing.
 - **Binding:** repeated equal profile/envelope/input/decision triples reproduce equal input,
   decision, and v3 composite digests; changing either the envelope or decision changes the
   composite candidate binding; an ordinary no-profile candidate retains its v2 identity.
-- **Limits:** policy inputs respect the closed type's caps; cancellation before or immediately
-  after policy evaluation publishes no proposal; all existing negotiated iteration, expansion,
-  obstacle-check, and physical-clearance ceilings remain enforced.
+- **Limits:** policy inputs respect the closed type's caps; cancellation before, during the fixed
+  worker wait, or immediately after policy evaluation publishes no proposal; all existing
+  negotiated iteration, expansion, obstacle-check, and physical-clearance ceilings remain
+  enforced.
 - **Measured evaluation, not a safety substitution:** on license-reviewed held-out fixtures, report
   completion/routed-net fraction, overflow units, total wire length, iterations/rip-ups, router
   expansions/obstacle/physical checks, wall time, deterministic replay, and separate KiCad DRC
@@ -183,7 +194,8 @@ the source used by the replay command.
 - **Treat policy/model exceptions as a fallback to normal routing.** Rejected: a failure could
   become invisible and cause a misleading candidate provenance claim. Invalid policy input fails
   before any router call.
-- **Accept arbitrary policy objects/factories or model endpoints.** Rejected: the protocol cannot
-  impose a hard deadline or safe cancellation on arbitrary in-process code, and a caller-selected
-  implementation defeats the closed boundary. A future captured policy requires a separately
-  bounded isolated-worker adapter registered in the private profile allowlist.
+- **Accept arbitrary policy objects/factories, worker commands, or model endpoints.** Rejected:
+  the protocol cannot impose a hard deadline or safe cancellation on arbitrary in-process code,
+  and a caller-selected implementation defeats the closed boundary. A future captured policy
+  requires a separately bounded isolated-worker adapter explicitly admitted by the private
+  dispatcher.

@@ -76,9 +76,10 @@ NEGOTIATED_POLICY_EVIDENCE_SCHEMA = "copper-mcp.negotiated-policy-evidence.v1"
 _POLICY_ID = re.compile(r"^[a-z0-9][a-z0-9._/-]{0,127}$")
 _ISOLATED_POLICY_TIMEOUT_SECONDS = 1.0
 
-# This intentionally private, immutable registry is the only policy-admission boundary.  It
-# keeps callers from supplying arbitrary in-process objects, callables, model adapters, or remote
-# evaluators through ``negotiate_routes``.
+# This private immutable registry admits only in-process profiles.  Together with the fixed
+# isolated-worker branch in ``_evaluate_policy_profile``, it is the closed policy-admission
+# boundary: callers cannot supply objects, callables, model adapters, remote evaluators, or worker
+# commands through ``negotiate_routes``.
 _POLICY_PROFILE_REGISTRY: Mapping[str, PolicyFactory] = MappingProxyType(
     {REFERENCE_POLICY_PROFILE: DeterministicReferencePolicy}
 )
