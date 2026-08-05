@@ -6,6 +6,36 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Internal ordered-layer route proposals now support two through eight signal layers with bounded,
+  deterministic full-stack-via transitions. Omitted via policy preserves legacy two-layer behavior,
+  while generalized stacks receive a deterministic cap; file, live, and durable public entry points
+  continue to reject non-two-layer stacks. Source-preserving KiCad serialization and DRC remain
+  deliberately restricted to the proven two-layer subset.
+
+- The structural candidate verifier now refuses route copper that crosses a full-stack via barrel
+  on a layer the route does not terminate on at that point. On two layers the existing same-layer
+  intersection scan covered this implicitly; from three layers up a track on an otherwise unused
+  layer could previously run straight through a barrel and still verify.
+
+- Committed a real four-layer KiCad fixture (`F.Cu`/`In1.Cu`/`In2.Cu`/`B.Cu`, accepted by
+  KiCad 10.0.5) and pinned candidate identities for two-, three-, and four-layer routes, so a
+  content-addressed change can no longer pass a green suite unnoticed.
+
+- Extended `scripts/benchmark_layered_astar.py` with an exact `(x, y, layer, vias_used)` Dijkstra
+  differential over seeded two-through-five-layer capped lattices, an independent legality replay
+  of every returned path, and a pinned via-policy boundary.
+
+### Fixed
+
+- Two-layer candidate identity is unchanged by ordered-layer routing. An intermediate revision
+  recorded every via span in canonical outer-stack order, which silently changed the candidate ID
+  of any two-layer route containing a return via and would have made persisted candidates fail
+  structural verification and therefore candidate-bound DRC. Two-layer vias keep their historical
+  traversal ordering, and the verifier compares the span as an unordered pair, exactly as the KiCad
+  serializer always has.
+
 ### Fixed
 
 - Route-bundle preview now refuses a seed whose derived per-net value would leave the supported

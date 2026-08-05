@@ -23,6 +23,11 @@ from math import isqrt
 from typing import Final
 
 from copper_mcp.board_ir import BoardIRSnapshot, Pad, PointNM, verify_snapshot
+from copper_mcp.routing.layered_astar import (
+    MAX_EXPLICIT_VIAS,
+    MAX_LAYERS,
+    effective_max_vias,
+)
 from copper_mcp.routing.layered_contracts import LayeredRouteCandidate, verify_layered_candidate_id
 
 _MAX_SAFE_INT: Final = (1 << 53) - 1
@@ -234,6 +239,16 @@ def _segments_intersect(left: tuple[PointNM, PointNM], right: tuple[PointNM, Poi
     ) <= h_start.y <= max(v_start.y, v_end.y)
 
 
+def _point_on_segment(point: PointNM, start: PointNM, end: PointNM) -> bool:
+    """Return whether ``point`` lies on the closed axis-aligned segment ``start``-``end``."""
+
+    if start.y == end.y:
+        return point.y == start.y and min(start.x, end.x) <= point.x <= max(start.x, end.x)
+    if start.x == end.x:
+        return point.x == start.x and min(start.y, end.y) <= point.y <= max(start.y, end.y)
+    return False
+
+
 def _validate_candidate_budget(
     candidate: LayeredRouteCandidate, limits: LayeredCandidateVerificationLimits
 ) -> str | None:
@@ -248,6 +263,12 @@ def _validate_candidate_budget(
     ):
         if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
             return f"{name} exceeds the finite layered budget"
+    if settings.max_vias is not None and (
+        isinstance(settings.max_vias, bool)
+        or not isinstance(settings.max_vias, int)
+        or not 0 <= settings.max_vias <= MAX_EXPLICIT_VIAS
+    ):
+        return "via budget exceeds the finite layered budget"
     if len(candidate.patch.paths) > limits.max_paths:
         return "candidate path count exceeds the verification budget"
     if len(candidate.patch.vias) > limits.max_vias:
@@ -439,10 +460,13 @@ def verify_layered_candidate(
             vertex_count=vertex_count,
             via_count=via_count,
         )
-    layer_ids = {layer.id for layer in snapshot.content.copper_layers}
-    signal_layer_ids = {
-        layer.id for layer in snapshot.content.copper_layers if layer.kind == "signal"
-    }
+    # The canonical stack order must be the one the adapter and the KiCad serializer use, so an
+    # index collision cannot make the verifier read a different outer span than the constructor.
+    ordered_layers = tuple(
+        sorted(snapshot.content.copper_layers, key=lambda layer: (layer.index, layer.id))
+    )
+    layer_ids = {layer.id for layer in ordered_layers}
+    signal_layer_ids = {layer.id for layer in ordered_layers if layer.kind == "signal"}
     if not layer_ids or not signal_layer_ids:
         return _failure(
             LayeredCandidateVerificationCode.LAYER_MISMATCH,
@@ -452,10 +476,21 @@ def verify_layered_candidate(
             vertex_count=vertex_count,
             via_count=via_count,
         )
-    if len(signal_layer_ids) != 2:
+    if not 2 <= len(ordered_layers) <= MAX_LAYERS or len(signal_layer_ids) != len(ordered_layers):
         return _failure(
             LayeredCandidateVerificationCode.LAYER_MISMATCH,
-            "layered candidate verification requires exactly two signal layers",
+            "layered candidate verification requires two through eight ordered signal layers",
+            candidate_id=candidate.candidate_id,
+            path_count=path_count,
+            vertex_count=vertex_count,
+            via_count=via_count,
+        )
+    outer_span = {ordered_layers[0].id, ordered_layers[-1].id}
+    via_limit = effective_max_vias(candidate.settings, len(ordered_layers))
+    if via_limit is not None and via_count > via_limit:
+        return _failure(
+            LayeredCandidateVerificationCode.BUDGET_EXCEEDED,
+            "candidate via count exceeds its effective routing budget",
             candidate_id=candidate.candidate_id,
             path_count=path_count,
             vertex_count=vertex_count,
@@ -621,16 +656,70 @@ def verify_layered_candidate(
         previous_path = candidate.patch.paths[via_index]
         next_path = candidate.patch.paths[via_index + 1]
         if (
-            via.start_layer_id != previous_path.layer_id
-            or via.end_layer_id != next_path.layer_id
-            or via.start_layer_id == via.end_layer_id
+            via.start_layer_id == via.end_layer_id
             or via.center != previous_path.vertices[-1]
             or via.center != next_path.vertices[0]
-            or {via.start_layer_id, via.end_layer_id} != signal_layer_ids
+            # Board IR v0.2 has only full-stack vias.  A route may transition between any two
+            # signal layers, but the via record must span the outer stack.  The pair is compared
+            # as a set, exactly as the KiCad serializer compares it: the recorded order carries no
+            # physical meaning, and two-layer candidates issued before the ordered-layer seam
+            # record it in traversal order.
+            or {via.start_layer_id, via.end_layer_id} != outer_span
+            or previous_path.layer_id == next_path.layer_id
         ):
             return _failure(
                 LayeredCandidateVerificationCode.VIA_DISCONTINUITY,
                 "via does not join adjacent path endpoints and layers",
+                candidate_id=candidate.candidate_id,
+                path_count=path_count,
+                vertex_count=vertex_count,
+                via_count=via_count,
+                pair_checks=pair_checks,
+            )
+        # A full-stack via drills a barrel through every layer of the stack, so copper crossing
+        # its centre on *any* layer is physically joined to it.  The chain model above describes
+        # exactly two such joins: the end of path ``via_index`` and the start of path
+        # ``via_index + 1``.  Any other contact is an unmodelled connection that would make the
+        # replayed chain a false description of the candidate's real topology.  On exactly two
+        # layers the same-layer intersection scan covered this implicitly; from three layers up it
+        # must be checked explicitly.
+        entry_edge = len(previous_path.vertices) - 2
+        for (
+            segment_layer,
+            segment_path_index,
+            segment_edge_index,
+            seg_start,
+            seg_end,
+        ) in all_segments:
+            del segment_layer
+            pair_checks += 1
+            if pair_checks > active_limits.max_pair_checks:
+                return _failure(
+                    LayeredCandidateVerificationCode.BUDGET_EXCEEDED,
+                    "route intersection checks exceed the verification budget",
+                    candidate_id=candidate.candidate_id,
+                    path_count=path_count,
+                    vertex_count=vertex_count,
+                    via_count=via_count,
+                    pair_checks=pair_checks,
+                )
+            if not _point_on_segment(via.center, seg_start, seg_end):
+                continue
+            joins_entry = (
+                segment_path_index == via_index
+                and segment_edge_index == entry_edge
+                and seg_end == via.center
+            )
+            joins_exit = (
+                segment_path_index == via_index + 1
+                and segment_edge_index == 0
+                and seg_start == via.center
+            )
+            if joins_entry or joins_exit:
+                continue
+            return _failure(
+                LayeredCandidateVerificationCode.DUPLICATE_GEOMETRY,
+                "route copper crosses a full-stack via barrel it does not terminate on",
                 candidate_id=candidate.candidate_id,
                 path_count=path_count,
                 vertex_count=vertex_count,
