@@ -1,0 +1,42 @@
+{
+  "date_utc": "2026-08-05",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+    "python": "3.14.2"
+  },
+  "fixture": "benchmarks/audio/fixtures/ne5532-stereo-summing-routing-v1.kicad_pcb",
+  "fixture_license_spdx": "Apache-2.0",
+  "fixture_origin": "coppermcp-original",
+  "metrics": {
+    "all_retained_candidates_legal": true,
+    "baseline_candidate_id": "sha256:84c9fd89036c805880b4375818fe43e767e22e53b0202a301552f106f95e040d",
+    "baseline_evaluations": 128,
+    "baseline_route_wire_length_nm": 42000000,
+    "baseline_solver_status": "work_exhausted",
+    "criterion": {
+      "metric": "independent bounded A* routed wire length",
+      "minimum_improvement_percent": 10,
+      "passed": true
+    },
+    "deterministic_replays": true,
+    "repetitions": 3,
+    "route_aware_candidate_id": "sha256:f14cfb32786a368e1bb5307eb4298bf859a615daf0ffd39eac2c7c2bbb33ed5c",
+    "route_aware_completed_probes": 1,
+    "route_aware_evaluations": 128,
+    "route_aware_operation_probe_limit": 128,
+    "route_aware_operation_probes_used": 116,
+    "route_aware_route_wire_length_nm": 32000000,
+    "route_aware_solver_status": "work_exhausted",
+    "route_aware_unrouted_probes": 0,
+    "route_length_improvement_percent": 23.80952380952381
+  },
+  "not_claimed": [
+    "combined-net routing, congestion allocation, overflow, or a whole-board completion result",
+    "KiCad DRC, electrical, timing, signal-integrity, thermal, or fabrication readiness",
+    "KiCad file mutation, editor mutation, placement apply, route apply, or live-editor behavior",
+    "placement optimality, a general improvement guarantee, or a comparison with external routers"
+  ],
+  "run_id": "sha256:a304b1e428b37d91f1d29f62f97460aac9569d6f9a12160953fc01a55de71fb0",
+  "schema": "copper-mcp/benchmark/route-aware-placement/v1",
+  "source_commit": "74647797582d0d8713c063afc146daf5d55e6163"
+}

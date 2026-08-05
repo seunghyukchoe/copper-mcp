@@ -1035,6 +1035,41 @@ are the audit copies for the original run IDs.
 | Replay guard | The detached clean-worktree regression now proves, using only local Git ancestry, that the artifact source is an ancestor of the checkout before cloning or checkout. It does not fetch, skip, xfail, or relax the clean-source byte replay. |
 | Interpretation | This is a provenance and CI-availability correction only. It adds no fixture, capability, quality, KiCad, network, model, electrical, fabrication, or hardware claim. |
 
+#### B-078 — opt-in route-aware placement selection replay
+
+| Field | Recorded evidence |
+|---|---|
+| Date and fixture | 2026-08-05; CopperMCP-original Apache-2.0 `benchmarks/audio/fixtures/ne5532-stereo-summing-routing-v1.kicad_pcb`, source SHA-256 `749adc8b4d26b7f7ef878f9cf681521a8efdf446b9f0bf559243918e6e1957a9`. |
+| Configuration | `scripts/benchmark_route_aware_placement.py`; 128 legalizer evaluations, four rounds, beam width four, 5,000,000 nm placement step; one independent existing-A* probe per candidate at a 1,000,000 nm grid with 10,000 expansions, shared operation cap 128. Candidate identity and exact snapshot/view bindings are verified before the private projection. Default `same-net-manhattan-v1` and opt-in `route-aware-astar-v1` search the same bounded legal candidate space. |
+| Predeclared criterion | Three deterministic replays; every retained candidate must remain legal, and route-aware selection must either improve the independent bounded-A* wire length by at least 10% or strictly reduce unrouted probes versus the default selection. |
+| Metrics | All retained candidates were legal; both choices completed one probe with zero unrouted probes. The route-aware solve consumed 116 of its 128 operation-wide probe budget. Default selection: 42,000,000 nm. Route-aware selection: 32,000,000 nm. Improvement: 23.80952380952381%; all three replay signatures matched. Run ID: `sha256:7ee7700748c25c759c9104e02072bcd007b7eb4bd71836ae0c1da48c287f3219`. |
+| Artifact | [`2026-08-05-route-aware-placement-v1.json`](../../benchmarks/results/placement/2026-08-05-route-aware-placement-v1.json), [`benchmark_route_aware_placement.py`](../../scripts/benchmark_route_aware_placement.py), and [`test_route_aware_placement.py`](../../tests/test_route_aware_placement.py). |
+| Interpretation | Accepted for this opt-in ranking policy only. Independent probes are not a combined-net route, negotiated congestion/overflow result, physical-clearance proof, KiCad DRC, external-router comparison, electrical/fabrication result, optimal-placement result, board mutation, or apply authority. |
+
+#### B-081 — route-aware placement reachable-source correction
+
+| Field | Recorded evidence |
+|---|---|
+| Correction | Supersedes only B-078's artifact-source provenance. B-078 remains immutable history. Its previous source object was not reachable from this branch after the one-commit transplant. |
+| Rebound source | `74647797582d0d8713c063afc146daf5d55e6163`, the DCO-signed projection-binding remediation commit, is an ancestor of this correction and contains the exact route-aware code and direct helper regressions used for the replay. |
+| Artifact | Regenerated [`2026-08-05-route-aware-placement-v1.json`](../../benchmarks/results/placement/2026-08-05-route-aware-placement-v1.json), run ID `sha256:a304b1e428b37d91f1d29f62f97460aac9569d6f9a12160953fc01a55de71fb0`; the artifact records the reachable source commit above. |
+| Metric preservation | Three deterministic replays remained legal and selected the same candidates: 42,000,000 nm baseline versus 32,000,000 nm route-aware wire length (23.80952380952381% improvement), zero unrouted probes, and 116 of 128 operation-wide probes used. |
+| Replay guard | The artifact self-digest and local Git ancestry are checked before this correction is committed; replay uses the source tree at the recorded, reachable commit. |
+| Interpretation | This is a provenance correction only. It does not alter placement/routing behavior, fixture inputs, candidate identity, legality, DRC, congestion, external-router, electrical/fabrication, mutation, or apply claims. |
+
+#### B-082 — route-aware placement claim correction, 2026-08-06
+
+| Field | Recorded evidence |
+|---|---|
+| Correction | Supersedes only the *interpretation* recorded in B-078 and repeated in B-081. B-078 and B-081 remain immutable history; their fixture, configuration, and numbers are unchanged and were independently reproduced here. What was wrong was the sentence "Default `same-net-manhattan-v1` and opt-in `route-aware-astar-v1` search the same bounded legal candidate space." They do not. |
+| Cause | The score feeds `solver._state_key`, which orders the beam, so the surviving beam decides which successors are generated in the next round. The scoring policy changes which candidates are ever explored, not merely how a fixed set is ordered. Measured on the same fixture and settings: at `max_ranked=64` the two retained sets intersect in **1** candidate; at the committed `max_ranked=8` they intersect in **0** — entirely disjoint. B-078's 23.80952380952381% is therefore a **different-search-trajectory** result, not a re-ranking result. |
+| Corrected claim | Two different bounded searches over one intent, fixture, and set of work ceilings, each ordering its own beam by its own score, **at one A\* probe per candidate**. The baseline search selected a candidate measuring 42,000,000 nm and the route-aware search one measuring 32,000,000 nm on that single probe: 23.80952380952381%. |
+| Added measurement — true re-ranking | One fixed candidate set — the 16-candidate union of what both searches retained — scored under both policies with the argmin of each compared. It independently reproduces the same two candidate choices and the same 42,000,000 → 32,000,000 nm, 23.80952380952381%. The union is itself drawn from the two searches, so this is a shared-set comparison, not a search-independent one. |
+| Added measurement — all probeable nets | The ranked search probes 1 net per candidate while the fixture has **11** probeable nets, so B-078's "zero unrouted probes" was a one-net statement. Probed against all 11, both chosen candidates complete 7 and leave **4 unrouted — all four `off_grid` refusals**, where the pad-centre delta is not divisible by the 1,000,000 nm probe grid. The ordering **reverses**: baseline choice 359,000,000 nm, route-aware choice 391,000,000 nm. The one-probe signal that steered the search does not survive the broader question. |
+| Artifact | New [`2026-08-06-route-aware-placement-v2.json`](../../benchmarks/results/placement/2026-08-06-route-aware-placement-v2.json), run ID `sha256:fecb29c10145ee7cce807a5034ac7d2da176a3963aec6c074f0763ab45af74fd`, source commit `ebe842984ed924df71c28b21531340934ae93731` — the commit carrying the corrected benchmark and its regressions, and a strict ancestor of this entry, following B-081's reachable-source rule. The v1 artifact is not regenerated; the overstated evidence stays auditable beside its correction. The v2 `run_id` binds the estimator id and the full probe/A\* configuration digests, so a one-probe report and an eleven-probe report can no longer share an identity. |
+| Criterion | Unchanged and still met on the search comparison: ≥10% improvement or strictly fewer unrouted probes, over three deterministic replays with every retained candidate legal. A failed criterion is now recorded with `criterion.passed` false and a non-zero exit rather than raised, which is what ADR-0067 promised. |
+| Interpretation | This corrects a claim, not an architecture. A route-aware score steering the search is the intended behavior; describing that as a re-ranking result was not. Adds no fixture, capability, DRC, congestion, external-router, electrical, fabrication, mutation, or apply claim, and no whole-board routing claim in either direction. |
+
 #### B-076 — recorded-link target corrections for B-036 and B-057
 
 | Field | Recorded evidence |
