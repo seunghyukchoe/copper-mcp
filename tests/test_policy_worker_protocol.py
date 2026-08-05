@@ -11,6 +11,7 @@ from copper_mcp.routing.policy_worker import (
     _SAFE_ENV,
     POLICY_WORKER_REJECTED,
     PolicyWorkerError,
+    _run_closed_frame,
     _serve_reference_once,
     _spawn_worker,
     _worker_command,
@@ -123,6 +124,37 @@ def test_response_duplicate_keys_and_oversized_output_fail_closed() -> None:
         decode_policy_worker_response(duplicate)
     with pytest.raises(PolicyWorkerProtocolError, match=POLICY_WORKER_REJECTED):
         decode_policy_worker_response(b" " * (MAX_POLICY_WORKER_FRAME_BYTES + 1))
+
+
+def test_response_requires_exact_canonical_bytes_after_validation() -> None:
+    request = _request()
+    canonical = _serve_reference_once(canonical_policy_worker_request_bytes(request))
+    decoded_object = json.loads(canonical)
+    alternate_spacing = json.dumps(decoded_object).encode("utf-8") + b"\n"
+    alternate_order = (
+        json.dumps(
+            dict(reversed(tuple(decoded_object.items()))),
+            separators=(",", ":"),
+        ).encode("utf-8")
+        + b"\n"
+    )
+
+    assert decode_policy_worker_response(canonical).status == "ok"
+    for noncanonical in (canonical + b" ", alternate_spacing, alternate_order):
+        with pytest.raises(PolicyWorkerProtocolError, match=POLICY_WORKER_REJECTED):
+            decode_policy_worker_response(noncanonical)
+
+
+def test_real_subprocess_emits_exact_canonical_response_bytes() -> None:
+    request = _request()
+    response_frame = _run_closed_frame(
+        canonical_policy_worker_request_bytes(request),
+        timeout_seconds=1.0,
+        cancelled=None,
+    )
+    response = decode_policy_worker_response(response_frame)
+
+    assert response_frame == canonical_policy_worker_response_bytes(response)
 
 
 def test_rejected_response_has_one_fixed_redacted_error() -> None:

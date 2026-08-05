@@ -322,6 +322,15 @@ def _decode_reference_decision(value: object) -> RoutingPolicyDecision:
 
 
 def decode_policy_worker_response(frame: bytes) -> PolicyWorkerResponse:
+    """Decode only the one canonical response representation.
+
+    Requests intentionally accept any bounded, closed JSON representation before
+    being canonicalized for their digest.  Responses are different: the parent
+    receives child bytes, so accepting whitespace or member-order variants would
+    make a signed/bound receipt ambiguous.  Re-encode the fully validated object
+    and require exact byte equality before it crosses the process boundary.
+    """
+
     root = _decode_frame(frame)
     status = root.get("status")
     if status == "rejected":
@@ -329,28 +338,34 @@ def decode_policy_worker_response(frame: bytes) -> PolicyWorkerResponse:
             root,
             frozenset({"error", "nonce", "request_digest", "schema", "status"}),
         )
-        return PolicyWorkerResponse(
+        response = PolicyWorkerResponse(
             nonce=_nonce(item["nonce"]),
             request_digest=_digest_text(item["request_digest"]),
             status="rejected",
             error=item["error"],
             schema=item["schema"],
         )
-    if status != "ok":
+    elif status == "ok":
+        item = _closed_object(
+            root,
+            frozenset(
+                {"decision", "decision_digest", "nonce", "request_digest", "schema", "status"}
+            ),
+        )
+        decision = _decode_reference_decision(item["decision"])
+        response = PolicyWorkerResponse(
+            nonce=_nonce(item["nonce"]),
+            request_digest=_digest_text(item["request_digest"]),
+            status="ok",
+            decision=decision,
+            decision_digest=_digest_text(item["decision_digest"]),
+            schema=item["schema"],
+        )
+    else:
         raise PolicyWorkerProtocolError()
-    item = _closed_object(
-        root,
-        frozenset({"decision", "decision_digest", "nonce", "request_digest", "schema", "status"}),
-    )
-    decision = _decode_reference_decision(item["decision"])
-    return PolicyWorkerResponse(
-        nonce=_nonce(item["nonce"]),
-        request_digest=_digest_text(item["request_digest"]),
-        status="ok",
-        decision=decision,
-        decision_digest=_digest_text(item["decision_digest"]),
-        schema=item["schema"],
-    )
+    if frame != canonical_policy_worker_response_bytes(response):
+        raise PolicyWorkerProtocolError()
+    return response
 
 
 def validate_policy_worker_response(
