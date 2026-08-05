@@ -26,8 +26,10 @@ from copper_mcp.routing import (
     CongestionLedger,
     NegotiatedRoutingRequest,
     NegotiatedRoutingStatus,
+    RouteDiagnostic,
     RouteFailureCode,
     RouteRequest,
+    RouteResult,
     negotiate_routes,
 )
 
@@ -283,6 +285,47 @@ def test_negotiated_router_discards_current_iteration_when_later_net_cancels() -
 
     result = negotiate_routes(snapshot, envelope, router=CancelSecondRouter())
 
+    assert result.status is NegotiatedRoutingStatus.CANCELLED
+    assert result.iterations == 1
+    assert result.candidates == ()
+    assert result.connections == ()
+    assert result.unrouted_nets == (H_NET, V_NET)
+    assert result.overflow_resources == ()
+    assert result.total_wire_length_nm == 0
+
+
+def test_negotiated_router_discards_prior_partial_pass_before_next_iteration() -> None:
+    snapshot = _crossing_snapshot()
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_requests(snapshot),
+        max_iterations=2,
+    )
+
+    class FirstCandidateThenNoPath:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.router = AStarRouter()
+
+        def propose(self, snapshot: object, request: RouteRequest, **kwargs: object) -> object:
+            self.calls += 1
+            if self.calls == 1:
+                return self.router.propose(snapshot, request)
+            return RouteResult(
+                diagnostic=RouteDiagnostic(RouteFailureCode.NO_PATH, "synthetic no-path")
+            )
+
+    checks = 0
+
+    def cancelled() -> bool:
+        nonlocal checks
+        checks += 1
+        return checks >= 4
+
+    router = FirstCandidateThenNoPath()
+    result = negotiate_routes(snapshot, envelope, router=router, cancelled=cancelled)
+
+    assert router.calls == 2
     assert result.status is NegotiatedRoutingStatus.CANCELLED
     assert result.iterations == 1
     assert result.candidates == ()
