@@ -897,3 +897,14 @@ are the audit copies for the original run IDs.
 | Artifact | [`2026-08-05-routing-policy-order.json`](../../benchmarks/results/routing/2026-08-05-routing-policy-order.json); the artifact records its script SHA-256, profile, policy ID, three fixture digests, and ten deterministic replays. |
 | Classification | `order-effect/no quality claim` |
 | Interpretation | This shows only that the bounded initial-order profile has a deterministic scheduling effect in synthetic fixtures; it makes no quality or routing-improvement claim. KiCad DRC was not run, apply was not invoked, and no learned/model output or model-generated copper was used. It provides no manufacturing, fabrication, board-mutation, or FreeRouting-parity evidence. |
+
+#### B-064 — MCP excessive-agency boundary replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:0c0b27c9a6c86de4422e00d9093ba36b25dd7442fd56b7d4fb62da9948da0c58` |
+| Date and code provenance | 2026-08-05; hardened evaluation harness `7f7a3d71c2b960f8917deeef0dc0d43fb937d227`; the artifact bytes are committed with this ledger entry. |
+| Configuration | `copper-mcp/security-evaluation/mcp-agency/v1`; seven deterministic offline MCP cases. The public route and placement apply handlers run with apply enabled and receive syntactically valid unauthorized tokens. Temporary-workspace snapshots compare path, type/symlink status, mode, size, digest, mtime, and inode; the report contains only stable unchanged assertions. |
+| Metrics | Attempted/blocked `7/7`; refused `4`; contained `3`; leaked `0`; `apply_candidate` and `apply_placement_candidate` each returned structured `invalid_token` before source access; workspace content/mode/metadata unchanged. |
+| Artifact | [`2026-08-05-mcp-agency-evaluation.json`](../../benchmarks/results/security/2026-08-05-mcp-agency-evaluation.json) |
+| Interpretation | This is a local MCP input, output/report-disclosure, revision, quota, and capability-boundary regression result. It invokes no model, network, KiCad, or board mutation. Application logging is not evaluated because the current source has no application logger sink; host logs, provider telemetry, remote authorization, unknown attacks, electrical/DRC/fabrication safety, and live-editor behavior remain outside scope. |
