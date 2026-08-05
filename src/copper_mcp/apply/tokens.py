@@ -14,7 +14,9 @@ revision it was issued against; a successful apply changes the file, so the same
 never match again and a replay fails the compare-and-swap as a stale candidate. The consumed
 nonce set below is defence in depth on top of that - it turns a replay into a precise
 ``token_already_used`` instead of a staleness error, and it is deliberately process-local and
-bounded.
+expiry-limited.  An unexpired consumed nonce is never evicted by count: restoring the documented
+pre-apply copy recreates the revision the token was bound to, so count eviction would turn a
+still-live confirmation into a second write.
 
 **The signing key lives only in this process.** Restarting the server invalidates every
 outstanding token. That is the right default for a short-lived confirmation: persisting the key
@@ -38,7 +40,10 @@ _DOMAIN = b"copper-mcp/apply-token/v1"
 _NONCE_BYTES = 16
 _MAC_BYTES = 32
 APPLY_TOKEN_TTL_SECONDS = 15 * 60
-#: Bounded so a caller cannot grow process memory by requesting tokens.
+#: Largest accepted compatibility capacity hint.  It is deliberately *not* an eviction boundary:
+#: every consumed nonce remains until its own expiry so replay protection never has false
+#: negatives.  Deployments needing a hard memory ceiling must apply admission control before
+#: issuing capabilities, rather than evicting live authorization state after a board write.
 MAX_CONSUMED_TOKENS = 4096
 
 
@@ -110,8 +115,14 @@ class ApplyTokenAuthority:
             raise ApplyTokenError(
                 "invalid_token", "token lifetime must be positive and tighten-only"
             )
+        if type(max_consumed) is not int or not 1 <= max_consumed <= MAX_CONSUMED_TOKENS:
+            raise ApplyTokenError(
+                "invalid_token", "consumed-token capacity hint must be a positive bounded integer"
+            )
         self._key = secrets.token_bytes(32)
         self._ttl = ttl_seconds
+        # Compatibility-only sizing hint.  It remains inspectable for embedders, but cannot
+        # safely control eviction: every live nonce below is retained until expiry.
         self._max_consumed = max_consumed
         self._clock: Callable[[], float] = clock if callable(clock) else time.time
         # Nonce -> the moment its token expires. A consumed nonce only needs to be remembered
@@ -190,16 +201,15 @@ class ApplyTokenAuthority:
     def consume(self, verified: VerifiedToken) -> None:
         """Record a token as spent until its own token would have expired.
 
-        A hard count cap remains as a memory backstop against a flood of distinct tokens, but
-        the primary lifetime is the token's own expiry, swept in ``verify``.
+        ``max_consumed`` is intentionally not enforced here.  This runs after the board rename,
+        so evicting a still-live record to satisfy a count cap would make a restored board
+        replayable.  Expiry is the only safe reclamation boundary for this exact nonce set.
         """
 
         now = self._now()
         self._sweep(now)
         self._consumed[verified.identifier] = verified.expires_at
         self._consumed.move_to_end(verified.identifier)
-        while len(self._consumed) > self._max_consumed:
-            self._consumed.popitem(last=False)
 
 
 __all__ = [

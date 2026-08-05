@@ -19,7 +19,7 @@ import pytest
 
 from copper_mcp.apply import ApplyTokenAuthority, apply_candidate, lockfile_for
 from copper_mcp.apply.contracts import ApplyRequestError, parse_apply_request
-from copper_mcp.apply.tokens import ApplyBinding, ApplyTokenError
+from copper_mcp.apply.tokens import MAX_CONSUMED_TOKENS, ApplyBinding, ApplyTokenError
 from copper_mcp.config import ConfigurationError, Settings
 from copper_mcp.mcp_contracts import ApplyCandidateToolResponse
 from copper_mcp.route_preview import preview_route
@@ -1115,6 +1115,35 @@ class TokenLifetimeTests(unittest.TestCase):
         with self.assertRaises(ApplyTokenError) as caught:
             authority.verify(guarded, binding)
         self.assertEqual(caught.exception.code, "token_already_used")
+
+    def test_a_tiny_capacity_hint_cannot_evict_a_live_consumed_nonce(self) -> None:
+        """Count pressure must never reopen a confirmation after a guarded board restore."""
+
+        clock = [1_000_000.0]
+        authority = ApplyTokenAuthority(
+            ttl_seconds=600,
+            max_consumed=1,
+            clock=lambda: clock[0],
+        )
+        binding = ApplyBinding("c", "sha256:" + "a" * 64, "sha256:" + "b" * 64, "b.kicad_pcb")
+
+        guarded = authority.issue(binding)
+        authority.consume(authority.verify(guarded, binding))
+        for _ in range(3):
+            other = authority.issue(binding)
+            authority.consume(authority.verify(other, binding))
+
+        self.assertGreater(len(authority._consumed), authority._max_consumed)
+        with self.assertRaises(ApplyTokenError) as caught:
+            authority.verify(guarded, binding)
+        self.assertEqual(caught.exception.code, "token_already_used")
+
+    def test_consumed_capacity_hint_must_be_a_positive_bounded_integer(self) -> None:
+        for hint in (False, 0, -1, MAX_CONSUMED_TOKENS + 1):
+            with self.subTest(hint=hint):
+                with self.assertRaises(ApplyTokenError) as caught:
+                    ApplyTokenAuthority(max_consumed=hint)
+                self.assertEqual(caught.exception.code, "invalid_token")
 
     def test_the_store_does_not_grow_without_bound(self) -> None:
         clock = [1_000_000.0]
