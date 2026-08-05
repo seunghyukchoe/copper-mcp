@@ -226,6 +226,7 @@ class LiveBoardObservationToolResponse(_ClosedContract):
         Field(max_length=32),
     ]
     socket_kind: Literal["default-local-ipc", "configured-local-ipc"]
+    session_revision: SessionRevision | None
     read_only: Literal[True]
 
 

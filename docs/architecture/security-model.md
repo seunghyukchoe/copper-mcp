@@ -174,6 +174,13 @@ explicit object/detail ceilings, reference durability is typed, and board-author
 as untrusted annotation data. The normalized render is digest-bound and advisory rather than
 geometric authority.
 
+`inspect_live_board` additionally returns the fixed-format, process-local PBKDF2 session CAS when
+KiCad supplied a plugin token, or explicit `null` when it did not. This bounded derived value is
+necessary for public observe-to-preview composition, but it is neither the token nor a reusable
+credential: preview validates it strictly and uses constant-time comparison; token changes and a
+fresh CopperMCP process still fail closed. The process salt and token never cross the output
+boundary.
+
 The active KiCad adapter accepts front- or back-side footprints with orthogonal transforms and
 unfilled rectangular `fp_rect` courtyard centerlines on matching `F.CrtYd`/`B.CrtYd`; unsupported
 footprint or courtyard forms fail closed before a scene or placement view exists. KiCad-authored

@@ -301,6 +301,7 @@ class KicadIpcTests(unittest.TestCase):
                 _settings(), client_factory=lambda **_: _KiCad(board=_Board())
             )
         self.assertIsNone(captured.session_revision)
+        self.assertIsNone(captured.observation.to_dict()["session_revision"])
 
     def test_oversized_live_snapshot_is_refused(self) -> None:
         board = _Board(source="x" * 32)

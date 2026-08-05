@@ -242,6 +242,35 @@ class PadlessFootprintTests(unittest.TestCase):
         self.assertIn("no copper pad", result.diagnostic.message)
         self.assertNotIn("does not exist", result.diagnostic.message)
 
+    def test_padless_subject_precedes_an_unrelated_front_back_contradiction(self) -> None:
+        """Subjects are preflighted before syntactic infeasibility is claimed."""
+
+        _, snapshot, view = _board(PADLESS_BOARD)
+        placeable = sorted(view.footprints)[0]
+
+        result = evaluate_placement(
+            _intent(
+                view,
+                PADLESS_BOARD.name,
+                subjects=[PADLESS_REF, placeable],
+                rules=[
+                    {"kind": "side", "subject": placeable, "side": "front"},
+                    {"kind": "side", "subject": placeable, "side": "back"},
+                ],
+            ),
+            snapshot,
+            view,
+        )
+
+        self.assertEqual(result.status, "refused")
+        self.assertIsNone(result.candidate)
+        assert result.diagnostic is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+        self.assertEqual(
+            result.diagnostic.message,
+            "a placement subject owns no copper pad, so it cannot be placed in v0.1",
+        )
+
     def test_a_padless_anchor_and_rule_subject_are_refused_the_same_way(self) -> None:
         _, snapshot, view = _board(PADLESS_BOARD)
         placeable = sorted(view.footprints)[0]

@@ -50,6 +50,14 @@ pipeline:
    KiCad objects, run DRC or refill, persist geometry, mint an apply token, or mutate the editor.
    Endpoint-via legality and full electrical/fabrication validity remain explicitly unclaimed.
 
+The public `inspect_live_board` observation includes one required `session_revision` field. It is
+the same already-validated opaque PBKDF2 value used by the capture; a plugin-launched observation
+with no token reports `null`. This lets a client compose `inspect_live_board` →
+`observe_live_board_scene` → `preview_live_layered_route` using only public structured output:
+the observation supplies the session CAS and the scene supplies source/snapshot CAS values and
+pad refs. `null` is not a bypass—the preview still requires a fixed-format non-null value and
+therefore refuses it before a candidate can be produced.
+
 The common response accepts either the file-backed or live request echo, with the live schema
 preserving `board: "live"` and the session digest precondition. No raw board source, net name,
 socket path, token, or unvalidated diagnostic text crosses MCP.
@@ -96,3 +104,10 @@ and a 32-byte derived value. The prior HMAC wording remains as historical eviden
 SEC-103, and R-102. Strict format validation and constant-time CAS comparison remain unchanged;
 previous HMAC and unkeyed SHA-256 wire values fail closed. This amendment changes no IPC mutation,
 candidate, source/snapshot CAS, routing, DRC, or apply authority.
+
+## Composability amendment — 2026-08-05
+
+D-130 makes the PBKDF2 session CAS visible in the closed public live-observation output, including
+an explicit `null` when no plugin token is present. This is disclosure of a bounded derived CAS
+value, not the KiCad token or process salt. It preserves fresh-process and token-change stale
+refusal and adds no mutation, DRC, apply, or persistent capability.

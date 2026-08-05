@@ -11,6 +11,7 @@ import copper_mcp.kicad_ipc as kicad_ipc
 import copper_mcp.live_layered_route_preview as live_preview
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.board_ir import NetClass
+from copper_mcp.circuit_scene import observe_live_board_scene
 from copper_mcp.config import Settings
 from copper_mcp.layered_route_preview import LayeredRoutePreviewError, preview_layered_route
 
@@ -225,6 +226,111 @@ def test_live_session_revision_pbkdf2_work_is_fixed_and_bounded() -> None:
 def _factory(source: bytes):
     text = source.decode("utf-8")
     return lambda **_: _FakeLiveKiCad(text)
+
+
+def test_public_live_observation_scene_and_preview_outputs_compose(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A client needs no private helper to carry the three live CAS values forward."""
+
+    settings, _, _, _, _ = _workspace(tmp_path)
+    source = FIXTURE.read_bytes()
+    salt_canary = b"session-salt-must-not-escape-0000"
+    monkeypatch.setattr(kicad_ipc, "_SESSION_REVISION_SALT", salt_canary)
+
+    observation = kicad_ipc.inspect_live_board(settings, client_factory=_factory(source)).to_dict()
+    scene = observe_live_board_scene(
+        {
+            "board": "live",
+            "constraints": {
+                "clearance_nm": 250_000,
+                "track_width_nm": 250_000,
+                "via_diameter_nm": 800_000,
+                "via_drill_nm": 400_000,
+            },
+            "region": {
+                "min_x_nm": -1_000_000_000,
+                "min_y_nm": -1_000_000_000,
+                "max_x_nm": 1_000_000_000,
+                "max_y_nm": 1_000_000_000,
+            },
+        },
+        settings,
+        client_factory=_factory(source),
+    ).to_dict()
+    pads = scene["static"]["pads"]
+    assert isinstance(pads, list) and len(pads) == 2
+    session_revision = observation["session_revision"]
+    assert isinstance(session_revision, str)
+
+    result = live_preview.preview_live_layered_route(
+        {
+            "board": "live",
+            "start_pad_id": pads[0]["ref_id"],
+            "end_pad_id": pads[1]["ref_id"],
+            "constraints": {
+                "clearance_nm": 250_000,
+                "track_width_nm": 250_000,
+                "via_diameter_nm": 800_000,
+                "via_drill_nm": 400_000,
+            },
+            "expect_board_revision": scene["board_revision"],
+            "expect_snapshot_digest": scene["snapshot_digest"],
+            "expect_session_revision": session_revision,
+            "grid_step_nm": 250_000,
+            "seed": 23,
+        },
+        settings,
+        client_factory=_factory(source),
+    )
+
+    public_outputs = repr((observation, scene, result))
+    assert result["status"] == "routed"
+    assert SESSION_TOKEN not in public_outputs
+    assert salt_canary.hex() not in public_outputs
+
+
+def test_public_session_revision_refuses_token_change_and_process_restart(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings, start, end, board_revision, snapshot_digest = _workspace(tmp_path)
+    source = FIXTURE.read_bytes()
+    observation = kicad_ipc.inspect_live_board(settings, client_factory=_factory(source)).to_dict()
+    session_revision = observation["session_revision"]
+    assert isinstance(session_revision, str)
+    request = {
+        "board": "live",
+        "start_pad_id": start,
+        "end_pad_id": end,
+        "constraints": {
+            "clearance_nm": 250_000,
+            "track_width_nm": 250_000,
+            "via_diameter_nm": 800_000,
+            "via_drill_nm": 400_000,
+        },
+        "expect_board_revision": board_revision,
+        "expect_snapshot_digest": snapshot_digest,
+        "expect_session_revision": session_revision,
+        "grid_step_nm": 250_000,
+        "seed": 23,
+    }
+
+    monkeypatch.setenv("KICAD_API_TOKEN", "restarted-kicad-session")
+    changed_token = live_preview.preview_live_layered_route(
+        request, settings, client_factory=_factory(source)
+    )
+    assert changed_token["status"] == "not_routed"
+    assert changed_token["diagnostic"]["code"] == "stale_revision"  # type: ignore[index]
+
+    monkeypatch.setenv("KICAD_API_TOKEN", SESSION_TOKEN)
+    monkeypatch.setattr(kicad_ipc, "_SESSION_REVISION_SALT", b"\x99" * 32)
+    restarted_process = live_preview.preview_live_layered_route(
+        request, settings, client_factory=_factory(source)
+    )
+    assert restarted_process["status"] == "not_routed"
+    assert restarted_process["diagnostic"]["code"] == "stale_revision"  # type: ignore[index]
 
 
 def test_live_layered_preview_reuses_exact_ipc_snapshot_and_is_deterministic(

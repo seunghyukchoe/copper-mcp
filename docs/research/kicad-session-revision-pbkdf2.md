@@ -64,3 +64,19 @@ unkeyed-SHA refusal, no token in successful output, schema alignment, fixed work
 broad runtime guard. The construction does not protect process memory, authenticate a caller,
 prevent KiCad's documented ABA possibility, hard-preempt synchronous IPC, prove real-editor
 behavior, or authorize DRC/editor mutation/fabrication.
+
+## Public structured-output composition
+
+KiCad's add-on guidance says the plugin-provided token is unique to a running instance and can
+detect a restart. MCP's tool specification permits a server to declare an output schema and return
+structured content, so a caller can carry typed data between tools rather than recover a private
+implementation value. CopperMCP therefore exposes the already-derived fixed-format session CAS as
+required `inspect_live_board.session_revision`; a missing plugin token is represented as explicit
+`null`, never as an invented value. The client combines that value with the public scene's
+board/snapshot digests and pad refs for live preview. The preview still rejects null/malformed CAS,
+token changes, and a fresh-process salt rotation before conversion. Regression output contains no
+raw token or salt.
+
+- [KiCad connection guidance](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/#connecting-to-kicad)
+- [MCP tools and structured output](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)
+- [Python `hashlib.pbkdf2_hmac`](https://docs.python.org/3/library/hashlib.html#hashlib.pbkdf2_hmac)

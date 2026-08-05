@@ -5,8 +5,8 @@
 
 ## Question
 
-Which refusal wins when a placement request contains both a proposal anchored to a real,
-padless footprint and an unrelated syntactic contradiction in its rules?
+Which refusal wins when a placement request contains either a declared or anchored real, padless
+footprint and an unrelated syntactic contradiction in its rules?
 
 ## Evidence
 
@@ -31,15 +31,15 @@ subset accordingly needs a pad hull before it can evaluate a placement-anchor ed
 
 ## Decision
 
-Before syntactic infeasibility analysis, scan every explicit proposal anchor in input order,
-after the existing rule-reference scan.  If an anchor names a known padless footprint, return
-the established `unsupported_geometry` diagnostic and publish no candidate.  `None` means the
-proposal is self-anchored and therefore is not an external reference to validate.
+Before syntactic infeasibility analysis, scan declared subjects in request order, then the existing
+rule-reference scan, then every explicit proposal anchor in input order. If any reference names a
+known padless footprint, return the established `unsupported_geometry` diagnostic and publish no
+candidate. `None` means the proposal is self-anchored and therefore is not an external reference to
+validate.
 
-The scan is intentionally limited to external proposal anchors.  It does not change legal
-proposal resolution, candidate canonicalization, reference ordering, or the result for a rule
-set with no padless anchor.  Thus a pure side/orientation/opposite-edge contradiction continues
-to return `infeasible_constraints`.
+The scan does not change legal proposal resolution, candidate canonicalization, reference ordering,
+or the result for a rule set with no padless reference. Thus a pure
+side/orientation/opposite-edge contradiction continues to return `infeasible_constraints`.
 
 ## Security rationale and regression
 
@@ -47,7 +47,7 @@ Validation must report the earliest unsupported boundary before it makes a stron
 the rest of the request.  Otherwise untrusted input can mask an unavailable geometry capability
 behind a later, unrelated contradiction, which confuses callers about what their request
 contains and makes the refusal order dependent on incidental rule composition.  The regression
-covers each supported proposal `anchor_point` (`center`, `north`, `south`, `east`, and `west`),
-combines it with an unrelated pair of contradictory side rules, and asserts the exact stable
-`unsupported_geometry` result with no candidate.  Existing failure-taxonomy coverage retains
-the pure-contradiction `infeasible_constraints` result.
+covers each supported proposal `anchor_point` (`center`, `north`, `south`, `east`, and `west`) plus
+a padless declared subject, combines each with unrelated contradictory side rules, and asserts the
+exact stable `unsupported_geometry` result with no candidate. Existing failure-taxonomy coverage
+retains the pure-contradiction `infeasible_constraints` result.

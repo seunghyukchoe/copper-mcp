@@ -80,15 +80,16 @@ def _reject_padless(view: PlacementView, ref: str) -> None:
 
 
 def _reject_padless_preflight_refs(view: PlacementView, intent: PlacementIntent) -> None:
-    """Reject unsupported rule and proposal-anchor references before syntactic analysis.
+    """Reject unsupported placement references before syntactic analysis.
 
     Padless footprints are deliberately unavailable as placement subjects, anchors, and rule
-    references. Checking this before ``_check_infeasible`` prevents a contradictory rule set from
-    hiding an unsupported rule reference or proposal anchor behind an
+    references. Preserve the request's subject order, then the established rule-reference and
+    proposal-anchor order, before ``_check_infeasible`` so a contradictory rule set cannot hide
+    an unsupported placement reference behind an
     ``infeasible_constraints`` diagnostic.
     """
 
-    refs: list[str] = []
+    refs: list[str] = list(intent.subject_refs)
     for rule in intent.rules:
         if isinstance(rule, ProximityRule | EdgeRule | RegionRule | OrientationRule | SideRule):
             refs.append(rule.subject)
