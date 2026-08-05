@@ -33,7 +33,15 @@ from copper_mcp.adapters import (
 )
 from copper_mcp.board_ir import NetClass
 from copper_mcp.config import Settings
+from copper_mcp.kicad_cli import (
+    _drc_object_pairs,
+    _finite_json_float,
+    _preflight_drc_json,
+    _reject_json_constant,
+    _validate_drc_json_tree,
+)
 from copper_mcp.route_preview import preview_route as preview_route_result
+from copper_mcp.security import WorkspaceViolationError, read_workspace_file
 from copper_mcp.tools import inspect_board_ir, preview_route
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -149,10 +157,31 @@ def _profile(metadata: dict[str, Any]) -> KiCadConstraintProfile:
     return KiCadConstraintProfile(net_classes=(net_class,), default_net_class_id=net_class.id)
 
 
-def _drc_summary(report_path: Path) -> dict[str, int]:
+def _drc_summary(workspace: Path, report_path: Path, *, max_report_bytes: int) -> dict[str, int]:
     try:
-        document = json.loads(report_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        payload = read_workspace_file(
+            workspace,
+            str(report_path),
+            allowed_suffixes={".json"},
+            max_bytes=max_report_bytes,
+        ).content
+        text = payload.decode("utf-8", errors="strict")
+        _preflight_drc_json(text)
+        document: Any = json.loads(
+            text,
+            object_pairs_hook=_drc_object_pairs,
+            parse_constant=_reject_json_constant,
+            parse_float=_finite_json_float,
+        )
+        _validate_drc_json_tree(document)
+    except (
+        OSError,
+        WorkspaceViolationError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        RecursionError,
+        ValueError,
+    ) as error:
         raise AudioRoutingBenchmarkError("KiCad DRC report cannot be parsed") from error
     if not isinstance(document, dict):
         raise AudioRoutingBenchmarkError("KiCad DRC report must be one JSON object")
@@ -168,6 +197,8 @@ def _run_drc(
     source: bytes,
     metadata: dict[str, Any],
     route_documents: list[tuple[dict[str, Any], dict[str, Any], object]],
+    *,
+    settings: Settings,
 ) -> dict[str, Any]:
     """Run KiCad DRC on source and independently serialized candidates, if opted in."""
 
@@ -215,7 +246,11 @@ def _run_drc(
             raise AudioRoutingBenchmarkError("KiCad DRC invocation failed") from error
         if completed.returncode != 0:
             raise AudioRoutingBenchmarkError("KiCad DRC returned a nonzero status")
-        return _drc_summary(report)
+        return _drc_summary(
+            workspace,
+            report,
+            max_report_bytes=settings.max_drc_report_bytes,
+        )
 
     source_counts = execute(source_board, workspace / "source-drc.json")
     candidates: list[dict[str, Any]] = []
@@ -299,7 +334,7 @@ def run_benchmark(repetitions: int, *, include_kicad_drc: bool = False) -> dict[
             )
 
         drc = (
-            _run_drc(workspace, source, metadata, route_documents)
+            _run_drc(workspace, source, metadata, route_documents, settings=settings)
             if include_kicad_drc
             else {
                 "attempted": False,
