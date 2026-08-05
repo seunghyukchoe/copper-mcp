@@ -102,6 +102,35 @@ def test_stale_revision_refuses_before_scene_or_drc(tmp_path: Path, monkeypatch)
         observe_post_placement(payload, settings)
 
 
+def test_stale_revision_refuses_before_context_scan(tmp_path: Path, monkeypatch) -> None:
+    board = tmp_path / FIXTURE.name
+    board.write_bytes(FIXTURE.read_bytes())
+    payload = _payload(board)
+    payload["expect_board_revision"] = "sha256:" + "0" * 64
+    settings = Settings(workspace=tmp_path.resolve())
+    monkeypatch.setattr(
+        "copper_mcp.post_placement_observation._drc_context",
+        lambda *args, **kwargs: pytest.fail("stale input must not scan DRC context"),
+    )
+
+    with pytest.raises(PostPlacementObservationError, match="revision is stale"):
+        observe_post_placement(payload, settings)
+
+
+def test_malformed_board_is_rejected_before_workspace_read(tmp_path: Path, monkeypatch) -> None:
+    settings = Settings(workspace=tmp_path.resolve())
+    board = tmp_path / FIXTURE.name
+    board.write_bytes(FIXTURE.read_bytes())
+    monkeypatch.setattr(
+        "copper_mcp.post_placement_observation.read_workspace_file",
+        lambda *args, **kwargs: pytest.fail("malformed board must not reach workspace read"),
+    )
+
+    payload = _payload(board) | {"board": 123}
+    with pytest.raises(PostPlacementObservationError, match="request is malformed"):
+        observe_post_placement(payload, settings)
+
+
 def test_context_race_discards_composite_evidence(tmp_path: Path, monkeypatch) -> None:
     board = tmp_path / FIXTURE.name
     board.write_bytes(FIXTURE.read_bytes())

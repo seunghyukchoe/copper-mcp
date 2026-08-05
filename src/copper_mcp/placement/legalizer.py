@@ -79,6 +79,27 @@ def _reject_padless(view: PlacementView, ref: str) -> None:
         )
 
 
+def _reject_padless_rule_refs(view: PlacementView, intent: PlacementIntent) -> None:
+    """Reject padless footprint references before any syntactic rule analysis.
+
+    Padless footprints are deliberately unavailable as placement subjects, anchors, and rule
+    references. Checking this before ``_check_infeasible`` prevents a contradictory rule set from
+    hiding that unsupported reference behind an ``infeasible_constraints`` diagnostic.
+    """
+
+    refs: list[str] = []
+    for rule in intent.rules:
+        if isinstance(rule, ProximityRule | EdgeRule | RegionRule | OrientationRule | SideRule):
+            refs.append(rule.subject)
+        elif isinstance(rule, AlignmentRule):
+            refs.extend(rule.members)
+        elif isinstance(rule, SymmetryRule):
+            refs.append(rule.about)
+            refs.extend(ref for pair in rule.pairs for ref in pair)
+    for ref in refs:
+        _reject_padless(view, ref)
+
+
 class _UnsupportedError(RuntimeError):
     """Raised when the geometry is outside what this version models."""
 
@@ -601,6 +622,7 @@ def evaluate_placement(
         )
     budget = _Budget(max_checks=max_checks, deadline_seconds=deadline_seconds)
     try:
+        _reject_padless_rule_refs(view, intent)
         _check_infeasible(intent)
         placed = _place(view, snapshot, intent, budget)
         # Stationary padless envelopes participate in physical legality, but remain unavailable

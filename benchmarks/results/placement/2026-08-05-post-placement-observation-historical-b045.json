@@ -1,0 +1,35 @@
+{
+  "date_utc": "2026-08-05",
+  "environment": {
+    "kicad_cli": "/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli",
+    "python": "3.12.13"
+  },
+  "fixture": "placement-v0.1/placement-legal.kicad_pcb",
+  "metrics": {
+    "binding_signatures": 1,
+    "drc_summary": [
+      true,
+      false,
+      0,
+      0,
+      0,
+      5,
+      0
+    ],
+    "drc_summary_signatures": 1,
+    "median_observation_ns": 378795500,
+    "post_apply_board_bytes_preserved": true,
+    "repetitions": 3,
+    "same_revision_scene_drc_binding": true,
+    "workspace_mutations": 0
+  },
+  "not_claimed": [
+    "apply provenance beyond the returned revision",
+    "live editor CAS",
+    "ERC/electrical/fabrication signoff",
+    "FreeRouting parity"
+  ],
+  "run_id": "sha256:c175adf67ca1406cc7fd272fb21bc866936b364f3b8832c2f104a331db8b0cba",
+  "schema": "copper-mcp/benchmark/post-placement-observation/v1",
+  "source_commit": "eb44ae9253166eabf0cf190beada1b990c32766e"
+}

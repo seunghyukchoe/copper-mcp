@@ -7,7 +7,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from copper_mcp.circuit_scene import CircuitScene, CircuitSceneError, _observe_board_scene
+from copper_mcp.circuit_scene import (
+    CircuitScene,
+    CircuitSceneError,
+    _observe_board_scene,
+    parse_circuit_scene_request,
+)
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import (
     KiCadCliError,
@@ -68,10 +73,16 @@ def _request(payload: Any) -> tuple[dict[str, Any], str]:
     expected = fields.pop("expect_board_revision")
     if not isinstance(expected, str) or _SHA256.fullmatch(expected) is None:
         raise PostPlacementObservationError("post-placement expected board revision is malformed")
+    try:
+        validated = parse_circuit_scene_request(fields)
+    except CircuitSceneError as error:
+        raise PostPlacementObservationError(
+            "post-placement observation request is malformed"
+        ) from error
     # A render independently opens the workspace and would no longer be bound to this capture.
-    if fields.get("include_render", False):
+    if validated.include_render:
         raise PostPlacementObservationError("post-placement observation does not render boards")
-    return fields, expected
+    return validated.to_dict(), expected
 
 
 def observe_post_placement(payload: Any, settings: Settings) -> PostPlacementObservation:
@@ -94,11 +105,16 @@ def observe_post_placement(payload: Any, settings: Settings) -> PostPlacementObs
         )
         board_path = board.path
         relative_path = board_path.relative_to(settings.workspace.resolve(strict=True)).as_posix()
-        context = _drc_context(board_path, settings, board)
-        source = context[relative_path]
-        board_revision = _revision(source)
+        # The board bytes alone are sufficient to reject a stale request. Do this before reading
+        # project/rule/library sidecars for the DRC context, which keeps stale work proportional to
+        # the one descriptor-confined board capture rather than the whole project.
+        board_revision = _revision(board.content)
         if board_revision != expected_revision:
             raise PostPlacementObservationError("post-placement board revision is stale")
+        context = _drc_context(board_path, settings, board)
+        source = context[relative_path]
+        if _revision(source) != board_revision:
+            raise PostPlacementObservationError("post-placement board changed during observation")
         context_revision = _context_revision(context)
         scene = _observe_board_scene(
             scene_payload,

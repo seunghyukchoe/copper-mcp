@@ -712,11 +712,31 @@ historical evidence; these runs were generated from the clean implementation com
 | Artifact | [`2026-08-05-post-placement-observation.json`](../../benchmarks/results/placement/2026-08-05-post-placement-observation.json) |
 | Interpretation | This demonstrates a legal file-backed apply followed by three read-only observations of the exact revision returned by apply. It does not provide cryptographic mutation provenance beyond that revision CAS, live editor CAS, ERC/electrical/fabrication readiness, or FreeRouting parity. |
 
+#### B-052 — post-placement observation boundary replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:d1c586ac5413cde8a40292f15e45e75944e71acef6422d8d7b5ea88229a3cc4e` |
+| Date and commit | 2026-08-05; source commit `5fd8fab8f41f20edffecb89a181947d13d59a256` |
+| Configuration | Three required-revision post-placement observations over the bounded placement fixture, with workspace state digested before and after the observer; malformed/stale pre-work and padless rule-order regressions are covered by focused tests. |
+| Metrics | Three observations; one binding signature; hard DRC pass `true`; clean `false` due five ignored checks; median latency `432,344,250 ns`; workspace state before/after both `sha256:1a453c07a4018679a41652a141c476362c5a319881d6d2a06dc65f6156ccfdc8` with two entries; `workspace_mutations=false` derived from those snapshots. |
+| Artifact | [`2026-08-05-post-placement-observation-replay-b052.json`](../../benchmarks/results/placement/2026-08-05-post-placement-observation-replay-b052.json) |
+| Interpretation | This is an append-only correction to the B-045 measurement boundary. It does not add mutation provenance, live/editor CAS, ERC/electrical/fabrication signoff, or FreeRouting parity. |
+
 ### Append-only artifact-preservation amendments
 
 These entries preserve superseded content-addressed benchmark artifacts when a historical result
 path was later reused by a replay. No earlier ledger row is rewritten; the recovered files below
 are the audit copies for the original run IDs.
+
+#### B-053 — preserve B-045 post-placement artifact copy
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:c175adf67ca1406cc7fd272fb21bc866936b364f3b8832c2f104a331db8b0cba` |
+| Historical source | `eb44ae9253166eabf0cf190beada1b990c32766e` |
+| Artifact | [`2026-08-05-post-placement-observation-historical-b045.json`](../../benchmarks/results/placement/2026-08-05-post-placement-observation-historical-b045.json) |
+| Reason | The original B-045 bytes are preserved as an explicit audit copy while B-052 records the stronger workspace-state measurement. The original B-045 row and artifact path remain unchanged. |
 
 #### B-046 — preserve superseded B-033 spatial-index artifact
 

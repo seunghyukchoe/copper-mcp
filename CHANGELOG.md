@@ -8,6 +8,11 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Post-placement observation now validates the complete scene request before any workspace read,
+  rejects stale board revisions before scanning DRC sidecars, and refuses padless footprint rule
+  references before syntactic infeasibility analysis. These boundaries keep malformed/stale work
+  fail-closed and preserve the supported placement contract.
+
 - Live KiCad IPC board counting now carries its cooperative operation deadline into bounded
   S-expression decoding, with pre/post-decode and 4 KiB scan checkpoints. Expired large or
   malformed snapshots fail with the typed deadline refusal instead of spending unbounded parse

@@ -21,7 +21,9 @@ from copper_mcp.post_placement_observation import observe_post_placement
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/placement-v0.1/placement-legal.kicad_pcb"
-OUTPUT = ROOT / "benchmarks/results/placement/2026-08-05-post-placement-observation.json"
+OUTPUT = ROOT / (
+    "benchmarks/results/placement/2026-08-05-post-placement-observation-replay-b052.json"
+)
 KICAD = Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli")
 CONSTRAINTS = {
     "clearance_nm": 200_000,
@@ -29,6 +31,41 @@ CONSTRAINTS = {
     "via_diameter_nm": 600_000,
     "via_drill_nm": 300_000,
 }
+
+
+def _workspace_state(root: Path) -> dict[str, object]:
+    """Return a digest of every visible workspace entry, not just board bytes."""
+
+    entries: list[dict[str, object]] = []
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            entries.append(
+                {
+                    "kind": "symlink",
+                    "path": relative,
+                    "target": str(path.readlink()),
+                }
+            )
+            continue
+        if not path.is_file():
+            continue
+        content = path.read_bytes()
+        stat = path.stat()
+        entries.append(
+            {
+                "kind": "file",
+                "mode": stat.st_mode & 0o7777,
+                "path": relative,
+                "sha256": hashlib.sha256(content).hexdigest(),
+                "size": len(content),
+            }
+        )
+    canonical = json.dumps(entries, sort_keys=True, separators=(",", ":")).encode()
+    return {
+        "digest": "sha256:" + hashlib.sha256(canonical).hexdigest(),
+        "entries": len(entries),
+    }
 
 
 def main() -> int:
@@ -87,6 +124,7 @@ def main() -> int:
                 "max_y_nm": 100_000_000,
             },
         }
+        workspace_before = _workspace_state(workspace)
         for _ in range(3):
             started = time.perf_counter_ns()
             result = observe_post_placement(request, settings)
@@ -111,6 +149,7 @@ def main() -> int:
                 )
             )
         preserved = board.read_bytes() == before
+        workspace_after = _workspace_state(workspace)
     payload = {
         "schema": "copper-mcp/benchmark/post-placement-observation/v1",
         "date_utc": "2026-08-05",
@@ -128,7 +167,9 @@ def main() -> int:
             "same_revision_scene_drc_binding": len(bindings) == 1,
             "binding_signatures": len(bindings),
             "post_apply_board_bytes_preserved": preserved,
-            "workspace_mutations": 0,
+            "workspace_mutations": workspace_before != workspace_after,
+            "workspace_state_before": workspace_before,
+            "workspace_state_after": workspace_after,
             "median_observation_ns": statistics.median(samples),
             "drc_summary_signatures": len(summaries),
             "drc_summary": next(iter(summaries)),

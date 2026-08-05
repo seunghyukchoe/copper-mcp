@@ -280,6 +280,28 @@ class PadlessFootprintTests(unittest.TestCase):
         self.assertEqual(ruled.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
         self.assertIn("no copper pad", ruled.diagnostic.message)
 
+    def test_padless_rule_ref_is_rejected_before_infeasible_rules(self) -> None:
+        _, snapshot, view = _board(PADLESS_BOARD)
+        placeable = sorted(view.footprints)[0]
+
+        result = evaluate_placement(
+            _intent(
+                view,
+                PADLESS_BOARD.name,
+                subjects=[placeable],
+                rules=[
+                    {"kind": "side", "subject": PADLESS_REF, "side": "front"},
+                    {"kind": "side", "subject": PADLESS_REF, "side": "back"},
+                ],
+            ),
+            snapshot,
+            view,
+        )
+
+        assert result.diagnostic is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+        self.assertIn("no copper pad", result.diagnostic.message)
+
     def test_a_genuinely_absent_reference_is_still_unresolved(self) -> None:
         """Guard the guard: the honest refusal must not swallow the real unknown-ref case."""
 
