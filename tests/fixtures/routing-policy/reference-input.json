@@ -1,0 +1,18 @@
+{
+  "schema": "copper-mcp.routing-policy-input.v1",
+  "board_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "bounds": {"min_x": 0, "min_y": 0, "max_x": 100, "max_y": 80},
+  "nets": [
+    {"net_id": "net:clock", "criticality": 90, "demand_cells": 20, "congestion_score": 15},
+    {"net_id": "net:data", "criticality": 50, "demand_cells": 36, "congestion_score": 55}
+  ],
+  "corridor_candidates": [
+    {"net_id": "net:clock", "bounds": {"min_x": 0, "min_y": 0, "max_x": 30, "max_y": 20}, "congestion_score": 8, "detour_cells": 5},
+    {"net_id": "net:clock", "bounds": {"min_x": 10, "min_y": 10, "max_x": 40, "max_y": 30}, "congestion_score": 12, "detour_cells": 3},
+    {"net_id": "net:data", "bounds": {"min_x": 50, "min_y": 20, "max_x": 90, "max_y": 50}, "congestion_score": 7, "detour_cells": 11}
+  ],
+  "repair_candidates": [
+    {"net_id": "net:clock", "bounds": {"min_x": 5, "min_y": 5, "max_x": 35, "max_y": 25}, "conflict_score": 24},
+    {"net_id": "net:data", "bounds": {"min_x": 45, "min_y": 15, "max_x": 95, "max_y": 60}, "conflict_score": 60}
+  ]
+}
