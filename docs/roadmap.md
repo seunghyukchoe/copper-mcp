@@ -158,11 +158,16 @@ documentation, ledger updates, and benchmark evidence.
   - [x] Candidate-only bounded rip-up/reroute coordination is covered by the negotiated
     congestion ledger and B-036; incremental obstacle updates and broader multi-net repair remain
     open.
-- [~] Benchmark comparison against established open baselines. A bounded external-process FreeRouting
-  harness now preserves bounded provenance, minimal child environment, KiCad-DRC prerequisites,
-  and receipt bindings, but its self-attested receipts can never close a comparison. No licensed
-  common fixture, Java runtime/JAR, KiCad CLI result pair, or actual comparison run is present;
-  user-supplied executable/JAR execution is explicitly not sandbox containment.
+- [~] Benchmark comparison against established open baselines. B-069 records one real smoke run
+  using the official FreeRouting v2.2.2 JAR and real KiCad 10.0.5 GUI DRC on a licensed,
+  CopperMCP-original two-pad fixture. Both observed output boards had zero hard violations, zero
+  unconnected items, zero vias, and 20.0 mm routed length. The source/report and source/DSN-export
+  relationships are `self_attested_unverified` and non-causal, as are the import and runner
+  workflow receipts; CopperMCP's result came from a pure-kernel runner rather than MCP or the
+  authorized apply service. The artifact therefore retains `comparison_closed=false` and
+  `unavailable_or_incomplete`. A harness-owned SES-import transaction, constrained candidate
+  runner, broader common corpus, and equivalent performance protocol remain required; bounded
+  external execution is not sandbox containment.
 
 - [~] Emit candidate DRC evidence as a deterministic, unsigned in-toto Statement payload using
   Link v0.3, with digest-bound subjects/materials and aggregate redacted byproducts. DSSE signing,
