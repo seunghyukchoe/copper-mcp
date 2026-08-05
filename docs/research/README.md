@@ -19,6 +19,9 @@ that every product feature, price, or repository release will remain current.
 - [Audio circuit benchmark intake](./audio-circuit-benchmarks.md) records why public DIY catalogs
   are reference-only and defines a licence-aware, original-fixture capability ladder for MCP-shared
   board inspection/routing tests plus MCP-independent Circuit Intent and schematic-rendering checks.
+- [Unshipped KiCad ERC containment experiment](./kicad-schematic-erc-containment.md) records why
+  a real local KiCad ERC probe did not become an MCP capability: legacy sandbox and aggregate-quota
+  containment did not meet the required security boundary.
 - [Held-out audio project-family evaluation](./heldout-audio-project-family-evaluation.md) defines
   the first hash-separated, independently authored family split and its one-family evidence limits.
 - [FreeRouting comparison boundary](./freerouting-comparison.md) documents the GPL-isolated,
