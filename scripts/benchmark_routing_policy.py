@@ -28,7 +28,11 @@ from copper_mcp.routing.policy import (
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "routing-policy" / "reference-input.json"
 SCRIPT_PATH = Path(__file__).relative_to(ROOT)
-SOURCE_COMMIT = "7a5bae2f5d39ad1cb014d4036b40451b914a2309"
+# The first commit supplied the privacy/documentation/test behavior this benchmark measures.  This
+# harness and its artifact are intentionally committed afterwards so the evidence source cannot
+# accidentally name a pre-hardening implementation.
+EVIDENCE_SOURCE_COMMIT = "849325a4409ecc721077476b7db7107b15fdfd58"
+INITIAL_IMPLEMENTATION_COMMIT = "7a5bae2f5d39ad1cb014d4036b40451b914a2309"
 REPLAY_COUNT = 10
 
 
@@ -92,22 +96,37 @@ def _metrics() -> dict[str, Any]:
     }
 
 
-def _report() -> dict[str, Any]:
-    return {
+def build_report() -> dict[str, Any]:
+    """Build one content-addressed, locally reproducible policy-boundary report."""
+
+    report: dict[str, Any] = {
         "schema": "copper-mcp/benchmark/routing-policy/v1",
-        "source_commit": SOURCE_COMMIT,
+        "evidence_source_commit": EVIDENCE_SOURCE_COMMIT,
+        "initial_implementation_commit": INITIAL_IMPLEMENTATION_COMMIT,
         "script": SCRIPT_PATH.as_posix(),
+        "script_sha256": hashlib.sha256(SCRIPT_PATH.read_bytes()).hexdigest(),
         "fixture": FIXTURE.relative_to(ROOT).as_posix(),
+        "fixture_sha256": hashlib.sha256(FIXTURE.read_bytes()).hexdigest(),
         "metrics": _metrics(),
+        "non_claims": [
+            "route construction, candidate geometry, or copper emission",
+            "route-quality or model-quality improvement",
+            "physical validity, KiCad DRC, fabrication, or FreeRouting parity",
+            (
+                "trace-digest secrecy, unlinkability, or resistance to complete-record "
+                "dictionary tests"
+            ),
+        ],
     }
+    report["run_id"] = "sha256:" + hashlib.sha256(_canonical_bytes(report)).hexdigest()
+    return report
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    report = _report()
-    report["run_id"] = "sha256:" + hashlib.sha256(_canonical_bytes(report)).hexdigest()
+    report = build_report()
     rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if args.output is not None:
         args.output.parent.mkdir(parents=True, exist_ok=True)

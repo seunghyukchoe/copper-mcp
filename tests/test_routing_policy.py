@@ -23,8 +23,16 @@ from copper_mcp.routing.policy import (
     policy_input_digest,
     redacted_policy_trace,
 )
+from scripts import benchmark_routing_policy
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "routing-policy" / "reference-input.json"
+_BENCHMARK_ARTIFACT = (
+    Path(__file__).parents[1]
+    / "benchmarks"
+    / "results"
+    / "routing"
+    / "2026-08-05-ai-policy-trace-privacy.json"
+)
 
 
 def _input() -> RoutingPolicyInput:
@@ -208,6 +216,36 @@ def test_oversize_json_and_out_of_bounds_windows_fail_closed() -> None:
 def test_lone_surrogate_json_text_is_rejected_with_a_fixed_boundary_error() -> None:
     with pytest.raises(ValueError, match="policy input is not valid UTF-8"):
         decode_policy_input_json("\ud800")
+
+
+def test_policy_benchmark_artifact_is_reproducible_and_provenance_bound() -> None:
+    first = benchmark_routing_policy.build_report()
+    second = benchmark_routing_policy.build_report()
+    canonical = dict(first)
+    run_id = canonical.pop("run_id")
+
+    assert first == second
+    assert first["evidence_source_commit"] == benchmark_routing_policy.EVIDENCE_SOURCE_COMMIT
+    assert (
+        first["initial_implementation_commit"]
+        == benchmark_routing_policy.INITIAL_IMPLEMENTATION_COMMIT
+    )
+    assert (
+        first["script_sha256"]
+        == hashlib.sha256(benchmark_routing_policy.SCRIPT_PATH.read_bytes()).hexdigest()
+    )
+    assert (
+        first["fixture_sha256"]
+        == hashlib.sha256(benchmark_routing_policy.FIXTURE.read_bytes()).hexdigest()
+    )
+    assert (
+        run_id
+        == "sha256:"
+        + hashlib.sha256(
+            json.dumps(canonical, allow_nan=False, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+    )
+    assert json.loads(_BENCHMARK_ARTIFACT.read_text(encoding="utf-8")) == first
 
 
 def test_evaluate_policy_rejects_unbound_or_incomplete_advisory_output() -> None:
