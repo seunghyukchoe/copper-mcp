@@ -123,6 +123,40 @@ def test_local_repair_rejects_untrusted_boundaries_with_fixed_diagnostics() -> N
     assert invalid_callback.route == ()
 
 
+@pytest.mark.parametrize(
+    "mutate",
+    (
+        lambda request: object.__setattr__(request, "blocked_cells", []),
+        lambda request: object.__setattr__(request, "blocked_cells", ((2, 2), (1, 2))),
+        lambda request: object.__setattr__(request, "blocked_cells", ((2, 2), (2, 2))),
+        lambda request: object.__setattr__(request, "start", (True, 2)),
+        lambda request: object.__setattr__(request, "max_expansions", True),
+        lambda request: object.__setattr__(request.repair_window, "conflict_score", 4),
+        lambda request: object.__setattr__(request, "_construction_digest", "sha256:" + "0" * 64),
+    ),
+)
+def test_local_repair_reconstructs_before_callbacks_or_search(mutate: object) -> None:
+    request = _detour_request()
+    assert callable(mutate)
+    mutate(request)
+    callback_calls = 0
+
+    def cancelled() -> bool:
+        nonlocal callback_calls
+        callback_calls += 1
+        return False
+
+    result = exact_local_repair(request, cancelled=cancelled)
+
+    assert result.status is LocalRepairStatus.INVALID_REQUEST
+    assert result.input_digest == "sha256:" + "0" * 64
+    assert result.route == ()
+    assert result.route_digest == "sha256:" + "0" * 64
+    assert result.expanded_states == 0
+    assert result.diagnostic == "the local repair request is invalid"
+    assert callback_calls == 0
+
+
 def test_local_repair_request_rejects_out_of_window_uncanonical_and_oversized_input() -> None:
     with pytest.raises(ValueError, match="inside the repair window"):
         LocalRepairRequest(_window(), start=(-1, 2), end=(4, 2))
@@ -209,3 +243,22 @@ def test_local_repair_verifier_rejects_mutated_request_and_nonterminal_geometry(
             diagnostic="wrong",
         ),
     )
+
+
+def test_local_repair_verifier_requires_exact_immutable_field_types() -> None:
+    request = _detour_request()
+    result = exact_local_repair(request)
+    list_route = exact_local_repair(request)
+    bool_expansions = exact_local_repair(request)
+    bool_bends = exact_local_repair(request)
+    bool_coordinate = exact_local_repair(request)
+    object.__setattr__(list_route, "route", list(list_route.route))
+    object.__setattr__(bool_expansions, "expanded_states", True)
+    object.__setattr__(bool_bends, "bend_count", True)
+    object.__setattr__(bool_coordinate, "route", ((0, 2), (True, 1), (4, 2)))
+
+    assert verify_local_repair_result(request, result)
+    assert not verify_local_repair_result(request, list_route)
+    assert not verify_local_repair_result(request, bool_expansions)
+    assert not verify_local_repair_result(request, bool_bends)
+    assert not verify_local_repair_result(request, bool_coordinate)
