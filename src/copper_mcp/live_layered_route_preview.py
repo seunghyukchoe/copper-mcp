@@ -13,6 +13,7 @@ the fake-IPC safety tests and the candidate-only boundary explicit.
 
 from __future__ import annotations
 
+import hmac
 import time
 from collections import Counter
 from dataclasses import replace
@@ -21,7 +22,7 @@ from typing import Any
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
-from copper_mcp.kicad_ipc import capture_live_board
+from copper_mcp.kicad_ipc import _is_session_revision, capture_live_board
 from copper_mcp.layered_route_preview import (
     LayeredRoutePreviewError,
     LayeredRoutePreviewRequest,
@@ -57,12 +58,10 @@ def parse_live_layered_route_preview_request(payload: Any) -> LayeredRoutePrevie
     request = replace(parse_layered_route_preview_request(normalized), board="live")
     if not isinstance(session_revision, str):
         raise LayeredRoutePreviewError("expect_session_revision is required")
-    if (
-        len(session_revision) != 71
-        or not session_revision.startswith("sha256:")
-        or any(character not in "0123456789abcdef" for character in session_revision[7:])
-    ):
-        raise LayeredRoutePreviewError("expect_session_revision must be content-addressed")
+    if not _is_session_revision(session_revision):
+        raise LayeredRoutePreviewError(
+            "expect_session_revision must be an hmac-sha256 session revision"
+        )
     return replace(request, expect_session_revision=session_revision)
 
 
@@ -95,7 +94,15 @@ def preview_live_layered_route(
         deadline=deadline,
     )
     board_revision = captured.observation.board_digest
-    if request.expect_session_revision != captured.session_revision:
+    expected_session_revision = request.expect_session_revision
+    assert isinstance(expected_session_revision, str)
+    captured_session_revision = captured.session_revision
+    if captured_session_revision is None:
+        session_matches = False
+    else:
+        assert isinstance(captured_session_revision, str)
+        session_matches = hmac.compare_digest(expected_session_revision, captured_session_revision)
+    if not session_matches:
         return _empty_result(
             "not_routed",
             request,

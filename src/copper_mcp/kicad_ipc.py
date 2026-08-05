@@ -11,11 +11,13 @@ same revision contract.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import importlib
 import math
 import os
 import platform
 import re
+import secrets
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
@@ -45,6 +47,12 @@ _COUNT_NAMES = (
 )
 _SHAPE_HEADS = {"gr_line", "gr_rect", "gr_arc", "gr_poly", "gr_curve", "gr_circle"}
 _MAX_EDITOR_SELECTION = 256
+_SESSION_REVISION_PREFIX = "hmac-sha256:"
+_SESSION_REVISION_HEX_LENGTH = 64
+# This key is intentionally process-local and never serialized.  KiCad documents that the
+# plugin token identifies one running editor; binding it with a fresh 256-bit local key makes
+# the public session precondition opaque and intentionally invalid after a fresh process start.
+_SESSION_REVISION_KEY = secrets.token_bytes(32)
 _LAYER_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 _UUID = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
@@ -172,7 +180,13 @@ def _socket_path() -> tuple[str | None, str]:
 
 
 def _session_revision() -> str | None:
-    """Return a redacted digest of KiCad's per-instance token, when supplied."""
+    """Return an opaque, process-local HMAC binding for KiCad's instance token.
+
+    The token itself is a credential, not a password verifier.  A plain SHA-256 fingerprint
+    would let an observer test candidate token values offline.  HMAC with a non-persistent
+    process key keeps the wire value suitable only for same-process CAS; a fresh process cannot
+    reproduce a prior value and must refuse it as stale.
+    """
 
     raw = os.environ.get("KICAD_API_TOKEN", "")
     if not raw:
@@ -183,7 +197,22 @@ def _session_revision() -> str | None:
         encoded = raw.encode("utf-8", errors="strict")
     except UnicodeError as error:
         raise KicadIpcConfigurationError("KICAD_API_TOKEN is invalid") from error
-    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+    message = b"copper-mcp:kicad-ipc-session-revision:v1\x00" + encoded
+    tag = hmac.new(_SESSION_REVISION_KEY, message, "sha256").hexdigest()
+    return f"{_SESSION_REVISION_PREFIX}{tag}"
+
+
+def _is_session_revision(value: object) -> bool:
+    """Recognize only the fixed opaque live-session wire type."""
+
+    return (
+        isinstance(value, str)
+        and len(value) == len(_SESSION_REVISION_PREFIX) + _SESSION_REVISION_HEX_LENGTH
+        and value.startswith(_SESSION_REVISION_PREFIX)
+        and all(
+            character in "0123456789abcdef" for character in value[len(_SESSION_REVISION_PREFIX) :]
+        )
+    )
 
 
 def _load_kicad_factory() -> Callable[..., _KiCadLike]:
@@ -358,9 +387,7 @@ class LiveBoardSnapshot:
         digest = f"sha256:{hashlib.sha256(self.source).hexdigest()}"
         if digest != self.observation.board_digest:
             raise KicadIpcPayloadError("live board source digest is not bound to its observation")
-        if self.session_revision is not None and (
-            not self.session_revision.startswith("sha256:") or len(self.session_revision) != 71
-        ):
+        if self.session_revision is not None and not _is_session_revision(self.session_revision):
             raise KicadIpcPayloadError("live IPC session revision is invalid")
 
 
@@ -683,7 +710,14 @@ def _capture_live_board_from_client(
         ) from error
     if confirmation_bytes != source_bytes:
         raise KicadIpcConnectionError("KiCad board changed during observation")
-    if _session_revision() != session_revision:
+    confirmed_session_revision = _session_revision()
+    if session_revision is None:
+        session_matches = confirmed_session_revision is None
+    elif confirmed_session_revision is None:
+        session_matches = False
+    else:
+        session_matches = hmac.compare_digest(confirmed_session_revision, session_revision)
+    if not session_matches:
         raise KicadIpcConnectionError("KiCad IPC session changed during observation")
     observation = LiveBoardObservation(
         kicad_version=kicad_version,

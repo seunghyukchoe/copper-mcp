@@ -384,6 +384,10 @@ class McpServerTests(unittest.TestCase):
                 "expect_session_revision",
             },
         )
+        self.assertEqual(
+            request_schema["properties"]["expect_session_revision"]["pattern"],
+            "^hmac-sha256:[0-9a-f]{64}$",
+        )
         assert live.annotations is not None
         self.assertIs(live.annotations.read_only_hint, True)
         self.assertIs(live.annotations.destructive_hint, False)

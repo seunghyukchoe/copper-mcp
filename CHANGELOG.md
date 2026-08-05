@@ -241,6 +241,12 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Replaced the public unkeyed `sha256(KICAD_API_TOKEN)` live-session fingerprint with the fixed
+  `hmac-sha256:<64 lowercase hex>` wire type. A fresh 256-bit process-local key and
+  domain-separated HMAC-SHA256 make this precondition opaque, use constant-time comparison at
+  the session CAS checks, and deliberately refuse preconditions from a fresh process/restart.
+  The token and process key remain absent from outputs, errors, logs, candidates, and ledgers.
+
 - Durable routing jobs now validate every immutable candidate-to-job completion binding and the
   exact `RUNNING` lifecycle revision before writing bounded, owner-bound candidate artifacts, then
   revalidate at the final lifecycle CAS. Invalid candidates, and direct queued, terminal,
