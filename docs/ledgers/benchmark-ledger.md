@@ -692,11 +692,11 @@ historical evidence; these runs were generated from the clean implementation com
 
 | Field | Recorded evidence |
 |---|---|
-| Run ID | `sha256:cc347454b154a73eeb73287b65fd3841c6340e5148947dfb009abaad5cc9a9e5` |
-| Date and commit | 2026-08-05; source commit `d0fbc09a86565d30c834e7b33c9245212e485a9c` |
+| Run ID | `sha256:96073306d5b6ca4c65730e90d7da91e4e28073f57527d065a878d3453ec76169` |
+| Date and commit | 2026-08-05; source commit `2d0172cf127522b73d5afa3c93bdcb49754038e5` |
 | Environment | Apple arm64 CPU; Python 3.12.13; KiCad 10.x headless CLI DRC |
 | Dataset | [`placement-legal.kicad_pcb`](../../tests/fixtures/placement-v0.1/placement-legal.kicad_pcb), the committed front-side orthogonal rectangular-courtyard placement fixture |
 | Configuration | `copper-mcp/benchmark/public-placement-preview-drc/v1`; three public `preview_placement` calls with `include_drc=true`, private disposable KiCad JSON DRC, candidate/source/patched-board/context binding, and source preservation checks |
-| Metrics | `passed_drc_runs=3`; `clean_drc_runs=0`; deterministic aggregate counts `{error_count:0, warning_count:0, exclusion_count:0, ignored_check_count:5, unconnected_count:0}`; deterministic evidence digests `1`; candidate/context binding `true`; source bytes/inode/mtime preserved `true`; workspace mutations `0`; median preview+DRC `690,878,042 ns` |
+| Metrics | `passed_drc_runs=3`; `clean_drc_runs=0`; deterministic aggregate counts `{error_count:0, warning_count:0, exclusion_count:0, ignored_check_count:5, unconnected_count:0}`; deterministic evidence digests `1`; candidate/context binding `true`; source bytes/inode/mtime preserved `true`; workspace mutations `0`; median preview+DRC `423,686,875 ns` |
 | Artifact | [`2026-08-05-public-placement-drc.json`](../../benchmarks/results/placement/2026-08-05-public-placement-drc.json) |
 | Interpretation | This measures the new public disclosure boundary and private replay, not a clean-board claim: hard-gate `passed` is distinct from strict `clean`, here because KiCad reports five ignored check classes. It does not establish general footprint fidelity, live editor CAS, apply, ERC/electrical correctness, fabrication readiness, hardware behavior, or FreeRouting parity. |
