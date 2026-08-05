@@ -285,7 +285,7 @@ class ServiceTests(unittest.TestCase):
         with (
             self.subTest("expired deadline"),
             patch("copper_mcp.placement_preview.evaluate_placement", return_value=baseline),
-            patch("copper_mcp.placement_preview.time.monotonic", side_effect=(0.0, 2.0)),
+            patch("copper_mcp.placement_preview.time.monotonic", side_effect=(0.0, 0.0, 2.0)),
             patch("copper_mcp.placement_preview.run_placement_candidate_drc") as runner,
         ):
             with self.assertRaisesRegex(PlacementPreviewError, "deadline expired"):
@@ -571,6 +571,32 @@ class LivePlacementTests(unittest.TestCase):
             deadline=101.0,
         )
         self.assertEqual(board_object.reads, 0)
+
+    def test_live_legalization_uses_only_the_capture_remaining_budget(self) -> None:
+        request, (factory, file_document, _board_object) = self._live()
+        source = (FIXTURES / "placement-legal.kicad_pcb").read_bytes()
+        baseline = preview_placement(_request("placement-legal.kicad_pcb"), _settings())
+        captured = SimpleNamespace(
+            observation=SimpleNamespace(board_digest=file_document["board_revision"]), source=source
+        )
+
+        with (
+            patch(
+                "copper_mcp.placement_preview.time.monotonic",
+                side_effect=(100.0, 100.25, 100.5),
+            ),
+            patch("copper_mcp.placement_preview.capture_live_board", return_value=captured),
+            patch(
+                "copper_mcp.placement_preview.evaluate_placement", return_value=baseline
+            ) as evaluate,
+        ):
+            preview_live_placement(
+                request,
+                _settings(max_placement_seconds=1),
+                client_factory=factory,
+            )
+
+        self.assertEqual(evaluate.call_args.kwargs["deadline_seconds"], 0.5)
 
     def test_live_result_survives_the_actual_mcp_boundary(self) -> None:
         request, (factory, _, _) = self._live()

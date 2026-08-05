@@ -84,10 +84,12 @@ def _preview_placement_source(
     settings: Settings,
     *,
     token_authority: ApplyTokenAuthority | None = None,
+    deadline: float | None = None,
 ) -> PlacementResult:
     """Run the deterministic placement pipeline over one already-bound source."""
 
-    deadline = time.monotonic() + float(settings.max_placement_seconds)
+    if deadline is None:
+        deadline = time.monotonic() + float(settings.max_placement_seconds)
 
     # A caller may bind a file-backed request to a previously observed revision as well as a
     # live request.  Honor that precondition before parsing so a stale request cannot echo its
@@ -160,12 +162,26 @@ def _preview_placement_source(
             ),
         )
 
+    remaining_seconds = deadline - time.monotonic()
+    if remaining_seconds <= 0:
+        return PlacementResult(
+            status="refused",
+            board_revision=board_revision,
+            board_path=relative_path,
+            request=intent,
+            snapshot_digest=snapshot.snapshot_digest,
+            diagnostic=PlacementDiagnostic(
+                code=PlacementFailureCode.BUDGET_EXHAUSTED,
+                message="placement preview deadline expired before legalization",
+            ),
+        )
+
     result = evaluate_placement(
         intent,
         snapshot,
         view,
         max_checks=settings.max_placement_checks,
-        deadline_seconds=float(settings.max_placement_seconds),
+        deadline_seconds=remaining_seconds,
         board_path=relative_path,
     )
     if result.status == "previewed" and result.candidate is not None and intent.include_drc:
@@ -298,6 +314,7 @@ def preview_live_placement(
         board_revision,
         settings,
         token_authority=None,
+        deadline=deadline,
     )
     if (
         intent.expect_snapshot_digest is not None
