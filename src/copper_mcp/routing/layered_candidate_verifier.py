@@ -239,6 +239,16 @@ def _segments_intersect(left: tuple[PointNM, PointNM], right: tuple[PointNM, Poi
     ) <= h_start.y <= max(v_start.y, v_end.y)
 
 
+def _point_on_segment(point: PointNM, start: PointNM, end: PointNM) -> bool:
+    """Return whether ``point`` lies on the closed axis-aligned segment ``start``-``end``."""
+
+    if start.y == end.y:
+        return point.y == start.y and min(start.x, end.x) <= point.x <= max(start.x, end.x)
+    if start.x == end.x:
+        return point.x == start.x and min(start.y, end.y) <= point.y <= max(start.y, end.y)
+    return False
+
+
 def _validate_candidate_budget(
     candidate: LayeredRouteCandidate, limits: LayeredCandidateVerificationLimits
 ) -> str | None:
@@ -660,6 +670,56 @@ def verify_layered_candidate(
             return _failure(
                 LayeredCandidateVerificationCode.VIA_DISCONTINUITY,
                 "via does not join adjacent path endpoints and layers",
+                candidate_id=candidate.candidate_id,
+                path_count=path_count,
+                vertex_count=vertex_count,
+                via_count=via_count,
+                pair_checks=pair_checks,
+            )
+        # A full-stack via drills a barrel through every layer of the stack, so copper crossing
+        # its centre on *any* layer is physically joined to it.  The chain model above describes
+        # exactly two such joins: the end of path ``via_index`` and the start of path
+        # ``via_index + 1``.  Any other contact is an unmodelled connection that would make the
+        # replayed chain a false description of the candidate's real topology.  On exactly two
+        # layers the same-layer intersection scan covered this implicitly; from three layers up it
+        # must be checked explicitly.
+        entry_edge = len(previous_path.vertices) - 2
+        for (
+            segment_layer,
+            segment_path_index,
+            segment_edge_index,
+            seg_start,
+            seg_end,
+        ) in all_segments:
+            del segment_layer
+            pair_checks += 1
+            if pair_checks > active_limits.max_pair_checks:
+                return _failure(
+                    LayeredCandidateVerificationCode.BUDGET_EXCEEDED,
+                    "route intersection checks exceed the verification budget",
+                    candidate_id=candidate.candidate_id,
+                    path_count=path_count,
+                    vertex_count=vertex_count,
+                    via_count=via_count,
+                    pair_checks=pair_checks,
+                )
+            if not _point_on_segment(via.center, seg_start, seg_end):
+                continue
+            joins_entry = (
+                segment_path_index == via_index
+                and segment_edge_index == entry_edge
+                and seg_end == via.center
+            )
+            joins_exit = (
+                segment_path_index == via_index + 1
+                and segment_edge_index == 0
+                and seg_start == via.center
+            )
+            if joins_entry or joins_exit:
+                continue
+            return _failure(
+                LayeredCandidateVerificationCode.DUPLICATE_GEOMETRY,
+                "route copper crosses a full-stack via barrel it does not terminate on",
                 candidate_id=candidate.candidate_id,
                 path_count=path_count,
                 vertex_count=vertex_count,

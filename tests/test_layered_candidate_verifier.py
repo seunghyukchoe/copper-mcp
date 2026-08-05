@@ -552,6 +552,77 @@ def test_accepts_a_legacy_two_layer_return_via_recorded_in_traversal_order() -> 
         replace(candidate.patch.vias[0], start_layer_id=B_CU, end_layer_id=B_CU)
 
 
+def test_rejects_route_copper_crossing_a_full_stack_via_barrel() -> None:
+    """A full-stack via drills every layer, so copper over its centre is joined to it.
+
+    The chain model describes exactly two joins per via: the end of the preceding path and the
+    start of the following one.  Any other contact is an unmodelled connection that makes the
+    replayed chain a false description of the real topology.  On two layers the same-layer
+    intersection scan covered this implicitly; from three layers up a track on a layer no other
+    path uses can run straight through a barrel unnoticed, so it is checked explicitly.
+    """
+
+    snapshot, candidate = _four_layer_candidate()
+    start = PointNM(10_000_000, 15_000_000)
+    end = PointNM(30_000_000, 15_000_000)
+    first = PointNM(17_000_000, 15_000_000)
+    second = PointNM(25_000_000, 15_000_000)
+    third = PointNM(21_000_000, 15_000_000)
+
+    def _via(index: int, center: PointNM):
+        return LayeredRouteVia(
+            id=f"via:layered:{index:04d}",
+            center=center,
+            diameter_nm=candidate.patch.via_diameter_nm,
+            drill_nm=candidate.patch.via_drill_nm,
+            start_layer_id=F_CU,
+            end_layer_id=B_CU,
+        )
+
+    # Every structural invariant the verifier checked before this fix holds: four paths for three
+    # vias, each via joining consecutive path endpoints across differing layers, canonical outer
+    # spans, and no same-layer overlap.  The only defect is three-dimensional: the In1.Cu path runs
+    # from x=17 to x=25 straight over via 2's barrel at x=21, and the returning F.Cu path runs over
+    # via 1's barrel at x=25.
+    crossing = _restamp(
+        candidate,
+        patch=replace(
+            candidate.patch,
+            paths=(
+                LayeredRoutePath(F_CU, (start, first)),
+                LayeredRoutePath(IN1_CU, (first, second)),
+                LayeredRoutePath(IN2_CU, (second, third)),
+                LayeredRoutePath(F_CU, (third, end)),
+            ),
+            vias=(_via(0, first), _via(1, second), _via(2, third)),
+        ),
+    )
+
+    result = verify_layered_candidate(crossing, snapshot)
+
+    assert not result.ok
+    assert result.diagnostic.code is LayeredCandidateVerificationCode.DUPLICATE_GEOMETRY
+    assert "barrel" in result.diagnostic.message
+
+    # Re-ordering the same three transitions so no path spans another via's centre restores a
+    # candidate the chain model describes exactly, proving the check rejects the crossing rather
+    # than the multilayer shape.
+    monotone = _restamp(
+        candidate,
+        patch=replace(
+            candidate.patch,
+            paths=(
+                LayeredRoutePath(F_CU, (start, first)),
+                LayeredRoutePath(IN1_CU, (first, third)),
+                LayeredRoutePath(IN2_CU, (third, second)),
+                LayeredRoutePath(F_CU, (second, end)),
+            ),
+            vias=(_via(0, first), _via(1, third), _via(2, second)),
+        ),
+    )
+    assert verify_layered_candidate(monotone, snapshot).ok
+
+
 def test_real_four_layer_fixture_verifies_and_keeps_full_stack_spans() -> None:
     """Prove the multilayer guards on real KiCad bytes, not a hand-built snapshot."""
 
