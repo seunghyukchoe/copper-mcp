@@ -23,6 +23,8 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -68,6 +70,7 @@ MAX_JAR_BYTES = 512 * 1024 * 1024
 MAX_EXECUTABLE_BYTES = 128 * 1024 * 1024
 MAX_BOARD_ITEMS = 100_000
 MAX_TRANSACTION_FILE_BYTES = MAX_DSN_BYTES
+MIN_PRIVATE_WORKSPACE_QUOTA_BYTES = MAX_BOARD_BYTES * 3 + MAX_DSN_BYTES * 2 + MAX_DRC_REPORT_BYTES
 FREEROUTING_RECEIPT_SCHEMA = "copper-mcp/freerouting-ses-import-receipt/v1"
 COPPER_RECEIPT_SCHEMA = "copper-mcp/candidate-runner-receipt/v1"
 FREEROUTING_TRANSACTION_SCHEMA = "copper-mcp/freerouting-kicad-transaction/v1"
@@ -99,6 +102,29 @@ class ProcessResult:
     status: str
     stdout: str
     stderr: str
+
+
+@dataclass(frozen=True, slots=True)
+class PrivateWorkspaceCapability:
+    """An internally supplied aggregate-quota workspace, never a caller path.
+
+    A platform-specific provider must create this directory and enforce ``quota_bytes`` for its
+    whole tree.  The harness verifies the local filesystem facts it can observe before every
+    transaction, but cannot turn an arbitrary directory into a quota boundary by inspection.
+    """
+
+    root: Path
+    quota_bytes: int
+
+
+def private_workspace_capability() -> PrivateWorkspaceCapability | None:
+    """Return a provider-created aggregate-quota root when a reviewed provider exists.
+
+    No provider is currently enabled.  Keeping this narrow seam explicit prevents a CLI caller
+    from supplying a convenient but unbounded workspace path as if it were containment.
+    """
+
+    return None
 
 
 def read_bounded_bytes(path: Path, maximum: int) -> bytes:
@@ -232,36 +258,108 @@ def minimal_environment(workspace: Path) -> dict[str, str]:
     }
 
 
-def aggregate_workspace_containment() -> dict[str, str]:
-    """Describe whether the host can enforce a private *aggregate* workspace quota.
+def _private_directory(path: Path, *, parent: Path | None = None) -> Path | None:
+    """Accept only a canonical, owned, non-symlink, owner-private directory."""
 
-    ``RLIMIT_FSIZE`` limits each child-created file but cannot bound the sum of multiple files.
-    This repository does not currently have a portable, unprivileged APFS/project-quota or Linux
-    mount/cgroup implementation that can prove the aggregate limit.  Refuse the harness-owned
-    transaction until such an operating-system boundary is available; a post-hoc directory-size
-    check would be detection, not containment.
+    try:
+        raw = path.absolute()
+        metadata = raw.lstat()
+        canonical = raw.resolve(strict=True)
+        resolved_metadata = canonical.lstat()
+        if (
+            raw != canonical
+            or not canonical.is_dir()
+            or metadata.st_ino != resolved_metadata.st_ino
+        ):
+            return None
+        if metadata.st_uid != os.getuid() or metadata.st_mode & 0o077:
+            return None
+        if parent is not None:
+            canonical_parent = parent.resolve(strict=True)
+            if canonical.parent != canonical_parent:
+                return None
+    except (OSError, RuntimeError):
+        return None
+    return canonical
+
+
+def verified_private_workspace_capability() -> tuple[
+    PrivateWorkspaceCapability | None, dict[str, str]
+]:
+    """Verify the exact root returned by the reviewed provider, or fail closed.
+
+    Filesystem metadata cannot prove an aggregate quota.  ``private_workspace_capability`` is
+    therefore the sole future platform-provider seam: it must create the root and vouch for the
+    quota, while this function prevents a symlink, shared, foreign-owned, or undersized directory
+    from reaching any child process.
     """
 
-    system = platform.system()
-    if system == "Darwin":
-        return {
-            "status": "unavailable",
-            "reason": (
-                "macOS legacy sandbox cannot yet run KiCad with both a finite write allowlist "
-                "and a verified runtime-read allowlist"
-            ),
-        }
-    if system == "Linux":
-        return {
-            "status": "unavailable",
-            "reason": (
+    capability = private_workspace_capability()
+    if not isinstance(capability, PrivateWorkspaceCapability):
+        system = platform.system()
+        if system == "Darwin":
+            reason = (
+                "macOS legacy sandbox cannot yet provide a quota-backed KiCad workspace with "
+                "a verified runtime-read allowlist"
+            )
+        elif system == "Linux":
+            reason = (
                 "no verified private tmpfs, mount-namespace, or cgroup quota provider is configured"
-            ),
-        }
-    return {
-        "status": "unavailable",
-        "reason": f"no verified aggregate private-workspace quota provider exists for {system}",
-    }
+            )
+        else:
+            reason = f"no verified aggregate private-workspace quota provider exists for {system}"
+        return None, {"status": "unavailable", "reason": reason}
+    if (
+        isinstance(capability.quota_bytes, bool)
+        or capability.quota_bytes < MIN_PRIVATE_WORKSPACE_QUOTA_BYTES
+    ):
+        return None, {"status": "unavailable", "reason": "provider workspace quota is insufficient"}
+    root = _private_directory(capability.root)
+    if root is None:
+        return None, {"status": "unavailable", "reason": "provider workspace root is invalid"}
+    return (
+        PrivateWorkspaceCapability(root=root, quota_bytes=capability.quota_bytes),
+        {"status": "available", "quota_bytes": str(capability.quota_bytes)},
+    )
+
+
+def aggregate_workspace_containment() -> dict[str, str]:
+    """Describe the current provider state without accepting a caller workspace."""
+
+    _, containment = verified_private_workspace_capability()
+    return containment
+
+
+def verified_workspace_capability_value(
+    capability: PrivateWorkspaceCapability,
+) -> tuple[PrivateWorkspaceCapability | None, dict[str, str]]:
+    """Revalidate an already-acquired internal capability before a launch boundary."""
+
+    if (
+        isinstance(capability.quota_bytes, bool)
+        or capability.quota_bytes < MIN_PRIVATE_WORKSPACE_QUOTA_BYTES
+    ):
+        return None, {"status": "unavailable", "reason": "provider workspace quota is insufficient"}
+    root = _private_directory(capability.root)
+    if root is None:
+        return None, {"status": "unavailable", "reason": "provider workspace root is invalid"}
+    return (
+        PrivateWorkspaceCapability(root=root, quota_bytes=capability.quota_bytes),
+        {"status": "available", "quota_bytes": str(capability.quota_bytes)},
+    )
+
+
+@contextmanager
+def private_transaction_workspace(capability: PrivateWorkspaceCapability) -> Iterator[Path]:
+    """Create one owner-private child inside a verified provider root."""
+
+    with tempfile.TemporaryDirectory(
+        prefix="copper-mcp-freerouting-", dir=capability.root
+    ) as directory:
+        workspace = _private_directory(Path(directory), parent=capability.root)
+        if workspace is None:
+            raise ValueError("provider transaction workspace is invalid")
+        yield workspace
 
 
 def _file_limit_preexec(limit_bytes: int) -> None:
@@ -596,6 +694,7 @@ def _harness_freerouting_transaction(
     timeout_seconds: int,
     source_sha256: str | None,
     cwd: Path,
+    workspace_capability: PrivateWorkspaceCapability | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """Causally bind private KiCad export, FreeRouting, KiCad import, and result DRC.
 
@@ -605,8 +704,12 @@ def _harness_freerouting_transaction(
     upgrade this transaction.
     """
 
-    containment = aggregate_workspace_containment()
-    if containment["status"] != "available":
+    capability, containment = (
+        verified_workspace_capability_value(workspace_capability)
+        if workspace_capability is not None
+        else verified_private_workspace_capability()
+    )
+    if capability is None or containment["status"] != "available":
         return {
             "schema": FREEROUTING_TRANSACTION_SCHEMA,
             "status": "unavailable",
@@ -614,93 +717,103 @@ def _harness_freerouting_transaction(
         }, None
     if source_sha256 is None:
         return {"schema": FREEROUTING_TRANSACTION_SCHEMA, "status": "unavailable"}, None
-    with tempfile.TemporaryDirectory(prefix="copper-mcp-freerouting-transaction-") as directory:
-        workspace = Path(directory)
-        private_source = workspace / "source.kicad_pcb"
-        private_hash = _private_copy(source, private_source)
-        record: dict[str, Any] = {
-            "schema": FREEROUTING_TRANSACTION_SCHEMA,
-            "source_sha256": source_sha256,
-            "source_copy_sha256": private_hash,
-            "status": "failed",
-        }
-        if private_hash != source_sha256:
-            return record, None
+    try:
+        workspace_context = private_transaction_workspace(capability)
+        with workspace_context as workspace:
+            private_source = workspace / "source.kicad_pcb"
+            private_hash = _private_copy(source, private_source)
+            record: dict[str, Any] = {
+                "schema": FREEROUTING_TRANSACTION_SCHEMA,
+                "source_sha256": source_sha256,
+                "source_copy_sha256": private_hash,
+                "status": "failed",
+            }
+            if private_hash != source_sha256:
+                return record, None
 
-        dsn = workspace / "source.dsn"
-        export = run_process(
-            kicad_specctra_argv(kicad_python, "export-dsn", private_source, dsn),
-            timeout_seconds,
-            workspace,
-            file_limit_bytes=MAX_DSN_BYTES,
-        )
-        dsn_sha256 = _validate_dsn(dsn) if export.status == "ok" else None
-        record["kicad_export"] = {
-            **process_record(export, "kicad_specctra_dsn_export"),
-            "dsn_sha256": dsn_sha256,
-            "dsn_status": "valid" if dsn_sha256 else "missing_or_invalid",
-        }
-        export_source_after = _hash_or_none(private_source, MAX_BOARD_BYTES)
-        record["kicad_export"]["source_copy_preserved"] = export_source_after == source_sha256
-        if dsn_sha256 is None or export_source_after != source_sha256:
-            return record, None
+            dsn = workspace / "source.dsn"
+            export = run_process(
+                kicad_specctra_argv(kicad_python, "export-dsn", private_source, dsn),
+                timeout_seconds,
+                workspace,
+                file_limit_bytes=MAX_DSN_BYTES,
+            )
+            dsn_sha256 = _validate_dsn(dsn) if export.status == "ok" else None
+            record["kicad_export"] = {
+                **process_record(export, "kicad_specctra_dsn_export"),
+                "dsn_sha256": dsn_sha256,
+                "dsn_status": "valid" if dsn_sha256 else "missing_or_invalid",
+            }
+            export_source_after = _hash_or_none(private_source, MAX_BOARD_BYTES)
+            record["kicad_export"]["source_copy_preserved"] = export_source_after == source_sha256
+            if dsn_sha256 is None or export_source_after != source_sha256:
+                return record, None
 
-        ses = workspace / "freerouting.ses"
-        router = run_process(
-            freerouting_argv(java, jar, dsn, ses),
-            timeout_seconds,
-            workspace,
-            file_limit_bytes=MAX_DSN_BYTES,
-        )
-        ses_sha256 = _validate_ses(ses) if router.status == "ok" else None
-        record["freerouting_process"] = {
-            **process_record(router, "freerouting_dsn_ses"),
-            "ses_sha256": ses_sha256,
-            "ses_status": "valid" if ses_sha256 else "missing_or_invalid",
-        }
-        if ses_sha256 is None:
-            return record, None
+            ses = workspace / "freerouting.ses"
+            router = run_process(
+                freerouting_argv(java, jar, dsn, ses),
+                timeout_seconds,
+                workspace,
+                file_limit_bytes=MAX_DSN_BYTES,
+            )
+            ses_sha256 = _validate_ses(ses) if router.status == "ok" else None
+            record["freerouting_process"] = {
+                **process_record(router, "freerouting_dsn_ses"),
+                "ses_sha256": ses_sha256,
+                "ses_status": "valid" if ses_sha256 else "missing_or_invalid",
+            }
+            if ses_sha256 is None:
+                return record, None
 
-        import_source = workspace / "import-source.kicad_pcb"
-        import_source_hash = _private_copy(source, import_source)
-        record["import_source_copy_sha256"] = import_source_hash
-        if import_source_hash != source_sha256:
-            return record, None
-        imported = workspace / "freerouting-imported.kicad_pcb"
-        imported_result = run_process(
-            kicad_specctra_argv(kicad_python, "import-ses", import_source, imported, ses=ses),
-            timeout_seconds,
-            workspace,
-            file_limit_bytes=MAX_BOARD_BYTES,
-        )
-        imported_sha256 = _hash_or_none(imported, MAX_BOARD_BYTES)
-        import_source_after = _hash_or_none(import_source, MAX_BOARD_BYTES)
-        record["kicad_import"] = {
-            **process_record(imported_result, "kicad_specctra_ses_import"),
-            "result_board_sha256": imported_sha256,
-            "result_status": "valid" if imported_sha256 else "missing_or_invalid",
-            "source_copy_preserved": import_source_after == source_sha256,
-        }
-        if (
-            imported_result.status != "ok"
-            or imported_sha256 is None
-            or import_source_after != source_sha256
-        ):
-            return record, None
+            import_source = workspace / "import-source.kicad_pcb"
+            import_source_hash = _private_copy(source, import_source)
+            record["import_source_copy_sha256"] = import_source_hash
+            if import_source_hash != source_sha256:
+                return record, None
+            imported = workspace / "freerouting-imported.kicad_pcb"
+            imported_result = run_process(
+                kicad_specctra_argv(kicad_python, "import-ses", import_source, imported, ses=ses),
+                timeout_seconds,
+                workspace,
+                file_limit_bytes=MAX_BOARD_BYTES,
+            )
+            imported_sha256 = _hash_or_none(imported, MAX_BOARD_BYTES)
+            import_source_after = _hash_or_none(import_source, MAX_BOARD_BYTES)
+            record["kicad_import"] = {
+                **process_record(imported_result, "kicad_specctra_ses_import"),
+                "result_board_sha256": imported_sha256,
+                "result_status": "valid" if imported_sha256 else "missing_or_invalid",
+                "source_copy_preserved": import_source_after == source_sha256,
+            }
+            if (
+                imported_result.status != "ok"
+                or imported_sha256 is None
+                or import_source_after != source_sha256
+            ):
+                return record, None
 
-        metrics = _result_for_board(
-            "freerouting",
-            imported,
-            kicad_cli,
-            timeout_seconds,
-            workspace,
-            router.elapsed_ns,
-        )
-        if metrics.get("drc", {}).get("status") != "ok":
-            record["drc_status"] = metrics.get("drc", {}).get("status", "unavailable")
+            metrics = _result_for_board(
+                "freerouting",
+                imported,
+                kicad_cli,
+                timeout_seconds,
+                workspace,
+                router.elapsed_ns,
+            )
+            if metrics.get("drc", {}).get("status") != "ok":
+                record["drc_status"] = metrics.get("drc", {}).get("status", "unavailable")
+                return record, metrics
+            record["status"] = "bound"
             return record, metrics
-        record["status"] = "bound"
-        return record, metrics
+    except ValueError:
+        return {
+            "schema": FREEROUTING_TRANSACTION_SCHEMA,
+            "status": "unavailable",
+            "containment": {
+                "status": "unavailable",
+                "reason": "provider workspace root is invalid",
+            },
+        }, None
 
 
 def _binding_status(
@@ -737,6 +850,7 @@ def preflight(
     release_provenance: Path | None = None,
     kicad_python: Path | None = None,
     harness_transaction: bool = False,
+    containment: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Return all prerequisite failures in one truthful, serializable record."""
 
@@ -759,8 +873,13 @@ def preflight(
     _, release_status = freerouting_release_provenance(release_provenance, jar)
     if release_status not in {"unavailable", "verified"}:
         reasons.append("FreeRouting release provenance is invalid or does not match its JAR")
-    if harness_transaction and aggregate_workspace_containment()["status"] != "available":
+    containment = containment if containment is not None else aggregate_workspace_containment()
+    if harness_transaction and containment["status"] != "available":
         reasons.append("aggregate private-workspace quota is unavailable")
+    # A refused harness transaction must not probe Java or KiCad: version probes are subprocesses
+    # too, and a preflight boundary is meaningful only before every executable launch seam.
+    if harness_transaction and containment["status"] != "available":
+        return {"available": False, "reasons": reasons, "probes": {}}
     probes: dict[str, Any] = {}
     if java is not None and java.is_file() and java.stat().st_size <= MAX_EXECUTABLE_BYTES:
         probes["java"] = version_probe(java, cwd)
@@ -1093,6 +1212,26 @@ def _result_for_board(
     return metrics
 
 
+def private_source_drc_metrics(
+    capability: PrivateWorkspaceCapability,
+    kicad_cli: Path,
+    source: Path,
+    timeout_seconds: int,
+) -> dict[str, Any]:
+    """Run source DRC only on a private copy inside the provider-owned boundary."""
+
+    try:
+        with private_transaction_workspace(capability) as workspace:
+            private_source = workspace / "source-drc.kicad_pcb"
+            if _private_copy(source, private_source) is None:
+                return {"status": "unavailable", "reason": "source board is unavailable"}
+            return drc_metrics(
+                kicad_cli, private_source, timeout_seconds, workspace, role="kicad_source_drc"
+            )
+    except ValueError:
+        return {"status": "unavailable", "reason": "provider workspace root is invalid"}
+
+
 def build_report(
     *,
     source: Path,
@@ -1117,6 +1256,7 @@ def build_report(
 ) -> dict[str, Any]:
     """Run available bounded stages and return content-addressed evidence; never mutate source."""
 
+    workspace_capability, containment = verified_private_workspace_capability()
     gate = preflight(
         source=source,
         dsn=dsn,
@@ -1128,6 +1268,7 @@ def build_report(
         release_provenance=release_provenance,
         kicad_python=kicad_python,
         harness_transaction=kicad_python is not None,
+        containment=containment,
     )
     source_before = _hash_or_none(source, MAX_BOARD_BYTES)
     fixture, _ = _provenance(provenance)
@@ -1176,13 +1317,19 @@ def build_report(
             ),
         },
     }
+    harness_requested = kicad_python is not None
+    containment_refused = harness_requested and workspace_capability is None
     source_drc = (
         gui_source_drc_metrics(source, source_drc_report)
         if source_drc_report is not None
         else (
-            drc_metrics(kicad_cli, source, timeout_seconds, ROOT, role="kicad_source_drc")
-            if kicad_cli is not None
-            else {"status": "unavailable"}
+            private_source_drc_metrics(workspace_capability, kicad_cli, source, timeout_seconds)
+            if harness_requested and workspace_capability is not None and kicad_cli is not None
+            else (
+                {"status": "unavailable", "reason": "private workspace containment is unavailable"}
+                if containment_refused
+                else drc_metrics(kicad_cli, source, timeout_seconds, ROOT, role="kicad_source_drc")
+            )
         )
     )
     report["source_drc"] = source_drc
@@ -1205,6 +1352,7 @@ def build_report(
             timeout_seconds=timeout_seconds,
             source_sha256=source_before,
             cwd=ROOT,
+            workspace_capability=workspace_capability,
         )
         report["freerouting_transaction"] = transaction
         export_record = transaction.get("kicad_export")
@@ -1265,8 +1413,13 @@ def build_report(
     generated_copper: Path | None = copper_board
     copper_output_sha256: str | None = None
     report["copper_process"] = {"status": "unavailable", "reason": "runner was not supplied"}
-    if copper_command is not None and source_before is not None:
-        with tempfile.TemporaryDirectory(prefix="copper-mcp-copper-runner-") as directory:
+    if copper_command is not None and source_before is not None and not containment_refused:
+        workspace_context = (
+            private_transaction_workspace(workspace_capability)
+            if harness_requested and workspace_capability is not None
+            else tempfile.TemporaryDirectory(prefix="copper-mcp-copper-runner-")
+        )
+        with workspace_context as directory:
             workspace = Path(directory)
             private_source = workspace / source.name
             private_source.write_bytes(read_bounded_bytes(source, MAX_BOARD_BYTES))
@@ -1289,6 +1442,11 @@ def build_report(
                     report["copper_process"]["output_status"] = "valid"
             elif copper_process.status == "ok":
                 report["copper_process"]["output_status"] = "missing_or_invalid"
+    elif containment_refused:
+        report["copper_process"] = {
+            "status": "unavailable",
+            "reason": "private workspace containment is unavailable",
+        }
     copper_binding = (
         _binding_status(
             copper_run_receipt,
@@ -1301,13 +1459,15 @@ def build_report(
         else copper_receipt_status
     )
     report["copper_runner_binding"] = {"status": copper_binding}
+    result_kicad_cli = None if containment_refused else kicad_cli
+    result_cwd = workspace_capability.root if harness_requested and workspace_capability else ROOT
     report["results"] = [
         _result_for_board(
             "copper_mcp",
             generated_copper,
-            kicad_cli,
+            result_kicad_cli,
             timeout_seconds,
-            ROOT,
+            result_cwd,
             copper_elapsed,
             copper_drc_report,
         ),
@@ -1316,9 +1476,9 @@ def build_report(
         else _result_for_board(
             "freerouting",
             freerouting_board,
-            kicad_cli,
+            result_kicad_cli,
             timeout_seconds,
-            ROOT,
+            result_cwd,
             freerouting_process.elapsed_ns if freerouting_process else 0,
             freerouting_drc_report,
         ),

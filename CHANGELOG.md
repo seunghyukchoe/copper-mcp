@@ -16,6 +16,13 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Hardened the optional harness-owned KiCad/FreeRouting transaction behind an internal
+  provider-created aggregate-quota workspace capability. The harness validates canonical
+  owner-private, non-symlink roots; keeps temporary directories and child `cwd`/`HOME`/`TMPDIR`
+  inside that boundary; and refuses before Java/KiCad probes, DRC, export, routing, import, or the
+  optional runner when no provider is available. No provider is enabled on current macOS or Linux,
+  so this adds no sandbox, parity, performance, or comparison-closure claim.
+
 - Added a read-only live KiCad IPC fidelity oracle. When launched by a KiCad plugin with the
   instance socket and token, it binds one confirmed live serialization to Board IR and Circuit
   Scene through redacted digest equality evidence. Missing plugin credentials produce a canonical
