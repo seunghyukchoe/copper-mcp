@@ -24,7 +24,7 @@
       "expected_disposition": "contained"
     },
     {
-      "id": "data-exfiltration-or-log-leakage",
+      "id": "data-exfiltration-output-report",
       "expected_disposition": "contained"
     },
     {

@@ -29,6 +29,15 @@ def test_agency_evaluation_runs_all_predeclared_cases_without_disclosure() -> No
         "board_mutation": "not_invoked",
         "workspace": "temporary-and-unchanged",
     }
+    assert report["handler_coverage"] == {
+        "apply_candidate": "structured_invalid_token_before_source_access",
+        "apply_placement_candidate": "structured_invalid_token_before_source_access",
+    }
+    assert report["workspace_integrity"] == {
+        "content": "unchanged",
+        "mode": "unchanged",
+        "metadata": "unchanged",
+    }
     assert report["counts"] == {
         "attempted": 7,
         "blocked": 7,
@@ -42,7 +51,7 @@ def test_agency_evaluation_runs_all_predeclared_cases_without_disclosure() -> No
         "apply-without-capability",
         "stale-revision",
         "resource-exhaustion",
-        "data-exfiltration-or-log-leakage",
+        "data-exfiltration-output-report",
         "cross-tool-capability-chaining",
     }
     assert CANARY not in json.dumps(report, ensure_ascii=False, sort_keys=True)

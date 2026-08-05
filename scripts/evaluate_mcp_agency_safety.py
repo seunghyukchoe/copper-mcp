@@ -17,6 +17,7 @@ import importlib
 import json
 import os
 import shutil
+import stat
 import tempfile
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -39,7 +40,7 @@ os.environ["COPPER_MCP_WORKSPACE"] = str(ROOT)
 
 mcp_server = importlib.import_module("copper_mcp.mcp_server")
 
-from copper_mcp.apply.tokens import ApplyBinding, ApplyTokenAuthority, ApplyTokenError  # noqa: E402
+from copper_mcp.apply.tokens import ApplyBinding, ApplyTokenAuthority  # noqa: E402
 from copper_mcp.config import Settings  # noqa: E402
 
 EVALUATION_SCHEMA = "copper-mcp/security-evaluation/mcp-agency/v1"
@@ -132,11 +133,60 @@ def _scene_request(*, include_annotations: bool = False) -> dict[str, Any]:
     }
 
 
-def _workspace_state(root: Path) -> dict[str, str]:
+def _file_type(mode: int) -> str:
+    if stat.S_ISREG(mode):
+        return "regular"
+    if stat.S_ISDIR(mode):
+        return "directory"
+    if stat.S_ISLNK(mode):
+        return "symlink"
+    if stat.S_ISFIFO(mode):
+        return "fifo"
+    if stat.S_ISCHR(mode):
+        return "character-device"
+    if stat.S_ISBLK(mode):
+        return "block-device"
+    if stat.S_ISSOCK(mode):
+        return "socket"
+    return "other"
+
+
+def _workspace_snapshot(root: Path) -> dict[str, dict[str, object]]:
+    """Capture same-run workspace integrity metadata without exposing it in the report."""
+
+    result: dict[str, dict[str, object]] = {}
+    for path in sorted(root.rglob("*")):
+        relative_path = path.relative_to(root).as_posix()
+        metadata = path.lstat()
+        file_type = _file_type(metadata.st_mode)
+        is_symlink = file_type == "symlink"
+        entry: dict[str, object] = {
+            "file_type": file_type,
+            "is_symlink": is_symlink,
+            "mode": stat.S_IMODE(metadata.st_mode),
+            "size": metadata.st_size,
+            "mtime_ns": metadata.st_mtime_ns,
+            "inode": metadata.st_ino,
+        }
+        if file_type == "regular":
+            entry["content_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        elif is_symlink:
+            entry["symlink_target"] = path.readlink().as_posix()
+        result[relative_path] = entry
+    return result
+
+
+def _assert_workspace_unchanged(
+    before: Mapping[str, Mapping[str, object]], after: Mapping[str, Mapping[str, object]]
+) -> dict[str, str]:
+    """Reject content, permission, or metadata changes without serializing private paths."""
+
+    if before != after:
+        raise EvaluationError("evaluation changed temporary workspace content, mode, or metadata")
     return {
-        path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in sorted(root.rglob("*"))
-        if path.is_file()
+        "content": "unchanged",
+        "mode": "unchanged",
+        "metadata": "unchanged",
     }
 
 
@@ -166,6 +216,26 @@ def _expect_tool_refusal(name: str, arguments: dict[str, Any], canary: str) -> N
     raise EvaluationError(f"{name} accepted a forbidden model-supplied field")
 
 
+def _expect_structured_refusal(
+    name: str,
+    arguments: dict[str, Any],
+    *,
+    code: str,
+    canary: str,
+) -> dict[str, Any]:
+    """Require a public MCP handler to return one non-echoing typed refusal."""
+
+    document = asyncio.run(_call_tool(name, arguments))
+    diagnostic = document.get("diagnostic")
+    if document.get("status") != "refused" or not isinstance(diagnostic, dict):
+        raise EvaluationError(f"{name} did not return a structured refusal")
+    if diagnostic.get("code") != code:
+        raise EvaluationError(f"{name} returned an unexpected refusal code")
+    if canary in json.dumps(document, ensure_ascii=False, sort_keys=True):
+        raise EvaluationError("structured refusal echoed untrusted input")
+    return document
+
+
 def _assert_canary_quarantined(document: Mapping[str, Any], canary: str) -> None:
     redacted = dict(document)
     annotations = redacted.pop("annotations", None)
@@ -192,7 +262,9 @@ def _case(case_id: str, disposition: str, boundary: str, assertion: str) -> dict
     }
 
 
-def _run_cases(catalog: Mapping[str, Any], *, canary: str) -> list[dict[str, str]]:
+def _run_cases(
+    catalog: Mapping[str, Any], *, canary: str
+) -> tuple[list[dict[str, str]], dict[str, str]]:
     declared = catalog.get("cases")
     if not isinstance(declared, list) or len(declared) != 7:
         raise EvaluationError("evaluation catalog must declare exactly seven threat cases")
@@ -211,7 +283,7 @@ def _run_cases(catalog: Mapping[str, Any], *, canary: str) -> list[dict[str, str
         "apply-without-capability",
         "stale-revision",
         "resource-exhaustion",
-        "data-exfiltration-or-log-leakage",
+        "data-exfiltration-output-report",
         "cross-tool-capability-chaining",
     }
     if set(expected) != expected_ids:
@@ -223,8 +295,9 @@ def _run_cases(catalog: Mapping[str, Any], *, canary: str) -> list[dict[str, str
         raise EvaluationError("hostile model-input fixtures must carry the declared canary")
 
     with _workspace() as workspace:
-        before = _workspace_state(workspace)
+        before = _workspace_snapshot(workspace)
         settings = Settings(workspace=workspace)
+        mutation_enabled = replace(settings, allow_apply=True)
         cases: list[dict[str, str]] = []
         with patch.object(mcp_server, "_SETTINGS", settings):
             scene = asyncio.run(
@@ -265,19 +338,71 @@ def _run_cases(catalog: Mapping[str, Any], *, canary: str) -> list[dict[str, str
             candidate = preview.get("candidate")
             if preview.get("status") != "routed" or not isinstance(candidate, dict):
                 raise EvaluationError("baseline route preview did not produce a candidate")
-            missing_token_apply = {
+            route_binding = ApplyBinding(
+                candidate_id=str(candidate["candidate_id"]),
+                base_revision=str(candidate["base_revision"]),
+                board_revision=str(preview["board_revision"]),
+                relative_path=ROUTE_FIXTURE.name,
+                operation="route",
+            )
+            # The token has valid syntax and binding fields, but its MAC comes from a different
+            # authority.  The public handler must reject it before reading or mutating the board.
+            foreign_authority = ApplyTokenAuthority()
+            unauthorized_token = foreign_authority.issue(route_binding)
+            unauthorized_apply = {
                 "board": ROUTE_FIXTURE.name,
                 "candidate": candidate,
+                "apply_token": unauthorized_token,
                 "expect_board_revision": preview["board_revision"],
                 "constraints": dict(_CONSTRAINTS),
             }
-            _expect_tool_refusal("apply_candidate", {"request": missing_token_apply}, canary)
+        with patch.object(mcp_server, "_SETTINGS", mutation_enabled):
+            _expect_structured_refusal(
+                "apply_candidate",
+                {"request": unauthorized_apply},
+                code="invalid_token",
+                canary=canary,
+            )
+        with patch.object(mcp_server, "_SETTINGS", settings):
+            placement_preview = asyncio.run(
+                _call_tool("preview_placement", {"request": _placement_request()})
+            )
+        placement_candidate = placement_preview.get("candidate")
+        if placement_preview.get("status") != "previewed" or not isinstance(
+            placement_candidate, dict
+        ):
+            raise EvaluationError("baseline placement preview did not produce a candidate")
+        route_domain_placement_token = mcp_server._APPLY_TOKENS.issue(
+            ApplyBinding(
+                candidate_id=str(placement_candidate["candidate_id"]),
+                base_revision=str(placement_candidate["base_revision"]),
+                board_revision=str(placement_preview["board_revision"]),
+                relative_path=PLACEMENT_FIXTURE.name,
+                operation="route",
+            )
+        )
+        placement_apply = {
+            "board": PLACEMENT_FIXTURE.name,
+            "candidate": placement_candidate,
+            "apply_token": route_domain_placement_token,
+            "expect_board_revision": placement_preview["board_revision"],
+            "constraints": dict(_SCENE_CONSTRAINTS),
+        }
+        with patch.object(mcp_server, "_SETTINGS", mutation_enabled):
+            _expect_structured_refusal(
+                "apply_placement_candidate",
+                {"request": placement_apply},
+                code="invalid_token",
+                canary=canary,
+            )
+        with patch.object(mcp_server, "_SETTINGS", settings):
             cases.append(
                 _case(
                     "apply-without-capability",
                     "refused",
                     "route apply authorization boundary",
-                    "destructive apply rejects a request missing its separate capability",
+                    "apply_candidate handler refuses a syntactically valid foreign-token request "
+                    "before source access or mutation",
                 )
             )
 
@@ -339,42 +464,26 @@ def _run_cases(catalog: Mapping[str, Any], *, canary: str) -> list[dict[str, str
             raise EvaluationError("default inspection disclosed hostile board text")
         cases.append(
             _case(
-                "data-exfiltration-or-log-leakage",
+                "data-exfiltration-output-report",
                 "contained",
-                "default inspection disclosure policy",
+                "default inspection and evaluation-report disclosure policy",
                 "default scene output excludes board-author text and the report records no "
-                "payloads",
+                "payloads; application logging is not evaluated because this boundary has no "
+                "application logger sink",
             )
         )
 
-        authority = ApplyTokenAuthority()
-        route_binding = ApplyBinding(
-            candidate_id="sha256:" + "a" * 64,
-            base_revision="sha256:" + "b" * 64,
-            board_revision="sha256:" + "c" * 64,
-            relative_path=ROUTE_FIXTURE.name,
-            operation="route",
-        )
-        placement_binding = replace(route_binding, operation="placement")
-        token = authority.issue(route_binding)
-        try:
-            authority.verify(token, placement_binding)
-        except ApplyTokenError as error:
-            if error.code != "invalid_token":
-                raise EvaluationError("cross-tool token refusal used an unexpected code") from error
-        else:
-            raise EvaluationError("route token authorized a placement operation")
         cases.append(
             _case(
                 "cross-tool-capability-chaining",
                 "refused",
-                "operation-domain apply token binding",
-                "a route token cannot authorize placement mutation",
+                "public apply_placement_candidate operation-domain boundary",
+                "apply_placement_candidate handler refuses a route-domain token bound to the "
+                "same placement board and candidate fields before source access or mutation",
             )
         )
 
-        if _workspace_state(workspace) != before:
-            raise EvaluationError("evaluation mutated its temporary board workspace")
+        workspace_integrity = _assert_workspace_unchanged(before, _workspace_snapshot(workspace))
 
     by_id = {case["id"]: case for case in cases}
     if set(by_id) != expected_ids:
@@ -382,7 +491,7 @@ def _run_cases(catalog: Mapping[str, Any], *, canary: str) -> list[dict[str, str
     for case_id, expected_disposition in expected.items():
         if by_id[case_id]["disposition"] != expected_disposition:
             raise EvaluationError("evaluation disposition diverged from predeclared expectation")
-    return cases
+    return cases, workspace_integrity
 
 
 def build_report(*, evidence_harness_commit: str) -> dict[str, Any]:
@@ -398,7 +507,7 @@ def build_report(*, evidence_harness_commit: str) -> dict[str, Any]:
         raise EvaluationError("evaluation fixture identifier is malformed")
     if not isinstance(canary, str) or not canary:
         raise EvaluationError("evaluation canary is malformed")
-    cases = _run_cases(catalog, canary=canary)
+    cases, workspace_integrity = _run_cases(catalog, canary=canary)
     refused = sum(case["disposition"] == "refused" for case in cases)
     contained = sum(case["disposition"] == "contained" for case in cases)
     report: dict[str, Any] = {
@@ -422,6 +531,11 @@ def build_report(*, evidence_harness_commit: str) -> dict[str, Any]:
             "board_mutation": "not_invoked",
             "workspace": "temporary-and-unchanged",
         },
+        "handler_coverage": {
+            "apply_candidate": "structured_invalid_token_before_source_access",
+            "apply_placement_candidate": "structured_invalid_token_before_source_access",
+        },
+        "workspace_integrity": workspace_integrity,
         "counts": {
             "attempted": len(cases),
             "blocked": len(cases),
@@ -433,7 +547,8 @@ def build_report(*, evidence_harness_commit: str) -> dict[str, Any]:
         "claim": {
             "classification": "boundary-regression/pass",
             "quality_claim": False,
-            "scope": "offline MCP input, disclosure, revision, quota, and capability boundaries",
+            "scope": "offline MCP input, output/report disclosure, revision, quota, and "
+            "capability boundaries",
         },
     }
     report["run_id"] = _digest(report)

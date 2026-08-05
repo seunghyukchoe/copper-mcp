@@ -239,6 +239,14 @@ All notable changes are documented here. The format follows
 
 ### Security
 
+- Added a deterministic offline MCP excessive-agency regression evaluation. With apply enabled it
+  calls the public route and placement apply handlers using syntactically valid but unauthorized
+  tokens, requiring structured `invalid_token` before source access; it also covers closed
+  request schemas, stale revision, quotas, and output/report disclosure. The disposable workspace
+  comparison includes content, permissions, and metadata but the artifact records only stable
+  unchanged assertions. It invokes no model, network, KiCad process, or board mutation, and does
+  not evaluate application logging because the current source has no application logger sink.
+
 - `make security` and the hosted security workflow now pass `.` to `pip-audit`, resolving the
   default production dependency graph instead of reporting unrelated packages installed in the
   ambient interpreter. Project-path mode excludes every optional group (`dev`, `security`, and
