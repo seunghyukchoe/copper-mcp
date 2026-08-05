@@ -118,6 +118,13 @@ documentation, ledger updates, and benchmark evidence.
     deterministic budgets, delivered as an internal oracle only. Board IR binding, physical
     clearance/via legality, KiCad serialization, and DRC remain required before this becomes a
     routing capability.
+  - [x] Internal Board-IR ordered-stack proposal seam for two through eight all-signal copper
+    layers: deterministic full-stack-through-via transitions, layer-scoped track/via keepouts,
+    stack/via/search budgets, topology replay, and a committed three-layer completion oracle
+    (B-076). Omitted via policy preserves the historical two-layer behavior while 3..8 layers
+    receive a deterministic 64-via effective cap. File, live, and durable public entry points
+    explicitly reject non-two-layer stacks; generalized serialization, DRC, refill, and apply
+    remain explicit promotion gates.
   - [x] Public, file-backed `preview_layered_route` MCP proposal with pad-reference net inference,
     double CAS, closed structured output, candidate-only full-stack vias, and explicit opt-in
     candidate-bound authoritative DRC evidence. This remains a read-only two-signal-layer surface;
@@ -128,16 +135,17 @@ documentation, ledger updates, and benchmark evidence.
   - [x] Structural candidate verification and endpoint-via avoidance now gate the internal
     serializer; exact padstack treatment, edge/hole clearance, refill, and fabrication evidence
     remain open.
-- [~] Board IR-bound two-layer proposal adapter: exact grid attachment, conservative foreign
+- [~] Board IR-bound ordered-layer proposal adapter (currently two through eight all-signal
+  layers): exact grid attachment, conservative foreign
   copper/zone/pad envelopes, separate track/via keepouts, immutable candidate digests, and
   fail-closed stale/off-grid/unsupported diagnostics are benchmarked in B-018. Source-preserving
   segment/via serialization and Board IR replay are covered by an internal disposable serializer;
   B-020 now binds that exact replay to private authoritative KiCad DRC, and B-024 exposes a
   separate read-only candidate preview through MCP. A bounded topology verifier now gates the
   serializer and refuses endpoint-via geometry; exact padstack/clearance, durable export,
-  multilayer generalization, and apply authority remain open gates. B-032 now covers the narrow
+  generalized KiCad serialization/DRC, and apply authority remain open gates. B-032 now covers the narrow
   public file-backed DRC evidence binding.
-  - [x] Candidate topology gate: revision/endpoint binding, path-via adjacency, two-layer
+  - [x] Candidate topology gate: revision/endpoint binding, path-via adjacency, ordered-stack
     full-stack transitions, duplicate/crossing rejection, bounded pair checks, and explicit
     physical-validation non-claim.
 - [x] Attachment to existing same-net copper and bounded partial-route completion.

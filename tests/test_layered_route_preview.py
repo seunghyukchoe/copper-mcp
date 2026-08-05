@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -8,7 +9,7 @@ import pytest
 
 import copper_mcp.layered_route_preview as layered_preview
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
-from copper_mcp.board_ir import NetClass
+from copper_mcp.board_ir import Layer, NetClass, make_snapshot
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import KiCadCliError, LayeredRouteCandidateDrcEvidence
 from copper_mcp.layered_route_preview import (
@@ -101,6 +102,41 @@ def test_routed_result_is_deterministic_and_contains_only_canonical_geometry(
     assert isinstance(patch, dict)
     assert patch["paths"]
     assert "net:name:" not in repr(first["diagnostic"])
+
+
+def test_file_preview_refuses_internal_three_layer_router_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    board, settings, start, end, _ = _workspace(tmp_path)
+    board_revision = f"sha256:{hashlib.sha256(board.read_bytes()).hexdigest()}"
+    profile = KiCadConstraintProfile(net_classes=(DEFAULT,), default_net_class_id=DEFAULT.id)
+    conversion = parse_kicad_bytes(board.read_bytes(), profile)
+    assert conversion.snapshot is not None
+    snapshot = conversion.snapshot
+    front, back = snapshot.content.copper_layers
+    internal_snapshot = make_snapshot(
+        replace(
+            snapshot.content,
+            copper_layers=(
+                front,
+                Layer(id="layer:In1.Cu", name="In1.Cu", index=1),
+                replace(back, index=2),
+            ),
+        )
+    )
+    monkeypatch.setattr(
+        layered_preview,
+        "parse_kicad_bytes",
+        lambda *_args, **_kwargs: replace(conversion, snapshot=internal_snapshot),
+    )
+
+    result = preview_layered_route(
+        _request(board, start, end, board_revision, internal_snapshot.snapshot_digest), settings
+    )
+
+    assert result["status"] == "unsupported_board"
+    assert result["candidate"] is None
+    assert result["diagnostic"]["code"] == "unsupported_geometry"  # type: ignore[index]
 
 
 def test_include_drc_returns_candidate_bound_aggregate_evidence(

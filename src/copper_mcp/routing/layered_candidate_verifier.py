@@ -23,6 +23,7 @@ from math import isqrt
 from typing import Final
 
 from copper_mcp.board_ir import BoardIRSnapshot, Pad, PointNM, verify_snapshot
+from copper_mcp.routing.layered_astar import effective_max_vias
 from copper_mcp.routing.layered_contracts import LayeredRouteCandidate, verify_layered_candidate_id
 
 _MAX_SAFE_INT: Final = (1 << 53) - 1
@@ -248,6 +249,12 @@ def _validate_candidate_budget(
     ):
         if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
             return f"{name} exceeds the finite layered budget"
+    if settings.max_vias is not None and (
+        isinstance(settings.max_vias, bool)
+        or not isinstance(settings.max_vias, int)
+        or not 0 <= settings.max_vias <= 256
+    ):
+        return "via budget exceeds the finite layered budget"
     if len(candidate.patch.paths) > limits.max_paths:
         return "candidate path count exceeds the verification budget"
     if len(candidate.patch.vias) > limits.max_vias:
@@ -439,10 +446,9 @@ def verify_layered_candidate(
             vertex_count=vertex_count,
             via_count=via_count,
         )
-    layer_ids = {layer.id for layer in snapshot.content.copper_layers}
-    signal_layer_ids = {
-        layer.id for layer in snapshot.content.copper_layers if layer.kind == "signal"
-    }
+    ordered_layers = tuple(sorted(snapshot.content.copper_layers, key=lambda layer: layer.index))
+    layer_ids = {layer.id for layer in ordered_layers}
+    signal_layer_ids = {layer.id for layer in ordered_layers if layer.kind == "signal"}
     if not layer_ids or not signal_layer_ids:
         return _failure(
             LayeredCandidateVerificationCode.LAYER_MISMATCH,
@@ -452,10 +458,20 @@ def verify_layered_candidate(
             vertex_count=vertex_count,
             via_count=via_count,
         )
-    if len(signal_layer_ids) != 2:
+    if not 2 <= len(ordered_layers) <= 8 or len(signal_layer_ids) != len(ordered_layers):
         return _failure(
             LayeredCandidateVerificationCode.LAYER_MISMATCH,
-            "layered candidate verification requires exactly two signal layers",
+            "layered candidate verification requires two through eight ordered signal layers",
+            candidate_id=candidate.candidate_id,
+            path_count=path_count,
+            vertex_count=vertex_count,
+            via_count=via_count,
+        )
+    via_limit = effective_max_vias(candidate.settings, len(ordered_layers))
+    if via_limit is not None and via_count > via_limit:
+        return _failure(
+            LayeredCandidateVerificationCode.BUDGET_EXCEEDED,
+            "candidate via count exceeds its effective routing budget",
             candidate_id=candidate.candidate_id,
             path_count=path_count,
             vertex_count=vertex_count,
@@ -621,12 +637,14 @@ def verify_layered_candidate(
         previous_path = candidate.patch.paths[via_index]
         next_path = candidate.patch.paths[via_index + 1]
         if (
-            via.start_layer_id != previous_path.layer_id
-            or via.end_layer_id != next_path.layer_id
-            or via.start_layer_id == via.end_layer_id
+            via.start_layer_id == via.end_layer_id
             or via.center != previous_path.vertices[-1]
             or via.center != next_path.vertices[0]
-            or {via.start_layer_id, via.end_layer_id} != signal_layer_ids
+            # Board IR v0.2 has only full-stack vias.  A route may transition between any two
+            # signal layers, but the via record must state the canonical outer stack span.
+            or via.start_layer_id != ordered_layers[0].id
+            or via.end_layer_id != ordered_layers[-1].id
+            or previous_path.layer_id == next_path.layer_id
         ):
             return _failure(
                 LayeredCandidateVerificationCode.VIA_DISCONTINUITY,

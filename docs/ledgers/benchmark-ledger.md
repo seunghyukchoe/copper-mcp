@@ -1034,3 +1034,21 @@ are the audit copies for the original run IDs.
 | Metric preservation | The regenerated three-replay signature remains `29b28fbab5baa7f8df04a958d21c90dbcd0ac53b1344f18d69156da5e7304bdd`: 6/6 routed nets, `205,000,000 nm` total wire length, 8 legal placement candidates after 96 evaluations, and zero internal routing violations. |
 | Replay guard | The detached clean-worktree regression now proves, using only local Git ancestry, that the artifact source is an ancestor of the checkout before cloning or checkout. It does not fetch, skip, xfail, or relax the clean-source byte replay. |
 | Interpretation | This is a provenance and CI-availability correction only. It adds no fixture, capability, quality, KiCad, network, model, electrical, fabrication, or hardware claim. |
+
+#### B-076 — ordered-layer internal proposal oracle
+
+| Field | Recorded evidence |
+|---|---|
+| Dataset | Deterministic synthetic 5x5 lattice and Board IR fixtures: both two available layers contain a full crossing wall, while the three-layer fixture has a clear inner signal layer. No external or proprietary board data. |
+| Protocol | Run the same bounded request under a two-layer stack and a three-layer stack; replay the latter twice; verify the emitted full-stack spans and reject invalid span, 9-layer, and zero-via-budget variants. |
+| Metrics | Two-layer result: `no_path`; three-layer result: complete with two vias through the inner layer and deterministic replay equality. |
+| Interpretation | This measures the internal candidate-only generalized-stack seam. It does not establish generalized KiCad serialization, Board-IR round-trip of rendered bytes, zone refill, authoritative DRC, MCP exposure, jobs, apply, fabrication, or whole-board routing. |
+
+#### B-077 — ordered-layer boundary and via-cap compatibility regression
+
+| Field | Recorded evidence |
+|---|---|
+| Dataset | Deterministic synthetic two-layer alternating-transition lattice, structurally restamped 65/66-via candidates, and converted public two-pad snapshots with one injected internal signal layer. No external or proprietary board data. |
+| Protocol | Route a 65-transition two-layer lattice with omitted policy and with an explicit 65-via policy; attempt the 66-transition case with that explicit policy; run a 65-transition three-layer lattice with its clear third layer blocked; verify restamped 65/66-via candidates; call file preview, live preview, and durable-job preparation with a three-layer snapshot. |
+| Metrics | Omitted two-layer route: complete with 65 vias. Explicit 65-via route: complete with 65 vias; 66-via route: `no_path`. Omitted three-layer route: `no_path` at its effective 64-via cap. Restamped 65-via candidate: verified; restamped 66-via candidate under explicit 65-via policy: `budget_exceeded`; omitted two-layer 66-via candidate: verified. File/live/durable entry points: all refuse the three-layer snapshot before router publication. |
+| Interpretation | This is a compatibility and boundary regression, not generalized KiCad routing evidence. It confirms only that the internal 3..8-layer seam cannot leak through existing public/live/durable two-layer surfaces and that verifier and constructor policy agree. Serialization, DRC, refill, apply, fabrication, and whole-board routing remain unproven. |

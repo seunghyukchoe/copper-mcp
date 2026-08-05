@@ -37,6 +37,7 @@ from copper_mcp.routing import (
 LAYER_ID = "layer:F.Cu"
 OTHER_REVISION = f"sha256:{'b' * 64}"
 BACK_LAYER_ID = "layer:B.Cu"
+INNER_LAYER_ID = "layer:In1.Cu"
 NET_ID = "net:audio"
 
 
@@ -206,6 +207,61 @@ def test_track_keepout_routes_on_back_layer_and_emits_two_vias() -> None:
     assert {path.layer_id for path in candidate.patch.paths} == {LAYER_ID, BACK_LAYER_ID}
     assert candidate.patch.vias[0].center.x < 4_000
     assert candidate.patch.vias[-1].center.x > 6_000
+    assert verify_layered_candidate_id(candidate)
+
+
+def test_three_layer_board_routes_only_through_the_inner_signal_layer() -> None:
+    """A full-stack via may land on the otherwise clear inner signal layer.
+
+    The counterpart two-layer fixture blocks both available layers, establishing the committed
+    oracle for this generalized-stack increment without claiming serializable KiCad output.
+    """
+
+    front_wall = _keepout(
+        "keepout:front-wall",
+        (LAYER_ID,),
+        (4_000, 0, 6_000, 10_000),
+        tracks=True,
+        vias=False,
+    )
+    back_wall = _keepout(
+        "keepout:back-wall",
+        (BACK_LAYER_ID,),
+        (4_000, 0, 6_000, 10_000),
+        tracks=True,
+        vias=False,
+    )
+    two_layer = _two_layer_snapshot(keepouts=(front_wall, back_wall))
+    blocked = LayeredBoardRouter().propose(two_layer, _request(two_layer))
+    assert blocked.diagnostic is not None
+    assert blocked.diagnostic.code is LayeredRouteFailureCode.NO_PATH
+
+    three_layer = make_snapshot(
+        replace(
+            two_layer.content,
+            copper_layers=(
+                Layer(id=LAYER_ID, name="F.Cu", index=0),
+                Layer(id=INNER_LAYER_ID, name="In1.Cu", index=1),
+                Layer(id=BACK_LAYER_ID, name="B.Cu", index=2),
+            ),
+        )
+    )
+    candidate = _candidate(
+        LayeredBoardRouter().propose(
+            three_layer,
+            _request(
+                three_layer,
+                settings=LayeredAStarSettings(via_cost=2, max_vias=2),
+            ),
+        )
+    )
+
+    assert {path.layer_id for path in candidate.patch.paths} == {LAYER_ID, INNER_LAYER_ID}
+    assert candidate.cost.via_count == 2
+    assert all(
+        (via.start_layer_id, via.end_layer_id) == (LAYER_ID, BACK_LAYER_ID)
+        for via in candidate.patch.vias
+    )
     assert verify_layered_candidate_id(candidate)
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import replace
+from itertools import pairwise
 from pathlib import Path
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
@@ -29,6 +30,7 @@ from copper_mcp.routing import (
     LayeredBoardRouter,
     LayeredRoutePath,
     LayeredRouteRequest,
+    LayeredRouteVia,
     canonical_layered_candidate_bytes,
 )
 from copper_mcp.routing.layered_candidate_verifier import (
@@ -208,6 +210,43 @@ def _restamp(candidate: object, **changes: object):
     return replace(provisional, candidate_id=digest)
 
 
+def _via_chain_patch(candidate: object, via_count: int):
+    """Build a structurally valid, monotonically separated two-layer via chain."""
+
+    start = candidate.patch.paths[0].vertices[0]
+    end = candidate.patch.paths[-1].vertices[-1]
+    centers = tuple(
+        PointNM(start.x + index * 1_000_000, start.y + 5_000_000 + index * 1_000_000)
+        for index in range(via_count)
+    )
+    paths = [LayeredRoutePath(F_CU, (start, centers[0]))]
+    for index, (current, following) in enumerate(pairwise(centers)):
+        paths.append(
+            LayeredRoutePath(
+                B_CU if index % 2 == 0 else F_CU,
+                (current, PointNM(following.x, current.y), following),
+            )
+        )
+    paths.append(
+        LayeredRoutePath(
+            B_CU if via_count % 2 else F_CU,
+            (centers[-1], PointNM(centers[-1].x, end.y), end),
+        )
+    )
+    vias = tuple(
+        LayeredRouteVia(
+            id=f"via:layered:{index:04d}",
+            center=center,
+            diameter_nm=candidate.patch.via_diameter_nm,
+            drill_nm=candidate.patch.via_drill_nm,
+            start_layer_id=F_CU,
+            end_layer_id=B_CU,
+        )
+        for index, center in enumerate(centers)
+    )
+    return replace(candidate.patch, paths=tuple(paths), vias=vias)
+
+
 def test_verifies_simple_candidate_and_exposes_physical_nonclaim() -> None:
     snapshot, candidate = _simple_candidate()
 
@@ -259,6 +298,88 @@ def test_rejects_restamped_dimensions_that_disagree_with_the_bound_net_class() -
     result = verify_layered_candidate(restamped, snapshot)
 
     assert result.diagnostic.code is LayeredCandidateVerificationCode.INVALID_CANDIDATE
+
+
+def test_via_budget_matches_legacy_two_layer_and_explicit_restamped_candidates() -> None:
+    back_snapshot, back_candidate = _blocked_candidate(end_on_back=True)
+    snapshot, candidate = _simple_candidate()
+    at_limit = _restamp(
+        back_candidate,
+        patch=_via_chain_patch(back_candidate, 65),
+        settings=LayeredAStarSettings(via_cost=2, max_vias=65),
+    )
+    over_limit = _restamp(
+        candidate,
+        patch=_via_chain_patch(candidate, 66),
+        settings=LayeredAStarSettings(via_cost=2, max_vias=65),
+    )
+    legacy_unset = _restamp(candidate, patch=_via_chain_patch(candidate, 66))
+
+    assert verify_layered_candidate(at_limit, back_snapshot).ok
+    assert (
+        verify_layered_candidate(over_limit, snapshot).diagnostic.code
+        is LayeredCandidateVerificationCode.BUDGET_EXCEEDED
+    )
+    assert verify_layered_candidate(legacy_unset, snapshot).ok
+
+
+def test_verifies_full_stack_via_transition_to_an_inner_signal_layer() -> None:
+    snapshot = _simple_snapshot()
+    inner = "layer:In1.Cu"
+    stacked_snapshot = make_snapshot(
+        replace(
+            snapshot.content,
+            copper_layers=(
+                Layer(id=F_CU, name="F.Cu", index=0),
+                Layer(id=inner, name="In1.Cu", index=1),
+                Layer(id=B_CU, name="B.Cu", index=2),
+            ),
+        )
+    )
+    _, simple = _simple_candidate()
+    enter_inner = PointNM(2_000, 5_000)
+    leave_inner = PointNM(8_000, 5_000)
+    patch = replace(
+        simple.patch,
+        paths=(
+            LayeredRoutePath(F_CU, (PointNM(1_000, 5_000), enter_inner)),
+            LayeredRoutePath(inner, (enter_inner, leave_inner)),
+            LayeredRoutePath(F_CU, (leave_inner, PointNM(9_000, 5_000))),
+        ),
+        vias=(
+            LayeredRouteVia(
+                id="via:layered:0000",
+                center=enter_inner,
+                diameter_nm=600,
+                drill_nm=300,
+                start_layer_id=F_CU,
+                end_layer_id=B_CU,
+            ),
+            LayeredRouteVia(
+                id="via:layered:0001",
+                center=leave_inner,
+                diameter_nm=600,
+                drill_nm=300,
+                start_layer_id=F_CU,
+                end_layer_id=B_CU,
+            ),
+        ),
+    )
+    candidate = _restamp(simple, base_revision=stacked_snapshot.snapshot_digest, patch=patch)
+
+    result = verify_layered_candidate(candidate, stacked_snapshot)
+
+    assert result.ok, result.diagnostic
+    invalid_span = _restamp(
+        candidate,
+        patch=replace(
+            patch,
+            vias=tuple(replace(via, end_layer_id=inner) for via in patch.vias),
+        ),
+    )
+    assert len(invalid_span.patch.vias) == 2
+    refused = verify_layered_candidate(invalid_span, stacked_snapshot)
+    assert refused.diagnostic.code is LayeredCandidateVerificationCode.VIA_DISCONTINUITY
 
 
 def test_rejects_disconnected_path_from_via_and_cross_path_intersection() -> None:

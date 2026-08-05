@@ -1,4 +1,4 @@
-"""Immutable contracts for the Board-IR-bound two-layer routing proposal.
+"""Immutable contracts for the Board-IR-bound ordered-layer routing proposal.
 
 This is deliberately separate from :mod:`copper_mcp.routing.contracts`.  The legacy route
 candidate and KiCad serializer are single-layer contracts; changing them would make old candidate
@@ -299,6 +299,18 @@ class LayeredRouteCandidate:
 def canonical_layered_candidate_bytes(candidate: LayeredRouteCandidate) -> bytes:
     """Return canonical identity bytes, excluding the circular ``candidate_id`` field."""
 
+    settings_payload: dict[str, int] = {
+        "max_expansions": candidate.settings.max_expansions,
+        "max_nodes": candidate.settings.max_nodes,
+        "max_obstacle_checks": candidate.settings.max_obstacle_checks,
+        "max_obstacles": candidate.settings.max_obstacles,
+        "move_cost": candidate.settings.move_cost,
+        "via_cost": candidate.settings.via_cost,
+    }
+    # Preserve the exact historic two-layer candidate bytes when the new cap is not supplied.
+    # A non-default cap is policy material and must participate in candidate identity.
+    if candidate.settings.max_vias is not None:
+        settings_payload["max_vias"] = candidate.settings.max_vias
     payload = {
         "base_revision": candidate.base_revision,
         "cost": {
@@ -345,14 +357,7 @@ def canonical_layered_candidate_bytes(candidate: LayeredRouteCandidate) -> bytes
         "policy": candidate.policy,
         "router_version": candidate.router_version,
         "seed": candidate.seed,
-        "settings": {
-            "max_expansions": candidate.settings.max_expansions,
-            "max_nodes": candidate.settings.max_nodes,
-            "max_obstacle_checks": candidate.settings.max_obstacle_checks,
-            "max_obstacles": candidate.settings.max_obstacles,
-            "move_cost": candidate.settings.move_cost,
-            "via_cost": candidate.settings.via_cost,
-        },
+        "settings": settings_payload,
         "start_pad_id": candidate.start_pad_id,
     }
     rendered = json.dumps(

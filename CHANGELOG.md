@@ -35,6 +35,12 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Internal ordered-layer route proposals now support two through eight signal layers with bounded,
+  deterministic full-stack-via transitions. Omitted via policy preserves legacy two-layer behavior,
+  while generalized stacks receive a deterministic cap; file, live, and durable public entry points
+  continue to reject non-two-layer stacks. Source-preserving KiCad serialization and DRC remain
+  deliberately restricted to the proven two-layer subset.
+
 - Hardened the optional harness-owned KiCad/FreeRouting transaction behind an internal
   provider-created aggregate-quota workspace capability. The harness validates canonical
   owner-private, non-symlink roots; keeps temporary directories and child `cwd`/`HOME`/`TMPDIR`

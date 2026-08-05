@@ -121,6 +121,183 @@ def test_obstacles_are_scoped_to_their_declared_layer() -> None:
     assert unblocked.metrics.via_steps == 0
 
 
+def test_three_layer_stack_completes_a_case_the_two_layer_restriction_cannot() -> None:
+    """Only layer 2 has a crossing; the fixed two-layer slice must refuse it."""
+
+    common = {
+        "board_revision": REVISION,
+        "expected_revision": REVISION,
+        "bounds": (0, 0, 4, 4),
+        "start": LayeredPoint(0, 2, 0),
+        "goal": LayeredPoint(4, 2, 0),
+        "obstacles": (
+            LayeredObstacle(0, 1, 0, 3, 4),
+            LayeredObstacle(1, 1, 0, 3, 4),
+        ),
+        "settings": LayeredAStarSettings(via_cost=2, max_vias=2),
+    }
+
+    two_layer = route_layered(LayeredAStarRequest(**common, layers=(0, 1)))
+    three_layer = route_layered(LayeredAStarRequest(**common, layers=(0, 1, 2)))
+
+    assert two_layer.diagnostic is not None
+    assert two_layer.diagnostic.code is LayeredFailureCode.NO_PATH
+    assert three_layer.ok
+    assert three_layer.path is not None
+    assert any(step.layer == 2 for step in three_layer.path)
+    assert three_layer.metrics.via_steps == 2
+    assert route_layered(LayeredAStarRequest(**common, layers=(0, 1, 2))) == three_layer
+
+
+def test_stack_and_via_budgets_fail_closed() -> None:
+    over_stack = route_layered(
+        LayeredAStarRequest(
+            board_revision=REVISION,
+            bounds=(0, 0, 0, 0),
+            start=LayeredPoint(0, 0, 0),
+            goal=LayeredPoint(0, 0, 1),
+            layers=tuple(range(9)),
+        )
+    )
+    via_limited = route_layered(
+        LayeredAStarRequest(
+            board_revision=REVISION,
+            bounds=(0, 0, 0, 0),
+            start=LayeredPoint(0, 0, 0),
+            goal=LayeredPoint(0, 0, 2),
+            layers=(0, 1, 2),
+            settings=LayeredAStarSettings(max_vias=0),
+        )
+    )
+
+    assert over_stack.diagnostic is not None
+    assert over_stack.diagnostic.code is LayeredFailureCode.INVALID_REQUEST
+    assert via_limited.diagnostic is not None
+    assert via_limited.diagnostic.code is LayeredFailureCode.NO_PATH
+
+
+def _review_capped_via_request(
+    *, settings: LayeredAStarSettings | None = None
+) -> LayeredAStarRequest:
+    """Return the three-layer ``max_vias=3`` coordinate-dominance regression request."""
+
+    chosen_settings = settings or LayeredAStarSettings(via_cost=1, max_vias=3)
+    return LayeredAStarRequest(
+        board_revision=REVISION,
+        expected_revision=REVISION,
+        bounds=(0, 0, 4, 3),
+        start=LayeredPoint(0, 2, 0),
+        goal=LayeredPoint(4, 2, 2),
+        obstacles=tuple(
+            LayeredObstacle(layer, x, y, x, y)
+            for x, y, layer in (
+                (0, 2, 2),
+                (0, 3, 0),
+                (1, 0, 0),
+                (1, 1, 0),
+                (1, 2, 0),
+                (1, 3, 1),
+                (2, 0, 2),
+                (2, 1, 1),
+                (2, 1, 2),
+                (2, 2, 1),
+                (2, 3, 2),
+                (3, 0, 1),
+                (3, 2, 2),
+                (4, 1, 2),
+            )
+        ),
+        layers=(0, 1, 2),
+        settings=chosen_settings,
+    )
+
+
+def test_three_layer_via_cap_keeps_remaining_budget_in_the_search_state() -> None:
+    """A cheaper arrival at a choke point uses all vias; the legal arrival does not.
+
+    Layer 1 is intentionally available despite the returned path using the direct 0↔2 full-stack
+    transitions, so the case exercises the ordered three-layer search rather than a two-layer
+    special case.
+    """
+
+    result = route_layered(_review_capped_via_request())
+
+    assert result.ok
+    assert result.path is not None
+    assert [(step.x, step.y, step.layer) for step in result.path] == [
+        (0, 2, 0),
+        (0, 1, 0),
+        (0, 1, 2),
+        (1, 1, 2),
+        (1, 2, 2),
+        (2, 2, 2),
+        (2, 2, 0),
+        (3, 2, 0),
+        (4, 2, 0),
+        (4, 2, 2),
+    ]
+    assert result.metrics.via_steps == 3
+
+
+def test_capped_search_charges_each_augmented_state_to_the_node_budget() -> None:
+    """The non-dominated finite-cap states in the review case consume the node budget."""
+
+    result = route_layered(
+        _review_capped_via_request(
+            settings=LayeredAStarSettings(via_cost=1, max_vias=3, max_nodes=45)
+        )
+    )
+
+    assert result.diagnostic is not None
+    assert result.diagnostic.code is LayeredFailureCode.GRID_BUDGET_EXCEEDED
+    assert result.metrics.discovered_nodes == 45
+
+
+def _alternating_via_request(
+    via_count: int,
+    *,
+    layers: tuple[int, ...],
+    settings: LayeredAStarSettings = DEFAULT_SETTINGS,
+) -> LayeredAStarRequest:
+    """Force one 0↔1 transition per two cells; any extra layer is blocked outright."""
+
+    obstacles = [
+        LayeredObstacle(index % 2, index * 2 + 1, 0, index * 2 + 1, 0) for index in range(via_count)
+    ]
+    if len(layers) > 2:
+        obstacles.extend(LayeredObstacle(2, x, 0, x, 0) for x in range(via_count * 2 + 1))
+    return LayeredAStarRequest(
+        board_revision=REVISION,
+        expected_revision=REVISION,
+        bounds=(0, 0, via_count * 2, 0),
+        start=LayeredPoint(0, 0, 0),
+        goal=LayeredPoint(via_count * 2, 0, via_count % 2),
+        obstacles=tuple(obstacles),
+        layers=layers,
+        settings=settings,
+    )
+
+
+def test_omitted_two_layer_via_budget_preserves_legacy_long_route_behavior() -> None:
+    legacy = route_layered(_alternating_via_request(65, layers=(0, 1)))
+    explicit_boundary = route_layered(
+        _alternating_via_request(65, layers=(0, 1), settings=LayeredAStarSettings(max_vias=65))
+    )
+    one_over = route_layered(
+        _alternating_via_request(66, layers=(0, 1), settings=LayeredAStarSettings(max_vias=65))
+    )
+    generalized = route_layered(_alternating_via_request(65, layers=(0, 1, 2)))
+
+    assert legacy.ok
+    assert legacy.metrics.via_steps == 65
+    assert explicit_boundary.ok
+    assert explicit_boundary.metrics.via_steps == 65
+    assert one_over.diagnostic is not None
+    assert one_over.diagnostic.code is LayeredFailureCode.NO_PATH
+    assert generalized.diagnostic is not None
+    assert generalized.diagnostic.code is LayeredFailureCode.NO_PATH
+
+
 def test_via_only_obstacles_block_transitions_without_blocking_tracks() -> None:
     via_keepout = LayeredObstacle(0, 0, 1, 0, 1)
     result = route_layered(

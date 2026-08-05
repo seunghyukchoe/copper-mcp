@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,13 +11,15 @@ import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
 import copper_mcp.mcp_server as server
+import copper_mcp.routing_job_service as routing_job_service
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
-from copper_mcp.board_ir import NetClass
+from copper_mcp.board_ir import Layer, NetClass, make_snapshot
 from copper_mcp.config import Settings
 from copper_mcp.mcp_server import mcp
 from copper_mcp.routing import RoutingJobRepository
 from copper_mcp.routing_job_service import (
     RoutingJobServiceError,
+    RoutingJobUnsupportedError,
     _prepare_layered_job,
     execute_routing_job,
 )
@@ -204,6 +207,47 @@ def test_direct_job_preparation_rejects_layered_drc_opt_in(tmp_path: Path) -> No
         match="cannot request authoritative DRC evidence",
     ):
         _prepare_layered_job(request, settings)
+
+
+def test_durable_job_refuses_internal_three_layer_router_snapshot(
+    tmp_path: Path,
+) -> None:
+    settings, request, _ = _workspace(tmp_path)
+    source = (tmp_path / FIXTURE.name).read_bytes()
+    constraints = NetClass(
+        id="class:request",
+        name="Request",
+        clearance_nm=250_000,
+        track_width_nm=250_000,
+        via_diameter_nm=800_000,
+        via_drill_nm=400_000,
+    )
+    conversion = parse_kicad_bytes(
+        source,
+        KiCadConstraintProfile(net_classes=(constraints,), default_net_class_id=constraints.id),
+    )
+    assert conversion.snapshot is not None
+    snapshot = conversion.snapshot
+    front, back = snapshot.content.copper_layers
+    internal_snapshot = make_snapshot(
+        replace(
+            snapshot.content,
+            copper_layers=(
+                front,
+                Layer(id="layer:In1.Cu", name="In1.Cu", index=1),
+                replace(back, index=2),
+            ),
+        )
+    )
+    request["expect_snapshot_digest"] = internal_snapshot.snapshot_digest
+
+    with patch.object(
+        routing_job_service,
+        "parse_kicad_bytes",
+        return_value=replace(conversion, snapshot=internal_snapshot),
+    ):
+        with pytest.raises(RoutingJobUnsupportedError, match="exactly two signal layers"):
+            _prepare_layered_job(request, settings)
 
 
 def test_job_worker_persists_result_and_explicit_geometry_export(tmp_path: Path) -> None:
