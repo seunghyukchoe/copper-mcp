@@ -22,7 +22,7 @@ from typing import Any
 import pytest
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
-from copper_mcp.board_ir import NetClass, ParseLimits
+from copper_mcp.board_ir import NetClass, ParseLimits, make_snapshot
 from copper_mcp.placement import (
     ORDERING_POLICY,
     PLACEMENT_VERSION,
@@ -90,6 +90,32 @@ def _intent(view: Any, board: str, **overrides: Any) -> Any:
 def _evaluate(path: Path, **overrides: Any) -> Any:
     _, snapshot, view = _board(path)
     return evaluate_placement(_intent(view, path.name, **overrides), snapshot, view)
+
+
+def _skewed_saved_pose(path: Path, angle_udeg: int = 45_000_000) -> tuple[Any, Any, str]:
+    """Re-bind a board whose first movable footprint carries a non-orthogonal saved pose.
+
+    The KiCad adapter fails closed on an oblique footprint angle, so this reaches the state a
+    directly constructed snapshot or a decoded Board IR envelope can still present. The digest is
+    recomputed rather than forged, because the point is a *valid* snapshot the placement boundary
+    must refuse in words, not a tampered one it refuses on binding.
+    """
+
+    from dataclasses import replace
+
+    source, snapshot, _ = _board(path)
+    footprints = snapshot.content.footprints
+    target = next(item for item in footprints if not item.locked and item.pad_ids)
+    skewed = make_snapshot(
+        replace(
+            snapshot.content,
+            footprints=tuple(
+                replace(item, rotation_udeg=angle_udeg) if item is target else item
+                for item in footprints
+            ),
+        )
+    )
+    return skewed, build_placement_view(source, skewed), target.id
 
 
 class PlacementViewTests(unittest.TestCase):
@@ -878,6 +904,72 @@ class FailureTaxonomyTests(unittest.TestCase):
         )
         assert result.diagnostic is not None
         self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+
+    def test_a_nonorthogonal_source_pose_is_a_typed_refusal_after_an_orthogonal_proposal(
+        self,
+    ) -> None:
+        """An orthogonal proposal must not mask a non-orthogonal pose it is measured against.
+
+        Every pad offset and courtyard point is un-rotated out of the *saved* pose before being
+        turned into the proposed one, so the stored angle has to be orthogonal too. Checking only
+        the resulting orientation let an orthogonal proposal hide an oblique source, and the
+        un-rotation escaped this boundary as a bare ``ValueError`` from ``rotate_offset``.
+        """
+
+        snapshot, view, subject = _skewed_saved_pose(FOOTPRINT_V02_BOARD)
+        self.assertEqual(view.footprints[subject].orientation_udeg, 45_000_000)
+
+        result = evaluate_placement(
+            _intent(
+                view,
+                FOOTPRINT_V02_BOARD.name,
+                proposals=[{"subject": subject, "orientation_udeg": 90_000_000}],
+            ),
+            snapshot,
+            view,
+        )
+
+        self.assertEqual(result.status, "refused")
+        self.assertIsNone(result.candidate)
+        assert result.diagnostic is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+        self.assertEqual(
+            result.diagnostic.message, "a placement subject's saved pose is not orthogonal"
+        )
+        self.assertNotIn("45", result.diagnostic.message)
+
+    def test_every_reference_to_a_nonorthogonal_saved_pose_is_refused_the_same_way(self) -> None:
+        """Anchors and rule members reach the same footprint by a different path.
+
+        ``_place`` resolves every footprint the view carries, not only proposal subjects, so one
+        oblique saved pose has to be refused whether it is named as a subject, borrowed as an
+        anchor, measured by a rule, or merely present. All four must land on the same code.
+        """
+
+        snapshot, view, subject = _skewed_saved_pose(FOOTPRINT_V02_BOARD)
+        other = next(
+            ref
+            for ref in sorted(view.footprints)
+            if ref != subject and not view.footprints[ref].locked
+        )
+        cases: dict[str, dict[str, Any]] = {
+            "merely present": {},
+            "translated subject": {"proposals": [{"subject": subject, "offset_x_nm": 1_000_000}]},
+            "another proposal's anchor": {
+                "proposals": [{"subject": other, "anchor": subject, "offset_x_nm": 1_000_000}]
+            },
+            "rule member": {
+                "rules": [{"kind": "alignment", "axis": "x", "members": [subject, other]}]
+            },
+        }
+        for reason, overrides in cases.items():
+            with self.subTest(reason=reason):
+                result = evaluate_placement(
+                    _intent(view, FOOTPRINT_V02_BOARD.name, **overrides), snapshot, view
+                )
+                self.assertIsNone(result.candidate)
+                assert result.diagnostic is not None
+                self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
 
 
 class RuleEvaluationTests(unittest.TestCase):

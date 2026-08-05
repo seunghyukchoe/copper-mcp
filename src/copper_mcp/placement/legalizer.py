@@ -246,6 +246,13 @@ def _place(
 
         if orientation % QUARTER_UDEG != 0:
             raise _UnsupportedError("placement supports orthogonal orientations only")
+        if footprint.orientation_udeg % QUARTER_UDEG != 0:
+            # The saved pose is the frame every pad offset and courtyard point is un-rotated out
+            # of below, so an orthogonal *proposal* does not make a non-orthogonal *source*
+            # placeable. Checking only the resulting orientation let an orthogonal proposal mask
+            # the stored angle, and the un-rotation then escaped this boundary as a bare
+            # ValueError from ``rotate_offset`` instead of a typed refusal.
+            raise _UnsupportedError("a placement subject's saved pose is not orthogonal")
 
         pads: list[_PlacedPad] = []
         hull: Rect | None = None
