@@ -92,6 +92,35 @@ reference-routing boundary:
 Consequently, no local proposal was converted into `RouteCandidate`, no candidate identity was
 changed, no policy window was admitted, and no board was mutated.
 
+## Candidate-path validator prerequisite
+
+Before any local-repair integration, this branch introduces the intentionally internal
+`routing.candidate_path_validator` seam. It accepts one already immutable `RouteCandidate`, its
+matching `RouteRequest`, and a Board IR snapshot; it publishes only a typed, redacted validation
+result. It does not construct a candidate, expose an MCP tool, admit a policy or model, serialize
+KiCad, mutate a board, or replace the existing candidate-pair physical-clearance gate.
+
+The validator reconstructs current exact request/candidate values, verifies the candidate content
+digest, then invokes the reference router's exact integer Board-IR preparation and checks every
+decompressed lattice edge with its existing obstacle predicate. The independent acceptance
+evidence therefore covers the current single-layer, two-pin reference subset: exact endpoint/pad
+identity, revision, grid, net class width, track/pad/keepout/zone clearance authority, and the
+explicit unsupported-geometry refusals already embodied by that subset. Candidate vias and
+multilayer geometry are refused rather than inferred from a two-dimensional path.
+
+The fixture is predeclared as `candidate-path-validator-detour-v1` in
+`tests/test_routing_candidate_path_validator.py`: a 1 mm grid, 200 um track, 100 um clearance,
+and a foreign vertical 200 um track from `(5,3)` mm to `(5,7)` mm. The exact 16-edge lower detour
+must be accepted identically in ten replays; a direct crossing must be rejected at its fourth
+unit edge. Acceptance additionally requires distinct typed outcomes for stale revision and an
+exhausted path-edge cap, plus atomic cancellation and a coordinator-owned cooperative deadline
+check before geometry work begins. These are a path-acceptance prerequisite, not a claim of a
+negotiated-routing improvement.
+
+The coordinator must account the validator's path-edge and obstacle work in a future independent
+envelope before it can bind a local route to a candidate. The current coordinator has not been
+changed, and the predeclared >=10% negotiated-quality threshold above remains unmet.
+
 ## Research basis
 
 - Larry McMurchie and Carl Ebeling, *PathFinder: A Negotiation-Based Performance-Driven Router
