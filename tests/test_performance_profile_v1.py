@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tarfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,12 +32,71 @@ def _run_digest(report: dict[str, object]) -> str:
     return _canonical_digest(payload)
 
 
-def _run_profile(output: Path) -> subprocess.CompletedProcess[str]:
-    environment = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
+def _git() -> str:
+    git = shutil.which("git")
+    assert git is not None
+    return git
+
+
+@contextmanager
+def _isolated_worktree(tmp_path: Path, *, source_root: Path = ROOT) -> Iterator[Path]:
+    worktree = tmp_path / "isolated-worktree"
+    archive = subprocess.run(  # noqa: S603 - locally resolved Git reads tracked HEAD only
+        [_git(), "archive", "--format=tar", "HEAD"],
+        check=True,
+        cwd=source_root,
+        capture_output=True,
+        timeout=30,
+    ).stdout
+    worktree.mkdir(parents=True)
+    with tarfile.open(fileobj=io.BytesIO(archive)) as bundle:
+        bundle.extractall(worktree, filter="data")
+    subprocess.run(  # noqa: S603 - initializes only the pytest-owned isolated checkout
+        [_git(), "init", "--quiet"],
+        check=True,
+        cwd=worktree,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    subprocess.run(  # noqa: S603 - stages only the isolated archive checkout
+        [_git(), "add", "--all"],
+        check=True,
+        cwd=worktree,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    subprocess.run(  # noqa: S603 - commits only the isolated archive checkout
+        [
+            _git(),
+            "-c",
+            "user.name=CopperMCP profile test",
+            "-c",
+            "user.email=profile-test@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "isolated tracked snapshot",
+        ],
+        check=True,
+        cwd=worktree,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    try:
+        yield worktree
+    finally:
+        shutil.rmtree(worktree)
+
+
+def _run_profile(output: Path, *, root: Path) -> subprocess.CompletedProcess[str]:
+    environment = {**os.environ, "PYTHONPATH": str(root / "src")}
     return subprocess.run(  # noqa: S603 - fixed script plus pytest-owned output path
         [
             sys.executable,
-            str(SCRIPT),
+            str(root / "scripts" / "performance_profile_v1.py"),
             "--output",
             str(output),
             "--samples",
@@ -42,19 +106,20 @@ def _run_profile(output: Path) -> subprocess.CompletedProcess[str]:
         ],
         check=False,
         capture_output=True,
-        cwd=ROOT,
+        cwd=root,
         env=environment,
         text=True,
         timeout=120,
     )
 
 
-def _report(tmp_path: Path) -> dict[str, object]:
-    output = tmp_path / "profile.json"
-    completed = _run_profile(output)
-    assert completed.returncode == 0, completed.stderr
-    assert completed.stdout == output.read_text(encoding="utf-8")
-    return json.loads(output.read_text(encoding="utf-8"))
+def _report(tmp_path: Path, *, parent_root: Path = ROOT) -> dict[str, object]:
+    with _isolated_worktree(tmp_path, source_root=parent_root) as worktree:
+        output = worktree / "profile.json"
+        completed = _run_profile(output, root=worktree)
+        assert completed.returncode == 0, completed.stderr
+        assert completed.stdout == output.read_text(encoding="utf-8")
+        return json.loads(output.read_text(encoding="utf-8"))
 
 
 def test_performance_profile_has_fixed_identity_and_three_replayable_scenarios(
@@ -134,13 +199,15 @@ def test_committed_performance_profile_keeps_provenance_outside_deterministic_id
 
 
 def test_performance_profile_refuses_dirty_tracked_source(tmp_path: Path) -> None:
-    original = SCRIPT.read_bytes()
-    output = tmp_path / "profile.json"
-    try:
-        SCRIPT.write_bytes(original + b"\n")
-        completed = _run_profile(output)
-    finally:
-        SCRIPT.write_bytes(original)
+    with _isolated_worktree(tmp_path) as worktree:
+        script = worktree / "scripts" / "performance_profile_v1.py"
+        original = script.read_bytes()
+        output = worktree / "profile.json"
+        try:
+            script.write_bytes(original + b"\n")
+            completed = _run_profile(output, root=worktree)
+        finally:
+            script.write_bytes(original)
 
     assert completed.returncode != 0
     assert "requires a clean tracked and untracked tree" in completed.stderr
@@ -148,14 +215,29 @@ def test_performance_profile_refuses_dirty_tracked_source(tmp_path: Path) -> Non
 
 
 def test_performance_profile_refuses_untracked_helper(tmp_path: Path) -> None:
-    helper = ROOT / "performance-profile-untracked-helper.py"
-    output = tmp_path / "profile.json"
-    try:
-        helper.write_text("# untracked file\n", encoding="utf-8")
-        completed = _run_profile(output)
-    finally:
-        helper.unlink(missing_ok=True)
+    with _isolated_worktree(tmp_path) as worktree:
+        helper = worktree / "performance-profile-untracked-helper.py"
+        output = worktree / "profile.json"
+        try:
+            helper.write_text("# untracked file\n", encoding="utf-8")
+            completed = _run_profile(output, root=worktree)
+        finally:
+            helper.unlink(missing_ok=True)
 
     assert completed.returncode != 0
     assert "requires a clean tracked and untracked tree" in completed.stderr
     assert not output.exists()
+
+
+def test_performance_profile_replays_from_isolation_when_parent_worktree_is_dirty(
+    tmp_path: Path,
+) -> None:
+    with _isolated_worktree(tmp_path / "dirty-parent") as dirty_parent:
+        marker = dirty_parent / "untracked-parent-helper.py"
+        try:
+            marker.write_text("# parent-only untracked helper\n", encoding="utf-8")
+            report = _report(tmp_path / "profile", parent_root=dirty_parent)
+        finally:
+            marker.unlink(missing_ok=True)
+
+    assert report["identity"]["source_provenance"]["clean_worktree"] is True
