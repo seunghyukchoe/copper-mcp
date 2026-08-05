@@ -13,9 +13,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import platform
 import shutil
+import signal
 import subprocess
+import sys
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -34,11 +37,13 @@ from copper_mcp.adapters import (
 from copper_mcp.board_ir import NetClass
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import (
+    _BOUNDED_EXEC,
     _drc_object_pairs,
     _finite_json_float,
     _preflight_drc_json,
     _reject_json_constant,
     _validate_drc_json_tree,
+    _validated_executable,
 )
 from copper_mcp.route_preview import preview_route as preview_route_result
 from copper_mcp.security import WorkspaceViolationError, read_workspace_file
@@ -159,9 +164,10 @@ def _profile(metadata: dict[str, Any]) -> KiCadConstraintProfile:
 
 def _drc_summary(workspace: Path, report_path: Path, *, max_report_bytes: int) -> dict[str, int]:
     try:
+        report_relative = report_path.relative_to(workspace)
         payload = read_workspace_file(
             workspace,
-            str(report_path),
+            report_relative.as_posix(),
             allowed_suffixes={".json"},
             max_bytes=max_report_bytes,
         ).content
@@ -208,6 +214,14 @@ def _run_drc(
             "status": "unavailable",
             "reason": "KiCad 10 CLI executable is absent at the reviewed local path",
         }
+    if os.name != "posix":
+        raise AudioRoutingBenchmarkError(
+            "bounded KiCad DRC execution is unsupported on this platform"
+        )
+    python_executable = _validated_executable(Path(sys.executable))
+    bounded_exec = _BOUNDED_EXEC.resolve(strict=True)
+    if python_executable is None or not bounded_exec.is_file():
+        raise AudioRoutingBenchmarkError("bounded KiCad DRC execution helper is unavailable")
     profile = _profile(metadata)
     conversion = parse_kicad_bytes(source, profile)
     if conversion.snapshot is None or conversion.diagnostics:
@@ -226,6 +240,10 @@ def _run_drc(
         try:
             completed = subprocess.run(  # noqa: S603 - fixed KiCad argv and private workspace
                 [
+                    str(python_executable),
+                    "-I",
+                    str(bounded_exec),
+                    str(settings.max_drc_report_bytes),
                     str(KICAD_CLI),
                     "pcb",
                     "drc",
@@ -237,13 +255,19 @@ def _run_drc(
                 ],
                 cwd=workspace,
                 env=environment,
-                capture_output=True,
+                stdin=subprocess.DEVNULL,
+                # The core DRC boundary deliberately discards untrusted child diagnostics rather
+                # than buffering them in the parent process.
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 check=False,
-                text=True,
+                shell=False,
                 timeout=45,
             )
         except (OSError, subprocess.SubprocessError) as error:
             raise AudioRoutingBenchmarkError("KiCad DRC invocation failed") from error
+        if completed.returncode == -signal.SIGXFSZ:
+            raise AudioRoutingBenchmarkError("KiCad DRC report exceeds the configured limit")
         if completed.returncode != 0:
             raise AudioRoutingBenchmarkError("KiCad DRC returned a nonzero status")
         return _drc_summary(
