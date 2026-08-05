@@ -789,7 +789,16 @@ def preview_live_route(
     if request.include_drc or request.include_fill_authority or request.include_apply_token:
         raise RoutePreviewError("live route proposals are read-only and cannot request actions")
 
-    captured = capture_live_board(settings, client_factory=client_factory)
+    # Capture must share the preview's bounded wall-clock budget. The IPC binding accepts a
+    # millisecond timeout capped at ten seconds; passing both it and the absolute deadline keeps
+    # the individual call and its multi-step capture from silently consuming the default timeout.
+    remaining_ms = max(1, min(10_000, int((deadline - time.monotonic()) * 1_000)))
+    captured = capture_live_board(
+        settings,
+        client_factory=client_factory,
+        timeout_ms=remaining_ms,
+        deadline=deadline,
+    )
     board_revision = captured.observation.board_digest
     if (
         request.expect_board_revision is not None

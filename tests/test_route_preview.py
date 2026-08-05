@@ -529,6 +529,33 @@ def test_live_route_proposal_reuses_the_exact_ipc_snapshot_and_candidate(
     assert live.to_dict()["request"]["net_ref_id"] == named.candidate.patch.net_id
 
 
+def test_live_route_passes_remaining_preview_budget_to_ipc(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, settings = _workspace(tmp_path)
+    named = preview_route(_request(), settings)
+    assert named.candidate is not None
+    observed: dict[str, object] = {}
+    real_capture = route_preview.capture_live_board
+
+    def capture_with_observation(*args: object, **kwargs: object) -> object:
+        observed.update(kwargs)
+        return real_capture(*args, **kwargs)
+
+    monkeypatch.setattr(route_preview, "capture_live_board", capture_with_observation)
+    preview_live_route(
+        _live_reference_request(named),
+        replace(settings, max_route_preview_seconds=1),
+        client_factory=lambda **_: _FakeLiveKiCad(FIXTURE.read_text(encoding="utf-8")),
+    )
+
+    timeout_ms = observed["timeout_ms"]
+    assert isinstance(timeout_ms, int)
+    assert 1 <= timeout_ms <= 1_000
+    assert isinstance(observed["deadline"], float)
+
+
 def test_live_route_refuses_stale_board_before_conversion(tmp_path: Path) -> None:
     _, settings = _workspace(tmp_path)
     named = preview_route(_request(), settings)
