@@ -312,6 +312,27 @@ class PadlessFootprintTests(unittest.TestCase):
         self.assertEqual(result.status, "previewed")
         assert result.candidate is not None
 
+    def test_a_padless_courtyard_is_a_stationary_collision_envelope(self) -> None:
+        _, snapshot, view = _board(PADLESS_BOARD)
+        placeable = sorted(view.footprints)[0]
+
+        result = evaluate_placement(
+            _intent(
+                view,
+                PADLESS_BOARD.name,
+                subjects=[placeable],
+                proposals=[{"subject": placeable, "offset_x_nm": 30_000_000}],
+            ),
+            snapshot,
+            view,
+        )
+
+        self.assertEqual(result.status, "refused")
+        assert result.diagnostic is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.ILLEGAL_PLACEMENT)
+        assert result.diagnostic.legality is not None
+        self.assertEqual(result.diagnostic.legality.courtyard_overlap, "violated")
+
 
 class RequestBoundaryTests(unittest.TestCase):
     def test_every_supported_rule_kind_parses(self) -> None:

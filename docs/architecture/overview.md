@@ -129,7 +129,9 @@ without a second mirror. The placement derivative remains deliberately stricter:
 with unsupported topology and back-side edits failing closed. A locked footprint cannot be moved.
 `courtyard_overlap` is exact for the bounded rectangular Board IR subset: same-side rings return
 `proven_clear` or `violated`, while front/back rings are evaluated independently. Unsupported
-topology fails closed before the view exists. File-backed placement apply now exists as a separate,
+topology fails closed before the view exists. Padless footprints remain unplaceable, while their
+supported rectangular courtyards stay in the stationary collision envelope. File-backed placement
+apply now exists as a separate,
 default-off, placement-token-scoped operation for the front-side orthogonal source-preserving
 subset; models never write KiCad syntax, mutate a live editor, or bypass deterministic candidate
 validation and explicit revision-checked authorization.

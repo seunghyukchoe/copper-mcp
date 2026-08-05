@@ -182,6 +182,8 @@ projected from the same Board IR snapshot, and the supplied source bytes must ma
 revision. AI output remains typed placement intent, a locked footprint cannot be moved, and
 `courtyard_overlap` is `proven_clear` or `violated` for the exact same-side rectangular-courtyard
 subset; front/back courtyards are independent and unsupported topology fails before evaluation.
+Padless footprints remain unavailable as placement subjects, but supported rectangular courtyards
+are retained as stationary collision envelopes and are excluded from candidate manifests.
 Direct model-generated KiCad mutation remains prohibited. The bounded file-level placement apply
 tool is separately operator-gated and placement-token-scoped; unsupported source constructs and
 live IPC mutation still fail closed. After publication it re-renders and reparses the authorized

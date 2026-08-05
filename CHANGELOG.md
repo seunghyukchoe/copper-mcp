@@ -8,6 +8,11 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Placement legality now keeps supported rectangular courtyards from padless/graphics-only
+  footprints as stationary collision envelopes. Padless objects remain unplaceable and absent from
+  candidate manifests, but movable footprints can no longer be reported clear through them
+  (ADR-0062, B-050).
+
 - Added read-only `observe_post_placement`: a required-revision, single-capture Circuit Scene and
   aggregate KiCad DRC observation. It is fail-closed on stale or changed context and never exposes
   raw DRC output, issues apply authority, or changes a board (ADR-0061, B-045).

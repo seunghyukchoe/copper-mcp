@@ -271,6 +271,29 @@ def _place(
                 courtyards=courtyards,
             )
         )
+    # Graphics-only footprints cannot be moved or used as rule references, but a rectangular
+    # courtyard on one is still physical board geometry. Include it as a fixed collision envelope
+    # while keeping it out of the candidate and rule-resolution maps below.
+    for ref_id in sorted(view.stationary):
+        budget.charge()
+        stationary_footprint = view.stationary[ref_id]
+        stationary_hull: Rect | None = None
+        for ring in stationary_footprint.courtyards:
+            bounds = ring_bounds(ring)
+            stationary_hull = bounds if stationary_hull is None else union(stationary_hull, bounds)
+        assert stationary_hull is not None
+        placed.append(
+            _PlacedFootprint(
+                ref_id=ref_id,
+                origin=stationary_footprint.origin,
+                orientation_udeg=stationary_footprint.orientation_udeg,
+                side=stationary_footprint.side,
+                moved=False,
+                pads=(),
+                hull=stationary_hull,
+                courtyards=stationary_footprint.courtyards,
+            )
+        )
     return tuple(placed)
 
 
@@ -580,7 +603,9 @@ def evaluate_placement(
     try:
         _check_infeasible(intent)
         placed = _place(view, snapshot, intent, budget)
-        placed_by_ref = {item.ref_id: item for item in placed}
+        # Stationary padless envelopes participate in physical legality, but remain unavailable
+        # as subjects, anchors, and rule references as promised by the padless contract.
+        placed_by_ref = {item.ref_id: item for item in placed if item.ref_id in view.footprints}
         rule_results = tuple(
             _evaluate_rule(index, rule, placed_by_ref, view, snapshot, budget)
             for index, rule in enumerate(intent.rules)
@@ -661,6 +686,7 @@ def evaluate_placement(
                     moved=item.moved,
                 )
                 for item in placed
+                if item.ref_id in view.footprints
             ),
             evidence=PlacementEvidence(
                 rule_results=rule_results,

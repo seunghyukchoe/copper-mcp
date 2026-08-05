@@ -203,6 +203,9 @@ collision could be proven. `courtyard_overlap` is exact for Board IR 0.2's recta
 subset: `proven_clear` or `violated`. Only footprints on the same physical side are compared, and
 edge contact is not overlap. A Board IR conversion rejects non-rectangular courtyard topology
 before a placement view exists, so the result cannot silently claim fidelity outside that subset.
+Padless/graphics-only footprints remain unavailable as subjects and anchors, but their supported
+courtyards remain stationary collision envelopes and are included in this same-side check; they are
+not emitted in the candidate manifest.
 
 A `refused` response carries a typed code: `unresolved_ref`, `infeasible_constraints`,
 `budget_exhausted`, `unsupported_geometry`, `illegal_placement`, `stale_revision` or
