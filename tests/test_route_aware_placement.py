@@ -513,3 +513,51 @@ def test_the_legality_verdict_is_invariant_across_scoring_policies() -> None:
     assert plain_score.violated_rules == aware_score.violated_rules
     assert plain_score.connectivity_manhattan_nm == aware_score.connectivity_manhattan_nm
     assert plain_score.moved_footprints == aware_score.moved_footprints
+
+
+def test_a_candidate_missing_a_footprint_refuses_as_a_binding_error() -> None:
+    """F9: an incomplete candidate is an integrity violation, not an unlucky probe."""
+
+    snapshot, view, result = _solved()
+    candidate = result.ranked[0].candidate
+    partial = finalise_candidate(replace(candidate, placements=candidate.placements[:-1]))
+
+    with pytest.raises(route_scoring.RouteScoringError, match="does not cover"):
+        route_scoring.score_route_aware_candidate(
+            partial,
+            snapshot,
+            view,
+            settings=benchmark.PROBE_SETTINGS,
+            stopped=lambda: None,
+        )
+
+
+def test_a_side_flip_stays_a_narrow_support_limit_and_is_scored_as_refused_probes() -> None:
+    """F3/F9: the two refusals are deliberately different kinds and must stay different.
+
+    A side flip is a legal legalizer output this narrow projection declines to represent, so it is
+    scored - as every probe refused - rather than raised.  Structural-integrity violations are the
+    opposite and escape the handler entirely.
+    """
+
+    snapshot, view, result = _solved()
+    candidate = result.ranked[0].candidate
+    flipped_side = "back" if candidate.placements[0].side == "front" else "front"
+    flipped = finalise_candidate(
+        replace(
+            candidate,
+            placements=(
+                replace(candidate.placements[0], side=flipped_side),
+                *candidate.placements[1:],
+            ),
+        )
+    )
+    settings = replace(benchmark.PROBE_SETTINGS, max_probes=11, max_total_probes=128)
+
+    evidence, status = route_scoring.score_route_aware_candidate(
+        flipped, snapshot, view, settings=settings, stopped=lambda: None
+    )
+
+    assert status is None and evidence is not None
+    assert evidence.attempted_probes == evidence.unrouted_probes == evidence.refused_probes == 11
+    assert evidence.wire_length_nm == 0

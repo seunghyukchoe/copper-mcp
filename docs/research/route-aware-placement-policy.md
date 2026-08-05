@@ -53,3 +53,19 @@ the default Manhattan-selected candidate, the route-aware-selected candidate eit
 
 The committed result passes the first condition (42,000,000 nm to 32,000,000 nm; 23.8095%).  This
 is a benchmark-specific selection result, not a universal policy-quality guarantee.
+
+### What the comparison is, corrected 2026-08-06
+
+The two policies do **not** rank one shared candidate set.  The score orders the solver beam, so it
+decides which successors are explored; the two retained sets are disjoint at the committed
+`max_ranked=8` and intersect in one candidate at `max_ranked=64`.  The number above is therefore a
+different-search-trajectory result.
+
+B-082 records two further measurements alongside it.  A genuine re-ranking over one fixed
+16-candidate set - the union of what both searches retained - independently reproduces the same two
+choices and the same 23.8095%.  And because the ranked search probes **one** of the fixture's
+**eleven** probeable nets, "zero unrouted probes" is a one-net statement: probed against all eleven,
+both chosen candidates leave four unrouted, every one of them an `off_grid` refusal rather than a
+proven-unroutable net, and the wire-length ordering reverses (359,000,000 nm baseline against
+391,000,000 nm route-aware).  A one-probe ranking signal is a search heuristic, and this fixture
+shows it does not generalize to the broader question by itself.

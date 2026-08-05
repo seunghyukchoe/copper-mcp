@@ -6,13 +6,57 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-08-05
+### Added
+
+- Added an opt-in, private route-aware placement ranking policy. It scores only candidates first
+  issued by the deterministic legalizer, verifies their identities and exact snapshot/view bindings
+  before rebuilding an immutable in-memory Board IR pose projection, and meters all independent A*
+  probes against one operation-wide cap. The default same-net Manhattan ranking and public placement
+  candidate shape remain unchanged. This is not whole-board routing, congestion, KiCad DRC, or apply
+  authority.
+
+- Route-aware placement evidence now names what produced it. `PlacementSolveResult` and every
+  `RankedPlacement` record their scoring policy, and `RouteAwareEvidence` carries an estimator id
+  plus a digest over the full probe and A* settings, so a one-probe observation can no longer be
+  mistaken for an eleven-probe one. The benchmark binds the same configuration into its `run_id`.
+
+- Added `score_placement_candidate`, which scores one already-legalized candidate under a stated
+  policy outside any search. This is what makes a genuine re-ranking comparison possible.
 
 ### Fixed
+
+- Corrected what the route-aware placement benchmark claims to compare. It described two policies
+  ranking one shared legalizer-issued candidate set; because the score orders the solver beam, the
+  policy decides which successors are ever explored, and the two retained sets are in fact disjoint
+  at the committed settings. B-082 records the correction, the separate true re-ranking measurement
+  (which reproduces the same 23.81% over a fixed 16-candidate set), and the honest all-probeable-net
+  observation, in which both chosen candidates leave 4 probes unrouted and the ordering reverses.
+  B-078 and B-081 are preserved unchanged as history.
+
+- Separated `refused_probes` from `unrouted_probes` in route-aware evidence. Only a completed
+  search reporting `no_path` is a routability statement; a grid, budget, support, or cancellation
+  refusal is a router limitation and is now counted as one.
+
+- Fixed a lexicographic inversion in route-aware ranking. A candidate the projection could not
+  represent reported one failed probe and a zero wire length, and since wire length is a minimize
+  tier, that zero is the best possible value — so an unrepresentable candidate outranked one that
+  was genuinely probed. It is now charged every probe it would have attempted. Reachable whenever
+  `max_probes` exceeds one.
+
+- Structural-integrity violations during route-aware projection — non-unique placements, a candidate
+  that does not cover the view footprint set, disagreeing footprint sets — now refuse as binding
+  errors instead of being downgraded to one failed probe.
+
+- A failed predeclared benchmark criterion is now recorded as a negative result with a non-zero
+  exit, as ADR-0067 promised, rather than raised. Harness integrity failures still refuse outright.
 
 - Regenerated the route-aware placement benchmark artifact from a reachable, DCO-signed
   projection-binding remediation commit. B-081 preserves B-078 as historical evidence while
   recording the corrected source provenance; the deterministic selection metrics are unchanged.
+
+## [0.5.0] - 2026-08-05
+
+### Fixed
 
 - Rebound the held-out audio benchmark artifact to the reachable merged-main source commit after
   PR #51's squash merge. Its strict detached replay now proves the locally available source is in
@@ -40,15 +84,6 @@ All notable changes are documented here. The format follows
   historical router/order combinations refuse before rendering or applying copper.
 
 ### Added
-
-- Added an opt-in, private route-aware placement ranking policy. It scores only candidates first
-  issued by the deterministic legalizer, verifies their identities and exact snapshot/view bindings
-  before rebuilding an immutable in-memory Board IR pose projection, and meters all independent A*
-  probes against one operation-wide cap. The default same-net Manhattan ranking and public placement
-  candidate shape remain unchanged. Three deterministic replays on the CopperMCP-original
-  Apache-2.0 NE5532 fixture selected a legal candidate with a 23.8095% lower one-probe routed length
-  (`42,000,000 → 32,000,000 nm`); this is not whole-board routing, congestion, KiCad DRC, or apply
-  authority.
 
 - Hardened the optional harness-owned KiCad/FreeRouting transaction behind an internal
   provider-created aggregate-quota workspace capability. The harness validates canonical
