@@ -11,6 +11,8 @@ import pytest
 
 from scripts import benchmark_audio_heldout_evaluation as benchmark
 
+ARTIFACT = benchmark.ROOT / benchmark.ARTIFACT_PATH
+
 
 def test_protocol_binds_original_fixture_license_and_exclusive_heldout_split() -> None:
     protocol = benchmark.load_protocol()
@@ -155,3 +157,15 @@ def test_reproducible_artifact_binds_all_inputs_without_host_observations(
         "tests/fixtures/benchmarks/heldout-audio/split.json",
     }
     assert "observations" not in artifact
+
+
+def test_committed_artifact_replays_from_its_clean_evidence_source() -> None:
+    artifact = json.loads(ARTIFACT.read_text(encoding="utf-8"))
+    evidence = artifact["evidence"]
+
+    replay = benchmark.build_reproducible_artifact(
+        evidence["evaluation"]["repetitions"],
+        evidence_source_commit=evidence["evidence_source_commit"],
+    )
+
+    assert replay == artifact
