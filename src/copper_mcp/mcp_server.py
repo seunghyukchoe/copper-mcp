@@ -505,8 +505,12 @@ def start_routing(
     ),
     structured_output=True,
 )
-def get_routing_job(job_id: Digest, authorization_digest: Digest) -> RoutingJobToolResponse:
-    """Read one durable routing-job record and its normalized request."""
+def get_routing_job(job_id: object, authorization_digest: object) -> RoutingJobToolResponse:
+    """Read one durable routing-job record and its normalized request.
+
+    Handles are checked by the retention-owning repository rather than the transport schema so
+    malformed JSON values still trigger bounded expiry cleanup before the fixed unavailable reply.
+    """
 
     try:
         result = get_routing_job_service(
@@ -528,8 +532,8 @@ def get_routing_job(job_id: Digest, authorization_digest: Digest) -> RoutingJobT
     structured_output=True,
 )
 def cancel_routing_job(
-    job_id: Digest,
-    authorization_digest: Digest,
+    job_id: object,
+    authorization_digest: object,
     reason: str = "caller_requested",
 ) -> RoutingJobToolResponse:
     """Request cooperative cancellation of one queued or running route proposal."""
@@ -558,11 +562,15 @@ def cancel_routing_job(
     structured_output=True,
 )
 def export_routing_candidate(
-    job_id: Digest,
-    candidate_id: Digest,
-    authorization_digest: Digest,
+    job_id: object,
+    candidate_id: object,
+    authorization_digest: object,
 ) -> RoutingCandidateExportToolResponse:
-    """Return candidate geometry only after the job's caller-context authorization succeeds."""
+    """Return candidate geometry only after the job's caller-context authorization succeeds.
+
+    Handles reach the geometry-retention boundary before validation so malformed values cannot
+    bypass TTL cleanup; no geometry is returned unless every later authorization check succeeds.
+    """
 
     try:
         result = export_routing_candidate_service(

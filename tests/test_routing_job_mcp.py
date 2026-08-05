@@ -314,3 +314,126 @@ def test_service_malformed_candidate_id_commits_expired_geometry_cleanup(tmp_pat
         assert retained is None
     finally:
         repository.close()
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "handle_fields", "diagnostic"),
+    (
+        (
+            "get_routing_job",
+            {"job_id": "malformed-job-id"},
+            "routing job is unavailable",
+        ),
+        (
+            "get_routing_job",
+            {"authorization_digest": {"malformed": "authorization"}},
+            "routing job is unavailable",
+        ),
+        (
+            "cancel_routing_job",
+            {"job_id": "malformed-job-id"},
+            "routing job cancellation was refused",
+        ),
+        (
+            "cancel_routing_job",
+            {"authorization_digest": ["malformed", "authorization"]},
+            "routing job cancellation was refused",
+        ),
+    ),
+)
+def test_mcp_malformed_job_lookup_handles_commit_expired_request_cleanup(
+    tmp_path: Path,
+    tool_name: str,
+    handle_fields: dict[str, object],
+    diagnostic: str,
+) -> None:
+    """MCP transport validation cannot bypass request-store TTL retention cleanup."""
+
+    settings, request, authorization = _workspace(tmp_path)
+    path = tmp_path / f"malformed-mcp-{tool_name}-{len(handle_fields)}.sqlite3"
+    repository = RoutingJobRepository(path, ttl_ms=10)
+    try:
+        with patch("copper_mcp.routing.job_repository._now_ms", return_value=100):
+            started = start_routing_job_service(
+                {"request": request, "authorization_digest": authorization},
+                settings,
+                repository,
+            )
+        payload: dict[str, object] = {
+            "job_id": started["job_id"],
+            "authorization_digest": authorization,
+        }
+        payload.update(handle_fields)
+        with (
+            patch.object(server, "_routing_repository", return_value=repository),
+            patch("copper_mcp.routing.job_repository._now_ms", return_value=110),
+            pytest.raises(ToolError) as caught,
+        ):
+            asyncio.run(mcp.call_tool(tool_name, payload))
+        assert str(caught.value).endswith(diagnostic)
+
+        with sqlite3.connect(path) as connection:
+            retained = connection.execute(
+                "SELECT request_json FROM routing_job_requests WHERE job_id = ?",
+                (started["job_id"],),
+            ).fetchone()
+        assert retained is None
+    finally:
+        repository.close()
+
+
+@pytest.mark.parametrize(
+    ("handle_fields",),
+    (
+        ({"job_id": "malformed-job-id"},),
+        ({"candidate_id": "malformed-candidate-id"},),
+        ({"authorization_digest": {"malformed": "authorization"}},),
+    ),
+)
+def test_mcp_malformed_export_handles_commit_expired_geometry_cleanup(
+    tmp_path: Path,
+    handle_fields: dict[str, object],
+) -> None:
+    """Malformed MCP export handles reach the geometry store before refusal."""
+
+    settings, request, authorization = _workspace(tmp_path)
+    path = tmp_path / f"malformed-mcp-export-{next(iter(handle_fields))}.sqlite3"
+    repository = RoutingJobRepository(path, ttl_ms=10)
+    try:
+        with patch("copper_mcp.routing.job_repository._now_ms", return_value=100):
+            started = start_routing_job_service(
+                {"request": request, "authorization_digest": authorization},
+                settings,
+                repository,
+            )
+        with (
+            patch("copper_mcp.routing.job_repository._now_ms", return_value=102),
+            patch("copper_mcp.routing.jobs._store_clock_ms", return_value=102),
+            patch("copper_mcp.routing.job_worker._wall_clock_ms", return_value=102),
+        ):
+            completed = execute_routing_job(
+                str(started["job_id"]), authorization, settings, repository
+            )
+        assert completed.candidate_id is not None
+        payload: dict[str, object] = {
+            "job_id": started["job_id"],
+            "candidate_id": completed.candidate_id,
+            "authorization_digest": authorization,
+        }
+        payload.update(handle_fields)
+        with (
+            patch.object(server, "_routing_repository", return_value=repository),
+            patch("copper_mcp.routing.job_repository._now_ms", return_value=112),
+            pytest.raises(ToolError) as caught,
+        ):
+            asyncio.run(mcp.call_tool("export_routing_candidate", payload))
+        assert str(caught.value).endswith("routing candidate export is unavailable")
+
+        with sqlite3.connect(path) as connection:
+            retained = connection.execute(
+                "SELECT candidate_json FROM routing_candidate_exports WHERE candidate_id = ?",
+                (completed.candidate_id,),
+            ).fetchone()
+        assert retained is None
+    finally:
+        repository.close()

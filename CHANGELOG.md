@@ -219,6 +219,10 @@ All notable changes are documented here. The format follows
   diagnostics and no-disclosure behavior are unchanged; timestamps remain validated first and
   TTL is not secure erasure.
 
+- MCP routing get, cancel, and export entrypoints now accept handles broadly enough to reach the
+  purge-first service/store boundary. Their payloads remain closed, diagnostics remain fixed and
+  non-disclosing, valid requests are unchanged, and TTL is not secure erasure.
+
 ### Changed
 
 - Corrected the spatial-index benchmark to count bucket candidates examined by the exact bounds
