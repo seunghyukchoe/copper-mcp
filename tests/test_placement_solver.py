@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from itertools import chain, repeat
 from pathlib import Path
 
 import pytest
@@ -144,6 +145,83 @@ def test_solver_honours_cancellation_and_work_ceiling() -> None:
     assert budgeted.ranked
 
 
+def test_solver_supports_a_declared_pad_subject_by_canonicalising_its_owner() -> None:
+    snapshot, view = _board(ROTATION_BOARD)
+    pad_ref = next(iter(view.owner_by_pad))
+
+    result = solve_placement(
+        _intent(view, ROTATION_BOARD, subjects=[pad_ref]), snapshot, view, settings=_settings()
+    )
+
+    assert result.status in {"completed", "work_exhausted"}
+    assert result.initial is not None and result.initial.request is not None
+    assert result.initial.request.subject_refs == (view.owner_by_pad[pad_ref],)
+    assert result.ranked
+
+
+@pytest.mark.parametrize(
+    "values",
+    (
+        (),
+        (0,),
+        (-7, -1, 2, 9),
+        (4, 4, 4, 4),
+        (9, -3, 7, -3, 0),
+    ),
+)
+def test_pairwise_axis_distance_matches_the_quadratic_definition(values: tuple[int, ...]) -> None:
+    expected = sum(
+        abs(left - right) for index, left in enumerate(values) for right in values[index + 1 :]
+    )
+
+    assert solver_module._pairwise_axis_distance(iter(values), stopped=lambda: None) == expected
+
+
+def test_pairwise_axis_distance_keeps_large_nets_subquadratic_and_exact() -> None:
+    count = 20_000
+
+    assert solver_module._pairwise_axis_distance(range(count), stopped=lambda: None) == (
+        count * (count - 1) * (count + 1) // 6
+    )
+
+
+def test_solver_drops_an_incomplete_score_when_cancelled_after_legalization() -> None:
+    snapshot, view = _board(ROTATION_BOARD)
+    intent = _intent(view, ROTATION_BOARD)
+    calls = 0
+
+    def cancelled() -> bool:
+        nonlocal calls
+        calls += 1
+        return calls > 1
+
+    result = solve_placement(intent, snapshot, view, settings=_settings(), cancelled=cancelled)
+
+    assert result.status == "cancelled"
+    assert result.evaluations == 1
+    assert result.initial is not None and result.initial.candidate is not None
+    assert result.initial_score is None
+    assert not result.ranked
+
+
+def test_scoring_refuses_a_partial_result_after_deadline_exhaustion() -> None:
+    snapshot, view = _board(ROTATION_BOARD)
+    initial = solver_module.evaluate_placement(
+        _intent(view, ROTATION_BOARD), snapshot, view, deadline_seconds=1.0
+    )
+    assert initial.candidate is not None
+
+    score, status = solver_module._score(
+        initial.candidate,
+        snapshot,
+        view,
+        stopped=lambda: "deadline_exhausted",
+    )
+
+    assert status == "deadline_exhausted"
+    assert score is None
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
@@ -172,7 +250,7 @@ def test_solver_caps_each_legalizer_call_to_the_remaining_operation_deadline(
 ) -> None:
     snapshot, view = _board(ROTATION_BOARD)
     intent = _intent(view, ROTATION_BOARD)
-    clock = iter((0.0, 0.1, 0.2, 0.3, 0.4))
+    clock = chain((0.0, 0.1, 0.2, 0.3, 0.4), repeat(0.4))
     deadlines: list[float] = []
     actual_evaluate = solver_module.evaluate_placement
     legalized_initial = actual_evaluate(intent, snapshot, view, deadline_seconds=1.0)

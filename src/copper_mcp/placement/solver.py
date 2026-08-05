@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 
 from copper_mcp.board_ir import BoardIRSnapshot, PointNM
@@ -166,9 +166,11 @@ def solve_placement(
 ) -> PlacementSolveResult:
     """Search bounded grid-adjacent moves and rank only legalizer-issued candidates.
 
-    ``intent`` is never changed.  Locked and padless footprints are never synthesized as moved
-    proposals.  A stale/digest mismatch is surfaced by the initial legalizer evaluation, before
-    the solver examines any footprint geometry.
+    ``intent`` is never changed.  For the search only, pad subjects are canonicalized to their
+    owning footprint while rule and anchor references retain their original meaning. Locked and
+    padless footprints are never synthesized as moved proposals.  A stale/digest mismatch is
+    surfaced by the initial legalizer evaluation, before the solver examines any footprint
+    geometry.
     """
 
     if not isinstance(intent, PlacementIntent):
@@ -183,6 +185,10 @@ def solve_placement(
         raise PlacementSolverError("settings must be a PlacementSolverSettings")
     if cancelled is not None and not callable(cancelled):
         raise PlacementSolverError("cancelled must be callable")
+
+    search_intent = _canonicalise_search_intent(intent, view)
+    if search_intent is None:
+        return PlacementSolveResult("input_refused", None, None, (), 0)
 
     started = time.monotonic()
 
@@ -214,7 +220,7 @@ def solve_placement(
     assert initial_deadline is not None
 
     initial = evaluate_placement(
-        intent,
+        search_intent,
         snapshot,
         view,
         max_checks=settings.legalizer_max_checks,
@@ -225,11 +231,15 @@ def solve_placement(
     if initial.candidate is None:
         return PlacementSolveResult("input_refused", initial, None, (), evaluations)
 
-    initial_ranked = RankedPlacement(initial, _score(initial.candidate, snapshot, view))
+    initial_score, score_status = _score(initial.candidate, snapshot, view, stopped=stopped)
+    if score_status is not None:
+        return PlacementSolveResult(score_status, initial, None, (), evaluations)
+    assert initial_score is not None
+    initial_ranked = RankedPlacement(initial, initial_score)
     known: dict[str, RankedPlacement] = {initial_ranked.candidate.candidate_id: initial_ranked}
-    movable = _movable_refs(intent, view)
+    movable = _movable_refs(search_intent, view)
     initial_state = _SearchState(
-        _normalise_proposals(intent, initial_ranked.candidate, view, movable), initial_ranked
+        _normalise_proposals(search_intent, initial_ranked.candidate, view, movable), initial_ranked
     )
     frontier: tuple[_SearchState, ...] = (initial_state,)
     status = "completed"
@@ -250,7 +260,7 @@ def solve_placement(
                         break
                     assert call_deadline is not None
                     successor = _with_step(state, ref_id, dx, dy, settings.step_nm, view)
-                    proposal_intent = replace(intent, proposals=successor)
+                    proposal_intent = replace(search_intent, proposals=successor)
                     result = evaluate_placement(
                         proposal_intent,
                         snapshot,
@@ -262,9 +272,12 @@ def solve_placement(
                     evaluations += 1
                     if result.candidate is None:
                         continue
-                    proposed_ranked = RankedPlacement(
-                        result, _score(result.candidate, snapshot, view)
-                    )
+                    score, score_status = _score(result.candidate, snapshot, view, stopped=stopped)
+                    if score_status is not None:
+                        status = score_status
+                        break
+                    assert score is not None
+                    proposed_ranked = RankedPlacement(result, score)
                     candidate_id = proposed_ranked.candidate.candidate_id
                     if candidate_id in known:
                         continue
@@ -282,6 +295,47 @@ def solve_placement(
         sorted(known.values(), key=_rank_key)[: settings.max_ranked]
     )
     return PlacementSolveResult(status, initial, initial_ranked.score, retained, evaluations)
+
+
+def _canonicalise_search_intent(
+    intent: PlacementIntent, view: PlacementView
+) -> PlacementIntent | None:
+    """Map supported pad subjects to owning footprints without broadening move authority.
+
+    The placement contract permits a subject reference to name either a footprint or one of its
+    pads. The legalizer resolves pad references for rules and anchors, but a physical move always
+    belongs to one footprint. Canonicalizing the private solver request preserves that meaning and
+    keeps generated proposals inside the intent's declared subject scope. If two user proposals
+    collapse onto one footprint, the search refuses rather than guessing which offset should win.
+    Unknown and padless references stay untouched so the legalizer can return its established
+    typed diagnostic.
+    """
+
+    resolved_subjects: dict[str, str] = {}
+    for subject in intent.subject_refs:
+        footprint = view.resolve(subject)
+        if footprint is None:
+            return intent
+        resolved_subjects[subject] = footprint.ref_id
+
+    proposals_by_subject: dict[str, PlacementProposal] = {}
+    for proposal in intent.proposals:
+        footprint = view.resolve(proposal.subject)
+        if footprint is None:
+            return intent
+        canonical = replace(proposal, subject=footprint.ref_id)
+        existing = proposals_by_subject.get(canonical.subject)
+        if existing is not None and existing != canonical:
+            return None
+        proposals_by_subject[canonical.subject] = canonical
+
+    canonical_subjects = tuple(sorted(set(resolved_subjects.values())))
+    canonical_proposals = tuple(
+        proposals_by_subject[subject] for subject in sorted(proposals_by_subject)
+    )
+    if canonical_subjects == intent.subject_refs and canonical_proposals == intent.proposals:
+        return intent
+    return replace(intent, subject_refs=canonical_subjects, proposals=canonical_proposals)
 
 
 def _movable_refs(intent: PlacementIntent, view: PlacementView) -> tuple[str, ...]:
@@ -353,20 +407,47 @@ def _score(
     candidate: PlacementCandidate,
     snapshot: BoardIRSnapshot,
     view: PlacementView,
-) -> PlacementSolverScore:
-    violated = sum(item.status == "violated" for item in candidate.evidence.rule_results)
-    moved = sum(item.moved for item in candidate.placements)
+    *,
+    stopped: Callable[[], str | None],
+) -> tuple[PlacementSolverScore | None, str | None]:
+    """Score a legal candidate, stopping before an unbounded proxy calculation can escape.
+
+    The exact all-pairs Manhattan total is computed from sorted axes rather than enumerating
+    pairs. This keeps the proxy exact while reducing each net from quadratic to ``O(n log n)``.
+    Every linear scan checks the solver's single cancellation/deadline gate.
+    """
+
+    violated = 0
+    for rule_result in candidate.evidence.rule_results:
+        try:
+            _raise_if_stopped(stopped)
+        except _ScoreInterruptedError as error:
+            return None, error.status
+        violated += rule_result.status == "violated"
+    moved = 0
+    for placement in candidate.placements:
+        try:
+            _raise_if_stopped(stopped)
+        except _ScoreInterruptedError as error:
+            return None, error.status
+        moved += placement.moved
+    try:
+        connectivity = _connectivity_manhattan(candidate, snapshot, view, stopped=stopped)
+    except _ScoreInterruptedError as error:
+        return None, error.status
     return PlacementSolverScore(
         violated_rules=violated,
-        connectivity_manhattan_nm=_connectivity_manhattan(candidate, snapshot, view),
+        connectivity_manhattan_nm=connectivity,
         moved_footprints=moved,
-    )
+    ), None
 
 
 def _connectivity_manhattan(
     candidate: PlacementCandidate,
     snapshot: BoardIRSnapshot,
     view: PlacementView,
+    *,
+    stopped: Callable[[], str | None],
 ) -> int:
     """Return the all-pairs same-net Manhattan proxy in integer nanometres.
 
@@ -374,9 +455,13 @@ def _connectivity_manhattan(
     congestion.  Its only role is a stable, visible rank signal for this baseline.
     """
 
-    placement_by_ref = {item.ref_id: item for item in candidate.placements}
-    centres_by_net: dict[str, list[tuple[str, PointNM]]] = {}
+    placement_by_ref: dict[str, FootprintPlacement] = {}
+    for placement in candidate.placements:
+        _raise_if_stopped(stopped)
+        placement_by_ref[placement.ref_id] = placement
+    centres_by_net: dict[str, list[PointNM]] = {}
     for pad in snapshot.content.pads:
+        _raise_if_stopped(stopped)
         if pad.net_id is None:
             continue
         owner = view.owner_by_pad.get(pad.id)
@@ -393,14 +478,45 @@ def _connectivity_manhattan(
             placement.origin_x_nm + turned.x,
             placement.origin_y_nm + turned.y,
         )
-        centres_by_net.setdefault(pad.net_id, []).append((pad.id, centre))
+        centres_by_net.setdefault(pad.net_id, []).append(centre)
 
     total = 0
-    for entries in centres_by_net.values():
-        ordered = sorted(entries)
-        for index, (_, left) in enumerate(ordered):
-            for _, right in ordered[index + 1 :]:
-                total += abs(left.x - right.x) + abs(left.y - right.y)
+    for net_id in sorted(centres_by_net):
+        _raise_if_stopped(stopped)
+        entries = centres_by_net[net_id]
+        total += _pairwise_axis_distance((point.x for point in entries), stopped=stopped)
+        total += _pairwise_axis_distance((point.y for point in entries), stopped=stopped)
+    return total
+
+
+class _ScoreInterruptedError(RuntimeError):
+    """Carry one non-sensitive solver stop status out of a scoring helper."""
+
+    def __init__(self, status: str) -> None:
+        super().__init__(status)
+        self.status = status
+
+
+def _raise_if_stopped(stopped: Callable[[], str | None]) -> None:
+    """Stop scoring without manufacturing an incomplete ranking signal."""
+
+    if (status := stopped()) is not None:
+        raise _ScoreInterruptedError(status)
+
+
+def _pairwise_axis_distance(values: Iterable[int], *, stopped: Callable[[], str | None]) -> int:
+    """Return ``sum(abs(a - b) for a < b)`` for one axis in ``O(n log n)`` exactly."""
+
+    ordered: list[int] = []
+    for value in values:
+        _raise_if_stopped(stopped)
+        ordered.append(value)
+    ordered.sort()
+    count = len(ordered)
+    total = 0
+    for index, value in enumerate(ordered):
+        _raise_if_stopped(stopped)
+        total += value * (2 * index - count + 1)
     return total
 
 

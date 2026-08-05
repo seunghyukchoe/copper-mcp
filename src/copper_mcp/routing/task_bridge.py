@@ -123,25 +123,37 @@ def assess_mcp_tasks_compatibility(
     )
 
 
-def probe_installed_mcp_tasks_runtime() -> MCPTasksCompatibility:
+def probe_installed_mcp_tasks_runtime(
+    *,
+    version_lookup: Callable[[str], str] | None = None,
+    symbol_probe: Callable[[str, tuple[str, ...]], bool] | None = None,
+    task_wire_probe: Callable[[], bool] | None = None,
+) -> MCPTasksCompatibility:
     """Inspect the installed SDK without claiming support from generic hooks alone.
 
-    The probe checks only public importable symbols.  A generic extension API is
-    insufficient: a Tasks server also needs the draft request/result wire types,
-    a dispatcher that validates their negotiated lifecycle, durable task state,
-    and an authenticated caller identity for every deferred-result lookup.
+    The probe checks only public importable symbols. Optional seams make the runtime
+    facts testable without pinning a dynamic dependency resolver result. A generic
+    extension API is insufficient: a Tasks server also needs the draft request/result
+    wire types, a dispatcher that validates their negotiated lifecycle, durable task
+    state, and an authenticated caller identity for every deferred-result lookup.
     """
 
+    installed_version_lookup = version if version_lookup is None else version_lookup
+    installed_symbol_probe = _has_symbols if symbol_probe is None else symbol_probe
+    installed_task_wire_probe = (
+        _has_current_task_wire_types if task_wire_probe is None else task_wire_probe
+    )
+
     try:
-        installed_version = version("mcp")
+        installed_version = installed_version_lookup("mcp")
     except PackageNotFoundError:
         installed_version = None
 
-    extension_api = _has_symbols(
+    extension_api = installed_symbol_probe(
         "mcp.server.extension", ("Extension", "MethodBinding")
-    ) and _has_symbols("mcp.server.mcpserver.server", ("require_client_extension",))
-    task_wire_types = _has_current_task_wire_types()
-    task_dispatcher = _has_symbols("mcp.server.tasks", ("Tasks",))
+    ) and installed_symbol_probe("mcp.server.mcpserver.server", ("require_client_extension",))
+    task_wire_types = installed_task_wire_probe()
+    task_dispatcher = installed_symbol_probe("mcp.server.tasks", ("Tasks",))
 
     # CopperMCP currently has neither a session-authenticated principal exposed
     # to task handlers nor permitted durable storage for a distinct task handle.

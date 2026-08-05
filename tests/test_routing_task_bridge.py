@@ -229,14 +229,33 @@ def test_compatibility_gate_rejects_non_text_version() -> None:
         )
 
 
-def test_installed_runtime_probe_refuses_to_overclaim_task_support() -> None:
-    result = probe_installed_mcp_tasks_runtime()
+def test_runtime_probe_records_injected_current_mcp_2_0_facts() -> None:
+    def symbol_probe(module_name: str, names: tuple[str, ...]) -> bool:
+        return (module_name, names) in {
+            ("mcp.server.extension", ("Extension", "MethodBinding")),
+            ("mcp.server.mcpserver.server", ("require_client_extension",)),
+        }
+
+    result = probe_installed_mcp_tasks_runtime(
+        version_lookup=lambda package: "2.0.0" if package == "mcp" else "",
+        symbol_probe=symbol_probe,
+        task_wire_probe=lambda: False,
+    )
 
     assert isinstance(result, MCPTasksCompatibility)
     assert result.mcp_version == "2.0.0"
     assert result.has_extension_api is True
     assert result.has_task_wire_types is False
     assert result.has_task_dispatcher is False
+    assert result.has_owner_bound_task_lookup is False
+    assert result.has_durable_task_handle_store is False
+    assert result.supports_safe_wire_contract is False
+
+
+def test_installed_runtime_probe_stays_fail_closed_across_dependency_updates() -> None:
+    result = probe_installed_mcp_tasks_runtime()
+
+    assert isinstance(result, MCPTasksCompatibility)
     assert result.has_owner_bound_task_lookup is False
     assert result.has_durable_task_handle_store is False
     assert result.supports_safe_wire_contract is False

@@ -1,13 +1,16 @@
 # MCP Tasks compatibility — 2026-08-05
 
-## Pinned result
+## Recorded result
 
-CopperMCP's dependency range currently resolves to **`mcp 2.0.0`** in the
-reference environment.  This runtime exposes the generic SEP-2133 extension
-API (`Extension`, `MethodBinding`, and a `tools/call` interceptor), but its
-Task classes are the incompatible historical nested-`task` shapes rather than
-the current draft's direct `CreateTaskResult` fields, and it has no Tasks
-dispatcher.  The runtime probe in
+CopperMCP's reference environment used **`mcp 2.0.0`** when this result was
+recorded. The supported dependency range is broader, so the runtime probe records
+the actually installed capabilities and tests the 2.0.0 facts through injected
+module observations rather than pinning CI to one resolver outcome.
+
+That runtime exposes the generic SEP-2133 extension API (`Extension`,
+`MethodBinding`, and a `tools/call` interceptor), but its Task classes are the
+incompatible historical nested-`task` shapes rather than the current draft's
+direct `CreateTaskResult` fields, and it has no Tasks dispatcher. The runtime probe in
 `copper_mcp.routing.task_bridge` reports this combination as unsupported and
 does not advertise `io.modelcontextprotocol/tasks`.
 
