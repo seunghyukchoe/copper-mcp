@@ -1,0 +1,269 @@
+{
+  "identity": {
+    "fixed_seed": 23,
+    "fixture_manifest": {
+      "placement": "sha256:31eb2dca626a7a56ec45e58a7ca6983fa08e11ca5b43309ea09bc4e8723540ea",
+      "routing": "sha256:5f88ebcf52cf8f1548990bdbdc1c52ac7a30f39c013366f79b161ec15e1caae2",
+      "scene": "sha256:c69298f27512becfe4b765b99e75628426711103837ab04f4ea424cc48580a1c"
+    },
+    "measurement_configuration": {
+      "hotspot_limit": 8,
+      "samples": 5,
+      "warmups": 2
+    },
+    "schema": "copper-mcp/performance-profile/v1",
+    "script_sha256": "sha256:c86974e516c347fb1e733fa3eefe54c0d37d58b547b1dadeaaf3e5a18cbc4761"
+  },
+  "identity_digest": "sha256:3cb1d73ba609cb7694dc7a6347615ad0a5bbb85c8faecf61d156aeba3b0c90e2",
+  "instrumentation": {
+    "hotspots": "cProfile cumulative time; bounded redacted function summaries only",
+    "run_span": "time.monotonic_ns; operational span only, excluded from identity",
+    "timings": "time.perf_counter_ns; unprofiled wall-clock samples, excluded from identity"
+  },
+  "monotonic_run_span_ns": 1597616500,
+  "not_claimed": [
+    "an acceleration, Rust, GPU, KiCad CLI, DRC, fabrication, or hardware result",
+    "a cross-machine timing comparison or stable nanosecond precision",
+    "public-contract, routing-policy, placement-policy, or mutation behavior changes"
+  ],
+  "provenance": {
+    "git_head": "2f4ed3d8f6e221b1d678355475ec7c6787ddcfc6",
+    "machine": "arm64",
+    "python": "3.14.2"
+  },
+  "run_id": "sha256:de83d0b4f077a3d940f5ad0e9ab38d5548dfd78cd6e20993a9f3dd77198b81be",
+  "scenarios": {
+    "placement": {
+      "fixture": {
+        "id": "placement",
+        "sha256": "sha256:31eb2dca626a7a56ec45e58a7ca6983fa08e11ca5b43309ea09bc4e8723540ea"
+      },
+      "hotspots_cumulative": [
+        {
+          "cumulative_time_ns": 317177042,
+          "function": "external:performance_profile_v1.py:_placement_pipeline",
+          "primitive_calls": 1,
+          "self_time_ns": 125167,
+          "total_calls": 1
+        },
+        {
+          "cumulative_time_ns": 304300458,
+          "function": "copper_mcp:copper_mcp.placement.solver:solve_placement",
+          "primitive_calls": 1,
+          "self_time_ns": 2072430,
+          "total_calls": 1
+        },
+        {
+          "cumulative_time_ns": 249641997,
+          "function": "copper_mcp:copper_mcp.placement.legalizer:evaluate_placement",
+          "primitive_calls": 128,
+          "self_time_ns": 2789267,
+          "total_calls": 128
+        },
+        {
+          "cumulative_time_ns": 153606208,
+          "function": "copper_mcp:copper_mcp.placement.legalizer:_outline_containment",
+          "primitive_calls": 128,
+          "self_time_ns": 2270117,
+          "total_calls": 128
+        },
+        {
+          "cumulative_time_ns": 150561753,
+          "function": "copper_mcp:copper_mcp.placement.legalizer:<genexpr>",
+          "primitive_calls": 3584,
+          "self_time_ns": 1371310,
+          "total_calls": 3584
+        },
+        {
+          "cumulative_time_ns": 149190443,
+          "function": "copper_mcp:copper_mcp.placement.geometry:rect_inside_ring",
+          "primitive_calls": 1792,
+          "self_time_ns": 12440508,
+          "total_calls": 1792
+        },
+        {
+          "cumulative_time_ns": 98915125,
+          "function": "copper_mcp:copper_mcp.placement.geometry:_segments_intersect",
+          "primitive_calls": 28672,
+          "self_time_ns": 33974437,
+          "total_calls": 28672
+        },
+        {
+          "cumulative_time_ns": 71423503,
+          "function": "copper_mcp:copper_mcp.placement.legalizer:_place",
+          "primitive_calls": 128,
+          "self_time_ns": 12383439,
+          "total_calls": 128
+        }
+      ],
+      "output_digest": "sha256:b272f5a6160239d05823240bd3131b16aeecffc530ba0673728deffd4f80625c",
+      "timing_perf_counter_ns": {
+        "max_ns": 240613625,
+        "median_ns": 160821709,
+        "min_ns": 132837584,
+        "samples_ns": [
+          138210083,
+          132837584,
+          160821709,
+          211194125,
+          240613625
+        ]
+      }
+    },
+    "routing": {
+      "fixture": {
+        "id": "routing",
+        "sha256": "sha256:5f88ebcf52cf8f1548990bdbdc1c52ac7a30f39c013366f79b161ec15e1caae2"
+      },
+      "hotspots_cumulative": [
+        {
+          "cumulative_time_ns": 10595167,
+          "function": "external:performance_profile_v1.py:_route_pipeline",
+          "primitive_calls": 1,
+          "self_time_ns": 25833,
+          "total_calls": 1
+        },
+        {
+          "cumulative_time_ns": 10495625,
+          "function": "copper_mcp:copper_mcp.route_preview:preview_route",
+          "primitive_calls": 1,
+          "self_time_ns": 66792,
+          "total_calls": 1
+        },
+        {
+          "cumulative_time_ns": 5955167,
+          "function": "copper_mcp:copper_mcp.routing.astar:propose",
+          "primitive_calls": 1,
+          "self_time_ns": 37667,
+          "total_calls": 1
+        },
+        {
+          "cumulative_time_ns": 5409791,
+          "function": "copper_mcp:copper_mcp.routing.astar:_route_tree",
+          "primitive_calls": 1,
+          "self_time_ns": 52917,
+          "total_calls": 1
+        },
+        {
+          "cumulative_time_ns": 4977291,
+          "function": "copper_mcp:copper_mcp.routing.astar:_search",
+          "primitive_calls": 1,
+          "self_time_ns": 948624,
+          "total_calls": 1
+        },
+        {
+          "cumulative_time_ns": 3951959,
+          "function": "copper_mcp:copper_mcp.adapters.kicad_board_ir:parse_kicad_bytes",
+          "primitive_calls": 1,
+          "self_time_ns": 18583,
+          "total_calls": 1
+        },
+        {
+          "cumulative_time_ns": 3141417,
+          "function": "copper_mcp:copper_mcp.adapters.kicad_board_ir:convert",
+          "primitive_calls": 1,
+          "self_time_ns": 68125,
+          "total_calls": 1
+        },
+        {
+          "cumulative_time_ns": 1417811,
+          "function": "copper_mcp:copper_mcp.routing.astar:_edge_is_legal",
+          "primitive_calls": 321,
+          "self_time_ns": 368252,
+          "total_calls": 321
+        }
+      ],
+      "output_digest": "sha256:3b3a4f9f8e4f0ac7c99fd821a3551d7b13e5c0f96243cb0889ba6b286fb5cbcf",
+      "timing_perf_counter_ns": {
+        "max_ns": 3945125,
+        "median_ns": 3601084,
+        "min_ns": 2883042,
+        "samples_ns": [
+          3945125,
+          3089167,
+          2883042,
+          3614083,
+          3601084
+        ]
+      }
+    },
+    "scene": {
+      "fixture": {
+        "id": "scene",
+        "sha256": "sha256:c69298f27512becfe4b765b99e75628426711103837ab04f4ea424cc48580a1c"
+      },
+      "hotspots_cumulative": [
+        {
+          "cumulative_time_ns": 5386666,
+          "function": "external:performance_profile_v1.py:_scene_pipeline",
+          "primitive_calls": 1,
+          "self_time_ns": 7541,
+          "total_calls": 1
+        },
+        {
+          "cumulative_time_ns": 5354167,
+          "function": "copper_mcp:copper_mcp.circuit_scene:observe_board_scene",
+          "primitive_calls": 1,
+          "self_time_ns": 15875,
+          "total_calls": 1
+        },
+        {
+          "cumulative_time_ns": 5338292,
+          "function": "copper_mcp:copper_mcp.circuit_scene:_observe_board_scene",
+          "primitive_calls": 1,
+          "self_time_ns": 119290,
+          "total_calls": 1
+        },
+        {
+          "cumulative_time_ns": 4727417,
+          "function": "copper_mcp:copper_mcp.adapters.kicad_board_ir:parse_kicad_bytes",
+          "primitive_calls": 1,
+          "self_time_ns": 15334,
+          "total_calls": 1
+        },
+        {
+          "cumulative_time_ns": 3407750,
+          "function": "copper_mcp:copper_mcp.adapters.kicad_board_ir:convert",
+          "primitive_calls": 1,
+          "self_time_ns": 42960,
+          "total_calls": 1
+        },
+        {
+          "cumulative_time_ns": 1117125,
+          "function": "copper_mcp:copper_mcp.adapters.sexpr:parse_sexpr",
+          "primitive_calls": 1,
+          "self_time_ns": 221822,
+          "total_calls": 1
+        },
+        {
+          "cumulative_time_ns": 1051459,
+          "function": "copper_mcp:copper_mcp.board_ir.canonical:make_snapshot",
+          "primitive_calls": 1,
+          "self_time_ns": 14500,
+          "total_calls": 1
+        },
+        {
+          "cumulative_time_ns": 810077,
+          "function": "copper_mcp:copper_mcp.adapters.sexpr:_tokens",
+          "primitive_calls": 328,
+          "self_time_ns": 507810,
+          "total_calls": 328
+        }
+      ],
+      "output_digest": "sha256:58139cebf3957abc1d90270ca8f8a75a87c72eff2c6c5e591afeb98272a8accb",
+      "timing_perf_counter_ns": {
+        "max_ns": 2658958,
+        "median_ns": 1747667,
+        "min_ns": 1608417,
+        "samples_ns": [
+          1782166,
+          1675041,
+          1608417,
+          2658958,
+          1747667
+        ]
+      }
+    }
+  },
+  "schema": "copper-mcp/performance-profile/v1"
+}
