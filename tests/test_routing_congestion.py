@@ -261,3 +261,32 @@ def test_negotiated_router_fails_closed_when_cancellation_callback_raises() -> N
     assert result.iterations == 1
     assert result.candidates == ()
     assert result.diagnostic == "negotiated routing was cancelled during a bounded iteration"
+
+
+def test_negotiated_router_discards_current_iteration_when_later_net_cancels() -> None:
+    snapshot = _crossing_snapshot()
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_requests(snapshot),
+    )
+
+    class CancelSecondRouter:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.router = AStarRouter()
+
+        def propose(self, snapshot: object, request: RouteRequest, **kwargs: object) -> object:
+            self.calls += 1
+            if self.calls == 2:
+                return self.router.propose(snapshot, request, cancelled=lambda: True)
+            return self.router.propose(snapshot, request, **kwargs)
+
+    result = negotiate_routes(snapshot, envelope, router=CancelSecondRouter())
+
+    assert result.status is NegotiatedRoutingStatus.CANCELLED
+    assert result.iterations == 1
+    assert result.candidates == ()
+    assert result.connections == ()
+    assert result.unrouted_nets == (H_NET, V_NET)
+    assert result.overflow_resources == ()
+    assert result.total_wire_length_nm == 0

@@ -578,6 +578,24 @@ def negotiate_routes(
                 for item in ordered
                 if item.net_id not in working and item.net_id not in connections
             )
+        iterations = iteration
+        if cancelled_during_iteration:
+            return NegotiatedRoutingResult(
+                status=NegotiatedRoutingStatus.CANCELLED,
+                board_revision=checked_envelope.board_revision,
+                # A cancellation invalidates the in-progress allocation as a whole.  Publishing
+                # only the earlier nets would make an incomplete negotiated pass look usable.
+                candidates=(),
+                connections=(),
+                unrouted_nets=tuple(item.net_id for item in ordered),
+                iterations=iterations,
+                ripups=ripups,
+                overflow_resources=(),
+                overflow_units=0,
+                total_wire_length_nm=0,
+                diagnostic="negotiated routing was cancelled during a bounded iteration",
+                policy_digest=checked_envelope.policy_digest,
+            )
         present_overflow = ledger.overflow_resources()
         candidates = tuple(sorted(working.values(), key=lambda item: item.patch.net_id))
         connected = tuple(sorted(connections.values(), key=lambda item: item.start_pad_id))
@@ -589,22 +607,6 @@ def negotiate_routes(
             best_connections = connected
             best_unrouted = unrouted_tuple
             best_overflow = present_overflow
-        iterations = iteration
-        if cancelled_during_iteration:
-            return NegotiatedRoutingResult(
-                status=NegotiatedRoutingStatus.CANCELLED,
-                board_revision=checked_envelope.board_revision,
-                candidates=best_candidates,
-                connections=best_connections,
-                unrouted_nets=best_unrouted,
-                iterations=iterations,
-                ripups=ripups,
-                overflow_resources=best_overflow,
-                overflow_units=sum(item.usage - 1 for item in best_overflow),
-                total_wire_length_nm=sum(item.patch.length_nm for item in best_candidates),
-                diagnostic="negotiated routing was cancelled during a bounded iteration",
-                policy_digest=checked_envelope.policy_digest,
-            )
         if not unrouted_tuple and not present_overflow:
             return NegotiatedRoutingResult(
                 status=NegotiatedRoutingStatus.COMPLETED,
