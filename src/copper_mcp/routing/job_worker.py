@@ -325,6 +325,8 @@ class RoutingJobWorker:
         if before_complete is not None:
             try:
                 before_complete(candidate)
+            except RoutingJobExecutionError as error:
+                return self._fail_or_cancel(lease, error.code, _failure_message(error.code))
             except (RoutingJobError, TypeError, ValueError):
                 return self._fail_or_cancel(
                     lease,

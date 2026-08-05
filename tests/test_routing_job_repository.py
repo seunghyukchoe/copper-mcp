@@ -13,6 +13,7 @@ from copper_mcp.routing import (
     CandidateManifestNotFoundError,
     LayeredAStarSettings,
     LayeredBoardRouter,
+    LayeredRouteCandidate,
     LayeredRouteRequest,
     RoutingJobKind,
     RoutingJobLimits,
@@ -46,7 +47,7 @@ def _profile() -> KiCadConstraintProfile:
     return KiCadConstraintProfile(net_classes=(net_class,), default_net_class_id=net_class.id)
 
 
-def _candidate_and_spec() -> tuple[object, RoutingJobSpec, dict[str, object], str]:
+def _candidate_and_spec() -> tuple[LayeredRouteCandidate, RoutingJobSpec, dict[str, object], str]:
     conversion = parse_kicad_bytes(FIXTURE.read_bytes(), _profile())
     assert conversion.diagnostics == ()
     assert conversion.snapshot is not None
@@ -114,6 +115,70 @@ def _candidate_and_spec() -> tuple[object, RoutingJobSpec, dict[str, object], st
         ),
     )
     return candidate, spec, request, _digest("e")
+
+
+def _completion_mismatch(
+    spec: RoutingJobSpec,
+    candidate: LayeredRouteCandidate,
+    kind: str,
+) -> RoutingJobSpec:
+    request_kind = spec.request_kind
+    router_version = spec.router_version
+    policy = spec.policy
+    seed = spec.seed
+    limits = spec.limits
+    if kind == "kind":
+        request_kind = RoutingJobKind.SINGLE_LAYER
+    elif kind == "router":
+        router_version = "different-router-v1"
+    elif kind == "policy":
+        policy = "different-policy-v1"
+    elif kind == "seed":
+        seed += 1
+    elif kind == "metrics":
+        if candidate.metrics.expanded_states > 1:
+            limits = RoutingJobLimits(
+                max_runtime_ms=limits.max_runtime_ms,
+                max_attempts=limits.max_attempts,
+                max_expansions=candidate.metrics.expanded_states - 1,
+                max_obstacle_checks=limits.max_obstacle_checks,
+            )
+        else:
+            assert candidate.metrics.obstacle_checks > 1
+            limits = RoutingJobLimits(
+                max_runtime_ms=limits.max_runtime_ms,
+                max_attempts=limits.max_attempts,
+                max_expansions=limits.max_expansions,
+                max_obstacle_checks=candidate.metrics.obstacle_checks - 1,
+            )
+    else:  # pragma: no cover - parameterization below owns the closed mismatch set
+        raise AssertionError(f"unsupported completion mismatch {kind!r}")
+    return RoutingJobSpec.create(
+        board_revision=spec.board_revision,
+        snapshot_digest=spec.snapshot_digest,
+        start_pad_id=spec.start_pad_id,
+        end_pad_id=spec.end_pad_id,
+        request_digest=spec.request_digest,
+        request_kind=request_kind,
+        backend=spec.backend,
+        router_version=router_version,
+        policy=policy,
+        seed=seed,
+        limits=limits,
+    )
+
+
+def _candidate_artifact_counts(path: Path) -> tuple[int, int]:
+    with sqlite3.connect(path) as connection:
+        export_count = connection.execute(
+            "SELECT COUNT(*) FROM routing_candidate_exports"
+        ).fetchone()
+        manifest_count = connection.execute(
+            "SELECT COUNT(*) FROM routing_candidate_manifests"
+        ).fetchone()
+    assert export_count is not None
+    assert manifest_count is not None
+    return int(export_count[0]), int(manifest_count[0])
 
 
 def test_request_store_reopens_and_binds_authorization_without_board_content(
@@ -249,6 +314,52 @@ def test_repository_execute_fails_before_completion_when_artifact_persistence_fa
 
         assert result.status is RoutingJobStatus.FAILED
         assert result.candidate_id is None
+
+
+@pytest.mark.parametrize("mismatch", ("kind", "router", "policy", "seed", "metrics"))
+def test_direct_publication_preflight_rejects_invalid_candidate_without_artifacts(
+    tmp_path: Path, mismatch: str
+) -> None:
+    """The retryable direct path validates completion identity before writing artifacts."""
+
+    candidate, original_spec, request, authorization = _candidate_and_spec()
+    spec = _completion_mismatch(original_spec, candidate, mismatch)
+    path = tmp_path / f"direct-preflight-{mismatch}.sqlite3"
+    with RoutingJobRepository(path) as repository:
+        queued = repository.create(spec, request, authorization, now_ms=100)
+        running = repository.jobs.start(spec.job_id, expected_revision=queued.revision, now_ms=101)
+
+        with pytest.raises(RoutingJobError):
+            repository.publish_candidate(
+                spec.job_id,
+                candidate,
+                expected_revision=running.revision,
+                authorization_digest=authorization,
+                now_ms=102,
+            )
+
+        assert repository.jobs.get(spec.job_id, now_ms=102) == running
+        assert _candidate_artifact_counts(path) == (0, 0)
+
+
+@pytest.mark.parametrize("mismatch", ("kind", "router", "policy", "seed", "metrics"))
+def test_worker_publication_preflight_rejects_invalid_candidate_without_artifacts(
+    tmp_path: Path, mismatch: str
+) -> None:
+    """The worker converts preflight rejection into its fixed invalid-candidate failure."""
+
+    candidate, original_spec, request, authorization = _candidate_and_spec()
+    spec = _completion_mismatch(original_spec, candidate, mismatch)
+    path = tmp_path / f"worker-preflight-{mismatch}.sqlite3"
+    with RoutingJobRepository(path) as repository:
+        repository.create(spec, request, authorization)
+
+        result = repository.execute(spec.job_id, authorization, lambda _probe: candidate)
+
+        assert result.status is RoutingJobStatus.FAILED
+        assert result.diagnostic_code.value == "invalid_request"
+        assert result.candidate_id is None
+        assert _candidate_artifact_counts(path) == (0, 0)
 
 
 def test_request_and_export_expiry_are_uniform(tmp_path: Path) -> None:

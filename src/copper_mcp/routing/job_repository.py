@@ -36,15 +36,22 @@ from copper_mcp.routing.candidate_store import (
     CandidateManifestStore,
 )
 from copper_mcp.routing.contracts import RouteCandidate
-from copper_mcp.routing.job_worker import RoutingJobExecutor, RoutingJobWorker, WorkerLimits
+from copper_mcp.routing.job_worker import (
+    RoutingJobExecutionError,
+    RoutingJobExecutor,
+    RoutingJobWorker,
+    WorkerLimits,
+)
 from copper_mcp.routing.jobs import (
     Candidate,
     RoutingJobConflictError,
     RoutingJobError,
+    RoutingJobFailureCode,
     RoutingJobNotFoundError,
     RoutingJobRecord,
     RoutingJobSpec,
     RoutingJobStore,
+    validate_candidate_for_job,
 )
 from copper_mcp.routing.layered_contracts import (
     LayeredRouteCandidate,
@@ -842,6 +849,7 @@ class RoutingJobRepository:
             record, envelope = self.get(job_id, authorization_digest, now_ms=timestamp)
             if record.revision != expected_revision:
                 raise RoutingJobConflictError("routing job revision conflict")
+            validate_candidate_for_job(candidate, record.spec)
             self._publish_candidate_artifacts(
                 candidate,
                 spec=record.spec,
@@ -876,6 +884,13 @@ class RoutingJobRepository:
 
         def publish_artifacts(result: Candidate) -> None:
             with self._lock:
+                try:
+                    validate_candidate_for_job(result, record.spec)
+                except RoutingJobError as error:
+                    raise RoutingJobExecutionError(
+                        RoutingJobFailureCode.INVALID_REQUEST,
+                        "routing executor returned an invalid candidate",
+                    ) from error
                 self._publish_candidate_artifacts(
                     result,
                     spec=record.spec,
