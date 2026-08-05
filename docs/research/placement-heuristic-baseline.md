@@ -35,7 +35,9 @@ The benchmark reports only deterministic configuration and result fields, so its
 run ID remains reproducible across host scheduling variance rather than encoding wall-clock time.
 Its `source_commit` is the committed solver and generator revision used for the replay; the
 generated artifact is committed separately so that provenance does not refer to a revision that
-cannot produce its own payload.
+cannot produce its own payload. The current artifact was replayed from the detached integrated
+solver/generator revision `b6d20e8a442614d7cb1f34d4eb4ee3c33a8fa94d`; its canonical run ID is
+`sha256:e41d1061f17bd43cfa402e9c88d84d0015d87c0351725cc0b660968882cae9e5`.
 
 The solver is a heuristic, not an optimizer: no optimality or approximation guarantee is claimed.
 It also makes no DRC, electrical, timing, signal-integrity, thermal, fabrication, routing,
