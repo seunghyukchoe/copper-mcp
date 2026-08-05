@@ -45,3 +45,10 @@ one lattice overflow unit, while three negotiated replays complete with zero ove
 total wire length (the baseline is 16 mm). This is structural lattice evidence only; it is not a
 KiCad DRC, electrical, fabrication, multilayer, or general-board FreeRouting result. The next
 quality gate is exact pairwise clearance/resource capacity and a held-out corpus comparison.
+
+## Boundary amendment — 2026-08-05
+
+Cancellation callbacks are untrusted cooperative boundaries. If one raises during an A* checkpoint,
+the search fails closed as `CANCELLED`; the negotiated coordinator discards the in-flight iteration
+and publishes no partial candidates. This preserves the candidate-only contract without claiming
+hard process interruption.

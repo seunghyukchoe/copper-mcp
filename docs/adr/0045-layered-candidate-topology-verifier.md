@@ -67,3 +67,10 @@ Trade-offs:
 - `tests/test_layered_board_adapter.py` and `tests/test_kicad_layered_route_patch.py`: endpoint-via
   avoidance, deterministic serialization, and Board IR round trip.
 - `scripts/benchmark_layered_candidate_verifier.py` and B-027 record the bounded verifier replay.
+
+## Boundary amendment — 2026-08-05
+
+Topology acceptance now also requires the candidate's track width, via diameter, and via drill to
+match the Board IR net-class assignment for the routed net. Re-signing a candidate with altered
+dimensions therefore fails before topology evidence is returned; this remains structural
+validation, not padstack, DRC, fill, or fabrication authority.
