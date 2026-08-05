@@ -1146,6 +1146,16 @@ are the audit copies for the original run IDs.
 | Metric preservation | Every measured quantity is unchanged: one overflow unit for independent same-base candidates, zero overflow for the bundle, two candidates, one core replay, three exact physical pair checks, and 26 mm total candidate length. |
 | Interpretation | This is an identity-binding and provenance regeneration only. It adds no fixture, capability, routing-quality, electrical, fabrication, apply, or general-board claim, and B-079's and B-080's claims are preserved. |
 
+#### B-085 — route-bundle 0.6.0 generator-version regeneration
+
+| Field | Recorded evidence |
+|---|---|
+| Correction | CopperMCP writes `(generator_version "<package version>")` into every board it renders, so the private combined derivative's bytes — and therefore `base_revision` and `drc_context_revision` — are reproducible only by the exact package version that recorded them. Bumping the source version to `0.6.0` made `tests/test_route_bundle_benchmark.py` fail against its own committed artifact. This is a property of the release process, not a routing or DRC change, and it is now a named step in [the release process](../releasing.md). |
+| Artifact | Regenerated [`2026-08-05-route-bundle-v1.json`](../../benchmarks/results/routing/2026-08-05-route-bundle-v1.json) under CopperMCP `0.6.0`; run `sha256:f050fcfc25a7f2ad904088ef3264303fb6970f88cd27c80dc0408c3f51ce5d75`, bound script `sha256:cadb5e760d23d6d742f1f812d67b35fd5e645cba5bb946877ce7bbd5e448b402` (unchanged). |
+| KiCad authority | The same bounded adapter resolved and SHA-256-bound KiCad 10.0.5 (`sha256:852c180a8c923beb6173b54bd6cc0bd66714e52ebfdd451ef0e061224bc954f5`) and ran its fixed-argument, private-environment, `DEVNULL`-connected child. The regenerated private combined derivative `sha256:a8189214c224cbbe565b750ff91f141b35156517fc29c38011e4e45056e5772c` with DRC context `sha256:8881a9ef8f45019bd8e2df67892ae181c06ddd45969891f41679f3e1f891d56e` reported exit `0`, zero errors, zero warnings, zero exclusions, and zero unconnected items. Source bytes, inode, and mtime were unchanged. B-083's `sha256:678c9fc7…` / `sha256:0cc3a5ce…` pair remains the immutable `0.5.0` record. |
+| Metric preservation | Every measured quantity is unchanged from B-083, including the bundle identity `sha256:6b54fa782ec45fe3ac919736799fc6dd51506f71b78acc7db15fe2a57f59bd75`: one overflow unit for independent same-base candidates, zero overflow for the bundle, two candidates, one core replay, three exact physical pair checks, and 26 mm total candidate length. Only the version-bound provenance fields and the recording timestamp moved. |
+| Interpretation | This is a version-provenance regeneration only. It adds no fixture, capability, routing-quality, electrical, fabrication, apply, or general-board claim, and B-079's, B-080's, and B-083's claims are preserved. It is also not a claim that the earlier revisions were wrong: they are correct for the version that produced them. |
+
 #### B-084 — recorded benchmark-ledger double allocations
 
 | Field | Recorded evidence |

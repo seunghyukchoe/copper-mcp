@@ -68,13 +68,38 @@ Expected behavior after the change:
 - The IPC object counter refuses a foreign root before classifying anything, so a payload such as
   `(evil_root …)` is no longer published as a live board observation with plausible topology counts.
 
+## 3. A digest taken over rendered bytes does not survive the upgrade
+
+This is not new in 0.6.0 — it has been true of every release — but 0.6.0 is the first release in
+which it is pinned and therefore the first in which it is worth stating plainly.
+
+CopperMCP writes `(generator_version "<package version>")` into every board and schematic it
+renders, as provenance. Any digest taken over those bytes is therefore version-scoped:
+
+- A rendered **schematic artifact digest** issued by 0.5.0 will not be reproduced by 0.6.0. The
+  intent digest it carries is unaffected, so a caller can still prove which Circuit Intent produced
+  an artifact; only the artifact's own content address moves.
+- A **patched-board revision** — the `base_revision` a candidate DRC statement binds, and the
+  combined-derivative revision recorded in route-bundle evidence — is likewise reproducible only by
+  the version that produced it. The route-bundle benchmark artifact is regenerated under 0.6.0 for
+  exactly this reason; `B-085` records that its measured quantities are all unchanged and that the
+  0.5.0 revisions remain correct for 0.5.0.
+
+To migrate: re-derive any stored rendered-artifact digest under 0.6.0 rather than comparing it
+against a 0.5.0 value, and treat a mismatch across a version boundary as expected rather than as
+tampering. Candidate IDs, bundle IDs, placement candidate IDs, Board IR snapshot and constraint
+digests, Circuit Scene revisions, policy digests, and net reference IDs are **not** version-coupled
+and are unchanged.
+
 ## What does not require migration
 
 - **Golden identity pins.** `tests/test_golden_identities.py` pins the exact digest of every
-  content-addressed surface as it behaves in 0.6.0 (#84). No pinned value changed in this release,
-  so no persisted candidate, bundle, snapshot, or export is invalidated by it. The pins exist so
-  that a future change to any of those identities cannot pass a green suite unnoticed; changing one
-  is a breaking change that will require its own version bump and its own migration note.
+  content-addressed surface as it behaves in 0.6.0 (#84). Exactly one pin moved in this release —
+  the version-coupled schematic artifact digest described above — so no persisted candidate,
+  bundle, snapshot, export, or scene revision is invalidated. The pins exist so that a future
+  change to any of those identities cannot pass a green suite unnoticed; changing one of the
+  version-independent pins is a breaking change that will require its own version bump and its own
+  migration note.
 - **Byte-accurate confirmation budgets.** The compare-and-swap confirmation read is now charged
   against `COPPER_MCP_MAX_BOARD_BYTES` before any encode (#76). An oversized second read is now a
   `KicadIpcPayloadError` budget refusal instead of a `KicadIpcConnectionError` reported as a
