@@ -48,7 +48,33 @@ def _workflow_named_step_run(path: Path, step_name: str) -> str:
     raise AssertionError(f"workflow step {step_name!r} has no run command")
 
 
+def _workflow_named_step_has_line(path: Path, step_name: str, expected: str) -> bool:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    marker = f"- name: {step_name}"
+    try:
+        start = next(index + 1 for index, line in enumerate(lines) if line.strip() == marker)
+    except StopIteration as error:
+        raise AssertionError(f"missing workflow step {step_name!r}") from error
+
+    for line in lines[start:]:
+        stripped = line.strip()
+        if stripped.startswith("- name:"):
+            break
+        if stripped == expected:
+            return True
+    return False
+
+
 class WorkspaceSecurityTests(unittest.TestCase):
+    def test_ci_checkout_preserves_benchmark_provenance_history(self) -> None:
+        self.assertTrue(
+            _workflow_named_step_has_line(
+                REPOSITORY_ROOT / ".github/workflows/ci.yml",
+                "Check out repository",
+                "fetch-depth: 0",
+            )
+        )
+
     def test_dependency_audits_resolve_declared_project_graph(self) -> None:
         make_recipes = _make_target_recipes(REPOSITORY_ROOT / "Makefile", "security")
         self.assertIn("$(PYTHON) scripts/check_secrets.py", make_recipes)
