@@ -21,21 +21,28 @@ RELEASE_METADATA_FILES = frozenset(
 
 
 def _authorized_source_commit(release_ledger: str, version: str) -> str | None:
-    """Return the validated source commit from an exact Ready authorization row."""
+    """Return the source from the latest exact authorization row for a version."""
     heading = re.search(r"^## Release authorization\s*$", release_ledger, re.MULTILINE)
     if heading is None:
         return None
     tail = release_ledger[heading.end() :]
     next_heading = re.search(r"^## ", tail, re.MULTILINE)
     section = tail if next_heading is None else tail[: next_heading.start()]
+    version_row = re.compile(rf"^\|\s*{re.escape(version)}\s*\|")
+    latest_row: str | None = None
+    for line in section.splitlines():
+        if version_row.match(line) is not None:
+            latest_row = line
+    if latest_row is None:
+        return None
+
     ready_row = re.compile(
         rf"^\|\s*{re.escape(version)}\s*\|"
         r"\s*\d{4}-\d{2}-\d{2}\s*\|"
         r"\s*\x60?([0-9a-f]{40})\x60?\s*\|"
-        r"\s*[^|\r\n]+\|\s*Ready\s*\|$",
-        re.MULTILINE,
+        r"\s*[^|\r\n]+\|\s*Ready\s*\|$"
     )
-    match = ready_row.search(section)
+    match = ready_row.fullmatch(latest_row)
     return None if match is None else match.group(1)
 
 

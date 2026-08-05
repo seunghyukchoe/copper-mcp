@@ -45,6 +45,43 @@ class VersionGateTests(unittest.TestCase):
 
         self.assertIsNone(_authorized_source_commit(ledger, "0.2.0"))
 
+    def test_latest_ready_correction_supersedes_an_older_ready_row(self) -> None:
+        old_source = "a" * 40
+        corrected_source = "b" * 40
+        ledger = f"""## Release authorization
+
+| Version | Date | Validated source commit | Full gate evidence | Status |
+|---|---|---|---|---|
+| 0.5.0 | 2026-08-05 | {old_source} | old hosted gate | Ready |
+| 0.5.0 | 2026-08-05 | {corrected_source} | corrected hosted gate | Ready |
+"""
+
+        self.assertEqual(_authorized_source_commit(ledger, "0.5.0"), corrected_source)
+
+    def test_latest_blocked_row_revokes_an_older_ready_row(self) -> None:
+        source_commit = "a" * 40
+        ledger = f"""## Release authorization
+
+| Version | Date | Validated source commit | Full gate evidence | Status |
+|---|---|---|---|---|
+| 0.5.0 | 2026-08-05 | {source_commit} | old hosted gate | Ready |
+| 0.5.0 | 2026-08-05 | {source_commit} | later failure | Blocked |
+"""
+
+        self.assertIsNone(_authorized_source_commit(ledger, "0.5.0"))
+
+    def test_malformed_latest_row_does_not_fall_back_to_an_older_ready_row(self) -> None:
+        source_commit = "a" * 40
+        ledger = f"""## Release authorization
+
+| Version | Date | Validated source commit | Full gate evidence | Status |
+|---|---|---|---|---|
+| 0.5.0 | 2026-08-05 | {source_commit} | old hosted gate | Ready |
+| 0.5.0 | 2026-08-05 | short | malformed correction | Ready |
+"""
+
+        self.assertIsNone(_authorized_source_commit(ledger, "0.5.0"))
+
     def test_tag_gate_refuses_a_tag_that_does_not_match_the_project_version(self) -> None:
         # A live-state assertion ("the current version is unreleased") flips the moment a
         # release is legitimately authorized, so the executable regression pins the
