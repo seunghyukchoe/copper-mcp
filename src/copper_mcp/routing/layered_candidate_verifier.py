@@ -413,6 +413,32 @@ def verify_layered_candidate(
             vertex_count=vertex_count,
             via_count=via_count,
         )
+    net_class_id = next(
+        (
+            assignment.net_class_id
+            for assignment in snapshot.content.constraints.assignments
+            if assignment.net_id == candidate.patch.net_id
+        ),
+        None,
+    )
+    net_class = next(
+        (item for item in snapshot.content.constraints.net_classes if item.id == net_class_id),
+        None,
+    )
+    if (
+        net_class is None
+        or candidate.patch.width_nm != net_class.track_width_nm
+        or candidate.patch.via_diameter_nm != net_class.via_diameter_nm
+        or candidate.patch.via_drill_nm != net_class.via_drill_nm
+    ):
+        return _failure(
+            LayeredCandidateVerificationCode.INVALID_CANDIDATE,
+            "candidate dimensions do not match the Board IR net-class binding",
+            candidate_id=candidate.candidate_id,
+            path_count=path_count,
+            vertex_count=vertex_count,
+            via_count=via_count,
+        )
     layer_ids = {layer.id for layer in snapshot.content.copper_layers}
     signal_layer_ids = {
         layer.id for layer in snapshot.content.copper_layers if layer.kind == "signal"

@@ -242,6 +242,25 @@ def test_rejects_stale_snapshot_and_tampered_canonical_identity() -> None:
     assert identity.diagnostic.code is LayeredCandidateVerificationCode.INVALID_CANDIDATE
 
 
+def test_rejects_restamped_dimensions_that_disagree_with_the_bound_net_class() -> None:
+    snapshot, candidate = _blocked_candidate(end_on_back=True)
+    altered_vias = tuple(
+        replace(via, diameter_nm=700_000, drill_nm=350_000) for via in candidate.patch.vias
+    )
+    altered_patch = replace(
+        candidate.patch,
+        width_nm=200_000,
+        via_diameter_nm=700_000,
+        via_drill_nm=350_000,
+        vias=altered_vias,
+    )
+    restamped = _restamp(candidate, patch=altered_patch)
+
+    result = verify_layered_candidate(restamped, snapshot)
+
+    assert result.diagnostic.code is LayeredCandidateVerificationCode.INVALID_CANDIDATE
+
+
 def test_rejects_disconnected_path_from_via_and_cross_path_intersection() -> None:
     snapshot, candidate = _blocked_candidate(end_on_back=True)
     first_path, second_path = candidate.patch.paths
