@@ -1500,3 +1500,41 @@ def test_isolated_policy_result_is_revalidated_before_router_construction(
     assert result.candidates == ()
     assert result.connections == ()
     assert router.calls == []
+
+
+def test_isolated_policy_worker_identity_is_revalidated_before_router_construction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot = _crossing_snapshot()
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_requests(snapshot),
+    )
+    router = _RecordingRouter()
+
+    def wrong_identity(
+        policy_input: RoutingPolicyInput, **_kwargs: object
+    ) -> RoutingPolicyDecision:
+        return RoutingPolicyDecision(
+            policy_id="different-policy-v1",
+            input_digest=policy_input_digest(policy_input),
+            net_order=tuple(net.net_id for net in policy_input.nets),
+        )
+
+    monkeypatch.setattr(
+        congestion_module,
+        "evaluate_reference_policy_in_worker",
+        wrong_identity,
+    )
+    result = negotiate_routes(
+        snapshot,
+        envelope,
+        router=router,
+        policy_profile=ISOLATED_REFERENCE_POLICY_PROFILE,
+    )
+
+    assert result.status is NegotiatedRoutingStatus.INVALID_REQUEST
+    assert result.diagnostic == "the negotiated routing policy was rejected"
+    assert result.candidates == ()
+    assert result.connections == ()
+    assert router.calls == []

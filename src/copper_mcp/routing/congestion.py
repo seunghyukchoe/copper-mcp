@@ -43,6 +43,7 @@ from copper_mcp.routing.physical_clearance import (
     verify_negotiated_physical_clearance,
 )
 from copper_mcp.routing.policy import (
+    REFERENCE_POLICY_ID,
     DeterministicReferencePolicy,
     PolicyBounds,
     PolicyFactory,
@@ -82,6 +83,12 @@ _ISOLATED_POLICY_TIMEOUT_SECONDS = 1.0
 # commands through ``negotiate_routes``.
 _POLICY_PROFILE_REGISTRY: Mapping[str, PolicyFactory] = MappingProxyType(
     {REFERENCE_POLICY_PROFILE: DeterministicReferencePolicy}
+)
+_EXPECTED_POLICY_IDS: Mapping[str, str] = MappingProxyType(
+    {
+        REFERENCE_POLICY_PROFILE: REFERENCE_POLICY_ID,
+        ISOLATED_REFERENCE_POLICY_PROFILE: REFERENCE_POLICY_ID,
+    }
 )
 
 ResourceKey: TypeAlias = tuple[str, PointNM, PointNM]
@@ -921,7 +928,8 @@ def negotiate_routes(
             )
             input_digest = policy_input_digest(policy_input)
             expected_net_ids = tuple(net.net_id for net in policy_input.nets)
-            if (
+            expected_policy_id = _EXPECTED_POLICY_IDS.get(policy_profile)
+            if (expected_policy_id is not None and decision.policy_id != expected_policy_id) or (
                 decision.input_digest != input_digest
                 or len(decision.net_order) != len(expected_net_ids)
                 or len(set(decision.net_order)) != len(decision.net_order)
