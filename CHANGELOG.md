@@ -8,6 +8,11 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Live KiCad IPC board counting now carries its cooperative operation deadline into bounded
+  S-expression decoding, with pre/post-decode and 4 KiB scan checkpoints. Expired large or
+  malformed snapshots fail with the typed deadline refusal instead of spending unbounded parse
+  time first (ADR-0063, B-051).
+
 - Placement legality now keeps supported rectangular courtyards from padless/graphics-only
   footprints as stationary collision envelopes. Padless objects remain unplaceable and absent from
   candidate manifests, but movable footprints can no longer be reported clear through them
