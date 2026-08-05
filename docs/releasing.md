@@ -7,11 +7,21 @@ notes, build attestations, and an append-only release ledger.
 
 1. Confirm the milestone is complete and all blocking issues are closed.
 2. Run `make check` from a clean checkout.
-3. Update `pyproject.toml`, `CITATION.cff`, and any versioned schemas.
-4. Move relevant `CHANGELOG.md` entries from **Unreleased** into a dated version section.
-5. Add migration notes for every breaking or behaviorally significant change.
-6. Complete the release-ledger row, including validation and security status.
-7. Run `python scripts/check_version.py --tag vX.Y.Z`.
+3. Update `pyproject.toml`, `src/copper_mcp/__init__.py`, `CITATION.cff`, and any versioned
+   schemas. `scripts/check_version.py` requires the first two to agree.
+4. Re-pin the version-coupled evidence. CopperMCP writes
+   `(generator_version "<package version>")` into every board and schematic it renders, so any
+   digest taken over rendered bytes changes with the version and is reproducible only by the
+   version that recorded it. Concretely: regenerate the route-bundle benchmark artifact with
+   `PYTHONPATH=src python scripts/benchmark_route_bundle.py --write` (real KiCad required) and
+   record the regeneration as a benchmark-ledger entry, and re-pin `SCHEMATIC_ARTIFACT_DIGEST` in
+   `tests/test_golden_identities.py`. Every other golden identity is version-independent and must
+   **not** move; a pin that changes here and is not on this list is a real contract change, not a
+   release chore.
+5. Move relevant `CHANGELOG.md` entries from **Unreleased** into a dated version section.
+6. Add migration notes for every breaking or behaviorally significant change.
+7. Complete the release-ledger row, including validation and security status.
+8. Run `python scripts/check_version.py --tag vX.Y.Z`.
 
 ## Dry run
 

@@ -115,7 +115,7 @@ inner-layer pour whose verified fill leaves a lower corridor:
 | Island wider than its backing zone | not evaluable | `unsupported_geometry` |
 | KiCad invoked | no | no |
 
-The replay artifact is B-085. It is evidence for this exact bounded adapter subset, not for
+The replay artifact is B-086. It is evidence for this exact bounded adapter subset, not for
 arbitrary pours, hole-carrying zones, exact polygon layered collision, whole-board completion,
 electrical behaviour, DFM, fabrication readiness, or Freerouting parity.
 

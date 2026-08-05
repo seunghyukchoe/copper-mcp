@@ -71,7 +71,7 @@ every error direction remains refusal-side.
   island, unchanged content-addressed identity semantics, a metamorphic monotonicity case over four
   nested islands, all three fail-closed gates, the malformed-input boundary, and obstacle-budget
   billing.
-- B-085 records ten deterministic replays of both modes plus every refusal as a real invocation.
+- B-086 records ten deterministic replays of both modes plus every refusal as a real invocation.
 - The containment gate was mutation-checked: reverting it turns the escaping-island refusal into an
   accepted candidate and fails exactly one test; reverting the revision gate fails exactly one
   other. Both were restored.
@@ -95,4 +95,4 @@ as a public one.
 - [KiCad S-expression format: zones and `filled_polygon`](https://dev-docs.kicad.org/en/file-formats/sexpr-intro/index.html)
 - [KiCad `ZONE_FILLER` class reference](https://docs.kicad.org/doxygen/classZONE__FILLER.html)
 - [Freerouting copper-pour awareness request](https://github.com/freerouting/freerouting/issues/152)
-- [B-085](../ledgers/benchmark-ledger.md)
+- [B-086](../ledgers/benchmark-ledger.md)
