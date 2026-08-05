@@ -680,14 +680,22 @@ def build_report(
     report["results"].sort(key=metric_priority)
     source_after = _hash_or_none(source, MAX_BOARD_BYTES)
     report["source_preserved"] = source_before is not None and source_before == source_after
-    report["comparison_closed"] = bool(
+    self_attested_evidence = bool(
         gate["available"]
         and report["source_preserved"]
         and freerouting_binding == "bound"
         and copper_binding == "bound"
         and all(item.get("drc", {}).get("status") == "ok" for item in report["results"])
     )
-    report["status"] = "completed" if report["comparison_closed"] else "unavailable_or_incomplete"
+    # The harness has not implemented either the KiCad SES-import transaction or a constrained
+    # CopperMCP runner contract. Both receipts are user-authored assertions, so their matching
+    # hashes prove content identity only—not the causal import or candidate-producing workflow.
+    # Keep the otherwise-complete observation visible while refusing to turn it into a claim.
+    report["comparison_closed"] = False
+    report["incomplete_reason"] = (
+        "self_attested_unverified" if self_attested_evidence else "incomplete_evidence"
+    )
+    report["status"] = "unavailable_or_incomplete"
     canonical = json.dumps(report, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     report["run_id"] = "sha256:" + hashlib.sha256(canonical).hexdigest()
     return report

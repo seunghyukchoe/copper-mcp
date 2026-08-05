@@ -269,6 +269,73 @@ def test_unrelated_drc_clean_board_fails_ses_receipt_binding(
     assert report["status"] == "unavailable_or_incomplete"
 
 
+def test_self_attested_bound_receipts_and_clean_drc_cannot_close(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    paths = _comparison_inputs(tmp_path)
+    paths["board"].write_text(
+        "(kicad_pcb (version 20240108) (general (thickness 1.6)))\n", encoding="utf-8"
+    )
+    ses = b"(session)\n"
+    source_sha = _sha(paths["source"].read_bytes())
+    board_sha = _sha(paths["board"].read_bytes())
+    freerouting_receipt = tmp_path / "freerouting-receipt.json"
+    freerouting_receipt.write_text(
+        json.dumps(
+            {
+                "schema": benchmark.FREEROUTING_RECEIPT_SCHEMA,
+                "workflow": "kicad-specctra-ses-import",
+                "source_sha256": source_sha,
+                "ses_sha256": _sha(ses),
+                "result_board_sha256": board_sha,
+            }
+        ),
+        encoding="utf-8",
+    )
+    copper_receipt = tmp_path / "copper-receipt.json"
+    copper_receipt.write_text(
+        json.dumps(
+            {
+                "schema": benchmark.COPPER_RECEIPT_SCHEMA,
+                "workflow": "coppermcp-candidate-runner",
+                "source_sha256": source_sha,
+                "runner_output_sha256": board_sha,
+                "result_board_sha256": board_sha,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        benchmark, "preflight", lambda **_kwargs: {"available": True, "reasons": [], "probes": {}}
+    )
+    monkeypatch.setattr(benchmark, "drc_metrics", _clean_drc)
+
+    def self_attesting_tools(argv: tuple[str, ...], *_args: object) -> object:
+        if "-do" in argv:
+            Path(argv[argv.index("-do") + 1]).write_bytes(ses)
+        elif argv[0] == "not-coppermcp":
+            Path(argv[2]).write_bytes(paths["board"].read_bytes())
+        return benchmark.ProcessResult(argv, 1, 0, "ok", "", "")
+
+    monkeypatch.setattr(benchmark, "run_process", self_attesting_tools)
+    report = benchmark.build_report(
+        **_build_kwargs(paths),
+        copper_board=paths["board"],
+        freerouting_board=paths["board"],
+        copper_receipt=copper_receipt,
+        freerouting_receipt=freerouting_receipt,
+        copper_command=("not-coppermcp", "{source}", "{output}", "{seed}"),
+        seed=1,
+        timeout_seconds=1,
+    )
+
+    assert report["freerouting_import_binding"]["status"] == "bound"
+    assert report["copper_runner_binding"]["status"] == "bound"
+    assert report["comparison_closed"] is False
+    assert report["incomplete_reason"] == "self_attested_unverified"
+    assert report["status"] == "unavailable_or_incomplete"
+
+
 def test_metric_priority_prefers_connectivity_and_drc_before_quality() -> None:
     clean = {
         "status": "ok",

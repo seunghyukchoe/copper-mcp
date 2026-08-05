@@ -56,8 +56,8 @@ FreeRouting’s own score and CopperMCP’s internal checks are not substituted 
 
 ## Closure receipts and command environment
 
-DRC-clean boards alone are deliberately insufficient. A completed comparison requires both
-content-addressed receipts in addition to both DRC reports:
+DRC-clean boards alone are deliberately insufficient. The harness records both content-addressed
+receipts alongside both DRC reports:
 
 - `copper-mcp/freerouting-ses-import-receipt/v1` binds the source hash, the freshly produced,
   nonempty bounded SES hash, the imported result-board hash, and workflow value
@@ -66,10 +66,18 @@ content-addressed receipts in addition to both DRC reports:
   successful optional CopperMCP runner, the evaluated board hash, and workflow value
   `coppermcp-candidate-runner`.
 
-The receipt is an explicit provenance assertion, not a signature or a substitute for review.
-Any missing, malformed, mismatched, absent/invalid SES, or failed process leaves the report
-`unavailable_or_incomplete`, even if supplied boards are DRC-clean. This makes the evidence gap
-visible instead of allowing unrelated artifacts to close a comparison.
+The receipt is an explicit, self-attested provenance assertion, not a signature or a substitute
+for review. Matching hashes show that named bytes agree; they do not prove that KiCad imported the
+SES into the supplied board or that an arbitrary command template was CopperMCP's candidate
+runner. Therefore this harness deliberately never sets `comparison_closed` or `status=completed`.
+When all receipt bindings and DRC reports otherwise match, it returns
+`status=unavailable_or_incomplete` with `incomplete_reason=self_attested_unverified`.
+
+A future closure gate must itself execute a constrained KiCad SES-import transaction in a private
+workspace and a constrained CopperMCP runner contract, then derive both result hashes from those
+transactions. Until those two controls exist, receipts remain useful diagnostic bindings but not
+comparison-completion evidence. Missing, malformed, mismatched, absent/invalid SES, or failed
+processes likewise remain `unavailable_or_incomplete` with `incomplete_reason=incomplete_evidence`.
 
 All Java/JAR/KiCad/CopperMCP commands receive only `HOME`, `TMPDIR`, `PATH`, `LANG`, and `LC_ALL`;
 provider tokens and general inherited environment variables are not passed through. A supplied
@@ -89,10 +97,12 @@ output, and resource effects, but is not sandbox containment for malicious code.
 4. Produce CopperMCP’s competing disposable board using its supported candidate/replay path;
    preserve its source relation and supply it with `--copper-board`.  Supply the imported board
    with `--freerouting-board`; create the matching receipt JSON files, then provide `--kicad-cli`
-   to DRC both.
-5. Treat `unavailable_or_incomplete` as a real outcome.  It means a prerequisite, an imported
-   result, or authoritative DRC evidence is absent; it is neither a routing failure nor a quality
-   win for either tool.
+   to DRC both. The resulting receipt bindings are self-attested and cannot close this version of
+   the harness.
+5. Treat `unavailable_or_incomplete` as a real outcome. `self_attested_unverified` means that
+   otherwise-matching user-supplied evidence awaits harness-owned import/runner transactions;
+   `incomplete_evidence` means a prerequisite, binding, or authoritative DRC record is absent.
+   Neither outcome is a routing failure nor a quality win for either tool.
 
 Example (paths are illustrative):
 
