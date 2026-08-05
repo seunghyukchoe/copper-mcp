@@ -51,6 +51,27 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- `scripts/check_ledgers.py` now validates ledger identifier allocation, and a new sibling
+  `scripts/check_adr_numbers.py` validates ADR numbers. Both run in `make lint` and CI. A duplicate
+  ID, a badly padded ID, a row that goes backwards in a strictly increasing ledger, two files
+  claiming one ADR number, an ADR heading that disagrees with its filename, an ADR missing from or
+  repeated in the index, an index row pointing at no file, and a stale advertised next number are
+  each now build failures. Gaps are reported as information and never fail, because a withdrawn
+  number is permanent. The nine benchmark replays that legitimately reuse a parent's number are
+  carried in a closed exception list keyed to their exact headings and are additionally required to
+  be `####` sub-entries beneath the `###` entry they replay; an exception that stops matching real
+  text is itself a failure. Both checkers also verify the single-line allocation registries in
+  `docs/ledgers/README.md` and `docs/adr/README.md`, so two branches that allocate the same next
+  number now produce a textual merge conflict instead of a silent collision. (#82, #83)
+
+### Fixed
+
+- Indexed `ADR-0067` and `ADR-0068` in `docs/adr/README.md`. Both were absent because they merged in
+  parallel with the pull request that rebuilt that index — the same class of defect the new checker
+  prevents. Recorded the six ledger identifier collisions the new checker found (`D-137`, `D-139`,
+  `D-140`, `B-076`, `B-078`, `B-082`) as append-only correction entries `D-143` and `B-084` rather
+  than renumbering any merged row.
+
 - Committed golden identities for every content-addressed surface, in a new
   `tests/test_golden_identities.py`. Each pin asserts an exact digest recomputed from a committed
   fixture, and — where a canonical payload can change without changing its byte length — the

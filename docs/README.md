@@ -78,4 +78,5 @@ contract.
 - **Handoff documents** record a state that ages. Where a handoff and the repository disagree, the
   repository is right.
 - Every relative link in this tree is checked by `scripts/check_doc_links.py`, which runs in
-  `make lint`.
+  `make lint`. Ledger IDs and ADR numbers are checked there too, by `scripts/check_ledgers.py` and
+  `scripts/check_adr_numbers.py`: one entry per number, in order, with gaps reported but allowed.

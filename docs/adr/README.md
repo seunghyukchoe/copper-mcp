@@ -14,9 +14,23 @@ in the pull request that lands the ADR, not before, so two concurrent branches c
 one. See the [ledger ID convention](../ledgers/README.md#allocating-ids) for the same rule applied to
 ledger entries.
 
+`scripts/check_adr_numbers.py` enforces this mechanically, in `make lint` and in CI. It fails the
+build when two files claim one number, when an ADR's own `# ADR-NNNN:` heading disagrees with its
+filename, when an ADR is missing from the index below or indexed twice, when an index row points at
+a file that does not exist, and when the advertised next unused number above is not the highest
+allocated plus one. Gaps are reported as information and never fail. Keeping the next number on one
+line is deliberate: two branches that both allocate it now conflict textually, so Git refuses the
+merge instead of accepting it.
+
 **Known gap:** there is no ADR-0027. The number was allocated on a branch whose ADR never landed. It
 is deliberately left unused rather than recycled, so that any external reference to ADR-0027 resolves
 to nothing rather than to an unrelated decision.
+
+**How 0066 through 0068 came to be three records:** three concurrent branches each created an
+`ADR-0066` — the atomic route bundle preview, ordered-layer routing, and route-aware placement
+ranking. Their filenames differed, so Git merged all three without a conflict and nothing detected
+the collision. Two were renumbered by hand after the fact, to 0067 and 0068. This is exactly what
+`scripts/check_adr_numbers.py` now refuses.
 
 ## Status vocabulary
 
@@ -103,8 +117,9 @@ never silently widens it.
 | [0068](0068-bounded-ordered-layer-routing.md) | Keep ordered-layer routing bounded and non-serializing | Accepted |
 | [0069](0069-operator-gated-live-ipc-observation.md) | Gate live KiCad IPC on an operator opt-in and establish document type at the observer | Accepted |
 
-Sixty-nine numbers, sixty-eight records, no duplicates. Only 0027 is unused; see **Known gap**
-above.
+Sixty-nine numbers, sixty-eight records, no duplicates — and `scripts/check_adr_numbers.py` now
+proves that last clause on every run rather than asserting it. Only 0027 is unused; see
+**Known gap** above.
 
 ## Reading order
 

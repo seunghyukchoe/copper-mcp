@@ -52,6 +52,13 @@ Type-check against a current mypy before pushing.
 `scripts/check_doc_links.py` verifies that every relative Markdown link in the repository resolves.
 It does not check network URLs or heading anchors.
 
+`scripts/check_ledgers.py` and `scripts/check_adr_numbers.py` verify identifier allocation. Take the
+next free ledger ID and ADR number from the registries in
+[`docs/ledgers/README.md`](docs/ledgers/README.md) and [`docs/adr/README.md`](docs/adr/README.md),
+update that registry line in the same pull request, and allocate only in the pull request that lands
+the entry. A duplicate ID or number fails the build; a gap does not, because a spent number is never
+reused.
+
 ## Contribution workflow
 
 1. Create or claim an issue with a clear acceptance test.
