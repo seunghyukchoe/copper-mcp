@@ -1,4 +1,16 @@
-"""Exact, backend-neutral contracts for immutable route candidates."""
+"""Exact, backend-neutral contracts for immutable route candidates.
+
+This module owns the stable seam between the routing core and everything that consumes it: the
+request, patch, candidate, and diagnostic shapes, in exact integer units, with candidates
+content-addressed and bound to the Board IR revision they were computed against. It is
+backend-neutral by design — a future Rust or GPU router implements these same types, which is
+why AGENTS.md names this file as the boundary such a backend may appear behind.
+
+It refuses to be an implementation. There is no search, no cost model, no obstacle collection,
+no serialization to KiCad bytes, and no apply authority here. A candidate constructed through
+these types is a proposal and nothing more: it carries no DRC evidence, and it becomes stale the
+moment its base revision changes rather than being refreshed in place.
+"""
 
 from __future__ import annotations
 

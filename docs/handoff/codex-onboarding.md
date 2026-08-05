@@ -1,7 +1,8 @@
 # Codex handoff — CopperMCP (updated 2026-08-05)
 
 You are picking up CopperMCP. This document is the fast path for the Codex agent that continues the
-work. Read `docs/HANDOFF.md` for the full state; read `AGENTS.md` for the repository contract you
+work. Read [`project-state.md`](project-state.md) for the full state; read `AGENTS.md` for the
+repository contract you
 must obey on every change. This file tells you where you are standing right now and exactly what to
 do first.
 
@@ -35,9 +36,11 @@ thing to watch for.
 ## How every change ships here
 
 1. **Design before code** for anything touching a public contract. Read the closest ADR
-   (`docs/adr/`) first. For a new capability, write the design as a report, not as code.
+   ([`docs/adr/`](../adr/README.md)) first. For a new capability, write the design as a report, not
+   as code.
 2. **Research-ground new arcs.** Each major slice starts from a current-literature pass in
-   `docs/research/` with licences and per-item implications, cited from that slice's ADR. Do not
+   [`docs/research/`](../research/README.md) with licences and per-item implications, cited from
+   that slice's ADR. Do not
    skip this for algorithmic work — it is how the licensing landmines (GeoSteiner, FLUTE, REST are
    all encumbered; freerouting is GPL) stay out of the tree.
 3. **Slice small.** Land the pure/verifiable part first (a parser, an engine, an assertion),
@@ -81,10 +84,11 @@ or authorizes:
    the reference board was already routed by its designer, so the router has recognized coverage
    but never *produced* new copper on a real board. Author or adopt one, measure honestly, record
    it in `docs/architecture/routing-baseline.md`.
-5. **IPC apply (v0.2 of the apply arc).** `kicad-python`'s `begin_commit`/`push_commit` gives a
-   real single-undo-step transaction into a running KiCad. See `docs/research/safe-apply-references.md`
-   for the constraints — the hard part is binding an in-memory document to a file digest.
-6. **`v0.5.0` release** once both apply surfaces have soaked and the release ledger names a green
+4. **IPC apply (v0.2 of the apply arc).** `kicad-python`'s `begin_commit`/`push_commit` gives a
+   real single-undo-step transaction into a running KiCad. See
+   [`safe-apply-references.md`](../research/safe-apply-references.md) for the constraints — the hard
+   part is binding an in-memory document to a file digest.
+5. **`v0.5.0` release** once both apply surfaces have soaked and the release ledger names a green
    source commit.
 
 ## KiCad facts that will bite you if you forget them
@@ -121,6 +125,7 @@ Each is load-bearing somewhere in the code; rediscovering them costs hours.
 
 ## Start here
 
-Read `docs/HANDOFF.md` §2 (invariants) and §5 (next steps), `AGENTS.md`, and ADR-0059. Check the
+Read [`project-state.md`](project-state.md) §2 (invariants) and §5 (next steps), `AGENTS.md`, and
+[ADR-0059](../adr/0059-separately-authorized-placement-apply.md). Check the
 stacked PR chain and hosted review state before changing public contracts. Protected-main merges
 require direct maintainer approval; do not merge them implicitly.

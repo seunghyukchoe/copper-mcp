@@ -1,4 +1,19 @@
-"""Filesystem boundary checks used by every board-facing entry point."""
+"""Filesystem boundary checks used by every board-facing entry point.
+
+This module owns the question "may this path be touched at all?" and the descriptor-anchored
+reads, create-only writes, and atomic replacements that answer it. Every board-facing entry
+point passes through it, so a caller cannot reach the filesystem by a route that skips the
+workspace check.
+
+It refuses rather than repairs: a path that escapes the configured workspace by traversal or
+symlink, a read that exceeds its byte ceiling, a create whose target already exists, and a
+replacement whose pre-rename snapshot no longer matches are all `WorkspaceViolationError`
+outcomes, never silently corrected ones. Detection of an unsafe filesystem is best effort, so a
+negative result means *not detected* and never *known safe*.
+
+Nothing here interprets board contents, applies a candidate, or decides whether an operation is
+authorized. Those are the callers' concerns; this module only decides where they may stand.
+"""
 
 from __future__ import annotations
 

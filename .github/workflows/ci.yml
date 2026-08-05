@@ -46,6 +46,8 @@ jobs:
         run: python -m pytest
       - name: Validate metadata and ledgers
         run: python scripts/check_version.py && python scripts/check_ledgers.py
+      - name: Check documentation links
+        run: python scripts/check_doc_links.py
       - name: Scan repository for secrets
         run: python scripts/check_secrets.py
       - name: Build packages
