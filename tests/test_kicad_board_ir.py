@@ -230,10 +230,55 @@ def _replace(source: bytes, old: bytes, new: bytes) -> bytes:
     return mutated
 
 
+def _replace_after(source: bytes, marker: bytes, old: bytes, new: bytes) -> bytes:
+    """Replace one exact field after a stable fixture-local marker."""
+
+    prefix, suffix = source.split(marker, 1)
+    return prefix + marker + _replace(suffix, old, new)
+
+
+def _insert_before(source: bytes, marker: bytes, expression: bytes) -> bytes:
+    """Insert one exact S-expression before a stable fixture-local marker."""
+
+    prefix, suffix = source.split(marker, 1)
+    return prefix + expression + marker + suffix
+
+
 def _insert_root(source: bytes, expression: bytes) -> bytes:
     closing = source.rfind(b"\n)")
     assert closing > 0
     return source[:closing] + b"\n  " + expression + source[closing:]
+
+
+def _back_side_orthogonal_polygon_source(turn: int) -> bytes:
+    """Return an asymmetric B.CrtYd polygon at one quarter-turn for mirror regressions."""
+
+    source = FRONT_BACK_FOOTPRINT_V02_BOARD.read_bytes()
+    if turn != 0:
+        source = _replace(source, b"(at 60 20 0)", f"(at 60 20 {turn})".encode())
+    rectangle = b"""(fp_rect
+      (start -3 -2)
+      (end 4 3)
+      (stroke (width 0.05) (type default))
+      (fill none)
+      (layer "B.CrtYd")
+      (uuid "93000000-0000-0000-0000-000000000014")
+    )"""
+    polygon = b"""(fp_poly
+      (pts
+        (xy -3 -2) (xy 4 -2) (xy 4 3) (xy 1 3) (xy 1 0) (xy -3 0)
+      )
+      (stroke (width 0.05) (type default))
+      (fill none)
+      (layer "B.CrtYd")
+      (uuid "93000000-0000-0000-0000-000000000014")
+    )"""
+    return _replace_after(
+        source,
+        b'(uuid "93000000-0000-0000-0000-000000000011")',
+        rectangle,
+        polygon,
+    )
 
 
 def test_v02_footprints_preserve_exact_pose_pad_ownership_and_lock() -> None:
@@ -398,6 +443,137 @@ def test_v02_open_or_diagonal_courtyard_line_chains_fail_closed() -> None:
         assert result.snapshot is None
         assert len(result.diagnostics) == 1
         assert result.diagnostics[0].code == expected
+
+
+def test_v02_branching_or_duplicate_courtyard_line_chain_fails_closed() -> None:
+    source = ORTHOGONAL_COURTYARD_BOARD.read_bytes()
+    marker = b'\t\t(pad "1" smd rect\n\t\t\t(at -1 0)'
+    branch = b"""\t\t(fp_line
+\t\t\t(start -2 -2)
+\t\t\t(end -2 0)
+\t\t\t(stroke
+\t\t\t\t(width 0.05)
+\t\t\t\t(type default)
+\t\t\t)
+\t\t\t(layer "F.CrtYd")
+\t\t\t(uuid "a3000000-0000-0000-0000-000000000018")
+\t\t)
+"""
+    duplicate = b"""\t\t(fp_line
+\t\t\t(start -2 -2)
+\t\t\t(end 2 -2)
+\t\t\t(stroke
+\t\t\t\t(width 0.05)
+\t\t\t\t(type default)
+\t\t\t)
+\t\t\t(layer "F.CrtYd")
+\t\t\t(uuid "a3000000-0000-0000-0000-000000000019")
+\t\t)
+"""
+
+    for inserted in (branch, duplicate):
+        result = parse_kicad_bytes(_insert_before(source, marker, inserted), constraint_profile())
+        assert result.snapshot is None
+        assert len(result.diagnostics) == 1
+        assert result.diagnostics[0].code == "geometry.invalid"
+
+
+def test_v02_self_intersecting_orthogonal_courtyard_polygon_fails_closed() -> None:
+    source = ORTHOGONAL_COURTYARD_BOARD.read_bytes()
+    self_intersecting = _replace(
+        source,
+        b"(xy -4 -3) (xy 4 -3) (xy 4 3) (xy 1 3) (xy 1 0) (xy -1 0) (xy -1 3) (xy -4 3)",
+        b"(xy -3 -3) (xy 3 -3) (xy 3 3) (xy -1 3) (xy -1 -5) (xy 1 -5) (xy 1 1) (xy -3 1)",
+    )
+
+    result = parse_kicad_bytes(self_intersecting, constraint_profile())
+
+    assert result.snapshot is None
+    assert len(result.diagnostics) == 1
+    assert result.diagnostics[0].code == "geometry.self_intersection"
+
+
+@pytest.mark.parametrize("primitive", (b"fp_arc", b"fp_curve"))
+def test_v02_curved_courtyard_primitive_fails_closed(primitive: bytes) -> None:
+    source = _replace(ORTHOGONAL_COURTYARD_BOARD.read_bytes(), b"fp_line", primitive)
+
+    result = parse_kicad_bytes(source, constraint_profile())
+
+    assert result.snapshot is None
+    assert len(result.diagnostics) == 1
+    assert result.diagnostics[0].code == "unsupported.construct"
+
+
+def test_v02_filled_courtyard_polygon_fails_closed() -> None:
+    source = _replace(
+        ORTHOGONAL_COURTYARD_BOARD.read_bytes(),
+        b'(fill no)\n\t\t\t(layer "F.CrtYd")',
+        b'(fill solid)\n\t\t\t(layer "F.CrtYd")',
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile())
+
+    assert result.snapshot is None
+    assert len(result.diagnostics) == 1
+    assert result.diagnostics[0].code == "unsupported.construct"
+
+
+def test_v02_ambiguous_or_malformed_courtyard_fields_fail_closed() -> None:
+    source = ORTHOGONAL_COURTYARD_BOARD.read_bytes()
+    ambiguous = _replace(
+        source,
+        b"(start -2 -2)\n\t\t\t(end 2 -2)",
+        b"(start -2 -2)\n\t\t\t(start -2 -2)\n\t\t\t(end 2 -2)",
+    )
+    malformed = _replace(source, b"(end 2 -2)", b"(end 2)")
+
+    for mutated, expected in ((ambiguous, "syntax.duplicate_field"), (malformed, "syntax.invalid")):
+        result = parse_kicad_bytes(mutated, constraint_profile())
+        assert result.snapshot is None
+        assert len(result.diagnostics) == 1
+        assert result.diagnostics[0].code == expected
+
+
+@pytest.mark.parametrize(
+    ("angle_degrees", "expected"),
+    (
+        (
+            0,
+            (
+                PointNM(57_000_000, 18_000_000),
+                PointNM(64_000_000, 18_000_000),
+                PointNM(64_000_000, 23_000_000),
+                PointNM(61_000_000, 23_000_000),
+                PointNM(61_000_000, 20_000_000),
+                PointNM(57_000_000, 20_000_000),
+            ),
+        ),
+        (
+            90,
+            (
+                PointNM(58_000_000, 16_000_000),
+                PointNM(63_000_000, 16_000_000),
+                PointNM(63_000_000, 19_000_000),
+                PointNM(60_000_000, 19_000_000),
+                PointNM(60_000_000, 23_000_000),
+                PointNM(58_000_000, 23_000_000),
+            ),
+        ),
+    ),
+)
+def test_v02_back_side_orthogonal_polygon_preserves_authored_coordinates(
+    angle_degrees: int, expected: tuple[PointNM, ...]
+) -> None:
+    """Board-frame coordinates are transformed once, never mirrored because the side is back."""
+
+    snapshot = parse_success(
+        _back_side_orthogonal_polygon_source(angle_degrees), constraint_profile()
+    )
+    back = snapshot.content.footprints[1]
+
+    assert back.side is FootprintSide.BACK
+    assert back.rotation_udeg == angle_degrees * 1_000_000
+    assert back.courtyards[0].points == expected
 
 
 def test_v02_back_side_footprints_preserve_authored_pose_and_matching_courtyard() -> None:
