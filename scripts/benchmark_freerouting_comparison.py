@@ -28,6 +28,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any, cast
 
+try:
+    import resource
+except ImportError:  # pragma: no cover - Windows has no POSIX resource module.
+    resource = None  # type: ignore[assignment]
+
 from copper_mcp.kicad_cli import (
     _BOUNDED_EXEC,
     KiCadCliError,
@@ -62,6 +67,7 @@ MAX_DRC_REPORT_BYTES = 32 * 1024 * 1024
 MAX_JAR_BYTES = 512 * 1024 * 1024
 MAX_EXECUTABLE_BYTES = 128 * 1024 * 1024
 MAX_BOARD_ITEMS = 100_000
+MAX_TRANSACTION_FILE_BYTES = MAX_DSN_BYTES
 FREEROUTING_RECEIPT_SCHEMA = "copper-mcp/freerouting-ses-import-receipt/v1"
 COPPER_RECEIPT_SCHEMA = "copper-mcp/candidate-runner-receipt/v1"
 FREEROUTING_TRANSACTION_SCHEMA = "copper-mcp/freerouting-kicad-transaction/v1"
@@ -226,10 +232,62 @@ def minimal_environment(workspace: Path) -> dict[str, str]:
     }
 
 
-def run_process(argv: tuple[str, ...], timeout_seconds: int, cwd: Path) -> ProcessResult:
+def aggregate_workspace_containment() -> dict[str, str]:
+    """Describe whether the host can enforce a private *aggregate* workspace quota.
+
+    ``RLIMIT_FSIZE`` limits each child-created file but cannot bound the sum of multiple files.
+    This repository does not currently have a portable, unprivileged APFS/project-quota or Linux
+    mount/cgroup implementation that can prove the aggregate limit.  Refuse the harness-owned
+    transaction until such an operating-system boundary is available; a post-hoc directory-size
+    check would be detection, not containment.
+    """
+
+    system = platform.system()
+    if system == "Darwin":
+        return {
+            "status": "unavailable",
+            "reason": (
+                "macOS legacy sandbox cannot yet run KiCad with both a finite write allowlist "
+                "and a verified runtime-read allowlist"
+            ),
+        }
+    if system == "Linux":
+        return {
+            "status": "unavailable",
+            "reason": (
+                "no verified private tmpfs, mount-namespace, or cgroup quota provider is configured"
+            ),
+        }
+    return {
+        "status": "unavailable",
+        "reason": f"no verified aggregate private-workspace quota provider exists for {system}",
+    }
+
+
+def _file_limit_preexec(limit_bytes: int) -> None:
+    """Set the POSIX per-file write ceiling in the child before it executes."""
+
+    assert resource is not None
+    resource.setrlimit(resource.RLIMIT_FSIZE, (limit_bytes, limit_bytes))
+
+
+def run_process(
+    argv: tuple[str, ...],
+    timeout_seconds: int,
+    cwd: Path,
+    *,
+    file_limit_bytes: int = MAX_TRANSACTION_FILE_BYTES,
+) -> ProcessResult:
     """Run one process with bounded streaming capture and group termination on failure."""
 
+    if not 1 <= file_limit_bytes <= MAX_TRANSACTION_FILE_BYTES:
+        raise ValueError("external process file limit is outside the supported range")
     started = time.perf_counter_ns()
+    preexec = (
+        (lambda: _file_limit_preexec(file_limit_bytes))
+        if resource is not None and os.name == "posix"
+        else None
+    )
     try:
         process = subprocess.Popen(  # noqa: S603 - argv is explicit, shell is never used
             argv,
@@ -239,6 +297,7 @@ def run_process(argv: tuple[str, ...], timeout_seconds: int, cwd: Path) -> Proce
             stderr=subprocess.PIPE,
             start_new_session=os.name == "posix",
             env=minimal_environment(cwd),
+            preexec_fn=preexec,
         )
     except OSError:
         return ProcessResult(
@@ -546,6 +605,13 @@ def _harness_freerouting_transaction(
     upgrade this transaction.
     """
 
+    containment = aggregate_workspace_containment()
+    if containment["status"] != "available":
+        return {
+            "schema": FREEROUTING_TRANSACTION_SCHEMA,
+            "status": "unavailable",
+            "containment": containment,
+        }, None
     if source_sha256 is None:
         return {"schema": FREEROUTING_TRANSACTION_SCHEMA, "status": "unavailable"}, None
     with tempfile.TemporaryDirectory(prefix="copper-mcp-freerouting-transaction-") as directory:
@@ -566,6 +632,7 @@ def _harness_freerouting_transaction(
             kicad_specctra_argv(kicad_python, "export-dsn", private_source, dsn),
             timeout_seconds,
             workspace,
+            file_limit_bytes=MAX_DSN_BYTES,
         )
         dsn_sha256 = _validate_dsn(dsn) if export.status == "ok" else None
         record["kicad_export"] = {
@@ -579,7 +646,12 @@ def _harness_freerouting_transaction(
             return record, None
 
         ses = workspace / "freerouting.ses"
-        router = run_process(freerouting_argv(java, jar, dsn, ses), timeout_seconds, workspace)
+        router = run_process(
+            freerouting_argv(java, jar, dsn, ses),
+            timeout_seconds,
+            workspace,
+            file_limit_bytes=MAX_DSN_BYTES,
+        )
         ses_sha256 = _validate_ses(ses) if router.status == "ok" else None
         record["freerouting_process"] = {
             **process_record(router, "freerouting_dsn_ses"),
@@ -599,14 +671,21 @@ def _harness_freerouting_transaction(
             kicad_specctra_argv(kicad_python, "import-ses", import_source, imported, ses=ses),
             timeout_seconds,
             workspace,
+            file_limit_bytes=MAX_BOARD_BYTES,
         )
         imported_sha256 = _hash_or_none(imported, MAX_BOARD_BYTES)
+        import_source_after = _hash_or_none(import_source, MAX_BOARD_BYTES)
         record["kicad_import"] = {
             **process_record(imported_result, "kicad_specctra_ses_import"),
             "result_board_sha256": imported_sha256,
             "result_status": "valid" if imported_sha256 else "missing_or_invalid",
+            "source_copy_preserved": import_source_after == source_sha256,
         }
-        if imported_result.status != "ok" or imported_sha256 is None:
+        if (
+            imported_result.status != "ok"
+            or imported_sha256 is None
+            or import_source_after != source_sha256
+        ):
             return record, None
 
         metrics = _result_for_board(
@@ -614,7 +693,7 @@ def _harness_freerouting_transaction(
             imported,
             kicad_cli,
             timeout_seconds,
-            cwd,
+            workspace,
             router.elapsed_ns,
         )
         if metrics.get("drc", {}).get("status") != "ok":
@@ -680,6 +759,8 @@ def preflight(
     _, release_status = freerouting_release_provenance(release_provenance, jar)
     if release_status not in {"unavailable", "verified"}:
         reasons.append("FreeRouting release provenance is invalid or does not match its JAR")
+    if harness_transaction and aggregate_workspace_containment()["status"] != "available":
+        reasons.append("aggregate private-workspace quota is unavailable")
     probes: dict[str, Any] = {}
     if java is not None and java.is_file() and java.stat().st_size <= MAX_EXECUTABLE_BYTES:
         probes["java"] = version_probe(java, cwd)
@@ -743,7 +824,7 @@ def drc_metrics(
 ) -> dict[str, Any]:
     """Run the same authoritative KiCad DRC command for either result board."""
 
-    with tempfile.TemporaryDirectory(prefix="copper-mcp-freerouting-drc-") as directory:
+    with tempfile.TemporaryDirectory(prefix="copper-mcp-freerouting-drc-", dir=cwd) as directory:
         report = Path(directory) / "drc.json"
         command = (
             sys.executable,
@@ -763,7 +844,12 @@ def drc_metrics(
             str(report),
             str(board),
         )
-        result = run_process(command, timeout_seconds, cwd)
+        result = run_process(
+            command,
+            timeout_seconds,
+            cwd,
+            file_limit_bytes=MAX_DRC_REPORT_BYTES,
+        )
         output: dict[str, Any] = {
             "process": process_record(result, role),
             "status": result.status,
