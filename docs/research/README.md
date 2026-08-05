@@ -17,6 +17,18 @@ that every product feature, price, or repository release will remain current.
 - [Audio circuit benchmark intake](./audio-circuit-benchmarks.md) records why public DIY catalogs
   are reference-only and defines a licence-aware, original-fixture capability ladder for MCP-shared
   board inspection/routing tests plus MCP-independent Circuit Intent and schematic-rendering checks.
+- [Negotiated physical-clearance acceptance](./negotiated-physical-clearance.md) defines the
+  bounded exact-integer, same-layer candidate-pair gate that supplements lattice congestion
+  accounting without claiming board-wide or KiCad physical verification.
+- [Bounded placement-heuristic baseline](./placement-heuristic-baseline.md) records the
+  legalizer-gated local/beam search, its connectivity proxy, reproducible fixture evidence, and
+  the limits that keep it advisory.
+- [AI routing-policy boundary](./ai-routing-policy-boundary.md) defines a closed, redacted policy
+  contract for ordering and coordinator-supplied options without direct copper authority.
+- [MCP Tasks compatibility](./mcp-tasks-compatibility.md) records the observed runtime facts and
+  the owner-bound, durable-storage gates that keep experimental wire Tasks disabled.
+- [FreeRouting comparison boundary](./freerouting-comparison.md) documents the GPL-isolated,
+  receipt-bound comparison harness and why it cannot yet declare a result.
 - [Circuit Scene to route action closure](./scene-action-closure-references.md) reproduces the
   opaque-reference integration failure, defines the revision-bound MCP contract, and records its
   exact hidden-name equivalence oracle and limitations.

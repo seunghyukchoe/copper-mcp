@@ -8,6 +8,33 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added a bounded, in-memory routing-task handle broker and a runtime MCP Tasks compatibility
+  probe. The reference environment observed `mcp 2.0.0`, but the supported dependency range
+  remains `<3`; the observed runtime lacks the current Tasks wire/dispatcher contract and
+  CopperMCP lacks owner-bound durable task-handle lookup, so wire Tasks stay disabled and the
+  ordinary routing-job tools remain the fallback.
+
+- Negotiated multi-net routing now rejects a lattice-clean candidate set when its same-layer,
+  cross-net orthogonal copper violates the stricter assigned net-class clearance. Generic routing
+  backends are independently replayed through the deterministic reference core under a shared
+  half-budget allocation before they can be accounted for or published. This is a bounded
+  acceptance gate, not KiCad DRC or board-wide physical clearance.
+
+- Added an internal, bounded deterministic placement-search baseline. It evaluates only
+  legalizer-issued immutable candidates, scores the same-net Manhattan connectivity proxy in
+  `O(n log n)`, and propagates one deadline plus cancellation through scoring and legalization.
+  It is advisory and makes no KiCad mutation, routing-quality, DRC, or fabrication claim.
+
+- Added a closed, advisory AI routing-policy seam for deterministic net ordering and
+  coordinator-supplied corridor/repair-window selection. Its bounded, redacted trace omits board
+  geometry and raw identifiers; policy output cannot emit copper or bypass deterministic routing,
+  validation, DRC, or explicit apply authorization. It is not yet route-integrated.
+
+- Added a process-isolated FreeRouting comparison harness with bounded input/output handling,
+  minimal child environment, KiCad-DRC evidence requirements, and self-attested receipt bindings.
+  The receipts deliberately cannot close a comparison; no real FreeRouting/KiCad comparison has
+  run in this repository yet.
+
 - Added an OpenSSF-informed sustainability and supply-chain roadmap. It separates the Criticality
   Score activity proxy from Scorecard controls, records the dated `0.23`/`5.8` baseline as an
   estimate and a distinct API snapshot, and defines engineering-backed gates for a defensible

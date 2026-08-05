@@ -140,13 +140,24 @@ documentation, ledger updates, and benchmark evidence.
   - [x] B-036 KiCad-fixture replay: sequential baseline overflow `1` versus negotiated overflow
     `0` across three deterministic replays; physical clearance, multilayer capacity, KiCad DRC,
     and held-out corpus comparison remain open.
+  - [x] Bounded same-layer candidate-pair physical acceptance gate: exact integer swept-disc
+    clearance over orthogonal segments, assigned-width checks, the stricter pairwise net-class
+    clearance, pair-check/cancellation budgets, and atomic discard of an invalid allocation.
+    Generic router output is independently replayed by the deterministic reference core under a
+    shared half-budget before publication. B-058 records a lattice-clean synthetic pair with
+    `300,000 nm` available versus `500,000 nm` governing clearance, rejected deterministically.
+    KiCad DRC, existing-board copper, pads, vias, zones, custom rules, multilayer geometry, and
+    physical-conflict-guided rerouting remain open.
 - [~] Incremental spatial index and bounded rip-up/reroute.
   - [x] Immutable conservative obstacle index for exact A*/Dijkstra query narrowing, with
     canonical linear fallback, differential route tests, and B-033 evidence.
   - [x] Candidate-only bounded rip-up/reroute coordination is covered by the negotiated
     congestion ledger and B-036; incremental obstacle updates and broader multi-net repair remain
     open.
-- [ ] Benchmark comparison against established open baselines.
+- [~] Benchmark comparison against established open baselines. A process-isolated FreeRouting
+  harness now preserves bounded provenance, minimal child environment, KiCad-DRC prerequisites,
+  and receipt bindings, but its self-attested receipts can never close a comparison. No licensed
+  common fixture, Java runtime/JAR, KiCad CLI result pair, or actual comparison run is present.
 
 - [~] Emit candidate DRC evidence as a deterministic, unsigned in-toto Statement payload using
   Link v0.3, with digest-bound subjects/materials and aggregate redacted byproducts. DSSE signing,
@@ -158,9 +169,13 @@ documentation, ledger updates, and benchmark evidence.
   recovery, redacted candidate manifests, file-backed layered request/result persistence,
   authorization-bound geometry export, and ordinary MCP tools now exist. Single-layer/live jobs
   and MCP Tasks negotiation remain open.
-- [ ] MCP Tasks progressive enhancement. The current protocol is an experimental extension and
-  remains deferred until a pinned client/server compatibility matrix, random task handles, and
-  authorization-bound result storage exist; see ADR-0046.
+- [~] MCP Tasks progressive enhancement. The reference environment observed `mcp 2.0.0` while
+  the supported dependency range remains `<3`; a runtime probe finds generic extension support
+  but no compatible current Tasks wire/dispatcher contract. A bounded, process-local 256-bit
+  owner-context-bound handle broker is available as a future seam, but it is not durable and no
+  `io.modelcontextprotocol/tasks` methods or advertisements ship. A pinned client/server matrix,
+  session-authenticated owner binding, and durable task-handle repository remain required; the
+  ordinary routing-job tools are the fallback. See [MCP Tasks compatibility research](research/mcp-tasks-compatibility.md).
 - [x] Immutable route patch format. A byte-preserving span-splice CST and a pure apply engine:
   given board bytes and a verified candidate they return the bytes an apply would write, proven
   by a three-part assertion (untouched bytes bit-identical, result reparses fail-closed,
@@ -236,8 +251,16 @@ placement, and the policy-plugin work.
   bounded file-level surface is implemented and measured, and file-backed post-placement
   DRC/scene observation is revision-bound; general footprint fidelity and live-editor action CAS
   remain open.
-- [ ] Heuristic policy baseline and trace dataset.
-- [ ] Typed net-ordering, corridor, and repair policy interface.
+- [~] Heuristic policy baseline and trace dataset. An internal deterministic local/beam placement
+  search evaluates legalizer-issued immutable candidates only and improves the same-net Manhattan
+  proxy by `2,000,000 nm` (`12,000,000 → 10,000,000 nm`) on three deterministic committed-fixture
+  replays (B-059). Its `O(n log n)` scoring, deadline, cancellation, and pad-subject normalization
+  are bounded; it is not an optimizer, KiCad mutation path, DRC result, or routing-quality claim.
+- [~] Typed net-ordering, corridor, and repair policy interface. The closed advisory
+  `routing.policy` contract has deterministic reference decisions, bounded hostile JSON handling,
+  canonical digest binding, and redacted ordinal-only action traces (B-060). It can only order
+  known nets and select coordinator-supplied options; it cannot emit copper and is not yet
+  integrated into negotiated routing or an MCP tool.
 - [ ] Optional local GNN/RL reference policy.
 - [~] Prompt-injection and excessive-agency tests. Board-author text is quarantined in the scene
   and asserted absent by a whole-response grep against a hostile fixture, and every request

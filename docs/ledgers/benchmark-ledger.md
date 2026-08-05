@@ -834,3 +834,46 @@ are the audit copies for the original run IDs.
 |---|---|
 | Correction | In B-056, “clean tree before artifact generation” means the tracked repository tree matched the recorded `source_commit`; the user-owned untracked [`docs/HANDOFF-CODEX.md`](HANDOFF-CODEX.md) was intentionally excluded from staging and does not belong to the benchmark workspace. |
 | Scope | No B-056 artifact bytes, run ID, metrics, or source commit change. This append-only note narrows the provenance wording without exposing or modifying the handoff contents. |
+
+#### B-058 — negotiated physical-clearance acceptance replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:6b55bb5d8fc59c26bec6c657a5af68249703081cded6224a4103c1cb49183397` |
+| Date and commits | 2026-08-05; implementation `e6634a72e7e1ec1204b38c5907a93b4a2e15e4ba`; evidence harness `5a2c1073de2a97cbb69e3a54d5077db0d4a24ba8` |
+| Configuration | Three deterministic CPU-only replays of two one-layer, orthogonal, self-identified synthetic candidates with exact assigned 600,000 nm widths; no external EDA tool invoked. |
+| Metrics | Lattice overflow `0`; legacy lattice-only acceptance `true`; available centreline clearance `300,000 nm`; governing pairwise net-class clearance `500,000 nm`; exact gate rejected the set as `clearance_violation` after one pair check; replays deterministic `true`. |
+| Artifact | [`2026-08-05-negotiated-physical-clearance.json`](../../benchmarks/results/routing/2026-08-05-negotiated-physical-clearance.json) |
+| Interpretation | This isolates a post-lattice candidate-pair acceptance delta. It does not measure KiCad DRC, existing-board copper, pads, vias, zones, custom rules, multilayer geometry, fabrication clearance, or FreeRouting parity. Generic custom-router outputs are independently reference-replayed under shared half-budget accounting in production tests; the current generic linear verifier is the safety gate, not a claimed acceleration. |
+
+#### B-059 — bounded placement-solver proxy replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:e41d1061f17bd43cfa402e9c88d84d0015d87c0351725cc0b660968882cae9e5` |
+| Date and commit | 2026-08-05; source commit `b6d20e8a442614d7cb1f34d4eb4ee3c33a8fa94d` |
+| Dataset | [`footprint-rotation.kicad_pcb`](../../tests/fixtures/board-ir-v0.1/footprint-rotation.kicad_pcb), a committed Board IR v0.1 fixture |
+| Configuration | Three deterministic replays; local/beam settings: 128 evaluations, five rounds, beam width four, 1,000,000 nm step. Retained candidates are existing legalizer-issued candidates. |
+| Metrics | All retained candidates legal `true`; deterministic replays `true`; same-net Manhattan proxy `12,000,000 → 10,000,000 nm`; improvement `2,000,000 nm`. |
+| Artifact | [`2026-08-05-placement-solver-baseline-v1.json`](../../benchmarks/results/placement/2026-08-05-placement-solver-baseline-v1.json) |
+| Interpretation | The proxy is not routed length, an optimality guarantee, DRC, electrical/timing/SI/thermal/fabrication evidence, KiCad mutation, routing feasibility, congestion, or manufacturing-clearance evidence. |
+
+#### B-060 — advisory AI routing-policy boundary replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:b7ffb5991153a3612764296761a9813c669e536f282f49077c368678ac107ab7` |
+| Date and commits | 2026-08-05; implementation `f1af095bfd6712969b0f9fb29933cd48aedef0dc`; evidence harness `5a2c1073de2a97cbb69e3a54d5077db0d4a24ba8` |
+| Configuration | Ten deterministic evaluations of the bounded reference policy over the committed closed input fixture; canonical decision/trace replay plus hostile decision-digest refusal. |
+| Metrics | Closed decision accepted `true`; hostile decision refused `true`; decision/trace deterministic `true`; routing invoked `false`; copper emitted `false`; route-quality and physical-validity claims `false`. |
+| Artifact | [`2026-08-05-ai-policy-trace-privacy.json`](../../benchmarks/results/routing/2026-08-05-ai-policy-trace-privacy.json) |
+| Interpretation | This proves a bounded advisory contract and redacted-trace replay only. It is not route-integrated and does not measure learned-policy quality, PCB routing, KiCad DRC, fabrication, FreeRouting parity, or secrecy against a complete low-entropy-record dictionary test. |
+
+#### B-061 — FreeRouting comparison harness preflight (no comparison run)
+
+| Field | Recorded evidence |
+|---|---|
+| Date | 2026-08-05 |
+| State | The local preflight found `/usr/bin/java` but no installed Java runtime, no `kicad-cli`, no released FreeRouting JAR, no common licensed DSN/KiCad fixture, and no result-board pair. No download, GPL source copy, fixture addition, routing invocation, or comparison report was produced. |
+| Harness | [`benchmark_freerouting_comparison.py`](../../scripts/benchmark_freerouting_comparison.py) and [comparison boundary](../research/freerouting-comparison.md) require bounded external inputs, a minimal environment, KiCad DRC for both boards, and provenance receipts. |
+| Closure | There is intentionally no run ID or score: self-attested SES-import and CopperMCP-runner receipts always yield `unavailable_or_incomplete` and can never close a comparison. A future harness-owned constrained KiCad import and candidate-runner transaction is required before a result can be evaluated. |
