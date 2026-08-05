@@ -21,6 +21,9 @@ from copper_mcp.routing_job_service import (
     execute_routing_job,
 )
 from copper_mcp.routing_job_service import (
+    cancel_routing_job as cancel_routing_job_service,
+)
+from copper_mcp.routing_job_service import (
     export_routing_candidate as export_routing_candidate_service,
 )
 from copper_mcp.routing_job_service import (
@@ -265,6 +268,74 @@ def test_service_malformed_job_id_commits_expired_request_cleanup(tmp_path: Path
                 (started["job_id"],),
             ).fetchone()
         assert retained is None
+    finally:
+        repository.close()
+
+
+def test_invalid_cancellation_reason_commits_expired_lifecycle_cleanup(tmp_path: Path) -> None:
+    """Optional cancellation text cannot bypass the repository retention boundary."""
+
+    settings, request, authorization = _workspace(tmp_path)
+    path = tmp_path / "invalid-cancel-reason-retention.sqlite3"
+    repository = RoutingJobRepository(path, ttl_ms=10)
+    try:
+        with patch("copper_mcp.routing.job_repository._now_ms", return_value=100):
+            started = start_routing_job_service(
+                {"request": request, "authorization_digest": authorization},
+                settings,
+                repository,
+            )
+
+        expired_job_id = _digest(b"expired-lifecycle")
+        with sqlite3.connect(path) as connection:
+            connection.execute(
+                "INSERT INTO routing_job_requests(job_id, request_digest, authorization_digest, "
+                "created_at_ms, updated_at_ms, expires_at_ms, request_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    expired_job_id,
+                    _digest(b"expired-request"),
+                    authorization,
+                    90,
+                    90,
+                    104,
+                    sqlite3.Binary(b'{"private":"expired"}'),
+                ),
+            )
+            connection.execute(
+                "INSERT INTO routing_jobs(job_id, status, revision, created_at_ms, updated_at_ms, "
+                "expires_at_ms, record_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    expired_job_id,
+                    "queued",
+                    0,
+                    90,
+                    90,
+                    104,
+                    sqlite3.Binary(b'{"private":"expired"}'),
+                ),
+            )
+
+        with patch("copper_mcp.routing.job_repository._now_ms", return_value=105):
+            with pytest.raises(RoutingJobServiceError, match="cancellation reason is malformed"):
+                cancel_routing_job_service(
+                    {
+                        "job_id": started["job_id"],
+                        "authorization_digest": authorization,
+                        "reason": "",
+                    },
+                    repository,
+                )
+
+        with sqlite3.connect(path) as connection:
+            request_row = connection.execute(
+                "SELECT job_id FROM routing_job_requests WHERE job_id = ?", (expired_job_id,)
+            ).fetchone()
+            lifecycle_row = connection.execute(
+                "SELECT job_id FROM routing_jobs WHERE job_id = ?", (expired_job_id,)
+            ).fetchone()
+        assert request_row is None
+        assert lifecycle_row is None
     finally:
         repository.close()
 

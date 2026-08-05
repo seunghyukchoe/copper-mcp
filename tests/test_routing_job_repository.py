@@ -13,6 +13,7 @@ from copper_mcp.routing import (
     CandidateManifestNotFoundError,
     LayeredAStarSettings,
     LayeredBoardRouter,
+    LayeredRouteCandidate,
     LayeredRouteRequest,
     RoutingJobKind,
     RoutingJobLimits,
@@ -24,7 +25,14 @@ from copper_mcp.routing.job_repository import (
     RoutingCandidateExportUnavailableError,
     RoutingJobRequestUnavailableError,
 )
-from copper_mcp.routing.jobs import RoutingJobError, RoutingJobSpec, RoutingJobStatus
+from copper_mcp.routing.jobs import (
+    RoutingJobConflictError,
+    RoutingJobError,
+    RoutingJobFailureCode,
+    RoutingJobSpec,
+    RoutingJobStateError,
+    RoutingJobStatus,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "blocked-pad.kicad_pcb"
 F_CU = "layer:F.Cu"
@@ -46,7 +54,7 @@ def _profile() -> KiCadConstraintProfile:
     return KiCadConstraintProfile(net_classes=(net_class,), default_net_class_id=net_class.id)
 
 
-def _candidate_and_spec() -> tuple[object, RoutingJobSpec, dict[str, object], str]:
+def _candidate_and_spec() -> tuple[LayeredRouteCandidate, RoutingJobSpec, dict[str, object], str]:
     conversion = parse_kicad_bytes(FIXTURE.read_bytes(), _profile())
     assert conversion.diagnostics == ()
     assert conversion.snapshot is not None
@@ -114,6 +122,70 @@ def _candidate_and_spec() -> tuple[object, RoutingJobSpec, dict[str, object], st
         ),
     )
     return candidate, spec, request, _digest("e")
+
+
+def _completion_mismatch(
+    spec: RoutingJobSpec,
+    candidate: LayeredRouteCandidate,
+    kind: str,
+) -> RoutingJobSpec:
+    request_kind = spec.request_kind
+    router_version = spec.router_version
+    policy = spec.policy
+    seed = spec.seed
+    limits = spec.limits
+    if kind == "kind":
+        request_kind = RoutingJobKind.SINGLE_LAYER
+    elif kind == "router":
+        router_version = "different-router-v1"
+    elif kind == "policy":
+        policy = "different-policy-v1"
+    elif kind == "seed":
+        seed += 1
+    elif kind == "metrics":
+        if candidate.metrics.expanded_states > 1:
+            limits = RoutingJobLimits(
+                max_runtime_ms=limits.max_runtime_ms,
+                max_attempts=limits.max_attempts,
+                max_expansions=candidate.metrics.expanded_states - 1,
+                max_obstacle_checks=limits.max_obstacle_checks,
+            )
+        else:
+            assert candidate.metrics.obstacle_checks > 1
+            limits = RoutingJobLimits(
+                max_runtime_ms=limits.max_runtime_ms,
+                max_attempts=limits.max_attempts,
+                max_expansions=limits.max_expansions,
+                max_obstacle_checks=candidate.metrics.obstacle_checks - 1,
+            )
+    else:  # pragma: no cover - parameterization below owns the closed mismatch set
+        raise AssertionError(f"unsupported completion mismatch {kind!r}")
+    return RoutingJobSpec.create(
+        board_revision=spec.board_revision,
+        snapshot_digest=spec.snapshot_digest,
+        start_pad_id=spec.start_pad_id,
+        end_pad_id=spec.end_pad_id,
+        request_digest=spec.request_digest,
+        request_kind=request_kind,
+        backend=spec.backend,
+        router_version=router_version,
+        policy=policy,
+        seed=seed,
+        limits=limits,
+    )
+
+
+def _candidate_artifact_counts(path: Path) -> tuple[int, int]:
+    with sqlite3.connect(path) as connection:
+        export_count = connection.execute(
+            "SELECT COUNT(*) FROM routing_candidate_exports"
+        ).fetchone()
+        manifest_count = connection.execute(
+            "SELECT COUNT(*) FROM routing_candidate_manifests"
+        ).fetchone()
+    assert export_count is not None
+    assert manifest_count is not None
+    return int(export_count[0]), int(manifest_count[0])
 
 
 def test_request_store_reopens_and_binds_authorization_without_board_content(
@@ -232,6 +304,139 @@ def test_repository_execute_publishes_candidate_artifacts_after_completion(
         assert repository.manifests.get(candidate.candidate_id).job_id == spec.job_id
 
 
+def test_repository_execute_fails_before_completion_when_artifact_persistence_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Worker execution must not expose a completed job without its candidate export."""
+
+    candidate, spec, request, authorization = _candidate_and_spec()
+    with RoutingJobRepository(tmp_path / "execute-export-failure.sqlite3") as repository:
+        repository.create(spec, request, authorization)
+
+        def fail_export(*_args: object, **_kwargs: object) -> dict[str, object]:
+            raise RoutingJobError("candidate export store capacity is exhausted")
+
+        monkeypatch.setattr(repository.exports, "put", fail_export)
+        result = repository.execute(spec.job_id, authorization, lambda _probe: candidate)
+
+        assert result.status is RoutingJobStatus.FAILED
+        assert result.candidate_id is None
+
+
+@pytest.mark.parametrize("mismatch", ("kind", "router", "policy", "seed", "metrics"))
+def test_direct_publication_preflight_rejects_invalid_candidate_without_artifacts(
+    tmp_path: Path, mismatch: str
+) -> None:
+    """The retryable direct path validates completion identity before writing artifacts."""
+
+    candidate, original_spec, request, authorization = _candidate_and_spec()
+    spec = _completion_mismatch(original_spec, candidate, mismatch)
+    path = tmp_path / f"direct-preflight-{mismatch}.sqlite3"
+    with RoutingJobRepository(path) as repository:
+        queued = repository.create(spec, request, authorization, now_ms=100)
+        running = repository.jobs.start(spec.job_id, expected_revision=queued.revision, now_ms=101)
+
+        with pytest.raises(RoutingJobError):
+            repository.publish_candidate(
+                spec.job_id,
+                candidate,
+                expected_revision=running.revision,
+                authorization_digest=authorization,
+                now_ms=102,
+            )
+
+        assert repository.jobs.get(spec.job_id, now_ms=102) == running
+        assert _candidate_artifact_counts(path) == (0, 0)
+
+
+@pytest.mark.parametrize("mismatch", ("kind", "router", "policy", "seed", "metrics"))
+def test_worker_publication_preflight_rejects_invalid_candidate_without_artifacts(
+    tmp_path: Path, mismatch: str
+) -> None:
+    """The worker converts preflight rejection into its fixed invalid-candidate failure."""
+
+    candidate, original_spec, request, authorization = _candidate_and_spec()
+    spec = _completion_mismatch(original_spec, candidate, mismatch)
+    path = tmp_path / f"worker-preflight-{mismatch}.sqlite3"
+    with RoutingJobRepository(path) as repository:
+        repository.create(spec, request, authorization)
+
+        result = repository.execute(spec.job_id, authorization, lambda _probe: candidate)
+
+        assert result.status is RoutingJobStatus.FAILED
+        assert result.diagnostic_code.value == "invalid_request"
+        assert result.candidate_id is None
+        assert _candidate_artifact_counts(path) == (0, 0)
+
+
+@pytest.mark.parametrize(
+    "state",
+    ("queued", "completed", "failed", "cancelled", "cancel_requested", "wrong_revision"),
+)
+def test_direct_publication_requires_current_running_lifecycle_before_artifacts(
+    tmp_path: Path, state: str
+) -> None:
+    """Lifecycle preflight prevents state/refusal orphans before artifact persistence."""
+
+    candidate, spec, request, authorization = _candidate_and_spec()
+    path = tmp_path / f"direct-lifecycle-preflight-{state}.sqlite3"
+    with RoutingJobRepository(path) as repository:
+        queued = repository.create(spec, request, authorization, now_ms=100)
+        expected_revision = queued.revision
+        before = queued
+        if state == "cancelled":
+            before = repository.jobs.request_cancel(
+                spec.job_id,
+                expected_revision=queued.revision,
+                now_ms=101,
+            )
+            expected_revision = before.revision
+        elif state != "queued":
+            running = repository.jobs.start(
+                spec.job_id, expected_revision=queued.revision, now_ms=101
+            )
+            before = running
+            expected_revision = running.revision
+            if state == "completed":
+                before = repository.jobs.complete(
+                    spec.job_id,
+                    candidate,
+                    expected_revision=running.revision,
+                    now_ms=102,
+                )
+                expected_revision = before.revision
+            elif state == "failed":
+                before = repository.jobs.fail(
+                    spec.job_id,
+                    RoutingJobFailureCode.WORKER_ERROR,
+                    "routing worker failed",
+                    expected_revision=running.revision,
+                    now_ms=102,
+                )
+                expected_revision = before.revision
+            elif state == "cancel_requested":
+                before = repository.jobs.request_cancel(
+                    spec.job_id,
+                    expected_revision=running.revision,
+                    now_ms=102,
+                )
+                expected_revision = before.revision
+            elif state == "wrong_revision":
+                expected_revision += 1
+
+        with pytest.raises((RoutingJobStateError, RoutingJobConflictError)):
+            repository.publish_candidate(
+                spec.job_id,
+                candidate,
+                expected_revision=expected_revision,
+                authorization_digest=authorization,
+                now_ms=103,
+            )
+
+        assert repository.jobs.get(spec.job_id, now_ms=103) == before
+        assert _candidate_artifact_counts(path) == (0, 0)
+
+
 def test_request_and_export_expiry_are_uniform(tmp_path: Path) -> None:
     candidate, spec, request, authorization = _candidate_and_spec()
     path = tmp_path / "routing.sqlite3"
@@ -247,6 +452,67 @@ def test_request_and_export_expiry_are_uniform(tmp_path: Path) -> None:
         with pytest.raises(RoutingCandidateExportUnavailableError) as unknown:
             repository.exports.get(_digest("f"), _digest("f"), authorization, now_ms=110)
         assert str(missing.value) == str(unknown.value)
+
+
+def test_repository_lookup_purges_expired_lifecycle_with_request(tmp_path: Path) -> None:
+    """A request expiry cannot retain its matching lifecycle metadata."""
+
+    _, spec, request, authorization = _candidate_and_spec()
+    path = tmp_path / "expired-repository-request.sqlite3"
+    with RoutingJobRepository(path, ttl_ms=10) as repository:
+        repository.create(spec, request, authorization, now_ms=100)
+
+        with pytest.raises(RoutingJobRequestUnavailableError):
+            repository.get(spec.job_id, authorization, now_ms=110)
+
+        with sqlite3.connect(path) as connection:
+            request_row = connection.execute(
+                "SELECT job_id FROM routing_job_requests WHERE job_id = ?", (spec.job_id,)
+            ).fetchone()
+            lifecycle_row = connection.execute(
+                "SELECT job_id FROM routing_jobs WHERE job_id = ?", (spec.job_id,)
+            ).fetchone()
+        assert request_row is None
+        assert lifecycle_row is None
+
+
+def test_export_capacity_refuses_before_lifecycle_completion(tmp_path: Path) -> None:
+    """A valid candidate cannot make a completed job if geometry persistence is full."""
+
+    candidate, spec, request, authorization = _candidate_and_spec()
+    path = tmp_path / "full-export-before-completion.sqlite3"
+    with RoutingJobRepository(path, max_records=1, ttl_ms=1_000) as repository:
+        queued = repository.create(spec, request, authorization, now_ms=100)
+        running = repository.jobs.start(spec.job_id, expected_revision=queued.revision, now_ms=101)
+        with sqlite3.connect(path) as connection:
+            connection.execute(
+                "INSERT INTO routing_candidate_exports(candidate_id, job_id, base_revision, "
+                "kind, authorization_digest, created_at_ms, expires_at_ms, candidate_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    _digest("d"),
+                    _digest("c"),
+                    candidate.base_revision,
+                    "layered",
+                    authorization,
+                    100,
+                    1_000,
+                    sqlite3.Binary(b'{"candidate_id":"retained-capacity"}'),
+                ),
+            )
+
+        with pytest.raises(RoutingJobError, match="candidate export store capacity"):
+            repository.publish_candidate(
+                spec.job_id,
+                candidate,
+                expected_revision=running.revision,
+                authorization_digest=authorization,
+                now_ms=102,
+            )
+
+        record = repository.jobs.get(spec.job_id, now_ms=102)
+        assert record.status is RoutingJobStatus.RUNNING
+        assert record.candidate_id is None
 
 
 def test_expired_request_is_deleted_before_uniform_unavailable_response(tmp_path: Path) -> None:

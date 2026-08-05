@@ -24,6 +24,10 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # The policy-order benchmark replays its committed evidence harness with `git show`.
+        # A shallow checkout omits that immutable historical source and makes all Python jobs fail.
+        with:
+          fetch-depth: 0
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:

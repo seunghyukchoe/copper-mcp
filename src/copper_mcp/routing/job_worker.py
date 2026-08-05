@@ -67,6 +67,7 @@ def _failure_message(code: RoutingJobFailureCode) -> str:
 
 
 RoutingJobExecutor: TypeAlias = Callable[["CancellationProbe"], Candidate]
+RoutingJobPreCompletionHook: TypeAlias = Callable[[Candidate], None]
 
 
 class RoutingJobExecutionError(RoutingJobError):
@@ -280,8 +281,22 @@ class RoutingJobWorker:
             now_ms=now,
         )
 
-    def execute(self, job_id: str, executor: RoutingJobExecutor) -> RoutingJobRecord:
-        """Claim, execute, and publish one candidate through the existing CAS store."""
+    def execute(
+        self,
+        job_id: str,
+        executor: RoutingJobExecutor,
+        *,
+        before_complete: RoutingJobPreCompletionHook | None = None,
+    ) -> RoutingJobRecord:
+        """Claim, execute, and publish one candidate through the existing CAS store.
+
+        ``before_complete`` is an internal bounded persistence seam.  It runs only after the
+        executor returns a candidate and the first cancellation observation, but before the
+        lifecycle completion CAS.  A failure therefore cannot publish a completed job whose
+        explicitly authorized candidate artifacts are unavailable.  A completion race may leave
+        an unreadable orphan artifact, which is retention-bounded and cannot be resolved without
+        a completed, owner-bound lifecycle record.
+        """
 
         if not callable(executor):
             raise ValueError("routing job executor is not callable")
@@ -305,6 +320,33 @@ class RoutingJobWorker:
                 RoutingJobFailureCode.WORKER_ERROR,
                 _failure_message(RoutingJobFailureCode.WORKER_ERROR),
             )
+        if probe.is_cancelled():
+            return self._cancel_or_expire(lease)
+        try:
+            current = self._store.get(job_id, now_ms=self._now())
+            current.validate_completion_eligibility(expected_revision=lease.revision)
+        except (RoutingJobConflictError, RoutingJobStateError):
+            return self._resolve_publish_race(lease)
+        except RoutingJobNotFoundError:
+            self._active = None
+            raise
+        if before_complete is not None:
+            try:
+                before_complete(candidate)
+            except RoutingJobExecutionError as error:
+                return self._fail_or_cancel(lease, error.code, _failure_message(error.code))
+            except (RoutingJobError, TypeError, ValueError):
+                return self._fail_or_cancel(
+                    lease,
+                    RoutingJobFailureCode.WORKER_ERROR,
+                    "routing candidate artifacts could not be published",
+                )
+            except Exception:
+                return self._fail_or_cancel(
+                    lease,
+                    RoutingJobFailureCode.WORKER_ERROR,
+                    "routing candidate artifacts could not be published",
+                )
         if probe.is_cancelled():
             return self._cancel_or_expire(lease)
         try:
@@ -431,6 +473,7 @@ __all__ = [
     "RoutingJobExecutor",
     "RoutingJobLease",
     "RoutingJobLeaseExpiredError",
+    "RoutingJobPreCompletionHook",
     "RoutingJobWorker",
     "Sleeper",
     "WorkerLimits",
