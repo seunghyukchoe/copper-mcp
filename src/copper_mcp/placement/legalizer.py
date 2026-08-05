@@ -83,9 +83,9 @@ def _reject_padless_preflight_refs(view: PlacementView, intent: PlacementIntent)
     """Reject unsupported placement references before syntactic analysis.
 
     Padless footprints are deliberately unavailable as placement subjects, anchors, and rule
-    references. Resolve subjects in request order before the established rule-reference and
-    proposal-anchor scans: an unknown subject must retain its earlier ``unresolved_ref`` outcome,
-    while an earlier known padless subject must precede syntactic infeasibility. This keeps a
+    references. Resolve subjects in request order before the rule-reference and proposal-anchor
+    scans. Each scan stops at its first unknown or padless reference, so a later unsupported
+    reference cannot overwrite an earlier ``unresolved_ref`` outcome. This keeps a
     contradictory rule set from hiding an unsupported placement reference behind an
     ``infeasible_constraints`` diagnostic.
     """
@@ -95,18 +95,30 @@ def _reject_padless_preflight_refs(view: PlacementView, intent: PlacementIntent)
             _reject_padless(view, ref)
             raise _UnresolvedError("a placement subject does not exist on this board")
 
-    refs: list[str] = []
+    rule_refs: list[str] = []
     for rule in intent.rules:
-        if isinstance(rule, ProximityRule | EdgeRule | RegionRule | OrientationRule | SideRule):
-            refs.append(rule.subject)
+        if isinstance(rule, ProximityRule):
+            rule_refs.extend((rule.subject, rule.target))
+        elif isinstance(rule, EdgeRule | RegionRule | OrientationRule | SideRule):
+            rule_refs.append(rule.subject)
         elif isinstance(rule, AlignmentRule):
-            refs.extend(rule.members)
+            rule_refs.extend(rule.members)
         elif isinstance(rule, SymmetryRule):
-            refs.append(rule.about)
-            refs.extend(ref for pair in rule.pairs for ref in pair)
-    refs.extend(proposal.anchor for proposal in intent.proposals if proposal.anchor is not None)
-    for ref in refs:
+            rule_refs.append(rule.about)
+            rule_refs.extend(ref for pair in rule.pairs for ref in pair)
+    for ref in rule_refs:
+        # Rules may name an individual pad, which ``view.resolve`` intentionally does not
+        # resolve because it only returns placeable footprints.
+        if view.resolve(ref) is not None or ref in view.owner_by_pad:
+            continue
         _reject_padless(view, ref)
+        raise _UnresolvedError("a rule names an object that does not exist on this board")
+
+    for proposal in intent.proposals:
+        if proposal.anchor is None or view.resolve(proposal.anchor) is not None:
+            continue
+        _reject_padless(view, proposal.anchor)
+        raise _UnresolvedError("a proposal anchors to an object that does not exist")
 
 
 class _UnsupportedError(RuntimeError):
