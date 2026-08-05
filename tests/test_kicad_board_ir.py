@@ -38,6 +38,9 @@ FOOTPRINT_V02_BOARD = (
 FRONT_BACK_FOOTPRINT_V02_BOARD = (
     TEST_ROOT / "fixtures" / "board-ir-v0.2" / "footprint-front-back-pose.kicad_pcb"
 )
+ORTHOGONAL_COURTYARD_BOARD = (
+    TEST_ROOT / "fixtures" / "board-ir-v0.2" / "courtyard-orthogonal-chains.kicad_pcb"
+)
 MALFORMED_BOARD = TEST_ROOT / "fixtures" / "board-ir-v0.1" / "malformed-unbalanced.kicad_pcb"
 _DISCOVERED_KICAD_CLI = shutil.which("kicad-cli")
 REAL_KICAD_CLI = (
@@ -358,6 +361,45 @@ def test_v02_rectangular_courtyards_transform_into_exact_board_coordinates() -> 
     }
 
 
+def test_v02_closed_orthogonal_line_chains_and_polygons_are_observed_exactly() -> None:
+    """A KiCad-resaved fixture pins both accepted non-rectangular courtyard encodings."""
+
+    snapshot = parse_success(ORTHOGONAL_COURTYARD_BOARD.read_bytes(), constraint_profile())
+    courtyards = {
+        footprint.id: footprint.courtyards[0].points for footprint in snapshot.content.footprints
+    }
+    assert courtyards == {
+        "footprint:kicad:a3000000-0000-0000-0000-000000000001": (
+            PointNM(11_000_000, 12_000_000),
+            PointNM(19_000_000, 12_000_000),
+            PointNM(19_000_000, 18_000_000),
+            PointNM(16_000_000, 18_000_000),
+            PointNM(16_000_000, 15_000_000),
+            PointNM(14_000_000, 15_000_000),
+            PointNM(14_000_000, 18_000_000),
+            PointNM(11_000_000, 18_000_000),
+        ),
+        "footprint:kicad:a3000000-0000-0000-0000-000000000011": (
+            PointNM(33_000_000, 13_000_000),
+            PointNM(37_000_000, 13_000_000),
+            PointNM(37_000_000, 17_000_000),
+            PointNM(33_000_000, 17_000_000),
+        ),
+    }
+
+
+def test_v02_open_or_diagonal_courtyard_line_chains_fail_closed() -> None:
+    source = ORTHOGONAL_COURTYARD_BOARD.read_bytes()
+    open_chain = _replace(source, b"(end -2 -2)", b"(end -2 -1)")
+    diagonal = _replace(source, b"(end 2 -2)", b"(end 2 -1)")
+
+    for mutated, expected in ((open_chain, "geometry.invalid"), (diagonal, "unsupported.topology")):
+        result = parse_kicad_bytes(mutated, constraint_profile())
+        assert result.snapshot is None
+        assert len(result.diagnostics) == 1
+        assert result.diagnostics[0].code == expected
+
+
 def test_v02_back_side_footprints_preserve_authored_pose_and_matching_courtyard() -> None:
     snapshot = parse_success(FRONT_BACK_FOOTPRINT_V02_BOARD.read_bytes(), constraint_profile())
 
@@ -439,7 +481,7 @@ def test_v02_mismatched_courtyard_layer_fails_closed() -> None:
     assert "does not match its footprint side" in result.diagnostics[0].message
 
 
-def test_v02_unsupported_courtyard_primitive_fails_closed() -> None:
+def test_v02_malformed_courtyard_line_fails_closed() -> None:
     source = _replace(FOOTPRINT_V02_BOARD.read_bytes(), b"    (fp_rect\n", b"    (fp_line\n")
 
     result = parse_kicad_bytes(source, constraint_profile())
@@ -447,7 +489,7 @@ def test_v02_unsupported_courtyard_primitive_fails_closed() -> None:
     assert result.snapshot is None
     assert len(result.diagnostics) == 1
     assert result.diagnostics[0].code == "unsupported.construct"
-    assert "courtyard primitive is unsupported" in result.diagnostics[0].message
+    assert "unsupported semantic field" in result.diagnostics[0].message
 
 
 def _four_layer_source() -> bytes:
@@ -1104,6 +1146,40 @@ def test_real_kicad_accepts_front_and_back_observation_fixture(tmp_path: Path) -
         FootprintSide.FRONT,
         FootprintSide.BACK,
     ]
+
+
+@pytest.mark.skipif(not REAL_KICAD_CLI.is_file(), reason="KiCad CLI is not installed")
+def test_real_kicad_accepts_orthogonal_courtyard_chain_fixture(tmp_path: Path) -> None:
+    """KiCad accepts the committed polygon and unordered-line source fixture unchanged."""
+
+    board = tmp_path / ORTHOGONAL_COURTYARD_BOARD.name
+    board.write_bytes(ORTHOGONAL_COURTYARD_BOARD.read_bytes())
+    report = tmp_path / "drc.json"
+
+    completed = subprocess.run(  # noqa: S603 - fixed local argv, trusted discovered CLI
+        [
+            str(REAL_KICAD_CLI),
+            "pcb",
+            "drc",
+            "--format",
+            "json",
+            "--units",
+            "mm",
+            "--severity-all",
+            "--exit-code-violations",
+            "--output",
+            str(report),
+            str(board),
+        ],
+        check=False,
+        capture_output=True,
+        timeout=120,
+    )
+
+    assert completed.returncode == 0
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    assert payload["violations"] == []
+    assert payload["unconnected_items"] == []
 
 
 def _drawn_rectangles(svg: bytes) -> dict[tuple[float, float], tuple[float, float]]:

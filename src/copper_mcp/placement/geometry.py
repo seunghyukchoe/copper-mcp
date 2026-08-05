@@ -17,6 +17,8 @@ three values rather than two.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from itertools import pairwise
 from math import isqrt
 
 from copper_mcp.board_ir import Pad, PadShape, PointNM, Ring
@@ -78,6 +80,60 @@ def ring_bounds(ring: Ring) -> Rect:
     xs = [point.x for point in ring.points]
     ys = [point.y for point in ring.points]
     return (min(xs), min(ys), max(xs), max(ys))
+
+
+def orthogonal_rings_overlap_open(
+    first: Ring, second: Ring, *, charge: Callable[[], None] | None = None
+) -> bool:
+    """Return whether two simple orthogonal rings share a positive-area interior.
+
+    All calculations use doubled integer coordinates.  Each open horizontal strip between
+    consecutive vertex y-coordinates has a constant even-odd interior, so a midpoint scan finds
+    boundary crossings as exact vertical-edge x coordinates.  Intersecting the paired intervals
+    detects proper crossings and strict containment while deliberately treating an edge or corner
+    touch as clear.  Board-IR validation admits only simple axis-aligned courtyard rings before
+    this predicate is called.
+    """
+
+    if not rects_overlap(ring_bounds(first), ring_bounds(second)):
+        return False
+    ys = sorted({point.y for point in first.points} | {point.y for point in second.points})
+    for lower, upper in pairwise(ys):
+        sample_y_twice = lower + upper
+        if charge is not None:
+            charge()
+        first_intervals = _orthogonal_scanline_intervals(first, sample_y_twice, charge=charge)
+        second_intervals = _orthogonal_scanline_intervals(second, sample_y_twice, charge=charge)
+        for first_left, first_right in first_intervals:
+            for second_left, second_right in second_intervals:
+                if charge is not None:
+                    charge()
+                if max(first_left, second_left) < min(first_right, second_right):
+                    return True
+    return False
+
+
+def _orthogonal_scanline_intervals(
+    ring: Ring, sample_y_twice: int, *, charge: Callable[[], None] | None
+) -> tuple[tuple[int, int], ...]:
+    """Return doubled-x open interior intervals at an open horizontal-strip sample."""
+
+    crossings: list[int] = []
+    for index, start in enumerate(ring.points):
+        if charge is not None:
+            charge()
+        end = ring.points[(index + 1) % len(ring.points)]
+        if start.x == end.x:
+            lower_y, upper_y = sorted((start.y * 2, end.y * 2))
+            if lower_y < sample_y_twice < upper_y:
+                crossings.append(start.x * 2)
+    crossings.sort()
+    # ``Ring`` is simple and the sample avoids every vertex, so an odd count is impossible.  A
+    # defensive empty answer nevertheless prevents a malformed externally-built ring from
+    # producing a positive verdict if this helper is ever called without Board-IR validation.
+    if len(crossings) % 2:
+        return ()
+    return tuple(zip(crossings[::2], crossings[1::2], strict=True))
 
 
 def pad_half_extents(pad: Pad) -> tuple[int, int]:
@@ -277,6 +333,7 @@ __all__ = [
     "QUARTER_UDEG",
     "Rect",
     "ceil_sqrt",
+    "orthogonal_rings_overlap_open",
     "pad_bounds",
     "pad_core",
     "pad_half_extents",

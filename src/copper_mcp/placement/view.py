@@ -36,7 +36,7 @@ class FootprintView:
     locked: bool
     #: Union of the footprint's pad bounds in the board frame, as currently placed.
     hull: Rect
-    #: Exact rectangular courtyard rings in the current Board IR board frame.
+    #: Exact simple orthogonal courtyard rings in the current Board IR board frame.
     courtyards: tuple[Ring, ...]
 
     def __post_init__(self) -> None:
@@ -90,7 +90,8 @@ class PlacementView:
     #: retained so a caller naming one is told it cannot be placed rather than that it does not
     #: exist. The second answer would be false: Board IR carries it and the scene reports it.
     padless_refs: frozenset[str] = frozenset()
-    #: Padless footprints with rectangular courtyards remain stationary collision envelopes.
+    #: Padless footprints with supported orthogonal courtyards remain stationary collision
+    #: envelopes.
     stationary: Mapping[str, StationaryFootprintView] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

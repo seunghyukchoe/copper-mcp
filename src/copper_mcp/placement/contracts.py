@@ -608,9 +608,9 @@ class PlacementLegality:
     pad_overlap: str
     outline_containment: str
     keepout_respect: str
-    #: Exact for the rectangular Board IR v0.2 subset and evaluated only between footprints on
-    #: the same physical side. Edge contact is not overlap; non-rectangular topology is rejected
-    #: by the Board IR contract before a placement view exists.
+    #: Exact for Board IR v0.2's simple orthogonal courtyard subset and evaluated only between
+    #: footprints on the same physical side. Edge contact is not overlap; unsupported topology is
+    #: rejected by the Board IR contract before a placement view exists.
     courtyard_overlap: str = "proven_clear"
 
     def __post_init__(self) -> None:

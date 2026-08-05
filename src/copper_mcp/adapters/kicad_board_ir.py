@@ -387,7 +387,7 @@ class _Converter:
                 if head.startswith("fp_") or head == "property":
                     layer = self._graphic_layer(item, f"{locator}.graphic")
                     if layer in _COURTYARD_LAYERS:
-                        if head != "fp_rect":
+                        if head not in {"fp_line", "fp_poly", "fp_rect"}:
                             self.fail(
                                 "unsupported.construct",
                                 "courtyard primitive is unsupported by Board IR v0.2",
@@ -815,17 +815,45 @@ class _Converter:
         turn: int,
         side: FootprintSide,
     ) -> tuple[Ring, ...]:
-        """Import exact rectangular courtyard centerlines in the board frame.
+        """Import exact closed orthogonal courtyard centerlines in the board frame.
 
-        Other courtyard primitives fail during semantic preflight. This makes an empty tuple
-        mean that no courtyard was present, never that an existing shape was silently ignored.
+        KiCad treats every closed shape on the matching courtyard layer as part of the footprint
+        envelope.  The bounded Board-IR subset accepts unfilled rectangles and polygons plus
+        complete ``fp_line`` cycles, but only when every edge is horizontal or vertical.  Empty
+        still means that no courtyard was present; a malformed or unsupported shape is never
+        silently omitted.
         """
 
         expected_layer = "F.CrtYd" if side is FootprintSide.FRONT else "B.CrtYd"
         result: list[Ring] = []
-        for index, rectangle in enumerate(children(footprint, "fp_rect")):
-            locator = f"{footprint_locator}.courtyard[{index}]"
-            layer = self._graphic_layer(rectangle, locator)
+        line_segments: list[tuple[PointNM, PointNM, str]] = []
+
+        def append(local_points: tuple[PointNM, ...], locator: str) -> None:
+            if len(result) >= 64:
+                self.fail(
+                    "budget.exceeded",
+                    "footprint courtyard limit exceeded",
+                    locator,
+                    object_kind="footprint",
+                )
+            try:
+                result.append(
+                    Ring(
+                        tuple(
+                            self._transform(point, origin, turn, locator) for point in local_points
+                        )
+                    )
+                )
+            except ValueError as error:
+                self.fail("geometry.invalid", str(error), locator, object_kind="footprint")
+
+        courtyard_index = 0
+        for item in footprint.items[1:]:
+            if not isinstance(item, SExpr) or item.head not in {"fp_line", "fp_poly", "fp_rect"}:
+                continue
+            locator = f"{footprint_locator}.courtyard[{courtyard_index}]"
+            courtyard_index += 1
+            layer = self._graphic_layer(item, locator)
             if layer not in _COURTYARD_LAYERS:
                 continue
             if layer != expected_layer:
@@ -835,58 +863,204 @@ class _Converter:
                     locator,
                     object_kind="footprint",
                 )
-            if len(result) >= 64:
-                self.fail(
-                    "budget.exceeded",
-                    "footprint courtyard limit exceeded",
+            if item.head == "fp_rect":
+                self._reject_unknown_children(
+                    item,
+                    frozenset(
+                        {"end", "fill", "layer", "locked", "start", "stroke", "tstamp", "uuid"}
+                    ),
                     locator,
-                    object_kind="footprint",
                 )
-            self._reject_unknown_children(
-                rectangle,
-                frozenset({"end", "fill", "layer", "locked", "start", "stroke", "tstamp", "uuid"}),
+                self._validate_direct_atoms(
+                    item,
+                    positional_atoms=0,
+                    allowed=frozenset({"locked"}),
+                    locator=locator,
+                )
+                fill = self._values(item, "fill", locator, minimum=1, maximum=1, required=False)
+                if fill and fill not in {("none",), ("no",)}:
+                    self.fail(
+                        "unsupported.construct",
+                        "filled courtyard rectangle is unsupported",
+                        locator,
+                        object_kind="footprint",
+                    )
+                start = self._point(item, "start", locator)
+                end = self._point(item, "end", locator)
+                if start.x == end.x or start.y == end.y:
+                    self.fail(
+                        "geometry.invalid",
+                        "courtyard rectangle must have non-zero width and height",
+                        locator,
+                        object_kind="footprint",
+                    )
+                append((start, PointNM(end.x, start.y), end, PointNM(start.x, end.y)), locator)
+            elif item.head == "fp_poly":
+                append(self._courtyard_polygon_points(item, locator), locator)
+            else:
+                line_segments.append(self._courtyard_line_segment(item, locator))
+
+        for index, ring in enumerate(
+            self._closed_courtyard_line_rings(line_segments, footprint_locator)
+        ):
+            append(ring, f"{footprint_locator}.line_chain[{index}]")
+        return tuple(result)
+
+    def _courtyard_polygon_points(self, polygon: SExpr, locator: str) -> tuple[PointNM, ...]:
+        """Read one unfilled orthogonal ``fp_poly`` without inventing a closing point."""
+
+        self._reject_unknown_children(
+            polygon,
+            frozenset({"fill", "layer", "locked", "pts", "stroke", "tstamp", "uuid"}),
+            locator,
+        )
+        self._validate_direct_atoms(
+            polygon, positional_atoms=0, allowed=frozenset({"locked"}), locator=locator
+        )
+        fill = self._values(polygon, "fill", locator, minimum=1, maximum=1, required=False)
+        if fill and fill not in {("none",), ("no",)}:
+            self.fail(
+                "unsupported.construct",
+                "filled courtyard polygon is unsupported",
                 locator,
+                object_kind="footprint",
             )
-            self._validate_direct_atoms(
-                rectangle,
-                positional_atoms=0,
-                allowed=frozenset({"locked"}),
-                locator=locator,
-            )
-            fill = self._values(
-                rectangle,
-                "fill",
-                locator,
-                minimum=1,
-                maximum=1,
-                required=False,
-            )
-            if fill and fill != ("none",):
+        points_expression = self._one(polygon, "pts", locator)
+        assert points_expression is not None
+        self._reject_unknown_children(points_expression, frozenset({"xy"}), f"{locator}.pts")
+        self._validate_direct_atoms(
+            points_expression, positional_atoms=0, allowed=frozenset(), locator=f"{locator}.pts"
+        )
+        point_expressions = children(points_expression, "xy")
+        if len(point_expressions) > self.limits.max_vertices_per_ring + 1:
+            self.fail("budget.exceeded", "ring vertex budget exceeded", locator)
+        points: list[PointNM] = []
+        for index, point in enumerate(point_expressions):
+            values = atoms(point)
+            if len(values) != 2:
                 self.fail(
-                    "unsupported.construct",
-                    "filled courtyard rectangle is unsupported",
-                    locator,
-                    object_kind="footprint",
+                    "syntax.invalid",
+                    "courtyard polygon point is malformed",
+                    f"{locator}.point[{index}]",
                 )
-            start = self._point(rectangle, "start", locator)
-            end = self._point(rectangle, "end", locator)
-            if start.x == end.x or start.y == end.y:
+            points.append(
+                PointNM(
+                    self._mm(values[0], f"{locator}.point[{index}].x"),
+                    self._mm(values[1], f"{locator}.point[{index}].y"),
+                )
+            )
+        if len(points) >= 2 and points[0] == points[-1]:
+            points.pop()
+        self._require_orthogonal_chain(tuple(points), locator)
+        return tuple(points)
+
+    def _courtyard_line_segment(self, line: SExpr, locator: str) -> tuple[PointNM, PointNM, str]:
+        """Read one line which must later join one complete courtyard cycle."""
+
+        self._reject_unknown_children(
+            line,
+            frozenset({"end", "layer", "locked", "start", "stroke", "tstamp", "uuid"}),
+            locator,
+        )
+        self._validate_direct_atoms(
+            line, positional_atoms=0, allowed=frozenset({"locked"}), locator=locator
+        )
+        start = self._point(line, "start", locator)
+        end = self._point(line, "end", locator)
+        self._require_orthogonal_chain((start, end), locator)
+        return (start, end, locator)
+
+    def _closed_courtyard_line_rings(
+        self, segments: list[tuple[PointNM, PointNM, str]], footprint_locator: str
+    ) -> tuple[tuple[PointNM, ...], ...]:
+        """Reconstruct unordered ``fp_line`` graphics into exact simple closed cycles."""
+
+        if not segments:
+            return ()
+        adjacency: dict[PointNM, list[tuple[int, PointNM]]] = {}
+        seen: set[tuple[PointNM, PointNM]] = set()
+        for index, (start, end, locator) in enumerate(segments):
+            key = (start, end) if start < end else (end, start)
+            if key in seen:
                 self.fail(
                     "geometry.invalid",
-                    "courtyard rectangle must have non-zero width and height",
+                    "courtyard line chain has a duplicate edge",
                     locator,
                     object_kind="footprint",
                 )
-            local_points = (
-                start,
-                PointNM(end.x, start.y),
-                end,
-                PointNM(start.x, end.y),
-            )
-            result.append(
-                Ring(tuple(self._transform(point, origin, turn, locator) for point in local_points))
-            )
-        return tuple(result)
+            seen.add(key)
+            adjacency.setdefault(start, []).append((index, end))
+            adjacency.setdefault(end, []).append((index, start))
+        for _point, links in adjacency.items():
+            if len(links) != 2:
+                self.fail(
+                    "geometry.invalid",
+                    "courtyard line chain must form closed non-branching loops",
+                    footprint_locator,
+                    object_kind="footprint",
+                )
+
+        visited: set[int] = set()
+        rings: list[tuple[PointNM, ...]] = []
+        for seed in range(len(segments)):
+            if seed in visited:
+                continue
+            component_points: set[PointNM] = set()
+            pending = [segments[seed][0]]
+            while pending:
+                point = pending.pop()
+                if point in component_points:
+                    continue
+                component_points.add(point)
+                pending.extend(other for _, other in adjacency[point])
+            start = min(component_points)
+            current = start
+            previous_edge: int | None = None
+            points: list[PointNM] = [start]
+            while True:
+                choices = sorted(
+                    (edge, other) for edge, other in adjacency[current] if edge != previous_edge
+                )
+                if not choices:
+                    self.fail(
+                        "geometry.invalid",
+                        "courtyard line chain cannot close",
+                        footprint_locator,
+                        object_kind="footprint",
+                    )
+                edge, next_point = choices[0]
+                if edge in visited and next_point != start:
+                    self.fail(
+                        "geometry.invalid",
+                        "courtyard line chain reuses an edge before closure",
+                        footprint_locator,
+                        object_kind="footprint",
+                    )
+                visited.add(edge)
+                previous_edge, current = edge, next_point
+                if current == start:
+                    break
+                points.append(current)
+                if len(points) > self.limits.max_vertices_per_ring:
+                    self.fail("budget.exceeded", "ring vertex budget exceeded", footprint_locator)
+            self._require_orthogonal_chain(tuple(points), footprint_locator)
+            rings.append(tuple(points))
+        return tuple(rings)
+
+    def _require_orthogonal_chain(self, points: tuple[PointNM, ...], locator: str) -> None:
+        """Fail closed unless every supplied edge is a non-zero orthogonal segment."""
+
+        if len(points) < 2:
+            self.fail("geometry.invalid", "courtyard chain has too few points", locator)
+        for index, start in enumerate(points):
+            end = points[(index + 1) % len(points)]
+            if (start.x == end.x) == (start.y == end.y):
+                self.fail(
+                    "unsupported.topology",
+                    "courtyard edges must be non-zero and axis-aligned",
+                    locator,
+                    object_kind="footprint",
+                )
 
     def _footprints_and_pads(self) -> tuple[tuple[Footprint, ...], tuple[Pad, ...]]:
         footprints: list[Footprint] = []
