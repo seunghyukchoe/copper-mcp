@@ -28,12 +28,13 @@ All notable changes are documented here. The format follows
 - Added a closed, advisory AI routing-policy seam for deterministic net ordering and
   coordinator-supplied corridor/repair-window selection. Its bounded, redacted trace omits board
   geometry and raw identifiers; policy output cannot emit copper or bypass deterministic routing,
-  validation, DRC, or explicit apply authorization. It is not yet route-integrated.
+  validation, DRC, or explicit apply authorization. Content digests remain linkable and are not
+  secret redactions. It is not yet route-integrated.
 
-- Added a process-isolated FreeRouting comparison harness with bounded input/output handling,
+- Added a bounded external-process FreeRouting comparison harness with bounded input/output handling,
   minimal child environment, KiCad-DRC evidence requirements, and self-attested receipt bindings.
   The receipts deliberately cannot close a comparison; no real FreeRouting/KiCad comparison has
-  run in this repository yet.
+  run in this repository yet. It is not sandbox containment for user-supplied executables.
 
 - Added an OpenSSF-informed sustainability and supply-chain roadmap. It separates the Criticality
   Score activity proxy from Scorecard controls, records the dated `0.23`/`5.8` baseline as an

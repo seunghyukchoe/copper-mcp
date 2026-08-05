@@ -145,7 +145,8 @@ documentation, ledger updates, and benchmark evidence.
     clearance, pair-check/cancellation budgets, and atomic discard of an invalid allocation.
     Generic router output is independently replayed by the deterministic reference core under a
     shared half-budget before publication. B-058 records a lattice-clean synthetic pair with
-    `300,000 nm` available versus `500,000 nm` governing clearance, rejected deterministically.
+    `300,000 nm` available copper-edge clearance versus `500,000 nm` governing clearance,
+    rejected deterministically.
     KiCad DRC, existing-board copper, pads, vias, zones, custom rules, multilayer geometry, and
     physical-conflict-guided rerouting remain open.
 - [~] Incremental spatial index and bounded rip-up/reroute.
@@ -154,10 +155,11 @@ documentation, ledger updates, and benchmark evidence.
   - [x] Candidate-only bounded rip-up/reroute coordination is covered by the negotiated
     congestion ledger and B-036; incremental obstacle updates and broader multi-net repair remain
     open.
-- [~] Benchmark comparison against established open baselines. A process-isolated FreeRouting
+- [~] Benchmark comparison against established open baselines. A bounded external-process FreeRouting
   harness now preserves bounded provenance, minimal child environment, KiCad-DRC prerequisites,
   and receipt bindings, but its self-attested receipts can never close a comparison. No licensed
-  common fixture, Java runtime/JAR, KiCad CLI result pair, or actual comparison run is present.
+  common fixture, Java runtime/JAR, KiCad CLI result pair, or actual comparison run is present;
+  user-supplied executable/JAR execution is explicitly not sandbox containment.
 
 - [~] Emit candidate DRC evidence as a deterministic, unsigned in-toto Statement payload using
   Link v0.3, with digest-bound subjects/materials and aggregate redacted byproducts. DSSE signing,
@@ -260,7 +262,8 @@ placement, and the policy-plugin work.
   `routing.policy` contract has deterministic reference decisions, bounded hostile JSON handling,
   canonical digest binding, and redacted ordinal-only action traces (B-060). It can only order
   known nets and select coordinator-supplied options; it cannot emit copper and is not yet
-  integrated into negotiated routing or an MCP tool.
+  integrated into negotiated routing or an MCP tool. The content digests are linkable bindings,
+  not secret redactions, and can support complete low-entropy-record dictionary tests.
 - [ ] Optional local GNN/RL reference policy.
 - [~] Prompt-injection and excessive-agency tests. Board-author text is quarantined in the scene
   and asserted absent by a whole-response grep against a hostile fixture, and every request

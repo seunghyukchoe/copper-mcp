@@ -877,3 +877,11 @@ are the audit copies for the original run IDs.
 | State | The local preflight found `/usr/bin/java` but no installed Java runtime, no `kicad-cli`, no released FreeRouting JAR, no common licensed DSN/KiCad fixture, and no result-board pair. No download, GPL source copy, fixture addition, routing invocation, or comparison report was produced. |
 | Harness | [`benchmark_freerouting_comparison.py`](../../scripts/benchmark_freerouting_comparison.py) and [comparison boundary](../research/freerouting-comparison.md) require bounded external inputs, a minimal environment, KiCad DRC for both boards, and provenance receipts. |
 | Closure | There is intentionally no run ID or score: self-attested SES-import and CopperMCP-runner receipts always yield `unavailable_or_incomplete` and can never close a comparison. A future harness-owned constrained KiCad import and candidate-runner transaction is required before a result can be evaluated. |
+
+#### B-062 — B-058 terminology and safety-gate correction
+
+| Field | Recorded evidence |
+|---|---|
+| Correction | B-058's `300,000 nm` is the available copper-edge clearance after two 600,000 nm track widths, not centreline clearance. The earlier wording is preserved above as append-only history. |
+| Safety gate | B-058/D-103's “generic linear verifier” wording was inaccurate: no generic linear independent candidate verifier is implemented. Exact deterministic A* replay is the current safety gate for custom negotiated-router output under the shared half-budget allocation. A generic linear independent verifier remains future acceleration work. |
+| Scope | No B-058 artifact bytes, run ID (`sha256:6b55bb5d8fc59c26bec6c657a5af68249703081cded6224a4103c1cb49183397`), implementation/evidence commits, or physical-gate result changes. This correction adds no KiCad DRC, board-wide clearance, or real FreeRouting comparison claim. |
