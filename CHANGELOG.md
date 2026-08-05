@@ -23,6 +23,10 @@ All notable changes are documented here. The format follows
   metadata in addition to bytes, mode, and symlink targets. Its replay can therefore detect
   metadata-only observer mutations instead of treating them as a clean workspace.
 
+- Live route and placement proposals now create their operation deadlines before IPC capture and
+  pass both the absolute deadline and remaining millisecond timeout into the bounded KiCad
+  adapter. A slow snapshot cannot silently consume the adapter default beyond the proposal budget.
+
 - Durable routing-job lookup now commits TTL purges even for malformed or unavailable IDs, and a
   stale `CANCEL_REQUESTED` lease is terminally acknowledged instead of remaining stranded until
   retention expiry. The lifecycle remains redacted and compare-and-swap bound.

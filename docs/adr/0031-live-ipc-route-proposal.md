@@ -33,6 +33,13 @@ This is a proposal oracle, not live action authority. Applying it requires a fut
 compare-and-swap, KiCad transaction/undo semantics, post-action observation, and authoritative
 validation evidence.
 
+## Boundary amendment — 2026-08-05
+
+The route operation deadline is created before opening IPC. The capture receives both the absolute
+deadline and a remaining timeout clamped to the adapter's bounded maximum, so connection and
+serialization work cannot silently consume time beyond the proposal budget. This remains
+cooperative timing; a blocking official IPC call is not hard process-preemptible.
+
 ## Consequences
 
 An AI/MCP client can complete the loop “observe active editor → select an opaque net reference →

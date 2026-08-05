@@ -42,6 +42,13 @@ export, while the deterministic core remains the only geometry and legality auth
 write contract must add a disposable projection/re-observation oracle and explicit single-undo
 authorization before it can call KiCad mutation APIs.
 
+## Boundary amendment — 2026-08-05
+
+The placement operation deadline is created before opening IPC. The capture receives both the
+absolute deadline and a remaining timeout clamped to the adapter's bounded maximum, so a slow live
+snapshot cannot consume more than the placement preview budget. This remains cooperative timing;
+blocking official IPC work is not hard process-preemptible.
+
 ## References
 
 - [KiCad Python Board API](https://docs.kicad.org/kicad-python-main/board.html)
