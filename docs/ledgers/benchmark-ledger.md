@@ -1052,3 +1052,12 @@ are the audit copies for the original run IDs.
 | Correction | The route-bundle request boundary now rejects a non-list or fewer-than-two/more-than-eight reference collection before iterating or validating an element; an explosive nine-item list regression proves the upper-bound refusal does no caller-controlled element work. |
 | KiCad authority binding | The regenerated [`2026-08-05-route-bundle-v1.json`](../../benchmarks/results/routing/2026-08-05-route-bundle-v1.json) retains `DrcSummary.base_revision` `sha256:efbab994177e0737b4ed1ae7343631b969e5ab7c51e888dfe90311c362209f4d` and `drc_context_revision` `sha256:1c8dee9d3b4248b891b38ff23e49cc5e1bf2f296db22e216d9f3f38591c0e2ee` for the private combined derivative. The benchmark recomputes the derivative bytes and refuses a mismatched summary before reporting completed evidence. |
 | Interpretation | This corrects request-work and evidence-binding boundaries only. The artifact remains aggregate evidence for one disposable public-fixture derivative; it grants no apply/export/persistence authority and makes no general-board, electrical, or fabrication claim. |
+
+#### B-082 — route-bundle released-version provenance correction
+
+| Field | Recorded evidence |
+|---|---|
+| Correction | The earlier route-bundle artifact predated the released `0.5.0` source lineage. Release commit `a12ee823fef5c099aa80c16bf5a694806eb643e2` was merged before source commit `f1fcfafa67843c9c7b27a0caa5676aaeeccd91cf`; the latter adds a report field and exact regression requiring `copper_mcp_version: "0.5.0"`. |
+| Artifact | Regenerated [`2026-08-05-route-bundle-v1.json`](../../benchmarks/results/routing/2026-08-05-route-bundle-v1.json) from that exact source tree. The bounded local KiCad 10.0.5 DRC record reports exit `0`, zero errors, zero unconnected items, combined-derivative SHA-256 `2617ea1a91e6eabd8f7de6d124672ee05478761843308a2d365a30f1a5dedc78`, and DRC-context SHA-256 `61efa0a7cf5845a8f49fe13eee46fe20d00b50f208a7c37c9d2ec4e9ffacfab4`. |
+| Replay guard | The evidence commit contains only this artifact, this append-only record, and the changelog correction. The source/test tree is byte-identical to source commit `f1fcfaf` and that commit is an ancestor of the evidence commit. |
+| Interpretation | This is a released-version and reachable-provenance correction. It preserves B-079/B-080's routing and bounded-DRC claims, and adds no authority, quality, electrical, fabrication, or general-board claim. |

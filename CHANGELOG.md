@@ -6,6 +6,12 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Rebound the route-bundle benchmark artifact to released CopperMCP `0.5.0`. Its provenance now
+  records the source version explicitly, while retaining exact script, fixture, combined-derivative,
+  DRC-context, and self-digest bindings.
+
 ## [0.5.0] - 2026-08-05
 
 ### Fixed
