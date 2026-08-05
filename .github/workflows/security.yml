@@ -31,7 +31,7 @@ jobs:
       - name: Scan repository for secrets
         run: python scripts/check_secrets.py
       - name: Audit Python dependencies
-        run: python -m pip_audit
+        run: python -m pip_audit .
 
   dependency-review:
     name: Dependency review

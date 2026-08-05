@@ -234,6 +234,10 @@ All notable changes are documented here. The format follows
 
 ### Security
 
+- `make security` and the hosted security workflow now pass `.` to `pip-audit`, resolving
+  CopperMCP's declared project graph instead of reporting unrelated packages installed in the
+  ambient interpreter. Secret scanning is unchanged.
+
 - Hardened placement application after review: bounded manifest pose, grid, legality, and evidence
   fields are rejected before board parsing; the destructive MCP request is closed at its nested
   boundary; post-rename and post-publication paths spend the capability exactly once; and the

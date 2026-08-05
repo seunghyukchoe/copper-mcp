@@ -28,7 +28,7 @@ typecheck:
 
 security:
 	$(PYTHON) scripts/check_secrets.py
-	$(PYTHON) -m pip_audit
+	$(PYTHON) -m pip_audit .
 
 build:
 	$(PYTHON) -m build
