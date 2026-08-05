@@ -55,6 +55,10 @@ When adding a document, add it to the list below in the same sentence form — *
   placement, and Circuit Scene measurement prerequisite for any future acceleration work.
 - [Ordered-layer routing v1](./ordered-layer-routing-v1.md) records the 2..8 signal-layer,
   full-stack-via proposal boundary and its serialization/DRC promotion gates.
+- [Layered fill-aware obstacles v1](./layered-fill-aware-obstacles-v1.md) records how production
+  routers treat poured copper, and the revision, zone-backing, and containment proofs that let the
+  ordered-layer adapter shrink a zone envelope to verified fill bounding boxes; it claims nothing
+  about exact polygon layered collision or a public layered fill-authority contract.
 - [Bounded placement-heuristic baseline](./placement-heuristic-baseline.md) records the
   legalizer-gated local/beam search, its connectivity proxy, reproducible fixture evidence, and
   the limits that keep it advisory.

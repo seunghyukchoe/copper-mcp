@@ -1,0 +1,37 @@
+{
+  "date_utc": "2026-08-05T22:02:15+00:00",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "fixture": "synthetic-layered-fill-corridor-v1",
+  "metrics": {
+    "conservative_candidate_id": "sha256:e8945b8a6fa71859dc327a1781bd71fe4b26808a152fa04717aeae43816b53e0",
+    "conservative_via_count": 0,
+    "conservative_wire_length_nm": 14000,
+    "deterministic_conservative": true,
+    "deterministic_fill_aware": true,
+    "drc": false,
+    "escaping_island_refusal_code": "unsupported_geometry",
+    "fill_aware_candidate_id": "sha256:f453759426f749cb51455f16377d81a48c08f6f5e1dbe207c683cc9829ac3b48",
+    "fill_aware_via_count": 0,
+    "fill_aware_wire_length_nm": 8000,
+    "growth_monotonic": true,
+    "kicad_invoked": false,
+    "nested_island_wire_lengths_nm": [
+      8000,
+      10000,
+      12000,
+      14000
+    ],
+    "orphaned_island_refusal_code": "unsupported_geometry",
+    "repetitions": 10,
+    "stale_revision_refusal_code": "stale_revision",
+    "verified_fill_source_revision": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "wire_length_reduction_nm": 6000
+  },
+  "run_id": "sha256:aa63918b6d855b7c61d4abc6c4d2a13b0ff03814246e568bd9fd9e0db529acf5",
+  "schema": "copper-mcp/benchmark/layered-fill-obstacles/v1",
+  "script": "scripts/benchmark_layered_fill_obstacles.py",
+  "source_commit": "9746bdbc04f7998dbaec849436c13e05d0edc14a"
+}

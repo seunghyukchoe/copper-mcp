@@ -51,6 +51,25 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **The bounded ordered-layer router can use freshness-verified zone fill instead of writing off a
+  whole layer.** `LayeredRouteRequest` gained an optional `verified_fill` tuple carrying the same
+  `VerifiedFill` value the single-layer core has accepted since ADR-0039, so one caller-side
+  ADR-0021 freshness proof now serves both routers. A foreign zone previously contributed its whole
+  boundary bounding box as a track and via obstacle on its layer, which is correct for a cached
+  fill nobody has checked and wrong for a pour with a real routing window: on the reference
+  fixture, a route that had to detour 14,000 nm around the outline runs 8,000 nm straight through
+  the verified void, with no vias. Nothing shrinks without proof. Malformed evidence is
+  `invalid_request` at the input boundary; an island proved against another source revision is
+  `stale_revision`; an island with no Board IR zone of the same net and layer, or whose bounding
+  box escapes that zone's, is `unsupported_geometry`. Islands are carried as bounding boxes rather
+  than exact polygons because the layered lattice model is rectangular, and containment makes
+  "the union of island boxes fits inside the zone box" a checked precondition rather than an
+  assumption about KiCad — so the replacement can only ever remove area the conservative envelope
+  had blocked, and clearance inflation is unchanged. Absent evidence keeps the old behavior exactly.
+  This is an internal seam: no public contract, response field, candidate identity rule, router
+  version, DRC authority, or apply semantics changes, and `preview_layered_route` does not yet
+  report fill-aware provenance the way `preview_route` does. (#63)
+
 - `scripts/check_ledgers.py` now validates ledger identifier allocation, and a new sibling
   `scripts/check_adr_numbers.py` validates ADR numbers. Both run in `make lint` and CI. A duplicate
   ID, a badly padded ID, a row that goes backwards in a strictly increasing ledger, two files
