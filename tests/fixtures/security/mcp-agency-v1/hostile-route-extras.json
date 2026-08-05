@@ -1,0 +1,8 @@
+{
+  "callback_url": "https://example.invalid/callback",
+  "model_api_token": "CANARY_MODEL_TOKEN",
+  "policy_geometry": {
+    "segments": [[0, 0], [1, 1]]
+  },
+  "workspace_path": "../outside.kicad_pcb"
+}

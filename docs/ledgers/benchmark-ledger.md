@@ -907,3 +907,14 @@ are the audit copies for the original run IDs.
 | Metrics | Four digest equalities true: captured source/observation, Board IR source/observation, Scene source/observation, and Scene/Board IR snapshot. Mutating calls `0`; client closure `true`; absent credentials return `kicad_plugin_environment_absent`; hostile workspace script exit `0` with no traceback/path; post-capture expiry starts neither Board IR nor Scene conversion. |
 | Artifact | Focused regression suite [`test_kicad_live_ipc_oracle.py`](../../tests/test_kicad_live_ipc_oracle.py) and read-only CLI [`probe_kicad_live_ipc.py`](../../scripts/probe_kicad_live_ipc.py). No private board, token, socket, or editor output is committed. |
 | Interpretation | This is fake-client contract evidence and a local capability replay, not a real KiCad GUI/API-server observation. It makes no live-editor fidelity, DRC, routing, placement, mutation, electrical, fabrication, or FreeRouting claim. |
+
+#### B-065 — MCP excessive-agency boundary replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:0c0b27c9a6c86de4422e00d9093ba36b25dd7442fd56b7d4fb62da9948da0c58` |
+| Date and code provenance | 2026-08-05; hardened evaluation harness `7f7a3d71c2b960f8917deeef0dc0d43fb937d227`; the artifact bytes are committed with this ledger entry. |
+| Configuration | `copper-mcp/security-evaluation/mcp-agency/v1`; seven deterministic offline MCP cases. The public route and placement apply handlers run with apply enabled and receive syntactically valid unauthorized tokens. Temporary-workspace snapshots compare path, type/symlink status, mode, size, digest, mtime, and inode; the report contains only stable unchanged assertions. |
+| Metrics | Attempted/blocked `7/7`; refused `4`; contained `3`; leaked `0`; `apply_candidate` and `apply_placement_candidate` each returned structured `invalid_token` before source access; workspace content/mode/metadata unchanged. |
+| Artifact | [`2026-08-05-mcp-agency-evaluation.json`](../../benchmarks/results/security/2026-08-05-mcp-agency-evaluation.json) |
+| Interpretation | This is a local MCP input, output/report-disclosure, revision, quota, and capability-boundary regression result. It invokes no model, network, KiCad, or board mutation. Application logging is not evaluated because the current source has no application logger sink; host logs, provider telemetry, remote authorization, unknown attacks, electrical/DRC/fabrication safety, and live-editor behavior remain outside scope. |
