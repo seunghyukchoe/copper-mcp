@@ -84,6 +84,14 @@ validation and explicit operator authorization.
   document cannot be bound to the same file digest/CAS contract without a separate transaction
   design.
 
+## Boundary amendment — 2026-08-05
+
+Consumed token nonces are retained until their individual expiry. Count-based FIFO eviction is
+not a safe memory bound because guarded restoration of a pre-apply copy can recreate the exact
+revision a live token authorizes. `max_consumed` remains a validated compatibility hint for
+embedders, but it never evicts replay-protection state; deployments that need a hard memory ceiling
+must apply admission control before issuing capabilities.
+
 ## Research basis
 
 - [KiCad Board File Format](https://dev-docs.kicad.org/en/file-formats/sexpr-pcb/): the board is a

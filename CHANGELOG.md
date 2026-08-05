@@ -27,6 +27,10 @@ All notable changes are documented here. The format follows
   pass both the absolute deadline and remaining millisecond timeout into the bounded KiCad
   adapter. A slow snapshot cannot silently consume the adapter default beyond the proposal budget.
 
+- Apply replay protection now retains every consumed nonce until its own expiry instead of
+  evicting live entries under count pressure. The compatibility capacity hint is validated but
+  cannot weaken single-use authorization after a pre-apply backup is restored.
+
 - Durable routing-job lookup now commits TTL purges even for malformed or unavailable IDs, and a
   stale `CANCEL_REQUESTED` lease is terminally acknowledged instead of remaining stranded until
   retention expiry. The lifecycle remains redacted and compare-and-swap bound.
