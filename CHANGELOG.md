@@ -73,10 +73,14 @@ All notable changes are documented here. The format follows
   budget remain coordinator-owned. This adds no model, plugin, MCP, corridor, repair, KiCad,
   copper, or apply authority, and it is not an OS sandbox.
 
-- Added a bounded external-process FreeRouting comparison harness with bounded input/output handling,
-  minimal child environment, KiCad-DRC evidence requirements, and self-attested receipt bindings.
-  The receipts deliberately cannot close a comparison; no real FreeRouting/KiCad comparison has
-  run in this repository yet. It is not sandbox containment for user-supplied executables.
+- Added the first real FreeRouting smoke record through the bounded GPL-isolated process boundary.
+  The official v2.2.2 JAR produced a valid SES for one CopperMCP-original two-pad fixture, and
+  KiCad GUI 10.0.5 DRC observations recorded zero hard violations and zero unconnected items on
+  both the imported FreeRouting result and CopperMCP's pure-kernel result. Source/report,
+  source/DSN-export, import, and runner relationships remain self-attested rather than causal;
+  the CopperMCP runner does not exercise MCP or the authorized apply service. The artifact
+  therefore retains `comparison_closed=false` and `unavailable_or_incomplete`, with no parity,
+  performance, whole-board, or sandbox-containment claim.
 
 - Added an OpenSSF-informed sustainability and supply-chain roadmap. It separates the Criticality
   Score activity proxy from Scorecard controls, records the dated `0.23`/`5.8` baseline as an
