@@ -13,6 +13,7 @@ route length, timing result, DRC result, or optimal-placement certificate.
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -31,6 +32,13 @@ from copper_mcp.placement.view import FootprintView, PlacementView
 
 _FULL_ROTATION_UDEG = 360_000_000
 _DIRECTIONS: tuple[tuple[int, int], ...] = ((-1, 0), (0, -1), (0, 1), (1, 0))
+_MAX_EVALUATIONS = 1_000_000
+_MAX_ROUNDS = 10_000
+_MAX_BEAM_WIDTH = 1_024
+_MAX_RANKED = 1_024
+_MAX_STEP_NM = 1_000_000_000
+_MAX_LEGALIZER_CHECKS = 2_000_000
+_MAX_DEADLINE_SECONDS = 60.0
 
 
 class PlacementSolverError(ValueError):
@@ -56,26 +64,34 @@ class PlacementSolverSettings:
     legalizer_deadline_seconds: float = 1.0
 
     def __post_init__(self) -> None:
-        for name in (
-            "max_evaluations",
-            "beam_width",
-            "max_ranked",
-            "step_nm",
-            "legalizer_max_checks",
-        ):
+        limits = {
+            "max_evaluations": _MAX_EVALUATIONS,
+            "beam_width": _MAX_BEAM_WIDTH,
+            "max_ranked": _MAX_RANKED,
+            "step_nm": _MAX_STEP_NM,
+            "legalizer_max_checks": _MAX_LEGALIZER_CHECKS,
+        }
+        for name, maximum in limits.items():
             value = getattr(self, name)
-            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-                raise PlacementSolverError(f"{name} must be a positive integer")
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
+                raise PlacementSolverError(f"{name} must be an integer between 1 and {maximum}")
         if (
             isinstance(self.max_rounds, bool)
             or not isinstance(self.max_rounds, int)
-            or self.max_rounds < 0
+            or not 0 <= self.max_rounds <= _MAX_ROUNDS
         ):
-            raise PlacementSolverError("max_rounds must be a non-negative integer")
+            raise PlacementSolverError(f"max_rounds must be an integer between 0 and {_MAX_ROUNDS}")
         for name in ("deadline_seconds", "legalizer_deadline_seconds"):
             value = getattr(self, name)
-            if isinstance(value, bool) or not isinstance(value, float) or value <= 0:
-                raise PlacementSolverError(f"{name} must be a positive float")
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, int | float)
+                or not math.isfinite(value)
+                or not 0 < value <= _MAX_DEADLINE_SECONDS
+            ):
+                raise PlacementSolverError(
+                    f"{name} must be finite and between 0 and {_MAX_DEADLINE_SECONDS}"
+                )
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -171,22 +187,38 @@ def solve_placement(
     started = time.monotonic()
 
     def stopped() -> str | None:
-        if cancelled is not None and cancelled():
-            return "cancelled"
-        if time.monotonic() - started > settings.deadline_seconds:
+        if cancelled is not None:
+            try:
+                if cancelled():
+                    return "cancelled"
+            except Exception:
+                return "cancelled"
+        if time.monotonic() - started >= settings.deadline_seconds:
             return "deadline_exhausted"
         return None
 
-    first_stop = stopped()
-    if first_stop is not None:
-        return PlacementSolveResult(first_stop, None, None, (), 0)
+    def remaining_legalizer_deadline() -> tuple[str | None, float | None]:
+        """Return an evaluator sub-deadline within the one solver operation deadline."""
+
+        stop = stopped()
+        if stop is not None:
+            return stop, None
+        remaining = settings.deadline_seconds - (time.monotonic() - started)
+        if remaining <= 0:
+            return "deadline_exhausted", None
+        return None, min(settings.legalizer_deadline_seconds, remaining)
+
+    initial_status, initial_deadline = remaining_legalizer_deadline()
+    if initial_status is not None:
+        return PlacementSolveResult(initial_status, None, None, (), 0)
+    assert initial_deadline is not None
 
     initial = evaluate_placement(
         intent,
         snapshot,
         view,
         max_checks=settings.legalizer_max_checks,
-        deadline_seconds=settings.legalizer_deadline_seconds,
+        deadline_seconds=initial_deadline,
         board_path=board_path,
     )
     evaluations = 1
@@ -209,13 +241,14 @@ def solve_placement(
         for state in frontier:
             for ref_id in movable:
                 for dx, dy in _DIRECTIONS:
-                    stop = stopped()
-                    if stop is not None:
-                        status = stop
-                        break
                     if evaluations >= settings.max_evaluations:
                         status = "work_exhausted"
                         break
+                    call_status, call_deadline = remaining_legalizer_deadline()
+                    if call_status is not None:
+                        status = call_status
+                        break
+                    assert call_deadline is not None
                     successor = _with_step(state, ref_id, dx, dy, settings.step_nm, view)
                     proposal_intent = replace(intent, proposals=successor)
                     result = evaluate_placement(
@@ -223,7 +256,7 @@ def solve_placement(
                         snapshot,
                         view,
                         max_checks=settings.legalizer_max_checks,
-                        deadline_seconds=settings.legalizer_deadline_seconds,
+                        deadline_seconds=call_deadline,
                         board_path=board_path,
                     )
                     evaluations += 1

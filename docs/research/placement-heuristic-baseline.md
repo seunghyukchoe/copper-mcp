@@ -6,7 +6,9 @@
 lexicographic local/beam search: evaluate the supplied immutable `PlacementIntent` first, then
 try one-grid-step cardinal moves for unlocked, pad-owning intent subjects. Search order is fixed
 by footprint reference and direction; ties use candidate IDs. The work budget, rounds, beam
-width, candidate rank cap, legalizer check cap, deadline, and cancellation callback are explicit.
+width, candidate rank cap, legalizer check cap, deadline, and cancellation callback are explicit
+and upper-bounded. Every legalizer call receives only the remaining operation deadline, capped by
+the legalizer sub-budget; a cancellation-callback failure is fail-closed as cancellation.
 
 The implementation performs no board or KiCad mutation and does not create placement candidates
 itself. Each state is encoded as an existing ref-anchored `PlacementProposal` and is retained only
@@ -23,6 +25,9 @@ The canonical replay benchmark uses the committed
 `tests/fixtures/board-ir-v0.1/footprint-rotation.kicad_pcb` fixture and records a strict proxy
 improvement over its no-proposal initial placement across three identical replays. The benchmark
 artifact is `benchmarks/results/placement/2026-08-05-placement-solver-baseline-v1.json`.
+
+The benchmark reports only deterministic configuration and result fields, so its strict canonical
+run ID remains reproducible across host scheduling variance rather than encoding wall-clock time.
 
 The solver is a heuristic, not an optimizer: no optimality or approximation guarantee is claimed.
 It also makes no DRC, electrical, timing, signal-integrity, thermal, fabrication, routing,

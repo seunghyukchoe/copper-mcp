@@ -12,10 +12,8 @@ import hashlib
 import json
 import platform
 import shutil
-import statistics
 import subprocess
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
@@ -85,15 +83,12 @@ def _run(repetitions: int) -> dict[str, Any]:
         }
     )
 
-    samples: list[int] = []
     replay_signatures: list[tuple[object, ...]] = []
     before: int | None = None
     after: int | None = None
     all_legal = True
     for _ in range(repetitions):
-        started = time.perf_counter_ns()
         result = solve_placement(intent, conversion.snapshot, view, settings=_SETTINGS)
-        samples.append(time.perf_counter_ns() - started)
         if result.initial_score is None or not result.ranked:
             raise RuntimeError(f"solver did not retain a candidate: {result.status}")
         best = min(result.ranked, key=lambda item: (item.score, item.candidate.candidate_id))
@@ -122,7 +117,6 @@ def _run(repetitions: int) -> dict[str, Any]:
         "initial_connectivity_manhattan_nm": before,
         "best_connectivity_manhattan_nm": after,
         "connectivity_improvement_nm": before - after,
-        "median_elapsed_ns": statistics.median(samples),
         "solver_settings": {
             "max_evaluations": _SETTINGS.max_evaluations,
             "max_rounds": _SETTINGS.max_rounds,
@@ -130,6 +124,13 @@ def _run(repetitions: int) -> dict[str, Any]:
             "step_nm": _SETTINGS.step_nm,
         },
     }
+
+
+def _canonical_run_id(payload: dict[str, Any]) -> str:
+    """Return the repository's strict canonical identity for this deterministic report."""
+
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    return "sha256:" + hashlib.sha256(canonical).hexdigest()
 
 
 def main() -> int:
@@ -153,8 +154,7 @@ def main() -> int:
             "routing feasibility, route length, congestion, impedance, or manufacturing clearance",
         ],
     }
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
-    payload["run_id"] = "sha256:" + hashlib.sha256(canonical).hexdigest()
+    payload["run_id"] = _canonical_run_id(payload)
     rendered = json.dumps(payload, indent=2, sort_keys=True) + "\n"
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(rendered, encoding="utf-8")

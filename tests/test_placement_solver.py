@@ -5,10 +5,17 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.board_ir import NetClass
 from copper_mcp.placement import build_placement_view, parse_placement_intent
-from copper_mcp.placement.solver import PlacementSolverSettings, solve_placement
+from copper_mcp.placement import solver as solver_module
+from copper_mcp.placement.solver import (
+    PlacementSolverError,
+    PlacementSolverSettings,
+    solve_placement,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 ROTATION_BOARD = ROOT / "tests/fixtures/board-ir-v0.1/footprint-rotation.kicad_pcb"
@@ -135,3 +142,88 @@ def test_solver_honours_cancellation_and_work_ceiling() -> None:
     assert budgeted.status == "work_exhausted"
     assert budgeted.evaluations == 1
     assert budgeted.ranked
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("max_evaluations", True),
+        ("max_evaluations", 1_000_001),
+        ("max_rounds", 10_001),
+        ("beam_width", 1_025),
+        ("max_ranked", 1_025),
+        ("step_nm", 1_000_000_001),
+        ("legalizer_max_checks", 2_000_001),
+        ("deadline_seconds", float("nan")),
+        ("deadline_seconds", float("inf")),
+        ("legalizer_deadline_seconds", True),
+        ("legalizer_deadline_seconds", 60.1),
+    ],
+)
+def test_solver_settings_reject_bool_nonfinite_and_unbounded_values(
+    field: str, value: object
+) -> None:
+    with pytest.raises(PlacementSolverError):
+        PlacementSolverSettings(**{field: value})  # type: ignore[arg-type]
+
+
+def test_solver_caps_each_legalizer_call_to_the_remaining_operation_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot, view = _board(ROTATION_BOARD)
+    intent = _intent(view, ROTATION_BOARD)
+    clock = iter((0.0, 0.1, 0.2, 0.3, 0.4))
+    deadlines: list[float] = []
+    actual_evaluate = solver_module.evaluate_placement
+    legalized_initial = actual_evaluate(intent, snapshot, view, deadline_seconds=1.0)
+    assert legalized_initial.candidate is not None
+
+    def capture_deadline(*args: object, **kwargs: object) -> object:
+        deadline = kwargs["deadline_seconds"]
+        assert isinstance(deadline, float)
+        deadlines.append(deadline)
+        return legalized_initial
+
+    monkeypatch.setattr(solver_module.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(solver_module, "evaluate_placement", capture_deadline)
+    result = solve_placement(
+        intent,
+        snapshot,
+        view,
+        settings=_settings(max_evaluations=2, deadline_seconds=1.0, legalizer_deadline_seconds=5.0),
+    )
+
+    assert result.status == "work_exhausted"
+    assert deadlines == [pytest.approx(0.8), pytest.approx(0.6)]
+
+
+def test_solver_refuses_before_a_legalizer_call_after_operation_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot, view = _board(ROTATION_BOARD)
+    intent = _intent(view, ROTATION_BOARD)
+    clock = iter((0.0, 2.0))
+
+    def unexpected_call(*args: object, **kwargs: object) -> object:
+        raise AssertionError("expired solver must not enter the legalizer")
+
+    monkeypatch.setattr(solver_module.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(solver_module, "evaluate_placement", unexpected_call)
+    result = solve_placement(intent, snapshot, view, settings=_settings(deadline_seconds=1.0))
+
+    assert result.status == "deadline_exhausted"
+    assert result.evaluations == 0
+    assert result.initial is None
+
+
+def test_solver_cancellation_callback_failure_is_fail_closed() -> None:
+    snapshot, view = _board(ROTATION_BOARD)
+    intent = _intent(view, ROTATION_BOARD)
+
+    def broken_cancel() -> bool:
+        raise RuntimeError("callback transport disappeared")
+
+    result = solve_placement(intent, snapshot, view, cancelled=broken_cancel)
+
+    assert result.status == "cancelled"
+    assert result.evaluations == 0

@@ -11,7 +11,6 @@
     "connectivity_improvement_nm": 2000000,
     "deterministic_replays": true,
     "initial_connectivity_manhattan_nm": 12000000,
-    "median_elapsed_ns": 2349664041,
     "repetitions": 3,
     "solver_settings": {
       "beam_width": 4,
@@ -26,7 +25,7 @@
     "KiCad file mutation, editor mutation, apply authority, undo, or live-editor behavior",
     "routing feasibility, route length, congestion, impedance, or manufacturing clearance"
   ],
-  "run_id": "sha256:2213e8b8ab8e052b24b79ff42bd5073fd0682408dc537e1b54731eb67a7831a8",
+  "run_id": "sha256:889b2a6c73c90e4305727e74ed0fe1a29f0825fff73abe2ea8189628e21c3a7d",
   "schema": "copper-mcp/benchmark/placement-solver-baseline/v1",
-  "source_commit": "3bdd5122c43d2250b6fe1c08b3bdc108d9705f7f"
+  "source_commit": "d7d646f4a0cb9897892cbd9f14be0230cd7aa8e4"
 }
