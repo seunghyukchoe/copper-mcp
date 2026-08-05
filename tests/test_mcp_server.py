@@ -249,6 +249,26 @@ class McpServerTests(unittest.TestCase):
         self.assertFalse(result.is_error)
         self.assertEqual(result.structured_content, payload)
 
+    def test_live_tools_stay_listed_but_refuse_while_the_capability_is_off(self) -> None:
+        """Hiding a gated tool makes it undiscoverable and invites retry loops.
+
+        The apply surface stays listed and answers with a refusal that names its flag; the
+        live IPC surface does the same, so a client can explain the situation to a user
+        instead of concluding the capability does not exist.
+        """
+
+        listed = {tool.name for tool in asyncio.run(mcp.list_tools())}
+        self.assertIn("inspect_live_board", listed)
+        self.assertIn("observe_live_board_scene", listed)
+
+        disabled = replace(_server._SETTINGS, allow_live_ipc=False)
+        self.assertFalse(disabled.allow_live_ipc)
+        with patch.object(_server, "_SETTINGS", disabled):
+            with self.assertRaises(ToolError) as caught:
+                asyncio.run(_server.mcp.call_tool("inspect_live_board", {}))
+        # The refusal names the flag, so the client can tell the operator what to turn on.
+        self.assertIn("COPPER_MCP_ALLOW_LIVE_IPC", str(caught.exception))
+
     def test_live_scene_advertises_a_closed_revision_bound_request(self) -> None:
         tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
         live_scene = tools["observe_live_board_scene"]

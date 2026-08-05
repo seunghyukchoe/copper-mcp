@@ -504,6 +504,15 @@ def _live_reference_request(preview: RoutePreview) -> dict[str, Any]:
     return request
 
 
+def _live_settings(settings: Settings) -> Settings:
+    """Live IPC is operator-gated and off by default; these tests are the enabled path.
+
+    tests/test_kicad_ipc.py owns the default-off refusal itself.
+    """
+
+    return replace(settings, allow_live_ipc=True)
+
+
 def test_live_route_proposal_reuses_the_exact_ipc_snapshot_and_candidate(
     tmp_path: Path,
 ) -> None:
@@ -514,7 +523,7 @@ def test_live_route_proposal_reuses_the_exact_ipc_snapshot_and_candidate(
 
     live = preview_live_route(
         _live_reference_request(named),
-        settings,
+        _live_settings(settings),
         client_factory=lambda **_: _FakeLiveKiCad(source),
     )
 
@@ -546,7 +555,7 @@ def test_live_route_passes_remaining_preview_budget_to_ipc(
     monkeypatch.setattr(route_preview, "capture_live_board", capture_with_observation)
     preview_live_route(
         _live_reference_request(named),
-        replace(settings, max_route_preview_seconds=1),
+        replace(_live_settings(settings), max_route_preview_seconds=1),
         client_factory=lambda **_: _FakeLiveKiCad(FIXTURE.read_text(encoding="utf-8")),
     )
 
@@ -569,7 +578,7 @@ def test_live_route_refuses_stale_board_before_conversion(tmp_path: Path) -> Non
 
     request = _live_reference_request(named)
     request["expect_board_revision"] = f"sha256:{'0' * 64}"
-    stale = preview_live_route(request, settings, client_factory=factory)
+    stale = preview_live_route(request, _live_settings(settings), client_factory=factory)
 
     assert stale.status is RoutePreviewStatus.NOT_ROUTED
     assert stale.snapshot_digest is None
@@ -592,7 +601,7 @@ def test_live_route_rejects_action_authority_before_ipc_capture(tmp_path: Path, 
     request = _live_reference_request(named)
     request[field] = True
     with pytest.raises(RoutePreviewError, match="read-only"):
-        preview_live_route(request, settings, client_factory=factory)
+        preview_live_route(request, _live_settings(settings), client_factory=factory)
     assert calls == 0
 
 

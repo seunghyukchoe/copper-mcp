@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0069**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0070**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -99,8 +99,12 @@ never silently widens it.
 | [0064](0064-policy-bound-initial-negotiated-order.md) | Bind a closed routing-policy decision to the initial negotiated order | Accepted |
 | [0065](0065-orthogonal-courtyard-chains.md) | Observe and legalize bounded orthogonal courtyard chains | Accepted |
 | [0066](0066-atomic-route-bundle-preview.md) | Publish a composed route bundle only as one all-or-nothing read-only plan | Accepted |
+| [0067](0067-route-aware-placement-ranking.md) | Keep route-aware placement ranking private, bounded, and opt-in | Accepted |
+| [0068](0068-bounded-ordered-layer-routing.md) | Keep ordered-layer routing bounded and non-serializing | Accepted |
+| [0069](0069-operator-gated-live-ipc-observation.md) | Gate live KiCad IPC on an operator opt-in and establish document type at the observer | Accepted |
 
-Sixty-six numbers, sixty-five records, no duplicates.
+Sixty-nine numbers, sixty-eight records, no duplicates. Only 0027 is unused; see **Known gap**
+above.
 
 ## Reading order
 
@@ -112,7 +116,7 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060.
 - **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065.
 - **Circuit Scene and rendering** — 0010, 0022, 0023, 0028, 0056.
-- **Live KiCad IPC** — 0029, 0030, 0031, 0032, 0033, 0044, 0063.
+- **Live KiCad IPC** — 0029, 0030, 0031, 0032, 0033, 0044, 0063, 0069.
 - **Durable jobs and persistence** — 0043, 0046, 0047, 0048.
 - **Mutation and authorization** — 0001, 0025, 0059.
 
@@ -167,3 +171,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0066: Publish a composed route bundle only as one all-or-nothing read-only plan](0066-atomic-route-bundle-preview.md)
 - [ADR-0067: Keep route-aware placement ranking private, bounded, and opt-in](0067-route-aware-placement-ranking.md)
 - [ADR-0068: Keep ordered-layer routing bounded and non-serializing](0068-bounded-ordered-layer-routing.md)
+- [ADR-0069: Gate live KiCad IPC on an operator opt-in and establish document type at the observer](0069-operator-gated-live-ipc-observation.md)

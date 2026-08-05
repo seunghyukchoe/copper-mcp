@@ -159,7 +159,9 @@ unsupported property refuses before a single byte is written.
 PCB-editor plugin that report only a live board digest, version compatibility, and bounded object
 counts, plus an `observe_live_board_scene` bridge that converts the exact active-editor snapshot
 into Circuit Scene `0.2.0` geometry. They never mutate KiCad or expose board text, net names, UUIDs,
-or geometry beyond the scene contract.
+or geometry beyond the scene contract. Reaching a running editor is an outbound action, so it is off
+by default behind the exact `COPPER_MCP_ALLOW_LIVE_IPC` flag; with it off the live tools stay listed
+and refuse, and no IPC socket is read from the environment or opened.
 
 Plus professional CI, CodeQL, dependency auditing, release automation, issue forms, and
 [project ledgers](docs/ledgers/README.md). See the [roadmap](docs/roadmap.md) for what comes next.

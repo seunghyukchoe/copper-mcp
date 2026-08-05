@@ -76,7 +76,8 @@ class _KiCad:
 
 
 def _settings() -> Settings:
-    return Settings(workspace=ROOT)
+    # The oracle probes a live session, which is operator-gated and off by default.
+    return Settings(workspace=ROOT, allow_live_ipc=True)
 
 
 def _environment(**values: str) -> dict[str, str]:

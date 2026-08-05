@@ -6,7 +6,56 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- **Live KiCad IPC observation now requires an explicit operator opt-in and is off by default.**
+  `capture_live_board` previously discovered `KICAD_API_SOCKET` from the ambient environment and,
+  with nothing set, connected to whatever socket the official binding defaults to; the MCP tools
+  `inspect_live_board` and `observe_live_board_scene` were registered unconditionally. Reaching a
+  running editor is an outbound action against the operator's machine, so it is now gated on
+  `COPPER_MCP_ALLOW_LIVE_IPC`, which uses the same exact `"0"`/`"1"` membership rule as
+  `COPPER_MCP_ALLOW_APPLY` — no case folding, no truthiness. Both capture chokepoints refuse
+  before the endpoint is read, so a disabled deployment discovers no socket and opens none, and
+  every live surface (scene, route, layered route, placement, editor context) is gated by that one
+  check. The tools stay **listed** and answer with a refusal naming the flag, matching the apply
+  surface: hiding them would make the capability undiscoverable and invite retry loops. The opt-in
+  enables local IPC only — TCP endpoints are still refused, and `KICAD_API_TOKEN` is still never
+  passed to the binding and never serialized. **This is a behavior change for any deployment that
+  relied on ambient discovery.** (#77)
+
+- **A serialization whose root is not `kicad_pcb` is no longer summarized as a PCB.** The IPC
+  object counter classifies `footprint`, `pad`, `via`, `segment` and `net` heads wherever they
+  occur in the tree and never established that the tree was a board, so an `(evil_root …)` payload
+  was published as a live board observation with plausible topology counts. The counter now
+  refuses a foreign root before classifying anything. Both Circuit Scene observer paths — the live
+  one and the file-backed `observe_board_scene` — now refuse it too, rather than reporting it as
+  an ordinary `supported: false` conversion result: "this is not a board" and "this is a board we
+  cannot convert" are different answers. A KiCad board with an unsupported version or construct is
+  unaffected and still returns its truthful unsupported result. (#75)
+
+- **The compare-and-swap confirmation read is charged against the board-byte budget.** The first
+  IPC read enforced `max_board_bytes`; the confirming read was UTF-8 encoded with no length check,
+  so with `max_board_bytes=4096` an 11 MB second read was materialized in full and then surfaced
+  as `KicadIpcConnectionError` ("KiCad board changed during observation") — a resource refusal
+  reported as a concurrent edit. The confirmation is now length-checked before any encode and
+  compared as text, so an oversized second read is a `KicadIpcPayloadError` budget refusal and no
+  unbudgeted encoded copy is created. An in-budget mid-observation edit is still the
+  connection-class refusal it was. The same fix applies to the editor-context capture. (#76)
+
 ### Changed
+
+- Board IR conversion reports a foreign S-expression root under its own diagnostic code,
+  `unsupported.document`, instead of the generic `syntax.invalid`. Callers that matched
+  `syntax.invalid` to detect a wrong document type must match the new code. (#75)
+
+- Live IPC redaction is proved by a whole-response grep rather than a single sentinel. The test
+  fixture now carries a distinct marker in each author-controlled slot — net name, net class,
+  footprint library id, property name and value, `fp_text`, `gr_text`, pad net, zone name, group
+  name, and title block — and no marker may appear anywhere in the serialized observation, its
+  `repr`, or the live scene outside its annotation quarantine, guarded by an assertion that each
+  object class was actually counted. The five `# pragma: no cover` refusal paths in
+  `kicad_ipc.py` (KiCad closed, socket refused, unreadable selection, unreadable item identity)
+  are now exercised by fakes standing in for the binding's error types. (#78)
 
 - Restructured repository documentation for a first-time reader. Added `docs/README.md` as the
   documentation index, moved the two handoff documents into `docs/handoff/` as `project-state.md`

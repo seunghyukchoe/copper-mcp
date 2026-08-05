@@ -60,6 +60,12 @@ layer identities, and per-collection object counts, or bounded conversion diagno
 when the board is outside the subset. It never returns coordinates, net names, pad or net
 identities, UUIDs, or source bytes.
 
+Every live tool below requires `COPPER_MCP_ALLOW_LIVE_IPC=1`, exact-membership and default off, the
+same rule as `COPPER_MCP_ALLOW_APPLY`. With it unset the tools stay listed — a hidden tool is
+indistinguishable from an unimplemented one — and refuse with a message naming the flag, before the
+IPC endpoint is read from the environment and before any socket is opened. The refusal is a
+capability state, not an error about the editor: it says nothing about whether KiCad is running.
+
 `inspect_live_board` is a separate, no-argument read-only probe for an already-running KiCad PCB
 Editor. It lazily loads the optional official `kicad-python` binding, accepts only KiCad's local
 IPC socket, checks the binding/API version, and returns a redacted `kicad-ipc-live` record with a
