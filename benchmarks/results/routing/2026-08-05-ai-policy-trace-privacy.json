@@ -1,8 +1,8 @@
 {
-  "evidence_source_commit": "849325a4409ecc721077476b7db7107b15fdfd58",
+  "evidence_source_commit": "5a2c1073de2a97cbb69e3a54d5077db0d4a24ba8",
   "fixture": "tests/fixtures/routing-policy/reference-input.json",
   "fixture_sha256": "6b0ba439feaae88d4576617fdf71398028ba0c46f43411bb58ad3befd9b0d3ae",
-  "initial_implementation_commit": "7a5bae2f5d39ad1cb014d4036b40451b914a2309",
+  "implementation_commit": "f1af095bfd6712969b0f9fb29933cd48aedef0dc",
   "metrics": {
     "closed_decision_accepted": true,
     "copper_emitted": false,
@@ -23,8 +23,8 @@
     "physical validity, KiCad DRC, fabrication, or FreeRouting parity",
     "trace-digest secrecy, unlinkability, or resistance to complete-record dictionary tests"
   ],
-  "run_id": "sha256:27e9a915120a58b1c13e46c11551bb62d5e4ed5a9da4abbdefa401a84eedc178",
-  "schema": "copper-mcp/benchmark/routing-policy/v1",
+  "run_id": "sha256:b7ffb5991153a3612764296761a9813c669e536f282f49077c368678ac107ab7",
+  "schema": "copper-mcp/benchmark/routing-policy/v2",
   "script": "scripts/benchmark_routing_policy.py",
-  "script_sha256": "038a9ebb0aca2c6a4df9d0db93d57e2c51c058513d24a6d7e230d1350007d751"
+  "script_sha256": "6070cd25dac1a166cbeba8d5e6b3a78932b165416e9f1940ba26c2751c393e00"
 }

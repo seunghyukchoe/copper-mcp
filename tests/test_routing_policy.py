@@ -33,6 +33,7 @@ _BENCHMARK_ARTIFACT = (
     / "routing"
     / "2026-08-05-ai-policy-trace-privacy.json"
 )
+_EVIDENCE_SOURCE_COMMIT = "5a2c1073de2a97cbb69e3a54d5077db0d4a24ba8"
 
 
 def _input() -> RoutingPolicyInput:
@@ -219,17 +220,14 @@ def test_lone_surrogate_json_text_is_rejected_with_a_fixed_boundary_error() -> N
 
 
 def test_policy_benchmark_artifact_is_reproducible_and_provenance_bound() -> None:
-    first = benchmark_routing_policy.build_report()
-    second = benchmark_routing_policy.build_report()
+    first = benchmark_routing_policy.build_report(evidence_source_commit=_EVIDENCE_SOURCE_COMMIT)
+    second = benchmark_routing_policy.build_report(evidence_source_commit=_EVIDENCE_SOURCE_COMMIT)
     canonical = dict(first)
     run_id = canonical.pop("run_id")
 
     assert first == second
-    assert first["evidence_source_commit"] == benchmark_routing_policy.EVIDENCE_SOURCE_COMMIT
-    assert (
-        first["initial_implementation_commit"]
-        == benchmark_routing_policy.INITIAL_IMPLEMENTATION_COMMIT
-    )
+    assert first["evidence_source_commit"] == _EVIDENCE_SOURCE_COMMIT
+    assert first["implementation_commit"] == benchmark_routing_policy.IMPLEMENTATION_COMMIT
     assert (
         first["script_sha256"]
         == hashlib.sha256(benchmark_routing_policy.SCRIPT_PATH.read_bytes()).hexdigest()
@@ -246,6 +244,11 @@ def test_policy_benchmark_artifact_is_reproducible_and_provenance_bound() -> Non
         ).hexdigest()
     )
     assert json.loads(_BENCHMARK_ARTIFACT.read_text(encoding="utf-8")) == first
+
+
+def test_policy_benchmark_requires_a_lowercase_full_evidence_commit() -> None:
+    with pytest.raises(ValueError, match="evidence_source_commit"):
+        benchmark_routing_policy.build_report(evidence_source_commit="not-a-commit")
 
 
 def test_evaluate_policy_rejects_unbound_or_incomplete_advisory_output() -> None:

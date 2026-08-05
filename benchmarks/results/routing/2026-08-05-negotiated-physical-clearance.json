@@ -1,6 +1,8 @@
 {
-  "benchmark": "negotiated-physical-clearance-v2",
+  "benchmark": "negotiated-physical-clearance-v3",
   "environment": "deterministic CPU-only; no external EDA tool invoked",
+  "evidence_source_commit": "5a2c1073de2a97cbb69e3a54d5077db0d4a24ba8",
+  "implementation_commit": "e6634a72e7e1ec1204b38c5907a93b4a2e15e4ba",
   "metrics": {
     "available_clearance_nm": 300000,
     "governing_clearance_nm": 500000,
@@ -22,9 +24,8 @@
     "fabrication clearance or FreeRouting parity"
   ],
   "replays": 3,
-  "run_id": "sha256:359d6dd015523fc0919ef8ebd5e5bbebd5dc7009ec1fd37a043e9422e923de90",
-  "schema": "copper-mcp/benchmark/negotiated-physical-clearance/v2",
+  "run_id": "sha256:6b55bb5d8fc59c26bec6c657a5af68249703081cded6224a4103c1cb49183397",
+  "schema": "copper-mcp/benchmark/negotiated-physical-clearance/v3",
   "script": "scripts/benchmark_negotiated_physical_clearance.py",
-  "script_sha256": "16f6d9ae86c6867abe1a565b428316b885fbb17ed18a0a5c6ea86fd0b1240403",
-  "source_commit": "62a267e01c4cdbcafb0985d876bb7b54e7b9691b"
+  "script_sha256": "500b6b33d7ff916d81abe762b276b0c37566e6ce8d5bb6c45cf9d994a7723b69"
 }
