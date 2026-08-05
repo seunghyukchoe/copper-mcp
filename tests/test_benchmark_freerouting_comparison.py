@@ -78,6 +78,33 @@ def test_freerouting_command_uses_documented_dsn_ses_boundary(tmp_path: Path) ->
     assert "shell" not in " ".join(command)
 
 
+def test_harness_owned_kicad_transaction_argv_has_no_template_or_shell(tmp_path: Path) -> None:
+    export = benchmark.kicad_specctra_argv(
+        tmp_path / "kicad-python",
+        "export-dsn",
+        tmp_path / "source.kicad_pcb",
+        tmp_path / "source.dsn",
+    )
+    imported = benchmark.kicad_specctra_argv(
+        tmp_path / "kicad-python",
+        "import-ses",
+        tmp_path / "source.kicad_pcb",
+        tmp_path / "result.kicad_pcb",
+        ses=tmp_path / "result.ses",
+    )
+
+    assert export[1] == str(benchmark.KICAD_SPECCTRA_TRANSACTION)
+    assert export[2:] == (
+        "export-dsn",
+        "--source",
+        str(tmp_path / "source.kicad_pcb"),
+        "--output",
+        str(tmp_path / "source.dsn"),
+    )
+    assert imported[2] == "import-ses"
+    assert "shell" not in " ".join(imported)
+
+
 def test_copper_template_has_only_explicit_placeholders(tmp_path: Path) -> None:
     command = benchmark.copper_argv(
         ("runner", "{source}", "{output}", "{seed}"), tmp_path / "in", tmp_path / "out", 9
@@ -608,6 +635,67 @@ def test_self_attested_bound_receipts_and_clean_drc_cannot_close(
     assert report["comparison_closed"] is False
     assert report["incomplete_reason"] == "self_attested_unverified"
     assert report["status"] == "unavailable_or_incomplete"
+
+
+def test_harness_owned_transaction_binds_export_router_import_and_result_drc(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    paths = _comparison_inputs(tmp_path)
+    kicad_python = tmp_path / "kicad-python"
+    kicad_python.write_bytes(b"tool")
+    source_sha = _sha(paths["source"].read_bytes())
+    board_bytes = b"(kicad_pcb (version 20240108) (segment (start 1 1) (end 2 1)))\n"
+    copper_receipt = tmp_path / "copper-receipt.json"
+    copper_receipt.write_text(
+        json.dumps(
+            {
+                "schema": benchmark.COPPER_RECEIPT_SCHEMA,
+                "workflow": "coppermcp-candidate-runner",
+                "source_sha256": source_sha,
+                "runner_output_sha256": _sha(paths["board"].read_bytes()),
+                "result_board_sha256": _sha(paths["board"].read_bytes()),
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        benchmark, "preflight", lambda **_kwargs: {"available": True, "reasons": [], "probes": {}}
+    )
+    monkeypatch.setattr(benchmark, "drc_metrics", _clean_drc)
+
+    def transaction_tools(argv: tuple[str, ...], *_args: object) -> object:
+        if "export-dsn" in argv:
+            Path(argv[argv.index("--output") + 1]).write_text("(pcb exported)\n", encoding="utf-8")
+        elif "-do" in argv:
+            Path(argv[argv.index("-do") + 1]).write_text("(session)\n", encoding="utf-8")
+        elif "import-ses" in argv:
+            Path(argv[argv.index("--output") + 1]).write_bytes(board_bytes)
+        elif argv[0] == "not-coppermcp":
+            Path(argv[2]).write_bytes(paths["board"].read_bytes())
+        return benchmark.ProcessResult(argv, 1, 0, "ok", "", "")
+
+    monkeypatch.setattr(benchmark, "run_process", transaction_tools)
+    kwargs = _build_kwargs(paths)
+    kwargs["dsn"] = None
+    report = benchmark.build_report(
+        **kwargs,
+        kicad_python=kicad_python,
+        copper_board=paths["board"],
+        freerouting_board=None,
+        copper_receipt=copper_receipt,
+        freerouting_receipt=None,
+        copper_command=("not-coppermcp", "{source}", "{output}", "{seed}"),
+        seed=1,
+        timeout_seconds=1,
+    )
+
+    assert report["freerouting_transaction"]["status"] == "bound"
+    assert report["fixture"]["dsn_source_export_binding"]["status"] == "harness_bound"
+    assert report["freerouting_import_binding"] == {"status": "harness_bound"}
+    freerouting_result = next(item for item in report["results"] if item["name"] == "freerouting")
+    assert freerouting_result["board_sha256"] == _sha(board_bytes)
+    assert report["comparison_closed"] is False
+    assert report["incomplete_reason"] == "copper_runner_self_attested_unverified"
 
 
 def test_metric_priority_prefers_connectivity_and_drc_before_quality() -> None:
