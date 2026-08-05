@@ -119,9 +119,9 @@
         "tuning_family_ids": []
       }
     },
-    "evidence_source_commit": "31da97aa6e0b7d889af26904621b5d3dc3043457",
+    "evidence_source_commit": "96110ee9c3dbf9769070abaaffefb85a4018a4cc",
     "inputs": {
-      "scripts/benchmark_audio_heldout_evaluation.py": "af5ecd07e701465c472cb51b81c5bbe1e77a0e032449b2aaa1362793784ce733",
+      "scripts/benchmark_audio_heldout_evaluation.py": "4005dc59159786435bfd6c90bf15709a44832d4d6cca62a54b0e03a7f78b43c4",
       "tests/fixtures/benchmarks/heldout-audio/LICENSE": "7ad27bd3d842c3cb15e67e107f51d6d5496470bc7b82f4fb91294721a75b6351",
       "tests/fixtures/benchmarks/heldout-audio/ac-coupled-signal-chain-v1.kicad_pcb": "2afcfabf4b6d910a21d507978686da1f24d5801521fbf6923724d4abd276b64f",
       "tests/fixtures/benchmarks/heldout-audio/provenance.json": "c577c7d77663aaea0ba95b0ad7d166ab935008ddc6ad64d95e8ebc5e823475a1",
@@ -130,6 +130,7 @@
     "schema": "copper-mcp/benchmark/heldout-audio-project-family/evidence-v1",
     "script": "scripts/benchmark_audio_heldout_evaluation.py"
   },
-  "evidence_run_id": "sha256:12cea9a35eea8c1a273c9099380db14651a88d174f6d584ac4b412c97281b25b",
+  "evidence_run_id": "sha256:34d83180f8fd5b62c17c0b1bc7d8306301d5949a7851e6f31b148177da261884",
+  "run_id": "sha256:44d3c793c0e5b76f856640ccc576692086b31c1688471362d210cef91a08587c",
   "schema": "copper-mcp/benchmark/heldout-audio-project-family/artifact-v1"
 }
