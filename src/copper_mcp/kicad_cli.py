@@ -920,7 +920,7 @@ def _run_captured_drc(
         try:
             if any(
                 path.stat().st_size > settings.max_drc_report_bytes
-                for path in (report_path, stdout_path, stderr_path)
+                for path in (stdout_path, stderr_path)
             ):
                 raise KiCadCliError("KiCad DRC output exceeds the configured limit")
         except OSError as error:

@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from typing import BinaryIO, cast
 from unittest.mock import patch
 
 from copper_mcp.config import Settings
@@ -79,6 +80,12 @@ class KiCadCliTests(unittest.TestCase):
     ) -> object:
         def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
             self.assertFalse(kwargs["shell"])
+            stdout = cast(BinaryIO, kwargs["stdout"])
+            stderr = cast(BinaryIO, kwargs["stderr"])
+            self.assertTrue(stdout.writable())
+            self.assertTrue(stderr.writable())
+            stdout.write(b"fake kicad stdout")
+            stderr.write(b"fake kicad stderr")
             self.assertNotIn("preexec_fn", kwargs)
             self.assertNotIn("--refill-zones", command)
             self.assertNotIn("--save-board", command)
