@@ -71,6 +71,16 @@ def _workspace_state(root: Path) -> dict[str, object]:
     return {
         "digest": "sha256:" + hashlib.sha256(canonical).hexdigest(),
         "entries": len(entries),
+        "fingerprint_fields": [
+            "kind",
+            "path",
+            "mode",
+            "inode",
+            "mtime_ns",
+            "sha256",
+            "size",
+            "target",
+        ],
     }
 
 
