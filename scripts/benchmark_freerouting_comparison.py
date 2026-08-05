@@ -353,10 +353,13 @@ def verified_workspace_capability_value(
 def private_transaction_workspace(capability: PrivateWorkspaceCapability) -> Iterator[Path]:
     """Create one owner-private child inside a verified provider root."""
 
+    verified, containment = verified_workspace_capability_value(capability)
+    if verified is None or containment["status"] != "available":
+        raise ValueError("provider workspace root is invalid")
     with tempfile.TemporaryDirectory(
-        prefix="copper-mcp-freerouting-", dir=capability.root
+        prefix="copper-mcp-freerouting-", dir=verified.root
     ) as directory:
-        workspace = _private_directory(Path(directory), parent=capability.root)
+        workspace = _private_directory(Path(directory), parent=verified.root)
         if workspace is None:
             raise ValueError("provider transaction workspace is invalid")
         yield workspace
@@ -461,6 +464,42 @@ def version_probe(executable: Path, cwd: Path) -> dict[str, Any]:
     result = run_process((str(executable), "--version"), 10, cwd)
     match = _VERSION.search(result.stdout)
     return {"status": result.status, "version": match.group(0) if match else "unknown"}
+
+
+def _tool_probes(
+    *,
+    java: Path | None,
+    kicad_cli: Path | None,
+    kicad_python: Path | None,
+    harness_transaction: bool,
+    cwd: Path,
+    reasons: list[str],
+) -> dict[str, Any]:
+    """Run only eligible version probes inside the supplied child workspace."""
+
+    probes: dict[str, Any] = {}
+    if java is not None and java.is_file() and java.stat().st_size <= MAX_EXECUTABLE_BYTES:
+        probes["java"] = version_probe(java, cwd)
+        if probes["java"]["status"] != "ok":
+            reasons.append("Java runtime did not execute --version")
+    if (
+        kicad_cli is not None
+        and kicad_cli.is_file()
+        and kicad_cli.stat().st_size <= MAX_EXECUTABLE_BYTES
+    ):
+        probes["kicad_cli"] = version_probe(kicad_cli, cwd)
+        if probes["kicad_cli"]["status"] != "ok":
+            reasons.append("KiCad CLI did not execute --version")
+    if (
+        harness_transaction
+        and kicad_python is not None
+        and kicad_python.is_file()
+        and kicad_python.stat().st_size <= MAX_EXECUTABLE_BYTES
+    ):
+        probes["kicad_python"] = version_probe(kicad_python, cwd)
+        if probes["kicad_python"]["status"] != "ok":
+            reasons.append("KiCad bundled Python did not execute --version")
+    return probes
 
 
 def _parse_template(path: Path | None) -> tuple[str, ...] | None:
@@ -851,6 +890,7 @@ def preflight(
     kicad_python: Path | None = None,
     harness_transaction: bool = False,
     containment: dict[str, str] | None = None,
+    workspace_capability: PrivateWorkspaceCapability | None = None,
 ) -> dict[str, Any]:
     """Return all prerequisite failures in one truthful, serializable record."""
 
@@ -880,28 +920,38 @@ def preflight(
     # too, and a preflight boundary is meaningful only before every executable launch seam.
     if harness_transaction and containment["status"] != "available":
         return {"available": False, "reasons": reasons, "probes": {}}
-    probes: dict[str, Any] = {}
-    if java is not None and java.is_file() and java.stat().st_size <= MAX_EXECUTABLE_BYTES:
-        probes["java"] = version_probe(java, cwd)
-        if probes["java"]["status"] != "ok":
-            reasons.append("Java runtime did not execute --version")
-    if (
-        kicad_cli is not None
-        and kicad_cli.is_file()
-        and kicad_cli.stat().st_size <= MAX_EXECUTABLE_BYTES
-    ):
-        probes["kicad_cli"] = version_probe(kicad_cli, cwd)
-        if probes["kicad_cli"]["status"] != "ok":
-            reasons.append("KiCad CLI did not execute --version")
-    if (
-        harness_transaction
-        and kicad_python is not None
-        and kicad_python.is_file()
-        and kicad_python.stat().st_size <= MAX_EXECUTABLE_BYTES
-    ):
-        probes["kicad_python"] = version_probe(kicad_python, cwd)
-        if probes["kicad_python"]["status"] != "ok":
-            reasons.append("KiCad bundled Python did not execute --version")
+    if harness_transaction:
+        if workspace_capability is None:
+            reasons.append("aggregate private-workspace quota is unavailable")
+            return {"available": False, "reasons": reasons, "probes": {}}
+        probe_capability, probe_containment = verified_workspace_capability_value(
+            workspace_capability
+        )
+        if probe_capability is None or probe_containment["status"] != "available":
+            reasons.append("aggregate private-workspace quota is unavailable")
+            return {"available": False, "reasons": reasons, "probes": {}}
+        try:
+            with private_transaction_workspace(probe_capability) as probe_workspace:
+                probes = _tool_probes(
+                    java=java,
+                    kicad_cli=kicad_cli,
+                    kicad_python=kicad_python,
+                    harness_transaction=True,
+                    cwd=probe_workspace,
+                    reasons=reasons,
+                )
+        except ValueError:
+            reasons.append("aggregate private-workspace quota is unavailable")
+            return {"available": False, "reasons": reasons, "probes": {}}
+    else:
+        probes = _tool_probes(
+            java=java,
+            kicad_cli=kicad_cli,
+            kicad_python=kicad_python,
+            harness_transaction=False,
+            cwd=cwd,
+            reasons=reasons,
+        )
     return {"available": not reasons, "reasons": reasons, "probes": probes}
 
 
@@ -1232,6 +1282,57 @@ def private_source_drc_metrics(
         return {"status": "unavailable", "reason": "provider workspace root is invalid"}
 
 
+def private_result_for_board(
+    name: str,
+    board: Path | None,
+    capability: PrivateWorkspaceCapability,
+    kicad_cli: Path | None,
+    timeout_seconds: int,
+    elapsed_ns: int,
+    gui_drc_report: Path | None,
+) -> dict[str, Any]:
+    """Copy a caller result into the provider boundary before KiCad can inspect it."""
+
+    if board is None or not board.is_file():
+        return {"name": name, "status": "unavailable", "reason": "result board is unavailable"}
+    # A supplied GUI report is parsed locally and launches no KiCad child. Preserve its expected
+    # basename contract; the private-copy requirement applies to every live KiCad invocation.
+    if gui_drc_report is not None:
+        return _result_for_board(
+            name, board, None, timeout_seconds, capability.root, elapsed_ns, gui_drc_report
+        )
+    try:
+        original_sha256 = _hash_or_none(board, MAX_BOARD_BYTES)
+        if original_sha256 is None:
+            return {"name": name, "status": "failed", "reason": "result board exceeds safe limits"}
+        with private_transaction_workspace(capability) as workspace:
+            private_board = workspace / "result.kicad_pcb"
+            copied_sha256 = _private_copy(board, private_board)
+            # Recheck both sides immediately before DRC so an external rewrite cannot make KiCad
+            # resolve project/rule context from the caller's directory after the copy boundary.
+            if (
+                copied_sha256 != original_sha256
+                or _hash_or_none(private_board, MAX_BOARD_BYTES) != original_sha256
+                or _hash_or_none(board, MAX_BOARD_BYTES) != original_sha256
+            ):
+                return {"name": name, "status": "unavailable", "reason": "result board changed"}
+            return _result_for_board(
+                name,
+                private_board,
+                kicad_cli,
+                timeout_seconds,
+                workspace,
+                elapsed_ns,
+                gui_drc_report,
+            )
+    except ValueError:
+        return {
+            "name": name,
+            "status": "unavailable",
+            "reason": "provider workspace root is invalid",
+        }
+
+
 def build_report(
     *,
     source: Path,
@@ -1269,6 +1370,7 @@ def build_report(
         kicad_python=kicad_python,
         harness_transaction=kicad_python is not None,
         containment=containment,
+        workspace_capability=workspace_capability,
     )
     source_before = _hash_or_none(source, MAX_BOARD_BYTES)
     fixture, _ = _provenance(provenance)
@@ -1462,14 +1564,26 @@ def build_report(
     result_kicad_cli = None if containment_refused else kicad_cli
     result_cwd = workspace_capability.root if harness_requested and workspace_capability else ROOT
     report["results"] = [
-        _result_for_board(
-            "copper_mcp",
-            generated_copper,
-            result_kicad_cli,
-            timeout_seconds,
-            result_cwd,
-            copper_elapsed,
-            copper_drc_report,
+        (
+            private_result_for_board(
+                "copper_mcp",
+                generated_copper,
+                workspace_capability,
+                result_kicad_cli,
+                timeout_seconds,
+                copper_elapsed,
+                copper_drc_report,
+            )
+            if harness_requested and workspace_capability is not None
+            else _result_for_board(
+                "copper_mcp",
+                generated_copper,
+                result_kicad_cli,
+                timeout_seconds,
+                result_cwd,
+                copper_elapsed,
+                copper_drc_report,
+            )
         ),
         transaction_result
         if transaction_result is not None
