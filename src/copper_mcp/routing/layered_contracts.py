@@ -307,8 +307,12 @@ def canonical_layered_candidate_bytes(candidate: LayeredRouteCandidate) -> bytes
         "move_cost": candidate.settings.move_cost,
         "via_cost": candidate.settings.via_cost,
     }
-    # Preserve the exact historic two-layer candidate bytes when the new cap is not supplied.
-    # A non-default cap is policy material and must participate in candidate identity.
+    # Preserve the exact historic two-layer candidate bytes when no cap is supplied.  Only the
+    # *stated* cap enters identity, never the derived effective cap: the effective cap is a pure
+    # function of ``settings.max_vias`` and the stack width, and the stack width is already pinned
+    # by ``base_revision``, which is in these bytes.  Two candidates with equal bytes therefore
+    # always ran under the same effective cap, so folding the derived value in would add no
+    # discrimination while breaking every two-layer identity ever issued.
     if candidate.settings.max_vias is not None:
         settings_payload["max_vias"] = candidate.settings.max_vias
     payload = {

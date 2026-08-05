@@ -13,7 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from itertools import pairwise
-from typing import TypeAlias
+from typing import Final, TypeAlias
 
 _Node: TypeAlias = tuple[int, int, int]
 _CappedState: TypeAlias = tuple[_Node, int]
@@ -31,9 +31,12 @@ _MAX_EXPANSIONS = 1_000_000
 _MAX_NODES = 500_000
 _MAX_OBSTACLES = 4_096
 _MAX_OBSTACLE_CHECKS = 10_000_000
-_MAX_LAYERS = 8
-_DEFAULT_GENERALIZED_MAX_VIAS = 64
-_MAX_EXPLICIT_VIAS = 256
+#: Shared ordered-stack policy.  The adapter and the structural verifier import these rather than
+#: restating the numbers, so the search, the candidate constructor, and the untrusted-candidate
+#: verifier can never drift apart on the stack width or the via budget.
+MAX_LAYERS: Final = 8
+DEFAULT_GENERALIZED_MAX_VIAS: Final = 64
+MAX_EXPLICIT_VIAS: Final = 256
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,7 +121,7 @@ def effective_max_vias(settings: LayeredAStarSettings, layer_count: int) -> int 
 
     if settings.max_vias is not None:
         return settings.max_vias
-    return None if layer_count == 2 else _DEFAULT_GENERALIZED_MAX_VIAS
+    return None if layer_count == 2 else DEFAULT_GENERALIZED_MAX_VIAS
 
 
 class LayeredFailureCode(StrEnum):
@@ -325,7 +328,7 @@ def _validate(
         return "bounds must be ordered"
     if (
         not isinstance(request.layers, tuple)
-        or not 2 <= len(request.layers) <= _MAX_LAYERS
+        or not 2 <= len(request.layers) <= MAX_LAYERS
         or not all(_integer(layer) for layer in request.layers)
     ):
         return "two through eight integer copper layers are required"
@@ -366,7 +369,7 @@ def _validate(
         if not _integer(value) or not 1 <= value <= maximum:
             return f"{name} must be a positive integer"
     if settings.max_vias is not None and (
-        not _integer(settings.max_vias) or not 0 <= settings.max_vias <= _MAX_EXPLICIT_VIAS
+        not _integer(settings.max_vias) or not 0 <= settings.max_vias <= MAX_EXPLICIT_VIAS
     ):
         return "via budget must be a non-negative integer"
     for obstacle_obj in (*obstacles, *via_obstacles):
@@ -510,6 +513,14 @@ def _route_capped(
     constraint: a cheaper arrival can have exhausted the cap while a more expensive arrival at the
     same coordinate can still complete.  The cap is validated before this helper is reached, so the
     augmented lattice remains finite and every discovered augmented state is budgeted.
+
+    Declared work bound.  A coordinate's Pareto front holds at most one entry per distinct via
+    count, so it never exceeds ``via_limit + 1`` entries and ``via_limit`` is validated to at most
+    ``MAX_EXPLICIT_VIAS``.  Each relaxation scans that front twice, so one relaxation costs at most
+    ``2 * (MAX_EXPLICIT_VIAS + 1)`` comparisons, and the whole search is bounded by
+    ``max_expansions * (4 + MAX_LAYERS - 1) * 2 * (MAX_EXPLICIT_VIAS + 1)``.  This is a constant
+    factor on the already-bounded expansion budget, not a separate unbounded allocation, so it
+    carries no budget of its own.
     """
 
     settings = request.settings
@@ -541,6 +552,11 @@ def _route_capped(
         ):
             continue
         work.expanded_nodes += 1
+        # A via keepout is a property of the transition coordinate, not of the destination layer,
+        # so every transition out of ``current`` shares one answer.  Evaluate and charge it once
+        # per expansion instead of once per candidate destination layer, which would otherwise
+        # bill an identical result up to ``MAX_LAYERS - 1`` times and overstate the work done.
+        via_blocked_here: bool | None = None
         if current == goal:
             steps = _capped_path(start_state, current_state, came_from)
             move_steps = sum(step.kind == "move" for step in steps)
@@ -565,7 +581,7 @@ def _route_capped(
             if tentative_vias > via_limit:
                 continue
             relation_checks = len(request.obstacles)
-            if is_via:
+            if is_via and via_blocked_here is None:
                 relation_checks += len(request.via_obstacles)
             if work.obstacle_checks + relation_checks > settings.max_obstacle_checks:
                 return _failure(
@@ -574,9 +590,9 @@ def _route_capped(
                     work,
                 )
             work.obstacle_checks += relation_checks
-            if _blocked(neighbor, request.obstacles) or (
-                is_via and _via_blocked(current, layers, request.via_obstacles)
-            ):
+            if is_via and via_blocked_here is None:
+                via_blocked_here = _via_blocked(current, layers, request.via_obstacles)
+            if _blocked(neighbor, request.obstacles) or (is_via and via_blocked_here):
                 continue
             step_cost = settings.via_cost if is_via else settings.move_cost
             tentative_g = queued_g + step_cost
