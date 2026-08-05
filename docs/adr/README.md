@@ -52,3 +52,4 @@ from the decision ledger.
 - [ADR-0059: Separately authorize bounded placement application](0059-separately-authorized-placement-apply.md)
 - [ADR-0064: Bind a closed routing-policy decision to the initial negotiated order](0064-policy-bound-initial-negotiated-order.md)
 - [ADR-0065: Observe and legalize bounded orthogonal courtyard chains](0065-orthogonal-courtyard-chains.md)
+- [ADR-0067: Keep route-aware placement ranking private, bounded, and opt-in](0067-route-aware-placement-ranking.md)

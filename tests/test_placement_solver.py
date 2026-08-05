@@ -12,11 +12,14 @@ from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.board_ir import NetClass
 from copper_mcp.placement import build_placement_view, parse_placement_intent
 from copper_mcp.placement import solver as solver_module
+from copper_mcp.placement.route_scoring import RouteProbeSettings
 from copper_mcp.placement.solver import (
+    PlacementScoringPolicy,
     PlacementSolverError,
     PlacementSolverSettings,
     solve_placement,
 )
+from copper_mcp.routing.contracts import AStarSettings
 
 ROOT = Path(__file__).resolve().parents[1]
 ROTATION_BOARD = ROOT / "tests/fixtures/board-ir-v0.1/footprint-rotation.kicad_pcb"
@@ -159,6 +162,31 @@ def test_solver_supports_a_declared_pad_subject_by_canonicalising_its_owner() ->
     assert result.ranked
 
 
+def test_route_aware_scoring_caps_probe_work_across_the_full_solver_operation() -> None:
+    snapshot, view = _board(ROTATION_BOARD)
+    settings = _settings(
+        scoring_policy=PlacementScoringPolicy.ROUTE_AWARE_ASTAR,
+        route_probe_settings=RouteProbeSettings(
+            max_probes=1,
+            max_total_probes=1,
+            astar_settings=AStarSettings(
+                grid_step_nm=1_000_000,
+                max_grid_nodes=10_000,
+                max_expansions=10_000,
+                max_obstacle_checks=100_000,
+            ),
+        ),
+    )
+
+    result = solve_placement(_intent(view, ROTATION_BOARD), snapshot, view, settings=settings)
+
+    assert result.status == "work_exhausted"
+    assert result.route_probes_used == 1
+    assert result.route_probe_limit == 1
+    assert result.ranked and result.ranked[0].route_evidence is not None
+    assert result.ranked[0].route_evidence.operation_probes_after == 1
+
+
 @pytest.mark.parametrize(
     "values",
     (
@@ -240,15 +268,17 @@ def test_scoring_refuses_a_partial_result_after_deadline_exhaustion() -> None:
     )
     assert initial.candidate is not None
 
-    score, status = solver_module._score(
+    score, evidence, status = solver_module._score(
         initial.candidate,
         snapshot,
         view,
+        settings=_settings(),
         stopped=lambda: "deadline_exhausted",
     )
 
     assert status == "deadline_exhausted"
     assert score is None
+    assert evidence is None
 
 
 @pytest.mark.parametrize(

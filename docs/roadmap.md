@@ -279,6 +279,14 @@ placement, and the policy-plugin work.
   proxy by `2,000,000 nm` (`12,000,000 → 10,000,000 nm`) on three deterministic committed-fixture
   replays (B-059). Its `O(n log n)` scoring, deadline, cancellation, and pad-subject normalization
   are bounded; it is not an optimizer, KiCad mutation path, DRC result, or routing-quality claim.
+  - [x] An explicit private `route-aware-astar-v1` scoring policy now independently probes a
+    bounded A* route on an in-memory Board IR projection of each already-legal placement candidate,
+    after identity and exact snapshot/view binding checks. One operation-wide probe meter caps all
+    solver evaluations. The default Manhattan ranking and public candidate shape remain unchanged. B-078 records three
+    deterministic replays of the original Apache-2.0 NE5532 fixture: the selected candidate reduced
+    the single independent probe's exact routed length from `42,000,000 nm` to `32,000,000 nm`
+    (23.8095%) with zero unrouted probes. This is not combined-net routing, congestion/overflow,
+    KiCad DRC, external-router validation, placement optimality, or apply authority.
 - [~] Typed net-ordering, corridor, and repair policy interface. The closed advisory
   `routing.policy` contract has deterministic reference decisions, bounded hostile JSON handling,
   canonical digest binding, and redacted ordinal-only action traces (B-060). It can only order

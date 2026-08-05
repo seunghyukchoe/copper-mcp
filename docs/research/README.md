@@ -41,6 +41,8 @@ that every product feature, price, or repository release will remain current.
 - [Bounded placement-heuristic baseline](./placement-heuristic-baseline.md) records the
   legalizer-gated local/beam search, its connectivity proxy, reproducible fixture evidence, and
   the limits that keep it advisory.
+- [Route-aware placement policy](./route-aware-placement-policy.md) records the bounded opt-in
+  A* evidence ranker, operation-wide probe accounting, and its fixture-specific acceptance gate.
 - [Padless proposal-anchor validation order](./padless-anchor-validation-order.md) records why an
   explicit anchor naming a known padless footprint refuses `unsupported_geometry` before an
   unrelated syntactic contradiction, without extending anchor geometry or padless placeability.

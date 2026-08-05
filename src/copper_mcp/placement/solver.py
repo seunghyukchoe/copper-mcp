@@ -16,7 +16,8 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
+from enum import StrEnum
 
 from copper_mcp.board_ir import BoardIRSnapshot, PointNM
 from copper_mcp.placement.contracts import (
@@ -28,6 +29,13 @@ from copper_mcp.placement.contracts import (
 )
 from copper_mcp.placement.geometry import rotate_offset
 from copper_mcp.placement.legalizer import evaluate_placement
+from copper_mcp.placement.route_scoring import (
+    ROUTE_AWARE_SCORING_POLICY,
+    RouteAwareEvidence,
+    RouteProbeBudget,
+    RouteProbeSettings,
+    score_route_aware_candidate,
+)
 from copper_mcp.placement.view import FootprintView, PlacementView
 
 _FULL_ROTATION_UDEG = 360_000_000
@@ -39,6 +47,13 @@ _MAX_RANKED = 1_024
 _MAX_STEP_NM = 1_000_000_000
 _MAX_LEGALIZER_CHECKS = 2_000_000
 _MAX_DEADLINE_SECONDS = 60.0
+
+
+class PlacementScoringPolicy(StrEnum):
+    """Closed ranking policies; the default preserves the published baseline order."""
+
+    SAME_NET_MANHATTAN = "same-net-manhattan-v1"
+    ROUTE_AWARE_ASTAR = ROUTE_AWARE_SCORING_POLICY
 
 
 class PlacementSolverError(ValueError):
@@ -62,6 +77,8 @@ class PlacementSolverSettings:
     deadline_seconds: float = 2.0
     legalizer_max_checks: int = 200_000
     legalizer_deadline_seconds: float = 1.0
+    scoring_policy: PlacementScoringPolicy = PlacementScoringPolicy.SAME_NET_MANHATTAN
+    route_probe_settings: RouteProbeSettings = field(default_factory=RouteProbeSettings)
 
     def __post_init__(self) -> None:
         limits = {
@@ -92,6 +109,10 @@ class PlacementSolverSettings:
                 raise PlacementSolverError(
                     f"{name} must be finite and between 0 and {_MAX_DEADLINE_SECONDS}"
                 )
+        if not isinstance(self.scoring_policy, PlacementScoringPolicy):
+            raise PlacementSolverError("scoring_policy must be a supported PlacementScoringPolicy")
+        if not isinstance(self.route_probe_settings, RouteProbeSettings):
+            raise PlacementSolverError("route_probe_settings must be RouteProbeSettings")
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -99,6 +120,9 @@ class PlacementSolverScore:
     """Lexicographic search score; lower is better and all fields are exact integers."""
 
     violated_rules: int
+    unrouted_probes: int
+    route_hard_internal_violations: int
+    route_wire_length_nm: int
     connectivity_manhattan_nm: int
     moved_footprints: int
 
@@ -109,6 +133,7 @@ class RankedPlacement:
 
     result: PlacementResult
     score: PlacementSolverScore
+    route_evidence: RouteAwareEvidence | None = None
 
     def __post_init__(self) -> None:
         if self.result.status != "previewed" or self.result.candidate is None:
@@ -131,6 +156,8 @@ class PlacementSolveResult:
     initial_score: PlacementSolverScore | None
     ranked: tuple[RankedPlacement, ...]
     evaluations: int
+    route_probes_used: int = 0
+    route_probe_limit: int = 0
 
     def __post_init__(self) -> None:
         if self.status not in {
@@ -143,6 +170,10 @@ class PlacementSolveResult:
             raise PlacementSolverError("solver status is malformed")
         if self.evaluations < 0:
             raise PlacementSolverError("solver evaluations must not be negative")
+        if self.route_probes_used < 0 or self.route_probe_limit < 0:
+            raise PlacementSolverError("solver route probe accounting must not be negative")
+        if self.route_probes_used > self.route_probe_limit:
+            raise PlacementSolverError("solver route probe use exceeds its limit")
         if any(item.result.candidate is None for item in self.ranked):
             raise PlacementSolverError("solver output must be candidate-backed")
 
@@ -185,10 +216,32 @@ def solve_placement(
         raise PlacementSolverError("settings must be a PlacementSolverSettings")
     if cancelled is not None and not callable(cancelled):
         raise PlacementSolverError("cancelled must be callable")
+    route_budget = (
+        RouteProbeBudget(settings.route_probe_settings.max_total_probes)
+        if settings.scoring_policy is PlacementScoringPolicy.ROUTE_AWARE_ASTAR
+        else None
+    )
+
+    def outcome(
+        status: str,
+        initial: PlacementResult | None,
+        initial_score: PlacementSolverScore | None,
+        ranked: tuple[RankedPlacement, ...],
+        evaluations: int,
+    ) -> PlacementSolveResult:
+        return PlacementSolveResult(
+            status,
+            initial,
+            initial_score,
+            ranked,
+            evaluations,
+            0 if route_budget is None else route_budget.used,
+            0 if route_budget is None else route_budget.limit,
+        )
 
     search_intent = _canonicalise_search_intent(intent, view)
     if search_intent is None:
-        return PlacementSolveResult("input_refused", None, None, (), 0)
+        return outcome("input_refused", None, None, (), 0)
 
     started = time.monotonic()
 
@@ -216,7 +269,7 @@ def solve_placement(
 
     initial_status, initial_deadline = remaining_legalizer_deadline()
     if initial_status is not None:
-        return PlacementSolveResult(initial_status, None, None, (), 0)
+        return outcome(initial_status, None, None, (), 0)
     assert initial_deadline is not None
 
     initial = evaluate_placement(
@@ -229,13 +282,20 @@ def solve_placement(
     )
     evaluations = 1
     if initial.candidate is None:
-        return PlacementSolveResult("input_refused", initial, None, (), evaluations)
+        return outcome("input_refused", initial, None, (), evaluations)
 
-    initial_score, score_status = _score(initial.candidate, snapshot, view, stopped=stopped)
+    initial_score, initial_evidence, score_status = _score(
+        initial.candidate,
+        snapshot,
+        view,
+        settings=settings,
+        stopped=stopped,
+        route_budget=route_budget,
+    )
     if score_status is not None:
-        return PlacementSolveResult(score_status, initial, None, (), evaluations)
+        return outcome(score_status, initial, None, (), evaluations)
     assert initial_score is not None
-    initial_ranked = RankedPlacement(initial, initial_score)
+    initial_ranked = RankedPlacement(initial, initial_score, initial_evidence)
     known: dict[str, RankedPlacement] = {initial_ranked.candidate.candidate_id: initial_ranked}
     movable = _movable_refs(search_intent, view)
     initial_state = _SearchState(
@@ -272,12 +332,19 @@ def solve_placement(
                     evaluations += 1
                     if result.candidate is None:
                         continue
-                    score, score_status = _score(result.candidate, snapshot, view, stopped=stopped)
+                    score, evidence, score_status = _score(
+                        result.candidate,
+                        snapshot,
+                        view,
+                        settings=settings,
+                        stopped=stopped,
+                        route_budget=route_budget,
+                    )
                     if score_status is not None:
                         status = score_status
                         break
                     assert score is not None
-                    proposed_ranked = RankedPlacement(result, score)
+                    proposed_ranked = RankedPlacement(result, score, evidence)
                     candidate_id = proposed_ranked.candidate.candidate_id
                     if candidate_id in known:
                         continue
@@ -303,7 +370,7 @@ def solve_placement(
         retained = ()
     else:
         retained = tuple(sorted(known.values(), key=_rank_key)[: settings.max_ranked])
-    return PlacementSolveResult(status, initial, initial_ranked.score, retained, evaluations)
+    return outcome(status, initial, initial_ranked.score, retained, evaluations)
 
 
 def _canonicalise_search_intent(
@@ -417,8 +484,10 @@ def _score(
     snapshot: BoardIRSnapshot,
     view: PlacementView,
     *,
+    settings: PlacementSolverSettings,
     stopped: Callable[[], str | None],
-) -> tuple[PlacementSolverScore | None, str | None]:
+    route_budget: RouteProbeBudget | None = None,
+) -> tuple[PlacementSolverScore | None, RouteAwareEvidence | None, str | None]:
     """Score a legal candidate, stopping before an unbounded proxy calculation can escape.
 
     The exact all-pairs Manhattan total is computed from sorted axes rather than enumerating
@@ -431,24 +500,50 @@ def _score(
         try:
             _raise_if_stopped(stopped)
         except _ScoreInterruptedError as error:
-            return None, error.status
+            return None, None, error.status
         violated += rule_result.status == "violated"
     moved = 0
     for placement in candidate.placements:
         try:
             _raise_if_stopped(stopped)
         except _ScoreInterruptedError as error:
-            return None, error.status
+            return None, None, error.status
         moved += placement.moved
     try:
         connectivity = _connectivity_manhattan(candidate, snapshot, view, stopped=stopped)
     except _ScoreInterruptedError as error:
-        return None, error.status
-    return PlacementSolverScore(
-        violated_rules=violated,
-        connectivity_manhattan_nm=connectivity,
-        moved_footprints=moved,
-    ), None
+        return None, None, error.status
+    evidence: RouteAwareEvidence | None = None
+    if settings.scoring_policy is PlacementScoringPolicy.ROUTE_AWARE_ASTAR:
+        evidence, score_status = score_route_aware_candidate(
+            candidate,
+            snapshot,
+            view,
+            settings=settings.route_probe_settings,
+            stopped=stopped,
+            operation_budget=route_budget,
+        )
+        if score_status == "route_probe_exhausted":
+            return None, None, "work_exhausted"
+        if score_status is not None:
+            return None, None, score_status
+        assert evidence is not None
+    else:
+        evidence = None
+    return (
+        PlacementSolverScore(
+            violated_rules=violated,
+            unrouted_probes=0 if evidence is None else evidence.unrouted_probes,
+            route_hard_internal_violations=(
+                0 if evidence is None else evidence.hard_internal_violations
+            ),
+            route_wire_length_nm=0 if evidence is None else evidence.wire_length_nm,
+            connectivity_manhattan_nm=connectivity,
+            moved_footprints=moved,
+        ),
+        evidence,
+        None,
+    )
 
 
 def _connectivity_manhattan(

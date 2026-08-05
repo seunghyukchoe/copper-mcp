@@ -35,6 +35,15 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added an opt-in, private route-aware placement ranking policy. It scores only candidates first
+  issued by the deterministic legalizer, verifies their identities and exact snapshot/view bindings
+  before rebuilding an immutable in-memory Board IR pose projection, and meters all independent A*
+  probes against one operation-wide cap. The default same-net Manhattan ranking and public placement
+  candidate shape remain unchanged. Three deterministic replays on the CopperMCP-original
+  Apache-2.0 NE5532 fixture selected a legal candidate with a 23.8095% lower one-probe routed length
+  (`42,000,000 → 32,000,000 nm`); this is not whole-board routing, congestion, KiCad DRC, or apply
+  authority.
+
 - Hardened the optional harness-owned KiCad/FreeRouting transaction behind an internal
   provider-created aggregate-quota workspace capability. The harness validates canonical
   owner-private, non-symlink roots; keeps temporary directories and child `cwd`/`HOME`/`TMPDIR`
