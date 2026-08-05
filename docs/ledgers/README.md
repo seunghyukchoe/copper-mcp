@@ -23,9 +23,9 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-142` | `D-143` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-143` | `D-144` |
 | [Risk register](risk-register.md) | `R-` | `R-113` | `R-114` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-117` | `SEC-118` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-118` | `SEC-119` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-084` | `B-085` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.5.0` | n/a |
 
@@ -74,7 +74,7 @@ The rules:
 
 Six historical collisions predate this check and are recorded rather than repaired, because a
 renumbered row would rewrite append-only history and break every external citation: `D-137`,
-`D-139`, and `D-140` (see `D-142`); `B-076`, `B-078`, and `B-082` (see `B-084`). Merging two
+`D-139`, and `D-140` (see `D-143`); `B-076`, `B-078`, and `B-082` (see `B-084`). Merging two
 independently appended blocks also displaced document order in the decision ledger, so the `D-137`
 block now follows the `D-139`/`D-140` block; the same correction records that. Each is carried in
 the checker's closed `RECORDED_COLLISIONS` list, keyed to the correction that documents it, so it

@@ -57,6 +57,15 @@ def _settings(**overrides: Any) -> Settings:
     return replace(Settings(workspace=FIXTURES.resolve()), **overrides)
 
 
+def _live_settings(**overrides: Any) -> Settings:
+    """Live IPC is operator-gated and off by default; these tests are the enabled path.
+
+    tests/test_kicad_ipc.py owns the default-off refusal itself.
+    """
+
+    return _settings(allow_live_ipc=True, **overrides)
+
+
 def _request(board: str, **overrides: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "board": board,
@@ -501,7 +510,7 @@ class LivePlacementTests(unittest.TestCase):
 
     def test_live_candidate_matches_the_file_oracle_and_is_read_only(self) -> None:
         request, (factory, file_document, board_object) = self._live()
-        live = preview_live_placement(request, _settings(), client_factory=factory).to_dict()
+        live = preview_live_placement(request, _live_settings(), client_factory=factory).to_dict()
         self.assertEqual(live["status"], file_document["status"])
         self.assertEqual(live["candidate"], file_document["candidate"])
         self.assertEqual(live["board_revision"], file_document["board_revision"])
@@ -513,7 +522,7 @@ class LivePlacementTests(unittest.TestCase):
     def test_stale_board_revision_refuses_after_capture_before_conversion(self) -> None:
         request, (factory, _, board_object) = self._live()
         request["expect_board_revision"] = "sha256:" + "0" * 64
-        result = preview_live_placement(request, _settings(), client_factory=factory).to_dict()
+        result = preview_live_placement(request, _live_settings(), client_factory=factory).to_dict()
         self.assertEqual(result["diagnostic"]["code"], "stale_revision")
         self.assertIsNone(result["snapshot_digest"])
         self.assertEqual(board_object.reads, 2)
@@ -521,7 +530,7 @@ class LivePlacementTests(unittest.TestCase):
     def test_stale_snapshot_digest_refuses_before_placement_view(self) -> None:
         request, (factory, _, _board_object) = self._live()
         request["expect_snapshot_digest"] = "sha256:" + "1" * 64
-        result = preview_live_placement(request, _settings(), client_factory=factory).to_dict()
+        result = preview_live_placement(request, _live_settings(), client_factory=factory).to_dict()
         self.assertEqual(result["diagnostic"]["code"], "stale_revision")
         self.assertIsNotNone(result["snapshot_digest"])
         self.assertIsNone(result["candidate"])
@@ -600,11 +609,11 @@ class LivePlacementTests(unittest.TestCase):
 
     def test_live_result_survives_the_actual_mcp_boundary(self) -> None:
         request, (factory, _, _) = self._live()
-        service_result = preview_live_placement(request, _settings(), client_factory=factory)
+        service_result = preview_live_placement(request, _live_settings(), client_factory=factory)
         with patch.object(
             _server, "preview_live_placement_service_raw", return_value=service_result
         ):
-            with patch.object(_server, "_SETTINGS", _settings()):
+            with patch.object(_server, "_SETTINGS", _live_settings()):
                 result = asyncio.run(
                     _server.mcp.call_tool("preview_live_placement", {"request": request})
                 )

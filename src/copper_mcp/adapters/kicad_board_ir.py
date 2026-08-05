@@ -54,6 +54,11 @@ _PLAIN_DECIMAL = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _UNSIGNED_INTEGER = re.compile(r"^(?:0|[1-9][0-9]*)$")
 _SIGNED_INTEGER_TOKEN = re.compile(r"^[+-]?[0-9]+$")
 _SUPPORTED_KICAD_PCB_VERSIONS = frozenset({"20260206"})
+KICAD_PCB_ROOT_HEAD = "kicad_pcb"
+# "This is not a KiCad board document" is a different fact from "this board uses something we
+# cannot convert", and observers need to tell them apart: the first is a refusal, the second is
+# a truthful unsupported result. It used to be reported as a generic ``syntax.invalid``.
+FOREIGN_ROOT_DIAGNOSTIC_CODE = "unsupported.document"
 _COURTYARD_LAYERS = frozenset({"F.CrtYd", "B.CrtYd"})
 _ROOT_METADATA_HEADS = frozenset(
     {
@@ -174,8 +179,12 @@ class _Converter:
         self.profile = profile
         self.limits = limits
         self.source_revision = f"sha256:{hashlib.sha256(payload).hexdigest()}"
-        if self.root.head != "kicad_pcb":
-            self.fail("syntax.invalid", "source root must be kicad_pcb", "kicad_pcb")
+        if self.root.head != KICAD_PCB_ROOT_HEAD:
+            self.fail(
+                FOREIGN_ROOT_DIAGNOSTIC_CODE,
+                "source root must be kicad_pcb",
+                "kicad_pcb",
+            )
         self.version = self._values(self.root, "version", "kicad_pcb", minimum=1, maximum=1)[0]
         if self.version not in _SUPPORTED_KICAD_PCB_VERSIONS:
             self.fail(

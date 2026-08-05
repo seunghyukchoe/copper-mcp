@@ -61,5 +61,47 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.max_route_preview_seconds, 5)
 
 
+class LiveIpcOptInTests(unittest.TestCase):
+    """COPPER_MCP_ALLOW_LIVE_IPC follows the apply flag's exact-membership rule."""
+
+    def _from_env(self, value: str | None) -> Settings:
+        with tempfile.TemporaryDirectory() as directory:
+            environment = {"COPPER_MCP_WORKSPACE": directory}
+            if value is not None:
+                environment["COPPER_MCP_ALLOW_LIVE_IPC"] = value
+            with patch.dict(os.environ, environment, clear=True):
+                return Settings.from_env()
+
+    def test_absent_means_off(self) -> None:
+        self.assertFalse(self._from_env(None).allow_live_ipc)
+
+    def test_only_the_exact_string_one_enables_it(self) -> None:
+        self.assertTrue(self._from_env("1").allow_live_ipc)
+        self.assertFalse(self._from_env("0").allow_live_ipc)
+
+    def test_every_ambiguous_spelling_is_a_configuration_error(self) -> None:
+        # bool() would read "false", "no" and " 1" as enabling. A flag that opens a socket to
+        # the operator's running editor must not be switched on by a near miss.
+        for value in (
+            "true",
+            "True",
+            "TRUE",
+            "yes",
+            "on",
+            "false",
+            "no",
+            "off",
+            "",
+            " 1",
+            "1 ",
+            "01",
+            "2",
+            "-1",
+        ):
+            with self.subTest(value=value):
+                with self.assertRaises(ConfigurationError):
+                    self._from_env(value)
+
+
 if __name__ == "__main__":
     unittest.main()

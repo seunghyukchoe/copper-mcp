@@ -79,7 +79,8 @@ def _workspace(
     pads = conversion.snapshot.content.pads
     board_revision = f"sha256:{hashlib.sha256(source).hexdigest()}"
     return (
-        Settings(workspace=tmp_path),
+        # Live IPC is operator-gated and off by default; these tests exercise the enabled path.
+        Settings(workspace=tmp_path, allow_live_ipc=True),
         pads[0].id,
         pads[1].id,
         board_revision,
@@ -532,7 +533,7 @@ def test_live_preview_does_not_write_workspace(tmp_path: Path) -> None:
 
 def test_live_preview_passes_remaining_route_budget_to_ipc(tmp_path: Path) -> None:
     settings, start, end, board_revision, snapshot_digest = _workspace(tmp_path)
-    settings = Settings(workspace=tmp_path, max_route_preview_seconds=1)
+    settings = Settings(workspace=tmp_path, max_route_preview_seconds=1, allow_live_ipc=True)
     seen: dict[str, object] = {}
 
     def factory(**kwargs: object) -> _FakeLiveKiCad:

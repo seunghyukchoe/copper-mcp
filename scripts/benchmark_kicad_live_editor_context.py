@@ -124,7 +124,10 @@ def _canonical_bytes(value: Any) -> bytes:
 
 
 def _run(repetitions: int) -> dict[str, Any]:
-    settings = Settings(workspace=ROOT)
+    # The benchmark drives a deterministic fake client, but it still goes through the real
+    # capture path, which is operator-gated. Enable it explicitly here rather than depending
+    # on the ambient environment.
+    settings = Settings(workspace=ROOT, allow_live_ipc=True)
     board = _Board()
 
     def factory(**_: object) -> _KiCad:

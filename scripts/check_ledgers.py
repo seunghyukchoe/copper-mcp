@@ -147,15 +147,15 @@ RECORDED_COLLISIONS: dict[tuple[str, str], str] = {
     (
         "docs/ledgers/decision-ledger.md",
         "D-137",
-    ): "documentation reorganization vs the ordered-layer seam; recorded by D-142",
+    ): "documentation reorganization vs the ordered-layer seam; recorded by D-143",
     (
         "docs/ledgers/decision-ledger.md",
         "D-139",
-    ): "route-aware placement scoring vs the ordered-layer correction; recorded by D-142",
+    ): "route-aware placement scoring vs the ordered-layer correction; recorded by D-143",
     (
         "docs/ledgers/decision-ledger.md",
         "D-140",
-    ): "route-aware interpretation correction vs the route bundle; recorded by D-142",
+    ): "route-aware interpretation correction vs the route bundle; recorded by D-143",
     (
         "docs/ledgers/benchmark-ledger.md",
         "B-076",

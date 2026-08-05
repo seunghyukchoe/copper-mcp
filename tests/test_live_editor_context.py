@@ -85,7 +85,9 @@ class _KiCad:
 
 
 def _settings() -> Settings:
-    return Settings(workspace=ROOT)
+    # Live IPC is operator-gated and off by default; these tests are about what happens once
+    # an operator has turned it on. tests/test_kicad_ipc.py owns the default-off behaviour.
+    return Settings(workspace=ROOT, allow_live_ipc=True)
 
 
 def _factory(board: _Board):

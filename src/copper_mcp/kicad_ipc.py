@@ -6,6 +6,12 @@ redacted counts and a content digest.  It never returns board text, net names, U
 or model-controlled strings, and it has no write path.  File-backed Board IR remains
 the authoritative route/placement input until a live snapshot can be bound to the
 same revision contract.
+
+Reaching a running editor is an outbound action against the operator's machine rather
+than a read of a file they handed us, so every capture here is gated on the explicit
+``COPPER_MCP_ALLOW_LIVE_IPC`` opt-in and refuses before the endpoint is even read.  The
+live tools stay listed when it is off; they answer with a typed refusal that names the
+flag, exactly as the apply surface does.
 """
 
 from __future__ import annotations
@@ -58,6 +64,16 @@ _SESSION_REVISION_SALT = secrets.token_bytes(32)
 _SESSION_REVISION_ITERATIONS = 200_000
 _SESSION_REVISION_DKLEN = 32
 _SESSION_REVISION_SALT_DOMAIN = b"copper-mcp:kicad-ipc-session-revision:v2\x00"
+_KICAD_PCB_ROOT = "kicad_pcb"
+_LIVE_IPC_DISABLED_MESSAGE = (
+    "live KiCad IPC observation is disabled; set COPPER_MCP_ALLOW_LIVE_IPC=1 to enable it"
+)
+# UTF-8 code-unit bounds, used to settle the clear cases of a byte-budget test in constant time.
+_UTF8_MIN_BYTES_PER_CHARACTER = 1
+_UTF8_MAX_BYTES_PER_CHARACTER = 4
+# Slice width for the exact measurement. Large enough that the loop is a handful of iterations
+# for a realistic board, small enough that the transient encoded slice stays a fixed cost.
+_UTF8_MEASURE_CHUNK_CHARACTERS = 65_536
 _LAYER_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 _UUID = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
@@ -115,6 +131,10 @@ class KicadIpcVersionError(KicadIpcError):
 
 class KicadIpcPayloadError(KicadIpcError):
     """Raised when a live board snapshot exceeds the configured safety budget."""
+
+
+class KicadIpcDisabledError(KicadIpcError):
+    """Raised when live IPC capture is attempted without the operator opt-in."""
 
 
 class KicadIpcDeadlineError(KicadIpcConnectionError):
@@ -258,6 +278,55 @@ def _close_ipc_client(client: object) -> None:
         return
 
 
+def _exceeds_utf8_budget(text: str, max_bytes: int) -> bool:
+    """Report whether ``text`` is over a UTF-8 *byte* ceiling without materializing an encoding.
+
+    ``COPPER_MCP_MAX_BOARD_BYTES`` is a byte budget: the first read is charged in bytes and
+    ``board_bytes`` is reported in bytes, so the confirmation has to be charged in bytes too.
+    ``len(text)`` counts code points, and board text is external-tool output that is routinely
+    non-ASCII -- accented silkscreen, a CJK net class -- so a confirmation can sit under the
+    character count while being up to four times over the byte ceiling. That is the same
+    character-versus-byte confusion this repository already hit once at an offset boundary.
+
+    Encoding the whole string to measure it would be byte-exact but would reintroduce the
+    unbudgeted second copy this gate exists to prevent, and gating on ``len(text) * 4`` alone
+    would be memory-safe but not byte-exact -- it would refuse in-budget boards. A cheap
+    upper-bound pre-check followed by an exact encode "only when ambiguous" is no better,
+    because the ambiguous case is precisely the common one (a board near its ceiling) and the
+    fallback still encodes the whole string.
+
+    So: settle the two unambiguous cases with the constant-time code-unit bounds, and settle
+    the rest by encoding bounded slices, stopping the moment the running total passes the
+    ceiling. That is byte-exact *and* caps the transient buffer at one slice
+    (``_UTF8_MEASURE_CHUNK_CHARACTERS`` code points) regardless of how long the string is.
+    Slicing a ``str`` is by code point, so a slice boundary can never split a character and no
+    incremental-encoder state is needed.
+    """
+
+    if len(text) * _UTF8_MIN_BYTES_PER_CHARACTER > max_bytes:
+        return True
+    if len(text) * _UTF8_MAX_BYTES_PER_CHARACTER <= max_bytes:
+        return False
+    total = 0
+    for start in range(0, len(text), _UTF8_MEASURE_CHUNK_CHARACTERS):
+        chunk = text[start : start + _UTF8_MEASURE_CHUNK_CHARACTERS]
+        total += len(chunk.encode("utf-8", errors="strict"))
+        if total > max_bytes:
+            return True
+    return False
+
+
+def _confirmation_within_budget(confirmation: str, max_bytes: int) -> None:
+    """Charge one confirmation read against the observation byte budget, or refuse."""
+
+    try:
+        over_budget = _exceeds_utf8_budget(confirmation, max_bytes)
+    except UnicodeError as error:
+        raise KicadIpcPayloadError("KiCad returned invalid board text") from error
+    if over_budget:
+        raise KicadIpcPayloadError("KiCad board confirmation exceeds the observation budget")
+
+
 def _count_serialized_items(
     source: bytes,
     max_bytes: int,
@@ -284,6 +353,12 @@ def _count_serialized_items(
         raise KicadIpcPayloadError(
             "KiCad board serialization is not a bounded S-expression"
         ) from error
+    # The counter recognises heads (footprint, pad, via, ...) wherever they appear, so without
+    # this gate any well-formed S-expression is summarised as if it were a PCB. The Board IR
+    # adapter refuses a foreign root, but nothing downstream of it re-derives these counts, so
+    # the observation boundary has to establish the document type for itself.
+    if root.head != _KICAD_PCB_ROOT:
+        raise KicadIpcPayloadError("KiCad returned a serialization whose root is not kicad_pcb")
     counts = dict.fromkeys(_COUNT_NAMES, 0)
     stack: list[tuple[SExpr, bool]] = [(root, False)]
     while stack:
@@ -461,7 +536,7 @@ def _selection_identity(item: Any) -> LiveEditorSelection:
     try:
         identifier = item.id
         value = getattr(identifier, "value", identifier)
-    except Exception as error:  # pragma: no cover - exercised by the real binding
+    except Exception as error:
         raise KicadIpcPayloadError("KiCad returned an unreadable selected item identity") from error
     if not isinstance(value, str) or _UUID.fullmatch(value) is None:
         raise KicadIpcPayloadError("KiCad returned an empty or malformed selected item identity")
@@ -475,7 +550,7 @@ def _read_editor_selection(
 
     try:
         selected = iter(board.get_selection())
-    except Exception as error:  # pragma: no cover - exercised by the real binding
+    except Exception as error:
         raise KicadIpcConnectionError("KiCad editor selection observation failed") from error
     result: list[LiveEditorSelection] = []
     for item in selected:
@@ -504,6 +579,10 @@ def capture_live_editor_context(
     active_settings = settings or Settings.from_env()
     if not isinstance(active_settings, Settings):
         raise KicadIpcConfigurationError("live editor settings are malformed")
+    if not active_settings.allow_live_ipc:
+        # Refuse before the endpoint is read, so a disabled deployment never discovers an
+        # ambient KICAD_API_SOCKET and never opens the binding's default socket either.
+        raise KicadIpcDisabledError(_LIVE_IPC_DISABLED_MESSAGE)
     if not 1 <= timeout_ms <= _MAX_TIMEOUT_MS:
         raise KicadIpcConfigurationError("IPC timeout is outside the bounded range")
     if not 1 <= max_selection <= _MAX_EDITOR_SELECTION:
@@ -518,7 +597,7 @@ def capture_live_editor_context(
             client = factory(socket_path=socket_path, timeout_ms=timeout_ms)
     except KicadIpcError:
         raise
-    except Exception as error:  # pragma: no cover - exercised by the real binding
+    except Exception as error:
         raise KicadIpcConnectionError("could not create a KiCad IPC client") from error
 
     try:
@@ -581,12 +660,17 @@ def _capture_live_editor_context_from_client(
         second_active_name = board.get_layer_name(second_active_index)
         second_selection = _read_editor_selection(board, max_selection)
         confirmation = board.get_as_string()
-        confirmation_bytes = confirmation.encode("utf-8", errors="strict")
     except (KicadIpcError, UnicodeError):
         raise
-    except Exception as error:  # pragma: no cover - exercised by the real binding
+    except Exception as error:
         raise KicadIpcConnectionError("KiCad editor context observation failed") from error
-    if confirmation_bytes != source_bytes:
+    if not isinstance(confirmation, str):
+        raise KicadIpcPayloadError("KiCad returned a non-text board snapshot")
+    # Same budget rule as the first read, and in the same unit: charge UTF-8 bytes, so an
+    # oversized second read is refused as a payload-budget violation rather than encoded in
+    # full and then reported as if the operator had edited the board.
+    _confirmation_within_budget(confirmation, max_bytes)
+    if confirmation != source:
         raise KicadIpcConnectionError("KiCad board changed during editor context observation")
     if (active_index, active_name, selection) != (
         second_active_index,
@@ -622,6 +706,11 @@ def capture_live_board(
     active_settings = settings or Settings.from_env()
     if not isinstance(active_settings, Settings):
         raise KicadIpcConfigurationError("live observation settings are malformed")
+    if not active_settings.allow_live_ipc:
+        # Talking to a running editor is an outbound action against the operator's machine,
+        # not a read of a file they handed us. It stays off until they say otherwise, and the
+        # refusal happens before KICAD_API_SOCKET is read or any default socket is opened.
+        raise KicadIpcDisabledError(_LIVE_IPC_DISABLED_MESSAGE)
     if not 1 <= timeout_ms <= _MAX_TIMEOUT_MS:
         raise KicadIpcConfigurationError("IPC timeout is outside the bounded range")
     if deadline is not None and (
@@ -641,7 +730,7 @@ def capture_live_board(
             client = factory(socket_path=socket_path, timeout_ms=timeout_ms)
     except KicadIpcError:
         raise
-    except Exception as error:  # pragma: no cover - exercised by the real binding
+    except Exception as error:
         raise KicadIpcConnectionError("could not create a KiCad IPC client") from error
 
     try:
@@ -699,7 +788,7 @@ def _capture_live_board_from_client(
         check_deadline()
     except KicadIpcError:
         raise
-    except Exception as error:  # pragma: no cover - exercised by the real binding
+    except Exception as error:
         raise KicadIpcConnectionError("KiCad IPC observation failed") from error
 
     if not isinstance(source, str):
@@ -721,14 +810,20 @@ def _capture_live_board_from_client(
         check_deadline()
         confirmation = board.get_as_string()
         check_deadline()
-        confirmation_bytes = confirmation.encode("utf-8", errors="strict")
     except KicadIpcError:
         raise
-    except Exception as error:  # pragma: no cover - exercised by the real binding
+    except Exception as error:
         raise KicadIpcConnectionError(
             "KiCad changed before observation could be confirmed"
         ) from error
-    if confirmation_bytes != source_bytes:
+    if not isinstance(confirmation, str):
+        raise KicadIpcPayloadError("KiCad returned a non-text board snapshot")
+    # Charge the confirmation against the same budget as the first read, in the same unit, and
+    # without materializing a whole second encoding of it. Refusing here keeps an oversized
+    # second read a payload-budget refusal instead of mis-reporting it as a concurrent board
+    # edit; see ``_exceeds_utf8_budget`` for why the measurement is sliced rather than whole.
+    _confirmation_within_budget(confirmation, max_bytes)
+    if confirmation != source:
         raise KicadIpcConnectionError("KiCad board changed during observation")
     confirmed_session_revision = _session_revision()
     if session_revision is None:
