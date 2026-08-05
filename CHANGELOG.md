@@ -8,6 +8,11 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Hardened the optional NE5532 KiCad DRC benchmark observation against untrusted report output.
+  Reports are now descriptor-anchored and byte-bounded before UTF-8/JSON decoding, then reuse the
+  adapter's duplicate-key, non-finite, nesting, and structural budgets. Normal aggregate counts,
+  provenance, and benchmark scope are unchanged.
+
 - Corrected the exact-local-repair gate evidence. The preserved B-071 historical artifact used a
   related KiCad-derived fixture with 512 grid nodes, 20,000 expansions, 128 obstacles, and
   200,000 obstacle checks, so it is not the predeclared semantic experiment. B-072 independently

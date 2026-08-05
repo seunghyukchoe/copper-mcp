@@ -9,6 +9,59 @@ import pytest
 from scripts import benchmark_ne5532_audio_routing as benchmark
 
 
+def _drc_report(
+    *,
+    violations: list[object] | None = None,
+    unconnected: list[object] | None = None,
+) -> dict[str, object]:
+    return {
+        "violations": [] if violations is None else violations,
+        "unconnected_items": [] if unconnected is None else unconnected,
+    }
+
+
+def test_drc_summary_reads_a_normal_bounded_report(tmp_path) -> None:
+    report = tmp_path / "report.json"
+    report.write_text(
+        json.dumps(_drc_report(violations=[{}], unconnected=[{}, {}])), encoding="utf-8"
+    )
+
+    assert benchmark._drc_summary(tmp_path, report, max_report_bytes=1024) == {
+        "violations": 1,
+        "unconnected_items": 2,
+    }
+
+
+def test_drc_summary_rejects_an_oversized_report_before_json_decode(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    report = tmp_path / "report.json"
+    report.write_bytes(b"{" + b" " * 1024 + b"}")
+    monkeypatch.setattr(
+        benchmark.json,
+        "loads",
+        lambda *_args, **_kwargs: pytest.fail("oversized report reached JSON decoding"),
+    )
+
+    with pytest.raises(benchmark.AudioRoutingBenchmarkError, match="cannot be parsed"):
+        benchmark._drc_summary(tmp_path, report, max_report_bytes=64)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b"{",
+        b"[" * 65 + b"0" + b"]" * 65,
+    ],
+)
+def test_drc_summary_rejects_malformed_or_overdeep_reports(tmp_path, payload: bytes) -> None:
+    report = tmp_path / "report.json"
+    report.write_bytes(payload)
+
+    with pytest.raises(benchmark.AudioRoutingBenchmarkError, match="cannot be parsed"):
+        benchmark._drc_summary(tmp_path, report, max_report_bytes=1024)
+
+
 def test_original_unrouted_ne5532_fixture_has_pinned_public_route_evidence() -> None:
     metrics = benchmark.run_benchmark(2)
 
