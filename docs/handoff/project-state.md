@@ -63,8 +63,8 @@ These are not style preferences. Most of them were paid for with a bug. Preserve
    any geometric predicate.
 7. **Append-only ledgers.** Decision, risk, security, release. Corrections are dated notes below
    the table; rows are never rewritten. `scripts/check_ledgers.py` enforces the shape and the
-   identifier allocation: duplicates fail, gaps are reported, and two historical collisions
-   (`D-137`, `B-076`) are recorded rather than repaired.
+   identifier allocation: duplicates fail, gaps are reported, and six historical collisions
+   (`D-137`, `D-139`, `D-140`, `B-076`, `B-078`, `B-082`) are recorded rather than repaired.
 8. **Release authorization is a separate, deliberate act.** A `Ready` row naming a validated source
    commit, then a metadata commit touching only the ledger and changelog, then the tag.
 9. **The board's own text is untrusted data.** Silkscreen, fab text, properties, and net names are

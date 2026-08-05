@@ -32,7 +32,10 @@ The rules, and what each one deliberately does *not* do:
   correction note already records. Both are keyed to exact text, and an entry in
   either list that stops matching a real ledger line is itself a failure -- so an
   exception cannot be added and then quietly forgotten, and a genuinely new
-  duplicate still fails until someone edits this file and says why.
+  duplicate still fails until someone edits this file and says why. A recorded
+  collision also excuses the document order it displaced, because merging two
+  independently appended blocks necessarily leaves one behind the other, and one
+  correction note records both facts.
 - **The allocation registry is verified.** The `Highest allocated` / `Next free`
   table in `docs/ledgers/README.md` must equal what the ledgers actually contain.
   That table is one line per ID space, so two branches that both allocate the
@@ -144,11 +147,27 @@ RECORDED_COLLISIONS: dict[tuple[str, str], str] = {
     (
         "docs/ledgers/decision-ledger.md",
         "D-137",
-    ): "two branches allocated D-137 in parallel; recorded by D-142",
+    ): "documentation reorganization vs the ordered-layer seam; recorded by D-142",
+    (
+        "docs/ledgers/decision-ledger.md",
+        "D-139",
+    ): "route-aware placement scoring vs the ordered-layer correction; recorded by D-142",
+    (
+        "docs/ledgers/decision-ledger.md",
+        "D-140",
+    ): "route-aware interpretation correction vs the route bundle; recorded by D-142",
     (
         "docs/ledgers/benchmark-ledger.md",
         "B-076",
-    ): "two branches allocated B-076 in parallel; recorded by B-084",
+    ): "recorded-link corrections vs the ordered-layer oracle; recorded by B-084",
+    (
+        "docs/ledgers/benchmark-ledger.md",
+        "B-078",
+    ): "route-aware selection replay vs the capped ordered-layer differential; recorded by B-084",
+    (
+        "docs/ledgers/benchmark-ledger.md",
+        "B-082",
+    ): "route-aware claim correction vs the route-bundle provenance; recorded by B-084",
 }
 
 # `| [Decision ledger](decision-ledger.md) | `D-` | `D-137` | `D-138` |`
@@ -329,11 +348,24 @@ def _check_ledger_ids(failures: list[str], notes: list[str]) -> dict[str, int]:
                     space, entry, seen, used_replays, used_collisions, failures, notes
                 )
             if space.ordered and previous is not None and entry.number < previous.number:
-                failures.append(
-                    f"{space.document}:{entry.line} {entry.identifier} is out of order; it follows "
-                    f"{previous.identifier} at line {previous.line} and this ledger is strictly "
-                    "increasing in document order"
-                )
+                # A recorded collision also displaces document order: merging two
+                # branches that each appended a block leaves one block behind the
+                # other. The correction note that records the collision records
+                # the disorder with it, so do not report the same defect twice.
+                collision = (space.document, entry.identifier)
+                if collision in RECORDED_COLLISIONS:
+                    used_collisions.add(collision)
+                    notes.append(
+                        f"{space.document}:{entry.line} {entry.identifier} follows "
+                        f"{previous.identifier}; document order was displaced by the same recorded "
+                        f"collision — {RECORDED_COLLISIONS[collision]}"
+                    )
+                else:
+                    failures.append(
+                        f"{space.document}:{entry.line} {entry.identifier} is out of order; it "
+                        f"follows {previous.identifier} at line {previous.line} and this ledger is "
+                        "strictly increasing in document order"
+                    )
             previous = entry
 
         allocated = sorted(first_seen)

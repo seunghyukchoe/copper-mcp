@@ -201,6 +201,35 @@ def test_recorded_collision_passes_as_information(
     assert any("recorded historical collision" in note for note in notes)
 
 
+def test_recorded_collision_also_covers_the_order_it_displaced(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Merging two appended blocks leaves one behind the other; that is the same defect."""
+    monkeypatch.setattr(
+        check_ledgers, "RECORDED_COLLISIONS", {(DECISION, "D-002"): "recorded by D-004"}
+    )
+    _write(tmp_path, DECISION, _decisions("D-001", "D-002", "D-003", "D-002", "D-004"))
+
+    failures, notes = _run_ids(tmp_path, monkeypatch)
+
+    assert failures == []
+    assert any("document order was displaced" in note for note in notes)
+
+
+def test_recorded_collision_does_not_excuse_an_unrelated_out_of_order_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        check_ledgers, "RECORDED_COLLISIONS", {(DECISION, "D-002"): "recorded by D-005"}
+    )
+    _write(tmp_path, DECISION, _decisions("D-001", "D-002", "D-004", "D-003", "D-002", "D-005"))
+
+    failures, _ = _run_ids(tmp_path, monkeypatch)
+
+    assert len(failures) == 1
+    assert "D-003 is out of order" in failures[0]
+
+
 def test_recorded_collision_does_not_excuse_a_second_duplicate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

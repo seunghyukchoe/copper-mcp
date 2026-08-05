@@ -33,20 +33,19 @@ The rules:
 
 1. **Allocate in the pull request that lands the entry, not before.** The "next free" numbers above
    go stale the moment another branch merges. Two concurrent branches that both reserve `D-137`
-   early will collide — and that is not hypothetical: `D-137` and `B-076` each name two unrelated
-   entries today, because the colliding rows landed in different places in the same table and Git
-   merged both without a conflict. Read the ledger at the tip of your rebase target, take the next
-   number, and if a rebase moves it, renumber before merging. Updating the row above is the cheap
-   safety net: it is one line per ID space, so two branches that both take the next number now
-   conflict *textually* and Git refuses the merge instead of accepting it silently.
+   early will collide — and that is not hypothetical. Six numbers each name two unrelated entries
+   today: `D-137`, `D-139`, `D-140`, `B-076`, `B-078`, and `B-082`. In every case the colliding
+   rows landed in different places in the same document and Git merged both without a conflict.
+   Read the ledger at the tip of your rebase target, take the next number, and if a rebase moves it,
+   renumber before merging. Updating the row above is the cheap safety net: it is one line per ID
+   space, so two branches that both take the next number now conflict *textually* and Git refuses
+   the merge instead of accepting it silently.
 2. **Numbers are never reused.** A gap is permanent, and the checker reports gaps as information
    rather than failing on them. `D-039`, `SEC-021`, and `B-006` are unused because their entries
-   were withdrawn before merge. `B-081` is *allocated but unmerged*: it names a route-aware
-   placement correction on an open branch, alongside [ADR-0067](../adr/README.md#adding-an-adr).
-   `SEC-114` has no recorded claimant at all; it was skipped during the same parallel-branch period
-   that produced the `D-137` and `B-076` collisions. Either way the number is spent, so that an
-   external reference resolves to nothing rather than to an unrelated entry. Do not fill a gap to
-   tidy the sequence.
+   were withdrawn before merge. `SEC-114` has no recorded claimant at all; it was skipped during
+   the same parallel-branch period that produced the six collisions. Either way the number is
+   spent, so that an external reference resolves to nothing rather than to an unrelated entry. Do
+   not fill a gap to tidy the sequence.
 3. **A correction gets a new ID.** Because rows are append-only, a superseding or clarifying entry
    is a new entry that names what it corrects — never an edit to the original. `B-075`
    ("held-out audio evidence-source provenance correction") is the model: it states what it
@@ -73,11 +72,14 @@ The rules:
    are four digits (`ADR-0065`) and are links into `docs/adr/`, never ledger-allocated IDs. The
    checker rejects a badly padded identifier rather than silently accepting it as a new number.
 
-Two historical collisions predate this check and are recorded rather than repaired, because a
-renumbered row would rewrite append-only history and break every external citation: `D-137` (see
-`D-142`) and `B-076` (see `B-084`). Each is carried in the checker's closed `RECORDED_COLLISIONS`
-list, keyed to the correction that documents it, so it is reported on every run while a *new*
-duplicate still fails the build. Registering a collision is not a way to accept one: it requires
+Six historical collisions predate this check and are recorded rather than repaired, because a
+renumbered row would rewrite append-only history and break every external citation: `D-137`,
+`D-139`, and `D-140` (see `D-142`); `B-076`, `B-078`, and `B-082` (see `B-084`). Merging two
+independently appended blocks also displaced document order in the decision ledger, so the `D-137`
+block now follows the `D-139`/`D-140` block; the same correction records that. Each is carried in
+the checker's closed `RECORDED_COLLISIONS` list, keyed to the correction that documents it, so it
+is reported on every run while a *new* duplicate still fails the build. Registering a collision is
+not a way to accept one: it requires
 landing the dated correction note first.
 
 The same "allocate at merge, never reuse" rule governs ADR numbers, and

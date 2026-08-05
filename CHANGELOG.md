@@ -23,9 +23,11 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
-- Indexed `ADR-0068` in `docs/adr/README.md`, which was absent because it merged in parallel with
-  the pull request that rebuilt that index, and added a tombstone row for the unmerged `0067`.
-  This is the same class of defect the new checker prevents.
+- Indexed `ADR-0067` and `ADR-0068` in `docs/adr/README.md`. Both were absent because they merged in
+  parallel with the pull request that rebuilt that index — the same class of defect the new checker
+  prevents. Recorded the six ledger identifier collisions the new checker found (`D-137`, `D-139`,
+  `D-140`, `B-076`, `B-078`, `B-082`) as append-only correction entries `D-142` and `B-084` rather
+  than renumbering any merged row.
 
 ### Changed
 
