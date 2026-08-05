@@ -21,6 +21,7 @@ from math import isqrt
 from typing import Any
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
+from copper_mcp.adapters.kicad_board_ir import FOREIGN_ROOT_DIAGNOSTIC_CODE
 from copper_mcp.adapters.sexpr import SExpr, SExprError, children, parse_sexpr
 from copper_mcp.board_ir import (
     Arc,
@@ -875,6 +876,15 @@ def _observe_board_scene(
         max_input_bytes=min(default_limits.max_input_bytes, settings.max_board_bytes),
     )
     conversion = parse_kicad_bytes(board_source, request.profile(), limits)
+    if any(
+        diagnostic.code == FOREIGN_ROOT_DIAGNOSTIC_CODE for diagnostic in conversion.diagnostics
+    ):
+        # A foreign S-expression root is not an unsupported board, it is not a board at all,
+        # and reporting it as ``supported: false`` puts a wrong-document-type answer in the
+        # same bucket as a KiCad board carrying a construct this converter cannot model. Both
+        # observer paths refuse it by type, so neither one can be talked into publishing a
+        # board_revision, a snapshot digest, or a topology summary for a foreign document.
+        raise CircuitSceneError("the observed source is not a KiCad board document")
     if conversion.snapshot is None or conversion.diagnostics:
         counts: dict[str, int] = {}
         for diagnostic in conversion.diagnostics:

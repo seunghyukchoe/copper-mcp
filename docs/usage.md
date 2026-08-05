@@ -309,8 +309,16 @@ extra and enable KiCad's IPC server in the editor preferences:
 ```bash
 python -m pip install -e ".[kicad]"
 export COPPER_MCP_WORKSPACE=/absolute/path/to/boards
+export COPPER_MCP_ALLOW_LIVE_IPC=1
 copper-mcp-server
 ```
+
+`COPPER_MCP_ALLOW_LIVE_IPC` is required and defaults to off. Talking to a running editor is an
+outbound action against your machine rather than a read of a file you handed the server, so it
+follows the same rule as `COPPER_MCP_ALLOW_APPLY`: the value must be exactly `0` or `1`, and
+anything else — `true`, `yes`, an empty string — is a configuration error rather than a silent
+enable. With it off, every live tool stays listed and answers with a refusal naming the flag, and
+the server reads no IPC socket from the environment and opens none.
 
 Call the read-only MCP tool `inspect_live_board` for a redacted digest/metadata probe. To request
 semantic geometry from the active editor, call `observe_live_board_scene` with the same constraints

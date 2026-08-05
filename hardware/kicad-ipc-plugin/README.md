@@ -40,3 +40,10 @@ KiCad 9/10 must be running with the IPC server enabled. `kicad-python` supplies 
 official socket/token client; CopperMCP refuses non-local endpoints and refuses a newer
 KiCad than the installed binding by default. The action is an observation smoke test,
 not placement or routing apply.
+
+Live IPC observation is off by default. `COPPER_MCP_ALLOW_LIVE_IPC=1` must be set in the
+environment KiCad launches the plugin in, exactly as it must be for the MCP server; the
+value has to be exactly `0` or `1`. Without it the action prints
+`CopperMCP IPC observer unavailable: KicadIpcDisabledError` and reads nothing. Clicking
+the button is an operator action, but the flag is what makes it one the *host* has
+authorized, and it is the same switch for every live surface.

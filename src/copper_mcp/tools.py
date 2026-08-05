@@ -86,7 +86,8 @@ def server_info() -> dict[str, Any]:
             "revision-bound atomic multi-net route-bundle preview (read-only)",
             "bounded Circuit Intent validation and deterministic KiCad schematic rendering",
             "explicit create-only CLI schematic export and ephemeral stdio MCP artifact delivery",
-            "read-only live KiCad IPC board observation (optional kicad-python)",
+            "operator-gated read-only live KiCad IPC board observation (optional kicad-python, "
+            "COPPER_MCP_ALLOW_LIVE_IPC)",
             "revision-bound live KiCad IPC Circuit Scene observation (read-only)",
             "revision-bound live KiCad IPC route proposal (read-only)",
             "revision-bound live KiCad IPC placement proposal (read-only)",

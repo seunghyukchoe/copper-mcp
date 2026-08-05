@@ -164,7 +164,13 @@ def _run(repetitions: int) -> dict[str, Any]:
     def factory(**_: object) -> _KiCad:
         return _KiCad(source, closed)
 
-    settings = Settings(workspace=ROOT / "tests" / "fixtures" / "route-candidate")
+    # The benchmark drives a deterministic fake client, but it still goes through the real
+    # capture path, which is operator-gated. Enable it explicitly here rather than depending
+    # on the ambient environment.
+    settings = Settings(
+        workspace=ROOT / "tests" / "fixtures" / "route-candidate",
+        allow_live_ipc=True,
+    )
     live_responses = [
         LayeredRoutePreviewToolResponse.model_validate(
             preview_live_layered_route(request, settings, client_factory=factory)

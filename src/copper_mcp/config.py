@@ -56,6 +56,7 @@ class Settings:
     max_placement_checks: int = 2_000_000
     max_placement_seconds: int = 10
     allow_apply: bool = False
+    allow_live_ipc: bool = False
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -178,6 +179,12 @@ class Settings:
             # all be truthy under bool(), and a flag that enables board mutation must never be
             # switched on by an ambiguous spelling.
             raise ConfigurationError('COPPER_MCP_ALLOW_APPLY must be exactly "0" or "1"')
+        raw_allow_live_ipc = os.environ.get("COPPER_MCP_ALLOW_LIVE_IPC", "0")
+        if raw_allow_live_ipc not in {"0", "1"}:
+            # Same exact-membership rule as the apply flag. Connecting to whatever socket the
+            # official binding defaults to is an outbound action against the operator's running
+            # editor, so it must never be switched on by an ambiguous spelling either.
+            raise ConfigurationError('COPPER_MCP_ALLOW_LIVE_IPC must be exactly "0" or "1"')
         return cls(
             workspace=workspace,
             transport=transport,
@@ -201,4 +208,5 @@ class Settings:
             max_placement_checks=max_placement_checks,
             max_placement_seconds=max_placement_seconds,
             allow_apply=raw_allow_apply == "1",
+            allow_live_ipc=raw_allow_live_ipc == "1",
         )

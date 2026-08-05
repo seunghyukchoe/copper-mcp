@@ -159,7 +159,10 @@ def _repetitions(value: str) -> int:
 
 def _run(repetitions: int) -> dict[str, Any]:
     source = FIXTURE.read_text(encoding="utf-8")
-    settings = Settings(workspace=ROOT)
+    # The benchmark drives a deterministic fake client, but it still goes through the real
+    # capture path, which is operator-gated. Enable it explicitly here rather than depending
+    # on the ambient environment.
+    settings = Settings(workspace=ROOT, allow_live_ipc=True)
     factory_calls = 0
 
     def factory(**_: object) -> _FakeKiCad:
