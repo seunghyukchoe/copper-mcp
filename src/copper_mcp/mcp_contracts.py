@@ -704,6 +704,24 @@ class CircuitSceneToolResponse(_ClosedContract):
     conversion_diagnostic_counts: dict[str, int]
 
 
+class PostPlacementObservationRequestContract(_ClosedContract):
+    board: Annotated[
+        str, Field(min_length=1, max_length=4096, pattern=r"^[^\u0000-\u001f\u007f]+$")
+    ]
+    expect_board_revision: Digest
+    constraints: dict[str, int]
+    region: dict[str, Any]
+    layers: list[LayerName] = Field(default_factory=list, max_length=64)
+    include_annotations: bool = False
+    include_render: Literal[False] = False
+
+
+PostPlacementObservationToolRequest = Annotated[
+    Any,
+    WithJsonSchema(_inline_json_schema(PostPlacementObservationRequestContract)),
+]
+
+
 class RoutePathContract(_ClosedContract):
     """One exact orthogonal polyline in a proposed route tree."""
 
@@ -829,6 +847,28 @@ class RouteDrcSummaryContract(_ClosedContract):
             raise ValueError("passed does not match the aggregate DRC findings")
         if self.clean is not expected_clean:
             raise ValueError("clean does not match the aggregate DRC findings")
+        return self
+
+
+class PostPlacementObservationToolResponse(_ClosedContract):
+    """One semantic scene and aggregate DRC report from the same captured board state."""
+
+    schema_version: Literal["1.0"]
+    observation_version: Literal["0.1.0"]
+    board_path: str
+    board_revision: Digest
+    snapshot_digest: Digest
+    scene: CircuitSceneToolResponse
+    drc_summary: RouteDrcSummaryContract
+
+    @model_validator(mode="after")
+    def _same_capture(self) -> PostPlacementObservationToolResponse:
+        if self.scene.board_revision != self.board_revision:
+            raise ValueError("post-placement scene revision is inconsistent")
+        if self.scene.snapshot_digest != self.snapshot_digest:
+            raise ValueError("post-placement scene snapshot is inconsistent")
+        if self.drc_summary.base_revision != self.board_revision:
+            raise ValueError("post-placement DRC revision is inconsistent")
         return self
 
 
@@ -1794,6 +1834,8 @@ __all__ = [
     "PlacementApplyToolRequestContract",
     "PlacementApplyToolResponse",
     "PlacementPreviewToolRequest",
+    "PostPlacementObservationToolRequest",
+    "PostPlacementObservationToolResponse",
     "RoutePreviewToolRequest",
     "RoutePreviewToolResponse",
     "RoutingCandidateExportToolRequest",

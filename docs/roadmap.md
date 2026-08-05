@@ -181,7 +181,7 @@ documentation, ledger updates, and benchmark evidence.
   file-backed previews may explicitly request a placement-scoped single-use token, and the pure
   source-preserving replay plus atomic file service applies front-side orthogonal footprints with
   native identity and supported rectangular `F.CrtYd` syntax. Unsupported properties/text/
-  fabrication graphics/library identity/3D-model pose, side flips, post-apply DRC/scene evidence,
+  fabrication graphics/library identity/3D-model pose, side flips, live-editor DRC/scene evidence,
   and live IPC mutation remain fail-closed open gates.
 
 ## M4 — High-fidelity Circuit Scene and AI policy plugins
@@ -231,8 +231,9 @@ placement, and the policy-plugin work.
   KiCad CLI DRC fixture; GUI-authored flip serialization, line-chain/polygon topology, and the
   no-second-mirror claim remain open until a live desktop oracle is available.
 - [~] Separately authorized placement apply; direct AI mutation of KiCad remains prohibited. The
-  bounded file-level surface is implemented and measured, while general footprint fidelity,
-  post-placement observation, and live-editor action CAS remain open.
+  bounded file-level surface is implemented and measured, and file-backed post-placement
+  DRC/scene observation is revision-bound; general footprint fidelity and live-editor action CAS
+  remain open.
 - [ ] Heuristic policy baseline and trace dataset.
 - [ ] Typed net-ordering, corridor, and repair policy interface.
 - [ ] Optional local GNN/RL reference policy.

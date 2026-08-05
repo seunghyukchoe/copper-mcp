@@ -48,6 +48,8 @@ from copper_mcp.mcp_contracts import (
     PlacementApplyToolResponse,
     PlacementPreviewToolRequest,
     PlacementPreviewToolResponse,
+    PostPlacementObservationToolRequest,
+    PostPlacementObservationToolResponse,
     RoutePreviewToolRequest,
     RoutePreviewToolResponse,
     RoutingCandidateExportToolResponse,
@@ -93,6 +95,7 @@ from copper_mcp.tools import (
 )
 from copper_mcp.tools import observe_board_scene_raw as observe_board_scene_service_raw
 from copper_mcp.tools import observe_live_board_scene_raw as observe_live_board_scene_service_raw
+from copper_mcp.tools import observe_post_placement as observe_post_placement_service
 from copper_mcp.tools import preview_layered_route as preview_layered_route_service
 from copper_mcp.tools import (
     preview_live_layered_route_raw as preview_live_layered_route_service_raw,
@@ -181,6 +184,7 @@ class CopperMCPServer(MCPServer[None]):
                 "preview_live_layered_route",
                 "render_circuit_schematic",
                 "observe_live_board_scene",
+                "observe_post_placement",
                 "preview_live_placement",
                 "preview_placement",
                 "inspect_live_editor_context",
@@ -212,6 +216,8 @@ class CopperMCPServer(MCPServer[None]):
             raise ToolError("live layered route tool arguments are malformed")
         if name == "observe_live_board_scene" and set(arguments) != {"request"}:
             raise ToolError("live scene tool arguments are malformed")
+        if name == "observe_post_placement" and set(arguments) != {"request"}:
+            raise ToolError("post-placement observation arguments are malformed")
         if name == "preview_live_placement" and set(arguments) != {"request"}:
             raise ToolError("live placement tool arguments are malformed")
         if name == "preview_placement" and set(arguments) != {"request"}:
@@ -665,6 +671,31 @@ def observe_board_scene(request: dict[str, Any]) -> CircuitSceneToolResponse:
             )
         ],
         structured_content=validated.model_dump(mode="json", by_alias=True),
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def observe_post_placement(
+    request: PostPlacementObservationToolRequest,
+) -> PostPlacementObservationToolResponse:
+    """Observe one exact post-placement board revision with semantic scene and redacted DRC.
+
+    Copy ``expect_board_revision`` from a successful placement-apply response. The tool captures
+    the board, project/rule/library context once, builds the scene from those bytes, runs fixed
+    private KiCad DRC against the same capture, and rejects the entire result if context changes.
+    It neither applies candidates nor issues or consumes tokens.
+    """
+
+    return PostPlacementObservationToolResponse.model_validate(
+        observe_post_placement_service(request, _SETTINGS)
     )
 
 

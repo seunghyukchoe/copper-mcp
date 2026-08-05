@@ -19,6 +19,7 @@
 | `inspect_board_ir` | None | Read-only Board IR conversion check and structural description. |
 | `inspect_live_board` | None | Optional `kicad-python` IPC observation of the first open PCB; returns only numeric versions, a SHA-256 digest, byte count, and bounded object counts. |
 | `observe_board_scene` | None, or a process-local render artifact when `include_render` is set | Bounded, region-scoped semantic scene of one board, with board text quarantined. |
+| `observe_post_placement` | None | Read-only exact-revision observation: one file/context capture supplies both bounded semantic scene and aggregate redacted KiCad DRC. No token, candidate, render, or mutation input is accepted. |
 | `observe_live_board_scene` | None | Bounded Circuit Scene `0.2.0` from the active KiCad IPC document; uses `board: "live"` and optional stale-digest compare values. |
 | `preview_live_route` | None | Revision-bound, ref-anchored route proposal over one active KiCad IPC snapshot; never writes, runs DRC/fill, or grants apply authority. |
 | `preview_layered_route` | None | Revision-bound, pad-ref-anchored two-signal-layer proposal with explicit full-stack vias and opt-in candidate-bound aggregate DRC evidence; still no refill, serialization, export, or apply authority. |

@@ -41,6 +41,9 @@ from copper_mcp.models import candidate_from_dict, rank_candidates
 from copper_mcp.placement.contracts import PlacementResult
 from copper_mcp.placement_preview import preview_live_placement as preview_live_placement_service
 from copper_mcp.placement_preview import preview_placement as preview_placement_service
+from copper_mcp.post_placement_observation import (
+    observe_post_placement as observe_post_placement_service,
+)
 from copper_mcp.route_preview import RoutePreview
 from copper_mcp.route_preview import preview_live_route as preview_live_route_candidate
 from copper_mcp.route_preview import preview_route as preview_route_candidate
@@ -236,6 +239,15 @@ def observe_board_scene(
     """Observe one board as a bounded, region-scoped Circuit Scene without modifying it."""
 
     return observe_board_scene_raw(payload, settings).to_dict()
+
+
+def observe_post_placement(
+    payload: dict[str, Any], settings: Settings | None = None
+) -> dict[str, Any]:
+    """Return one revision-bound, read-only post-placement scene and DRC observation."""
+
+    active_settings = settings or Settings.from_env()
+    return observe_post_placement_service(payload, active_settings).to_dict()
 
 
 def observe_live_board_scene_raw(

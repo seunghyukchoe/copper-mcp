@@ -96,6 +96,7 @@ class McpServerTests(unittest.TestCase):
                 "inspect_live_editor_context",
                 "observe_board_scene",
                 "observe_live_board_scene",
+                "observe_post_placement",
                 "preview_placement",
                 "preview_live_placement",
                 "preview_live_route",
@@ -344,6 +345,19 @@ class McpServerTests(unittest.TestCase):
                 )
             )
         self.assertNotIn(secret, str(caught.exception))
+
+    def test_post_placement_observation_is_discoverable_and_rejects_unknown_wrapper_fields(
+        self,
+    ) -> None:
+        tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
+        tool = tools["observe_post_placement"]
+        assert tool.input_schema["additionalProperties"] is False
+        with self.assertRaisesRegex(
+            ToolError, "post-placement observation arguments are malformed"
+        ):
+            asyncio.run(
+                mcp.call_tool("observe_post_placement", {"request": {}, "candidate": "forbidden"})
+            )
 
     def test_live_layered_route_advertises_closed_read_only_revision_bound_request(self) -> None:
         tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}

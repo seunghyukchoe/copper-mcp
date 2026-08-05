@@ -8,6 +8,10 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added read-only `observe_post_placement`: a required-revision, single-capture Circuit Scene and
+  aggregate KiCad DRC observation. It is fail-closed on stale or changed context and never exposes
+  raw DRC output, issues apply authority, or changes a board (ADR-0061, B-045).
+
 - Added a separately authorized `apply_placement_candidate` MCP capability for the bounded
   front-side, orthogonal, source-preserving footprint subset. File-backed previews issue a
   placement-scoped single-use token only when the exact replay accepts the candidate; the apply
