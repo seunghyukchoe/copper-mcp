@@ -40,6 +40,7 @@ from copper_mcp.kicad_cli import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
+KICAD_SPECCTRA_TRANSACTION = ROOT / "scripts" / "kicad_specctra_transaction.py"
 SCHEMA = "copper-mcp/benchmark/freerouting-comparison/v1"
 FREEROUTING_LICENSE = "GPL-3.0-only"
 FREEROUTING_RELEASE_SCHEMA = "copper-mcp/freerouting-release-provenance/v1"
@@ -63,6 +64,7 @@ MAX_EXECUTABLE_BYTES = 128 * 1024 * 1024
 MAX_BOARD_ITEMS = 100_000
 FREEROUTING_RECEIPT_SCHEMA = "copper-mcp/freerouting-ses-import-receipt/v1"
 COPPER_RECEIPT_SCHEMA = "copper-mcp/candidate-runner-receipt/v1"
+FREEROUTING_TRANSACTION_SCHEMA = "copper-mcp/freerouting-kicad-transaction/v1"
 _RECEIPT_SHA256 = re.compile(r"^sha256:[a-f0-9]{64}$")
 _RELEASE_TAG = re.compile(r"^v(\d+\.\d+\.\d+)$")
 _GUI_DRC_HEADER = re.compile(r"^\*\* Drc report for (?P<board>[^\n]+) \*\*$", re.MULTILINE)
@@ -148,6 +150,46 @@ def freerouting_argv(java: Path, jar: Path, dsn: Path, ses: Path) -> tuple[str, 
         "-l",
         "en",
     )
+
+
+def kicad_specctra_argv(
+    kicad_python: Path,
+    command: str,
+    source: Path,
+    output: Path,
+    *,
+    ses: Path | None = None,
+) -> tuple[str, ...]:
+    """Return a fixed KiCad-bundled-Python transaction argv without a shell.
+
+    KiCad documents DSN export and SES import as PCB-editor operations.  Its bundled ``pcbnew``
+    binding exposes the same two operations; the helper receives only private workspace paths
+    created by this harness.  No user-supplied command template participates in this boundary.
+    """
+
+    if command == "export-dsn" and ses is None:
+        return (
+            str(kicad_python),
+            str(KICAD_SPECCTRA_TRANSACTION),
+            command,
+            "--source",
+            str(source),
+            "--output",
+            str(output),
+        )
+    if command == "import-ses" and ses is not None:
+        return (
+            str(kicad_python),
+            str(KICAD_SPECCTRA_TRANSACTION),
+            command,
+            "--source",
+            str(source),
+            "--ses",
+            str(ses),
+            "--output",
+            str(output),
+        )
+    raise ValueError("unsupported KiCad Specctra transaction")
 
 
 def copper_argv(
@@ -460,6 +502,128 @@ def _validate_ses(path: Path) -> str | None:
     return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
+def _validate_dsn(path: Path) -> str | None:
+    """Accept only a bounded, nonempty Specctra-design shaped KiCad export."""
+
+    try:
+        payload = read_bounded_bytes(path, MAX_DSN_BYTES)
+        text = payload.decode("utf-8", errors="strict")
+    except (OSError, UnicodeDecodeError, ValueError):
+        return None
+    stripped = text.lstrip()
+    if not stripped.startswith("(pcb") or not stripped.rstrip().endswith(")"):
+        return None
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
+def _private_copy(source: Path, destination: Path) -> str | None:
+    """Copy source bytes only after the board-size guard and return their digest."""
+
+    try:
+        payload = read_bounded_bytes(source, MAX_BOARD_BYTES)
+    except (OSError, ValueError):
+        return None
+    destination.write_bytes(payload)
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
+def _harness_freerouting_transaction(
+    *,
+    source: Path,
+    java: Path,
+    jar: Path,
+    kicad_python: Path,
+    kicad_cli: Path | None,
+    timeout_seconds: int,
+    source_sha256: str | None,
+    cwd: Path,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Causally bind private KiCad export, FreeRouting, KiCad import, and result DRC.
+
+    All intermediate bytes are confined to one temporary directory.  The resulting report
+    retains only hashes, process summaries, aggregate metrics, and a status.  Every stage must
+    succeed before the result is marked ``bound``; a caller-supplied board or receipt cannot
+    upgrade this transaction.
+    """
+
+    if source_sha256 is None:
+        return {"schema": FREEROUTING_TRANSACTION_SCHEMA, "status": "unavailable"}, None
+    with tempfile.TemporaryDirectory(prefix="copper-mcp-freerouting-transaction-") as directory:
+        workspace = Path(directory)
+        private_source = workspace / "source.kicad_pcb"
+        private_hash = _private_copy(source, private_source)
+        record: dict[str, Any] = {
+            "schema": FREEROUTING_TRANSACTION_SCHEMA,
+            "source_sha256": source_sha256,
+            "source_copy_sha256": private_hash,
+            "status": "failed",
+        }
+        if private_hash != source_sha256:
+            return record, None
+
+        dsn = workspace / "source.dsn"
+        export = run_process(
+            kicad_specctra_argv(kicad_python, "export-dsn", private_source, dsn),
+            timeout_seconds,
+            workspace,
+        )
+        dsn_sha256 = _validate_dsn(dsn) if export.status == "ok" else None
+        record["kicad_export"] = {
+            **process_record(export, "kicad_specctra_dsn_export"),
+            "dsn_sha256": dsn_sha256,
+            "dsn_status": "valid" if dsn_sha256 else "missing_or_invalid",
+        }
+        export_source_after = _hash_or_none(private_source, MAX_BOARD_BYTES)
+        record["kicad_export"]["source_copy_preserved"] = export_source_after == source_sha256
+        if dsn_sha256 is None or export_source_after != source_sha256:
+            return record, None
+
+        ses = workspace / "freerouting.ses"
+        router = run_process(freerouting_argv(java, jar, dsn, ses), timeout_seconds, workspace)
+        ses_sha256 = _validate_ses(ses) if router.status == "ok" else None
+        record["freerouting_process"] = {
+            **process_record(router, "freerouting_dsn_ses"),
+            "ses_sha256": ses_sha256,
+            "ses_status": "valid" if ses_sha256 else "missing_or_invalid",
+        }
+        if ses_sha256 is None:
+            return record, None
+
+        import_source = workspace / "import-source.kicad_pcb"
+        import_source_hash = _private_copy(source, import_source)
+        record["import_source_copy_sha256"] = import_source_hash
+        if import_source_hash != source_sha256:
+            return record, None
+        imported = workspace / "freerouting-imported.kicad_pcb"
+        imported_result = run_process(
+            kicad_specctra_argv(kicad_python, "import-ses", import_source, imported, ses=ses),
+            timeout_seconds,
+            workspace,
+        )
+        imported_sha256 = _hash_or_none(imported, MAX_BOARD_BYTES)
+        record["kicad_import"] = {
+            **process_record(imported_result, "kicad_specctra_ses_import"),
+            "result_board_sha256": imported_sha256,
+            "result_status": "valid" if imported_sha256 else "missing_or_invalid",
+        }
+        if imported_result.status != "ok" or imported_sha256 is None:
+            return record, None
+
+        metrics = _result_for_board(
+            "freerouting",
+            imported,
+            kicad_cli,
+            timeout_seconds,
+            cwd,
+            router.elapsed_ns,
+        )
+        if metrics.get("drc", {}).get("status") != "ok":
+            record["drc_status"] = metrics.get("drc", {}).get("status", "unavailable")
+            return record, metrics
+        record["status"] = "bound"
+        return record, metrics
+
+
 def _binding_status(
     receipt: dict[str, str] | None,
     *,
@@ -492,17 +656,21 @@ def preflight(
     provenance: Path | None,
     cwd: Path,
     release_provenance: Path | None = None,
+    kicad_python: Path | None = None,
+    harness_transaction: bool = False,
 ) -> dict[str, Any]:
     """Return all prerequisite failures in one truthful, serializable record."""
 
     reasons: list[str] = []
-    for label, path, maximum in (
+    requirements: tuple[tuple[str, Path | None, int], ...] = (
         ("source board", source, MAX_BOARD_BYTES),
-        ("DSN", dsn, MAX_DSN_BYTES),
         ("Java", java, MAX_EXECUTABLE_BYTES),
         ("FreeRouting JAR", jar, MAX_JAR_BYTES),
         ("KiCad CLI", kicad_cli, MAX_EXECUTABLE_BYTES),
-    ):
+    ) + (() if harness_transaction else (("DSN", dsn, MAX_DSN_BYTES),))
+    if harness_transaction:
+        requirements += (("KiCad bundled Python", kicad_python, MAX_EXECUTABLE_BYTES),)
+    for label, path, maximum in requirements:
         if path is None or not path.is_file():
             reasons.append(f"{label} is unavailable")
         elif path.stat().st_size > maximum:
@@ -525,6 +693,15 @@ def preflight(
         probes["kicad_cli"] = version_probe(kicad_cli, cwd)
         if probes["kicad_cli"]["status"] != "ok":
             reasons.append("KiCad CLI did not execute --version")
+    if (
+        harness_transaction
+        and kicad_python is not None
+        and kicad_python.is_file()
+        and kicad_python.stat().st_size <= MAX_EXECUTABLE_BYTES
+    ):
+        probes["kicad_python"] = version_probe(kicad_python, cwd)
+        if probes["kicad_python"]["status"] != "ok":
+            reasons.append("KiCad bundled Python did not execute --version")
     return {"available": not reasons, "reasons": reasons, "probes": probes}
 
 
@@ -846,6 +1023,7 @@ def build_report(
     seed: int,
     timeout_seconds: int,
     release_provenance: Path | None = None,
+    kicad_python: Path | None = None,
     source_drc_report: Path | None = None,
     copper_drc_report: Path | None = None,
     freerouting_drc_report: Path | None = None,
@@ -862,6 +1040,8 @@ def build_report(
         provenance=provenance,
         cwd=ROOT,
         release_provenance=release_provenance,
+        kicad_python=kicad_python,
+        harness_transaction=kicad_python is not None,
     )
     source_before = _hash_or_none(source, MAX_BOARD_BYTES)
     fixture, _ = _provenance(provenance)
@@ -887,6 +1067,7 @@ def build_report(
             "freerouting_release_provenance_status": release_status,
             "java_sha256": _hash_or_none(java, MAX_EXECUTABLE_BYTES),
             "kicad_cli_sha256": _hash_or_none(kicad_cli, MAX_EXECUTABLE_BYTES),
+            "kicad_python_sha256": _hash_or_none(kicad_python, MAX_EXECUTABLE_BYTES),
             "platform": platform.platform(),
             "python": platform.python_version(),
         },
@@ -895,6 +1076,11 @@ def build_report(
         "preflight": gate,
         "method": {
             "freerouting_boundary": "documented DSN/SES CLI",
+            "kicad_specctra_transaction": (
+                "harness-owned private DSN export and SES import"
+                if kicad_python is not None
+                else "not requested"
+            ),
             "source_preservation": "source bytes hashed before and after every process",
             "gpl_boundary": "released JAR process only; no FreeRouting source is copied or linked",
             "command_environment": "minimal allowlisted environment; no inherited provider tokens",
@@ -921,7 +1107,36 @@ def build_report(
     )
     freerouting_process: ProcessResult | None = None
     freerouting_ses_sha256: str | None = None
-    if gate["available"] and dsn and java and jar:
+    transaction_result: dict[str, Any] | None = None
+    harness_transaction_bound = False
+    if gate["available"] and java and jar and kicad_python is not None:
+        transaction, transaction_result = _harness_freerouting_transaction(
+            source=source,
+            java=java,
+            jar=jar,
+            kicad_python=kicad_python,
+            kicad_cli=kicad_cli,
+            timeout_seconds=timeout_seconds,
+            source_sha256=source_before,
+            cwd=ROOT,
+        )
+        report["freerouting_transaction"] = transaction
+        export_record = transaction.get("kicad_export")
+        if isinstance(export_record, dict):
+            exported_dsn = export_record.get("dsn_sha256")
+            if isinstance(exported_dsn, str):
+                report["fixture"]["dsn_sha256"] = exported_dsn
+                report["fixture"]["dsn_source_export_binding"] = {
+                    "status": "harness_bound",
+                    "workflow": "kicad_pcbnew_export_specctra_dsn",
+                }
+        router_record = transaction.get("freerouting_process")
+        if isinstance(router_record, dict):
+            report["freerouting_process"] = router_record
+        else:
+            report["freerouting_process"] = {"status": "unavailable"}
+        harness_transaction_bound = transaction.get("status") == "bound"
+    elif gate["available"] and dsn and java and jar:
         with tempfile.TemporaryDirectory(prefix="copper-mcp-freerouting-") as directory:
             workspace = Path(directory)
             ses = workspace / "freerouting.ses"
@@ -942,17 +1157,21 @@ def build_report(
         }
 
     freerouting_binding = (
-        _binding_status(
-            free_receipt,
-            source_sha256=source_before,
-            result_board=freerouting_board,
-            output_sha256=freerouting_ses_sha256
-            if freerouting_process and freerouting_process.status == "ok"
-            else None,
-            output_key="ses_sha256",
+        "harness_bound"
+        if harness_transaction_bound
+        else (
+            _binding_status(
+                free_receipt,
+                source_sha256=source_before,
+                result_board=freerouting_board,
+                output_sha256=freerouting_ses_sha256
+                if freerouting_process and freerouting_process.status == "ok"
+                else None,
+                output_key="ses_sha256",
+            )
+            if free_receipt_status == "ok"
+            else free_receipt_status
         )
-        if free_receipt_status == "ok"
-        else free_receipt_status
     )
     report["freerouting_import_binding"] = {"status": freerouting_binding}
 
@@ -1006,7 +1225,9 @@ def build_report(
             copper_elapsed,
             copper_drc_report,
         ),
-        _result_for_board(
+        transaction_result
+        if transaction_result is not None
+        else _result_for_board(
             "freerouting",
             freerouting_board,
             kicad_cli,
@@ -1022,18 +1243,20 @@ def build_report(
     self_attested_evidence = bool(
         gate["available"]
         and report["source_preserved"]
-        and freerouting_binding == "bound"
+        and freerouting_binding in {"bound", "harness_bound"}
         and copper_binding == "bound"
         and all(item.get("drc", {}).get("status") == "ok" for item in report["results"])
     )
-    # The harness has not implemented either the KiCad SES-import transaction or a constrained
-    # CopperMCP runner contract. Both receipts are user-authored assertions, so their matching
-    # hashes prove content identity only—not the causal import or candidate-producing workflow.
-    # Keep the otherwise-complete observation visible while refusing to turn it into a claim.
+    # The KiCad transaction can causally bind the FreeRouting side, but the optional CopperMCP
+    # command template remains an external, self-attested runner.  Do not turn matching DRC and
+    # hashes into a parity or completion claim until that competing runner is harness-owned too.
     report["comparison_closed"] = False
-    report["incomplete_reason"] = (
-        "self_attested_unverified" if self_attested_evidence else "incomplete_evidence"
-    )
+    if self_attested_evidence and harness_transaction_bound:
+        report["incomplete_reason"] = "copper_runner_self_attested_unverified"
+    else:
+        report["incomplete_reason"] = (
+            "self_attested_unverified" if self_attested_evidence else "incomplete_evidence"
+        )
     report["status"] = "unavailable_or_incomplete"
     canonical = json.dumps(report, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     report["run_id"] = "sha256:" + hashlib.sha256(canonical).hexdigest()
@@ -1066,6 +1289,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--kicad-cli", type=_path, default=Path(shutil.which("kicad-cli") or "kicad-cli")
+    )
+    parser.add_argument(
+        "--kicad-python",
+        type=_path,
+        help=(
+            "KiCad-bundled Python interpreter. When supplied, the harness itself exports DSN "
+            "and imports SES in a private workspace using KiCad's pcbnew binding."
+        ),
     )
     parser.add_argument("--copper-board", type=_path, help="CopperMCP's disposable result board.")
     parser.add_argument(
@@ -1114,6 +1345,7 @@ def main() -> int:
             seed=args.seed,
             timeout_seconds=args.timeout_seconds,
             release_provenance=args.freerouting_release_provenance,
+            kicad_python=args.kicad_python,
             source_drc_report=args.source_drc_report,
             copper_drc_report=args.copper_drc_report,
             freerouting_drc_report=args.freerouting_drc_report,
