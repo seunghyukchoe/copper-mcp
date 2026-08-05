@@ -55,11 +55,11 @@ from copper_mcp.routing.policy import REFERENCE_POLICY_ID
 SCRIPT_FILE = Path(__file__).resolve()
 ROOT = SCRIPT_FILE.parents[1]
 SCRIPT_PATH = SCRIPT_FILE.relative_to(ROOT)
-IMPLEMENTATION_COMMIT = "d5b6c407a7937a50dd96d25d6e706947a99bba79"
+IMPLEMENTATION_COMMIT = "cde2f9adc3a6436dbe99a20a12946cc70616f232"
 # The generated artifact is replayed from the portable harness finalized in this commit.
 # This is the typed-harness base.  Artifact provenance identifies the exact later source commit
 # through a caller-supplied value, so a generated artifact never needs to contain its own commit.
-TYPED_HARNESS_BASE_COMMIT = "b821fd2cfed06ab8e0a66062c76d598ce63211ae"
+TYPED_HARNESS_BASE_COMMIT = "62570d5bcbe4d812028f77380cef8230241a1785"
 REPLAY_MINIMUM = 10
 REPLAY_MAXIMUM = 32
 LAYER_ID = "layer:F.Cu"

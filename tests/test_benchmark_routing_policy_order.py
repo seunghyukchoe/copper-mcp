@@ -22,8 +22,8 @@ def test_policy_order_report_has_complete_candidate_only_schema() -> None:
     report = benchmark.build_report(evidence_harness_commit=TEST_EVIDENCE_HARNESS_COMMIT)
 
     assert report["schema"] == "copper-mcp/benchmark/routing-policy-order/v1"
-    assert report["implementation_commit"] == "d5b6c407a7937a50dd96d25d6e706947a99bba79"
-    assert report["typed_harness_base_commit"] == "b821fd2cfed06ab8e0a66062c76d598ce63211ae"
+    assert report["implementation_commit"] == "cde2f9adc3a6436dbe99a20a12946cc70616f232"
+    assert report["typed_harness_base_commit"] == "62570d5bcbe4d812028f77380cef8230241a1785"
     assert report["evidence_harness_commit"] == TEST_EVIDENCE_HARNESS_COMMIT
     assert report["evidence_harness_command"] == (
         "PYTHONPATH=src python3 scripts/benchmark_routing_policy_order.py --replays 10 "
