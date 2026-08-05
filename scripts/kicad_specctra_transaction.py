@@ -8,7 +8,7 @@ caller owns all path selection, byte ceilings, process lifetime, and output hash
 adapter owns no benchmark policy and emits no board contents or diagnostics.
 
 Official API reference (KiCad 10.0.5 locally):
-https://docs.kicad.org/doxygen-python-7.0/namespacepcbnew.html
+https://docs.kicad.org/doxygen-python-10.0/namespacepcbnew.html
 """
 
 from __future__ import annotations
@@ -39,7 +39,8 @@ def import_ses(source: Path, ses: Path, output: Path) -> None:
     board = _board(source)
     if not pcbnew.ImportSpecctraSES(board, str(ses)):
         raise ValueError("KiCad did not import Specctra SES")
-    pcbnew.SaveBoard(str(output), board)
+    if not pcbnew.SaveBoard(str(output), board):
+        raise ValueError("KiCad did not save the imported disposable board")
 
 
 def parse_args() -> argparse.Namespace:

@@ -19,9 +19,11 @@ or applying a session itself:
 
 The repository's adapter is intentionally a tiny command dispatcher, not a DSN or SES parser.
 It copies no FreeRouting source or GPL code, accepts no command template, and returns no board
-contents.  The outer harness keeps fixed argv, a minimal child environment, file/input/output
-limits, bounded capture, process-group termination, source-preservation hashing, and redacted
-records.
+contents.  It checks every boolean KiCad binding return, including `SaveBoard`. The outer harness
+keeps fixed argv, a minimal child environment, file/input/output limits, bounded capture,
+process-group termination, source-preservation hashing before and after both KiCad operations,
+and redacted records. KiCad DRC runs with its child CWD, `HOME`, `TMPDIR`, temporary report, and
+input board all below the same private workspace.
 
 ## Official interface evidence
 
@@ -31,8 +33,9 @@ records.
   adds routing only: [KiCad PCB Editor, Specctra session import](https://docs.kicad.org/10.0/en/pcbnew/pcbnew.html#specctra-session-import).
 - The same version documents DSN as an export for third-party autorouters with no configurable
   exporter options: [KiCad PCB Editor, Specctra DSN](https://docs.kicad.org/10.0/en/pcbnew/pcbnew.html#specctra-dsn).
-- KiCad's generated API documents `ExportSpecctraDSN` in its `pcbnew` namespace:
-  [KiCad Python API reference](https://docs.kicad.org/doxygen-python-7.0/namespacepcbnew.html).
+- KiCad 10.0's generated API documents `ExportSpecctraDSN`, `ImportSpecctraSES`, and `SaveBoard`
+  in its `pcbnew` namespace: [KiCad 10 Python API reference](https://docs.kicad.org/doxygen-python-10.0/namespacepcbnew.html)
+  and [binding file reference](https://docs.kicad.org/doxygen-python-10.0/pcbnew_8py.html).
 - KiCad's source API describes `DSN::ImportSpecctraSession(BOARD*, filename)` as the helper that
   imports an SES into a board, then clears/rebuilds connectivity:
   [KiCad doxygen source](https://docs.kicad.org/doxygen/specctra__import_8cpp_source.html).
@@ -60,11 +63,12 @@ this new code does not rewrite that artifact.
 
 ## What this closes—and what it does not
 
-With `--kicad-python`, a successful report can now mark the **FreeRouting side**
-`harness_bound`: original source digest equals the private copy, the harness produced and hashed
-the DSN, the isolated FreeRouting process produced and hashed the SES, the fixed KiCad import
-adapter produced and hashed the board, and the harness derived its DRC/metric result from that
-board. A caller-supplied DSN, imported board, or import receipt cannot substitute for this chain.
+When a future aggregate-quota provider admits execution, the **FreeRouting side** may mark
+`harness_bound` only if original source digest equals the private copies, the harness produced and
+hashed the DSN, the isolated FreeRouting process produced and hashed the SES, the fixed KiCad
+import adapter produced and hashed the board, and the harness derived its DRC/metric result from
+that board. A caller-supplied DSN, imported board, or import receipt cannot substitute for this
+chain.
 
 This is intentionally not a comparison closure. The competing CopperMCP command-template result
 is still an external, self-attested runner contract; a successful FreeRouting transaction therefore
@@ -73,3 +77,40 @@ reports `comparison_closed: false` and
 It also does not establish parity, throughput, broad-board routing, sandbox containment, electrical
 behavior, fabrication readiness, or an advantage over FreeRouting. A two-pad fixture is useful only
 as a transaction smoke test.
+
+## Aggregate-workspace containment gate
+
+The first transaction implementation limited captured stdout/stderr but did not prevent a child
+from writing many individual files. The revised harness now sets POSIX `RLIMIT_FSIZE` before every
+external transaction process executes, with a per-file ceiling at or below the DSN/SES/board/DRC
+output limit. That is preventive per-file containment, not an aggregate directory quota. The Linux
+interface documents `RLIMIT_FSIZE` as a maximum size for files created by the process:
+[getrlimit(2)](https://man7.org/linux/man-pages/man2/getrlimit.2.html).
+
+For aggregate containment, Linux can in principle use a separately mounted tmpfs whose `size=`
+option limits total bytes: [Linux tmpfs documentation](https://www.kernel.org/doc/html/latest/filesystems/tmpfs.html).
+That requires a verified private mount/user-namespace or service-manager boundary. macOS APFS
+volume quotas likewise require external volume administration rather than a portable per-directory
+unprivileged API. This repository does not yet establish either mechanism. A directory-size check
+after a process exits would detect excess only after it occurred, so it is not treated as containment.
+
+On the current macOS host, a concrete `sandbox-exec` probe showed the finite-write half can work:
+with the output file precreated, `file-write* (literal output)` and a broad read rule, KiCad 10.0.5
+exported a 1,374-byte DSN. The same exact-write profile exported a 1,357-byte DSN on a disposable
+16 MB HFS+ image; the image reported 15,952 KiB free and detached cleanly. Thus a finite output
+set plus a fixed-capacity image is a plausible aggregate design, not a substitute for a read policy.
+
+The defensible runtime-read half did not pass. A deny-by-default profile allowing only KiCad's app
+bundle, `/System`, `/usr/lib`, `/usr/share`, `/Library`, `/private/etc`, `/private/var/db`,
+`/private/var/folders`, `/dev`, and the private workspace left the precreated output at zero bytes
+while the binding returned success. Broad `/` read made export work, but would expose unrelated host
+paths to a compromised parser and is rejected. Java is absent on this host, so the corresponding
+`-XX:-UsePerfData` and private `java.io.tmpdir` exact-write probe could not run.
+
+Accordingly, the current **Darwin** implementation fails closed before it launches KiCad, Java, or
+DRC; a platform-specific future provider must prove both aggregate quota and runtime-read allowlist.
+Linux is also refused until it supplies a verified private tmpfs/mount-namespace or cgroup provider.
+The fixed adapter and unit tests remain implementation evidence, but no new end-to-end routing run
+or sandbox claim is made. This is deliberately stricter than the preceding `harness_bound`
+aspiration: a result cannot receive that status until both aggregate storage and the separate
+CopperMCP runner boundary are real.
