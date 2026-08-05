@@ -8,6 +8,14 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added a read-only live KiCad IPC fidelity oracle. When launched by a KiCad plugin with the
+  instance socket and token, it binds one confirmed live serialization to Board IR and Circuit
+  Scene through redacted digest equality evidence. Missing plugin credentials produce a canonical
+  non-failing capability skip before process settings are resolved; endpoint, token, timeout,
+  session, version, and generic configuration failures remain distinct redacted results. One
+  cooperative deadline spans capture and both conversion stages. This adds no MCP action, editor
+  mutation, DRC, routing, placement, apply, or live-editor success claim.
+
 - Added a bounded, in-memory routing-task handle broker and a runtime MCP Tasks compatibility
   probe. The reference environment observed `mcp 2.0.0`, but the supported dependency range
   remains `<3`; the observed runtime lacks the current Tasks wire/dispatcher contract and

@@ -42,10 +42,27 @@ mismatch, parser/scene refusal, and a generic server-unreachable-or-busy conditi
 is intentionally conservative: the synchronous API cannot safely distinguish a disabled server,
 a stale socket, or an editor blocked by user work from a read-only client.
 
-In CI and ordinary terminal sessions without both plugin variables, the result is deterministic
-`skipped` rather than a network attempt or a claim about the workstation's editor. Tests use a
-fake official-client seam to prove exact digest equality, client closure, no mutating call, and
-redaction. A real GUI result remains required before claiming real-editor fidelity.
+Credential presence is checked before CopperMCP process settings are resolved. Therefore a CI or
+ordinary terminal session without both plugin variables returns the deterministic `skipped`
+result even when unrelated `COPPER_MCP_*` configuration is invalid. With credentials, the oracle
+uses one monotonic deadline for IPC capture, Board IR conversion, and Circuit Scene projection;
+it checks before and after each conversion stage and returns a fixed deadline-exhausted result
+without beginning later work. The synchronous calls and conversions remain cooperative rather
+than hard-preemptible.
+
+Tests use a fake official-client seam to prove exact digest equality, client closure, no mutating
+call, secret/path redaction, partial-credential outcomes, configuration classification, and
+post-capture deadline refusal. A real GUI result remains required before claiming real-editor
+fidelity.
+
+## Workstation operator/configuration evidence
+
+The following is a separate **operator/configuration inspection record**, not runtime oracle
+output and not a live-editor fidelity result. On 2026-08-05, the workstation reported KiCad
+`10.0.5`; the inspected KiCad common configuration had `api.enable_server=false`; the root
+Python environment had no importable `kipy`; and the standard user plugin discovery locations
+contained no plugin manifests. This explains why the normal shell result is the credential-absent
+capability skip. It contains no socket value, token, board content, or private plugin path.
 
 ## Non-claims
 
