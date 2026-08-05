@@ -1035,6 +1035,15 @@ are the audit copies for the original run IDs.
 | Replay guard | The detached clean-worktree regression now proves, using only local Git ancestry, that the artifact source is an ancestor of the checkout before cloning or checkout. It does not fetch, skip, xfail, or relax the clean-source byte replay. |
 | Interpretation | This is a provenance and CI-availability correction only. It adds no fixture, capability, quality, KiCad, network, model, electrical, fabrication, or hardware claim. |
 
+#### B-076 — recorded-link target corrections for B-036 and B-057
+
+| Field | Recorded evidence |
+|---|---|
+| Correction | Two Markdown link *targets* recorded in this ledger do not resolve, and this entry records where each was meant to point. B-036's `Dataset` link target `../../audio/fixtures/negotiated-crossing-v1.kicad_pcb` omits the `benchmarks/` path segment; the fixture it names is at [`benchmarks/audio/fixtures/negotiated-crossing-v1.kicad_pcb`](../../benchmarks/audio/fixtures/negotiated-crossing-v1.kicad_pcb). B-057's `Correction` link target `HANDOFF-CODEX.md` resolves to `docs/ledgers/HANDOFF-CODEX.md`, a path that has never existed here; the document it names is the user-owned untracked `docs/HANDOFF-CODEX.md`, which is deliberately not in the repository and therefore has no correct in-repository target. |
+| Scope | B-036 and B-057 are unchanged, byte for byte. Nothing in this ledger's history was rewritten: this is a new dated entry recorded on 2026-08-06 under issue #70 (repository professionalization), which is the only way a correction is recorded here. No run ID, digest, fixture name, metric, source commit, interpretation, or displayed text changes anywhere. |
+| Checker exemption | `scripts/check_doc_links.py` carries these two targets as its only exemptions, each keyed to the exact document and target string and each naming this entry. The exemption list is closed: a target is exempt only while it appears there, an exemption that stops matching a real link fails the check, and no new broken link can be added without editing the checker. |
+| Interpretation | This is a documentation-navigability record with no measurement, capability, KiCad, electrical, fabrication, or hardware claim. It exists so a reader who follows a stale target learns where it pointed, without the ledger's append-only history being edited to hide that it was stale. |
+
 #### B-076 — ordered-layer internal proposal oracle
 
 | Field | Recorded evidence |

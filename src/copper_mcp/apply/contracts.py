@@ -1,4 +1,16 @@
-"""Request, result, and failure vocabulary for candidate application."""
+"""Request, result, and failure vocabulary for candidate application.
+
+This module owns the closed vocabulary the only mutating operation in the project speaks: what an
+apply request must carry, what a result may report, and the bounded limits on manifests and
+tokens. The failure vocabulary is deliberately closed and each member deliberately distinct —
+`apply_disabled`, a lockfile refusal, a stale-revision refusal, and `applied_but_unverified` are
+separate outcomes precisely so a caller cannot collapse "we refused" into "nothing happened" or
+read a post-write verification failure as success.
+
+It refuses to act. Nothing here reads a board, validates a candidate, checks the operator gate,
+verifies a token, splices bytes, or writes a file; those live in the engine and service beside
+it. These are the words, not the deed.
+"""
 
 from __future__ import annotations
 

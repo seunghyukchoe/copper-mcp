@@ -1,6 +1,8 @@
 # ADR-0036: Bind the layered search oracle to a narrow Board IR proposal contract
 
-Date: 2026-08-04
+- Status: Accepted
+- Date: 2026-08-04
+- Related: [D-052](../ledgers/decision-ledger.md), [D-053](../ledgers/decision-ledger.md)
 
 ## Context
 

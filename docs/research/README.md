@@ -6,6 +6,21 @@ This package surveys current PCB autorouters and turns the evidence into an
 implementation direction for CopperMCP. It is a research snapshot, not a claim
 that every product feature, price, or repository release will remain current.
 
+## How to read this directory
+
+Each document is a **dated snapshot of external evidence**, not a maintained summary. It records
+what was true, and what was licensable, when it was gathered — and it is not revised as the code
+moves. Every entry below therefore states what the survey covers and carries its own
+`Research date` or `Reviewed` line near the top; check that line before relying on a claim.
+
+These documents exist because a major engineering slice starts from a current-literature pass with
+licences and per-item implications, cited from that slice's ADR. That is how the licensing landmines
+stay out of the tree: freerouting is GPL-3.0, GeoSteiner and FLUTE carry non-commercial
+encumbrances, and REST uses a non-OSI licence. None may become dependencies.
+
+When adding a document, add it to the list below in the same sentence form — *what it covers*, and
+*what it refuses to claim*.
+
 ## Documents
 
 - [Autorouter landscape](./autorouter-landscape.md) compares open-source and
@@ -58,6 +73,15 @@ that every product feature, price, or repository release will remain current.
   observation contract and its disclosure limits.
 - [FreeRouting real-run evidence](./freerouting-real-run-v2.md) records the first public,
   KiCad-DRC-gated DSN/SES run while retaining the harness's no-parity/no-closure boundary.
+- [Harness-owned KiCad Specctra transaction](./freerouting-harness-owned-kicad-transaction.md)
+  records the documented DSN/SES export-import chain the comparison harness can own through
+  KiCad-bundled Python, without CopperMCP parsing or applying a session itself.
+- [KiCad orthogonal courtyard topology](./kicad-orthogonal-courtyard-topology.md) grounds ADR-0065's
+  exact decimal-to-nanometre courtyard chain reconstruction in the official S-expression
+  specification, copying no external code.
+- [NE5532-class audio routing fixture](./ne5532-audio-routing-fixture.md) records the public
+  datasheet pin roles and bypass guidance behind the CopperMCP-original Apache-2.0 fixture, which
+  reproduces abstract roles rather than any third-party schematic, artwork, or values.
 - [Circuit Scene to route action closure](./scene-action-closure-references.md) reproduces the
   opaque-reference integration failure, defines the revision-bound MCP contract, and records its
   exact hidden-name equivalence oracle and limitations.

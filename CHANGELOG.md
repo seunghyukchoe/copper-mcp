@@ -6,6 +6,58 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Restructured repository documentation for a first-time reader. Added `docs/README.md` as the
+  documentation index, moved the two handoff documents into `docs/handoff/` as `project-state.md`
+  and `codex-onboarding.md` behind a `docs/handoff/README.md` that distinguishes them, and moved
+  the full CLI and MCP walkthrough out of `README.md` into a new `docs/usage.md`. `README.md` now
+  answers what CopperMCP is, why it exists, how to try it, what it does today, and — in one
+  consolidated section — what it does not claim. No capability text was deleted; the explicit
+  non-claims are now gathered rather than scattered. **No behavior changed.**
+
+- Completed and corrected the ADR index: 16 records (0036–0047, 0060–0063) were missing from
+  `docs/adr/README.md`, which is now a table carrying every number, title, and status, plus a
+  tombstone explaining the deliberate ADR-0027 gap and a thematic reading order. Added the absent
+  `Status: Accepted` line to ADR-0035 and ADR-0036, matching their accepted decision-ledger rows.
+
+- Documented how ledger IDs are allocated in `docs/ledgers/README.md`: allocate at merge rather
+  than in advance, never reuse a number, record corrections as new entries, and reuse a benchmark's
+  ID only for a replay of that benchmark. Nothing validated these IDs before, and nothing does now;
+  the convention is enforced by review.
+
+- Indexed the three research documents that were absent from `docs/research/README.md`, and stated
+  in that index that each survey is a dated evidence snapshot rather than a maintained summary.
+
+- Refreshed `CONTRIBUTING.md` and `GOVERNANCE.md` to match how the project actually works: the
+  per-target quality gate, ledger and ADR ID allocation, required conversation resolution, the
+  dedicated adversarial review for any surface that writes to a user's file, and the append-only
+  ledger record with its stated non-properties.
+
+- Expanded the module docstrings on `security.py`, `tools.py`, `models.py`,
+  `routing/contracts.py`, and `apply/contracts.py` to state what each module owns and what it
+  refuses, matching the convention the rest of `src/copper_mcp/` already follows. Documentation
+  only; no code, signature, or export changed.
+
+- Corrected three stale capability claims in the restructured documentation, each checked against
+  current code rather than against the previous text. `README.md` said route apply was the only
+  mutating operation; it now names both `apply_candidate` and `apply_placement_candidate`, each
+  default-off behind `COPPER_MCP_ALLOW_APPLY` with its own single-use token in its own operation
+  domain, and states placement apply's narrower admitted subset. `docs/usage.md` said courtyard
+  overlap was reported as `not_modelled`; the contract has evaluated it since the bounded same-side
+  orthogonal evaluator landed, so the guide now describes what is evaluated exactly and what remains
+  open, and gained a section for the MCP-only placement apply. `README.md`'s non-claims section and
+  `docs/handoff/project-state.md` carried the same two stale claims and were corrected with them.
+  **Documentation only; no behavior, contract, or diagnostic changed.**
+
+### Added
+
+- `scripts/check_doc_links.py` verifies that every relative Markdown link in tracked documentation
+  resolves to a real path. It is wired into `make lint` and CI, and passes on the current tree. It
+  deliberately does not fetch network URLs or validate heading anchors. It carries one closed
+  exemption list for unresolvable targets inside append-only ledger history, which may not be
+  rewritten; an exemption that matches no real link is itself a failure.
+
 ### Added
 
 - Internal ordered-layer route proposals now support two through eight signal layers with bounded,
@@ -37,6 +89,32 @@ All notable changes are documented here. The format follows
   serializer always has.
 
 ### Fixed
+
+- Recorded the corrected targets for two unresolvable Markdown links in
+  `docs/ledgers/benchmark-ledger.md` (B-036's dataset path is missing its `benchmarks/` segment;
+  B-057 links to a path that never existed in the repository). The historical rows are unchanged;
+  the corrections are recorded as append-only entry B-076, and `scripts/check_doc_links.py` reads
+  that entry's exemption list rather than requiring history to be rewritten.
+
+- Route-bundle preview now refuses a seed whose derived per-net value would leave the supported
+  integer range. The request boundary and the published JSON Schema both reserve headroom for the
+  largest reachable reference index, so a schema-valid request can no longer escape the service as
+  an untyped error instead of a typed refusal.
+
+- An expired route-bundle time budget is now reported as budget exhaustion rather than as a
+  deterministic-replay mismatch. The two negotiation runs share one deadline, so an expiry between
+  them is a resource outcome; the replay-mismatch diagnostic is now reserved for genuine structural
+  differences.
+
+- Restored `DEVNULL` for the bounded KiCad DRC child's stdout and stderr, reverting an unrelated
+  change to never-read on-disk capture files. SEC-113's zero-byte parent capture budget is the
+  governing mitigation, and the capture had reintroduced a file-size failure mode for a chatty but
+  valid KiCad run. Report bounding, timeout, private child environment, and aggregate evidence are
+  unchanged.
+
+- Rebound the route-bundle benchmark artifact to released CopperMCP `0.5.0`. Its provenance now
+  records the source version explicitly, while retaining exact script, fixture, combined-derivative,
+  DRC-context, and self-digest bindings.
 
 - Route-bundle preview now refuses a seed whose derived per-net value would leave the supported
   integer range. The request boundary and the published JSON Schema both reserve headroom for the

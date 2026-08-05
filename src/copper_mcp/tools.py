@@ -1,4 +1,16 @@
-"""Pure application services shared by the CLI and MCP gateway."""
+"""Pure application services shared by the CLI and MCP gateway.
+
+This module owns the application layer: the one implementation of each capability that both
+surfaces call, so the CLI and MCP cannot drift into behaving differently. "Pure" here means each
+service takes validated inputs and returns typed results without owning a transport, a session,
+or a process — not that it performs no I/O; board reads and bounded KiCad invocations happen
+here, always through `security` and the request boundary.
+
+It refuses to be a transport. Nothing here parses MCP arguments or CLI flags, formats output for
+a human, holds client state, or decides authorization policy; the gateway and CLI own those and
+hand this module validated requests. Nothing here mutates a board either — the mutating apply
+path lives in `apply/` behind its own operator gate and token.
+"""
 
 from __future__ import annotations
 
