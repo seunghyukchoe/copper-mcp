@@ -14,9 +14,20 @@ in the pull request that lands the ADR, not before, so two concurrent branches c
 one. See the [ledger ID convention](../ledgers/README.md#allocating-ids) for the same rule applied to
 ledger entries.
 
-**Known gap:** there is no ADR-0027. The number was allocated on a branch whose ADR never landed. It
-is deliberately left unused rather than recycled, so that any external reference to ADR-0027 resolves
-to nothing rather than to an unrelated decision.
+`scripts/check_adr_numbers.py` enforces this mechanically, in `make lint` and in CI. It fails the
+build when two files claim one number, when an ADR's own `# ADR-NNNN:` heading disagrees with its
+filename, when an ADR is missing from the index below or indexed twice, when an index row points at
+a file that does not exist, and when the advertised next unused number above is not the highest
+allocated plus one. Gaps are reported as information and never fail. Keeping the next number on one
+line is deliberate: two branches that both allocate it now conflict textually, so Git refuses the
+merge instead of accepting it.
+
+**Known gaps:** neither ADR-0027 nor ADR-0067 is present here. ADR-0027 is permanently unused: the
+number was allocated on a branch whose ADR never landed, and it is deliberately left unused rather
+than recycled, so that any external reference to it resolves to nothing rather than to an unrelated
+decision. ADR-0067 is *allocated but unmerged* — it is the renumbering of one of the three
+concurrent branches that each created an `ADR-0066`, and it is claimed by an open branch. Either
+way the number is spent: do not take 0027 or 0067 for a new record.
 
 ## Status vocabulary
 
@@ -59,7 +70,7 @@ never silently widens it.
 | [0024](0024-placement-intent-and-legalization.md) | Typed placement intent, validated by a deterministic legalizer | Accepted |
 | [0025](0025-file-level-candidate-apply.md) | Apply a route candidate by splicing bytes, not by rewriting a board | Accepted (mutating path added 2026-08-04) |
 | [0026](0026-first-class-footprints-in-board-ir.md) | Make footprints revision-bound Board IR objects before moving them | Accepted |
-| — | *0027 is deliberately unused; see **Known gap** above.* | — |
+| — | *0027 is deliberately unused; see **Known gaps** above.* | — |
 | [0028](0028-revision-bound-scene-route-references.md) | Make Circuit Scene net references directly actionable for routing | Accepted |
 | [0029](0029-read-only-kicad-ipc-observer.md) | Add a redacted, read-only KiCad IPC observer | Accepted |
 | [0030](0030-live-ipc-circuit-scene-binding.md) | Bind a bounded KiCad IPC snapshot to Circuit Scene | Accepted |
@@ -99,8 +110,11 @@ never silently widens it.
 | [0064](0064-policy-bound-initial-negotiated-order.md) | Bind a closed routing-policy decision to the initial negotiated order | Accepted |
 | [0065](0065-orthogonal-courtyard-chains.md) | Observe and legalize bounded orthogonal courtyard chains | Accepted |
 | [0066](0066-atomic-route-bundle-preview.md) | Publish a composed route bundle only as one all-or-nothing read-only plan | Accepted |
+| — | *0067 is allocated but unmerged; see **Known gaps** above.* | — |
+| [0068](0068-bounded-ordered-layer-routing.md) | Keep ordered-layer routing bounded and non-serializing | Accepted |
 
-Sixty-six numbers, sixty-five records, no duplicates.
+Sixty-eight numbers, sixty-six records, no duplicates — and `scripts/check_adr_numbers.py` now
+proves that last clause on every run rather than asserting it.
 
 ## Reading order
 
