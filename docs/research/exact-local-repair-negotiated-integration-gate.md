@@ -2,11 +2,11 @@
 
 ## Status
 
-**Declined at the current public-contract boundary — 2026-08-05.** This note records a
-predeclared integration experiment rather than an implementation. The standalone local operator
-remains useful and independently tested, but publishing its geometry through the current
-negotiated coordinator would bypass an acceptance property that the repository treats as
-mandatory.
+**Negotiated integration remains declined at the current public-contract boundary — 2026-08-05.**
+This note records a predeclared integration experiment. The standalone local operator remains
+useful and independently tested. An internal, non-publishing Board-IR candidate-path acceptance
+gate now exists as a prerequisite, but publishing local-repair geometry through the current
+negotiated coordinator would still bypass other mandatory acceptance properties.
 
 ## Predeclared fixture and measurement
 
@@ -100,22 +100,28 @@ matching `RouteRequest`, and a Board IR snapshot; it publishes only a typed, red
 result. It does not construct a candidate, expose an MCP tool, admit a policy or model, serialize
 KiCad, mutate a board, or replace the existing candidate-pair physical-clearance gate.
 
-The validator reconstructs current exact request/candidate values, verifies the candidate content
-digest, then invokes the reference router's exact integer Board-IR preparation and checks every
-decompressed lattice edge with its existing obstacle predicate. The independent acceptance
-evidence therefore covers the current single-layer, two-pin reference subset: exact endpoint/pad
-identity, revision, grid, net class width, track/pad/keepout/zone clearance authority, and the
-explicit unsupported-geometry refusals already embodied by that subset. Candidate vias and
-multilayer geometry are refused rather than inferred from a two-dimensional path.
+The validator first caps raw candidate text and path cardinality before reconstructing or hashing
+it, then reconstructs current exact request/candidate values, verifies the candidate content
+digest, and invokes the reference router's exact integer Board-IR preparation and checks every
+decompressed lattice edge with its existing obstacle predicate. Its local-repair path window is
+capped at 4,096 unit edges. Reconstruction and validation observe cancellation/deadline hooks;
+the validator checks one final time before publishing acceptance. The independent acceptance
+evidence therefore covers the current single-layer, two-pin reference subset: exact revision,
+grid, net class width, track/pad/keepout/zone clearance authority, and the explicit
+unsupported-geometry refusals already embodied by that subset. Endpoints must be legal current
+source/target lattice nodes, so a path may attach to existing same-net copper but cannot nominate
+a foreign-net endpoint. Candidate vias and multilayer geometry are refused rather than inferred
+from a two-dimensional path.
 
 The fixture is predeclared as `candidate-path-validator-detour-v1` in
 `tests/test_routing_candidate_path_validator.py`: a 1 mm grid, 200 um track, 100 um clearance,
 and a foreign vertical 200 um track from `(5,3)` mm to `(5,7)` mm. The exact 16-edge lower detour
 must be accepted identically in ten replays; a direct crossing must be rejected at its fourth
-unit edge. Acceptance additionally requires distinct typed outcomes for stale revision and an
-exhausted path-edge cap, plus atomic cancellation and a coordinator-owned cooperative deadline
-check before geometry work begins. These are a path-acceptance prerequisite, not a claim of a
-negotiated-routing improvement.
+unit edge. The fixture additionally exercises a valid same-net attachment, foreign endpoint
+refusal, zero-length and repeated-vertex refusal, preflight refusal of an oversized raw path
+before identity work, and cancellation both before geometry and just before acceptance. Acceptance
+additionally requires distinct typed outcomes for stale revision and an exhausted path-edge cap.
+These are a path-acceptance prerequisite, not a claim of a negotiated-routing improvement.
 
 The coordinator must account the validator's path-edge and obstacle work in a future independent
 envelope before it can bind a local route to a candidate. The current coordinator has not been

@@ -35,8 +35,11 @@ from copper_mcp.routing.contracts import (
 )
 
 CancellationCheck = Callable[[], bool]
-_MAX_EDGE_CHECKS: Final = 500_000
+_MAX_EDGE_CHECKS: Final = 4_096
 _MAX_OBSTACLE_CHECKS: Final = 10_000_000
+_CANCELLATION_CADENCE: Final = 64
+_MAX_RAW_TEXT_LENGTH: Final = 512
+_MAX_RAW_INTEGER: Final = (1 << 53) - 1
 
 
 class CandidatePathValidationFailure(StrEnum):
@@ -160,7 +163,9 @@ def _canonical_settings(value: object) -> AStarSettings | None:
         return None
 
 
-def _canonical_request(value: object) -> RouteRequest | None:
+def _canonical_request(value: object, stop: _StopChecks) -> RouteRequest | None:
+    if stop.check() is not None:
+        return None
     if type(value) is not RouteRequest:
         return None
     settings = _canonical_settings(value.settings)
@@ -178,7 +183,108 @@ def _canonical_request(value: object) -> RouteRequest | None:
         return None
 
 
-def _canonical_candidate(value: object) -> RouteCandidate | None:
+def _raw_text(value: object) -> bool:
+    return type(value) is str and 1 <= len(value) <= _MAX_RAW_TEXT_LENGTH
+
+
+def _raw_integer(value: object) -> bool:
+    return type(value) is int and 0 <= value <= _MAX_RAW_INTEGER
+
+
+def _raw_point(value: object) -> bool:
+    return (
+        type(value) is PointNM
+        and type(value.x) is int
+        and -_MAX_RAW_INTEGER <= value.x <= _MAX_RAW_INTEGER
+        and type(value.y) is int
+        and -_MAX_RAW_INTEGER <= value.y <= _MAX_RAW_INTEGER
+    )
+
+
+def _preflight_candidate(
+    value: object,
+    *,
+    max_path_edges: int,
+    stop: _StopChecks,
+) -> CandidatePathValidationFailure | None:
+    """Reject oversized/type-confused candidates before reconstruction or hashing.
+
+    The cap matches the local exact-repair window ceiling. It intentionally constrains this
+    integration prerequisite more tightly than the general A* router so adversarial geometry
+    cannot turn identity verification into an unmetered large-input operation.
+    """
+
+    if type(value) is not RouteCandidate:
+        return CandidatePathValidationFailure.INVALID_CANDIDATE
+    try:
+        if stop.check() is not None:
+            return stop.observed
+        if (
+            not _raw_text(value.candidate_id)
+            or not _raw_text(value.base_revision)
+            or not _raw_text(value.start_pad_id)
+            or not _raw_text(value.end_pad_id)
+            or not _raw_text(value.router_version)
+            or not _raw_text(value.policy)
+            or not _raw_text(value.ordering_policy)
+            or not _raw_integer(value.seed)
+            or not _raw_integer(value.pad_count)
+            or type(value.patch) is not RoutePatch
+            or type(value.cost) is not RouteCost
+            or type(value.metrics) is not RouteMetrics
+            or type(value.settings) is not AStarSettings
+        ):
+            return CandidatePathValidationFailure.INVALID_CANDIDATE
+        patch = value.patch
+        if (
+            not _raw_text(patch.net_id)
+            or not _raw_text(patch.layer_id)
+            or not _raw_integer(patch.width_nm)
+            or type(patch.paths) is not tuple
+            or len(patch.paths) != 1
+            or type(patch.paths[0]) is not RoutePath
+            or type(patch.paths[0].vertices) is not tuple
+        ):
+            return CandidatePathValidationFailure.INVALID_CANDIDATE
+        vertices = patch.paths[0].vertices
+        if not 2 <= len(vertices) <= max_path_edges + 1:
+            return CandidatePathValidationFailure.BUDGET_EXHAUSTED
+        for index, point in enumerate(vertices):
+            if index % _CANCELLATION_CADENCE == 0 and stop.check() is not None:
+                return stop.observed
+            if not _raw_point(point):
+                return CandidatePathValidationFailure.INVALID_CANDIDATE
+        scalars = (
+            value.cost.length_nm,
+            value.cost.bend_count,
+            value.cost.bend_cost_nm,
+            value.cost.proximity_steps,
+            value.cost.proximity_cost_nm,
+            value.cost.via_cost_nm,
+            value.cost.total_cost_nm,
+            value.metrics.hard_internal_violations,
+            value.metrics.unrouted_connections,
+            value.metrics.vias,
+            value.metrics.wire_length_nm,
+            value.metrics.expanded_states,
+            value.metrics.peak_frontier_states,
+            value.metrics.obstacle_checks,
+            value.settings.grid_step_nm,
+            value.settings.bend_penalty_nm,
+            value.settings.proximity_penalty_nm,
+            value.settings.max_grid_nodes,
+            value.settings.max_expansions,
+            value.settings.max_obstacles,
+            value.settings.max_obstacle_checks,
+        )
+        if not all(_raw_integer(item) for item in scalars):
+            return CandidatePathValidationFailure.INVALID_CANDIDATE
+    except Exception:
+        return CandidatePathValidationFailure.INVALID_CANDIDATE
+    return stop.check()
+
+
+def _canonical_candidate(value: object, stop: _StopChecks) -> RouteCandidate | None:
     """Reconstruct a candidate before trusting any frozen dataclass field.
 
     This is a type/shape boundary, not an origin claim: an equal, valid current value is treated as
@@ -186,32 +292,34 @@ def _canonical_candidate(value: object) -> RouteCandidate | None:
     validation below.
     """
 
-    if type(value) is not RouteCandidate:
+    if stop.check() is not None or type(value) is not RouteCandidate:
         return None
     try:
         if type(value.patch) is not RoutePatch or type(value.cost) is not RouteCost:
             return None
         if type(value.metrics) is not RouteMetrics or type(value.settings) is not AStarSettings:
             return None
-        paths: list[RoutePath] = []
-        if type(value.patch.paths) is not tuple:
+        if (
+            type(value.patch.paths) is not tuple
+            or len(value.patch.paths) != 1
+            or type(value.patch.paths[0]) is not RoutePath
+            or type(value.patch.paths[0].vertices) is not tuple
+        ):
             return None
-        for supplied_path in value.patch.paths:
-            if type(supplied_path) is not RoutePath or type(supplied_path.vertices) is not tuple:
+        vertices: list[PointNM] = []
+        for index, point in enumerate(value.patch.paths[0].vertices):
+            if index % _CANCELLATION_CADENCE == 0 and stop.check() is not None:
                 return None
-            vertices = tuple(
-                PointNM(point.x, point.y)
-                for point in supplied_path.vertices
-                if type(point) is PointNM
-            )
-            if len(vertices) != len(supplied_path.vertices):
+            if type(point) is not PointNM:
                 return None
-            paths.append(RoutePath(vertices=vertices))
+            vertices.append(PointNM(point.x, point.y))
+        if stop.check() is not None:
+            return None
         patch = RoutePatch(
             net_id=value.patch.net_id,
             layer_id=value.patch.layer_id,
             width_nm=value.patch.width_nm,
-            paths=tuple(paths),
+            paths=(RoutePath(vertices=tuple(vertices)),),
         )
         cost = RouteCost(
             length_nm=value.cost.length_nm,
@@ -249,7 +357,11 @@ def _canonical_candidate(value: object) -> RouteCandidate | None:
             pad_count=value.pad_count,
             ordering_policy=value.ordering_policy,
         )
+        if stop.check() is not None:
+            return None
         verify_candidate_id(candidate)
+        if stop.check() is not None:
+            return None
     except Exception:
         return None
     return candidate
@@ -307,22 +419,16 @@ def validate_candidate_path(
     closed and publishes no geometry.
     """
 
-    checked_request = _canonical_request(request)
-    checked_candidate = _canonical_candidate(candidate)
     if (
         type(snapshot) is not BoardIRSnapshot
-        or checked_request is None
-        or checked_candidate is None
         or (cancelled is not None and not callable(cancelled))
         or (deadline_check is not None and not callable(deadline_check))
         or isinstance(max_obstacle_checks, bool)
         or not isinstance(max_obstacle_checks, int)
-        or not 1
-        <= max_obstacle_checks
-        <= min(checked_request.settings.max_obstacle_checks, _MAX_OBSTACLE_CHECKS)
+        or not 1 <= max_obstacle_checks <= _MAX_OBSTACLE_CHECKS
         or isinstance(max_path_edges, bool)
         or not isinstance(max_path_edges, int)
-        or not 1 <= max_path_edges <= min(checked_request.settings.max_grid_nodes, _MAX_EDGE_CHECKS)
+        or not 1 <= max_path_edges <= _MAX_EDGE_CHECKS
     ):
         return _result(None, 0, CandidatePathValidationFailure.INVALID_REQUEST)
 
@@ -330,6 +436,34 @@ def validate_candidate_path(
     stopped = stop.check()
     if stopped is not None:
         return _result(None, 0, stopped)
+
+    checked_request = _canonical_request(request, stop)
+    if checked_request is None:
+        return _result(
+            None,
+            0,
+            stop.observed or CandidatePathValidationFailure.INVALID_REQUEST,
+        )
+    if (
+        max_obstacle_checks > checked_request.settings.max_obstacle_checks
+        or max_path_edges > checked_request.settings.max_grid_nodes
+    ):
+        return _result(None, 0, CandidatePathValidationFailure.INVALID_REQUEST)
+
+    raw_candidate_failure = _preflight_candidate(
+        candidate,
+        max_path_edges=max_path_edges,
+        stop=stop,
+    )
+    if raw_candidate_failure is not None:
+        return _result(None, 0, raw_candidate_failure)
+    checked_candidate = _canonical_candidate(candidate, stop)
+    if checked_candidate is None:
+        return _result(
+            None,
+            0,
+            stop.observed or CandidatePathValidationFailure.INVALID_CANDIDATE,
+        )
 
     bounded_request = replace(
         checked_request,
@@ -361,23 +495,30 @@ def validate_candidate_path(
         return _result(work, 0, CandidatePathValidationFailure.INVALID_CANDIDATE)
 
     path = checked_candidate.patch.paths[0]
-    if path.vertices[0] != problem.start_pad.center or path.vertices[-1] != problem.end_pad.center:
-        return _result(work, 0, CandidatePathValidationFailure.INVALID_CANDIDATE)
     step = checked_request.settings.grid_step_nm
     origin = problem.start_pad.center
-    if any(
-        (point.x - origin.x) % step != 0 or (point.y - origin.y) % step != 0
-        for point in path.vertices
-    ):
-        return _result(work, 0, CandidatePathValidationFailure.UNSUPPORTED_GEOMETRY)
+    nodes: list[tuple[int, int]] = []
+    for index, point in enumerate(path.vertices):
+        if index % _CANCELLATION_CADENCE == 0:
+            stopped = stop.check()
+            if stopped is not None:
+                return _result(work, 0, stopped)
+        delta_x = point.x - origin.x
+        delta_y = point.y - origin.y
+        if delta_x % step != 0 or delta_y % step != 0:
+            return _result(work, 0, CandidatePathValidationFailure.UNSUPPORTED_GEOMETRY)
+        nodes.append((delta_x // step, delta_y // step))
+    if nodes[0] not in problem.source_nodes or nodes[-1] not in problem.target_nodes:
+        return _result(work, 0, CandidatePathValidationFailure.INVALID_CANDIDATE)
 
-    total_edges = sum(
-        (abs(end.x - start.x) + abs(end.y - start.y)) // step
-        for start, end in pairwise(path.vertices)
-    )
-    if total_edges > max_path_edges:
-        return _result(work, 0, CandidatePathValidationFailure.BUDGET_EXHAUSTED)
-
+    total_edges = 0
+    for start, end in pairwise(path.vertices):
+        stopped = stop.check()
+        if stopped is not None:
+            return _result(work, 0, stopped)
+        total_edges += (abs(end.x - start.x) + abs(end.y - start.y)) // step
+        if total_edges > max_path_edges:
+            return _result(work, 0, CandidatePathValidationFailure.BUDGET_EXHAUSTED)
     edge_checks = 0
     seen = {path.vertices[0]}
     try:
@@ -407,6 +548,9 @@ def validate_candidate_path(
         return _result(work, edge_checks, _failure_from_router(error, stop))
     except Exception:  # pragma: no cover - a hostile candidate must fail closed
         return _result(work, edge_checks, CandidatePathValidationFailure.INVALID_CANDIDATE)
+    stopped = stop.check()
+    if stopped is not None:
+        return _result(work, edge_checks, stopped)
     return _result(work, edge_checks, None)
 
 

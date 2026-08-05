@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import replace
 
+import copper_mcp.routing.candidate_path_validator as validator_module
 from copper_mcp.board_ir import (
     ConstraintSet,
     Footprint,
@@ -73,7 +74,7 @@ def _pad(identifier: str, net_id: str, point: PointNM) -> Pad:
     )
 
 
-def _snapshot(*, foreign_segment: bool = False) -> object:
+def _snapshot(*, foreign_segment: bool = False, same_net_stub: bool = False) -> object:
     left = _pad("pad:route-left", ROUTE_NET, PointNM(1_000_000, 5_000_000))
     right = _pad("pad:route-right", ROUTE_NET, PointNM(9_000_000, 5_000_000))
     signal = NetClass(
@@ -85,8 +86,19 @@ def _snapshot(*, foreign_segment: bool = False) -> object:
         via_drill_nm=300_000,
     )
     segments: tuple[Segment, ...] = ()
+    if same_net_stub:
+        segments += (
+            Segment(
+                id="segment:route-stub",
+                net_id=ROUTE_NET,
+                layer_id=LAYER,
+                start=left.center,
+                end=PointNM(4_000_000, 5_000_000),
+                width_nm=200_000,
+            ),
+        )
     if foreign_segment:
-        segments = (
+        segments += (
             Segment(
                 id="segment:foreign-wall",
                 net_id=FOREIGN_NET,
@@ -237,6 +249,38 @@ def test_candidate_path_validator_rejects_an_adversarial_foreign_copper_crossing
     assert result.diagnostic == "candidate path violates the Board IR obstacle authority"
 
 
+def test_candidate_path_validator_accepts_a_legal_same_net_attachment_node() -> None:
+    snapshot = _snapshot(same_net_stub=True)
+    request = _request(snapshot)
+    candidate = _candidate(
+        request,
+        (PointNM(4_000_000, 5_000_000), PointNM(9_000_000, 5_000_000)),
+    )
+
+    result = _validate(snapshot, request, candidate)
+
+    assert result.accepted
+    assert result.edge_checks == 5
+
+
+def test_candidate_path_validator_rejects_a_foreign_copper_endpoint() -> None:
+    snapshot = _snapshot(foreign_segment=True)
+    request = _request(snapshot)
+    candidate = _candidate(
+        request,
+        (
+            PointNM(5_000_000, 3_000_000),
+            PointNM(9_000_000, 3_000_000),
+            PointNM(9_000_000, 5_000_000),
+        ),
+    )
+
+    result = _validate(snapshot, request, candidate)
+
+    assert result.failure is CandidatePathValidationFailure.INVALID_CANDIDATE
+    assert result.edge_checks == 0
+
+
 def test_candidate_path_validator_distinguishes_stale_revision_from_infeasible_and_budget() -> None:
     snapshot = _snapshot()
     request = _request(snapshot)
@@ -262,13 +306,20 @@ def test_candidate_path_validator_distinguishes_stale_revision_from_infeasible_a
     assert budget.diagnostic != stale.diagnostic
 
 
-def test_candidate_path_validator_honours_cancellation_and_deadline_before_geometry() -> None:
+def test_candidate_path_validator_honours_cancellation_and_deadline_before_geometry(
+    monkeypatch,
+) -> None:
     snapshot = _snapshot()
     request = _request(snapshot)
     direct = _candidate(
         request,
         (PointNM(1_000_000, 5_000_000), PointNM(9_000_000, 5_000_000)),
     )
+
+    def identity_must_not_run(_: RouteCandidate) -> None:
+        raise AssertionError("pre-cancelled candidate must not be canonicalized or hashed")
+
+    monkeypatch.setattr(validator_module, "verify_candidate_id", identity_must_not_run)
 
     cancelled = _validate(snapshot, request, direct, cancelled=lambda: True)
     deadline = _validate(snapshot, request, direct, deadline_check=lambda: True)
@@ -277,6 +328,130 @@ def test_candidate_path_validator_honours_cancellation_and_deadline_before_geome
     assert deadline.failure is CandidatePathValidationFailure.DEADLINE_EXCEEDED
     assert cancelled.edge_checks == deadline.edge_checks == 0
     assert cancelled.obstacle_checks == deadline.obstacle_checks == 0
+
+
+def test_candidate_path_validator_preflights_oversized_path_before_identity_work(
+    monkeypatch,
+) -> None:
+    snapshot = _snapshot()
+    request = _request(snapshot)
+    candidate = _candidate(
+        request,
+        (PointNM(1_000_000, 5_000_000), PointNM(9_000_000, 5_000_000)),
+    )
+    oversized_vertices = tuple(
+        PointNM(1_000_000 + (index % 2) * 1_000_000, 1_000_000 + index * 1_000_000)
+        for index in range(66)
+    )
+    object.__setattr__(candidate.patch.paths[0], "vertices", oversized_vertices)
+
+    def identity_must_not_run(_: RouteCandidate) -> None:
+        raise AssertionError("oversized candidate must not be canonicalized or hashed")
+
+    monkeypatch.setattr(validator_module, "verify_candidate_id", identity_must_not_run)
+
+    result = _validate(snapshot, request, candidate)
+
+    assert result.failure is CandidatePathValidationFailure.BUDGET_EXHAUSTED
+    assert result.edge_checks == result.obstacle_checks == 0
+
+
+def test_candidate_path_validator_preflights_out_of_range_scalars_before_identity_work(
+    monkeypatch,
+) -> None:
+    snapshot = _snapshot()
+    request = _request(snapshot)
+    candidate = _candidate(
+        request,
+        (PointNM(1_000_000, 5_000_000), PointNM(9_000_000, 5_000_000)),
+    )
+    object.__setattr__(candidate.cost, "length_nm", 1 << 100)
+
+    def identity_must_not_run(_: RouteCandidate) -> None:
+        raise AssertionError("out-of-range scalar must not be canonicalized or hashed")
+
+    monkeypatch.setattr(validator_module, "verify_candidate_id", identity_must_not_run)
+
+    result = _validate(snapshot, request, candidate)
+
+    assert result.failure is CandidatePathValidationFailure.INVALID_CANDIDATE
+    assert result.edge_checks == result.obstacle_checks == 0
+
+
+def test_candidate_path_validator_checks_cancellation_before_success_publication(
+    monkeypatch,
+) -> None:
+    snapshot = _snapshot()
+    request = _request(snapshot)
+    candidate = _candidate(
+        request,
+        (PointNM(1_000_000, 5_000_000), PointNM(9_000_000, 5_000_000)),
+    )
+    cancel_late = False
+    checked_edges = 0
+    reference_edge_is_legal = validator_module._edge_is_legal
+
+    def cancel_after_final_edge(*args: object) -> bool:
+        nonlocal cancel_late, checked_edges
+        legal = reference_edge_is_legal(*args)
+        checked_edges += 1
+        if checked_edges == 8:
+            cancel_late = True
+        return legal
+
+    monkeypatch.setattr(validator_module, "_edge_is_legal", cancel_after_final_edge)
+
+    result = _validate(snapshot, request, candidate, cancelled=lambda: cancel_late)
+
+    assert checked_edges == 8
+    assert result.failure is CandidatePathValidationFailure.CANCELLED
+    assert result.edge_checks == 8
+
+
+def test_candidate_path_validator_rejects_repeated_vertices_and_self_crossing_paths() -> None:
+    snapshot = _snapshot()
+    request = _request(snapshot)
+    candidate = _candidate(
+        request,
+        (
+            PointNM(1_000_000, 5_000_000),
+            PointNM(1_000_000, 4_000_000),
+            PointNM(2_000_000, 4_000_000),
+            PointNM(2_000_000, 5_000_000),
+            PointNM(1_000_000, 5_000_000),
+            PointNM(1_000_000, 6_000_000),
+            PointNM(9_000_000, 6_000_000),
+            PointNM(9_000_000, 5_000_000),
+        ),
+    )
+
+    result = _validate(snapshot, request, candidate)
+
+    assert result.failure is CandidatePathValidationFailure.INVALID_CANDIDATE
+    assert result.edge_checks == 3
+
+
+def test_candidate_path_validator_rejects_a_hostile_zero_length_edge() -> None:
+    snapshot = _snapshot()
+    request = _request(snapshot)
+    candidate = _candidate(
+        request,
+        (PointNM(1_000_000, 5_000_000), PointNM(9_000_000, 5_000_000)),
+    )
+    object.__setattr__(
+        candidate.patch.paths[0],
+        "vertices",
+        (
+            PointNM(1_000_000, 5_000_000),
+            PointNM(1_000_000, 5_000_000),
+            PointNM(9_000_000, 5_000_000),
+        ),
+    )
+
+    result = _validate(snapshot, request, candidate)
+
+    assert result.failure is CandidatePathValidationFailure.INVALID_CANDIDATE
+    assert result.edge_checks == result.obstacle_checks == 0
 
 
 def test_candidate_path_validator_rejects_tampered_width_and_non_lattice_geometry() -> None:
