@@ -10,6 +10,7 @@ import pytest
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.board_ir import NetClass
 from copper_mcp.routing import (
+    CandidateManifestNotFoundError,
     LayeredAStarSettings,
     LayeredBoardRouter,
     LayeredRouteRequest,
@@ -189,6 +190,46 @@ def test_repository_publishes_redacted_manifest_and_explicit_geometry_export(
             )
         with pytest.raises(RoutingJobError):
             repository.exports.get(spec.job_id, candidate.candidate_id, authorization, now_ms=103)
+
+
+def test_repository_cancellation_after_compute_publishes_no_candidate_artifacts(
+    tmp_path: Path,
+) -> None:
+    candidate, spec, request, authorization = _candidate_and_spec()
+    path = tmp_path / "cancel-after-compute.sqlite3"
+    with RoutingJobRepository(path) as repository:
+        repository.create(spec, request, authorization)
+
+        def executor(_probe: object) -> object:
+            running = repository.jobs.get(spec.job_id)
+            repository.jobs.request_cancel(
+                spec.job_id,
+                expected_revision=running.revision,
+            )
+            return candidate
+
+        result = repository.execute(spec.job_id, authorization, executor)
+
+        assert result.status is RoutingJobStatus.CANCELLED
+        with pytest.raises(RoutingCandidateExportUnavailableError):
+            repository.exports.get(spec.job_id, candidate.candidate_id, authorization)
+        with pytest.raises(CandidateManifestNotFoundError):
+            repository.manifests.get(candidate.candidate_id)
+
+
+def test_repository_execute_publishes_candidate_artifacts_after_completion(
+    tmp_path: Path,
+) -> None:
+    candidate, spec, request, authorization = _candidate_and_spec()
+    with RoutingJobRepository(tmp_path / "execute-success.sqlite3") as repository:
+        repository.create(spec, request, authorization)
+
+        result = repository.execute(spec.job_id, authorization, lambda _probe: candidate)
+
+        assert result.status is RoutingJobStatus.COMPLETED
+        exported = repository.exports.get(spec.job_id, candidate.candidate_id, authorization)
+        assert exported["candidate_id"] == candidate.candidate_id
+        assert repository.manifests.get(candidate.candidate_id).job_id == spec.job_id
 
 
 def test_request_and_export_expiry_are_uniform(tmp_path: Path) -> None:

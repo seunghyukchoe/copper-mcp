@@ -44,6 +44,7 @@ from copper_mcp.routing.jobs import (
     RoutingJobNotFoundError,
     RoutingJobRecord,
     RoutingJobSpec,
+    RoutingJobStatus,
     RoutingJobStore,
 )
 from copper_mcp.routing.layered_contracts import (
@@ -817,20 +818,19 @@ class RoutingJobRepository:
         if record.revision != expected_revision:
             raise RoutingJobConflictError("routing job revision conflict")
         timestamp = _now_ms() if now_ms is None else now_ms
-        self.exports.put(
-            candidate,
-            spec=record.spec,
-            authorization_digest=envelope.authorization_digest,
-            now_ms=timestamp,
-        )
-        manifest = _manifest_for_candidate(candidate, spec=record.spec, now_ms=timestamp)
-        self.manifests.put(manifest, now_ms=timestamp)
-        return self.jobs.complete(
+        completed = self.jobs.complete(
             job_id,
             candidate,
             expected_revision=expected_revision,
             now_ms=timestamp,
         )
+        self._publish_candidate_artifacts(
+            candidate,
+            spec=completed.spec,
+            authorization_digest=envelope.authorization_digest,
+            now_ms=timestamp,
+        )
+        return completed
 
     def execute(
         self,
@@ -840,35 +840,53 @@ class RoutingJobRepository:
     ) -> RoutingJobRecord:
         """Execute one job while publishing geometry only after executor output is verified."""
 
-        record, _ = self.get(job_id, authorization_digest)
+        record, envelope = self.get(job_id, authorization_digest)
         worker = RoutingJobWorker(
             self.jobs,
             limits=WorkerLimits(
                 lease_ms=max(1, min(30_000, record.spec.limits.max_runtime_ms)),
             ),
         )
+        candidate: Candidate | None = None
 
         def wrapped(probe: object) -> Candidate:
+            nonlocal candidate
             candidate = executor(cast(Any, probe))
-            record = self.jobs.get(job_id)
-            # The export/manifest writes are immutable and bounded. The worker still performs the
-            # final lifecycle CAS, so a stale worker cannot publish a newer revision.
-            envelope = self.requests.get(job_id, authorization_digest)
-            self.exports.put(
-                candidate,
-                spec=record.spec,
-                authorization_digest=envelope.authorization_digest,
-            )
-            self.manifests.put(
-                _manifest_for_candidate(
-                    candidate,
-                    spec=record.spec,
-                    now_ms=record.updated_at_ms,
-                )
-            )
             return candidate
 
-        return worker.execute(job_id, wrapped)
+        completed = worker.execute(job_id, wrapped)
+        if completed.status is not RoutingJobStatus.COMPLETED:
+            return completed
+        if candidate is None:  # pragma: no cover - worker completion requires a candidate
+            raise RoutingJobError("completed routing job is missing its candidate")
+        self._publish_candidate_artifacts(
+            candidate,
+            spec=completed.spec,
+            authorization_digest=envelope.authorization_digest,
+            now_ms=_now_ms(),
+        )
+        return completed
+
+    def _publish_candidate_artifacts(
+        self,
+        candidate: Candidate,
+        *,
+        spec: RoutingJobSpec,
+        authorization_digest: str,
+        now_ms: int,
+    ) -> None:
+        """Persist explicit geometry only after lifecycle completion has won its CAS race."""
+
+        self.exports.put(
+            candidate,
+            spec=spec,
+            authorization_digest=authorization_digest,
+            now_ms=now_ms,
+        )
+        self.manifests.put(
+            _manifest_for_candidate(candidate, spec=spec, now_ms=now_ms),
+            now_ms=now_ms,
+        )
 
 
 __all__ = [
