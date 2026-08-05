@@ -165,5 +165,5 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0064: Bind a closed routing-policy decision to the initial negotiated order](0064-policy-bound-initial-negotiated-order.md)
 - [ADR-0065: Observe and legalize bounded orthogonal courtyard chains](0065-orthogonal-courtyard-chains.md)
 - [ADR-0066: Publish a composed route bundle only as one all-or-nothing read-only plan](0066-atomic-route-bundle-preview.md)
+- [ADR-0067: Keep route-aware placement ranking private, bounded, and opt-in](0067-route-aware-placement-ranking.md)
 - [ADR-0068: Keep ordered-layer routing bounded and non-serializing](0068-bounded-ordered-layer-routing.md)
-

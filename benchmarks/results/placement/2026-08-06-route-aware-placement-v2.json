@@ -1,0 +1,107 @@
+{
+  "configuration": {
+    "constraints": {
+      "clearance_nm": 250000,
+      "track_width_nm": 250000,
+      "via_diameter_nm": 800000,
+      "via_drill_nm": 400000
+    },
+    "estimator_id": "route-aware-astar-probe-v1",
+    "observation_max_probes": 32,
+    "observation_probe_settings_digest": "sha256:e3bdaa1d5294b75f05b660dd3ac5a65b67cdd18b670906deef4c608a11eee1e9",
+    "ranking_max_probes": 1,
+    "ranking_max_total_probes": 128,
+    "ranking_probe_settings_digest": "sha256:fe230a41312dc93d2ccd7a4d66016d1a2468007861dc0583add749b42734f474",
+    "search_settings": {
+      "beam_width": 4,
+      "deadline_seconds": 30.0,
+      "legalizer_deadline_seconds": 3.0,
+      "legalizer_max_checks": 200000,
+      "max_evaluations": 128,
+      "max_ranked": 8,
+      "max_rounds": 4,
+      "step_nm": 5000000
+    }
+  },
+  "date_utc": "2026-08-06",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "fixture": "benchmarks/audio/fixtures/ne5532-stereo-summing-routing-v1.kicad_pcb",
+  "fixture_license_spdx": "Apache-2.0",
+  "fixture_origin": "coppermcp-original",
+  "metrics": {
+    "all_retained_candidates_legal": true,
+    "criterion": {
+      "metric": "independent bounded A* routed wire length of the candidate each bounded search selected, at one probe per candidate",
+      "minimum_improvement_percent": 10,
+      "passed": true
+    },
+    "deterministic_replays": true,
+    "estimator_id": "route-aware-astar-probe-v1",
+    "multi_probe_observation": {
+      "baseline_choice": {
+        "attempted_probes": 11,
+        "completed_probes": 7,
+        "refused_probes": 4,
+        "unrouted_probes": 4,
+        "wire_length_nm": 359000000
+      },
+      "comparison_kind": "the two chosen candidates re-measured against every probeable net, so the one-probe numbers above are never read as a whole-board result",
+      "route_aware_choice": {
+        "attempted_probes": 11,
+        "completed_probes": 7,
+        "refused_probes": 4,
+        "unrouted_probes": 4,
+        "wire_length_nm": 391000000
+      }
+    },
+    "repetitions": 3,
+    "rerank_comparison": {
+      "manhattan_choice_id": "sha256:84c9fd89036c805880b4375818fe43e767e22e53b0202a301552f106f95e040d",
+      "manhattan_route_wire_length_nm": 42000000,
+      "route_aware_choice_id": "sha256:f14cfb32786a368e1bb5307eb4298bf859a615daf0ffd39eac2c7c2bbb33ed5c",
+      "route_aware_route_wire_length_nm": 32000000,
+      "route_length_improvement_percent": 23.80952380952381,
+      "same_choice": false,
+      "shared_candidate_set_size": 16
+    },
+    "route_probe_settings_digest": "sha256:fe230a41312dc93d2ccd7a4d66016d1a2468007861dc0583add749b42734f474",
+    "search_comparison": {
+      "baseline_candidate_id": "sha256:84c9fd89036c805880b4375818fe43e767e22e53b0202a301552f106f95e040d",
+      "baseline_evaluations": 128,
+      "baseline_refused_probes": 0,
+      "baseline_retained_candidates": 8,
+      "baseline_route_wire_length_nm": 42000000,
+      "baseline_scoring_policy": "same-net-manhattan-v1",
+      "baseline_solver_status": "work_exhausted",
+      "baseline_unrouted_probes": 0,
+      "comparison_kind": "two different bounded searches over one intent, each ordering its own beam by its own score; not one shared candidate set re-ranked",
+      "probes_per_candidate": 1,
+      "route_aware_candidate_id": "sha256:f14cfb32786a368e1bb5307eb4298bf859a615daf0ffd39eac2c7c2bbb33ed5c",
+      "route_aware_completed_probes": 1,
+      "route_aware_evaluations": 128,
+      "route_aware_operation_probe_limit": 128,
+      "route_aware_operation_probes_used": 116,
+      "route_aware_refused_probes": 0,
+      "route_aware_retained_candidates": 8,
+      "route_aware_route_wire_length_nm": 32000000,
+      "route_aware_scoring_policy": "route-aware-astar-v1",
+      "route_aware_solver_status": "work_exhausted",
+      "route_aware_unrouted_probes": 0,
+      "route_length_improvement_percent": 23.80952380952381,
+      "shared_retained_candidates": 0
+    }
+  },
+  "not_claimed": [
+    "combined-net routing, congestion allocation, overflow, or a whole-board completion result",
+    "KiCad DRC, electrical, timing, signal-integrity, thermal, or fabrication readiness",
+    "KiCad file mutation, editor mutation, placement apply, route apply, or live-editor behavior",
+    "placement optimality, a general improvement guarantee, or a comparison with external routers",
+    "that the two ranked searches explored one shared candidate set; they did not, and `rerank_comparison` is the separate measurement that does"
+  ],
+  "run_id": "sha256:fecb29c10145ee7cce807a5034ac7d2da176a3963aec6c074f0763ab45af74fd",
+  "schema": "copper-mcp/benchmark/route-aware-placement/v2",
+  "source_commit": "ebe842984ed924df71c28b21531340934ae93731"
+}
