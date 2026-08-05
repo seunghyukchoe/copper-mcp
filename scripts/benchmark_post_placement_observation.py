@@ -22,7 +22,7 @@ from copper_mcp.post_placement_observation import observe_post_placement
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/placement-v0.1/placement-legal.kicad_pcb"
 OUTPUT = ROOT / (
-    "benchmarks/results/placement/2026-08-05-post-placement-observation-replay-b052.json"
+    "benchmarks/results/placement/2026-08-05-post-placement-observation-replay-b056.json"
 )
 KICAD = Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli")
 CONSTRAINTS = {
@@ -40,9 +40,13 @@ def _workspace_state(root: Path) -> dict[str, object]:
     for path in sorted(root.rglob("*")):
         relative = path.relative_to(root).as_posix()
         if path.is_symlink():
+            stat = path.lstat()
             entries.append(
                 {
                     "kind": "symlink",
+                    "inode": stat.st_ino,
+                    "mode": stat.st_mode & 0o7777,
+                    "mtime_ns": stat.st_mtime_ns,
                     "path": relative,
                     "target": str(path.readlink()),
                 }
@@ -55,7 +59,9 @@ def _workspace_state(root: Path) -> dict[str, object]:
         entries.append(
             {
                 "kind": "file",
+                "inode": stat.st_ino,
                 "mode": stat.st_mode & 0o7777,
+                "mtime_ns": stat.st_mtime_ns,
                 "path": relative,
                 "sha256": hashlib.sha256(content).hexdigest(),
                 "size": len(content),
