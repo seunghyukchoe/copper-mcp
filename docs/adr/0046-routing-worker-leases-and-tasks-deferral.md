@@ -75,3 +75,11 @@ Trade-offs and residuals:
   successful candidate identity publication, bounded executor failure, invalid candidate refusal,
   and redacted SQLite storage.
 - B-028 records deterministic worker outcomes and the no-board-content persistence check.
+
+## Boundary amendment — 2026-08-05
+
+Lease recovery also covers a worker whose durable row is `CANCEL_REQUESTED`: after the lease
+boundary, `claim` acknowledges cancellation through the record revision and returns a typed lease
+expiry, so no non-terminal cancellation can strand a worker. Job lookup purges expired rows before
+validating the identifier, committing the retention boundary even when the caller only observes an
+unavailable/malformed ID.

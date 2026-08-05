@@ -18,6 +18,10 @@ All notable changes are documented here. The format follows
   binds track width, via diameter, and via drill to the Board IR net-class assignment, rejecting
   re-stamped dimensions before topology acceptance.
 
+- Durable routing-job lookup now commits TTL purges even for malformed or unavailable IDs, and a
+  stale `CANCEL_REQUESTED` lease is terminally acknowledged instead of remaining stranded until
+  retention expiry. The lifecycle remains redacted and compare-and-swap bound.
+
 - Live KiCad IPC board counting now carries its cooperative operation deadline into bounded
   S-expression decoding, with pre/post-decode and 4 KiB scan checkpoints. Expired large or
   malformed snapshots fail with the typed deadline refusal instead of spending unbounded parse
