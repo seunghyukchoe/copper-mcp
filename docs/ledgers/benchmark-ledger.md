@@ -797,3 +797,22 @@ are the audit copies for the original run IDs.
 | Metrics | Deadline refusal `true`; callback invoked once before parser materialization; parser completion `false`; elapsed `24,875 ns` on this host; payload digest recorded in the artifact |
 | Artifact | [`2026-08-05-ipc-deadline-parse.json`](../../benchmarks/results/routing/2026-08-05-ipc-deadline-parse.json) |
 | Interpretation | This measures cooperative early refusal and typed error preservation. It does not claim hard process pre-emption, interruption during one atomic UTF-8 decode, or interruption of a blocking official KiCad IPC call. |
+
+#### B-054 — spatial-index candidate-work provenance correction
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:ff639282bc61125319a151041e0b07497b87fdf44bb9f9dfc746f18130643163` |
+| Date and commit | 2026-08-05; source commit `748cc586963a33392b73842a97fff888dc6af6d0`; clean tree before artifact generation |
+| Configuration | `routing-conservative-spatial-index-v1`; 512 entries, 256 exact closed-AABB queries, and seven timing repetitions; source ordinals remain the equality authority |
+| Metrics | Exact ordered identities `256/256`; legacy relation checks `131,072`; indexed candidate checks `636`; candidate-work reduction `99.5148%`; median fixture speedup `19.125x` on this machine |
+| Artifact | [`2026-08-05-spatial-index-provenance-correction.json`](../../benchmarks/results/routing/2026-08-05-spatial-index-provenance-correction.json) |
+| Correction | The B-033 review-remediation artifact was generated before the script measured examined candidates, so its `31` value was a returned-hit count, not relation work. Its exact identity result remains historical evidence; this row is the replacement for candidate-work metrics. |
+| Interpretation | Synthetic uniform-grid fixture only; no whole-board scaling, congestion, KiCad DRC, electrical/fabrication readiness, or FreeRouting claim. Wall-clock timing is machine-bound. |
+
+#### B-055 — review-remediation source-commit clarification
+
+| Field | Recorded evidence |
+|---|---|
+| Correction | The shared review-remediation preface's `d69f3b0b9e563ef5d4d6c1e99a6ef47508fdf51b` wording applies to B-022, B-026, B-027, and B-032. The embedded source commits in the B-031 and original B-033 remediation artifacts are `43df15d62336a95d44f960181a9b0fe1e2279c2e`; artifact-level `source_commit` is authoritative. |
+| Scope | This corrects provenance description only. It changes neither historical artifact bytes nor the B-031 topology metrics; B-054 replaces the B-033 candidate-work metric claim. |
