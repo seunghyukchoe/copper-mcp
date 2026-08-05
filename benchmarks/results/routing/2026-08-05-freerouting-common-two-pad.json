@@ -1,7 +1,7 @@
 {
   "comparison_closed": false,
   "copper_process": {
-    "elapsed_ns": 226415708,
+    "elapsed_ns": 221698250,
     "output_sha256": "sha256:fa8478e410daf85145203f331db0f7161a9b3c9e94507dbc93092db181ff8276",
     "output_status": "valid",
     "returncode": 0,
@@ -28,7 +28,7 @@
     "status": "bound"
   },
   "freerouting_process": {
-    "elapsed_ns": 2913016209,
+    "elapsed_ns": 4248779750,
     "returncode": 0,
     "role": "freerouting_dsn_ses",
     "ses_sha256": "sha256:eb016ba1a7a4e680c472787dcf49b5f115c969d33603951b9b9fb3e94ba8fc4a",
@@ -57,7 +57,7 @@
     },
     "reasons": []
   },
-  "recorded_at_utc": "2026-08-05T07:35:24+00:00",
+  "recorded_at_utc": "2026-08-05T07:39:18+00:00",
   "results": [
     {
       "board_sha256": "sha256:fa8478e410daf85145203f331db0f7161a9b3c9e94507dbc93092db181ff8276",
@@ -70,7 +70,7 @@
         "unconnected": 0,
         "workflow": "kicad-gui-drc-report"
       },
-      "elapsed_ns": 226415708,
+      "elapsed_ns": 221698250,
       "length_nm": 20000000,
       "name": "copper_mcp",
       "status": "ok",
@@ -87,14 +87,14 @@
         "unconnected": 0,
         "workflow": "kicad-gui-drc-report"
       },
-      "elapsed_ns": 2913016209,
+      "elapsed_ns": 4248779750,
       "length_nm": 20000000,
       "name": "freerouting",
       "status": "ok",
       "vias": 0
     }
   ],
-  "run_id": "sha256:e7dd3deb411e9d1c00c57a4fea613256643003713c85dad9d85c6b4bd55b2a63",
+  "run_id": "sha256:b72a4ab2dfe1d44d1d2641af9e62f20daec63ff78ce2b0843196daeb2e0d3ddf",
   "schema": "copper-mcp/benchmark/freerouting-comparison/v1",
   "seed": 0,
   "source_drc": {

@@ -22,6 +22,43 @@ sys.modules[RUNNER_SPEC.name] = runner
 RUNNER_SPEC.loader.exec_module(runner)
 
 
+def _gui_drc_report(board_name: str, unconnected: int = 1) -> str:
+    """Return the exact KiCad 10.0.5 GUI-report grammar accepted by this benchmark."""
+
+    unconnected_detail = ()
+    if unconnected == 1:
+        unconnected_detail = (
+            "[unconnected_items]: Missing connection between items",
+            "    Local override; error",
+            "    @(10.0000 mm, 15.0000 mm): Pad 1 [AUDIO] of J1 on F.Cu",
+            "    @(30.0000 mm, 15.0000 mm): Pad 1 [AUDIO] of J2 on F.Cu",
+        )
+    return "\n".join(
+        (
+            f"** Drc report for {board_name} **",
+            "** Created on 2026-08-05T16:04:34 **",
+            "** Report includes: Errors, Warnings **",
+            "",
+            "** Found 0 DRC violations **",
+            "",
+            f"** Found {unconnected} unconnected pads **",
+            *unconnected_detail,
+            "",
+            "** Found 0 Footprint errors **",
+            "",
+            "** Ignored checks **",
+            "    - Footprint has no courtyard defined",
+            "    - Track endpoint not centered on via",
+            "    - Tuning profile track geometries",
+            "    - Footprint doesn't match symbol's footprint filters",
+            "    - Footprint component type doesn't match footprint pads",
+            "",
+            "** End of Report **",
+            "",
+        )
+    )
+
+
 def test_freerouting_command_uses_documented_dsn_ses_boundary(tmp_path: Path) -> None:
     command = benchmark.freerouting_argv(
         tmp_path / "java",
@@ -166,19 +203,7 @@ def test_gui_source_drc_requires_unambiguous_expected_report_structure(tmp_path:
     source = tmp_path / "source.kicad_pcb"
     source.write_text("(kicad_pcb (version 20240108))\n", encoding="utf-8")
     report = tmp_path / "source.rpt"
-    report.write_text(
-        "\n".join(
-            (
-                "** Drc report for source.kicad_pcb **",
-                "** Report includes: Errors, Warnings **",
-                "** Found 0 DRC violations **",
-                "** Found 1 unconnected pads **",
-                "** Found 0 Footprint errors **",
-                "** End of Report **",
-            )
-        ),
-        encoding="utf-8",
-    )
+    report.write_text(_gui_drc_report(source.name), encoding="utf-8")
 
     evidence = benchmark.gui_source_drc_metrics(source, report)
 
@@ -197,14 +222,7 @@ def test_gui_source_drc_rejects_duplicate_or_conflicting_counts(tmp_path: Path) 
     source = tmp_path / "source.kicad_pcb"
     source.write_text("(kicad_pcb (version 20240108))\n", encoding="utf-8")
     report = tmp_path / "source.rpt"
-    valid = (
-        "** Drc report for source.kicad_pcb **\n"
-        "** Report includes: Errors, Warnings **\n"
-        "** Found 0 DRC violations **\n"
-        "** Found 1 unconnected pads **\n"
-        "** Found 0 Footprint errors **\n"
-        "** End of Report **\n"
-    )
+    valid = _gui_drc_report(source.name)
     for malformed in (
         valid.replace(
             "** Found 0 DRC violations **\n",
@@ -215,6 +233,15 @@ def test_gui_source_drc_rejects_duplicate_or_conflicting_counts(tmp_path: Path) 
         ),
         valid.replace("** End of Report **", "** Found 0 Other errors **\n** End of Report **"),
         valid.replace("** End of Report **", ""),
+        "UNEXPECTED LINE\n" + valid,
+        valid.replace(
+            "** Found 0 DRC violations **\n", "** Found 0 DRC violations **\nUNEXPECTED LINE\n"
+        ),
+        valid + "POSTSCRIPT\n",
+        valid.replace(
+            "** Found 0 DRC violations **\n\n** Found 1 unconnected pads **",
+            "** Found 1 unconnected pads **\n\n** Found 0 DRC violations **",
+        ),
     ):
         report.write_text(malformed, encoding="utf-8")
         assert benchmark.gui_source_drc_metrics(source, report)["status"] == "failed"

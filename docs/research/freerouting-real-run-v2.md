@@ -51,6 +51,8 @@ GUI DRC report under the same bounded parsing and hashing gate; the observed cou
 declared baseline of 0 hard violations and 1 intentional unconnected item. A GUI report header
 identifies only a board basename, not source bytes, so the source/report relationship is
 self-attested and non-causal unless a retained GUI attestation bundles both exact hashes. The
+parser accepts only the recorded KiCad 10.0.5 full line sequence, including its documented blank
+separators and ignored-check list; extra, missing, duplicate, or reordered lines fail closed. The
 DSN/source-export statement remains self-attested: separate source and DSN hashes do not
 demonstrate that KiCad exported one from the other. The FreeRouting import and CopperMCP runner
 receipts are deliberately self-attested; the harness consequently sets

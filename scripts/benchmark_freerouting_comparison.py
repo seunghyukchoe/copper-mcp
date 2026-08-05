@@ -66,10 +66,21 @@ COPPER_RECEIPT_SCHEMA = "copper-mcp/candidate-runner-receipt/v1"
 _RECEIPT_SHA256 = re.compile(r"^sha256:[a-f0-9]{64}$")
 _RELEASE_TAG = re.compile(r"^v(\d+\.\d+\.\d+)$")
 _GUI_DRC_HEADER = re.compile(r"^\*\* Drc report for (?P<board>[^\n]+) \*\*$", re.MULTILINE)
-_GUI_DRC_INCLUDES = re.compile(r"^\*\* Report includes: Errors, Warnings \*\*$", re.MULTILINE)
-_GUI_DRC_COUNT = re.compile(r"^\*\* Found (?P<count>\d+) (?P<kind>[^*\n]+) \*\*$", re.MULTILINE)
-_GUI_DRC_END = re.compile(r"^\*\* End of Report \*\*$", re.MULTILINE)
-_GUI_DRC_COUNT_KINDS = frozenset({"DRC violations", "unconnected pads", "Footprint errors"})
+_GUI_DRC_CREATED = re.compile(r"^\*\* Created on \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2} \*\*$")
+_GUI_DRC_COUNT = re.compile(
+    r"^\*\* Found (?P<count>\d+) (?P<kind>DRC violations|unconnected pads|Footprint errors) \*\*$"
+)
+_GUI_DRC_UNCONNECTED_LOCATION = re.compile(
+    r"^    @\(-?\d+\.\d{4} mm, -?\d+\.\d{4} mm\): Pad [1-9]\d* "
+    r"\[[A-Za-z0-9_.-]+\] of [A-Za-z0-9_.-]+ on [A-Za-z0-9_.-]+$"
+)
+_GUI_DRC_IGNORED_CHECKS = (
+    "    - Footprint has no courtyard defined",
+    "    - Track endpoint not centered on via",
+    "    - Tuning profile track geometries",
+    "    - Footprint doesn't match symbol's footprint filters",
+    "    - Footprint component type doesn't match footprint pads",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -660,7 +671,11 @@ def gui_drc_metrics(board: Path, report: Path | None) -> dict[str, Any]:
     This is deliberately a separate evidence path from ``drc_metrics``: KiCad's GUI can emit a
     report on platforms where the local CLI cannot complete.  The report header only identifies
     a basename, so the returned board hash records the bytes evaluated by this invocation.  It
-    does not imply DSN provenance or a causal routing/import transaction.
+    does not imply DSN provenance or a causal routing/import transaction.  The parser accepts
+    only the KiCad 10.0.5 report sequence recorded for this fixed fixture: an exact header,
+    timestamp, report-includes line, three zero-or-one count sections, the documented single
+    blank separators, the known ignored-check list, and one end marker.  Every other line,
+    duplicate, reordered section, or unsupported nonzero count fails closed.
     """
 
     if report is None:
@@ -670,27 +685,9 @@ def gui_drc_metrics(board: Path, report: Path | None) -> dict[str, Any]:
         text = payload.decode("utf-8", errors="strict")
     except (OSError, UnicodeDecodeError, ValueError):
         return {"status": "failed"}
-    headers = list(_GUI_DRC_HEADER.finditer(text))
-    includes = list(_GUI_DRC_INCLUDES.finditer(text))
-    counts = list(_GUI_DRC_COUNT.finditer(text))
-    endings = list(_GUI_DRC_END.finditer(text))
-    if (
-        len(headers) != 1
-        or headers[0].group("board") != board.name
-        or len(includes) != 1
-        or len(endings) != 1
-        or not headers[0].start() < includes[0].start() < endings[0].start()
-    ):
+    observed_counts = _parse_gui_drc_report(text, board.name)
+    if observed_counts is None:
         return {"status": "failed"}
-    count_kinds = [match.group("kind") for match in counts]
-    if (
-        len(counts) != len(_GUI_DRC_COUNT_KINDS)
-        or set(count_kinds) != _GUI_DRC_COUNT_KINDS
-        or len(set(count_kinds)) != len(count_kinds)
-        or any(not includes[0].start() < match.start() < endings[0].start() for match in counts)
-    ):
-        return {"status": "failed"}
-    observed_counts = {match.group("kind"): int(match.group("count")) for match in counts}
     try:
         board_sha256 = sha256_file(board, MAX_BOARD_BYTES)
         report_sha256 = sha256_file(report, MAX_DRC_REPORT_BYTES)
@@ -704,6 +701,69 @@ def gui_drc_metrics(board: Path, report: Path | None) -> dict[str, Any]:
         "status": "ok",
         "unconnected": observed_counts["unconnected pads"],
         "workflow": "kicad-gui-drc-report",
+    }
+
+
+def _parse_gui_drc_report(text: str, board_name: str) -> dict[str, int] | None:
+    """Parse exactly the bounded KiCad GUI report grammar accepted by this benchmark."""
+
+    if not text.endswith("\n"):
+        return None
+    lines = text.splitlines()
+    if len(lines) < 18:
+        return None
+    header = _GUI_DRC_HEADER.fullmatch(lines[0])
+    if (
+        header is None
+        or header.group("board") != board_name
+        or _GUI_DRC_CREATED.fullmatch(lines[1]) is None
+        or lines[2] != "** Report includes: Errors, Warnings **"
+        or lines[3] != ""
+    ):
+        return None
+
+    def count_at(index: int, expected_kind: str) -> int | None:
+        match = _GUI_DRC_COUNT.fullmatch(lines[index])
+        if match is None or match.group("kind") != expected_kind:
+            return None
+        return int(match.group("count"))
+
+    hard_violations = count_at(4, "DRC violations")
+    unconnected = count_at(6, "unconnected pads")
+    if hard_violations != 0 or unconnected not in {0, 1} or lines[5] != "":
+        return None
+    footprint_index = 8
+    if unconnected == 1:
+        if (
+            len(lines) < 22
+            or lines[7] != "[unconnected_items]: Missing connection between items"
+            or lines[8] != "    Local override; error"
+            or _GUI_DRC_UNCONNECTED_LOCATION.fullmatch(lines[9]) is None
+            or _GUI_DRC_UNCONNECTED_LOCATION.fullmatch(lines[10]) is None
+            or lines[11] != ""
+        ):
+            return None
+        footprint_index = 12
+    elif lines[7] != "":
+        return None
+    footprint_errors = count_at(footprint_index, "Footprint errors")
+    ignored_index = footprint_index + 2
+    end_index = ignored_index + len(_GUI_DRC_IGNORED_CHECKS) + 2
+    if (
+        footprint_errors != 0
+        or len(lines) != end_index + 1
+        or lines[footprint_index + 1] != ""
+        or lines[ignored_index] != "** Ignored checks **"
+        or tuple(lines[ignored_index + 1 : ignored_index + 1 + len(_GUI_DRC_IGNORED_CHECKS)])
+        != _GUI_DRC_IGNORED_CHECKS
+        or lines[end_index - 1] != ""
+        or lines[end_index] != "** End of Report **"
+    ):
+        return None
+    return {
+        "DRC violations": hard_violations,
+        "Footprint errors": footprint_errors,
+        "unconnected pads": unconnected,
     }
 
 
