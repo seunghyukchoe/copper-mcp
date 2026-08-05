@@ -705,9 +705,9 @@ historical evidence; these runs were generated from the clean implementation com
 
 | Field | Recorded evidence |
 |---|---|
-| Run ID | `sha256:e2428e655ad3042425fb116000887e7fd1f1ea4b352759988e4d04463b55ca4d` |
-| Date and commit | 2026-08-05; source commit `5fbdbef1030b8b5313fe2d8a40c1c0014feb5629` |
+| Run ID | `sha256:c175adf67ca1406cc7fd272fb21bc866936b364f3b8832c2f104a331db8b0cba` |
+| Date and commit | 2026-08-05; source commit `eb44ae9253166eabf0cf190beada1b990c32766e` |
 | Configuration | One legal bounded placement apply in a temporary workspace, followed by three required-revision observations deriving bounded Circuit Scene and private aggregate KiCad DRC from one captured context. |
-| Metrics | Same board/scene/DRC binding across all replays; post-apply board bytes preserved by the observer; post-observer workspace mutations `0`; hard DRC pass `true`, clean `false` due to five ignored checks; median latency recorded in the artifact. |
+| Metrics | Three observations bind to one returned post-apply board revision and one scene/DRC context; post-apply board bytes preserved by the observer; post-observer workspace mutations `0`; hard DRC pass `true`, clean `false` due to five ignored checks; median latency `378,795,500 ns`. |
 | Artifact | [`2026-08-05-post-placement-observation.json`](../../benchmarks/results/placement/2026-08-05-post-placement-observation.json) |
-| Interpretation | This proves only a read-only file-backed observation binding. It does not prove that an apply candidate caused the observed state, live editor CAS, ERC/electrical/fabrication readiness, or FreeRouting parity. |
+| Interpretation | This demonstrates a legal file-backed apply followed by three read-only observations of the exact revision returned by apply. It does not provide cryptographic mutation provenance beyond that revision CAS, live editor CAS, ERC/electrical/fabrication readiness, or FreeRouting parity. |
