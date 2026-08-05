@@ -209,6 +209,11 @@ All notable changes are documented here. The format follows
   live export remains intact, while unrelated expired private records are removed; decode and
   integrity failures still roll back, and TTL is not secure erasure.
 
+- Malformed routing request and candidate-export handles now also begin and purge their stores
+  before the uniform unavailable response, committing expired private-record cleanup. Lookup
+  timestamps remain validated before any transaction, and TTL remains an access-retention policy,
+  not secure erasure.
+
 ### Changed
 
 - Corrected the spatial-index benchmark to count bucket candidates examined by the exact bounds

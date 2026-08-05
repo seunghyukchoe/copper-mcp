@@ -279,6 +279,28 @@ def test_expired_request_is_deleted_before_uniform_unavailable_response(tmp_path
         assert retained is None
 
 
+def test_malformed_request_handle_commits_expired_request_purge(tmp_path: Path) -> None:
+    """Malformed request handles do not bypass durable TTL cleanup."""
+
+    _, spec, request, authorization = _candidate_and_spec()
+    path = tmp_path / "malformed-request-expiry.sqlite3"
+    with RoutingJobRepository(path, ttl_ms=10) as repository:
+        repository.create(spec, request, authorization, now_ms=100)
+
+        with pytest.raises(RoutingJobRequestUnavailableError) as malformed:
+            repository.requests.get("malformed-job-id", authorization, now_ms=110)
+        with pytest.raises(RoutingJobRequestUnavailableError) as unknown:
+            repository.requests.get(_digest("f"), authorization, now_ms=110)
+        assert str(malformed.value) == str(unknown.value)
+
+        with sqlite3.connect(path) as connection:
+            retained = connection.execute(
+                "SELECT request_json FROM routing_job_requests WHERE job_id = ?",
+                (spec.job_id,),
+            ).fetchone()
+        assert retained is None
+
+
 def test_expired_candidate_export_is_deleted_before_unavailable_response(tmp_path: Path) -> None:
     """An expired geometry export is removed even though lookup reports a uniform miss."""
 
@@ -314,6 +336,41 @@ def test_expired_candidate_export_is_deleted_before_unavailable_response(tmp_pat
         with pytest.raises(RoutingCandidateExportUnavailableError) as unknown:
             repository.exports.get(_digest("f"), _digest("f"), authorization, now_ms=112)
         assert str(expired.value) == str(unknown.value)
+
+        with sqlite3.connect(path) as connection:
+            retained = connection.execute(
+                "SELECT candidate_json FROM routing_candidate_exports WHERE candidate_id = ?",
+                (candidate.candidate_id,),
+            ).fetchone()
+        assert retained is None
+
+
+def test_malformed_export_handle_commits_expired_geometry_purge(tmp_path: Path) -> None:
+    """Malformed export handles do not bypass durable private-geometry expiry cleanup."""
+
+    candidate, spec, request, authorization = _candidate_and_spec()
+    path = tmp_path / "malformed-export-expiry.sqlite3"
+    with RoutingJobRepository(path, ttl_ms=10) as repository:
+        queued = repository.create(spec, request, authorization, now_ms=100)
+        running = repository.jobs.start(spec.job_id, expected_revision=queued.revision, now_ms=101)
+        repository.publish_candidate(
+            spec.job_id,
+            candidate,
+            expected_revision=running.revision,
+            authorization_digest=authorization,
+            now_ms=102,
+        )
+
+        with pytest.raises(RoutingCandidateExportUnavailableError) as malformed:
+            repository.exports.get(
+                spec.job_id,
+                "malformed-candidate-id",
+                authorization,
+                now_ms=112,
+            )
+        with pytest.raises(RoutingCandidateExportUnavailableError) as unknown:
+            repository.exports.get(_digest("f"), _digest("f"), authorization, now_ms=112)
+        assert str(malformed.value) == str(unknown.value)
 
         with sqlite3.connect(path) as connection:
             retained = connection.execute(

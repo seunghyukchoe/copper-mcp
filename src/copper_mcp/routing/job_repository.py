@@ -27,7 +27,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Final, cast
+from typing import Any, Final, NoReturn, cast
 
 from copper_mcp.routing.astar import canonical_candidate_bytes, verify_candidate_id
 from copper_mcp.routing.candidate_store import (
@@ -321,6 +321,12 @@ class RoutingJobRequestStore:
         if self._connection.in_transaction:
             self._connection.commit()
 
+    def _raise_unavailable_after_retention(self) -> NoReturn:
+        """Finalize any expiry purge before preserving the uniform public miss."""
+
+        self._commit()
+        raise RoutingJobRequestUnavailableError("routing request is unavailable") from None
+
     def _purge_locked(self, now_ms: int) -> int:
         return self._connection.execute(
             "DELETE FROM routing_job_requests WHERE expires_at_ms <= ?", (now_ms,)
@@ -420,15 +426,15 @@ class RoutingJobRequestStore:
     ) -> RoutingJobRequestEnvelope:
         timestamp = _now_ms() if now_ms is None else now_ms
         _integer("request lookup timestamp", timestamp)
-        try:
-            _digest("job ID", job_id)
-            _authorization_digest(authorization_digest)
-        except ValueError:
-            raise RoutingJobRequestUnavailableError("routing request is unavailable") from None
         with self._lock:
             self._transaction()
             try:
                 self._purge_locked(timestamp)
+                try:
+                    _digest("job ID", job_id)
+                    _authorization_digest(authorization_digest)
+                except ValueError:
+                    self._raise_unavailable_after_retention()
                 row = self._connection.execute(
                     "SELECT job_id, request_digest, authorization_digest, created_at_ms, "
                     "updated_at_ms, expires_at_ms, request_json FROM routing_job_requests "
@@ -440,10 +446,7 @@ class RoutingJobRequestStore:
                     envelope = self._decode(cast(tuple[object, ...], row))
                     unavailable = envelope.authorization_digest != authorization_digest
                 if unavailable:
-                    # A lookup miss may have just crossed the retention boundary.  Commit its
-                    # purge before reporting the intentionally uniform public error.
-                    self._commit()
-                    raise RoutingJobRequestUnavailableError("routing request is unavailable")
+                    self._raise_unavailable_after_retention()
                 self._commit()
                 return envelope
             except BaseException:
@@ -551,6 +554,15 @@ class RoutingCandidateExportStore:
             "DELETE FROM routing_candidate_exports WHERE expires_at_ms <= ?", (now_ms,)
         ).rowcount
 
+    def _raise_unavailable_after_retention(self) -> NoReturn:
+        """Finalize any expiry purge before preserving the uniform public miss."""
+
+        if self._connection.in_transaction:
+            self._connection.commit()
+        raise RoutingCandidateExportUnavailableError(
+            "routing candidate export is unavailable"
+        ) from None
+
     def put(
         self,
         candidate: Candidate,
@@ -639,18 +651,16 @@ class RoutingCandidateExportStore:
     ) -> dict[str, object]:
         timestamp = _now_ms() if now_ms is None else now_ms
         _integer("candidate export lookup timestamp", timestamp)
-        try:
-            _digest("job ID", job_id)
-            _digest("candidate ID", candidate_id)
-            _authorization_digest(authorization_digest)
-        except ValueError:
-            raise RoutingCandidateExportUnavailableError(
-                "routing candidate export is unavailable"
-            ) from None
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
                 self._purge_locked(timestamp)
+                try:
+                    _digest("job ID", job_id)
+                    _digest("candidate ID", candidate_id)
+                    _authorization_digest(authorization_digest)
+                except ValueError:
+                    self._raise_unavailable_after_retention()
                 row = self._connection.execute(
                     "SELECT job_id, authorization_digest, kind, candidate_json FROM "
                     "routing_candidate_exports WHERE candidate_id = ?",
@@ -658,13 +668,7 @@ class RoutingCandidateExportStore:
                 ).fetchone()
                 unavailable = row is None or row[0] != job_id or row[1] != authorization_digest
                 if unavailable:
-                    # A lookup miss (including an unauthorized live target) may have purged
-                    # unrelated expired private geometry.  Commit only that retention work
-                    # before returning the deliberately uniform unavailable response.
-                    self._connection.commit()
-                    raise RoutingCandidateExportUnavailableError(
-                        "routing candidate export is unavailable"
-                    )
+                    self._raise_unavailable_after_retention()
                 if row[2] not in {
                     CandidateManifestKind.SINGLE_LAYER.value,
                     CandidateManifestKind.LAYERED.value,
