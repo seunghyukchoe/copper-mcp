@@ -1,9 +1,10 @@
-"""Bounded exact local lattice repair for coordinator-owned windows.
+"""Bounded exact local lattice repair for coordinator-supplied windows.
 
 This is deliberately *not* a board mutator, a policy evaluator, or a RouteCandidate serializer.
-It turns a coordinator-supplied :class:`RepairWindowCandidate` plus a bounded, already-derived
-occupancy view into an immutable local route proposal.  A future negotiated coordinator may use
-the proposal only after it binds the geometry to Board IR and sends it through the ordinary
+It turns a conventionally coordinator-supplied :class:`RepairWindowCandidate` plus a bounded,
+already-derived occupancy view into an immutable local route proposal. This local type does not
+authenticate that provenance or claim ownership; a future coordinator must establish it at its own
+validated boundary before binding the geometry to Board IR and sending it through the ordinary
 candidate and physical-clearance gates.
 
 The search is Dijkstra over ``(cell, incoming direction)`` states with the lexicographic positive
@@ -20,6 +21,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from heapq import heappop, heappush
+from itertools import pairwise
 from typing import Final, TypeAlias, cast
 
 from copper_mcp.routing.policy import PolicyBounds, RepairWindowCandidate
@@ -70,6 +72,18 @@ def _digest(value: object) -> str:
     return f"sha256:{hashlib.sha256(_canonical_bytes(value)).hexdigest()}"
 
 
+def _route_digest(input_digest: str, route: tuple[GridCell, ...]) -> str:
+    """Return the route content binding for a completed local repair proposal."""
+
+    return _digest(
+        {
+            "input_digest": input_digest,
+            "route": [list(cell) for cell in route],
+            "schema": "copper-mcp.local-exact-repair-route.v1",
+        }
+    )
+
+
 def _within(bounds: PolicyBounds, cell: GridCell) -> bool:
     return bounds.min_x <= cell[0] <= bounds.max_x and bounds.min_y <= cell[1] <= bounds.max_y
 
@@ -92,7 +106,7 @@ class LocalRepairRequest:
 
     def __post_init__(self) -> None:
         if not isinstance(self.repair_window, RepairWindowCandidate):
-            raise ValueError("local repair requires a coordinator-owned repair window")
+            raise ValueError("local repair requires a coordinator-supplied repair window")
         start = _cell("local repair start", self.start)
         end = _cell("local repair end", self.end)
         if start == end:
@@ -154,6 +168,7 @@ class LocalRepairResult:
     status: LocalRepairStatus
     input_digest: str
     route: tuple[GridCell, ...] = ()
+    route_digest: str = _EMPTY_DIGEST
     expanded_states: int = 0
     bend_count: int = 0
     diagnostic: str | None = None
@@ -173,6 +188,13 @@ class LocalRepairResult:
         ):
             raise ValueError("local repair route is malformed")
         if (
+            not isinstance(self.route_digest, str)
+            or len(self.route_digest) != _SHA256_PREFIX_LENGTH
+            or not self.route_digest.startswith("sha256:")
+            or any(character not in "0123456789abcdef" for character in self.route_digest[7:])
+        ):
+            raise ValueError("local repair route digest is malformed")
+        if (
             not isinstance(self.expanded_states, int)
             or isinstance(self.expanded_states, bool)
             or self.expanded_states < 0
@@ -185,24 +207,123 @@ class LocalRepairResult:
         ):
             raise ValueError("local repair bend accounting is malformed")
         if self.status is LocalRepairStatus.COMPLETED:
-            if len(self.route) < 2 or self.diagnostic is not None:
+            if (
+                len(self.route) < 2
+                or self.route_digest == _EMPTY_DIGEST
+                or self.diagnostic is not None
+            ):
                 raise ValueError("completed local repair must contain a route and no diagnostic")
-        elif self.route or self.bend_count:
+        elif self.route or self.route_digest != _EMPTY_DIGEST or self.bend_count:
             raise ValueError("non-completed local repair cannot publish a route")
 
-    @property
-    def route_digest(self) -> str:
-        """Return a content binding for a completed local candidate proposal, if any."""
 
-        if self.status is not LocalRepairStatus.COMPLETED:
-            return _EMPTY_DIGEST
-        return _digest(
-            {
-                "input_digest": self.input_digest,
-                "route": [list(cell) for cell in self.route],
-                "schema": "copper-mcp.local-exact-repair-route.v1",
-            }
+def _validated_request(request: object) -> LocalRepairRequest | None:
+    """Revalidate a request to detect mutation after frozen construction."""
+
+    if type(request) is not LocalRepairRequest:
+        return None
+    try:
+        supplied_window = request.repair_window
+        if type(supplied_window) is not RepairWindowCandidate:
+            return None
+        supplied_bounds = supplied_window.bounds
+        if type(supplied_bounds) is not PolicyBounds:
+            return None
+        bounds = PolicyBounds(
+            supplied_bounds.min_x,
+            supplied_bounds.min_y,
+            supplied_bounds.max_x,
+            supplied_bounds.max_y,
         )
+        window = RepairWindowCandidate(
+            supplied_window.net_id,
+            bounds,
+            supplied_window.conflict_score,
+        )
+        validated = LocalRepairRequest(
+            repair_window=window,
+            start=request.start,
+            end=request.end,
+            blocked_cells=request.blocked_cells,
+            max_expansions=request.max_expansions,
+            max_window_cells=request.max_window_cells,
+        )
+    except Exception:
+        return None
+    return validated if validated == request else None
+
+
+def _bend_count(route: tuple[GridCell, ...]) -> int:
+    """Return the number of direction changes in a proven unit-step route."""
+
+    directions = tuple((end[0] - start[0], end[1] - start[1]) for start, end in pairwise(route))
+    return sum(left != right for left, right in pairwise(directions))
+
+
+def verify_local_repair_result(request: object, result: object) -> bool:
+    """Prove a local repair result is bound to one revalidated immutable request.
+
+    The verifier is deliberately stricter than the result dataclass constructor: frozen objects can
+    still be forged or mutated through hostile in-process code. A completed result must bind the
+    original request digest and route digest, use exact endpoints, stay inside the selected window,
+    avoid blocked cells, take only orthogonal unit steps without repeated cells, and report its
+    exact bend count. Non-completed results cannot carry geometry and use fixed diagnostics.
+    """
+
+    validated = _validated_request(request)
+    if validated is None or type(result) is not LocalRepairResult:
+        return False
+    try:
+        if (
+            type(result.status) is not LocalRepairStatus
+            or type(result.input_digest) is not str
+            or type(result.route_digest) is not str
+            or result.input_digest != validated.input_digest
+            or not 0 <= result.expanded_states <= validated.max_expansions
+        ):
+            return False
+        if result.status is LocalRepairStatus.COMPLETED:
+            if (
+                result.diagnostic is not None
+                or result.route[0] != validated.start
+                or result.route[-1] != validated.end
+                or len(result.route) > validated.max_window_cells
+                or len(set(result.route)) != len(result.route)
+                or result.route_digest != _route_digest(result.input_digest, result.route)
+                or result.bend_count != _bend_count(result.route)
+            ):
+                return False
+            blocked = frozenset(validated.blocked_cells)
+            for cell in result.route:
+                if _cell("verified local repair route cell", cell) != cell:
+                    return False
+                if not _within(validated.repair_window.bounds, cell) or cell in blocked:
+                    return False
+            return all(
+                abs(end[0] - start[0]) + abs(end[1] - start[1]) == 1
+                for start, end in pairwise(result.route)
+            )
+        if result.route or result.route_digest != _EMPTY_DIGEST or result.bend_count:
+            return False
+        if result.status is LocalRepairStatus.NO_PATH:
+            return result.diagnostic == "local repair found no route inside the supplied window"
+        if result.status is LocalRepairStatus.BUDGET_EXHAUSTED:
+            return (
+                result.expanded_states == validated.max_expansions
+                and result.diagnostic == "local repair expansion budget was exhausted"
+            )
+        if result.status is LocalRepairStatus.CANCELLED:
+            return result.diagnostic in {
+                "local repair was cancelled before search",
+                "local repair was cancelled during search",
+            }
+        if result.status is LocalRepairStatus.INVALID_REQUEST:
+            return (
+                result.expanded_states == 0
+                and result.diagnostic == "the local repair cancellation hook is invalid"
+            )
+    except Exception:  # pragma: no cover - hostile in-process result must fail closed
+        return False
 
 
 def _cancelled(cancelled: CancellationCheck | None) -> bool:
@@ -223,14 +344,22 @@ def _result(
     route: tuple[GridCell, ...] = (),
     bend_count: int = 0,
 ) -> LocalRepairResult:
-    return LocalRepairResult(
+    result = LocalRepairResult(
         status=status,
         input_digest=request.input_digest,
         route=route,
+        route_digest=(
+            _route_digest(request.input_digest, route)
+            if status is LocalRepairStatus.COMPLETED
+            else _EMPTY_DIGEST
+        ),
         expanded_states=expanded_states,
         bend_count=bend_count,
         diagnostic=diagnostic,
     )
+    if not verify_local_repair_result(request, result):  # pragma: no cover - implementation guard
+        raise RuntimeError("local repair result failed its own request-bound verifier")
+    return result
 
 
 def exact_local_repair(
@@ -340,4 +469,5 @@ __all__ = [
     "LocalRepairResult",
     "LocalRepairStatus",
     "exact_local_repair",
+    "verify_local_repair_result",
 ]

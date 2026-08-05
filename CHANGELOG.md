@@ -8,6 +8,11 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added a packaged standalone deterministic exact local-repair operator for a conventionally
+  coordinator-supplied bounded lattice window. It emits only request-bound immutable local
+  proposals with fixed failure/cancellation states and is not wired into negotiated routing, MCP,
+  KiCad, candidate application, or board mutation.
+
 - Added a bounded, in-memory routing-task handle broker and a runtime MCP Tasks compatibility
   probe. The reference environment observed `mcp 2.0.0`, but the supported dependency range
   remains `<3`; the observed runtime lacks the current Tasks wire/dispatcher contract and

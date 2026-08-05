@@ -8,8 +8,10 @@ geometry, mutating a board, or weakening the existing candidate/physical-clearan
 ## Decision
 
 `copper_mcp.routing.repair.exact_local_repair` is a deterministic, candidate-only local operator.
-It accepts a **coordinator-owned** `RepairWindowCandidate`, two integer lattice endpoints, a
-canonical bounded tuple of occupied cells, and a capped expansion budget.  It returns either an
+It accepts a **conventionally coordinator-supplied** `RepairWindowCandidate`, two integer lattice
+endpoints, a canonical bounded tuple of occupied cells, and a capped expansion budget. The local
+type does not authenticate who supplied the window or claim ownership; that provenance remains a
+future coordinator boundary. It returns either an
 immutable lattice proposal with input/route content digests or a fixed no-route, budget,
 cancellation, or invalid-boundary result.  It never receives Board IR, KiCad text, pad identifiers,
 track widths, layers, candidates, policy/model output, or apply authority.
@@ -21,6 +23,13 @@ non-negative bend increment, so the usual Dijkstra settlement condition applies.
 cell sequence is only a deterministic tie-breaker and is bounded by the window-cell cap.  The
 four-neighbour grid form is the classic Lee path-connection setting, but this implementation does
 not claim Lee's full PCB semantics.
+
+The request-bound verifier independently revalidates frozen request fields and accepts a completed
+proposal only when input and stored route digests recompute exactly; endpoints match; every cell is
+in-window and unblocked; every segment is one orthogonal cell; cells are unique; and the reported
+bend count recomputes. Non-completed results must publish no route or route digest and carry the
+exact fixed status diagnostic. This catches hostile in-process construction or mutation before a
+future integration can bind a local proposal to a route candidate.
 
 Primary sources:
 
@@ -56,5 +65,5 @@ This is an abstract, orthogonal, single-net lattice calculation.  It does **not*
 quality improvement over the existing negotiated router, physical clearance, existing-board
 copper avoidance, Board IR/KiCad binding, DRC, manufacturing validity, model effectiveness, or
 safe apply.  It is intentionally not wired into `negotiate_routes` yet: doing so would require a
-new ADR, coordinator-owned repair-window derivation, revised profile validation and candidate
+new ADR, conventionally coordinator-supplied repair-window derivation, revised profile validation and candidate
 identity/versioning, reference-router replay, physical acceptance, and a held-out benchmark.

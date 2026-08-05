@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from copper_mcp.routing.policy import PolicyBounds, RepairWindowCandidate
 from copper_mcp.routing.repair import (
     LocalRepairRequest,
+    LocalRepairResult,
     LocalRepairStatus,
     exact_local_repair,
+    verify_local_repair_result,
 )
 
 
@@ -55,6 +59,7 @@ def test_exact_local_repair_solves_predeclared_bounded_detour_repeatably() -> No
     assert result.expanded_states <= request.max_expansions
     assert result.input_digest == request.input_digest
     assert result.route_digest.startswith("sha256:")
+    assert verify_local_repair_result(request, result)
 
 
 def test_exact_local_repair_optimizes_bends_after_unit_length() -> None:
@@ -149,3 +154,58 @@ def test_local_repair_route_digest_changes_when_the_coordinator_input_changes() 
     assert second.status is LocalRepairStatus.COMPLETED
     assert first.input_digest != second.input_digest
     assert first.route_digest != second.route_digest
+
+
+def test_local_repair_verifier_rejects_forged_completed_geometry_and_digests() -> None:
+    request = _detour_request()
+    result = exact_local_repair(request)
+    assert result.status is LocalRepairStatus.COMPLETED
+    forged_results = (
+        replace(
+            result,
+            route=((0, 2), (1, 1), (4, 2)),
+        ),
+        replace(
+            result,
+            route=((0, 2), (-1, 2), (0, 2), (4, 2)),
+        ),
+        replace(
+            result,
+            route=((0, 2), (0, 1), (0, 0), (0, 1), (4, 2)),
+        ),
+        replace(
+            result,
+            route=((0, 2), (0, 1), (4, 2)),
+        ),
+        replace(result, bend_count=result.bend_count + 1),
+        replace(result, route_digest="sha256:" + "f" * 64),
+    )
+
+    assert all(not verify_local_repair_result(request, forged) for forged in forged_results)
+
+
+def test_local_repair_verifier_rejects_mutated_request_and_nonterminal_geometry() -> None:
+    request = _detour_request()
+    result = exact_local_repair(request)
+    tampered_request = _detour_request()
+    object.__setattr__(tampered_request, "blocked_cells", ())
+    budget = exact_local_repair(_detour_request(max_expansions=1))
+
+    assert not verify_local_repair_result(tampered_request, result)
+    assert verify_local_repair_result(_detour_request(max_expansions=1), budget)
+    forged_budget = exact_local_repair(_detour_request(max_expansions=1))
+    object.__setattr__(forged_budget, "route", ((0, 2), (0, 1)))
+    object.__setattr__(forged_budget, "route_digest", "sha256:" + "a" * 64)
+    object.__setattr__(forged_budget, "bend_count", 1)
+    forged_status = exact_local_repair(_detour_request(max_expansions=1))
+    object.__setattr__(forged_status, "status", "completed")
+    assert not verify_local_repair_result(_detour_request(max_expansions=1), forged_budget)
+    assert not verify_local_repair_result(_detour_request(max_expansions=1), forged_status)
+    assert not verify_local_repair_result(
+        request,
+        LocalRepairResult(
+            status=LocalRepairStatus.NO_PATH,
+            input_digest=request.input_digest,
+            diagnostic="wrong",
+        ),
+    )
