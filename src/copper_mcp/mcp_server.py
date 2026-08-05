@@ -10,7 +10,7 @@ import os
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, get_args
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.context import Context
@@ -121,6 +121,12 @@ _ROUTING_REPOSITORY_LOCK = threading.RLock()
 _ROUTING_FUTURES: dict[str, Future[Any]] = {}
 _ROUTING_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="copper-routing")
 
+# Retain the exact, closed schema advertised to MCP clients while deliberately accepting every
+# runtime JSON value.  The routing-job service owns untrusted request parsing and returns its
+# fixed non-echoing refusal; allowing Pydantic to validate nested values here could disclose them
+# in a framework-generated error before that boundary runs.
+RoutingJobToolRequest = Annotated[Any, *get_args(RoutingJobRequest)[1:]]
+
 
 def _routing_repository() -> RoutingJobRepository:
     """Open the ignored local routing ledger lazily, so read-only imports do not write state."""
@@ -188,6 +194,7 @@ class CopperMCPServer(MCPServer[None]):
                 "preview_live_placement",
                 "preview_placement",
                 "inspect_live_editor_context",
+                "start_routing",
             }:
                 result.append(tool)
                 continue
@@ -462,7 +469,7 @@ def preview_live_layered_route(
     structured_output=True,
 )
 def start_routing(
-    request: RoutingJobRequest,
+    request: RoutingJobToolRequest,
     authorization_digest: Digest,
 ) -> RoutingJobToolResponse:
     """Queue one durable, file-backed layered route proposal and dispatch the local worker.
@@ -477,7 +484,7 @@ def start_routing(
         repository = _routing_repository()
         result = start_routing_job_service(
             {
-                "request": request.model_dump(mode="python", exclude_none=True),
+                "request": request,
                 "authorization_digest": authorization_digest,
             },
             _SETTINGS,

@@ -139,6 +139,49 @@ def test_job_request_cannot_silently_accept_layered_drc_opt_in(tmp_path: Path) -
         repository.close()
 
 
+@pytest.mark.parametrize(
+    "raw_request",
+    (
+        "SECRET_ROUTING_JOB_SCALAR",
+        {"private_payload": "SECRET_ROUTING_JOB_NESTED"},
+    ),
+)
+def test_job_mcp_routes_malformed_private_requests_through_service_refusal(
+    tmp_path: Path,
+    raw_request: object,
+) -> None:
+    """Nested job values must not reach Pydantic's echoing argument-validation path."""
+
+    settings, _, authorization = _workspace(tmp_path)
+    repository = RoutingJobRepository(tmp_path / "jobs.sqlite3")
+    try:
+        with patch.object(server, "_SETTINGS", settings):
+            with patch.object(server, "_routing_repository", return_value=repository):
+                with pytest.raises(ToolError) as caught:
+                    asyncio.run(
+                        mcp.call_tool(
+                            "start_routing",
+                            {"request": raw_request, "authorization_digest": authorization},
+                        )
+                    )
+        assert str(caught.value) == (
+            "Error executing tool start_routing: routing job request was refused"
+        )
+        assert "SECRET_ROUTING_JOB" not in repr(caught.value)
+        assert isinstance(caught.value.__cause__, ToolError)
+        assert isinstance(caught.value.__cause__.__cause__, RoutingJobServiceError)
+    finally:
+        repository.close()
+
+
+def test_job_start_advertises_closed_outer_and_nested_request_schemas() -> None:
+    tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
+    schema = tools["start_routing"].input_schema
+    assert schema["additionalProperties"] is False
+    request_schema = schema["properties"]["request"]
+    assert request_schema["additionalProperties"] is False
+
+
 def test_direct_job_preparation_rejects_layered_drc_opt_in(tmp_path: Path) -> None:
     settings, request, _ = _workspace(tmp_path)
     request["include_drc"] = True
