@@ -1023,3 +1023,14 @@ are the audit copies for the original run IDs.
 | Route metrics | 8/8 previews routed, with four two-pad and four multi-pad candidates; all recorded zero vias and zero internal violations. Wire lengths (mm) are `12`, `12`, `37.25`, `34.75`, `45.5`, `48`, `55.5`, and `50.75` for `L_IN`, `R_IN`, `L_SUM`, `R_SUM`, `L_OUT`, `R_OUT`, `VPOS`, and `VNEG`. The four multi-pad candidates use two or three paths. Repeated service outputs and candidate identities are pinned by regression. |
 | KiCad authority | Explicit local KiCad CLI `10.0.5` executed JSON DRC on the source private copy and eight independently serialized single-net derivatives. Source: 14 violations, 24 unconnected items. Derivatives: 14 violations and 23/23/22/22/23/23/21/21 unconnected items in the same route order. Thus each derivative reduces its selected net's disconnect count without adding a violation; all remain non-clean. |
 | Interpretation | This is public-service deterministic candidate-preview evidence and an authoritative KiCad DRC observation of independent disposable derivatives. It is not combined-net routing, a clean board DRC, electrical/ERC verification, component-value selection, fabrication/hardware evidence, performance comparison, or FreeRouting parity. |
+
+#### B-075 — held-out audio evidence-source provenance correction
+
+| Field | Recorded evidence |
+|---|---|
+| Correction | Supersedes only B-066's clean-evidence source reference. B-066 remains immutable history. PR #51 was squash-merged, so its previously recorded source `96110ee9c3dbf9769070abaaffefb85a4018a4cc` is not an ancestor of the merged-main lineage and cannot be guaranteed available to a shallow CI checkout. |
+| Rebound source | `999d64d3bc930f3f5a3fcbed0725bf7f203e6337`, the merged-main squash commit, is locally reachable from the integration head and contains byte-identical bound script, fixture, licence, provenance, and split inputs. |
+| Artifact | [`2026-08-05-audio-project-family-v1.json`](../../benchmarks/results/heldout/2026-08-05-audio-project-family-v1.json); regenerated evidence run `sha256:f8c5be968f5df360fb975c4959a20fe0663621dd2b9cd2e3ba0acedf37795c40`; artifact run `sha256:839013f27b62c2ae4eeab2212b24aab675876d955863c6caf1a9cb72448d68e2`. |
+| Metric preservation | The regenerated three-replay signature remains `29b28fbab5baa7f8df04a958d21c90dbcd0ac53b1344f18d69156da5e7304bdd`: 6/6 routed nets, `205,000,000 nm` total wire length, 8 legal placement candidates after 96 evaluations, and zero internal routing violations. |
+| Replay guard | The detached clean-worktree regression now proves, using only local Git ancestry, that the artifact source is an ancestor of the checkout before cloning or checkout. It does not fetch, skip, xfail, or relax the clean-source byte replay. |
+| Interpretation | This is a provenance and CI-availability correction only. It adds no fixture, capability, quality, KiCad, network, model, electrical, fabrication, or hardware claim. |

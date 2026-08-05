@@ -119,7 +119,7 @@
         "tuning_family_ids": []
       }
     },
-    "evidence_source_commit": "96110ee9c3dbf9769070abaaffefb85a4018a4cc",
+    "evidence_source_commit": "999d64d3bc930f3f5a3fcbed0725bf7f203e6337",
     "inputs": {
       "scripts/benchmark_audio_heldout_evaluation.py": "4005dc59159786435bfd6c90bf15709a44832d4d6cca62a54b0e03a7f78b43c4",
       "tests/fixtures/benchmarks/heldout-audio/LICENSE": "7ad27bd3d842c3cb15e67e107f51d6d5496470bc7b82f4fb91294721a75b6351",
@@ -130,7 +130,7 @@
     "schema": "copper-mcp/benchmark/heldout-audio-project-family/evidence-v1",
     "script": "scripts/benchmark_audio_heldout_evaluation.py"
   },
-  "evidence_run_id": "sha256:34d83180f8fd5b62c17c0b1bc7d8306301d5949a7851e6f31b148177da261884",
-  "run_id": "sha256:44d3c793c0e5b76f856640ccc576692086b31c1688471362d210cef91a08587c",
+  "evidence_run_id": "sha256:f8c5be968f5df360fb975c4959a20fe0663621dd2b9cd2e3ba0acedf37795c40",
+  "run_id": "sha256:839013f27b62c2ae4eeab2212b24aab675876d955863c6caf1a9cb72448d68e2",
   "schema": "copper-mcp/benchmark/heldout-audio-project-family/artifact-v1"
 }

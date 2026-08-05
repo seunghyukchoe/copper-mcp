@@ -33,6 +33,18 @@ def _replay_artifact_in_clean_detached_worktree(
     assert isinstance(repetitions, int)
     git = shutil.which("git")
     assert git is not None
+    reachable = subprocess.run(  # noqa: S603 - fixed local Git argv; does not contact a remote
+        [git, "merge-base", "--is-ancestor", source_commit, "HEAD"],
+        cwd=benchmark.ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert reachable.returncode == 0, (
+        "artifact evidence source must be reachable from the local checkout before replay; "
+        f"source={source_commit} stderr={reachable.stderr}"
+    )
     detached = tmp_path / "clean-evidence-clone"
     output = tmp_path / "replayed-artifact.json"
     cloned = subprocess.run(  # noqa: S603 - fixed local Git argv; writes only below tmp_path
