@@ -31,7 +31,7 @@
 | `inspect_live_editor_context` | None | Revision-bound active layer and bounded native selection references from the KiCad IPC editor; never reads raw selection text or mutates the editor. |
 | `apply_candidate` | **Replaces the board file**; disabled by default | Separately authorized route-patch mutation. Requires an operator flag and a route-scoped single-use token. |
 | `apply_placement_candidate` | **Replaces the board file**; disabled by default | Separately authorized bounded placement-pose mutation. Requires an operator flag and a placement-scoped single-use token. |
-| `preview_placement` | None, or a short-lived placement capability when explicitly requested | Deterministic legality preview for a proposed footprint placement. It never writes or runs DRC; `include_apply_token: true` may request a placement token for the supported replay subset. |
+| `preview_placement` | None, or a short-lived placement capability when explicitly requested | Deterministic legality preview for a proposed footprint placement. `include_drc: true` may request aggregate DRC evidence for the file-backed serializer subset; `include_apply_token: true` may request a placement token. Neither flag writes the source board or grants live authority. |
 | `preview_route` | None, or a temporary report when `include_drc` is set | Bounded, non-mutating two-pin route proposal on the documented Board IR subset. |
 | `render_circuit_schematic` | Process-local artifact only; stdio only | Validate structured Circuit Intent, require deterministic replay, and issue one opaque schematic resource capability. |
 | `validate_candidate` | None | Validate and normalize candidate metadata. |
@@ -183,8 +183,8 @@ the scene's `board_revision` into this read, then use `context_digest` for subse
 
 `preview_placement` takes one request object with a workspace-relative `board`, integer
 `constraints`, and `subjects` - the footprint references a proposal may move - plus optional
-`rules`, `proposals`, `placement_grid_nm`, and the explicit `include_apply_token` capability
-request. Rules come in seven kinds (proximity, alignment,
+`rules`, `proposals`, `placement_grid_nm`, `include_drc`, and the explicit `include_apply_token`
+capability request. Rules come in seven kinds (proximity, alignment,
 symmetry, edge, region, orientation, side) and name objects only by references a scene already
 returned. Proposals are anchored the same way, as an offset from another object's edge or
 centre; there is no field anywhere in the language that accepts an absolute coordinate, so every
@@ -216,15 +216,22 @@ A proposal that would move a footprint whose Board IR `locked` field is true is 
 `unsupported_geometry` before a candidate is issued. Unlocking or applying that move is never
 implicit.
 
-**The public preview never applies a placement and does not return KiCad DRC evidence.** A separate
-internal `run_placement_candidate_drc` gate can bind the supported candidate subset to a private,
-disposable KiCad replay; that evidence is not exposed through `preview_placement` or live
-placement. What the public tool claims is exactly what the deterministic legalizer proved. A
-file-backed preview may explicitly request a short-lived placement-scoped apply token; the token
-is issued only when the operator has enabled apply and the same pure source-preserving replay
-accepts the candidate. Moving a footprint moves its pads, so a placement candidate invalidates
-any route candidate bound to the same base revision, and observing a scene after a hypothetical
-placement is not supported. Live placement never grants apply authority.
+**The public preview never applies a placement.** With `include_drc: true`, the file-backed tool
+may additionally run the same candidate through the private, disposable KiCad DRC gate. The
+response exposes only candidate/source/patched-board/context digests and the aggregate
+`DrcSummary`; it carries no raw report, board bytes, net names, UUIDs, or fabrication conclusion.
+`passed` means KiCad reported no active errors or unconnected items, while `clean` is stricter and
+also requires zero warnings, exclusions, ignored checks, and violation types. A warning-only
+report can therefore be `passed: true, clean: false`. The source board is never written, the
+candidate is re-bound to the captured source and context, and any timeout, unsupported syntax,
+context race, malformed report, or binding mismatch fails closed. Live placement and apply paths
+force `include_drc: false`. What the public tool claims without the flag is exactly what the
+deterministic legalizer proved. A file-backed preview may explicitly request a short-lived
+placement-scoped apply token; the token is issued only when the operator has enabled apply and the
+same pure source-preserving replay accepts the candidate. Moving a footprint moves its pads, so a
+placement candidate invalidates any route candidate bound to the same base revision, and observing
+a scene after a hypothetical placement is not supported. Live placement never grants apply
+authority.
 
 `apply_placement_candidate` is the separately authorized file-level mutation surface for that
 narrow replay subset. It takes `board`, the `candidate` manifest from a preview,
@@ -425,8 +432,7 @@ the rename leaves the board untouched and is a clean refusal; a failure *after* 
 board is already changed, and that is reported truthfully as **`applied_but_unverified`** with
 the best-effort observed final digest rather than as "nothing changed". The final digest may be
 the original when guarded rollback succeeds, a concurrent writer, or `null` when the board is
-missing/unreadable. In that
-case a *guarded* rollback runs - it restores the pre-apply bytes only if the file still holds
+missing/unreadable. In that case a *guarded* rollback runs - it restores the pre-apply bytes only if the file still holds
 exactly what this apply wrote, so a concurrent writer's newer bytes are never clobbered. The
 service also takes one last best-effort digest observation before a successful apply response so
 a visible rewrite after verification is not reported as `applied`; a longer editor transaction

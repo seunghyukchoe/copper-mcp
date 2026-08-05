@@ -905,14 +905,14 @@ def apply_placement_candidate(
     # can still win the tiny interval after verification.  We cannot eliminate that last
     # nanosecond without a longer transaction, but we can refuse to claim success when the
     # reproducible race is visible and preserve the concurrent bytes.
-    final_revision = _final_observed_revision(settings, board)
-    if final_revision is None or final_revision != published_revision:
+    observed_final_revision = _final_observed_revision(settings, board)
+    if observed_final_revision is None or observed_final_revision != published_revision:
         token_authority.consume(verified)
         return PlacementApplyResult(
             status="applied_but_unverified",
             board_path=board.relative_path,
             board_revision_before=board.revision,
-            board_revision_after=final_revision,
+            board_revision_after=observed_final_revision,
             snapshot_digest_before=snapshot.snapshot_digest,
             base_revision=candidate.base_revision,
             candidate_id=candidate.candidate_id,
@@ -927,7 +927,7 @@ def apply_placement_candidate(
                     + (
                         "the final board revision could not be observed; the board may be "
                         "missing or unreadable; restore the pre-apply copy if needed"
-                        if final_revision is None
+                        if observed_final_revision is None
                         else "the final observed board revision changed before return; "
                         "concurrent bytes were left in place; restore the pre-apply copy if needed"
                     )
@@ -940,7 +940,7 @@ def apply_placement_candidate(
         status="applied",
         board_path=board.relative_path,
         board_revision_before=board.revision,
-        board_revision_after=final_revision,
+        board_revision_after=observed_final_revision,
         snapshot_digest_before=snapshot.snapshot_digest,
         base_revision=candidate.base_revision,
         candidate_id=candidate.candidate_id,

@@ -214,9 +214,12 @@ placement, and the policy-plugin work.
 - [~] Authoritative KiCad DRC binding for placement candidates. The narrow internal
   source-preserving serializer covers front-side, orthogonal, unfilled-courtyard footprints and
   reparses its disposable result; `run_placement_candidate_drc` now binds that exact replay to a
-  private KiCad 10.0.5 DRC context with source/context CAS and redacted aggregate evidence. Public
-  placement DRC, unsupported properties/text/fabrication graphics/library identity/3D-model pose,
-  live compare-and-swap, and apply remain open gates.
+  private KiCad 10.0.5 DRC context with source/context CAS and redacted aggregate evidence.
+  File-backed `preview_placement` now exposes this evidence only through explicit
+  `include_drc: true`, with candidate/source/patched-board/context bindings and distinct hard-gate
+  `passed` versus warning-aware `clean` semantics. Unsupported properties/text/fabrication
+  graphics/library identity/3D-model pose, live compare-and-swap, placement apply, and broader
+  geometry remain open gates.
 - [~] Deterministic snapping, connectivity, clearance, rule, provenance, and revision validation for
   every placement candidate. Grid snapping, rule residuals, three-valued pad overlap, outline
   containment, keepout respect, exact same-side rectangular-courtyard overlap, and dual-digest

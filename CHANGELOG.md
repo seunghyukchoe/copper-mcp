@@ -47,6 +47,13 @@ All notable changes are documented here. The format follows
   against a disposable private context, rechecks source/rule/library CAS, and returns only a
   redacted aggregate summary; public/live placement and apply remain unchanged.
 
+- Added opt-in, file-backed placement DRC evidence to `preview_placement`. `include_drc: true`
+  replays the immutable candidate through the same private KiCad context gate and returns only
+  candidate/source/patched-board/context digests plus aggregate findings. `passed` remains the
+  hard error/connectivity signal while `clean` is stricter about warnings, exclusions, and ignored
+  checks; live placement, apply authority, raw reports, and fabrication claims remain excluded.
+  Evidence is recorded in B-044.
+
 - Added a redacted, deterministic unsigned in-toto Statement payload to candidate-bound DRC
   evidence. The Link v0.3 payload binds the candidate and board revisions by digest, carries only
   aggregate DRC byproducts, and is validated at the MCP boundary; DSSE signing and verification
@@ -130,6 +137,11 @@ All notable changes are documented here. The format follows
 - Route and placement apply now distinguish an unreadable or missing board at the final
   publication observation from the expected digest: the capability is consumed and the result is
   `applied_but_unverified` with a null after-revision instead of a false `applied` response.
+
+- Placement DRC evidence is now a public, read-only opt-in only for the documented file-backed
+  serializer subset. KiCad runs with fixed JSON DRC arguments and no refill/save flags against a
+  disposable context; source bytes, inode, and mtime remain unchanged, and malformed, stale, or
+  unbound evidence fails closed at the MCP contract boundary.
 
 - Routing-job and candidate-manifest TTL misses now commit their expiry purge before returning
   the uniform unavailable diagnostic, so expired board-derived metadata cannot reappear after a
