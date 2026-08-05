@@ -1,0 +1,8 @@
+{
+  "callback_url": "https://example.invalid/placement",
+  "model_api_token": "CANARY_PLACEMENT_TOKEN",
+  "policy_geometry": {
+    "origin_nm": [0, 0]
+  },
+  "workspace_path": "../outside.kicad_pcb"
+}
