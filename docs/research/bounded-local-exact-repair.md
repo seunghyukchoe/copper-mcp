@@ -24,12 +24,17 @@ cell sequence is only a deterministic tie-breaker and is bounded by the window-c
 four-neighbour grid form is the classic Lee path-connection setting, but this implementation does
 not claim Lee's full PCB semantics.
 
-The request-bound verifier independently revalidates frozen request fields and accepts a completed
-proposal only when input and stored route digests recompute exactly; endpoints match; every cell is
-in-window and unblocked; every segment is one orthogonal cell; cells are unique; and the reported
-bend count recomputes. Non-completed results must publish no route or route digest and carry the
-exact fixed status diagnostic. This catches hostile in-process construction or mutation before a
-future integration can bind a local proposal to a route candidate.
+At the public boundary, the operator revalidates each current request field and reconstructs a
+fresh immutable request before any callback or search. A malformed or type-confused current value
+returns the fixed invalid result with zero search work. This does **not** authenticate an object,
+seal its lifetime, or distinguish a post-construction change that forms another valid exact request
+from a freshly submitted equivalent request. The request-bound verifier accepts a completed
+proposal only when the current input and stored route digests recompute exactly; endpoints match;
+every cell is in-window and unblocked; every segment is one orthogonal cell; cells are unique; and
+the reported bend count recomputes. Non-completed results must publish no route or route digest and
+carry the exact fixed status diagnostic. These checks validate geometry and work accounting before
+a future integration can bind a local proposal to a route candidate; they do not establish origin,
+ownership, or authentication.
 
 Primary sources:
 

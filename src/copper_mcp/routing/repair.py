@@ -18,7 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
 from heapq import heappop, heappush
 from itertools import pairwise
@@ -88,11 +88,12 @@ def _within(bounds: PolicyBounds, cell: GridCell) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class LocalRepairRequest:
-    """Trusted coordinator input for one bounded local repair attempt.
+    """Bounded coordinator-shaped input for one local repair attempt.
 
     ``blocked_cells`` must be a canonical occupancy projection from the deterministic core.  It is
-    intentionally not populated by an advisory policy, and neither it nor the result has Board
-    IR, pad IDs, widths, layers, or an apply capability.
+    intentionally not populated by an advisory policy, but this value itself makes no provenance
+    or authentication claim. Neither it nor the result has Board IR, pad IDs, widths, layers, or
+    an apply capability.
     """
 
     repair_window: RepairWindowCandidate
@@ -101,7 +102,6 @@ class LocalRepairRequest:
     blocked_cells: tuple[GridCell, ...] = ()
     max_expansions: int = _MAX_EXPANSIONS
     max_window_cells: int = _MAX_WINDOW_CELLS
-    _construction_digest: str = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if type(self.repair_window) is not RepairWindowCandidate:
@@ -138,7 +138,6 @@ class LocalRepairRequest:
             raise ValueError("local repair blocked cells must be canonical and in-window")
         if start in self.blocked_cells or end in self.blocked_cells:
             raise ValueError("local repair endpoints cannot be blocked")
-        object.__setattr__(self, "_construction_digest", self.input_digest)
 
     @property
     def input_digest(self) -> str:
@@ -206,12 +205,12 @@ class LocalRepairResult:
 
 
 def _canonical_request(request: object) -> LocalRepairRequest | None:
-    """Return a reconstructed immutable request, rejecting post-construction mutation.
+    """Return a fresh immutable request reconstructed from current exact field values.
 
-    The public entry point must never let a previously frozen object directly influence a search:
-    hostile in-process code can bypass frozen slots with ``object.__setattr__``.  The construction
-    digest seals ordinary object lifetime; reconstruction gives the search a fresh exact-tuple,
-    primitive-only copy even when the caller retains the original object.
+    The public entry point validates and copies all current values before a callback or search can
+    observe them.  This is a type/shape and bounded-work boundary, not an object-lifetime seal:
+    a post-construction change that forms another valid exact request is equivalent to submitting
+    that request afresh.  No origin, ownership, or authentication property is inferred.
     """
 
     if type(request) is not LocalRepairRequest:
@@ -229,7 +228,6 @@ def _canonical_request(request: object) -> LocalRepairRequest | None:
             or type(request.blocked_cells) is not tuple
             or type(request.max_expansions) is not int
             or type(request.max_window_cells) is not int
-            or type(request._construction_digest) is not str
         ):
             return None
         bounds = PolicyBounds(
@@ -253,7 +251,7 @@ def _canonical_request(request: object) -> LocalRepairRequest | None:
         )
     except Exception:
         return None
-    return canonical if canonical.input_digest == request._construction_digest else None
+    return canonical
 
 
 def _bend_count(route: tuple[GridCell, ...]) -> int:
@@ -264,13 +262,13 @@ def _bend_count(route: tuple[GridCell, ...]) -> int:
 
 
 def verify_local_repair_result(request: object, result: object) -> bool:
-    """Prove a local repair result is bound to one revalidated immutable request.
+    """Prove a local repair result against the request's current canonical values.
 
-    The verifier is deliberately stricter than the result dataclass constructor: frozen objects can
+    The verifier is deliberately stricter than the result dataclass constructor: result objects can
     still be forged or mutated through hostile in-process code. A completed result must bind the
-    original request digest and route digest, use exact endpoints, stay inside the selected window,
-    avoid blocked cells, take only orthogonal unit steps without repeated cells, and report its
-    exact bend count. Non-completed results cannot carry geometry and use fixed diagnostics.
+    current canonical request and route digests, use exact endpoints, stay inside the selected
+    window, avoid blocked cells, take only orthogonal unit steps without repeated cells, and report
+    its exact bend count. Non-completed results cannot carry geometry and use fixed diagnostics.
     """
 
     canonical = _canonical_request(request)

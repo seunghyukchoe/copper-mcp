@@ -131,8 +131,6 @@ def test_local_repair_rejects_untrusted_boundaries_with_fixed_diagnostics() -> N
         lambda request: object.__setattr__(request, "blocked_cells", ((2, 2), (2, 2))),
         lambda request: object.__setattr__(request, "start", (True, 2)),
         lambda request: object.__setattr__(request, "max_expansions", True),
-        lambda request: object.__setattr__(request.repair_window, "conflict_score", 4),
-        lambda request: object.__setattr__(request, "_construction_digest", "sha256:" + "0" * 64),
     ),
 )
 def test_local_repair_reconstructs_before_callbacks_or_search(mutate: object) -> None:
@@ -155,6 +153,30 @@ def test_local_repair_reconstructs_before_callbacks_or_search(mutate: object) ->
     assert result.expanded_states == 0
     assert result.diagnostic == "the local repair request is invalid"
     assert callback_calls == 0
+
+
+def test_local_repair_treats_valid_current_mutation_as_a_fresh_canonical_request() -> None:
+    mutated = _detour_request()
+    object.__setattr__(mutated.repair_window, "conflict_score", 4)
+    fresh = LocalRepairRequest(
+        repair_window=RepairWindowCandidate(
+            net_id="net:repair",
+            bounds=PolicyBounds(0, 0, 4, 4),
+            conflict_score=4,
+        ),
+        start=(0, 2),
+        end=(4, 2),
+        blocked_cells=((2, 1), (2, 2), (2, 3)),
+        max_expansions=64,
+    )
+
+    mutated_results = tuple(exact_local_repair(mutated) for _ in range(10))
+    fresh_result = exact_local_repair(fresh)
+
+    assert mutated_results == (fresh_result,) * 10
+    assert mutated_results[0].input_digest == fresh.input_digest
+    assert verify_local_repair_result(mutated, mutated_results[0])
+    assert verify_local_repair_result(fresh, mutated_results[0])
 
 
 def test_local_repair_request_rejects_out_of_window_uncanonical_and_oversized_input() -> None:
