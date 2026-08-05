@@ -6,6 +6,16 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Refused a non-orthogonal *saved* footprint pose with a typed `unsupported_geometry` diagnostic
+  instead of an untyped exception. An orthogonal proposal previously masked the stored angle from
+  the placement legalizer's orientation guard, and un-rotating the footprint's pads and courtyards
+  out of that oblique frame escaped the placement boundary as a bare `ValueError`. The KiCad
+  adapter already fails closed on such an angle, so this is reachable only through a directly
+  constructed or decoded Board IR snapshot. The refusal message does not echo the rejected value,
+  and every other reference path to such a footprint already refused with the same code.
+
 ## [0.5.0] - 2026-08-05
 
 ### Fixed
