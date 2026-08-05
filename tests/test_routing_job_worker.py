@@ -170,6 +170,29 @@ def test_expired_lease_acknowledges_a_pending_cancellation(tmp_path: Path) -> No
         assert recovered.diagnostic_code is RoutingJobFailureCode.CANCELLED
 
 
+def test_claim_acknowledges_a_stale_pending_cancellation(tmp_path: Path) -> None:
+    _, spec = _candidate_and_spec()
+    clock = _FakeClock(10)
+    with RoutingJobStore(tmp_path / "claim-cancel-expiry.sqlite3", ttl_ms=10_000) as store:
+        store.create(spec, now_ms=clock.now())
+        first = RoutingJobWorker(store, limits=WorkerLimits(lease_ms=10), clock=clock.now)
+        lease = first.claim(spec.job_id)
+        store.request_cancel(
+            spec.job_id,
+            expected_revision=lease.revision,
+            now_ms=clock.now(),
+        )
+        clock.now_ms = 20
+        second = RoutingJobWorker(store, limits=WorkerLimits(lease_ms=10), clock=clock.now)
+
+        with pytest.raises(RoutingJobLeaseExpiredError):
+            second.claim(spec.job_id)
+
+        recovered = store.get(spec.job_id, now_ms=clock.now())
+        assert recovered.status is RoutingJobStatus.CANCELLED
+        assert recovered.diagnostic_code is RoutingJobFailureCode.CANCELLED
+
+
 def test_claim_closes_and_reports_an_expired_running_lease(tmp_path: Path) -> None:
     _, spec = _candidate_and_spec()
     clock = _FakeClock(10)

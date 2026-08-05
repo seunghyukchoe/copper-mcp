@@ -231,6 +231,17 @@ class RoutingJobWorker:
                 )
                 raise RoutingJobLeaseExpiredError("routing job lease expired and was closed")
             raise RoutingJobAlreadyClaimedError("routing job is already running")
+        if record.status is RoutingJobStatus.CANCEL_REQUESTED:
+            if now - record.updated_at_ms >= self._limits.lease_ms:
+                self._store.acknowledge_cancel(
+                    job_id,
+                    expected_revision=record.revision,
+                    now_ms=now,
+                )
+                raise RoutingJobLeaseExpiredError(
+                    "routing job cancellation was acknowledged after lease expiry"
+                )
+            raise RoutingJobAlreadyClaimedError("routing job cancellation is pending")
         if record.status is not RoutingJobStatus.QUEUED:
             raise RoutingJobStateError("only a queued job can be claimed")
         running = self._store.start(job_id, expected_revision=record.revision, now_ms=now)

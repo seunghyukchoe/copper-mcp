@@ -341,6 +341,18 @@ def test_sqlite_expiry_and_unknown_ids_share_one_not_found_error(tmp_path: Path)
         assert recreated.created_at_ms == 111
 
 
+def test_sqlite_invalid_get_durably_purges_expired_rows(tmp_path: Path) -> None:
+    _, spec = _candidate_and_spec()
+    path = tmp_path / "invalid-get-expiry.sqlite3"
+    with RoutingJobStore(path, ttl_ms=10) as store:
+        store.create(spec, now_ms=100)
+        with pytest.raises(RoutingJobNotFoundError):
+            store.get("malformed-job-id", now_ms=110)
+    connection = sqlite3.connect(path)
+    assert connection.execute("SELECT COUNT(*) FROM routing_jobs").fetchone() == (0,)
+    connection.close()
+
+
 def test_sqlite_mutations_enforce_revision_cas_and_are_thread_safe(tmp_path: Path) -> None:
     _, spec = _candidate_and_spec()
     path = tmp_path / "cas.sqlite3"

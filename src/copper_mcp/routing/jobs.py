@@ -896,11 +896,14 @@ class RoutingJobStore:
         return record
 
     def _require_row_locked(self, job_id: str, now_ms: int) -> RoutingJobRecord:
+        # A lookup is a retention boundary even when the identifier is malformed.  Otherwise a
+        # caller that only observes unavailable jobs can leave expired redacted metadata behind
+        # until a later successful operation happens to purge it.
+        self._purge_locked(now_ms)
         try:
             _digest("job ID", job_id)
         except ValueError:
             raise RoutingJobNotFoundError("routing job is unavailable") from None
-        self._purge_locked(now_ms)
         row = self._row_locked(job_id)
         if row is None:
             raise RoutingJobNotFoundError("routing job is unavailable")
