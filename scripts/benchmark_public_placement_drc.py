@@ -78,6 +78,7 @@ def _run(repetitions: int) -> dict[str, Any]:
     context_bound = True
     passed_runs = 0
     clean_runs = 0
+    aggregate_signatures: set[tuple[int, int, int, int, int]] = set()
     for _ in range(repetitions):
         with tempfile.TemporaryDirectory(prefix="copper-mcp-public-placement-drc-") as root:
             workspace = Path(root)
@@ -110,12 +111,42 @@ def _run(repetitions: int) -> dict[str, Any]:
             source_preserved = source_preserved and after.st_mtime_ns == before.st_mtime_ns
             passed_runs += int(summary["passed"] is True)
             clean_runs += int(summary["clean"] is True)
+            aggregate_signatures.add(
+                tuple(
+                    int(summary[name])
+                    for name in (
+                        "error_count",
+                        "warning_count",
+                        "exclusion_count",
+                        "ignored_check_count",
+                        "unconnected_count",
+                    )
+                )
+            )
             evidence_bytes = json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode()
             evidence_digests.add("sha256:" + hashlib.sha256(evidence_bytes).hexdigest())
+    aggregate_counts: dict[str, int] | None = None
+    if len(aggregate_signatures) == 1:
+        values = next(iter(aggregate_signatures))
+        aggregate_counts = dict(
+            zip(
+                (
+                    "error_count",
+                    "warning_count",
+                    "exclusion_count",
+                    "ignored_check_count",
+                    "unconnected_count",
+                ),
+                values,
+                strict=True,
+            )
+        )
     return {
         "repetitions": repetitions,
         "passed_drc_runs": passed_runs,
         "clean_drc_runs": clean_runs,
+        "aggregate_counts": aggregate_counts,
+        "aggregate_counts_deterministic": len(aggregate_signatures) == 1,
         "candidate_binding": candidate_bound,
         "context_binding": context_bound,
         "source_bytes_inode_mtime_preserved": source_preserved,

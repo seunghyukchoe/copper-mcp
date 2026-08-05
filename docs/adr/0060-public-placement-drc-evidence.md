@@ -44,10 +44,11 @@ coordinates through the evidence object.
 The focused public-contract suite covers omitted-flag zero invocation, deterministic three-run
 evidence, source inode/mtime/byte preservation, warning-only `passed=true`/`clean=false`, malformed
 and foreign evidence, deadline refusal, live opt-in rejection, and MCP schema validation. B-044
-records three real KiCad 10.0.5 disposable replays with candidate/context binding and no workspace
-mutation. The fixture is warning-bearing, so the measured result is `passed_drc_runs=3` and
-`clean_drc_runs=0`; this is not whole-board placement quality, ERC, fabrication readiness, live
-editor CAS, apply, or FreeRouting evidence.
+  records three real KiCad 10.0.5 disposable replays with candidate/context binding and no workspace
+  mutation. The fixture reports five ignored check classes and no errors, warnings, exclusions, or
+  unconnected items, so the measured result is `passed_drc_runs=3`, `clean_drc_runs=0`, and a
+  deterministic aggregate signature. This is not whole-board placement quality, ERC, fabrication
+  readiness, live editor CAS, apply, or FreeRouting evidence.
 
 ## References
 
