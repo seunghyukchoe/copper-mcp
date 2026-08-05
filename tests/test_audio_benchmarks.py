@@ -16,6 +16,9 @@ CHECKER = ROOT / "scripts" / "check_audio_benchmarks.py"
 RUNNER = ROOT / "scripts" / "run_audio_benchmarks.py"
 SCHEMA = ROOT / "schemas" / "audio-benchmark-catalog" / "0.1.0.schema.json"
 RC_FIXTURE = ROOT / "benchmarks" / "audio" / "fixtures" / "rc-low-pass-routing-v1.kicad_pcb"
+NE5532_FIXTURE = (
+    ROOT / "benchmarks" / "audio" / "fixtures" / "ne5532-stereo-summing-routing-v1.kicad_pcb"
+)
 COPPERTONE = ROOT / "hardware" / "coppertone-buffer" / "coppertone-buffer.kicad_pcb"
 REAL_KICAD_CLI = Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli")
 
@@ -48,6 +51,12 @@ def _catalog() -> dict[str, Any]:
     document = json.loads(CATALOG.read_text(encoding="utf-8"))
     assert isinstance(document, dict)
     return document
+
+
+def _fixture(document: dict[str, Any], identifier: str) -> dict[str, Any]:
+    fixture = next(item for item in document["fixtures"] if item["id"] == identifier)
+    assert isinstance(fixture, dict)
+    return fixture
 
 
 def _write_catalog(tmp_path: Path, document: dict[str, Any]) -> Path:
@@ -149,7 +158,7 @@ def test_catalog_rejects_license_evidence_for_a_different_spdx_identity(
 ) -> None:
     document = _catalog()
     fixture = document["fixtures"][0]
-    cern_license = ROOT / document["fixtures"][1]["license_path"]
+    cern_license = ROOT / _fixture(document, "coppertone-buffer-preview-v1")["license_path"]
     fixture["license_path"] = str(cern_license.relative_to(ROOT))
     fixture["license_sha256"] = hashlib.sha256(cern_license.read_bytes()).hexdigest()
     catalog = _write_catalog(tmp_path, document)
@@ -253,7 +262,7 @@ def test_catalog_rejects_route_claims_without_declared_routes(
     claim: str,
 ) -> None:
     document = _catalog()
-    fixture = document["fixtures"][1]
+    fixture = _fixture(document, "coppertone-buffer-preview-v1")
     assert fixture["routes"] == []
     fixture["claims"].append(claim)
     catalog = _write_catalog(tmp_path, document)
@@ -296,14 +305,16 @@ def test_catalog_rejects_a_symlink_escape(tmp_path: Path) -> None:
 
 def test_capability_runner_never_changes_committed_board_sources() -> None:
     before = {
-        path: (path.read_bytes(), path.stat().st_mtime_ns) for path in (RC_FIXTURE, COPPERTONE)
+        path: (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in (RC_FIXTURE, NE5532_FIXTURE, COPPERTONE)
     }
 
     result = _run(RUNNER)
 
     assert result.returncode == 0, result.stderr
     assert {
-        path: (path.read_bytes(), path.stat().st_mtime_ns) for path in (RC_FIXTURE, COPPERTONE)
+        path: (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in (RC_FIXTURE, NE5532_FIXTURE, COPPERTONE)
     } == before
 
 

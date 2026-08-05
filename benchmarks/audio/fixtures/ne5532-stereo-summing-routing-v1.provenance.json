@@ -1,0 +1,37 @@
+{
+  "artifact": "ne5532-stereo-summing-routing-v1.kicad_pcb",
+  "artifact_sha256": "749adc8b4d26b7f7ef878f9cf681521a8efdf446b9f0bf559243918e6e1957a9",
+  "derivation_statement": "CopperMCP Contributors independently authored this synthetic routing topology. It uses only high-level pin-role and bypass-placement facts from TI's public NE5532x datasheet; it copies no schematic, PCB, artwork, value selection, BOM, or design text from a third party.",
+  "license_file": "../../../LICENSE",
+  "license_sha256": "947af68b9ff8f542f5bba7a084e343573274741f4d7e4cbe1e4e9668a89331de",
+  "license_spdx": "Apache-2.0",
+  "origin": "coppermcp-original",
+  "rights_holder": "CopperMCP Contributors",
+  "safety_class": "synthetic-low-voltage",
+  "source_material": [
+    {
+      "title": "TI NE5532x, SA5532x Dual Low-Noise Operational Amplifiers (SLOS075K, Rev. K)",
+      "url": "https://www.ti.com/lit/ds/symlink/ne5532a.pdf",
+      "used_for": "The public pin-function table identifies the dual-amplifier input/output and VCC+/VCC- roles; the layout guidance recommends placing 0.1-uF bypass capacitors close to supply pins.",
+      "copied_content": false
+    },
+    {
+      "title": "KiCad board S-expression file format documentation",
+      "url": "https://dev-docs.kicad.org/en/file-formats/sexpr-pcb/",
+      "used_for": "The fixture is stored as a native KiCad PCB S-expression rather than an external board download.",
+      "copied_content": false
+    }
+  ],
+  "third_party_content_included": false,
+  "not_claimed": [
+    "electrical-correctness",
+    "erc",
+    "kicad-drc",
+    "component-value-selection",
+    "manufacturability",
+    "fabrication-readiness",
+    "hardware-measurement",
+    "combined-net-route-feasibility",
+    "freerouting-parity"
+  ]
+}

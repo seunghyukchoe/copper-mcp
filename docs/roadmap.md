@@ -102,6 +102,11 @@ documentation, ledger updates, and benchmark evidence.
     (`batched-1-steiner-v1` for at most nine evolving components, with a measured 12.5% wire-
     length reduction on the four-pad fixture). This is not a FLUTE implementation or optimality
     claim; higher-degree decomposition and learned policies remain future work.
+  - [x] Original audio multi-pin service benchmark: an Apache-2.0, zero-copper NE5532-class
+    topology has 14 synthetic footprints, 35 pads, 11 nets, and eight independently replayed
+    public-service candidates (four two-pad and four three-/four-pad). B-074 pins their identities
+    and route metrics; optional KiCad 10.0.5 DRC runs only on independent disposable derivatives,
+    reducing the selected net's unconnected count but remaining non-clean and non-combined.
 - [x] Via-aware connectivity, so a net joined through another layer is recognised rather than
   refused. On CopperTone this resolved `VCC` and `L_OUT`; `GND` remains refused because it carries a
   same-net zone, whose fill is not trusted.

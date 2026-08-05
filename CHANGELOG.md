@@ -16,6 +16,15 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added an Apache-2.0 CopperMCP-original NE5532-class stereo audio routing fixture with 14
+  synthetic footprints, 35 pads, 11 nets, and no source copper. Its bounded benchmark invokes the
+  public route-preview application service for eight independently replayed two- and multi-pin
+  candidates, binds fixture/licence provenance, and records exact candidate IDs, path counts,
+  lengths, vias, and search work. Optional KiCad 10.0.5 JSON DRC runs only on disposable,
+  independent candidate derivatives; the recorded run reduced unconnected-item counts without
+  claiming a clean or combined-board DRC result, electrical correctness, fabrication readiness, or
+  FreeRouting parity.
+
 - Added a read-only live KiCad IPC fidelity oracle. When launched by a KiCad plugin with the
   instance socket and token, it binds one confirmed live serialization to Board IR and Circuit
   Scene through redacted digest equality evidence. Missing plugin credentials produce a canonical

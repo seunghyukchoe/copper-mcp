@@ -41,6 +41,14 @@ circuit content, writes a board candidate, runs ERC, or applies copper. Catalog,
 files are read once under byte and path bounds; the runner uses that exact validation snapshot and
 reports only capability claims derived from observed results.
 
+`ne5532-stereo-summing-routing-v1` is a larger CopperMCP-original Apache-2.0 routing topology:
+14 synthetic footprints, 35 pads, 11 nets, and no starting copper. Its dedicated
+`scripts/benchmark_ne5532_audio_routing.py` runner invokes the public service behind MCP for eight
+independent F.Cu previews—four two-pad and four multi-pad—and records deterministic candidate IDs,
+path counts, lengths, vias, and bounded search work. It intentionally does not combine candidates
+into a whole-board route. Its TI/KiCad research basis and nonclaims are in
+[`docs/research/ne5532-audio-routing-fixture.md`](../../docs/research/ne5532-audio-routing-fixture.md).
+
 ## Licensing
 
 The synthetic fixture and catalog are Apache-2.0 test data under the repository license. A catalog
