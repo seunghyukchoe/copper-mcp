@@ -49,6 +49,15 @@ absolute deadline and a remaining timeout clamped to the adapter's bounded maxim
 snapshot cannot consume more than the placement preview budget. This remains cooperative timing;
 blocking official IPC work is not hard process-preemptible.
 
+## Boundary amendment — 2026-08-05 (operation-wide propagation)
+
+The same absolute deadline is retained after capture and passed into the shared placement pipeline.
+Board IR conversion and placement-view construction may consume time, but legalization and any
+optional candidate-bound evidence receive only the remaining seconds. If the deadline has expired
+before legalization, the service returns the typed `budget_exhausted` refusal rather than starting a
+fresh full placement window. The focused regression simulates capture plus conversion work and
+asserts that legalization receives the remainder, not the configured maximum again.
+
 ## References
 
 - [KiCad Python Board API](https://docs.kicad.org/kicad-python-main/board.html)

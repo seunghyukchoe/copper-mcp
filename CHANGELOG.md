@@ -8,6 +8,11 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Live placement proposals now preserve one operation-wide deadline after IPC capture: Board IR
+  conversion, placement-view construction, legalization, optional evidence, and token preparation
+  receive only the remaining budget. An expired post-capture budget returns a typed refusal instead
+  of silently granting a second full placement window.
+
 - Post-placement observation now validates the complete scene request before any workspace read,
   rejects stale board revisions before scanning DRC sidecars, and refuses padless footprint rule
   references before syntactic infeasibility analysis. These boundaries keep malformed/stale work
