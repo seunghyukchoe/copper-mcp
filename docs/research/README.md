@@ -45,6 +45,8 @@ that every product feature, price, or repository release will remain current.
   offline capability, disclosure, revision, and quota regression boundary.
 - [Circuit Scene IR references](./circuit-scene-ir-references.md) grounds the typed semantic/visual
   observation contract and its disclosure limits.
+- [FreeRouting real-run evidence](./freerouting-real-run-v2.md) records the first public,
+  KiCad-DRC-gated DSN/SES run while retaining the harness's no-parity/no-closure boundary.
 - [Circuit Scene to route action closure](./scene-action-closure-references.md) reproduces the
   opaque-reference integration failure, defines the revision-bound MCP contract, and records its
   exact hidden-name equivalence oracle and limitations.

@@ -1,0 +1,134 @@
+{
+  "comparison_closed": false,
+  "copper_process": {
+    "elapsed_ns": 221698250,
+    "output_sha256": "sha256:fa8478e410daf85145203f331db0f7161a9b3c9e94507dbc93092db181ff8276",
+    "output_status": "valid",
+    "returncode": 0,
+    "role": "copper_runner",
+    "status": "ok"
+  },
+  "copper_runner_binding": {
+    "status": "bound"
+  },
+  "fixture": {
+    "dsn_sha256": "sha256:1596d6987d8cb5605c9acffd40bff02cd62845d5be31fb4b228c6379472b3210",
+    "dsn_source_export_binding": {
+      "status": "self_attested_unverified",
+      "workflow": "kicad-ui-specctra-dsn-export"
+    },
+    "provenance": {
+      "license_spdx": "Apache-2.0",
+      "origin": "coppermcp-original"
+    },
+    "provenance_sha256": "sha256:a580643d21461c1fa4714857bdead95366767f5a7c9052a451fd6b5600070b01",
+    "source_sha256": "sha256:f2bb74d00f9195237ecebbf15d55c1e0175c38cc0ca65b3281edf64a3ee45c9c"
+  },
+  "freerouting_import_binding": {
+    "status": "bound"
+  },
+  "freerouting_process": {
+    "elapsed_ns": 4248779750,
+    "returncode": 0,
+    "role": "freerouting_dsn_ses",
+    "ses_sha256": "sha256:eb016ba1a7a4e680c472787dcf49b5f115c969d33603951b9b9fb3e94ba8fc4a",
+    "ses_status": "valid",
+    "status": "ok"
+  },
+  "incomplete_reason": "self_attested_unverified",
+  "method": {
+    "command_environment": "minimal allowlisted environment; no inherited provider tokens",
+    "freerouting_boundary": "documented DSN/SES CLI",
+    "gpl_boundary": "released JAR process only; no FreeRouting source is copied or linked",
+    "isolation_limit": "authorized executables are not sandboxed; isolation is lifecycle and resource containment",
+    "source_preservation": "source bytes hashed before and after every process"
+  },
+  "preflight": {
+    "available": true,
+    "probes": {
+      "java": {
+        "status": "ok",
+        "version": "26.0.2"
+      },
+      "kicad_cli": {
+        "status": "ok",
+        "version": "10.0.5"
+      }
+    },
+    "reasons": []
+  },
+  "recorded_at_utc": "2026-08-05T07:39:18+00:00",
+  "results": [
+    {
+      "board_sha256": "sha256:fa8478e410daf85145203f331db0f7161a9b3c9e94507dbc93092db181ff8276",
+      "drc": {
+        "board_sha256": "sha256:fa8478e410daf85145203f331db0f7161a9b3c9e94507dbc93092db181ff8276",
+        "footprint_errors": 0,
+        "hard_violations": 0,
+        "report_sha256": "sha256:9722a51f2d676f65d7eafb0976a6ccd94e5ad1740af7a2925ec73fc274f4f428",
+        "status": "ok",
+        "unconnected": 0,
+        "workflow": "kicad-gui-drc-report"
+      },
+      "elapsed_ns": 221698250,
+      "length_nm": 20000000,
+      "name": "copper_mcp",
+      "status": "ok",
+      "vias": 0
+    },
+    {
+      "board_sha256": "sha256:99a6c10f975b155363e5386d2c2906c5d600bfaef02414b6be2b7d01b5c61755",
+      "drc": {
+        "board_sha256": "sha256:99a6c10f975b155363e5386d2c2906c5d600bfaef02414b6be2b7d01b5c61755",
+        "footprint_errors": 0,
+        "hard_violations": 0,
+        "report_sha256": "sha256:c14c15720e5fcad576859e795b59cbe53297eefd154924fe719534d024beeff4",
+        "status": "ok",
+        "unconnected": 0,
+        "workflow": "kicad-gui-drc-report"
+      },
+      "elapsed_ns": 4248779750,
+      "length_nm": 20000000,
+      "name": "freerouting",
+      "status": "ok",
+      "vias": 0
+    }
+  ],
+  "run_id": "sha256:b72a4ab2dfe1d44d1d2641af9e62f20daec63ff78ce2b0843196daeb2e0d3ddf",
+  "schema": "copper-mcp/benchmark/freerouting-comparison/v1",
+  "seed": 0,
+  "source_drc": {
+    "board_sha256": "sha256:f2bb74d00f9195237ecebbf15d55c1e0175c38cc0ca65b3281edf64a3ee45c9c",
+    "footprint_errors": 0,
+    "hard_violations": 0,
+    "report_sha256": "sha256:6dbc0a14a5ba8594246db23ad81ca5bff1900694bb6ebdf02ea52f8c494378d7",
+    "status": "ok",
+    "unconnected": 1,
+    "workflow": "kicad-gui-drc-report"
+  },
+  "source_drc_binding": {
+    "evidence_limit": "GUI report header identifies only a board basename",
+    "expected_hard_violations": 0,
+    "expected_intentional_unconnected_items": 1,
+    "status": "self_attested_unverified"
+  },
+  "source_preserved": true,
+  "status": "unavailable_or_incomplete",
+  "timeout_seconds": 120,
+  "toolchain": {
+    "freerouting_jar_sha256": "sha256:f7a716c8f2586eb79d7e6c54c497a6752c3b2401730fdb75c37245d461baa228",
+    "freerouting_license": "GPL-3.0-only",
+    "freerouting_release_provenance": {
+      "asset_name": "freerouting-2.2.2.jar",
+      "asset_sha256": "sha256:f7a716c8f2586eb79d7e6c54c497a6752c3b2401730fdb75c37245d461baa228",
+      "license_spdx": "GPL-3.0-only",
+      "release_tag": "v2.2.2",
+      "source_url": "https://github.com/freerouting/freerouting/releases/download/v2.2.2/freerouting-2.2.2.jar"
+    },
+    "freerouting_release_provenance_status": "verified",
+    "java_sha256": "sha256:a91e35c95afe1846984eeba5d11998f11dceb0843aec35802705a31ce970655a",
+    "kicad_cli_sha256": "sha256:852c180a8c923beb6173b54bd6cc0bd66714e52ebfdd451ef0e061224bc954f5",
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+    "python": "3.14.2"
+  }
+}

@@ -42,6 +42,8 @@ from copper_mcp.kicad_cli import (
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = "copper-mcp/benchmark/freerouting-comparison/v1"
 FREEROUTING_LICENSE = "GPL-3.0-only"
+FREEROUTING_RELEASE_SCHEMA = "copper-mcp/freerouting-release-provenance/v1"
+_FREEROUTING_RELEASE_URL = "https://github.com/freerouting/freerouting/releases/download/"
 REDACTED = "[redacted]"
 _SECRET = re.compile(r"(?i)(bearer\s+|token=|password=|api[_-]?key=)[^\s]+")
 _PATH = re.compile(r"(?<![A-Za-z0-9])(?:/[A-Za-z0-9._~+@%=-]+){2,}|[A-Za-z]:\\[^\s]+")
@@ -62,6 +64,23 @@ MAX_BOARD_ITEMS = 100_000
 FREEROUTING_RECEIPT_SCHEMA = "copper-mcp/freerouting-ses-import-receipt/v1"
 COPPER_RECEIPT_SCHEMA = "copper-mcp/candidate-runner-receipt/v1"
 _RECEIPT_SHA256 = re.compile(r"^sha256:[a-f0-9]{64}$")
+_RELEASE_TAG = re.compile(r"^v(\d+\.\d+\.\d+)$")
+_GUI_DRC_HEADER = re.compile(r"^\*\* Drc report for (?P<board>[^\n]+) \*\*$", re.MULTILINE)
+_GUI_DRC_CREATED = re.compile(r"^\*\* Created on \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2} \*\*$")
+_GUI_DRC_COUNT = re.compile(
+    r"^\*\* Found (?P<count>\d+) (?P<kind>DRC violations|unconnected pads|Footprint errors) \*\*$"
+)
+_GUI_DRC_UNCONNECTED_LOCATION = re.compile(
+    r"^    @\(-?\d+\.\d{4} mm, -?\d+\.\d{4} mm\): Pad [1-9]\d* "
+    r"\[[A-Za-z0-9_.-]+\] of [A-Za-z0-9_.-]+ on [A-Za-z0-9_.-]+$"
+)
+_GUI_DRC_IGNORED_CHECKS = (
+    "    - Footprint has no courtyard defined",
+    "    - Track endpoint not centered on via",
+    "    - Tuning profile track geometries",
+    "    - Footprint doesn't match symbol's footprint filters",
+    "    - Footprint component type doesn't match footprint pads",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,9 +129,25 @@ def _output_text(value: str | bytes | None) -> str:
 
 
 def freerouting_argv(java: Path, jar: Path, dsn: Path, ses: Path) -> tuple[str, ...]:
-    """Return the documented FreeRouting v2 DSN-to-SES command, without a shell."""
+    """Return a headless documented FreeRouting v2 DSN-to-SES command, without a shell.
 
-    return (str(java), "-jar", str(jar), "-de", str(dsn), "-do", str(ses), "-l", "en")
+    The official JAR initializes Swing before it sees the DSN arguments.  The JVM headless flag
+    prevents a physical-display requirement from silently turning a CLI benchmark into a macOS
+    graphics-pipeline failure; it does not alter FreeRouting's DSN/SES protocol.
+    """
+
+    return (
+        str(java),
+        "-Djava.awt.headless=true",
+        "-jar",
+        str(jar),
+        "-de",
+        str(dsn),
+        "-do",
+        str(ses),
+        "-l",
+        "en",
+    )
 
 
 def copper_argv(
@@ -262,6 +297,109 @@ def _provenance(path: Path | None) -> tuple[dict[str, Any] | None, list[str]]:
     return {"license_spdx": value["license_spdx"], "origin": origin}, []
 
 
+def _fixture_provenance_object(path: Path | None) -> dict[str, Any] | None:
+    """Read a fixture provenance object for an optional, non-authoritative claim."""
+
+    if path is None:
+        return None
+    try:
+        value = _strict_json(read_bounded_bytes(path, MAX_PROVENANCE_BYTES), "fixture provenance")
+    except (OSError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def source_drc_expectation(path: Path | None) -> dict[str, int] | None:
+    """Read the declared pre-route DRC baseline without treating it as DRC evidence."""
+
+    provenance = _fixture_provenance_object(path)
+    if provenance is None:
+        return None
+    value = provenance.get("source_drc_expectation")
+    if not isinstance(value, dict) or set(value) != {
+        "hard_violations",
+        "intentional_unconnected_items",
+    }:
+        return None
+    hard_violations = value.get("hard_violations")
+    intentional_unconnected = value.get("intentional_unconnected_items")
+    if (
+        isinstance(hard_violations, bool)
+        or not isinstance(hard_violations, int)
+        or isinstance(intentional_unconnected, bool)
+        or not isinstance(intentional_unconnected, int)
+        or not 0 <= hard_violations <= MAX_BOARD_ITEMS
+        or not 0 <= intentional_unconnected <= MAX_BOARD_ITEMS
+    ):
+        return None
+    return {
+        "hard_violations": hard_violations,
+        "intentional_unconnected_items": intentional_unconnected,
+    }
+
+
+def dsn_source_export_binding(path: Path | None) -> dict[str, str]:
+    """Expose a DSN-export statement without misrepresenting it as a verified causal binding."""
+
+    provenance = _fixture_provenance_object(path)
+    if provenance is None:
+        return {"status": "unavailable"}
+    value = provenance.get("dsn_source_export")
+    if not isinstance(value, dict):
+        return {"status": "unavailable"}
+    if (
+        value.get("workflow") != "kicad-ui-specctra-dsn-export"
+        or value.get("status") != "self_attested_unverified"
+        or not isinstance(value.get("statement"), str)
+        or not 1 <= len(value["statement"]) <= 512
+    ):
+        return {"status": "invalid"}
+    return {
+        "status": "self_attested_unverified",
+        "workflow": "kicad-ui-specctra-dsn-export",
+    }
+
+
+def freerouting_release_provenance(
+    path: Path | None, jar: Path | None
+) -> tuple[dict[str, str] | None, str]:
+    """Bind one official GitHub-release JAR to a bounded public provenance record.
+
+    This proves that the evaluated local bytes match the caller-recorded SHA-256 and names the
+    official release URL.  It does not claim an upstream signature or substitute for a published
+    checksum, neither of which FreeRouting currently supplies with the JAR asset.
+    """
+
+    if path is None:
+        return None, "unavailable"
+    try:
+        value = _strict_json(read_bounded_bytes(path, MAX_PROVENANCE_BYTES), "release provenance")
+    except (OSError, ValueError):
+        return None, "invalid"
+    if not isinstance(value, dict) or value.get("schema") != FREEROUTING_RELEASE_SCHEMA:
+        return None, "invalid"
+    keys = ("release_tag", "asset_name", "asset_sha256", "source_url", "license_spdx")
+    if any(not isinstance(value.get(key), str) or not value[key] for key in keys):
+        return None, "invalid"
+    if any(len(value[key]) > 512 for key in keys):
+        return None, "invalid"
+    tag_match = _RELEASE_TAG.fullmatch(value["release_tag"])
+    if tag_match is None or value["license_spdx"] != FREEROUTING_LICENSE:
+        return None, "invalid"
+    expected_asset = f"freerouting-{tag_match.group(1)}.jar"
+    expected_url = _FREEROUTING_RELEASE_URL + f"{value['release_tag']}/{expected_asset}"
+    if value["asset_name"] != expected_asset or value["source_url"] != expected_url:
+        return None, "invalid"
+    if not _RECEIPT_SHA256.fullmatch(value["asset_sha256"]):
+        return None, "invalid"
+    actual_hash = _hash_or_none(jar, MAX_JAR_BYTES)
+    if actual_hash is None:
+        return None, "unavailable"
+    if actual_hash != value["asset_sha256"]:
+        return None, "mismatch"
+    return {key: value[key] for key in keys}, "verified"
+
+
 def _strict_json(payload: bytes, label: str) -> Any:
     try:
         text = payload.decode("utf-8", errors="strict")
@@ -353,6 +491,7 @@ def preflight(
     kicad_cli: Path | None,
     provenance: Path | None,
     cwd: Path,
+    release_provenance: Path | None = None,
 ) -> dict[str, Any]:
     """Return all prerequisite failures in one truthful, serializable record."""
 
@@ -370,6 +509,9 @@ def preflight(
             reasons.append(f"{label} exceeds its byte limit")
     _, provenance_reasons = _provenance(provenance)
     reasons.extend(provenance_reasons)
+    _, release_status = freerouting_release_provenance(release_provenance, jar)
+    if release_status not in {"unavailable", "verified"}:
+        reasons.append("FreeRouting release provenance is invalid or does not match its JAR")
     probes: dict[str, Any] = {}
     if java is not None and java.is_file() and java.stat().st_size <= MAX_EXECUTABLE_BYTES:
         probes["java"] = version_probe(java, cwd)
@@ -414,7 +556,14 @@ def board_metrics(board: Path) -> dict[str, int | str]:
     }
 
 
-def drc_metrics(kicad_cli: Path, board: Path, timeout_seconds: int, cwd: Path) -> dict[str, Any]:
+def drc_metrics(
+    kicad_cli: Path,
+    board: Path,
+    timeout_seconds: int,
+    cwd: Path,
+    *,
+    role: str = "kicad_drc",
+) -> dict[str, Any]:
     """Run the same authoritative KiCad DRC command for either result board."""
 
     with tempfile.TemporaryDirectory(prefix="copper-mcp-freerouting-drc-") as directory:
@@ -439,7 +588,7 @@ def drc_metrics(kicad_cli: Path, board: Path, timeout_seconds: int, cwd: Path) -
         )
         result = run_process(command, timeout_seconds, cwd)
         output: dict[str, Any] = {
-            "process": process_record(result, "kicad_drc"),
+            "process": process_record(result, role),
             "status": result.status,
         }
         if result.status != "ok" and result.returncode != 5:
@@ -455,13 +604,16 @@ def drc_metrics(kicad_cli: Path, board: Path, timeout_seconds: int, cwd: Path) -
                 return_code=result.returncode,
                 base_revision=sha256_file(board, MAX_BOARD_BYTES),
                 drc_context_revision=sha256_file(board, MAX_BOARD_BYTES),
-                expected_source=str(board),
+                # KiCad CLI v10 records only the input basename in a board-only DRC report.
+                # Comparing that stable value still prevents substituting another board result.
+                expected_source=board.name,
             )
         except (KiCadCliError, ValueError, OSError):
             output["status"] = "failed"
             return output
         output.update(
             {
+                "board_sha256": sha256_file(board, MAX_BOARD_BYTES),
                 "hard_violations": summary.error_count,
                 "kicad_version": summary.kicad_version,
                 "report_sha256": sha256_file(report, MAX_DRC_REPORT_BYTES),
@@ -470,6 +622,155 @@ def drc_metrics(kicad_cli: Path, board: Path, timeout_seconds: int, cwd: Path) -
             }
         )
         return output
+
+
+def source_drc_binding(
+    source_sha256: str | None,
+    source_drc: dict[str, Any],
+    expectation: dict[str, int] | None,
+) -> dict[str, int | str]:
+    """Compare a source DRC observation with its declared exact fixture baseline.
+
+    A KiCad GUI report names only a board basename, so it cannot causally bind its report digest
+    to the source bytes.  A retained attestation containing both exact hashes would be needed to
+    strengthen that GUI evidence beyond a self-attested observation.
+    """
+
+    if source_sha256 is None or expectation is None or source_drc.get("status") != "ok":
+        return {"status": "unavailable"}
+    actual_source = source_drc.get("board_sha256")
+    hard_violations = source_drc.get("hard_violations")
+    unconnected = source_drc.get("unconnected")
+    if (
+        not isinstance(actual_source, str)
+        or isinstance(hard_violations, bool)
+        or not isinstance(hard_violations, int)
+        or isinstance(unconnected, bool)
+        or not isinstance(unconnected, int)
+    ):
+        return {"status": "unavailable"}
+    matches = (
+        actual_source == source_sha256
+        and hard_violations == expectation["hard_violations"]
+        and unconnected == expectation["intentional_unconnected_items"]
+    )
+    output: dict[str, int | str] = {
+        "status": "mismatch" if not matches else "bound",
+        "expected_hard_violations": expectation["hard_violations"],
+        "expected_intentional_unconnected_items": expectation["intentional_unconnected_items"],
+    }
+    if matches and source_drc.get("workflow") == "kicad-gui-drc-report":
+        output["status"] = "self_attested_unverified"
+        output["evidence_limit"] = "GUI report header identifies only a board basename"
+    return output
+
+
+def gui_drc_metrics(board: Path, report: Path | None) -> dict[str, Any]:
+    """Parse a bounded KiCad-GUI DRC report for the named board.
+
+    This is deliberately a separate evidence path from ``drc_metrics``: KiCad's GUI can emit a
+    report on platforms where the local CLI cannot complete.  The report header only identifies
+    a basename, so the returned board hash records the bytes evaluated by this invocation.  It
+    does not imply DSN provenance or a causal routing/import transaction.  The parser accepts
+    only the KiCad 10.0.5 report sequence recorded for this fixed fixture: an exact header,
+    timestamp, report-includes line, three zero-or-one count sections, the documented single
+    blank separators, the known ignored-check list, and one end marker.  Every other line,
+    duplicate, reordered section, or unsupported nonzero count fails closed.
+    """
+
+    if report is None:
+        return {"status": "unavailable", "reason": "source DRC report was not supplied"}
+    try:
+        payload = read_bounded_bytes(report, MAX_DRC_REPORT_BYTES)
+        text = payload.decode("utf-8", errors="strict")
+    except (OSError, UnicodeDecodeError, ValueError):
+        return {"status": "failed"}
+    observed_counts = _parse_gui_drc_report(text, board.name)
+    if observed_counts is None:
+        return {"status": "failed"}
+    try:
+        board_sha256 = sha256_file(board, MAX_BOARD_BYTES)
+        report_sha256 = sha256_file(report, MAX_DRC_REPORT_BYTES)
+    except (OSError, ValueError):
+        return {"status": "failed"}
+    return {
+        "board_sha256": board_sha256,
+        "footprint_errors": observed_counts["Footprint errors"],
+        "hard_violations": observed_counts["DRC violations"],
+        "report_sha256": report_sha256,
+        "status": "ok",
+        "unconnected": observed_counts["unconnected pads"],
+        "workflow": "kicad-gui-drc-report",
+    }
+
+
+def _parse_gui_drc_report(text: str, board_name: str) -> dict[str, int] | None:
+    """Parse exactly the bounded KiCad GUI report grammar accepted by this benchmark."""
+
+    if not text.endswith("\n"):
+        return None
+    lines = text.splitlines()
+    if len(lines) < 18:
+        return None
+    header = _GUI_DRC_HEADER.fullmatch(lines[0])
+    if (
+        header is None
+        or header.group("board") != board_name
+        or _GUI_DRC_CREATED.fullmatch(lines[1]) is None
+        or lines[2] != "** Report includes: Errors, Warnings **"
+        or lines[3] != ""
+    ):
+        return None
+
+    def count_at(index: int, expected_kind: str) -> int | None:
+        match = _GUI_DRC_COUNT.fullmatch(lines[index])
+        if match is None or match.group("kind") != expected_kind:
+            return None
+        return int(match.group("count"))
+
+    hard_violations = count_at(4, "DRC violations")
+    unconnected = count_at(6, "unconnected pads")
+    if hard_violations != 0 or unconnected not in {0, 1} or lines[5] != "":
+        return None
+    footprint_index = 8
+    if unconnected == 1:
+        if (
+            len(lines) < 22
+            or lines[7] != "[unconnected_items]: Missing connection between items"
+            or lines[8] != "    Local override; error"
+            or _GUI_DRC_UNCONNECTED_LOCATION.fullmatch(lines[9]) is None
+            or _GUI_DRC_UNCONNECTED_LOCATION.fullmatch(lines[10]) is None
+            or lines[11] != ""
+        ):
+            return None
+        footprint_index = 12
+    elif lines[7] != "":
+        return None
+    footprint_errors = count_at(footprint_index, "Footprint errors")
+    ignored_index = footprint_index + 2
+    end_index = ignored_index + len(_GUI_DRC_IGNORED_CHECKS) + 2
+    if (
+        footprint_errors != 0
+        or len(lines) != end_index + 1
+        or lines[footprint_index + 1] != ""
+        or lines[ignored_index] != "** Ignored checks **"
+        or tuple(lines[ignored_index + 1 : ignored_index + 1 + len(_GUI_DRC_IGNORED_CHECKS)])
+        != _GUI_DRC_IGNORED_CHECKS
+        or lines[end_index - 1] != ""
+        or lines[end_index] != "** End of Report **"
+    ):
+        return None
+    return {
+        "DRC violations": hard_violations,
+        "Footprint errors": footprint_errors,
+        "unconnected pads": unconnected,
+    }
+
+
+def gui_source_drc_metrics(source: Path, report: Path | None) -> dict[str, Any]:
+    """Parse a bounded GUI DRC report for the pre-route source board."""
+
+    return gui_drc_metrics(source, report)
 
 
 def process_record(result: ProcessResult, role: str) -> dict[str, Any]:
@@ -504,6 +805,7 @@ def _result_for_board(
     timeout_seconds: int,
     cwd: Path,
     elapsed_ns: int = 0,
+    gui_drc_report: Path | None = None,
 ) -> dict[str, Any]:
     if board is None or not board.is_file():
         return {"name": name, "status": "unavailable", "reason": "result board is unavailable"}
@@ -517,9 +819,13 @@ def _result_for_board(
     except (OSError, UnicodeDecodeError, ValueError):
         return {"name": name, "status": "failed", "reason": "result board exceeds safe limits"}
     metrics["drc"] = (
-        drc_metrics(kicad_cli, board, timeout_seconds, cwd)
-        if kicad_cli
-        else {"status": "unavailable"}
+        gui_drc_metrics(board, gui_drc_report)
+        if gui_drc_report is not None
+        else (
+            drc_metrics(kicad_cli, board, timeout_seconds, cwd)
+            if kicad_cli
+            else {"status": "unavailable"}
+        )
     )
     return metrics
 
@@ -539,6 +845,10 @@ def build_report(
     copper_command: tuple[str, ...] | None,
     seed: int,
     timeout_seconds: int,
+    release_provenance: Path | None = None,
+    source_drc_report: Path | None = None,
+    copper_drc_report: Path | None = None,
+    freerouting_drc_report: Path | None = None,
     timestamp: datetime | None = None,
 ) -> dict[str, Any]:
     """Run available bounded stages and return content-addressed evidence; never mutate source."""
@@ -551,9 +861,13 @@ def build_report(
         kicad_cli=kicad_cli,
         provenance=provenance,
         cwd=ROOT,
+        release_provenance=release_provenance,
     )
     source_before = _hash_or_none(source, MAX_BOARD_BYTES)
     fixture, _ = _provenance(provenance)
+    baseline_expectation = source_drc_expectation(provenance)
+    dsn_export = dsn_source_export_binding(provenance)
+    release, release_status = freerouting_release_provenance(release_provenance, jar)
     free_receipt, free_receipt_status = _receipt(freerouting_receipt, FREEROUTING_RECEIPT_SCHEMA)
     copper_run_receipt, copper_receipt_status = _receipt(copper_receipt, COPPER_RECEIPT_SCHEMA)
     report: dict[str, Any] = {
@@ -564,10 +878,13 @@ def build_report(
             "dsn_sha256": _hash_or_none(dsn, MAX_DSN_BYTES),
             "provenance_sha256": _hash_or_none(provenance, MAX_PROVENANCE_BYTES),
             "provenance": fixture,
+            "dsn_source_export_binding": dsn_export,
         },
         "toolchain": {
             "freerouting_license": FREEROUTING_LICENSE,
             "freerouting_jar_sha256": _hash_or_none(jar, MAX_JAR_BYTES),
+            "freerouting_release_provenance": release,
+            "freerouting_release_provenance_status": release_status,
             "java_sha256": _hash_or_none(java, MAX_EXECUTABLE_BYTES),
             "kicad_cli_sha256": _hash_or_none(kicad_cli, MAX_EXECUTABLE_BYTES),
             "platform": platform.platform(),
@@ -587,6 +904,21 @@ def build_report(
             ),
         },
     }
+    source_drc = (
+        gui_source_drc_metrics(source, source_drc_report)
+        if source_drc_report is not None
+        else (
+            drc_metrics(kicad_cli, source, timeout_seconds, ROOT, role="kicad_source_drc")
+            if kicad_cli is not None
+            else {"status": "unavailable"}
+        )
+    )
+    report["source_drc"] = source_drc
+    report["source_drc_binding"] = source_drc_binding(
+        source_before,
+        source_drc,
+        baseline_expectation,
+    )
     freerouting_process: ProcessResult | None = None
     freerouting_ses_sha256: str | None = None
     if gate["available"] and dsn and java and jar:
@@ -666,7 +998,13 @@ def build_report(
     report["copper_runner_binding"] = {"status": copper_binding}
     report["results"] = [
         _result_for_board(
-            "copper_mcp", generated_copper, kicad_cli, timeout_seconds, ROOT, copper_elapsed
+            "copper_mcp",
+            generated_copper,
+            kicad_cli,
+            timeout_seconds,
+            ROOT,
+            copper_elapsed,
+            copper_drc_report,
         ),
         _result_for_board(
             "freerouting",
@@ -675,6 +1013,7 @@ def build_report(
             timeout_seconds,
             ROOT,
             freerouting_process.elapsed_ns if freerouting_process else 0,
+            freerouting_drc_report,
         ),
     ]
     report["results"].sort(key=metric_priority)
@@ -718,6 +1057,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--java", type=_path, default=Path(shutil.which("java") or "java"))
     parser.add_argument("--freerouting-jar", type=_path)
     parser.add_argument(
+        "--freerouting-release-provenance",
+        type=_path,
+        help=(
+            "Optional bounded record binding the JAR to the official FreeRouting GitHub "
+            "release URL and its SHA-256."
+        ),
+    )
+    parser.add_argument(
         "--kicad-cli", type=_path, default=Path(shutil.which("kicad-cli") or "kicad-cli")
     )
     parser.add_argument("--copper-board", type=_path, help="CopperMCP's disposable result board.")
@@ -726,6 +1073,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--freerouting-import-receipt", type=_path)
     parser.add_argument("--copper-receipt", type=_path)
+    parser.add_argument(
+        "--source-drc-report",
+        type=_path,
+        help=(
+            "Bounded KiCad-GUI DRC .rpt for the exact source basename. This is required when "
+            "the local KiCad CLI cannot produce the pre-route DRC report."
+        ),
+    )
+    parser.add_argument("--copper-drc-report", type=_path)
+    parser.add_argument("--freerouting-drc-report", type=_path)
     parser.add_argument(
         "--copper-command-json",
         type=_path,
@@ -756,6 +1113,10 @@ def main() -> int:
             copper_command=_parse_template(args.copper_command_json),
             seed=args.seed,
             timeout_seconds=args.timeout_seconds,
+            release_provenance=args.freerouting_release_provenance,
+            source_drc_report=args.source_drc_report,
+            copper_drc_report=args.copper_drc_report,
+            freerouting_drc_report=args.freerouting_drc_report,
         )
     except (OSError, ValueError, json.JSONDecodeError) as error:
         raise SystemExit(
