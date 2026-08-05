@@ -13,6 +13,7 @@ from scripts import evaluate_mcp_agency_safety as evaluation
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIRECTORY = ROOT / "tests" / "fixtures" / "security" / "mcp-agency-v1"
+ARTIFACT = ROOT / "benchmarks" / "results" / "security" / "2026-08-05-mcp-agency-evaluation.json"
 CANARY = "CANARY"
 TEST_HARNESS_COMMIT = "a" * 40
 
@@ -97,6 +98,16 @@ def test_agency_evaluation_cli_ignores_inherited_copper_configuration(tmp_path: 
     report = json.loads(output.read_text(encoding="utf-8"))
     assert report == evaluation.build_report(evidence_harness_commit=TEST_HARNESS_COMMIT)
     assert CANARY not in output.read_text(encoding="utf-8")
+
+
+def test_committed_agency_artifact_replays_from_its_recorded_harness() -> None:
+    artifact = json.loads(ARTIFACT.read_text(encoding="utf-8"))
+    harness_commit = artifact["evidence_harness_commit"]
+    assert isinstance(harness_commit, str)
+    script_sha256 = hashlib.sha256(evaluation.SCRIPT_FILE.read_bytes()).hexdigest()
+    assert artifact["script_sha256"] == script_sha256
+    assert artifact == evaluation.build_report(evidence_harness_commit=harness_commit)
+    assert CANARY not in ARTIFACT.read_text(encoding="utf-8")
 
 
 def test_hostile_fixtures_hold_only_declared_evaluation_inputs() -> None:
