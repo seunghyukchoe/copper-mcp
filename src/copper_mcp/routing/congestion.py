@@ -24,6 +24,7 @@ from copper_mcp.routing.contracts import (
     CancellationCheck,
     RouteCandidate,
     RouteConnection,
+    RouteFailureCode,
     RouteRequest,
 )
 
@@ -566,6 +567,9 @@ def negotiate_routes(
                 if result.diagnostic is not None:
                     total_expansions += result.diagnostic.expanded_states
                     total_obstacle_checks += result.diagnostic.obstacle_checks
+                    if result.diagnostic.code is RouteFailureCode.CANCELLED:
+                        cancelled_during_iteration = True
+                        break
                 unrouted.add(request.net_id)
                 failure_message = "one or more negotiated nets did not produce a candidate"
         if len(working) + len(connections) < len(ordered):

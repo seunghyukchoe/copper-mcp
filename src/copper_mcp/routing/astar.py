@@ -136,7 +136,13 @@ class _WorkBudget:
     obstacle_checks: int = 0
 
     def checkpoint(self) -> None:
-        if self.cancelled is not None and self.cancelled():
+        cancelled = False
+        if self.cancelled is not None:
+            try:
+                cancelled = bool(self.cancelled())
+            except Exception:  # pragma: no cover - defensive untrusted callback boundary
+                cancelled = True
+        if cancelled:
             raise _fail(
                 RouteFailureCode.CANCELLED,
                 "the routing search was cancelled",

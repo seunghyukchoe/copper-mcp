@@ -238,3 +238,26 @@ def test_negotiated_router_fails_closed_on_bad_penalty_and_cancellation() -> Non
     cancelled = negotiate_routes(snapshot, envelope, cancelled=lambda: True)
     assert cancelled.status is NegotiatedRoutingStatus.CANCELLED
     assert cancelled.iterations == 0
+
+
+def test_negotiated_router_fails_closed_when_cancellation_callback_raises() -> None:
+    snapshot = _crossing_snapshot()
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_requests(snapshot),
+    )
+    checks = 0
+
+    def cancelled() -> bool:
+        nonlocal checks
+        checks += 1
+        if checks == 3:
+            raise RuntimeError("cancellation transport failed")
+        return False
+
+    result = negotiate_routes(snapshot, envelope, cancelled=cancelled)
+
+    assert result.status is NegotiatedRoutingStatus.CANCELLED
+    assert result.iterations == 1
+    assert result.candidates == ()
+    assert result.diagnostic == "negotiated routing was cancelled during a bounded iteration"
