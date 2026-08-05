@@ -302,6 +302,42 @@ class PadlessFootprintTests(unittest.TestCase):
         self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
         self.assertIn("no copper pad", result.diagnostic.message)
 
+    def test_every_padless_proposal_anchor_precedes_an_unrelated_contradiction(self) -> None:
+        """Unsupported proposal anchors must not be masked by syntactic rule analysis."""
+
+        _, snapshot, view = _board(PADLESS_BOARD)
+        placeable = sorted(view.footprints)[0]
+        expected_message = "a placement subject owns no copper pad, so it cannot be placed in v0.1"
+        for anchor_point in ("center", "north", "south", "east", "west"):
+            with self.subTest(anchor_point=anchor_point):
+                result = evaluate_placement(
+                    _intent(
+                        view,
+                        PADLESS_BOARD.name,
+                        subjects=[placeable],
+                        proposals=[
+                            {
+                                "subject": placeable,
+                                "anchor": PADLESS_REF,
+                                "anchor_point": anchor_point,
+                                "offset_x_nm": 0,
+                            }
+                        ],
+                        rules=[
+                            {"kind": "side", "subject": placeable, "side": "front"},
+                            {"kind": "side", "subject": placeable, "side": "back"},
+                        ],
+                    ),
+                    snapshot,
+                    view,
+                )
+
+                self.assertEqual(result.status, "refused")
+                self.assertIsNone(result.candidate)
+                assert result.diagnostic is not None
+                self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+                self.assertEqual(result.diagnostic.message, expected_message)
+
     def test_a_genuinely_absent_reference_is_still_unresolved(self) -> None:
         """Guard the guard: the honest refusal must not swallow the real unknown-ref case."""
 
