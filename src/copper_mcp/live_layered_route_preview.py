@@ -33,7 +33,12 @@ from copper_mcp.layered_route_preview import (
     parse_layered_route_preview_request,
 )
 from copper_mcp.request_boundary import mapping
-from copper_mcp.routing import LayeredBoardRouter, LayeredRouteFailureCode, LayeredRouteRequest
+from copper_mcp.routing import (
+    LayeredBoardRouter,
+    LayeredRouteFailureCode,
+    LayeredRouteRequest,
+)
+from copper_mcp.routing.layered_board_adapter import has_exactly_two_signal_layers
 
 
 def parse_live_layered_route_preview_request(payload: Any) -> LayeredRoutePreviewRequest:
@@ -158,6 +163,18 @@ def preview_live_layered_route(
             snapshot_digest=snapshot.snapshot_digest,
             diagnostic=_diagnostic_document(
                 "stale_revision", "live Board IR snapshot revision is stale"
+            ),
+        )
+    if not has_exactly_two_signal_layers(snapshot):
+        return _empty_result(
+            "unsupported_board",
+            request,
+            "live",
+            board_revision,
+            snapshot_digest=snapshot.snapshot_digest,
+            diagnostic=_diagnostic_document(
+                LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY.value,
+                "board copper stack is outside the public two-layer live preview subset",
             ),
         )
     if time.monotonic() >= deadline:

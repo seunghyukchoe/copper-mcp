@@ -48,6 +48,7 @@ from copper_mcp.routing.job_worker import (
     RoutingJobCancelledError,
     RoutingJobExecutionError,
 )
+from copper_mcp.routing.layered_board_adapter import has_exactly_two_signal_layers
 from copper_mcp.security import read_workspace_file
 
 _SHA256_RE: Final = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -175,6 +176,8 @@ def _prepare_layered_job(payload: object, settings: Settings) -> PreparedLayered
     snapshot = conversion.snapshot
     if request.expect_snapshot_digest != snapshot.snapshot_digest:
         raise RoutingJobStaleError("routing job Board IR revision is stale")
+    if not has_exactly_two_signal_layers(snapshot):
+        raise RoutingJobUnsupportedError("routing job requires exactly two signal layers")
     pads = {pad.id: pad for pad in snapshot.content.pads}
     start_pad = pads.get(request.start_pad_id)
     end_pad = pads.get(request.end_pad_id)

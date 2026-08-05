@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0067**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0069**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -115,3 +115,55 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - **Live KiCad IPC** — 0029, 0030, 0031, 0032, 0033, 0044, 0063.
 - **Durable jobs and persistence** — 0043, 0046, 0047, 0048.
 - **Mutation and authorization** — 0001, 0025, 0059.
+
+- [ADR-0001: Candidate-first mutation model](0001-candidate-first.md)
+- [ADR-0002: MCP is an external adapter](0002-mcp-adapter.md)
+- [ADR-0003: Python reference core with Rust-ready contracts](0003-python-reference-core.md)
+- [ADR-0004: Authoritative KiCad CLI DRC gate](0004-authoritative-kicad-drc.md)
+- [ADR-0005: Canonical integer Board IR v0.1](0005-canonical-board-ir.md)
+- [ADR-0006: Bounded deterministic A* reference](0006-bounded-deterministic-astar.md)
+- [ADR-0007: Disposable KiCad candidate snapshots](0007-disposable-kicad-candidate-snapshot.md)
+- [ADR-0008: Candidate-bound authoritative KiCad DRC evidence](0008-candidate-bound-kicad-drc.md)
+- [ADR-0009: Bounded non-mutating route preview](0009-non-mutating-route-preview.md)
+- [ADR-0010: Read-only Board IR inspection service](0010-board-ir-inspection-service.md)
+- [ADR-0011: Existing copper as exact rectangular obstacles](0011-existing-copper-obstacles.md)
+- [ADR-0012: Through vias as selected-layer obstacles](0012-via-obstacles.md)
+- [ADR-0013: Conservative polygon zone-boundary obstacles](0013-polygon-zone-obstacles.md)
+- [ADR-0014: Canonical circuit intent and deterministic schematic rendering](0014-canonical-circuit-intent.md)
+- [ADR-0015: Bounded Circuit Intent schematic delivery](0015-bounded-circuit-schematic-delivery.md)
+- [ADR-0016: Same-net attachment and partial-route completion](0016-same-net-attachment.md)
+- [ADR-0017: Conservative integer envelopes for diagonal foreign copper](0017-diagonal-segment-envelopes.md)
+- [ADR-0018: Chained integer squares as the core of diagonal attachment copper](0018-diagonal-attachment-cores.md)
+- [ADR-0019: Route multi-pin nets by deterministic component merging](0019-multi-pin-component-merging.md)
+- [ADR-0020: Treat same-net through vias as connectivity joints](0020-via-aware-connectivity.md)
+- [ADR-0021: Trust poured copper only against a fresh KiCad refill](0021-zone-fill-authority.md)
+- [ADR-0022: Observe a board as a semantic scene, with its text held at arm's length](0022-circuit-scene-observation.md)
+- [ADR-0023: Render a board deterministically, and only as an advisory aid](0023-deterministic-board-render.md)
+- [ADR-0024: Typed placement intent, validated by a deterministic legalizer](0024-placement-intent-and-legalization.md)
+- [ADR-0025: Apply a route candidate by splicing bytes, not by rewriting a board](0025-file-level-candidate-apply.md)
+- [ADR-0026: Make footprints revision-bound Board IR objects before moving them](0026-first-class-footprints-in-board-ir.md)
+- [ADR-0028: Make Circuit Scene net references directly actionable for routing](0028-revision-bound-scene-route-references.md)
+- [ADR-0029: Add a redacted, read-only KiCad IPC observer](0029-read-only-kicad-ipc-observer.md)
+- [ADR-0030: Bind a bounded KiCad IPC snapshot to Circuit Scene](0030-live-ipc-circuit-scene-binding.md)
+- [ADR-0031: Keep live KiCad route proposals read-only and revision-bound](0031-live-ipc-route-proposal.md)
+- [ADR-0032: Keep live KiCad placement proposals read-only and revision-bound](0032-live-placement-proposal.md)
+- [ADR-0033: Keep live editor context read-only and revision-bound](0033-live-editor-context.md)
+- [ADR-0034: Keep placement candidate rendering source-preserving and subset-bound](0034-source-preserving-placement-candidates.md)
+- [ADR-0035: Keep the layered A* search seam internal until board fidelity exists](0035-internal-layered-search-oracle.md)
+- [ADR-0048: Durable layered routing request, result, and export boundary](0048-durable-routing-request-result-export.md)
+- [ADR-0049: Add a bounded one-Steiner topology ordering policy](0049-batched-one-steiner-ordering.md)
+- [ADR-0050: Expose opt-in DRC evidence for file-backed layered proposals](0050-public-layered-route-drc-evidence.md)
+- [ADR-0051: Narrow exact obstacle queries with a conservative spatial index](0051-conservative-spatial-index.md)
+- [ADR-0052: Emit candidate DRC as a redacted in-toto Statement payload](0052-in-toto-candidate-drc-statement.md)
+- [ADR-0053: Bind the supported placement subset to private KiCad DRC](0053-private-placement-candidate-drc.md)
+- [ADR-0054: Close review-bot boundary gaps in routing and live observation](0054-review-boundary-hardening.md)
+- [ADR-0055: Add a bounded negotiated-congestion coordinator](0055-bounded-negotiated-congestion.md)
+- [ADR-0056: Verify bounded Circuit Intent schematic parity](0056-kicad-schematic-parity.md)
+- [ADR-0057: Observe bounded front/back footprint poses](0057-front-back-footprint-observation.md)
+- [ADR-0058: Check same-side rectangular courtyard legality](0058-rectangular-courtyard-legality.md)
+- [ADR-0059: Separately authorize bounded placement application](0059-separately-authorized-placement-apply.md)
+- [ADR-0064: Bind a closed routing-policy decision to the initial negotiated order](0064-policy-bound-initial-negotiated-order.md)
+- [ADR-0065: Observe and legalize bounded orthogonal courtyard chains](0065-orthogonal-courtyard-chains.md)
+- [ADR-0066: Publish a composed route bundle only as one all-or-nothing read-only plan](0066-atomic-route-bundle-preview.md)
+- [ADR-0068: Keep ordered-layer routing bounded and non-serializing](0068-bounded-ordered-layer-routing.md)
+

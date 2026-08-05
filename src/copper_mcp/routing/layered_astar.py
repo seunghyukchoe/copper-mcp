@@ -1,4 +1,4 @@
-"""Internal, bounded A* search over a two-layer integer lattice.
+"""Internal, bounded A* search over an ordered copper-layer lattice.
 
 This module deliberately does not produce :mod:`copper_mcp.routing.contracts` objects.  It is a
 small algorithmic seam for evaluating multilayer search before it is wired to board geometry or a
@@ -13,9 +13,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from itertools import pairwise
-from typing import TypeAlias, cast
+from typing import Final, TypeAlias
 
 _Node: TypeAlias = tuple[int, int, int]
+_CappedState: TypeAlias = tuple[_Node, int]
 _Bounds: TypeAlias = tuple[int, int, int, int]
 CancellationCheck: TypeAlias = Callable[[], bool]
 
@@ -30,6 +31,12 @@ _MAX_EXPANSIONS = 1_000_000
 _MAX_NODES = 500_000
 _MAX_OBSTACLES = 4_096
 _MAX_OBSTACLE_CHECKS = 10_000_000
+#: Shared ordered-stack policy.  The adapter and the structural verifier import these rather than
+#: restating the numbers, so the search, the candidate constructor, and the untrusted-candidate
+#: verifier can never drift apart on the stack width or the via budget.
+MAX_LAYERS: Final = 8
+DEFAULT_GENERALIZED_MAX_VIAS: Final = 64
+MAX_EXPLICIT_VIAS: Final = 256
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,11 +73,15 @@ class LayeredAStarSettings:
     max_nodes: int = 250_000
     max_obstacles: int = 256
     max_obstacle_checks: int = 2_000_000
+    # ``None`` preserves the historical two-layer behavior and canonical payload.  Generalized
+    # (three through eight layer) searches receive the finite policy cap below; callers can
+    # state a different finite cap explicitly.
+    max_vias: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class LayeredAStarRequest:
-    """A two-signal-layer search request against one caller-owned revision.
+    """A 2..8-signal-layer search request against one caller-owned revision.
 
     ``expected_revision`` is optional so callers can use the algorithm as a pure planner.  When
     present, it is an optimistic concurrency precondition and a mismatch returns ``STALE_REVISION``
@@ -83,7 +94,7 @@ class LayeredAStarRequest:
     goal: LayeredPoint
     obstacles: tuple[LayeredObstacle, ...] = ()
     via_obstacles: tuple[LayeredObstacle, ...] = ()
-    layers: tuple[int, int] = (0, 1)
+    layers: tuple[int, ...] = (0, 1)
     expected_revision: str | None = None
     settings: LayeredAStarSettings = LayeredAStarSettings()
 
@@ -98,6 +109,19 @@ class LayeredAStarRequest:
         """Compatibility alias for adapters that name the precondition explicitly."""
 
         return self.expected_revision
+
+
+def effective_max_vias(settings: LayeredAStarSettings, layer_count: int) -> int | None:
+    """Return the route's effective via cap without changing legacy two-layer defaults.
+
+    A missing setting means "no new via-policy cap" for the established two-layer seam.  The
+    broader internal lattice has no historical behavior to preserve, so it receives a bounded
+    deterministic default.  Callers may always select an explicit finite cap.
+    """
+
+    if settings.max_vias is not None:
+        return settings.max_vias
+    return None if layer_count == 2 else DEFAULT_GENERALIZED_MAX_VIAS
 
 
 class LayeredFailureCode(StrEnum):
@@ -279,7 +303,7 @@ def _integer(value: object) -> bool:
 
 def _validate(
     request: object,
-) -> tuple[LayeredAStarRequest, tuple[int, int], _Bounds] | _ValidationFailure | str:
+) -> tuple[LayeredAStarRequest, tuple[int, ...], _Bounds] | _ValidationFailure | str:
     if not isinstance(request, LayeredAStarRequest):
         return "request must be a LayeredAStarRequest"
     if not isinstance(request.board_revision, str) or not 1 <= len(request.board_revision) <= 256:
@@ -304,13 +328,13 @@ def _validate(
         return "bounds must be ordered"
     if (
         not isinstance(request.layers, tuple)
-        or len(request.layers) != 2
+        or not 2 <= len(request.layers) <= MAX_LAYERS
         or not all(_integer(layer) for layer in request.layers)
     ):
-        return "exactly two integer signal layers are required"
-    if request.layers[0] == request.layers[1]:
-        return "signal layers must be distinct"
-    layers = cast(tuple[int, int], tuple(sorted(request.layers)))
+        return "two through eight integer copper layers are required"
+    if len(set(request.layers)) != len(request.layers):
+        return "copper layers must be distinct"
+    layers = tuple(sorted(request.layers))
     start_obj: object = request.start
     goal_obj: object = request.goal
     if not isinstance(start_obj, LayeredPoint) or not isinstance(goal_obj, LayeredPoint):
@@ -344,6 +368,10 @@ def _validate(
     ):
         if not _integer(value) or not 1 <= value <= maximum:
             return f"{name} must be a positive integer"
+    if settings.max_vias is not None and (
+        not _integer(settings.max_vias) or not 0 <= settings.max_vias <= MAX_EXPLICIT_VIAS
+    ):
+        return "via budget must be a non-negative integer"
     for obstacle_obj in (*obstacles, *via_obstacles):
         obstacle: object = obstacle_obj
         if not isinstance(obstacle, LayeredObstacle):
@@ -404,7 +432,7 @@ def _blocked(
 
 def _via_blocked(
     node: _Node,
-    layers: tuple[int, int],
+    layers: tuple[int, ...],
     obstacles: tuple[LayeredObstacle, ...],
 ) -> bool:
     """Return whether a transition at ``node`` violates either layer's via keepout."""
@@ -418,11 +446,16 @@ def _via_blocked(
     )
 
 
-def _neighbors(node: _Node, layers: tuple[int, int]) -> tuple[tuple[_Node, bool], ...]:
+def _neighbors(node: _Node, layers: tuple[int, ...]) -> tuple[tuple[_Node, bool], ...]:
     x, y, layer = node
     cardinal = tuple(((x + dx, y + dy, layer), False) for dx, dy in _CARDINALS)
-    other_layer = layers[1] if layer == layers[0] else layers[0]
-    return (*cardinal, ((x, y, other_layer), True))
+    # Board IR currently models full-stack through vias.  A transition therefore may land on any
+    # other routable copper layer in the ordered stack; its physical span is represented by the
+    # Board-IR adapter, not by this lattice state.
+    transitions = tuple(
+        ((x, y, other_layer), True) for other_layer in layers if other_layer != layer
+    )
+    return (*cardinal, *transitions)
 
 
 def _path(
@@ -443,16 +476,171 @@ def _path(
     return tuple(steps)
 
 
+def _capped_path(
+    start: _CappedState,
+    goal: _CappedState,
+    came_from: dict[_CappedState, _CappedState],
+) -> tuple[LayeredStep, ...]:
+    """Reconstruct a route whose finite via use is part of its search state."""
+
+    reversed_states = [goal]
+    current = goal
+    while current != start:
+        current = came_from[current]
+        reversed_states.append(current)
+    nodes = tuple(state[0] for state in reversed(reversed_states))
+    steps: list[LayeredStep] = [LayeredStep(*nodes[0], kind="start")]
+    for previous_node, current_node in pairwise(nodes):
+        kind = "via" if previous_node[2] != current_node[2] else "move"
+        steps.append(LayeredStep(*current_node, kind=kind))
+    return tuple(steps)
+
+
+def _route_capped(
+    request: LayeredAStarRequest,
+    *,
+    layers: tuple[int, ...],
+    bounds: _Bounds,
+    start: _Node,
+    goal: _Node,
+    work: _Work,
+    via_limit: int,
+    cancelled: object | None,
+) -> LayeredAStarResult:
+    """Search a finite `(x, y, layer, vias_used)` lattice under one via cap.
+
+    Coordinates alone are not a sound dominance key when a remaining via budget is a feasibility
+    constraint: a cheaper arrival can have exhausted the cap while a more expensive arrival at the
+    same coordinate can still complete.  The cap is validated before this helper is reached, so the
+    augmented lattice remains finite and every discovered augmented state is budgeted.
+
+    Declared work bound.  A coordinate's Pareto front holds at most one entry per distinct via
+    count, so it never exceeds ``via_limit + 1`` entries and ``via_limit`` is validated to at most
+    ``MAX_EXPLICIT_VIAS``.  Each relaxation scans that front twice, so one relaxation costs at most
+    ``2 * (MAX_EXPLICIT_VIAS + 1)`` comparisons, and the whole search is bounded by
+    ``max_expansions * (4 + MAX_LAYERS - 1) * 2 * (MAX_EXPLICIT_VIAS + 1)``.  This is a constant
+    factor on the already-bounded expansion budget, not a separate unbounded allocation, so it
+    carries no budget of its own.
+    """
+
+    settings = request.settings
+    min_x, min_y, max_x, max_y = bounds
+    start_state: _CappedState = (start, 0)
+    frontier: list[tuple[int, int, int, int, int, int]] = []
+    heapq.heappush(
+        frontier,
+        (_heuristic(start, goal, settings), 0, 0, start[0], start[1], start[2]),
+    )
+    g_score: dict[_CappedState, int] = {start_state: 0}
+    pareto_score: dict[_Node, dict[int, int]] = {start: {0: 0}}
+    came_from: dict[_CappedState, _CappedState] = {}
+
+    while frontier:
+        if _is_cancelled(cancelled):
+            return _failure(LayeredFailureCode.CANCELLED, "the search was cancelled", work)
+        if work.expanded_nodes >= settings.max_expansions:
+            return _failure(
+                LayeredFailureCode.SEARCH_BUDGET_EXCEEDED,
+                "the search reached its expansion budget",
+                work,
+            )
+        _, queued_g, queued_vias, x, y, layer = heapq.heappop(frontier)
+        current: _Node = (x, y, layer)
+        current_state: _CappedState = (current, queued_vias)
+        if queued_g != g_score.get(current_state) or queued_g != pareto_score.get(current, {}).get(
+            queued_vias
+        ):
+            continue
+        work.expanded_nodes += 1
+        # A via keepout is a property of the transition coordinate, not of the destination layer,
+        # so every transition out of ``current`` shares one answer.  Evaluate and charge it once
+        # per expansion instead of once per candidate destination layer, which would otherwise
+        # bill an identical result up to ``MAX_LAYERS - 1`` times and overstate the work done.
+        via_blocked_here: bool | None = None
+        if current == goal:
+            steps = _capped_path(start_state, current_state, came_from)
+            move_steps = sum(step.kind == "move" for step in steps)
+            via_steps = sum(step.kind == "via" for step in steps)
+            return LayeredAStarResult(
+                path=steps,
+                metrics=LayeredAStarMetrics(
+                    expanded_nodes=work.expanded_nodes,
+                    discovered_nodes=work.discovered_nodes,
+                    peak_frontier_nodes=work.peak_frontier_nodes,
+                    obstacle_checks=work.obstacle_checks,
+                    move_steps=move_steps,
+                    via_steps=via_steps,
+                    path_cost=queued_g,
+                ),
+            )
+        for neighbor, is_via in _neighbors(current, layers):
+            nx, ny, _ = neighbor
+            if not min_x <= nx <= max_x or not min_y <= ny <= max_y:
+                continue
+            tentative_vias = queued_vias + int(is_via)
+            if tentative_vias > via_limit:
+                continue
+            relation_checks = len(request.obstacles)
+            if is_via and via_blocked_here is None:
+                relation_checks += len(request.via_obstacles)
+            if work.obstacle_checks + relation_checks > settings.max_obstacle_checks:
+                return _failure(
+                    LayeredFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+                    "the search reached its obstacle-check budget",
+                    work,
+                )
+            work.obstacle_checks += relation_checks
+            if is_via and via_blocked_here is None:
+                via_blocked_here = _via_blocked(current, layers, request.via_obstacles)
+            if _blocked(neighbor, request.obstacles) or (is_via and via_blocked_here):
+                continue
+            step_cost = settings.via_cost if is_via else settings.move_cost
+            tentative_g = queued_g + step_cost
+            neighbor_state: _CappedState = (neighbor, tentative_vias)
+            old_g = g_score.get(neighbor_state)
+            if old_g is not None and tentative_g >= old_g:
+                continue
+            node_scores = pareto_score.setdefault(neighbor, {})
+            if any(
+                used_vias <= tentative_vias and cost <= tentative_g
+                for used_vias, cost in node_scores.items()
+            ):
+                continue
+            if old_g is None:
+                if work.discovered_nodes >= settings.max_nodes:
+                    return _failure(
+                        LayeredFailureCode.GRID_BUDGET_EXCEEDED,
+                        "the search reached its node budget",
+                        work,
+                    )
+                work.discovered_nodes += 1
+            for used_vias, cost in tuple(node_scores.items()):
+                if tentative_vias <= used_vias and tentative_g <= cost:
+                    del node_scores[used_vias]
+            came_from[neighbor_state] = current_state
+            g_score[neighbor_state] = tentative_g
+            node_scores[tentative_vias] = tentative_g
+            f_score = tentative_g + _heuristic(neighbor, goal, settings)
+            heapq.heappush(
+                frontier,
+                (f_score, tentative_g, tentative_vias, neighbor[0], neighbor[1], neighbor[2]),
+            )
+            work.peak_frontier_nodes = max(work.peak_frontier_nodes, len(frontier))
+
+    return _failure(LayeredFailureCode.NO_PATH, "no bounded path exists", work)
+
+
 def route_layered(
     request: LayeredAStarRequest,
     *,
     cancelled: object | None = None,
 ) -> LayeredAStarResult:
-    """Run deterministic two-layer A* and return a path or a diagnostic.
+    """Run deterministic 2..8-layer A* and return a path or a diagnostic.
 
     Cardinal moves are expanded in east, north, west, south order.  A via transition is expanded
-    after those moves and changes only the layer at the same coordinate.  The heap key contains the
-    full integer state, making equal-cost replay independent of hash ordering or dictionary order.
+    after those moves and changes only the layer at the same coordinate.  Transition targets follow
+    canonical stack order.  The heap key contains the full integer state, making equal-cost replay
+    independent of hash ordering or dictionary order.
     """
 
     validated = _validate(request)
@@ -503,6 +691,19 @@ def route_layered(
                 peak_frontier_nodes=1,
                 path_cost=0,
             ),
+        )
+
+    via_limit = effective_max_vias(settings, len(layers))
+    if via_limit is not None:
+        return _route_capped(
+            checked,
+            layers=layers,
+            bounds=bounds,
+            start=start,
+            goal=goal,
+            work=work,
+            via_limit=via_limit,
+            cancelled=cancelled,
         )
 
     frontier: list[tuple[int, int, int, int, int, int]] = []

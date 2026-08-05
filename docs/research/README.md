@@ -53,6 +53,8 @@ When adding a document, add it to the list below in the same sentence form — *
   same-net-aware subset, and why the predeclared >=10% gain gate still declines integration.
 - [Performance profile v1](./performance-profile-v1.md) records the clean-worktree routing,
   placement, and Circuit Scene measurement prerequisite for any future acceleration work.
+- [Ordered-layer routing v1](./ordered-layer-routing-v1.md) records the 2..8 signal-layer,
+  full-stack-via proposal boundary and its serialization/DRC promotion gates.
 - [Bounded placement-heuristic baseline](./placement-heuristic-baseline.md) records the
   legalizer-gated local/beam search, its connectivity proxy, reproducible fixture evidence, and
   the limits that keep it advisory.
