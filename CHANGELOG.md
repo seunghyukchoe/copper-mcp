@@ -15,7 +15,7 @@ All notable changes are documented here. The format follows
 
 - Negotiated-congestion routing now treats cancellation-callback failures as cancellation and
   never publishes a partial candidate from that iteration, including when a later net cancels an
-  otherwise productive pass. Layered candidate verification also
+  otherwise productive pass or when cancellation arrives before the next retry. Layered candidate verification also
   binds track width, via diameter, and via drill to the Board IR net-class assignment, rejecting
   re-stamped dimensions before topology acceptance.
 

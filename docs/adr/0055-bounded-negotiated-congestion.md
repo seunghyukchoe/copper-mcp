@@ -50,5 +50,6 @@ quality gate is exact pairwise clearance/resource capacity and a held-out corpus
 
 Cancellation callbacks are untrusted cooperative boundaries. If one raises during an A* checkpoint,
 the search fails closed as `CANCELLED`; the negotiated coordinator discards the in-flight iteration
-and publishes no partial candidates. This preserves the candidate-only contract without claiming
-hard process interruption.
+and publishes no partial candidates. If cancellation arrives before a later retry, any partial
+result retained from an earlier pass is discarded as well. This preserves the candidate-only
+contract without claiming hard process interruption.
