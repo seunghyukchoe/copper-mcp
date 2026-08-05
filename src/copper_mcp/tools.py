@@ -56,6 +56,7 @@ from copper_mcp.placement_preview import preview_placement as preview_placement_
 from copper_mcp.post_placement_observation import (
     observe_post_placement as observe_post_placement_service,
 )
+from copper_mcp.route_bundle import preview_route_bundle as preview_route_bundle_candidate
 from copper_mcp.route_preview import RoutePreview
 from copper_mcp.route_preview import preview_live_route as preview_live_route_candidate
 from copper_mcp.route_preview import preview_route as preview_route_candidate
@@ -82,6 +83,7 @@ def server_info() -> dict[str, Any]:
             "operator-gated, token-authorized route-candidate apply with atomic replacement",
             "operator-gated, token-authorized bounded placement apply with atomic replacement",
             "non-mutating two-pin route preview on a documented Board IR subset",
+            "revision-bound atomic multi-net route-bundle preview (read-only)",
             "bounded Circuit Intent validation and deterministic KiCad schematic rendering",
             "explicit create-only CLI schematic export and ephemeral stdio MCP artifact delivery",
             "read-only live KiCad IPC board observation (optional kicad-python)",
@@ -174,6 +176,15 @@ def preview_route(
 
     active_settings = settings or Settings.from_env()
     return preview_route_candidate(payload, active_settings, token_authority).to_dict()
+
+
+def preview_route_bundle(
+    payload: dict[str, Any], settings: Settings | None = None
+) -> dict[str, Any]:
+    """Preview one atomic multi-net route composition without write or apply authority."""
+
+    active_settings = settings or Settings.from_env()
+    return preview_route_bundle_candidate(payload, active_settings).to_dict()
 
 
 def preview_live_route_raw(

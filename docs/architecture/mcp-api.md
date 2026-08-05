@@ -34,6 +34,7 @@
 | `apply_placement_candidate` | **Replaces the board file**; disabled by default | Separately authorized bounded placement-pose mutation. Requires an operator flag and a placement-scoped single-use token. |
 | `preview_placement` | None, or a short-lived placement capability when explicitly requested | Deterministic legality preview for a proposed footprint placement. `include_drc: true` may request aggregate DRC evidence for the file-backed serializer subset; `include_apply_token: true` may request a placement token. Neither flag writes the source board or grants live authority. |
 | `preview_route` | None, or a temporary report when `include_drc` is set | Bounded, non-mutating two-pin route proposal on the documented Board IR subset. |
+| `preview_route_bundle` | None | Bounded revision-bound composition of two through eight known net references; it never returns a partial plan, DRC artifact, derivative, token, or apply authority. |
 | `render_circuit_schematic` | Process-local artifact only; stdio only | Validate structured Circuit Intent, require deterministic replay, and issue one opaque schematic resource capability. |
 | `validate_candidate` | None | Validate and normalize candidate metadata. |
 | `compare_candidates` | None | Correctness-first deterministic ranking. |

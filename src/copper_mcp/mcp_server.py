@@ -50,6 +50,8 @@ from copper_mcp.mcp_contracts import (
     PlacementPreviewToolResponse,
     PostPlacementObservationToolRequest,
     PostPlacementObservationToolResponse,
+    RouteBundleToolRequest,
+    RouteBundleToolResponse,
     RoutePreviewToolRequest,
     RoutePreviewToolResponse,
     RoutingCandidateExportToolResponse,
@@ -104,6 +106,7 @@ from copper_mcp.tools import preview_live_placement_raw as preview_live_placemen
 from copper_mcp.tools import preview_live_route_raw as preview_live_route_service_raw
 from copper_mcp.tools import preview_placement as preview_placement_service
 from copper_mcp.tools import preview_route as preview_route_service
+from copper_mcp.tools import preview_route_bundle as preview_route_bundle_service
 from copper_mcp.tools import render_circuit_schematic as render_circuit_schematic_service
 from copper_mcp.tools import run_board_drc as run_board_drc_service
 from copper_mcp.tools import server_info as server_info_service
@@ -185,6 +188,7 @@ class CopperMCPServer(MCPServer[None]):
         for tool in listed:
             if tool.name not in {
                 "preview_route",
+                "preview_route_bundle",
                 "preview_live_route",
                 "preview_layered_route",
                 "preview_live_layered_route",
@@ -215,6 +219,8 @@ class CopperMCPServer(MCPServer[None]):
             raise ToolError("schematic tool arguments are malformed")
         if name == "preview_route" and set(arguments) != {"request"}:
             raise ToolError("route tool arguments are malformed")
+        if name == "preview_route_bundle" and set(arguments) != {"request"}:
+            raise ToolError("route bundle tool arguments are malformed")
         if name == "preview_live_route" and set(arguments) != {"request"}:
             raise ToolError("live route tool arguments are malformed")
         if name == "preview_layered_route" and set(arguments) != {"request"}:
@@ -384,6 +390,28 @@ def preview_route(request: RoutePreviewToolRequest) -> RoutePreviewToolResponse:
     return RoutePreviewToolResponse.model_validate(
         preview_route_service(request, _SETTINGS, _APPLY_TOKENS)
     )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def preview_route_bundle(request: RouteBundleToolRequest) -> RouteBundleToolResponse:
+    """Compose a bounded set of known net references into one read-only route plan.
+
+    Every reference must come from the same Circuit Scene and carry its board and snapshot
+    compare-and-swap values.  The tool publishes a plan only when deterministic negotiated
+    routing, a complete composition replay, and the bounded cross-net physical-clearance gate
+    all succeed. It never returns partial plans, a board derivative, DRC evidence, or apply
+    authority.
+    """
+
+    return RouteBundleToolResponse.model_validate(preview_route_bundle_service(request, _SETTINGS))
 
 
 @mcp.tool(

@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0066**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0067**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -98,15 +98,17 @@ never silently widens it.
 | [0063](0063-ipc-parser-deadline.md) | Carry live IPC deadlines into bounded board parsing | Accepted |
 | [0064](0064-policy-bound-initial-negotiated-order.md) | Bind a closed routing-policy decision to the initial negotiated order | Accepted |
 | [0065](0065-orthogonal-courtyard-chains.md) | Observe and legalize bounded orthogonal courtyard chains | Accepted |
+| [0066](0066-atomic-route-bundle-preview.md) | Publish a composed route bundle only as one all-or-nothing read-only plan | Accepted |
 
-Sixty-five numbers, sixty-four records, no duplicates.
+Sixty-six numbers, sixty-five records, no duplicates.
 
 ## Reading order
 
 The ADRs are chronological, not thematic. To follow one arc, read it in this order:
 
 - **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051.
-- **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064.
+- **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
+  0066.
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060.
 - **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065.
 - **Circuit Scene and rendering** — 0010, 0022, 0023, 0028, 0056.
