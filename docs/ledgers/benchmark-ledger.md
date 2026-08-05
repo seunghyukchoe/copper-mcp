@@ -897,3 +897,13 @@ are the audit copies for the original run IDs.
 | Artifact | [`2026-08-05-routing-policy-order.json`](../../benchmarks/results/routing/2026-08-05-routing-policy-order.json); the artifact records its script SHA-256, profile, policy ID, three fixture digests, and ten deterministic replays. |
 | Classification | `order-effect/no quality claim` |
 | Interpretation | This shows only that the bounded initial-order profile has a deterministic scheduling effect in synthetic fixtures; it makes no quality or routing-improvement claim. KiCad DRC was not run, apply was not invoked, and no learned/model output or model-generated copper was used. It provides no manufacturing, fabrication, board-mutation, or FreeRouting-parity evidence. |
+
+#### B-064 — live IPC fidelity-oracle fake-client and capability replay
+
+| Field | Recorded evidence |
+|---|---|
+| Date and source | 2026-08-05; implementation/remediation commit `bed248b98e5a315f0a2daac2fbce5f646dfbd564`. |
+| Configuration | One deterministic fake KiCad 10.0.5 client returns the committed supported Circuit Scene fixture; the oracle receives plugin-shaped non-secret test credentials, a 2,000 ms cooperative deadline, and no mutable method implementation. Separate replays remove credentials, inject hostile workspace configuration, malformed endpoint/token configuration, generic configuration refusal, and post-capture deadline expiry. |
+| Metrics | Four digest equalities true: captured source/observation, Board IR source/observation, Scene source/observation, and Scene/Board IR snapshot. Mutating calls `0`; client closure `true`; absent credentials return `kicad_plugin_environment_absent`; hostile workspace script exit `0` with no traceback/path; post-capture expiry starts neither Board IR nor Scene conversion. |
+| Artifact | Focused regression suite [`test_kicad_live_ipc_oracle.py`](../../tests/test_kicad_live_ipc_oracle.py) and read-only CLI [`probe_kicad_live_ipc.py`](../../scripts/probe_kicad_live_ipc.py). No private board, token, socket, or editor output is committed. |
+| Interpretation | This is fake-client contract evidence and a local capability replay, not a real KiCad GUI/API-server observation. It makes no live-editor fidelity, DRC, routing, placement, mutation, electrical, fabrication, or FreeRouting claim. |
