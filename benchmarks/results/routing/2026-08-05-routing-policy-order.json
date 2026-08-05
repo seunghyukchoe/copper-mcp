@@ -1,0 +1,562 @@
+{
+  "apply": "not_invoked",
+  "cases": [
+    {
+      "baseline": {
+        "candidate_digests": [
+          "sha256:9a224da3f38693e229fdc33b9a687311e9747016dab1f4c3857c4a12ad240bd8",
+          "sha256:f885a9498aa09907f4fcf145fdcdcb23962faddce9c8447f7b56acd5c9fb092e"
+        ],
+        "completion": true,
+        "evidence": null,
+        "geometry": {
+          "sha256": "sha256:e1151e0929c4c25ef215ce8c3e67e20bafa8bdfff4999bf292b828da4efab028",
+          "value": {
+            "candidates": [
+              {
+                "layer_id": "layer:F.Cu",
+                "net_id": "net:horizontal",
+                "paths": [
+                  [
+                    [
+                      10000000,
+                      5000000
+                    ],
+                    [
+                      2000000,
+                      5000000
+                    ]
+                  ]
+                ],
+                "width_nm": 200000
+              },
+              {
+                "layer_id": "layer:F.Cu",
+                "net_id": "net:vertical",
+                "paths": [
+                  [
+                    [
+                      6000000,
+                      9000000
+                    ],
+                    [
+                      11000000,
+                      9000000
+                    ],
+                    [
+                      11000000,
+                      1000000
+                    ],
+                    [
+                      6000000,
+                      1000000
+                    ]
+                  ]
+                ],
+                "width_nm": 200000
+              }
+            ],
+            "connections": [],
+            "unrouted_nets": []
+          }
+        },
+        "iterations": 1,
+        "observed_iteration_orders": [
+          [
+            "net:horizontal",
+            "net:vertical"
+          ]
+        ],
+        "overflow_resource_count": 0,
+        "overflow_resources": [],
+        "overflow_units": 0,
+        "physical_checks": 3,
+        "ripups": 0,
+        "routed_nets": 2,
+        "router_call_count": 2,
+        "router_expansions": 197,
+        "router_obstacle_checks": 2576,
+        "status": "completed",
+        "total_wire_length_nm": 26000000,
+        "unrouted_nets": []
+      },
+      "fixture": "crossing-neutral-control",
+      "fixture_purpose": "existing crossing fixture reproduced as a neutral order control",
+      "profile": {
+        "candidate_digests": [
+          "sha256:a514e6ee46bf7a759b267feae6068e36ba94b9acb1d85559c83a7ce8ecac7034",
+          "sha256:04d5abfe7ad46ea9ba38b3b8a47631e8e3a31a0d4cce3df5ea27249985ee3848"
+        ],
+        "completion": true,
+        "evidence": {
+          "composite_digest": "sha256:c1b81f35fca3ff5c83feeaee9a41439c11ecce97c7d5aae72a49485543035f0a",
+          "decision_digest": "sha256:7e8356a497f996f2425b596668599bb62e1bf198adb9be89230de3d09cfd02ff",
+          "envelope_digest": "sha256:8109ebfa399b5788548c78f49966159f5f187f33d7f2980c0e295cf751c84b78",
+          "input_digest": "sha256:12733bfadc22edfa5eb26c1e50d5fd30972de5627ca9120b4aa917b015a7203b",
+          "policy_id": "deterministic-routing-policy-v1"
+        },
+        "geometry": {
+          "sha256": "sha256:e1151e0929c4c25ef215ce8c3e67e20bafa8bdfff4999bf292b828da4efab028",
+          "value": {
+            "candidates": [
+              {
+                "layer_id": "layer:F.Cu",
+                "net_id": "net:horizontal",
+                "paths": [
+                  [
+                    [
+                      10000000,
+                      5000000
+                    ],
+                    [
+                      2000000,
+                      5000000
+                    ]
+                  ]
+                ],
+                "width_nm": 200000
+              },
+              {
+                "layer_id": "layer:F.Cu",
+                "net_id": "net:vertical",
+                "paths": [
+                  [
+                    [
+                      6000000,
+                      9000000
+                    ],
+                    [
+                      11000000,
+                      9000000
+                    ],
+                    [
+                      11000000,
+                      1000000
+                    ],
+                    [
+                      6000000,
+                      1000000
+                    ]
+                  ]
+                ],
+                "width_nm": 200000
+              }
+            ],
+            "connections": [],
+            "unrouted_nets": []
+          }
+        },
+        "iterations": 1,
+        "observed_iteration_orders": [
+          [
+            "net:horizontal",
+            "net:vertical"
+          ]
+        ],
+        "overflow_resource_count": 0,
+        "overflow_resources": [],
+        "overflow_units": 0,
+        "physical_checks": 3,
+        "ripups": 0,
+        "routed_nets": 2,
+        "router_call_count": 2,
+        "router_expansions": 197,
+        "router_obstacle_checks": 2576,
+        "status": "completed",
+        "total_wire_length_nm": 26000000,
+        "unrouted_nets": []
+      },
+      "replay_count": 10,
+      "replay_deterministic": true,
+      "shared_envelope_digest": "sha256:8109ebfa399b5788548c78f49966159f5f187f33d7f2980c0e295cf751c84b78",
+      "shared_snapshot_digest": "sha256:a1c749db994e7957fea690e525343301c789707e2ef16ff36b8c9a42e1ea3350"
+    },
+    {
+      "baseline": {
+        "candidate_digests": [
+          "sha256:8ed6e50561864df3a8bd50ad67c73610241535d867b8e5d1bf7707a71dd6b4c7",
+          "sha256:73d8ee95091274e35bc99c361d57bd81a5c603360f63160c7189c0a58c66bee5"
+        ],
+        "completion": true,
+        "evidence": null,
+        "geometry": {
+          "sha256": "sha256:7c885a37a9ac921bdf0c3ab632c4bb09c9d28774817cd807032e31310f3ae763",
+          "value": {
+            "candidates": [
+              {
+                "layer_id": "layer:F.Cu",
+                "net_id": "net:alpha",
+                "paths": [
+                  [
+                    [
+                      7000000,
+                      7000000
+                    ],
+                    [
+                      7000000,
+                      3000000
+                    ]
+                  ]
+                ],
+                "width_nm": 200000
+              },
+              {
+                "layer_id": "layer:F.Cu",
+                "net_id": "net:zeta",
+                "paths": [
+                  [
+                    [
+                      13000000,
+                      5000000
+                    ],
+                    [
+                      13000000,
+                      8000000
+                    ],
+                    [
+                      1000000,
+                      8000000
+                    ],
+                    [
+                      1000000,
+                      5000000
+                    ]
+                  ]
+                ],
+                "width_nm": 200000
+              }
+            ],
+            "connections": [],
+            "unrouted_nets": []
+          }
+        },
+        "iterations": 1,
+        "observed_iteration_orders": [
+          [
+            "net:alpha",
+            "net:zeta"
+          ]
+        ],
+        "overflow_resource_count": 0,
+        "overflow_resources": [],
+        "overflow_units": 0,
+        "physical_checks": 3,
+        "ripups": 0,
+        "routed_nets": 2,
+        "router_call_count": 2,
+        "router_expansions": 185,
+        "router_obstacle_checks": 2585,
+        "status": "completed",
+        "total_wire_length_nm": 22000000,
+        "unrouted_nets": []
+      },
+      "fixture": "asymmetric-primary",
+      "fixture_purpose": "predeclared short-first baseline against long-first reference-policy order",
+      "profile": {
+        "candidate_digests": [
+          "sha256:3c74a5e56c8957174a75748e514e1e668b05902679cf06f4bb191708c2687153",
+          "sha256:249a336aa1a702c660bf2da3bf51642f9fa39b4e0a483e0e033a4c84e9dc6d7e"
+        ],
+        "completion": true,
+        "evidence": {
+          "composite_digest": "sha256:274c478bbdfe5f13485e031261c88b4629761e14aae5609bd7ace26c87ca7631",
+          "decision_digest": "sha256:6b5ea3c94f998c7714dd31a4c30bf168b633a7670393dc4c7d77b6af2a437d8a",
+          "envelope_digest": "sha256:0e1867cebb52d4f8d55bb56cd929b4c8cf511f22b7cd7ad8e686dc64fae9f42e",
+          "input_digest": "sha256:95ff219d89716c53506b479d70f5d484851acc32e1ad835d34ebfcc97dc36872",
+          "policy_id": "deterministic-routing-policy-v1"
+        },
+        "geometry": {
+          "sha256": "sha256:ada911706b40eba5b2a8480a87b2064e002d886c865147b5a992f697bf12a710",
+          "value": {
+            "candidates": [
+              {
+                "layer_id": "layer:F.Cu",
+                "net_id": "net:alpha",
+                "paths": [
+                  [
+                    [
+                      7000000,
+                      7000000
+                    ],
+                    [
+                      6000000,
+                      7000000
+                    ],
+                    [
+                      6000000,
+                      3000000
+                    ],
+                    [
+                      7000000,
+                      3000000
+                    ]
+                  ]
+                ],
+                "width_nm": 200000
+              },
+              {
+                "layer_id": "layer:F.Cu",
+                "net_id": "net:zeta",
+                "paths": [
+                  [
+                    [
+                      13000000,
+                      5000000
+                    ],
+                    [
+                      13000000,
+                      8000000
+                    ],
+                    [
+                      1000000,
+                      8000000
+                    ],
+                    [
+                      1000000,
+                      5000000
+                    ]
+                  ]
+                ],
+                "width_nm": 200000
+              }
+            ],
+            "connections": [],
+            "unrouted_nets": []
+          }
+        },
+        "iterations": 2,
+        "observed_iteration_orders": [
+          [
+            "net:zeta",
+            "net:alpha"
+          ],
+          [
+            "net:alpha",
+            "net:zeta"
+          ]
+        ],
+        "overflow_resource_count": 0,
+        "overflow_resources": [],
+        "overflow_units": 0,
+        "physical_checks": 10,
+        "ripups": 0,
+        "routed_nets": 2,
+        "router_call_count": 4,
+        "router_expansions": 392,
+        "router_obstacle_checks": 5307,
+        "status": "completed",
+        "total_wire_length_nm": 24000000,
+        "unrouted_nets": []
+      },
+      "replay_count": 10,
+      "replay_deterministic": true,
+      "shared_envelope_digest": "sha256:0e1867cebb52d4f8d55bb56cd929b4c8cf511f22b7cd7ad8e686dc64fae9f42e",
+      "shared_snapshot_digest": "sha256:0359a6152c738e545579d486c3390dbc6093fe15197be097fc5072647c78257a"
+    },
+    {
+      "baseline": {
+        "candidate_digests": [
+          "sha256:6294f7606076909ec42e5f9dc4036d25405901c1d4c24fccf10fbbf22efcce89",
+          "sha256:270bf8ae1bb37de8b5f335b29feed3ac691ad02af2d5fe38d810b8da675d3c8b"
+        ],
+        "completion": true,
+        "evidence": null,
+        "geometry": {
+          "sha256": "sha256:32de0d0928adb299a4ca338cb2e9a5873f9ba8bbcd0492d521d82da45d3bf081",
+          "value": {
+            "candidates": [
+              {
+                "layer_id": "layer:F.Cu",
+                "net_id": "net:alpha",
+                "paths": [
+                  [
+                    [
+                      9000000,
+                      5000000
+                    ],
+                    [
+                      5000000,
+                      5000000
+                    ]
+                  ]
+                ],
+                "width_nm": 200000
+              },
+              {
+                "layer_id": "layer:F.Cu",
+                "net_id": "net:zeta",
+                "paths": [
+                  [
+                    [
+                      7000000,
+                      9000000
+                    ],
+                    [
+                      4000000,
+                      9000000
+                    ],
+                    [
+                      4000000,
+                      1000000
+                    ],
+                    [
+                      7000000,
+                      1000000
+                    ]
+                  ]
+                ],
+                "width_nm": 200000
+              }
+            ],
+            "connections": [],
+            "unrouted_nets": []
+          }
+        },
+        "iterations": 1,
+        "observed_iteration_orders": [
+          [
+            "net:alpha",
+            "net:zeta"
+          ]
+        ],
+        "overflow_resource_count": 0,
+        "overflow_resources": [],
+        "overflow_units": 0,
+        "physical_checks": 3,
+        "ripups": 0,
+        "routed_nets": 2,
+        "router_call_count": 2,
+        "router_expansions": 121,
+        "router_obstacle_checks": 1625,
+        "status": "completed",
+        "total_wire_length_nm": 18000000,
+        "unrouted_nets": []
+      },
+      "fixture": "independent-control",
+      "fixture_purpose": "predeclared independent orthogonal control of the asymmetric primary",
+      "profile": {
+        "candidate_digests": [
+          "sha256:e8038af4574cba6cccd8e4b47b779b4071088e7b1cf91945e4c7533599ac96a2",
+          "sha256:9b9f742684f6db7b6669e88b018e74e2446cde7b28bb755c95aed6bd798db088"
+        ],
+        "completion": true,
+        "evidence": {
+          "composite_digest": "sha256:93da0fdcc9f3d6a3b16416bc7a34eb68b9a4137a57daaee987f48f5137fa165e",
+          "decision_digest": "sha256:f8cc11b9ef1d2b4a7db3efc172e082eea4ba35d5f87f651365c41b8268842099",
+          "envelope_digest": "sha256:c8afebcc256b11991a5944d14f9a4b4dd9df249c69c483c57e62935db656913a",
+          "input_digest": "sha256:28c0e5f55198664bd239d35f6c83ab4812e7843fcbcc35928ee902aa224eeef5",
+          "policy_id": "deterministic-routing-policy-v1"
+        },
+        "geometry": {
+          "sha256": "sha256:30aa558e2051f53ed775c9a93127d72a0cfd548e8fa533557c8519d185fc90e8",
+          "value": {
+            "candidates": [
+              {
+                "layer_id": "layer:F.Cu",
+                "net_id": "net:alpha",
+                "paths": [
+                  [
+                    [
+                      9000000,
+                      5000000
+                    ],
+                    [
+                      9000000,
+                      6000000
+                    ],
+                    [
+                      5000000,
+                      6000000
+                    ],
+                    [
+                      5000000,
+                      5000000
+                    ]
+                  ]
+                ],
+                "width_nm": 200000
+              },
+              {
+                "layer_id": "layer:F.Cu",
+                "net_id": "net:zeta",
+                "paths": [
+                  [
+                    [
+                      7000000,
+                      9000000
+                    ],
+                    [
+                      4000000,
+                      9000000
+                    ],
+                    [
+                      4000000,
+                      1000000
+                    ],
+                    [
+                      7000000,
+                      1000000
+                    ]
+                  ]
+                ],
+                "width_nm": 200000
+              }
+            ],
+            "connections": [],
+            "unrouted_nets": []
+          }
+        },
+        "iterations": 2,
+        "observed_iteration_orders": [
+          [
+            "net:zeta",
+            "net:alpha"
+          ],
+          [
+            "net:alpha",
+            "net:zeta"
+          ]
+        ],
+        "overflow_resource_count": 0,
+        "overflow_resources": [],
+        "overflow_units": 0,
+        "physical_checks": 10,
+        "ripups": 0,
+        "routed_nets": 2,
+        "router_call_count": 4,
+        "router_expansions": 315,
+        "router_obstacle_checks": 4174,
+        "status": "completed",
+        "total_wire_length_nm": 20000000,
+        "unrouted_nets": []
+      },
+      "replay_count": 10,
+      "replay_deterministic": true,
+      "shared_envelope_digest": "sha256:c8afebcc256b11991a5944d14f9a4b4dd9df249c69c483c57e62935db656913a",
+      "shared_snapshot_digest": "sha256:12f11e27ee15d188fa6148ff6a7115a980e059eb19798b6cd67affc033547c9f"
+    }
+  ],
+  "claim": {
+    "classification": "order-effect/no quality claim",
+    "quality_claim": false,
+    "rule": "a quality claim requires both asymmetric-primary and independent-control to show at least 10% lower router expansions or obstacle checks with no higher wire length, or fewer iterations/ripups without completion, overflow, or wire-length regression"
+  },
+  "evidence_harness_command": "PYTHONPATH=src python3 scripts/benchmark_routing_policy_order.py --replays 10 --evidence-harness-commit 1fab7136591dc8b4c96e719e36a49781503df2d2 --output benchmarks/results/routing/2026-08-05-routing-policy-order.json",
+  "evidence_harness_commit": "1fab7136591dc8b4c96e719e36a49781503df2d2",
+  "implementation_commit": "d5b6c407a7937a50dd96d25d6e706947a99bba79",
+  "kicad_drc": "not_run",
+  "non_claims": [
+    "candidate geometry is not applied to a board",
+    "no model output or model-generated copper is used",
+    "the bounded physical-clearance count is not KiCad DRC",
+    "no manufacturing, fabrication, or board-mutation claim"
+  ],
+  "policy_id": "deterministic-routing-policy-v1",
+  "policy_profile": "deterministic-reference-v1",
+  "replay_minimum": 10,
+  "run_id": "sha256:c404ced69c2f1cfca5986ee82eef2fa0361d7860e5958fbd4218f0420a622a25",
+  "schema": "copper-mcp/benchmark/routing-policy-order/v1",
+  "script": "scripts/benchmark_routing_policy_order.py",
+  "script_sha256": "b1cee85ff2180bbbb6040450b6381dac42f098dd55cd668ab7efda731bb28d39",
+  "typed_harness_base_commit": "b821fd2cfed06ab8e0a66062c76d598ce63211ae"
+}
