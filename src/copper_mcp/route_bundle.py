@@ -57,6 +57,10 @@ _REQUIRED_FIELDS = (
 )
 _OPTIONAL_FIELDS = ("seed", "settings")
 _MAX_NETS = 8
+# Every per-net request derives ``seed + index``, so the accepted request seed must leave room for
+# the largest reachable index.  Bounding it here keeps a schema-valid request from producing an
+# out-of-range core seed and an untyped crash inside the coordinator.
+_MAX_SEED = MAX_JSON_SAFE_INTEGER - (_MAX_NETS - 1)
 
 
 class RouteBundleError(RequestError):
@@ -97,7 +101,7 @@ class RouteBundleRequest:
             _net_ref_id(reference)
         _digest("expect_board_revision", self.expect_board_revision)
         _digest("expect_snapshot_digest", self.expect_snapshot_digest)
-        integer("seed", self.seed, minimum=0, maximum=MAX_JSON_SAFE_INTEGER)
+        integer("seed", self.seed, minimum=0, maximum=_MAX_SEED)
 
     @property
     def layer_id(self) -> str:
@@ -145,7 +149,7 @@ def parse_route_bundle_request(payload: Any) -> RouteBundleRequest:
             expect_snapshot_digest=_digest(
                 "expect_snapshot_digest", fields["expect_snapshot_digest"]
             ),
-            seed=integer("seed", fields.get("seed", 0), minimum=0, maximum=MAX_JSON_SAFE_INTEGER),
+            seed=integer("seed", fields.get("seed", 0), minimum=0, maximum=_MAX_SEED),
             settings=_settings(fields.get("settings", {})),
         )
     except RouteBundleError:
@@ -199,20 +203,37 @@ def _candidate_document(candidate: RouteCandidate) -> dict[str, Any]:
     }
 
 
-def _bundle_bytes(plan: RouteBundlePlan) -> bytes:
+def _bundle_id(
+    *,
+    base_revision: str,
+    candidate_ids: list[str],
+    core_replays: int,
+    layer_id: str,
+    net_ref_ids: tuple[str, ...],
+    physical_pair_checks: int,
+    policy_digest: str,
+    settings: Any,
+) -> str:
+    """Digest the exact immutable content of one bundle.
+
+    ``policy_digest`` is the coordinator's own envelope digest.  It binds the iteration ceiling and
+    the penalty/budget envelope that produced this allocation, so two bundles composed from the
+    same references under different coordinator policy can never share a ``bundle_id``.
+    """
+
     payload = {
-        "base_revision": plan.base_revision,
-        "candidate_ids": [candidate.candidate_id for candidate in plan.candidates],
-        "core_replays": plan.core_replays,
-        "layer_id": plan.layer_id,
-        "net_ref_ids": list(plan.net_ref_ids),
-        "physical_pair_checks": plan.physical_pair_checks,
+        "base_revision": base_revision,
+        "candidate_ids": candidate_ids,
+        "core_replays": core_replays,
+        "layer_id": layer_id,
+        "net_ref_ids": list(net_ref_ids),
+        "physical_pair_checks": physical_pair_checks,
+        "policy_digest": policy_digest,
         "schema": "copper-mcp.route-bundle.v1",
-        "settings": {
-            field: getattr(plan.settings, field) for field in plan.settings.__dataclass_fields__
-        },
+        "settings": {field: getattr(settings, field) for field in settings.__dataclass_fields__},
     }
-    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n"
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n"
+    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,9 +248,14 @@ class RouteBundlePlan:
     settings: Any
     core_replays: int
     physical_pair_checks: int
+    policy_digest: str
 
     def __post_init__(self) -> None:
-        if not _SHA256_ID.fullmatch(self.bundle_id) or not _SHA256_ID.fullmatch(self.base_revision):
+        if (
+            not _SHA256_ID.fullmatch(self.bundle_id)
+            or not _SHA256_ID.fullmatch(self.base_revision)
+            or not _SHA256_ID.fullmatch(self.policy_digest)
+        ):
             raise RouteBundleError("route bundle identity is malformed")
         if not isinstance(self.net_ref_ids, tuple) or len(self.net_ref_ids) != len(self.candidates):
             raise RouteBundleError("route bundle candidates do not cover the requested nets")
@@ -247,7 +273,16 @@ class RouteBundlePlan:
                 verify_candidate_id(candidate)
             except ValueError as error:
                 raise RouteBundleError("route bundle candidate identity is invalid") from error
-        expected = f"sha256:{hashlib.sha256(_bundle_bytes(self)).hexdigest()}"
+        expected = _bundle_id(
+            base_revision=self.base_revision,
+            candidate_ids=[candidate.candidate_id for candidate in self.candidates],
+            core_replays=self.core_replays,
+            layer_id=self.layer_id,
+            net_ref_ids=self.net_ref_ids,
+            physical_pair_checks=self.physical_pair_checks,
+            policy_digest=self.policy_digest,
+            settings=self.settings,
+        )
         if self.bundle_id != expected:
             raise RouteBundleError("route bundle identity does not match its immutable content")
 
@@ -259,6 +294,7 @@ class RouteBundlePlan:
         return {
             "bundle_id": self.bundle_id,
             "base_revision": self.base_revision,
+            "policy_digest": self.policy_digest,
             "layer_id": self.layer_id,
             "net_ref_ids": list(self.net_ref_ids),
             "candidates": [_candidate_document(candidate) for candidate in self.candidates],
@@ -364,6 +400,11 @@ def _plan(snapshot: Any, request: RouteBundleRequest, deadline: float) -> RouteB
     # Replaying the entire allocation, rather than each independent route, proves that the
     # negotiated occupancy and physical-clearance decision is reproducible as one composition.
     replay = negotiate_routes(snapshot, envelope, cancelled=cancelled)
+    # Both runs share one wall-clock budget, so an expiry between them is a resource outcome and
+    # never evidence about determinism.  Classify it first, or an exhausted budget would be
+    # reported as a replay mismatch and accuse the deterministic core of non-determinism.
+    if NegotiatedRoutingStatus.CANCELLED in (first.status, replay.status):
+        return "the route-bundle composition exhausted its bounded time budget"
     if first != replay:
         return "the deterministic route-bundle replay did not reproduce the allocation"
     if (
@@ -374,26 +415,17 @@ def _plan(snapshot: Any, request: RouteBundleRequest, deadline: float) -> RouteB
         or first.unrouted_nets
     ):
         return "the requested route bundle could not be composed atomically"
-    # Build the exact bytes before the final constructor verifies its identity.
-    digest_payload = {
-        "base_revision": snapshot.snapshot_digest,
-        "candidate_ids": [candidate.candidate_id for candidate in first.candidates],
-        "core_replays": 1,
-        "layer_id": request.layer_id,
-        "net_ref_ids": list(request.net_ref_ids),
-        "physical_pair_checks": first.total_physical_checks,
-        "schema": "copper-mcp.route-bundle.v1",
-        "settings": {
-            field: getattr(request.settings, field)
-            for field in request.settings.__dataclass_fields__
-        },
-    }
-    bundle_id = (
-        "sha256:"
-        + hashlib.sha256(
-            json.dumps(digest_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-            + b"\n"
-        ).hexdigest()
+    # Compute the identity with the same helper the constructor re-verifies it with, so the
+    # published bundle content and its digest can never drift apart.
+    bundle_id = _bundle_id(
+        base_revision=snapshot.snapshot_digest,
+        candidate_ids=[candidate.candidate_id for candidate in first.candidates],
+        core_replays=1,
+        layer_id=request.layer_id,
+        net_ref_ids=request.net_ref_ids,
+        physical_pair_checks=first.total_physical_checks,
+        policy_digest=first.policy_digest,
+        settings=request.settings,
     )
     return RouteBundlePlan(
         bundle_id=bundle_id,
@@ -404,6 +436,7 @@ def _plan(snapshot: Any, request: RouteBundleRequest, deadline: float) -> RouteB
         settings=request.settings,
         core_replays=1,
         physical_pair_checks=first.total_physical_checks,
+        policy_digest=first.policy_digest,
     )
 
 

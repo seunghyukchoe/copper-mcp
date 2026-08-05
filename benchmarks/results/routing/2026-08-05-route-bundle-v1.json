@@ -1,7 +1,7 @@
 {
   "authoritative_kicad_drc": {
-    "base_revision": "sha256:2617ea1a91e6eabd8f7de6d124672ee05478761843308a2d365a30f1a5dedc78",
-    "drc_context_revision": "sha256:61efa0a7cf5845a8f49fe13eee46fe20d00b50f208a7c37c9d2ec4e9ffacfab4",
+    "base_revision": "sha256:678c9fc7a67217530d5ca112d181c7efc45b50ed237f7ce0e81d00dd3a6d11bb",
+    "drc_context_revision": "sha256:0cc3a5ce94e32cb4485a49e543ab254ef33183ae2d83ff44c681f77e07682528",
     "drc_schema": "https://schemas.kicad.org/drc.v1.json",
     "error_count": 0,
     "exclusion_count": 0,
@@ -20,7 +20,7 @@
     "same_base_independent_overflow_units": 1
   },
   "bundle": {
-    "bundle_id": "sha256:5eda7cfc4646373d4dd8a843ca95eadf210e0808e09510260454a914ec75fdb9",
+    "bundle_id": "sha256:6b54fa782ec45fe3ac919736799fc6dd51506f71b78acc7db15fe2a57f59bd75",
     "candidate_count": 2,
     "combined_derivative": true,
     "core_replays": 1,
@@ -45,8 +45,8 @@
     "fabrication_readiness",
     "general_board_scaling"
   ],
-  "recorded_at_utc": "2026-08-05T13:35:06+00:00",
-  "run_id": "sha256:2022cff8d154653e86e0a05f89271732f91c51166eaf37559ac67dd208fa351f",
+  "recorded_at_utc": "2026-08-05T15:40:07+00:00",
+  "run_id": "sha256:e03c156534462ba63f7abb8ad6bf3548e43196b4c763a15fa316a0a43f73caf6",
   "schema": "copper-mcp/benchmark/route-bundle/v1",
   "script": "scripts/benchmark_route_bundle.py",
   "script_sha256": "cadb5e760d23d6d742f1f812d67b35fd5e645cba5bb946877ce7bbd5e448b402",

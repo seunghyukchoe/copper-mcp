@@ -1061,6 +1061,12 @@ class RoutePreviewToolResponse(
     """Strict status-specific structured output contract for ``preview_route``."""
 
 
+#: A bundle derives one core seed per reference as ``seed + index``, so the advertised ceiling
+#: reserves room for the largest reachable index.  Without this reservation the schema would
+#: publish requests whose derived per-net seed leaves the deterministic core's integer range.
+RouteBundleSeed = Annotated[int, Field(ge=0, le=2**53 - 8)]
+
+
 class RouteBundleRequestContract(_ClosedContract):
     """Closed, reference-only request for one atomic same-layer route composition."""
 
@@ -1073,7 +1079,7 @@ class RouteBundleRequestContract(_ClosedContract):
     net_ref_ids: Annotated[list[NetRefId], Field(min_length=2, max_length=8)]
     expect_board_revision: Digest
     expect_snapshot_digest: Digest
-    seed: NonNegativeInteger = 0
+    seed: RouteBundleSeed = 0
     settings: RouteSettingsContract = Field(default_factory=RouteSettingsContract)
 
 
@@ -1093,6 +1099,7 @@ class RouteBundleMetricsContract(_ClosedContract):
 class RouteBundlePlanContract(_ClosedContract):
     bundle_id: Digest
     base_revision: Digest
+    policy_digest: Digest
     layer_id: LayerId
     net_ref_ids: Annotated[list[NetRefId], Field(min_length=2, max_length=8)]
     candidates: Annotated[list[RouteCandidateContract], Field(min_length=2, max_length=8)]
