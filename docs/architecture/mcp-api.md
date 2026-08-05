@@ -446,7 +446,10 @@ evidence. Failure codes are `invalid_request`, `apply_disabled`, `invalid_token`
 `apply_verification_failed`. The tool's annotations say `destructiveHint: true` and
 `readOnlyHint: false` truthfully, but they are advisory client hints and enforce nothing.
 
-There is no merge, lock override, IPC apply, batch apply, or post-placement scene observation.
+There is no merge, lock override, IPC apply, or batch apply. The read-only
+`observe_post_placement` tool provides a bounded file-backed scene plus aggregate DRC observation
+for an explicitly expected board revision; it does not establish mutation provenance or provide an
+IPC/live-editor apply path.
 
 ## Planned tools
 
