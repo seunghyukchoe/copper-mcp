@@ -1,0 +1,244 @@
+{
+  "benchmark": "exact-local-repair-negotiated-gate-v1",
+  "candidate_identity": {
+    "no_profile_candidate_identity": "negotiated-congestion-v2 (unchanged)",
+    "no_profile_result_shape": "NegotiatedRoutingResult (unchanged)"
+  },
+  "configuration": {
+    "envelope": {
+      "max_iterations": 4,
+      "max_total_expansions": 2000000,
+      "max_total_obstacle_checks": 10000000,
+      "max_total_physical_checks": 2000000
+    },
+    "settings": {
+      "bend_penalty_nm": 500000,
+      "grid_step_nm": 1000000,
+      "max_expansions": 20000,
+      "max_grid_nodes": 512,
+      "max_obstacle_checks": 200000,
+      "max_obstacles": 128,
+      "proximity_penalty_nm": 0
+    }
+  },
+  "dataset": {
+    "fixture": "benchmarks/audio/fixtures/negotiated-crossing-v1.kicad_pcb",
+    "fixture_sha256": "dbbfc5179cca7f644b90303ff3bc695f191ba94f7e5bbc8b4b1437d810ec83c7",
+    "license": "Apache-2.0",
+    "predeclared_in": "docs/research/exact-local-repair-negotiated-integration-gate.md",
+    "provenance": "Committed held-out KiCad fixture converted through canonical Board IR."
+  },
+  "gate": {
+    "baseline_gates_hold": true,
+    "minimum_improvement_percent": 10,
+    "named_coordinator_metric": "iterations",
+    "result": "declined",
+    "transaction_admitted": false,
+    "why": "The no-profile coordinator completed with zero overflow in one iteration, so no complete rejected allocation exists. A repair window, occupancy projection, local repair search, validator invocation, and candidate-v3 binding are not admissible."
+  },
+  "metering": {
+    "candidate_path_edge_checks": 0,
+    "candidate_path_obstacle_checks": 0,
+    "local_repair_expanded_states": 0,
+    "reason": "No rejected allocation exists; no repair or validator work was performed."
+  },
+  "replay_count": 10,
+  "replay_deterministic": true,
+  "replays": [
+    {
+      "candidate_ids": [
+        "sha256:29179321a77bf6e2e3f7bc7f41b8b6f993cc9c54b358d2e06f85243ad7e6d214",
+        "sha256:ae91bce9b191fedb1a68cf10ab23ca6619b5399b8ab9d8f17b377994c7dfcb00"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:29179321a77bf6e2e3f7bc7f41b8b6f993cc9c54b358d2e06f85243ad7e6d214",
+        "sha256:ae91bce9b191fedb1a68cf10ab23ca6619b5399b8ab9d8f17b377994c7dfcb00"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:29179321a77bf6e2e3f7bc7f41b8b6f993cc9c54b358d2e06f85243ad7e6d214",
+        "sha256:ae91bce9b191fedb1a68cf10ab23ca6619b5399b8ab9d8f17b377994c7dfcb00"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:29179321a77bf6e2e3f7bc7f41b8b6f993cc9c54b358d2e06f85243ad7e6d214",
+        "sha256:ae91bce9b191fedb1a68cf10ab23ca6619b5399b8ab9d8f17b377994c7dfcb00"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:29179321a77bf6e2e3f7bc7f41b8b6f993cc9c54b358d2e06f85243ad7e6d214",
+        "sha256:ae91bce9b191fedb1a68cf10ab23ca6619b5399b8ab9d8f17b377994c7dfcb00"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:29179321a77bf6e2e3f7bc7f41b8b6f993cc9c54b358d2e06f85243ad7e6d214",
+        "sha256:ae91bce9b191fedb1a68cf10ab23ca6619b5399b8ab9d8f17b377994c7dfcb00"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:29179321a77bf6e2e3f7bc7f41b8b6f993cc9c54b358d2e06f85243ad7e6d214",
+        "sha256:ae91bce9b191fedb1a68cf10ab23ca6619b5399b8ab9d8f17b377994c7dfcb00"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:29179321a77bf6e2e3f7bc7f41b8b6f993cc9c54b358d2e06f85243ad7e6d214",
+        "sha256:ae91bce9b191fedb1a68cf10ab23ca6619b5399b8ab9d8f17b377994c7dfcb00"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:29179321a77bf6e2e3f7bc7f41b8b6f993cc9c54b358d2e06f85243ad7e6d214",
+        "sha256:ae91bce9b191fedb1a68cf10ab23ca6619b5399b8ab9d8f17b377994c7dfcb00"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:29179321a77bf6e2e3f7bc7f41b8b6f993cc9c54b358d2e06f85243ad7e6d214",
+        "sha256:ae91bce9b191fedb1a68cf10ab23ca6619b5399b8ab9d8f17b377994c7dfcb00"
+      ],
+      "candidate_revisions_exact": true,
+      "iterations": 1,
+      "overflow_units": 0,
+      "physical_gate": {
+        "accepted": true,
+        "failure": null,
+        "pair_checks": 3
+      },
+      "ripups": 0,
+      "router_expansions": 197,
+      "router_obstacle_checks": 2464,
+      "status": "completed",
+      "unrouted_nets": []
+    }
+  ],
+  "run_id": "sha256:b854a5216154a9c5faa7793c7877fe2bbf08c80e20cd03994e31a698caefb01e",
+  "schema": "copper-mcp/benchmark/exact-local-repair-gate/v1",
+  "script": "scripts/benchmark_exact_local_repair_integration_gate.py",
+  "script_sha256": "1030539b45776a75a32e2f83e6d1feae8eca6dc30e1a55b4a666a26aea4d86f5",
+  "snapshot_digest": "sha256:acaf156090956d6e5ec91cbd68b5b0ef75f7e1767b9184366363869b23457e31"
+}

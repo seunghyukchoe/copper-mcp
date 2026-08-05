@@ -65,6 +65,7 @@ from copper_mcp.routing.policy import (
     RoutingPolicyInput,
     policy_input_digest,
 )
+from scripts import exact_local_repair_gate_fixture as predeclared_fixture
 
 BOARD_SOURCE = f"sha256:{'c' * 64}"
 LAYER = "layer:F.Cu"
@@ -188,6 +189,17 @@ def _requests(snapshot: object) -> tuple[RouteRequest, RouteRequest]:
             settings=settings,
         ),
     )
+
+
+def test_predeclared_repair_gate_helper_is_semantically_equivalent_to_original_builder() -> None:
+    original = _crossing_snapshot()
+    fixture = predeclared_fixture.build_snapshot()
+
+    assert original.snapshot_digest == predeclared_fixture.EXPECTED_SNAPSHOT_DIGEST
+    assert fixture.snapshot_digest == original.snapshot_digest
+    assert fixture.content == original.content
+    assert predeclared_fixture.settings() == _settings()
+    assert predeclared_fixture.build_requests(fixture) == _requests(original)
 
 
 def _resign(candidate: RouteCandidate) -> RouteCandidate:

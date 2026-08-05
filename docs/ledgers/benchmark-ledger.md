@@ -981,3 +981,25 @@ are the audit copies for the original run IDs.
 | Configuration | Provider capability is represented by an owner-private temporary root with the required aggregate-budget declaration. Fakes observe subprocess arguments without executing external tools. |
 | Metrics | 36 focused tests passed: absent capability observed zero process launches; provider-present Java/KiCad/KiCad-Python probes and every live caller-result DRC argument/CWD were provider descendants; source/import preservation and caller-result tamper checks refused before DRC. |
 | Interpretation | This is code-path evidence for fail-closed containment semantics only. It does not prove an OS quota, sandbox, KiCad/FreeRouting interoperability, routing quality, performance, parity, manufacturing readiness, or comparison closure. |
+
+#### B-071 — preserved historical exact local-repair admission replay
+
+| Field | Recorded evidence |
+|---|---|
+| Correction | B-071 is retained audit history, but its related KiCad-derived fixture used 512 grid nodes, 20,000 expansions, 128 obstacles, and 200,000 obstacle checks. It is not equivalent to the predeclared `_crossing_snapshot` and `_requests` experiment and is not relied upon for that attribution. |
+| Configuration | Historical `exact-local-repair-gate-v1` artifact; ten negotiated-routing replays under the recorded related-fixture envelope. |
+| Metrics | Ten replays completed with zero overflow, one iteration, zero ripups, and no rejected allocation; local-repair and validator meters remained zero because no repair admission was attempted. |
+| Artifact | Preserved [`2026-08-05-exact-local-repair-gate.json`](../../benchmarks/results/routing/2026-08-05-exact-local-repair-gate.json). |
+| Classification | Declined; historical negative observation only. |
+| Interpretation | This does not establish the predeclared experiment, coordinator integration, routing improvement, DRC, FreeRouting parity, or board-mutation authority. B-072 supersedes its experiment attribution without deleting or modifying this record. |
+
+#### B-072 — corrected exact local-repair admission replay
+
+| Field | Recorded evidence |
+|---|---|
+| Correction | Supersedes only B-071's predeclared-experiment attribution. B-071 remains immutable history. |
+| Configuration | Ten negotiated-routing replays using an independently reconstructed source-`965d8fc97ddeb720251cb7863c7b62310637f301` fixture with snapshot digest `sha256:9ad048f6f439a7e71be4c1f115d8a205f00c92f0853e0c140725906c1acdb245`, 256 grid nodes, 5,000 expansions, 64 obstacles, and 100,000 obstacle checks. |
+| Metrics | Ten replays completed with zero overflow, one iteration, zero ripups, and no rejected allocation. The repair and validator meters are zero because no rejected allocation was present; this is a declined gate, not a repair result. |
+| Artifact | [`2026-08-05-exact-local-repair-gate-correction-v2.json`](../../benchmarks/results/routing/2026-08-05-exact-local-repair-gate-correction-v2.json), [`benchmark_exact_local_repair_integration_gate.py`](../../scripts/benchmark_exact_local_repair_integration_gate.py), and [`exact_local_repair_gate_fixture.py`](../../scripts/exact_local_repair_gate_fixture.py). |
+| Classification | Declined; no integration or improvement claim. |
+| Interpretation | The helper is regression-checked against the original semantic builder and imports no test code. This is benchmark-attribution evidence only; it adds no profile, transaction, public behavior, routing integration, DRC, FreeRouting parity, apply, or board-mutation claim. |
