@@ -36,7 +36,7 @@
     "KiCad file mutation, editor mutation, placement apply, route apply, or live-editor behavior",
     "placement optimality, a general improvement guarantee, or a comparison with external routers"
   ],
-  "run_id": "sha256:7ee7700748c25c759c9104e02072bcd007b7eb4bd71836ae0c1da48c287f3219",
+  "run_id": "sha256:a304b1e428b37d91f1d29f62f97460aac9569d6f9a12160953fc01a55de71fb0",
   "schema": "copper-mcp/benchmark/route-aware-placement/v1",
-  "source_commit": "071e141f08fa6ac43e8dfbdec8296e047bfed4de"
+  "source_commit": "74647797582d0d8713c063afc146daf5d55e6163"
 }

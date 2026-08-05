@@ -1045,3 +1045,14 @@ are the audit copies for the original run IDs.
 | Metrics | All retained candidates were legal; both choices completed one probe with zero unrouted probes. The route-aware solve consumed 116 of its 128 operation-wide probe budget. Default selection: 42,000,000 nm. Route-aware selection: 32,000,000 nm. Improvement: 23.80952380952381%; all three replay signatures matched. Run ID: `sha256:7ee7700748c25c759c9104e02072bcd007b7eb4bd71836ae0c1da48c287f3219`. |
 | Artifact | [`2026-08-05-route-aware-placement-v1.json`](../../benchmarks/results/placement/2026-08-05-route-aware-placement-v1.json), [`benchmark_route_aware_placement.py`](../../scripts/benchmark_route_aware_placement.py), and [`test_route_aware_placement.py`](../../tests/test_route_aware_placement.py). |
 | Interpretation | Accepted for this opt-in ranking policy only. Independent probes are not a combined-net route, negotiated congestion/overflow result, physical-clearance proof, KiCad DRC, external-router comparison, electrical/fabrication result, optimal-placement result, board mutation, or apply authority. |
+
+#### B-081 — route-aware placement reachable-source correction
+
+| Field | Recorded evidence |
+|---|---|
+| Correction | Supersedes only B-078's artifact-source provenance. B-078 remains immutable history. Its previous source object was not reachable from this branch after the one-commit transplant. |
+| Rebound source | `74647797582d0d8713c063afc146daf5d55e6163`, the DCO-signed projection-binding remediation commit, is an ancestor of this correction and contains the exact route-aware code and direct helper regressions used for the replay. |
+| Artifact | Regenerated [`2026-08-05-route-aware-placement-v1.json`](../../benchmarks/results/placement/2026-08-05-route-aware-placement-v1.json), run ID `sha256:a304b1e428b37d91f1d29f62f97460aac9569d6f9a12160953fc01a55de71fb0`; the artifact records the reachable source commit above. |
+| Metric preservation | Three deterministic replays remained legal and selected the same candidates: 42,000,000 nm baseline versus 32,000,000 nm route-aware wire length (23.80952380952381% improvement), zero unrouted probes, and 116 of 128 operation-wide probes used. |
+| Replay guard | The artifact self-digest and local Git ancestry are checked before this correction is committed; replay uses the source tree at the recorded, reachable commit. |
+| Interpretation | This is a provenance correction only. It does not alter placement/routing behavior, fixture inputs, candidate identity, legality, DRC, congestion, external-router, electrical/fabrication, mutation, or apply claims. |

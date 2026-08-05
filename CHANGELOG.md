@@ -8,6 +8,10 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Regenerated the route-aware placement benchmark artifact from a reachable, DCO-signed
+  projection-binding remediation commit. B-081 preserves B-078 as historical evidence while
+  recording the corrected source provenance; the deterministic selection metrics are unchanged.
+
 - Rebound the held-out audio benchmark artifact to the reachable merged-main source commit after
   PR #51's squash merge. Its strict detached replay now proves the locally available source is in
   checkout ancestry before checkout; all bound inputs and recorded benchmark metrics are unchanged.
