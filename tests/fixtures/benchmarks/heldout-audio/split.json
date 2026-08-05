@@ -13,6 +13,7 @@
       {
         "family_id": "passive-rc-low-pass",
         "fixture": "benchmarks/audio/fixtures/rc-low-pass-routing-v1.kicad_pcb",
+        "fixture_sha256": "8cfea1dbcedbfede05905cdeb36160aa41f1022245f4dfe5c1e723aa503a758b",
         "topology_category": "synthetic-passive-rc"
       }
     ],

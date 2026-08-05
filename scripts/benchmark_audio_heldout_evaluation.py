@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import platform
+import re
 import shutil
 import subprocess
 import tempfile
@@ -34,6 +35,9 @@ FIXTURE = FIXTURE_DIRECTORY / "ac-coupled-signal-chain-v1.kicad_pcb"
 PROVENANCE = FIXTURE_DIRECTORY / "provenance.json"
 SPLIT = FIXTURE_DIRECTORY / "split.json"
 SCRIPT_PATH = Path("scripts/benchmark_audio_heldout_evaluation.py")
+ARTIFACT_PATH = Path("benchmarks/results/heldout/2026-08-05-audio-project-family-v1.json")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_GIT_COMMIT = re.compile(r"^[0-9a-f]{40}$")
 CONSTRAINTS = {
     "clearance_nm": 250_000,
     "track_width_nm": 250_000,
@@ -106,6 +110,44 @@ def _git_commit() -> str:
         return "unknown"
 
 
+def _git_output(arguments: list[str]) -> bytes:
+    git = shutil.which("git")
+    if git is None:
+        raise HeldoutEvaluationError("Git is required for reproducible evidence")
+    try:
+        return subprocess.run(  # noqa: S603 - fixed local Git argv
+            [git, *arguments],
+            cwd=ROOT,
+            capture_output=True,
+            check=True,
+            timeout=5,
+        ).stdout
+    except (OSError, subprocess.SubprocessError) as error:
+        raise HeldoutEvaluationError("Git evidence lookup failed") from error
+
+
+def _require_clean_git_tree() -> None:
+    if _git_output(["status", "--porcelain=v1", "--untracked-files=all"]):
+        raise HeldoutEvaluationError("reproducible artifact generation requires a clean Git tree")
+
+
+def _evidence_source_commit(value: str) -> str:
+    if not _GIT_COMMIT.fullmatch(value):
+        raise HeldoutEvaluationError("evidence source commit must be one full lowercase Git SHA")
+    resolved = _git_output(["rev-parse", "--verify", f"{value}^{{commit}}"]).decode().strip()
+    if resolved != value:
+        raise HeldoutEvaluationError("evidence source commit did not resolve exactly")
+    return resolved
+
+
+def _tracked_sha256(commit: str, path: Path) -> str:
+    try:
+        content = _git_output(["show", f"{commit}:{path.as_posix()}"])
+    except HeldoutEvaluationError as error:
+        raise HeldoutEvaluationError("evidence source commit lacks a bound input") from error
+    return _sha256(content)
+
+
 def _profile() -> KiCadConstraintProfile:
     net_class = NetClass(id="class:heldout-audio", name="Held-out audio", **CONSTRAINTS)
     return KiCadConstraintProfile(net_classes=(net_class,), default_net_class_id=net_class.id)
@@ -176,10 +218,9 @@ def load_protocol() -> HeldoutProtocol:
             if not isinstance(entry, dict) or not isinstance(entry.get("family_id"), str):
                 raise HeldoutEvaluationError("split family declaration is malformed")
             fixture_hash = entry.get("fixture_sha256")
-            if fixture_hash is not None:
-                if not isinstance(fixture_hash, str) or len(fixture_hash) != 64:
-                    raise HeldoutEvaluationError("split fixture hash is malformed")
-                hashes.append(fixture_hash)
+            if not isinstance(fixture_hash, str) or not _SHA256.fullmatch(fixture_hash):
+                raise HeldoutEvaluationError("split fixture hash is required and must be SHA-256")
+            hashes.append(fixture_hash)
     if len(hashes) != len(set(hashes)):
         raise HeldoutEvaluationError("a fixture hash appears in multiple split partitions")
     heldout = heldout_entries[0]
@@ -342,30 +383,83 @@ def run_evaluation(repetitions: int) -> dict[str, Any]:
     }
 
 
-def build_report(repetitions: int, *, timestamp: datetime | None = None) -> dict[str, Any]:
-    """Build a content-addressed report; callers may freeze time for reproducible artifacts."""
+def _input_hashes() -> dict[str, str]:
+    paths = (
+        SCRIPT_PATH,
+        FIXTURE.relative_to(ROOT),
+        (FIXTURE_DIRECTORY / "LICENSE").relative_to(ROOT),
+        PROVENANCE.relative_to(ROOT),
+        SPLIT.relative_to(ROOT),
+    )
+    return {path.as_posix(): _sha256((ROOT / path).read_bytes()) for path in paths}
 
-    report: dict[str, Any] = {
-        "schema": "copper-mcp/benchmark/heldout-audio-project-family/v1",
-        "date_utc": (timestamp or datetime.now(UTC)).replace(microsecond=0).isoformat(),
-        "source_commit": _git_commit(),
-        "environment": {"platform": platform.platform(), "python": platform.python_version()},
+
+def _evidence(repetitions: int, *, evidence_source_commit: str) -> dict[str, Any]:
+    return {
+        "schema": "copper-mcp/benchmark/heldout-audio-project-family/evidence-v1",
+        "evidence_source_commit": evidence_source_commit,
+        "inputs": _input_hashes(),
         "script": str(SCRIPT_PATH),
         "evaluation": run_evaluation(repetitions),
     }
-    report["run_id"] = "sha256:" + _sha256(
-        json.dumps(report, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+
+
+def _evidence_run_id(evidence: dict[str, Any]) -> str:
+    return "sha256:" + _sha256(
+        json.dumps(evidence, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     )
-    return report
+
+
+def build_report(repetitions: int, *, timestamp: datetime | None = None) -> dict[str, Any]:
+    """Build a local report with host observations separate from deterministic evidence."""
+
+    evidence = _evidence(repetitions, evidence_source_commit=_git_commit())
+    return {
+        "schema": "copper-mcp/benchmark/heldout-audio-project-family/report-v1",
+        "evidence": evidence,
+        "evidence_run_id": _evidence_run_id(evidence),
+        "observations": {
+            "generated_at_utc": (timestamp or datetime.now(UTC)).replace(microsecond=0).isoformat(),
+            "platform": platform.platform(),
+            "python": platform.python_version(),
+        },
+    }
+
+
+def build_reproducible_artifact(repetitions: int, *, evidence_source_commit: str) -> dict[str, Any]:
+    """Build evidence only after every bound input matches a clean source commit."""
+
+    _require_clean_git_tree()
+    commit = _evidence_source_commit(evidence_source_commit)
+    inputs = _input_hashes()
+    if any(_tracked_sha256(commit, Path(path)) != digest for path, digest in inputs.items()):
+        raise HeldoutEvaluationError("evidence source commit does not match current bound inputs")
+    evidence = _evidence(repetitions, evidence_source_commit=commit)
+    return {
+        "schema": "copper-mcp/benchmark/heldout-audio-project-family/artifact-v1",
+        "evidence": evidence,
+        "evidence_run_id": _evidence_run_id(evidence),
+    }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repetitions", type=int, default=3)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--reproducible-artifact", action="store_true")
+    parser.add_argument("--evidence-source-commit")
     args = parser.parse_args()
     try:
-        report = build_report(args.repetitions)
+        if args.reproducible_artifact:
+            if args.output is None or args.evidence_source_commit is None:
+                raise HeldoutEvaluationError(
+                    "reproducible artifact mode requires --output and --evidence-source-commit"
+                )
+            report = build_reproducible_artifact(
+                args.repetitions, evidence_source_commit=args.evidence_source_commit
+            )
+        else:
+            report = build_report(args.repetitions)
     except (HeldoutEvaluationError, OSError, ValueError) as error:
         raise SystemExit(f"Held-out audio evaluation failed: {error}") from error
     rendered = json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n"

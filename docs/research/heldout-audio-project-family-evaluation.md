@@ -31,8 +31,9 @@ partitions:
 - tuning: empty, because this reference run has no learned model or tunable policy; and
 - held-out: a new original `ac-coupled-signal-chain` family.
 
-The evaluator rejects duplicate fixture hashes across partitions, requires the held-out hash to
-match its provenance record, and reads only the held-out board. It does not open the training
+The evaluator requires a valid SHA-256 declaration for every non-empty partition entry, rejects
+duplicate fixture hashes across partitions, requires the held-out hash to match its provenance
+record, and reads only the held-out board. It does not open the training
 fixture, choose settings from observed held-out results, train a model, invoke a network, or write
 the source board. Before a learned policy is admitted, it must use a separately frozen train/tune
 protocol; this fixture cannot become a tuning sample retroactively.
@@ -51,5 +52,8 @@ The evaluator runs the unmodified deterministic services and records:
 The predeclared primary comparison metrics for a future policy are routed-net completion fraction
 and total router expansions. Any quality claim needs a frozen baseline and policy evaluated on a
 larger held-out corpus, no regression in completion or deterministic validation, and separate
-KiCad DRC evidence. This v1 run makes **no** placement/routing improvement, electrical,
+KiCad DRC evidence. Reproducible artifact generation additionally requires a clean Git tree and
+binds the exact source commit plus the script, fixture, licence, provenance, and split hashes;
+host and wall-clock observations are deliberately outside its content identity. This v1 run makes
+**no** placement/routing improvement, electrical,
 manufacturing, DRC, ERC, schematic, fabrication, or hardware-performance claim.

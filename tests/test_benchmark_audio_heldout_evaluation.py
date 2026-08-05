@@ -82,20 +82,76 @@ def test_duplicate_fixture_hash_across_split_partitions_is_rejected(
         benchmark.load_protocol()
 
 
-def test_fixed_time_report_is_content_addressed_and_makes_no_quality_claim(
+@pytest.mark.parametrize("value", (None, "not-a-hash", "f" * 63, "g" * 64))
+def test_nonempty_split_entry_requires_a_valid_fixture_hash(
+    value: object,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    split = json.loads(benchmark.SPLIT.read_text(encoding="utf-8"))
+    split["family_definitions"]["training"][0]["fixture_sha256"] = value
+    tampered = tmp_path / "split.json"
+    tampered.write_text(json.dumps(split), encoding="utf-8")
+    monkeypatch.setattr(benchmark, "SPLIT", tampered)
+
+    with pytest.raises(benchmark.HeldoutEvaluationError, match="required and must be SHA-256"):
+        benchmark.load_protocol()
+
+
+def test_report_separates_host_observations_from_content_addressed_evidence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(benchmark, "_git_commit", lambda: "test-commit")
     timestamp = datetime(2026, 8, 5, tzinfo=UTC)
 
     first = benchmark.build_report(2, timestamp=timestamp)
+    monkeypatch.setattr(benchmark.platform, "platform", lambda: "different-host")
+    monkeypatch.setattr(benchmark.platform, "python_version", lambda: "different-python")
     second = benchmark.build_report(2, timestamp=timestamp)
 
-    assert first == second
-    canonical = dict(first)
-    run_id = canonical.pop("run_id")
+    assert first["evidence"] == second["evidence"]
+    assert first["evidence_run_id"] == second["evidence_run_id"]
+    assert first["observations"] != second["observations"]
     expected = hashlib.sha256(
-        json.dumps(canonical, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        json.dumps(
+            first["evidence"], sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode()
     ).hexdigest()
-    assert run_id == f"sha256:{expected}"
-    assert "placement or routing quality improvement" in first["evaluation"]["not_claimed"]
+    assert first["evidence_run_id"] == f"sha256:{expected}"
+    assert (
+        "placement or routing quality improvement" in first["evidence"]["evaluation"]["not_claimed"]
+    )
+
+
+def test_reproducible_artifact_requires_a_clean_tree(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(benchmark, "_git_output", lambda _arguments: b" M fixture")
+
+    with pytest.raises(benchmark.HeldoutEvaluationError, match="clean Git tree"):
+        benchmark.build_reproducible_artifact(2, evidence_source_commit="a" * 40)
+
+
+def test_reproducible_artifact_binds_all_inputs_without_host_observations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commit = "a" * 40
+    monkeypatch.setattr(benchmark, "_require_clean_git_tree", lambda: None)
+    monkeypatch.setattr(benchmark, "_evidence_source_commit", lambda value: value)
+    monkeypatch.setattr(
+        benchmark,
+        "_tracked_sha256",
+        lambda _commit, path: benchmark._input_hashes()[path.as_posix()],
+    )
+
+    artifact = benchmark.build_reproducible_artifact(2, evidence_source_commit=commit)
+
+    assert artifact["evidence"]["evidence_source_commit"] == commit
+    assert set(artifact["evidence"]["inputs"]) == {
+        "scripts/benchmark_audio_heldout_evaluation.py",
+        "tests/fixtures/benchmarks/heldout-audio/LICENSE",
+        "tests/fixtures/benchmarks/heldout-audio/ac-coupled-signal-chain-v1.kicad_pcb",
+        "tests/fixtures/benchmarks/heldout-audio/provenance.json",
+        "tests/fixtures/benchmarks/heldout-audio/split.json",
+    }
+    assert "observations" not in artifact
