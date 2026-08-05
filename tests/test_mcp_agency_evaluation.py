@@ -26,7 +26,7 @@ def test_agency_evaluation_runs_all_predeclared_cases_without_disclosure() -> No
         "network": "not_invoked",
         "model": "not_invoked",
         "kicad": "not_invoked",
-        "apply": "not_invoked",
+        "board_mutation": "not_invoked",
         "workspace": "temporary-and-unchanged",
     }
     assert report["counts"] == {

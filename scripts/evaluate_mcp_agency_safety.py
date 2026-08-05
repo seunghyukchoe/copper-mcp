@@ -419,7 +419,7 @@ def build_report(*, evidence_harness_commit: str) -> dict[str, Any]:
             "network": "not_invoked",
             "model": "not_invoked",
             "kicad": "not_invoked",
-            "apply": "not_invoked",
+            "board_mutation": "not_invoked",
             "workspace": "temporary-and-unchanged",
         },
         "counts": {
