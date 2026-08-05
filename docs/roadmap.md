@@ -45,8 +45,9 @@ documentation, ledger updates, and benchmark evidence.
   real-editor oracle run has been recorded, and live action compare-and-swap before placement or
   routing remains open because the workstation IPC server is disabled.
 - [x] Canonical Board IR v0.2 contract with integer units, typed constraints, strict codecs,
-  content digests, first-class footprint pose/side/lock/pad ownership, and bounded rectangular
-  courtyard rings. The immutable v0.1 schema remains as legacy compatibility evidence.
+  content digests, first-class footprint pose/side/lock/pad ownership, and bounded simple closed
+  orthogonal courtyard rings: unfilled `fp_rect`, `fp_poly`, and unordered complete `fp_line`
+  cycles. The immutable v0.1 schema remains as legacy compatibility evidence.
 - [x] Board IR application-service and MCP exposure as a read-only structural summary.
 - [ ] Broader KiCad geometry and rule coverage.
 - [x] Headless `kicad-cli pcb drc --format json` validation.
@@ -251,18 +252,19 @@ placement, and the policy-plugin work.
   geometry remain open gates.
 - [~] Deterministic snapping, connectivity, clearance, rule, provenance, and revision validation for
   every placement candidate. Grid snapping, rule residuals, three-valued pad overlap, outline
-  containment, keepout respect, exact same-side rectangular-courtyard overlap, and dual-digest
-  binding are implemented, including stationary supported courtyards from padless footprints while
-  keeping those footprints out of candidate manifests. Board IR now carries the supported
-  rectangular courtyard rings; pad-net connectivity after a placement and non-rectangular topology
-  remain future work.
-- [~] General courtyard line-chain/polygon topology and back-side footprint observation, pinned to
-  KiCad-authored front/back flip and DRC oracle fixtures without applying a second mirror. The
-  adapter now observes bounded `F.Cu`/`B.Cu` footprints with rectangles, unfilled orthogonal
-  polygons, and closed orthogonal line-chain courtyards; exact same-side positive-area legality is
-  measured on a KiCad-resaved DRC-clean fixture (B-073). Curves/arcs/diagonals, nonzero custom
-  clearance, GUI-authored flip serialization, side-aware placement apply, and a live desktop
-  no-second-mirror oracle remain open.
+  containment, keepout respect, exact same-side simple closed orthogonal-courtyard overlap, and
+  dual-digest binding are implemented, including stationary supported courtyards from padless
+  footprints while keeping those footprints out of candidate manifests. Board IR accepts unfilled
+  `fp_rect`, `fp_poly`, and unordered complete `fp_line` cycles only when they normalize to simple
+  closed horizontal/vertical rings; B-073 measures the resulting exact positive-area legality.
+  Pad-net connectivity after a placement, nonzero custom clearance, and general topology remain
+  future work.
+- [~] Broaden courtyard geometry and side-aware placement safely. Bounded `F.Cu`/`B.Cu`
+  observation imports simple closed orthogonal rectangles, polygons, and unordered line cycles
+  without a second mirror; malformed chains and unsupported fields fail closed. Diagonal edges,
+  curves, arcs, fills, open/branching/self-intersecting contours, holes or multi-loop contour
+  semantics, nonzero custom clearance, GUI-authored flip serialization, side-aware placement apply, and a
+  live desktop no-second-mirror oracle remain open.
 - [~] Separately authorized placement apply; direct AI mutation of KiCad remains prohibited. The
   bounded file-level surface is implemented and measured, and file-backed post-placement
   DRC/scene observation is revision-bound; general footprint fidelity and live-editor action CAS
