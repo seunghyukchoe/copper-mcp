@@ -30,13 +30,17 @@ pipeline:
 
 1. Require the literal `board: "live"`, two typed pad references, bounded net-class/grid/search
    settings, and **three** compare-and-swap values: source board digest, converted Board IR
-   snapshot digest, and a redacted SHA-256 digest of `KICAD_API_TOKEN`.
+   snapshot digest, and an opaque `hmac-sha256:<64 lowercase hex>` session revision. The session
+   revision is a domain-separated HMAC-SHA256 of `KICAD_API_TOKEN` using a fresh process-local
+   256-bit key; it is not a password hash, is not reusable across a fresh process, and is compared
+   in constant time after fixed-format validation.
 2. Reject unknown fields and raw `net`/`net_ref_id` selectors before opening IPC. The net is
    inferred only after both pads are resolved in the converted snapshot and prove one non-null
    net.
 3. Capture one bounded official IPC serialization, confirm a byte-identical second serialization,
-   verify the token digest did not change during capture, and close the client in all success and
-   failure paths. The token itself never enters a response, log, candidate, or ledger.
+   verify the opaque session revision did not change during capture, and close the client in all
+   success and failure paths. The token and process key never enter a response, log, candidate,
+   or ledger.
 4. Convert those exact bytes through the existing Board IR 0.2 adapter and invoke the pure
    two-layer A* router with the remaining request deadline. The capture deadline is checked
    between synchronous IPC calls and throughout bounded serialized-item counting. A stale source
@@ -63,8 +67,9 @@ Positive:
 
 Trade-offs and residuals:
 
-- The token digest is only a session CAS signal; KiCad exposes no atomic board revision/event API,
-  so an ABA change that returns to identical bytes between confirmations remains possible.
+- The opaque session revision is only a same-process session CAS signal; KiCad exposes no atomic
+  board revision/event API, so an ABA change that returns to identical bytes between confirmations
+  remains possible. A fresh CopperMCP process intentionally refuses prior session revisions.
 - The official synchronous wrapper may block inside a call and allocates the returned serialization
   before Python can enforce the byte ceiling; cooperative checks cannot forcibly pre-empt that
   call. An isolated worker/process boundary remains open for hostile or unresponsive sessions.

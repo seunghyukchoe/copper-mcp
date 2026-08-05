@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+import copper_mcp.kicad_ipc as kicad_ipc
 import copper_mcp.live_layered_route_preview as live_preview
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.board_ir import NetClass
@@ -14,12 +15,12 @@ from copper_mcp.layered_route_preview import LayeredRoutePreviewError, preview_l
 
 FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "two-pad.kicad_pcb"
 SESSION_TOKEN = "copper-mcp-test-kicad-session"
-SESSION_REVISION = "sha256:" + hashlib.sha256(SESSION_TOKEN.encode()).hexdigest()
 
 
 @pytest.fixture(autouse=True)
 def _fake_kicad_session(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("KICAD_API_TOKEN", SESSION_TOKEN)
+    monkeypatch.setattr(kicad_ipc, "_SESSION_REVISION_KEY", b"\x42" * 32)
 
 
 class _FakeVersion:
@@ -90,6 +91,8 @@ def _request(
     snapshot_digest: str,
     **overrides: Any,
 ) -> dict[str, object]:
+    session_revision = kicad_ipc._session_revision()
+    assert session_revision is not None
     request: dict[str, object] = {
         "board": "live",
         "start_pad_id": start_pad_id,
@@ -102,12 +105,76 @@ def _request(
         },
         "expect_board_revision": board_revision,
         "expect_snapshot_digest": snapshot_digest,
-        "expect_session_revision": SESSION_REVISION,
+        "expect_session_revision": session_revision,
         "grid_step_nm": 250_000,
         "seed": 23,
     }
     request.update(overrides)
     return request
+
+
+def test_live_session_revision_is_keyed_stable_and_token_distinct(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = kicad_ipc._session_revision()
+    second = kicad_ipc._session_revision()
+    assert first is not None
+    assert first == second
+    assert first.startswith("hmac-sha256:")
+    assert first != "sha256:" + hashlib.sha256(SESSION_TOKEN.encode()).hexdigest()
+
+    monkeypatch.setenv("KICAD_API_TOKEN", "other-kicad-session")
+    assert kicad_ipc._session_revision() != first
+
+
+def test_live_preview_refuses_a_session_revision_from_a_rotated_process_key(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings, start, end, board_revision, snapshot_digest = _workspace(tmp_path)
+    previous = kicad_ipc._session_revision()
+    assert previous is not None
+    monkeypatch.setattr(kicad_ipc, "_SESSION_REVISION_KEY", b"\x43" * 32)
+    request = _request(
+        start,
+        end,
+        board_revision,
+        snapshot_digest,
+        expect_session_revision=previous,
+    )
+
+    def unexpected_conversion(*_: object, **__: object) -> object:
+        raise AssertionError("rotated process key must refuse before Board IR conversion")
+
+    monkeypatch.setattr(live_preview, "parse_kicad_bytes", unexpected_conversion)
+    result = live_preview.preview_live_layered_route(
+        request,
+        settings,
+        client_factory=_factory(FIXTURE.read_bytes()),
+    )
+
+    assert result["status"] == "not_routed"
+    assert result["diagnostic"]["code"] == "stale_revision"  # type: ignore[index]
+
+
+def test_live_request_refuses_legacy_unkeyed_session_revision() -> None:
+    with pytest.raises(LayeredRoutePreviewError, match="hmac-sha256"):
+        live_preview.parse_live_layered_route_preview_request(
+            {
+                "board": "live",
+                "start_pad_id": "pad:a",
+                "end_pad_id": "pad:b",
+                "constraints": {
+                    "clearance_nm": 250_000,
+                    "track_width_nm": 250_000,
+                    "via_diameter_nm": 800_000,
+                    "via_drill_nm": 400_000,
+                },
+                "expect_board_revision": "sha256:" + "0" * 64,
+                "expect_snapshot_digest": "sha256:" + "0" * 64,
+                "expect_session_revision": "sha256:" + "0" * 64,
+            }
+        )
 
 
 def _factory(source: bytes):
@@ -140,6 +207,7 @@ def test_live_layered_preview_reuses_exact_ipc_snapshot_and_is_deterministic(
     assert first["snapshot_digest"] == snapshot_digest
     assert first["request"]["board"] == "live"  # type: ignore[index]
     assert first["candidate"] is not None
+    assert SESSION_TOKEN not in str(first)
 
     file_request = dict(request)
     file_request["board"] = FIXTURE.name
@@ -207,7 +275,7 @@ def test_live_preview_refuses_stale_session_before_conversion(
 ) -> None:
     settings, start, end, board_revision, snapshot_digest = _workspace(tmp_path)
     request = _request(start, end, board_revision, snapshot_digest)
-    request["expect_session_revision"] = "sha256:" + "0" * 64
+    request["expect_session_revision"] = "hmac-sha256:" + "0" * 64
 
     def unexpected_conversion(*_: object, **__: object) -> object:
         raise AssertionError("stale live session must be refused before Board IR conversion")

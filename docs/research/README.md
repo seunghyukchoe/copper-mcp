@@ -58,6 +58,9 @@ that every product feature, price, or repository release will remain current.
 - [Live KiCad IPC fidelity oracle](./kicad-live-ipc-oracle.md) records the read-only
   source-to-Board-IR-to-Scene digest probe, capability outcomes, deadline boundary, and
   workstation evidence without claiming a live-editor result.
+- [KiCad session-revision HMAC boundary](./kicad-session-revision-hmac.md) records why the
+  live-session CAS uses a process-local keyed fingerprint instead of an offline-testable token
+  hash, including the deliberate restart refusal.
 - [Safe apply references](./safe-apply-references.md) grounds compare-and-swap, atomic publication,
   editor-lock, recovery, and explicit-authorization decisions for file-backed mutation.
 - [Apply-token retention](./apply-token-retention.md) records nonce-expiry and bounded-retention

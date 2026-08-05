@@ -64,6 +64,7 @@ PortId = Annotated[
     Field(pattern=r"^port:[a-z0-9][a-z0-9._-]{0,63}$"),
 ]
 Digest = Annotated[str, Field(pattern=r"^sha256:[0-9a-f]{64}$")]
+SessionRevision = Annotated[str, Field(pattern=r"^hmac-sha256:[0-9a-f]{64}$")]
 
 
 class InTotoDigestContract(_ClosedContract):
@@ -1109,7 +1110,7 @@ class LiveLayeredRoutePreviewRequestContract(LayeredRoutePreviewRequestContract)
     """Closed layered route proposal shape for one active KiCad IPC snapshot."""
 
     board: Literal["live"]
-    expect_session_revision: Digest
+    expect_session_revision: SessionRevision
     include_drc: Literal[False] = False
 
 

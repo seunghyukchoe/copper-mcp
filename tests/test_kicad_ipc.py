@@ -295,6 +295,13 @@ class KicadIpcTests(unittest.TestCase):
         with self.assertRaises(KicadIpcConnectionError):
             inspect_live_board(_settings(), client_factory=lambda **_: _KiCad(board=board))
 
+    def test_read_only_capture_without_a_plugin_token_remains_observable(self) -> None:
+        with patch.dict(os.environ, {"KICAD_API_TOKEN": ""}, clear=False):
+            captured = capture_live_board(
+                _settings(), client_factory=lambda **_: _KiCad(board=_Board())
+            )
+        self.assertIsNone(captured.session_revision)
+
     def test_oversized_live_snapshot_is_refused(self) -> None:
         board = _Board(source="x" * 32)
         with self.assertRaises(KicadIpcPayloadError):

@@ -11,9 +11,12 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
+import pytest
+
 from copper_mcp.config import Settings
 from copper_mcp.kicad_ipc import (
     KicadIpcConfigurationError,
+    KicadIpcPayloadError,
     LiveBoardObservation,
     LiveBoardSnapshot,
 )
@@ -277,3 +280,22 @@ def test_oracle_detects_a_session_change_after_capture_without_board_text() -> N
 
     assert (result.status, result.capability) == ("refused", "kicad_session_changed")
     assert result.to_dict()["board_digest"] is None
+
+
+def test_live_snapshot_refuses_legacy_unkeyed_session_revision() -> None:
+    source = FIXTURE.read_bytes()
+    digest = f"sha256:{hashlib.sha256(source).hexdigest()}"
+    with pytest.raises(KicadIpcPayloadError, match="session revision is invalid"):
+        LiveBoardSnapshot(
+            observation=LiveBoardObservation(
+                kicad_version="10.0.5",
+                api_version="10.0.5",
+                compatibility="compatible",
+                board_digest=digest,
+                board_bytes=len(source),
+                object_counts={},
+                socket_kind="configured-local-ipc",
+            ),
+            source=source,
+            session_revision="sha256:" + "0" * 64,
+        )
