@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 
 from copper_mcp.board_ir.limits import ParseLimits
@@ -23,6 +23,9 @@ class Token:
     kind: str
     value: str
     offset: int
+
+
+_DEADLINE_CHECK_INTERVAL = 4 * 1024
 
 
 class QuotedAtom(str):
@@ -47,12 +50,19 @@ class SExpr:
         return self.items[0] if self.items and isinstance(self.items[0], str) else None
 
 
-def _tokens(text: str, limits: ParseLimits) -> Iterator[Token]:
+def _tokens(
+    text: str,
+    limits: ParseLimits,
+    *,
+    check_deadline: Callable[[], None] | None = None,
+) -> Iterator[Token]:
     index = 0
     token_count = 0
     length = len(text)
     escapes = {"n": "\n", "r": "\r", "t": "\t", '"': '"', "\\": "\\"}
     while index < length:
+        if check_deadline is not None and index > 0 and index % _DEADLINE_CHECK_INTERVAL == 0:
+            check_deadline()
         character = text[index]
         if character.isspace():
             index += 1
@@ -76,6 +86,8 @@ def _tokens(text: str, limits: ParseLimits) -> Iterator[Token]:
                 else:
                     string_chars.append(text[index])
                     index += 1
+                if check_deadline is not None and index % _DEADLINE_CHECK_INTERVAL == 0:
+                    check_deadline()
                 if len(string_chars) > limits.max_atom_chars:
                     raise SExprError("budget.exceeded", "string length budget exceeded", start)
             if index >= length:
@@ -86,6 +98,8 @@ def _tokens(text: str, limits: ParseLimits) -> Iterator[Token]:
             start = index
             while index < length and not text[index].isspace() and text[index] not in "()":
                 index += 1
+                if check_deadline is not None and index % _DEADLINE_CHECK_INTERVAL == 0:
+                    check_deadline()
             atom_value = text[start:index]
             if len(atom_value) > limits.max_atom_chars:
                 raise SExprError("budget.exceeded", "atom length budget exceeded", start)
@@ -96,21 +110,34 @@ def _tokens(text: str, limits: ParseLimits) -> Iterator[Token]:
         yield token
 
 
-def parse_sexpr(payload: bytes, limits: ParseLimits | None = None) -> SExpr:
-    """Decode exactly one bounded UTF-8 S-expression without recursion."""
+def parse_sexpr(
+    payload: bytes,
+    limits: ParseLimits | None = None,
+    *,
+    check_deadline: Callable[[], None] | None = None,
+) -> SExpr:
+    """Decode exactly one bounded UTF-8 S-expression without recursion.
+
+    ``check_deadline`` is an optional cooperative checkpoint for callers that own an
+    operation-wide deadline.  It is intentionally allowed to raise the caller's typed error.
+    """
 
     limits = limits or ParseLimits()
     if not isinstance(payload, bytes) or len(payload) > limits.max_input_bytes:
         raise SExprError("budget.exceeded", "input byte budget exceeded", 0)
+    if check_deadline is not None:
+        check_deadline()
     try:
         text = payload.decode("utf-8", errors="strict")
     except UnicodeDecodeError as error:
         raise SExprError("syntax.invalid", "source must be valid UTF-8", error.start) from error
+    if check_deadline is not None:
+        check_deadline()
 
     roots: list[str | SExpr] = []
     stack: list[tuple[list[str | SExpr], int]] = []
     nodes = 0
-    for token in _tokens(text, limits):
+    for token in _tokens(text, limits, check_deadline=check_deadline):
         target = stack[-1][0] if stack else roots
         if token.kind == "(":
             if len(stack) + 1 > limits.max_depth:
@@ -123,6 +150,8 @@ def parse_sexpr(payload: bytes, limits: ParseLimits | None = None) -> SExpr:
             children, offset = stack.pop()
             if not children:
                 raise SExprError("syntax.invalid", "empty list is unsupported", offset)
+            if check_deadline is not None and len(children) >= _DEADLINE_CHECK_INTERVAL:
+                check_deadline()
             expression = SExpr(tuple(children), offset)
             target = stack[-1][0] if stack else roots
             target.append(expression)

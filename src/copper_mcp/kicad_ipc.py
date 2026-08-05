@@ -239,7 +239,7 @@ def _count_serialized_items(
         max_nodes=1_000_000,
     )
     try:
-        root = parse_sexpr(source, limits)
+        root = parse_sexpr(source, limits, check_deadline=check_deadline)
     except SExprError as error:
         raise KicadIpcPayloadError(
             "KiCad board serialization is not a bounded S-expression"

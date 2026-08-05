@@ -101,6 +101,23 @@ def _settings(**overrides: object) -> Settings:
 
 
 class KicadIpcTests(unittest.TestCase):
+    def test_expired_deadline_preempts_large_malformed_serialization_parse(self) -> None:
+        source = b"(kicad_pcb " + b"(net 1 N)" * 100_000
+        calls = 0
+
+        def check_deadline() -> None:
+            nonlocal calls
+            calls += 1
+            raise KicadIpcDeadlineError("live IPC capture deadline expired")
+
+        with self.assertRaises(KicadIpcDeadlineError):
+            _count_serialized_items(
+                source,
+                16 * 1024 * 1024,
+                check_deadline=check_deadline,
+            )
+        self.assertEqual(calls, 1)
+
     def test_serialized_item_count_checks_the_operation_deadline(self) -> None:
         calls = 0
 

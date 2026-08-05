@@ -854,6 +854,27 @@ def test_streaming_sexpr_reader_stops_before_tokenizing_large_rejected_tail() ->
     assert peak < 12_000_000
 
 
+def test_parser_deadline_checkpoints_while_scanning_a_large_quoted_atom() -> None:
+    class DeadlineExpiredError(Exception):
+        pass
+
+    calls = 0
+
+    def check_deadline() -> None:
+        nonlocal calls
+        calls += 1
+        if calls >= 3:
+            raise DeadlineExpiredError()
+
+    with pytest.raises(DeadlineExpiredError):
+        parse_sexpr(
+            b'(root "' + b"x" * 16_384 + b'")',
+            ParseLimits(max_atom_chars=32_768),
+            check_deadline=check_deadline,
+        )
+    assert calls == 3
+
+
 @pytest.mark.parametrize(
     "limits",
     [
