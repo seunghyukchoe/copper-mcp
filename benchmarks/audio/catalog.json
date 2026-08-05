@@ -107,6 +107,119 @@
       ]
     },
     {
+      "id": "ne5532-stereo-summing-routing-v1",
+      "title": "Original NE5532-class stereo summing and buffer routing fixture",
+      "origin": "coppermcp-original",
+      "artifact_path": "benchmarks/audio/fixtures/ne5532-stereo-summing-routing-v1.kicad_pcb",
+      "artifact_sha256": "749adc8b4d26b7f7ef878f9cf681521a8efdf446b9f0bf559243918e6e1957a9",
+      "license_spdx": "Apache-2.0",
+      "license_path": "LICENSE",
+      "license_sha256": "947af68b9ff8f542f5bba7a084e343573274741f4d7e4cbe1e4e9668a89331de",
+      "stated_rightsholder": "CopperMCP Contributors",
+      "third_party_content_included": false,
+      "derivation_statement": "Independently authored from TI public pin and decoupling guidance as a synthetic routing topology; no third-party schematic, layout, artwork, values, BOM, or board file was copied or reconstructed.",
+      "safety_class": "synthetic-low-voltage",
+      "constraints": {
+        "clearance_nm": 250000,
+        "track_width_nm": 250000,
+        "via_diameter_nm": 800000,
+        "via_drill_nm": 400000
+      },
+      "inspection": {
+        "expected_supported": true,
+        "expected_object_counts": {
+          "nets": 11,
+          "pads": 35,
+          "footprints": 14,
+          "segments": 0,
+          "vias": 0,
+          "zones": 0
+        }
+      },
+      "routes": [
+        {
+          "net": "L_IN",
+          "layer": "F.Cu",
+          "seed": 5532,
+          "expected_status": "routed",
+          "expected_diagnostic": null,
+          "expected_pad_count": 2
+        },
+        {
+          "net": "R_IN",
+          "layer": "F.Cu",
+          "seed": 5532,
+          "expected_status": "routed",
+          "expected_diagnostic": null,
+          "expected_pad_count": 2
+        },
+        {
+          "net": "L_SUM",
+          "layer": "F.Cu",
+          "seed": 5532,
+          "expected_status": "routed",
+          "expected_diagnostic": null,
+          "expected_pad_count": 3
+        },
+        {
+          "net": "R_SUM",
+          "layer": "F.Cu",
+          "seed": 5532,
+          "expected_status": "routed",
+          "expected_diagnostic": null,
+          "expected_pad_count": 3
+        },
+        {
+          "net": "L_OUT",
+          "layer": "F.Cu",
+          "seed": 5532,
+          "expected_status": "routed",
+          "expected_diagnostic": null,
+          "expected_pad_count": 2
+        },
+        {
+          "net": "R_OUT",
+          "layer": "F.Cu",
+          "seed": 5532,
+          "expected_status": "routed",
+          "expected_diagnostic": null,
+          "expected_pad_count": 2
+        },
+        {
+          "net": "VPOS",
+          "layer": "F.Cu",
+          "seed": 5532,
+          "expected_status": "routed",
+          "expected_diagnostic": null,
+          "expected_pad_count": 4
+        },
+        {
+          "net": "VNEG",
+          "layer": "F.Cu",
+          "seed": 5532,
+          "expected_status": "routed",
+          "expected_diagnostic": null,
+          "expected_pad_count": 4
+        }
+      ],
+      "claims": [
+        "board-ir-inspection",
+        "two-pin-route-preview",
+        "multi-pin-route-preview"
+      ],
+      "not_claimed": [
+        "circuit-generation",
+        "schematic-generation",
+        "erc",
+        "electrical-validation",
+        "candidate-drc",
+        "combined-net-route-feasibility",
+        "manufacturability",
+        "fabrication-readiness",
+        "hardware-measurement"
+      ]
+    },
+    {
       "id": "coppertone-buffer-preview-v1",
       "title": "CopperTone open-hardware line-buffer preview",
       "origin": "coppermcp-open-hardware",
