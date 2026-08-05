@@ -554,11 +554,7 @@ def apply_candidate(
         # otherwise the same token could replay a second write against the restored revision.
         token_authority.consume(verified)
         restored = _guarded_restore(settings, board, error.published_revision)
-        final_revision = _observed_revision(
-            settings,
-            board,
-            fallback=board.revision if restored else error.published_revision,
-        )
+        final_revision = _final_observed_revision(settings, board)
         return ApplyResult(
             status="applied_but_unverified",
             board_path=board.relative_path,
@@ -585,12 +581,46 @@ def apply_candidate(
             ),
         )
 
+    # Take one final observation immediately before reporting success.  The publication lock is
+    # released by replace_workspace_file before this point, so a writer can still win the tiny
+    # interval after the atomic rename.  We cannot eliminate that final nanosecond without a
+    # longer transaction, but a visible rewrite must not be reported as a verified apply.
+    final_revision = _final_observed_revision(settings, board)
+    if final_revision != applied.result_revision:
+        token_authority.consume(verified)
+        return ApplyResult(
+            status="applied_but_unverified",
+            board_path=board.relative_path,
+            board_revision_before=board.revision,
+            board_revision_after=final_revision,
+            snapshot_digest_before=snapshot.snapshot_digest,
+            base_revision=candidate.base_revision,
+            candidate_id=candidate.candidate_id,
+            request=request,
+            backup_path=backup_path,
+            bytes_added=applied.bytes_added,
+            segments_added=applied.segments_added,
+            diagnostic=ApplyDiagnostic(
+                code=ApplyFailureCode.APPLY_VERIFICATION_FAILED,
+                message=(
+                    "the authorized route was verified once, but "
+                    + (
+                        "the final board revision could not be observed; the board may be "
+                        "missing or unreadable; restore the pre-apply copy if needed"
+                        if final_revision is None
+                        else "the final observed board revision changed before return; "
+                        "concurrent bytes were left in place; restore the pre-apply copy if needed"
+                    )
+                ),
+            ),
+        )
+
     token_authority.consume(verified)
     return ApplyResult(
         status="applied",
         board_path=board.relative_path,
         board_revision_before=board.revision,
-        board_revision_after=applied.result_revision,
+        board_revision_after=final_revision,
         snapshot_digest_before=snapshot.snapshot_digest,
         base_revision=candidate.base_revision,
         candidate_id=candidate.candidate_id,
@@ -875,7 +905,7 @@ def apply_placement_candidate(
     # can still win the tiny interval after verification.  We cannot eliminate that last
     # nanosecond without a longer transaction, but we can refuse to claim success when the
     # reproducible race is visible and preserve the concurrent bytes.
-    final_revision = _try_observed_revision(settings, board)
+    final_revision = _final_observed_revision(settings, board)
     if final_revision is None or final_revision != published_revision:
         token_authority.consume(verified)
         return PlacementApplyResult(
@@ -1070,12 +1100,12 @@ def _observed_revision(settings: Settings, board: _Board, *, fallback: str) -> s
         return fallback
 
 
-def _try_observed_revision(settings: Settings, board: _Board) -> str | None:
-    """Return the final board digest, or ``None`` when the board cannot be observed.
+def _final_observed_revision(settings: Settings, board: _Board) -> str | None:
+    """Best-effort final observation for a successfully published apply.
 
-    A missing or unreadable board is not equivalent to the bytes we published.  Callers at the
-    success boundary therefore use this non-fallback form and report an unverified outcome rather
-    than inventing a digest for a file that is no longer observable.
+    Unlike recovery reporting, a success path must not substitute an expected digest after an
+    unreadable or missing board. Returning ``None`` makes the published-but-unobserved state
+    explicit so callers report it as ``applied_but_unverified`` and spend the token.
     """
 
     try:

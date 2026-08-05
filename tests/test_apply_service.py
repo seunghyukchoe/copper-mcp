@@ -450,6 +450,58 @@ class StalenessTests(_Case):
         on_disk = f"sha256:{hashlib.sha256(self.fixture.board.read_bytes()).hexdigest()}"
         self.assertEqual(on_disk, winner["board_revision_after"])
 
+    def test_a_rewrite_before_final_observation_is_unverified_and_spends_token(
+        self,
+    ) -> None:
+        """A writer visible after publication must not be reported as our verified result."""
+
+        import copper_mcp.apply.service as service
+
+        third_party = self.fixture.original + b"\n(comment final-observation writer)\n"
+        real_observed_revision = service._final_observed_revision
+
+        def rewrite_then_observe(*args: Any, **kwargs: Any) -> str | None:
+            self.fixture.board.write_bytes(third_party)
+            return real_observed_revision(*args, **kwargs)
+
+        with patch.object(service, "_final_observed_revision", rewrite_then_observe):
+            document = self.fixture.apply()
+
+        expected_revision = f"sha256:{hashlib.sha256(third_party).hexdigest()}"
+        self.assertEqual(document["status"], "applied_but_unverified")
+        self.assertEqual(document["board_revision_after"], expected_revision)
+        self.assertEqual(self.fixture.board.read_bytes(), third_party)
+        assert document["diagnostic"] is not None
+        self.assertEqual(document["diagnostic"]["code"], "apply_verification_failed")
+
+        replay = self.fixture.apply()
+        assert replay["diagnostic"] is not None
+        self.assertEqual(replay["diagnostic"]["code"], "token_already_used")
+
+    def test_an_unreadable_final_board_is_not_reported_as_applied(self) -> None:
+        """A missing final board must not inherit the expected published digest."""
+
+        import copper_mcp.apply.service as service
+
+        real_observed_revision = service._final_observed_revision
+
+        def remove_then_observe(*args: Any, **kwargs: Any) -> str | None:
+            self.fixture.board.unlink()
+            return real_observed_revision(*args, **kwargs)
+
+        with patch.object(service, "_final_observed_revision", remove_then_observe):
+            document = self.fixture.apply()
+
+        self.assertEqual(document["status"], "applied_but_unverified")
+        self.assertIsNone(document["board_revision_after"])
+        assert document["diagnostic"] is not None
+        self.assertIn("could not be observed", document["diagnostic"]["message"])
+
+        self.fixture.board.write_bytes(self.fixture.original)
+        replay = self.fixture.apply()
+        assert replay["diagnostic"] is not None
+        self.assertEqual(replay["diagnostic"]["code"], "token_already_used")
+
     def test_a_stale_board_is_never_auto_refreshed(self) -> None:
         self.fixture.board.write_bytes(self.fixture.original + b"\n")
         document = self.fixture.apply()
