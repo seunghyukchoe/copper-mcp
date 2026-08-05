@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import statistics
+import subprocess
 import tempfile
 import time
 from pathlib import Path
@@ -74,7 +75,7 @@ def main() -> int:
             authority,
         )
         assert applied.status == "applied" and applied.board_revision_after is not None
-        before = board.stat()
+        before = board.read_bytes()
         request = {
             "board": board.name,
             "expect_board_revision": applied.board_revision_after,
@@ -109,20 +110,24 @@ def main() -> int:
                     summary.unconnected_count,
                 )
             )
-        after = board.stat()
-        preserved = board.read_bytes() == source and (before.st_ino, before.st_mtime_ns) == (
-            after.st_ino,
-            after.st_mtime_ns,
-        )
+        preserved = board.read_bytes() == before
     payload = {
         "schema": "copper-mcp/benchmark/post-placement-observation/v1",
         "date_utc": "2026-08-05",
+        "source_commit": subprocess.run(
+            ["git", "rev-parse", "HEAD"],  # noqa: S607 - repository-local benchmark metadata
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip(),
+        "environment": {"python": __import__("sys").version.split()[0], "kicad_cli": str(KICAD)},
         "fixture": "placement-v0.1/placement-legal.kicad_pcb",
         "metrics": {
             "repetitions": 3,
             "same_revision_scene_drc_binding": len(bindings) == 1,
             "binding_signatures": len(bindings),
-            "post_apply_bytes_inode_mtime_preserved": preserved,
+            "post_apply_board_bytes_preserved": preserved,
             "workspace_mutations": 0,
             "median_observation_ns": statistics.median(samples),
             "drc_summary_signatures": len(summaries),

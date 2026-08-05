@@ -700,3 +700,14 @@ historical evidence; these runs were generated from the clean implementation com
 | Metrics | `passed_drc_runs=3`; `clean_drc_runs=0`; deterministic aggregate counts `{error_count:0, warning_count:0, exclusion_count:0, ignored_check_count:5, unconnected_count:0}`; deterministic evidence digests `1`; candidate/context binding `true`; source bytes/inode/mtime preserved `true`; workspace mutations `0`; median preview+DRC `423,686,875 ns` |
 | Artifact | [`2026-08-05-public-placement-drc.json`](../../benchmarks/results/placement/2026-08-05-public-placement-drc.json) |
 | Interpretation | This measures the new public disclosure boundary and private replay, not a clean-board claim: hard-gate `passed` is distinct from strict `clean`, here because KiCad reports five ignored check classes. It does not establish general footprint fidelity, live editor CAS, apply, ERC/electrical correctness, fabrication readiness, hardware behavior, or FreeRouting parity. |
+
+#### B-045 — revision-bound post-placement scene and DRC observation
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:e2428e655ad3042425fb116000887e7fd1f1ea4b352759988e4d04463b55ca4d` |
+| Date and commit | 2026-08-05; source commit `5fbdbef1030b8b5313fe2d8a40c1c0014feb5629` |
+| Configuration | One legal bounded placement apply in a temporary workspace, followed by three required-revision observations deriving bounded Circuit Scene and private aggregate KiCad DRC from one captured context. |
+| Metrics | Same board/scene/DRC binding across all replays; post-apply board bytes preserved by the observer; post-observer workspace mutations `0`; hard DRC pass `true`, clean `false` due to five ignored checks; median latency recorded in the artifact. |
+| Artifact | [`2026-08-05-post-placement-observation.json`](../../benchmarks/results/placement/2026-08-05-post-placement-observation.json) |
+| Interpretation | This proves only a read-only file-backed observation binding. It does not prove that an apply candidate caused the observed state, live editor CAS, ERC/electrical/fabrication readiness, or FreeRouting parity. |
