@@ -1587,14 +1587,26 @@ def build_report(
         ),
         transaction_result
         if transaction_result is not None
-        else _result_for_board(
-            "freerouting",
-            freerouting_board,
-            result_kicad_cli,
-            timeout_seconds,
-            result_cwd,
-            freerouting_process.elapsed_ns if freerouting_process else 0,
-            freerouting_drc_report,
+        else (
+            private_result_for_board(
+                "freerouting",
+                freerouting_board,
+                workspace_capability,
+                result_kicad_cli,
+                timeout_seconds,
+                freerouting_process.elapsed_ns if freerouting_process else 0,
+                freerouting_drc_report,
+            )
+            if harness_requested and workspace_capability is not None
+            else _result_for_board(
+                "freerouting",
+                freerouting_board,
+                result_kicad_cli,
+                timeout_seconds,
+                result_cwd,
+                freerouting_process.elapsed_ns if freerouting_process else 0,
+                freerouting_drc_report,
+            )
         ),
     ]
     report["results"].sort(key=metric_priority)
