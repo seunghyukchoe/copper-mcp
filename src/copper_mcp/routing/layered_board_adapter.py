@@ -1,8 +1,9 @@
-"""Board IR adapter for the bounded, proposal-only two-layer router.
+"""Board IR adapter for the bounded, proposal-only ordered-layer router.
 
-The adapter is intentionally conservative.  It accepts exactly two signal layers, a rectangular
-hole-free board, two pads, and foreign orthogonal copper/rectangular keepout envelopes.  It emits
-an immutable layered candidate but does not write KiCad bytes, call KiCad, or grant apply authority.
+The adapter is intentionally conservative.  It accepts two through eight ordered signal layers, a
+rectangular hole-free board, two pads, and foreign orthogonal copper/rectangular keepout envelopes.
+It emits an immutable layered candidate but does not write KiCad bytes, call KiCad, or grant apply
+authority.
 """
 
 from __future__ import annotations
@@ -25,6 +26,8 @@ from copper_mcp.board_ir import (
 )
 from copper_mcp.board_ir.types import Layer, NetClass
 from copper_mcp.routing.layered_astar import (
+    MAX_EXPLICIT_VIAS,
+    MAX_LAYERS,
     LayeredAStarRequest,
     LayeredAStarResult,
     LayeredAStarSettings,
@@ -32,6 +35,7 @@ from copper_mcp.routing.layered_astar import (
     LayeredObstacle,
     LayeredPoint,
     LayeredStep,
+    effective_max_vias,
     route_layered,
 )
 from copper_mcp.routing.layered_contracts import (
@@ -67,11 +71,11 @@ _MAX_OBSTACLE_CHECKS = 10_000_000
 
 @dataclass(frozen=True, slots=True)
 class LayeredRouteRequest:
-    """A two-pad, two-layer Board IR routing request.
+    """A two-pad Board IR routing request over a bounded ordered signal stack.
 
     ``start_layer_id`` and ``end_layer_id`` are explicit because through-hole pads can be
-    reachable on both layers.  Omitting one is accepted only when the corresponding pad exposes
-    exactly one of the two signal layers.
+    reachable on several layers.  Omitting one is accepted only when the corresponding pad exposes
+    exactly one supported signal layer.
     """
 
     board_revision: str
@@ -166,6 +170,12 @@ def _invalid_request(request: object) -> str | None:
             or not 1 <= setting_value <= setting_maximum
         ):
             return f"{setting_name} must be a positive integer"
+    if settings_obj.max_vias is not None and (
+        isinstance(settings_obj.max_vias, bool)
+        or not isinstance(settings_obj.max_vias, int)
+        or not 0 <= settings_obj.max_vias <= MAX_EXPLICIT_VIAS
+    ):
+        return "via budget must be a non-negative integer"
     return None
 
 
@@ -278,6 +288,17 @@ def _layer_order(snapshot: BoardIRSnapshot) -> tuple[Layer, ...]:
     return tuple(sorted(snapshot.content.copper_layers, key=lambda layer: (layer.index, layer.id)))
 
 
+def has_exactly_two_signal_layers(snapshot: BoardIRSnapshot) -> bool:
+    """Return whether a converted board remains within the public two-layer contract.
+
+    The generalized router is an internal seam.  File-backed preview, live preview, and durable
+    jobs call this predicate explicitly before they hand a snapshot to that seam.
+    """
+
+    layers = _layer_order(snapshot)
+    return len(layers) == 2 and all(layer.kind == "signal" for layer in layers)
+
+
 def _map_failure(result: LayeredAStarResult) -> LayeredRouteResult:
     assert result.diagnostic is not None
     code = {
@@ -306,10 +327,31 @@ def _compress(points: list[PointNM]) -> tuple[PointNM, ...]:
     return tuple(compressed)
 
 
+def _via_span(layer_ids: tuple[str, ...], from_layer: int, to_layer: int) -> tuple[str, str]:
+    """Return the recorded layer pair of one full-stack through via.
+
+    Board IR v0.2 models only the full-stack through via, and every consumer reads the recorded
+    pair as an unordered span: the KiCad serializer and the structural verifier both compare it as
+    a set, and the serializer always writes the canonical outer ordering.  The order of the pair
+    therefore carries no physical meaning.
+
+    On exactly two signal layers the traversed pair *is* the outer stack span, so the historical
+    traversal ordering is retained verbatim.  That ordering is part of the candidate identity bytes
+    of every two-layer candidate ever issued, so changing it would silently invalidate persisted
+    ADR-0043 jobs, ADR-0047 manifests, and ADR-0048 exports.  On three through eight layers there
+    is no legacy identity and a traversed inner pair would misstate a full-stack via as a
+    blind/buried one, so the canonical outer span is recorded instead.
+    """
+
+    if len(layer_ids) == 2:
+        return layer_ids[from_layer], layer_ids[to_layer]
+    return layer_ids[0], layer_ids[-1]
+
+
 def _paths_and_vias(
     steps: tuple[LayeredStep, ...],
     *,
-    layer_ids: tuple[str, str],
+    layer_ids: tuple[str, ...],
     origin: PointNM,
     start_point: PointNM,
     end_point: PointNM,
@@ -343,14 +385,15 @@ def _paths_and_vias(
             # so a future mode cannot manufacture a degenerate path segment.
             if len(current_points) >= 2:
                 paths.append(LayeredRoutePath(layer_ids[current_layer], _compress(current_points)))
+            span = _via_span(layer_ids, previous.layer, current.layer)
             vias.append(
                 LayeredRouteVia(
                     id=f"via:layered:{len(vias):04d}",
                     center=physical(previous),
                     diameter_nm=via_diameter_nm,
                     drill_nm=via_drill_nm,
-                    start_layer_id=layer_ids[previous.layer],
-                    end_layer_id=layer_ids[current.layer],
+                    start_layer_id=span[0],
+                    end_layer_id=span[1],
                 )
             )
             current_layer = current.layer
@@ -421,12 +464,12 @@ class LayeredBoardRouter:
         cancellation_check = cast(CancellationCheck | None, cancelled_obj)
 
         layers = _layer_order(snapshot)
-        if len(layers) != 2 or any(layer.kind != "signal" for layer in layers):
+        if not 2 <= len(layers) <= MAX_LAYERS or any(layer.kind != "signal" for layer in layers):
             return _diagnostic(
                 LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY,
-                "layered routing v0.1 requires exactly two signal layers",
+                "layered routing requires two through eight ordered signal layers",
             )
-        layer_ids = (layers[0].id, layers[1].id)
+        layer_ids = tuple(layer.id for layer in layers)
         layer_index = {layer.id: index for index, layer in enumerate(layers)}
         net_class = _resolve_net_class(snapshot, request.net_id)
         if net_class is None:
@@ -469,7 +512,7 @@ class LayeredBoardRouter:
         if len(net_pads) != 2:
             return _diagnostic(
                 LayeredRouteFailureCode.UNSUPPORTED_CONSTRAINT,
-                "layered routing v0.1 requires exactly two pads",
+                "layered routing requires exactly two pads",
             )
         for pad in (start_pad, end_pad):
             if not set(pad.layer_ids) & set(layer_ids):
@@ -623,7 +666,7 @@ class LayeredBoardRouter:
         endpoint_clearance = max(net_class.clearance_nm, widest_clearance)
         for endpoint_pad in (start_pad, end_pad):
             endpoint_rectangle = _pad_bounds(endpoint_pad)
-            for layer in range(2):
+            for layer in range(len(layers)):
                 if not add_obstacle(
                     endpoint_rectangle,
                     layer,
@@ -676,7 +719,7 @@ class LayeredBoardRouter:
             clearance = max(
                 net_class.clearance_nm, clearance_by_net.get(via.net_id, widest_clearance)
             )
-            for layer in range(2):
+            for layer in range(len(layers)):
                 # The foreign via rectangle already contains its own radius. Inflate it by the
                 # candidate copper envelope as well: tracks need half-width clearance, while a
                 # candidate via transition needs the candidate via radius.
@@ -758,7 +801,7 @@ class LayeredBoardRouter:
             goal=LayeredPoint(goal[0], goal[1], layer_index[end_layer_id]),
             obstacles=tuple(track_obstacles),
             via_obstacles=tuple(via_obstacles),
-            layers=(0, 1),
+            layers=tuple(range(len(layers))),
             settings=request.settings,
         )
         searched = route_layered(abstract, cancelled=cancellation_check)
@@ -782,6 +825,13 @@ class LayeredBoardRouter:
                 search=searched,
             )
         paths, vias = converted
+        via_limit = effective_max_vias(request.settings, len(layers))
+        if via_limit is not None and len(vias) > via_limit:
+            return _diagnostic(
+                LayeredRouteFailureCode.SEARCH_BUDGET_EXCEEDED,
+                "layered route exceeds its effective via budget",
+                search=searched,
+            )
         patch = LayeredRoutePatch(
             net_id=request.net_id,
             width_nm=net_class.track_width_nm,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +11,7 @@ import pytest
 import copper_mcp.kicad_ipc as kicad_ipc
 import copper_mcp.live_layered_route_preview as live_preview
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
-from copper_mcp.board_ir import NetClass
+from copper_mcp.board_ir import Layer, NetClass, make_snapshot
 from copper_mcp.circuit_scene import observe_live_board_scene
 from copper_mcp.config import Settings
 from copper_mcp.layered_route_preview import LayeredRoutePreviewError, preview_layered_route
@@ -366,6 +367,55 @@ def test_live_layered_preview_reuses_exact_ipc_snapshot_and_is_deterministic(
     file_settings = Settings(workspace=tmp_path)
     file_result = preview_layered_route(file_request, file_settings)
     assert first["candidate"] == file_result["candidate"]
+
+
+def test_live_preview_refuses_internal_three_layer_router_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings, start, end, board_revision, _ = _workspace(tmp_path)
+    source = FIXTURE.read_bytes()
+    profile = KiCadConstraintProfile(
+        net_classes=(
+            NetClass(
+                id="class:request",
+                name="Request",
+                clearance_nm=250_000,
+                track_width_nm=250_000,
+                via_diameter_nm=800_000,
+                via_drill_nm=400_000,
+            ),
+        ),
+        default_net_class_id="class:request",
+    )
+    conversion = parse_kicad_bytes(source, profile)
+    assert conversion.snapshot is not None
+    snapshot = conversion.snapshot
+    front, back = snapshot.content.copper_layers
+    internal_snapshot = make_snapshot(
+        replace(
+            snapshot.content,
+            copper_layers=(
+                front,
+                Layer(id="layer:In1.Cu", name="In1.Cu", index=1),
+                replace(back, index=2),
+            ),
+        )
+    )
+    monkeypatch.setattr(
+        live_preview,
+        "parse_kicad_bytes",
+        lambda *_args, **_kwargs: replace(conversion, snapshot=internal_snapshot),
+    )
+
+    result = live_preview.preview_live_layered_route(
+        _request(start, end, board_revision, internal_snapshot.snapshot_digest),
+        settings,
+        client_factory=_factory(source),
+    )
+
+    assert result["status"] == "unsupported_board"
+    assert result["candidate"] is None
+    assert result["diagnostic"]["code"] == "unsupported_geometry"  # type: ignore[index]
 
 
 def test_live_layered_preview_can_propose_a_two_layer_via_route(tmp_path: Path) -> None:

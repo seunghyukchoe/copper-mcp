@@ -1069,3 +1069,70 @@ are the audit copies for the original run IDs.
 | Artifact | New [`2026-08-06-route-aware-placement-v2.json`](../../benchmarks/results/placement/2026-08-06-route-aware-placement-v2.json), run ID `sha256:fecb29c10145ee7cce807a5034ac7d2da176a3963aec6c074f0763ab45af74fd`, source commit `ebe842984ed924df71c28b21531340934ae93731` — the commit carrying the corrected benchmark and its regressions, and a strict ancestor of this entry, following B-081's reachable-source rule. The v1 artifact is not regenerated; the overstated evidence stays auditable beside its correction. The v2 `run_id` binds the estimator id and the full probe/A\* configuration digests, so a one-probe report and an eleven-probe report can no longer share an identity. |
 | Criterion | Unchanged and still met on the search comparison: ≥10% improvement or strictly fewer unrouted probes, over three deterministic replays with every retained candidate legal. A failed criterion is now recorded with `criterion.passed` false and a non-zero exit rather than raised, which is what ADR-0067 promised. |
 | Interpretation | This corrects a claim, not an architecture. A route-aware score steering the search is the intended behavior; describing that as a re-ranking result was not. Adds no fixture, capability, DRC, congestion, external-router, electrical, fabrication, mutation, or apply claim, and no whole-board routing claim in either direction. |
+
+#### B-076 — ordered-layer internal proposal oracle
+
+| Field | Recorded evidence |
+|---|---|
+| Dataset | Deterministic synthetic 5x5 lattice and Board IR fixtures: both two available layers contain a full crossing wall, while the three-layer fixture has a clear inner signal layer. No external or proprietary board data. |
+| Protocol | Run the same bounded request under a two-layer stack and a three-layer stack; replay the latter twice; verify the emitted full-stack spans and reject invalid span, 9-layer, and zero-via-budget variants. |
+| Metrics | Two-layer result: `no_path`; three-layer result: complete with two vias through the inner layer and deterministic replay equality. |
+| Interpretation | This measures the internal candidate-only generalized-stack seam. It does not establish generalized KiCad serialization, Board-IR round-trip of rendered bytes, zone refill, authoritative DRC, MCP exposure, jobs, apply, fabrication, or whole-board routing. |
+
+#### B-077 — ordered-layer boundary and via-cap compatibility regression
+
+| Field | Recorded evidence |
+|---|---|
+| Dataset | Deterministic synthetic two-layer alternating-transition lattice, structurally restamped 65/66-via candidates, and converted public two-pad snapshots with one injected internal signal layer. No external or proprietary board data. |
+| Protocol | Route a 65-transition two-layer lattice with omitted policy and with an explicit 65-via policy; attempt the 66-transition case with that explicit policy; run a 65-transition three-layer lattice with its clear third layer blocked; verify restamped 65/66-via candidates; call file preview, live preview, and durable-job preparation with a three-layer snapshot. |
+| Metrics | Omitted two-layer route: complete with 65 vias. Explicit 65-via route: complete with 65 vias; 66-via route: `no_path`. Omitted three-layer route: `no_path` at its effective 64-via cap. Restamped 65-via candidate: verified; restamped 66-via candidate under explicit 65-via policy: `budget_exceeded`; omitted two-layer 66-via candidate: verified. File/live/durable entry points: all refuse the three-layer snapshot before router publication. |
+| Interpretation | This is a compatibility and boundary regression, not generalized KiCad routing evidence. It confirms only that the internal 3..8-layer seam cannot leak through existing public/live/durable two-layer surfaces and that verifier and constructor policy agree. Serialization, DRC, refill, apply, fabrication, and whole-board routing remain unproven. |
+
+#### B-078 — capped ordered-layer exact `(node, vias)` differential
+
+| Field | Recorded evidence |
+|---|---|
+| Correction | Supersedes the unrecorded multilayer differential claim made alongside B-076. The committed `scripts/benchmark_layered_astar.py` had a two-layer, uncapped `_dijkstra_cost` and four two-layer uncapped cases, so it never reached the capped search or a multilayer expansion. B-076 and B-077 remain immutable history and are unaffected; only the differential claim is replaced by this recorded run. |
+| Dataset | 20,000 seeded synthetic lattices (`seed 20260805`) of 2..5 ordered layers on 3x3..6x6 integer grids, with full-height per-layer walls, layer-scoped rectangular track keepouts, layer-scoped via keepouts, and omitted or explicit via caps of 0/1/2/3/6. Plus the unchanged four fixed 5x5 two-layer cases and a three-case via-policy boundary. No external or proprietary board data. |
+| Protocol | Route each lattice with the bounded search; compare its cost against an exact `(x, y, layer, vias_used)` uniform-cost Dijkstra written without a heuristic, without Pareto pruning, and enumerating the augmented state space directly; replay each returned path through an independent legality checker for bounds, obstacles, orthogonal unit moves, coincident via transitions, the via keepout, the cap, and cost/via accounting; replay each lattice twice for determinism. Separately observe the routed/refused boundary either side of the declared generalized via cap on a 64- and 65-transition corridor, and a 65-transition two-layer corridor with omitted policy. |
+| Metrics | 20,000/20,000 differential matches, 0 mismatches, 0 illegal paths, 40,000 deterministic replays with no divergence. Layer coverage 5,074 / 5,039 / 4,948 / 4,939 for 2 / 3 / 4 / 5 layers; 19,190 lattices under a finite effective cap; 13,032 routed; deepest observed chain 4 transitions. Outcome signature `sha256:9c2543ee8bcc9981e8ca6ed9f3e65cf6a226558e0738757f6eb9937c58a2d0cc`. Policy boundary: omitted 3-layer cap routes exactly 64 transitions and refuses the 65th with `no_path`; omitted 2-layer policy stays unbounded at 65 transitions. |
+| Artifact | [`2026-08-06-layered-astar-capped-multilayer.json`](../../benchmarks/results/routing/2026-08-06-layered-astar-capped-multilayer.json); run `sha256:65291e67b0a20a219b129d0f13126bbc826ecab2629e9cc59a6f03ff8dbb5b02`; bound script `sha256:d5b8d70af633120f653d5d2544752676198854112db81ca6aa2f4eeabe7ab30b` at source `00502fa6d8cf4fc0ef322c93051823a08e673231`. |
+| Mutation sensitivity | Observed on this suite: an off-by-one via cap, a coordinate-only search state, transitions restricted to adjacent layers, an ignored via keepout, and a changed declared default cap are each detected. Not detected: removing the via-awareness of the per-coordinate Pareto front, which is an additional prune above the sound `(node, vias)` dominance key. |
+| Interpretation | This measures the internal candidate-only search kernel: cost exactness under a finite via budget, path legality, and deterministic replay over 2..5 layers. It is not evidence for six through eight layer stacks, Board IR mapping, trace width or clearance, via annulus/drill/net-class rules, KiCad serialization, authoritative DRC, MCP exposure, jobs, apply, fabrication, or whole-board routing. |
+
+#### B-079 — bounded composed route-bundle KiCad replay
+
+| Field | Recorded evidence |
+|---|---|
+| Artifact | [`2026-08-05-route-bundle-v1.json`](../../benchmarks/results/routing/2026-08-05-route-bundle-v1.json) |
+| Dataset | CopperMCP-original Apache-2.0 `negotiated-crossing-v1.kicad_pcb`, SHA-256 `dbbfc5179cca7f644b90303ff3bc695f191ba94f7e5bbc8b4b1437d810ec83c7`. |
+| Metrics | Independent same-base candidates overflow one lattice unit; the two-net route bundle replayed identically, completed with zero overflow and three exact physical pair checks, at 26 mm total length. |
+| KiCad authority | The project bounded DRC adapter resolved and SHA-256-bound KiCad 10.0.5 before launching its fixed-argument, private-environment execution. It capped report, stdout, and stderr bytes before strict UTF-8/duplicate-key/structure parsing and checked report/exit consistency. The private combined derivative completed with exit `0`, zero errors, and zero unconnected items; source bytes/inode/mtime remained unchanged. |
+| Limits | One two-pin/one-layer/common-grid fixture only. No apply/export/persistence authority, multilayer/via/zone capacity, electrical or fabrication claim, or general-board scaling result. |
+
+#### B-080 — route-bundle boundary and DRC-binding correction
+
+| Field | Recorded evidence |
+|---|---|
+| Correction | The route-bundle request boundary now rejects a non-list or fewer-than-two/more-than-eight reference collection before iterating or validating an element; an explosive nine-item list regression proves the upper-bound refusal does no caller-controlled element work. |
+| KiCad authority binding | The regenerated [`2026-08-05-route-bundle-v1.json`](../../benchmarks/results/routing/2026-08-05-route-bundle-v1.json) retains `DrcSummary.base_revision` `sha256:efbab994177e0737b4ed1ae7343631b969e5ab7c51e888dfe90311c362209f4d` and `drc_context_revision` `sha256:1c8dee9d3b4248b891b38ff23e49cc5e1bf2f296db22e216d9f3f38591c0e2ee` for the private combined derivative. The benchmark recomputes the derivative bytes and refuses a mismatched summary before reporting completed evidence. |
+| Interpretation | This corrects request-work and evidence-binding boundaries only. The artifact remains aggregate evidence for one disposable public-fixture derivative; it grants no apply/export/persistence authority and makes no general-board, electrical, or fabrication claim. |
+
+#### B-082 — route-bundle released-version provenance correction
+
+| Field | Recorded evidence |
+|---|---|
+| Correction | The earlier route-bundle artifact predated the released `0.5.0` source lineage. Release commit `a12ee823fef5c099aa80c16bf5a694806eb643e2` was merged before source commit `f1fcfafa67843c9c7b27a0caa5676aaeeccd91cf`; the latter adds a report field and exact regression requiring `copper_mcp_version: "0.5.0"`. |
+| Artifact | Regenerated [`2026-08-05-route-bundle-v1.json`](../../benchmarks/results/routing/2026-08-05-route-bundle-v1.json) from that exact source tree. The bounded local KiCad 10.0.5 DRC record reports exit `0`, zero errors, zero unconnected items, combined-derivative SHA-256 `2617ea1a91e6eabd8f7de6d124672ee05478761843308a2d365a30f1a5dedc78`, and DRC-context SHA-256 `61efa0a7cf5845a8f49fe13eee46fe20d00b50f208a7c37c9d2ec4e9ffacfab4`. |
+| Replay guard | The evidence commit contains only this artifact, this append-only record, and the changelog correction. The source/test tree is byte-identical to source commit `f1fcfaf` and that commit is an ancestor of the evidence commit. |
+| Interpretation | This is a released-version and reachable-provenance correction. It preserves B-079/B-080's routing and bounded-DRC claims, and adds no authority, quality, electrical, fabrication, or general-board claim. |
+
+#### B-083 — route-bundle policy-bound identity regeneration
+
+| Field | Recorded evidence |
+|---|---|
+| Correction | `bundle_id` now binds the coordinator's `policy_digest` (its iteration ceiling and penalty/budget envelope) alongside the ordered references, candidate IDs, settings, work evidence, and Board IR revision. Two bundles composed from identical references under different coordinator policy can no longer share one identity. Because the identity feeds the private combined serializer's element identifiers, the derivative bytes and every recorded revision change with it. |
+| Artifact | Regenerated [`2026-08-05-route-bundle-v1.json`](../../benchmarks/results/routing/2026-08-05-route-bundle-v1.json). The bundle identity moves from `sha256:5eda7cfc4646373d4dd8a843ca95eadf210e0808e09510260454a914ec75fdb9` to `sha256:6b54fa782ec45fe3ac919736799fc6dd51506f71b78acc7db15fe2a57f59bd75`. |
+| KiCad authority | The same bounded adapter resolved and SHA-256-bound KiCad 10.0.5 (`sha256:852c180a8c923beb6173b54bd6cc0bd66714e52ebfdd451ef0e061224bc954f5`) and ran its fixed-argument, private-environment, `DEVNULL`-connected child. The regenerated private combined derivative `sha256:678c9fc7a67217530d5ca112d181c7efc45b50ed237f7ce0e81d00dd3a6d11bb` with DRC context `sha256:0cc3a5ce94e32cb4485a49e543ab254ef33183ae2d83ff44c681f77e07682528` reported exit `0`, zero errors, zero warnings, zero exclusions, and zero unconnected items. Source bytes, inode, and mtime were unchanged. |
+| Metric preservation | Every measured quantity is unchanged: one overflow unit for independent same-base candidates, zero overflow for the bundle, two candidates, one core replay, three exact physical pair checks, and 26 mm total candidate length. |
+| Interpretation | This is an identity-binding and provenance regeneration only. It adds no fixture, capability, routing-quality, electrical, fabrication, apply, or general-board claim, and B-079's and B-080's claims are preserved. |

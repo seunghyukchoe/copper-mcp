@@ -54,9 +54,85 @@ All notable changes are documented here. The format follows
   projection-binding remediation commit. B-081 preserves B-078 as historical evidence while
   recording the corrected source provenance; the deterministic selection metrics are unchanged.
 
+- Internal ordered-layer route proposals now support two through eight signal layers with bounded,
+  deterministic full-stack-via transitions. Omitted via policy preserves legacy two-layer behavior,
+  while generalized stacks receive a deterministic cap; file, live, and durable public entry points
+  continue to reject non-two-layer stacks. Source-preserving KiCad serialization and DRC remain
+  deliberately restricted to the proven two-layer subset.
+
+- The structural candidate verifier now refuses route copper that crosses a full-stack via barrel
+  on a layer the route does not terminate on at that point. On two layers the existing same-layer
+  intersection scan covered this implicitly; from three layers up a track on an otherwise unused
+  layer could previously run straight through a barrel and still verify.
+
+- Committed a real four-layer KiCad fixture (`F.Cu`/`In1.Cu`/`In2.Cu`/`B.Cu`, accepted by
+  KiCad 10.0.5) and pinned candidate identities for two-, three-, and four-layer routes, so a
+  content-addressed change can no longer pass a green suite unnoticed.
+
+- Extended `scripts/benchmark_layered_astar.py` with an exact `(x, y, layer, vias_used)` Dijkstra
+  differential over seeded two-through-five-layer capped lattices, an independent legality replay
+  of every returned path, and a pinned via-policy boundary.
+
+### Fixed
+
+- Two-layer candidate identity is unchanged by ordered-layer routing. An intermediate revision
+  recorded every via span in canonical outer-stack order, which silently changed the candidate ID
+  of any two-layer route containing a return via and would have made persisted candidates fail
+  structural verification and therefore candidate-bound DRC. Two-layer vias keep their historical
+  traversal ordering, and the verifier compares the span as an unordered pair, exactly as the KiCad
+  serializer always has.
+
+### Fixed
+
+- Route-bundle preview now refuses a seed whose derived per-net value would leave the supported
+  integer range. The request boundary and the published JSON Schema both reserve headroom for the
+  largest reachable reference index, so a schema-valid request can no longer escape the service as
+  an untyped error instead of a typed refusal.
+
+- An expired route-bundle time budget is now reported as budget exhaustion rather than as a
+  deterministic-replay mismatch. The two negotiation runs share one deadline, so an expiry between
+  them is a resource outcome; the replay-mismatch diagnostic is now reserved for genuine structural
+  differences.
+
+- Restored `DEVNULL` for the bounded KiCad DRC child's stdout and stderr, reverting an unrelated
+  change to never-read on-disk capture files. SEC-113's zero-byte parent capture budget is the
+  governing mitigation, and the capture had reintroduced a file-size failure mode for a chatty but
+  valid KiCad run. Report bounding, timeout, private child environment, and aggregate evidence are
+  unchanged.
+
+- Rebound the route-bundle benchmark artifact to released CopperMCP `0.5.0`. Its provenance now
+  records the source version explicitly, while retaining exact script, fixture, combined-derivative,
+  DRC-context, and self-digest bindings.
+
+- Refused a non-orthogonal *saved* footprint pose with a typed `unsupported_geometry` diagnostic
+  instead of an untyped exception. An orthogonal proposal previously masked the stored angle from
+  the placement legalizer's orientation guard, and un-rotating the footprint's pads and courtyards
+  out of that oblique frame escaped the placement boundary as a bare `ValueError`. The KiCad
+  adapter already fails closed on such an angle, so this is reachable only through a directly
+  constructed or decoded Board IR snapshot. The refusal message does not echo the rejected value,
+  and every other reference path to such a footprint already refused with the same code.
+
+### Changed
+
+- The route-bundle plan digest now binds the coordinator's policy-envelope digest, and the plan
+  publishes it as `policy_digest`. Bundles composed from the same references under different
+  coordinator iteration or penalty limits no longer share one `bundle_id`. The recorded benchmark
+  identity and combined-derivative revisions are regenerated accordingly; every measured metric is
+  unchanged.
+
+### Added
+
+- [ADR-0066](docs/adr/0066-atomic-route-bundle-preview.md) records the public route-bundle contract:
+  the all-or-nothing publication rule, the double-negotiation determinism requirement, the digest
+  binding, and the explicit non-claims.
+
 ## [0.5.0] - 2026-08-05
 
 ### Fixed
+
+- Route-bundle preview now refuses oversized net-reference arrays before inspecting any element.
+  Its completed benchmark DRC record also binds the aggregate result to the private combined-board
+  and DRC-context revisions, without exposing board bytes or derivative authority.
 
 - Rebound the held-out audio benchmark artifact to the reachable merged-main source commit after
   PR #51's squash merge. Its strict detached replay now proves the locally available source is in
@@ -84,6 +160,12 @@ All notable changes are documented here. The format follows
   historical router/order combinations refuse before rendering or applying copper.
 
 ### Added
+
+- Added `preview_route_bundle`, a closed read-only MCP/application-service surface that accepts a
+  bounded ordered set of revision-bound Circuit Scene net references and publishes one immutable
+  multi-net plan only after deterministic composition replay and cross-net physical-clearance
+  acceptance. It never issues an apply token, writes a board, exports a derivative, or returns a
+  partial plan. A committed public-fixture replay records one combined private KiCad DRC derivative.
 
 - Hardened the optional harness-owned KiCad/FreeRouting transaction behind an internal
   provider-created aggregate-quota workspace capability. The harness validates canonical

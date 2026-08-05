@@ -48,12 +48,15 @@ from copper_mcp.routing import (
     canonical_layered_candidate_bytes,
     verify_layered_candidate_id,
 )
+from copper_mcp.routing.layered_board_adapter import has_exactly_two_signal_layers
 from copper_mcp.security import read_workspace_file
 
 _MAX_GRID_STEP_NM = 1_000_000_000
 _MAX_PAD_ID_CHARACTERS = 164
-_SETTINGS_FIELDS = tuple(sorted(LayeredAStarSettings.__dataclass_fields__))
-_MAX_SETTINGS_FIELDS = frozenset(LayeredAStarSettings.__dataclass_fields__)
+_SETTINGS_FIELDS = tuple(
+    field for field in sorted(LayeredAStarSettings.__dataclass_fields__) if field != "max_vias"
+)
+_MAX_SETTINGS_FIELDS = frozenset(_SETTINGS_FIELDS)
 _REQUIRED_FIELDS = (
     "board",
     "start_pad_id",
@@ -386,6 +389,18 @@ def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]
             snapshot_digest=snapshot.snapshot_digest,
             diagnostic=_diagnostic_document(
                 "stale_revision", "Board IR snapshot revision is stale"
+            ),
+        )
+    if not has_exactly_two_signal_layers(snapshot):
+        return _empty_result(
+            "unsupported_board",
+            request,
+            relative_path,
+            board_revision,
+            snapshot_digest=snapshot.snapshot_digest,
+            diagnostic=_diagnostic_document(
+                LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY.value,
+                "board copper stack is outside the public two-layer preview subset",
             ),
         )
 

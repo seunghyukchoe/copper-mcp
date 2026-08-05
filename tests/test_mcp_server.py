@@ -103,6 +103,7 @@ class McpServerTests(unittest.TestCase):
                 "preview_layered_route",
                 "preview_live_layered_route",
                 "preview_route",
+                "preview_route_bundle",
                 "render_circuit_schematic",
                 "run_board_drc",
                 "server_info",
@@ -113,6 +114,100 @@ class McpServerTests(unittest.TestCase):
                 "validate_candidate",
             },
         )
+
+    def test_route_bundle_advertises_only_closed_read_only_plan_contracts(self) -> None:
+        bundle = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}["preview_route_bundle"]
+        _assert_closed_object(bundle.input_schema, {"request"})
+        request = bundle.input_schema["properties"]["request"]
+        assert isinstance(request, dict)
+        self.assertIs(request["additionalProperties"], False)
+        self.assertEqual(
+            set(request["properties"]),
+            {
+                "board",
+                "layer",
+                "constraints",
+                "net_ref_ids",
+                "expect_board_revision",
+                "expect_snapshot_digest",
+                "seed",
+                "settings",
+            },
+        )
+        self.assertEqual(
+            set(request["required"]),
+            {
+                "board",
+                "layer",
+                "constraints",
+                "net_ref_ids",
+                "expect_board_revision",
+                "expect_snapshot_digest",
+            },
+        )
+        for nested in ("constraints", "settings"):
+            value = request["properties"][nested]
+            assert isinstance(value, dict)
+            self.assertIs(value["additionalProperties"], False)
+        self.assertEqual(request["properties"]["net_ref_ids"]["minItems"], 2)
+        self.assertEqual(request["properties"]["net_ref_ids"]["maxItems"], 8)
+
+        output = bundle.output_schema
+        assert isinstance(output, dict)
+        definitions = output["$defs"]
+        assert isinstance(definitions, dict)
+        statuses = {
+            "RoutedRouteBundlePreviewContract": "routed",
+            "NotRoutedRouteBundlePreviewContract": "not_routed",
+            "UnsupportedRouteBundlePreviewContract": "unsupported_board",
+        }
+        for name, status in statuses.items():
+            schema = definitions[name]
+            assert isinstance(schema, dict)
+            _assert_closed_object(
+                schema,
+                {
+                    "schema_version",
+                    "board_path",
+                    "board_revision",
+                    "request",
+                    "status",
+                    "snapshot_digest",
+                    "plan",
+                    "diagnostic",
+                    "conversion_diagnostic_counts",
+                },
+            )
+            self.assertEqual(schema["properties"]["status"]["const"], status)
+        for name in (
+            "RouteBundleRequestContract",
+            "RouteBundlePlanContract",
+            "RouteBundleMetricsContract",
+        ):
+            schema = definitions[name]
+            assert isinstance(schema, dict)
+            self.assertIs(schema["additionalProperties"], False)
+
+        property_names: set[str] = set()
+        pending: list[object] = [bundle.input_schema, output]
+        while pending:
+            current = pending.pop()
+            if isinstance(current, dict):
+                properties = current.get("properties")
+                if isinstance(properties, dict):
+                    property_names.update(properties)
+                pending.extend(current.values())
+            elif isinstance(current, list):
+                pending.extend(current)
+        self.assertFalse(
+            {"apply_token", "apply_authority", "drc_evidence", "derivative", "artifact"}
+            & property_names
+        )
+        assert bundle.annotations is not None
+        self.assertIs(bundle.annotations.read_only_hint, True)
+        self.assertIs(bundle.annotations.destructive_hint, False)
+        self.assertIs(bundle.annotations.idempotent_hint, True)
+        self.assertIs(bundle.annotations.open_world_hint, False)
 
     def test_live_observer_advertises_closed_read_only_output(self) -> None:
         tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -8,7 +9,7 @@ import pytest
 
 import copper_mcp.layered_route_preview as layered_preview
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
-from copper_mcp.board_ir import NetClass
+from copper_mcp.board_ir import Layer, NetClass, make_snapshot
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import KiCadCliError, LayeredRouteCandidateDrcEvidence
 from copper_mcp.layered_route_preview import (
@@ -21,6 +22,9 @@ from copper_mcp.models import DrcSummary
 FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "two-pad.kicad_pcb"
 BLOCKED_PAD_FIXTURE = (
     Path(__file__).parent / "fixtures" / "route-candidate" / "blocked-pad.kicad_pcb"
+)
+FOUR_LAYER_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "route-candidate" / "four-layer-blocked-outers.kicad_pcb"
 )
 REAL_KICAD_CLI = Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli")
 DEFAULT = NetClass(
@@ -101,6 +105,78 @@ def test_routed_result_is_deterministic_and_contains_only_canonical_geometry(
     assert isinstance(patch, dict)
     assert patch["paths"]
     assert "net:name:" not in repr(first["diagnostic"])
+
+
+def test_file_preview_refuses_internal_three_layer_router_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    board, settings, start, end, _ = _workspace(tmp_path)
+    board_revision = f"sha256:{hashlib.sha256(board.read_bytes()).hexdigest()}"
+    profile = KiCadConstraintProfile(net_classes=(DEFAULT,), default_net_class_id=DEFAULT.id)
+    conversion = parse_kicad_bytes(board.read_bytes(), profile)
+    assert conversion.snapshot is not None
+    snapshot = conversion.snapshot
+    front, back = snapshot.content.copper_layers
+    internal_snapshot = make_snapshot(
+        replace(
+            snapshot.content,
+            copper_layers=(
+                front,
+                Layer(id="layer:In1.Cu", name="In1.Cu", index=1),
+                replace(back, index=2),
+            ),
+        )
+    )
+    monkeypatch.setattr(
+        layered_preview,
+        "parse_kicad_bytes",
+        lambda *_args, **_kwargs: replace(conversion, snapshot=internal_snapshot),
+    )
+
+    result = preview_layered_route(
+        _request(board, start, end, board_revision, internal_snapshot.snapshot_digest), settings
+    )
+
+    assert result["status"] == "unsupported_board"
+    assert result["candidate"] is None
+    assert result["diagnostic"]["code"] == "unsupported_geometry"  # type: ignore[index]
+
+
+def test_file_preview_refuses_a_real_four_layer_board(tmp_path: Path) -> None:
+    """Prove the public two-layer boundary on committed KiCad bytes, not a patched snapshot.
+
+    Every other boundary regression monkeypatches ``parse_kicad_bytes`` with a hand-built stack, so
+    none of them can observe a real parse producing four copper layers.  This one routes the
+    committed, KiCad 10.0.5-accepted four-layer fixture through the real public entry point.
+    """
+
+    board = tmp_path / FOUR_LAYER_FIXTURE.name
+    source = FOUR_LAYER_FIXTURE.read_bytes()
+    board.write_bytes(source)
+    profile = KiCadConstraintProfile(net_classes=(DEFAULT,), default_net_class_id=DEFAULT.id)
+    conversion = parse_kicad_bytes(source, profile)
+    assert conversion.diagnostics == ()
+    assert conversion.snapshot is not None
+    assert len(conversion.snapshot.content.copper_layers) == 4
+    endpoints = tuple(
+        pad for pad in conversion.snapshot.content.pads if pad.center.x in (10_000_000, 30_000_000)
+    )
+
+    result = preview_layered_route(
+        _request(
+            board,
+            endpoints[0].id,
+            endpoints[1].id,
+            f"sha256:{hashlib.sha256(source).hexdigest()}",
+            conversion.snapshot.snapshot_digest,
+            grid_step_nm=1_000_000,
+        ),
+        Settings(workspace=tmp_path),
+    )
+
+    assert result["status"] == "unsupported_board"
+    assert result["candidate"] is None
+    assert result["diagnostic"]["code"] == "unsupported_geometry"  # type: ignore[index]
 
 
 def test_include_drc_returns_candidate_bound_aggregate_evidence(

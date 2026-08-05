@@ -895,6 +895,8 @@ def _run_captured_drc(
             *kicad_command,
         ]
         try:
+            # SEC-113: untrusted child diagnostics keep a zero-byte parent capture budget, so a
+            # chatty-but-valid run cannot spend the RLIMIT_FSIZE report budget on unread bytes.
             completed = subprocess.run(  # noqa: S603
                 command,
                 stdin=subprocess.DEVNULL,
