@@ -133,6 +133,8 @@ def parse_route_bundle_request(payload: Any) -> RouteBundleRequest:
         raw_refs = fields["net_ref_ids"]
         if not isinstance(raw_refs, list):
             raise RouteBundleError("net_ref_ids must be an ordered list")
+        if not 2 <= len(raw_refs) <= _MAX_NETS:
+            raise RouteBundleError("route bundles require a bounded set of net references")
         references = tuple(_net_ref_id(reference) for reference in raw_refs)
         return RouteBundleRequest(
             board=board_path(fields["board"]),

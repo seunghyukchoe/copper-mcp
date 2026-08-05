@@ -9,7 +9,12 @@ from copper_mcp.adapters import KiCadConstraintProfile, net_id_for_name, parse_k
 from copper_mcp.adapters.kicad_route_bundle_patch import render_kicad_route_bundle_board
 from copper_mcp.board_ir import NetClass
 from copper_mcp.config import Settings
-from copper_mcp.route_bundle import RouteBundleError, RouteBundleStatus, preview_route_bundle
+from copper_mcp.route_bundle import (
+    RouteBundleError,
+    RouteBundleStatus,
+    parse_route_bundle_request,
+    preview_route_bundle,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "benchmarks/audio/fixtures/negotiated-crossing-v1.kicad_pcb"
@@ -119,6 +124,21 @@ def test_preview_refuses_stale_or_duplicate_reference_bundle_without_a_partial_p
     duplicate = dict(payload, net_ref_ids=[net_id_for_name("HORIZONTAL")] * 2)
     with pytest.raises(RouteBundleError, match="distinct"):
         preview_route_bundle(duplicate, Settings(workspace=tmp_path))
+
+
+def test_oversized_reference_list_refuses_before_element_iteration(tmp_path: Path) -> None:
+    class ExplosiveList(list[object]):
+        def __iter__(self):  # type: ignore[override]
+            raise AssertionError("oversized references must not be iterated")
+
+    source = FIXTURE.read_bytes()
+    board = tmp_path / FIXTURE.name
+    board.write_bytes(source)
+    payload = _payload(board.name, source)
+    payload["net_ref_ids"] = ExplosiveList([object()] * 9)
+
+    with pytest.raises(RouteBundleError, match="bounded set of net references"):
+        parse_route_bundle_request(payload)
 
 
 def test_preview_preserves_request_order_while_canonicalizing_plan_candidates(

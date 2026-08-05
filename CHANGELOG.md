@@ -8,6 +8,10 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Route-bundle preview now refuses oversized net-reference arrays before inspecting any element.
+  Its completed benchmark DRC record also binds the aggregate result to the private combined-board
+  and DRC-context revisions, without exposing board bytes or derivative authority.
+
 - Rebound the held-out audio benchmark artifact to the reachable merged-main source commit after
   PR #51's squash merge. Its strict detached replay now proves the locally available source is in
   checkout ancestry before checkout; all bound inputs and recorded benchmark metrics are unchanged.

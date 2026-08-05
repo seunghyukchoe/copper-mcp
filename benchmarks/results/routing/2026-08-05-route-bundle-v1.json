@@ -1,5 +1,7 @@
 {
   "authoritative_kicad_drc": {
+    "base_revision": "sha256:efbab994177e0737b4ed1ae7343631b969e5ab7c51e888dfe90311c362209f4d",
+    "drc_context_revision": "sha256:1c8dee9d3b4248b891b38ff23e49cc5e1bf2f296db22e216d9f3f38591c0e2ee",
     "drc_schema": "https://schemas.kicad.org/drc.v1.json",
     "error_count": 0,
     "exclusion_count": 0,
@@ -42,10 +44,10 @@
     "fabrication_readiness",
     "general_board_scaling"
   ],
-  "recorded_at_utc": "2026-08-05T11:57:16+00:00",
-  "run_id": "sha256:2d0570acd7f7838868c825701fdae52fefe2bbf17046cce5e82610cd50e9bb99",
+  "recorded_at_utc": "2026-08-05T12:12:42+00:00",
+  "run_id": "sha256:1aa4ce69b7ceb1eb0bad609d942d7f95331f3bb2aea68a93483aa77297727770",
   "schema": "copper-mcp/benchmark/route-bundle/v1",
   "script": "scripts/benchmark_route_bundle.py",
-  "script_sha256": "eb126a08d7f74f56cecccd0efb19ca672de5d635caf47b400f2192d88b5a258e",
+  "script_sha256": "d48b06de606b2cba0e882d07911e762a45b0a9ccb83444cdce236f4731c1fcee",
   "source_unchanged": true
 }

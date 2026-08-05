@@ -153,6 +153,9 @@ def _drc(board: Path) -> dict[str, Any]:
         )
     except KiCadCliError:
         return {"status": "unavailable", "reason": "bounded KiCad DRC evidence is unavailable"}
+    expected_base_revision = f"sha256:{hashlib.sha256(board.read_bytes()).hexdigest()}"
+    if summary.base_revision != expected_base_revision:
+        raise KiCadCliError("KiCad DRC evidence is not bound to the combined derivative")
     inferred_exit_code = (
         0
         if summary.error_count == 0
@@ -164,6 +167,8 @@ def _drc(board: Path) -> dict[str, Any]:
     return {
         "status": "completed",
         "execution": "copper_mcp.kicad_cli.run_board_drc",
+        "base_revision": summary.base_revision,
+        "drc_context_revision": summary.drc_context_revision,
         "executable": str(executable),
         "executable_sha256": executable_digest,
         "kicad_version": summary.kicad_version,

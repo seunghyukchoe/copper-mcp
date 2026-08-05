@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import KiCadCliError
 from scripts import benchmark_route_bundle as benchmark
 
@@ -43,6 +45,23 @@ def test_committed_route_bundle_artifact_binds_its_inputs_and_clean_kicad_eviden
     authority = report["authoritative_kicad_drc"]
     assert authority["status"] == "completed"
     assert authority["execution"] == "copper_mcp.kicad_cli.run_board_drc"
+    source = benchmark.FIXTURE.read_bytes()
+    conversion = benchmark.parse_kicad_bytes(source, benchmark._profile())
+    assert conversion.snapshot is not None
+    with tempfile.TemporaryDirectory(prefix="copper-mcp-route-bundle-test-") as temporary:
+        workspace = Path(temporary)
+        board = workspace / benchmark.FIXTURE.name
+        board.write_bytes(source)
+        result = benchmark.preview_route_bundle(
+            benchmark._payload(board.name, source, conversion.snapshot.snapshot_digest),
+            Settings(workspace=workspace),
+        )
+        assert result.plan is not None
+        rendered = benchmark.render_kicad_route_bundle_board(
+            source, conversion.snapshot, result.plan, benchmark._profile()
+        )
+    assert authority["base_revision"] == f"sha256:{hashlib.sha256(rendered).hexdigest()}"
+    assert authority["drc_context_revision"].startswith("sha256:")
     assert authority["exit_code"] == 0
     assert authority["error_count"] == 0
     assert authority["unconnected_count"] == 0

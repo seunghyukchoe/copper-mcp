@@ -1044,3 +1044,11 @@ are the audit copies for the original run IDs.
 | Metrics | Independent same-base candidates overflow one lattice unit; the two-net route bundle replayed identically, completed with zero overflow and three exact physical pair checks, at 26 mm total length. |
 | KiCad authority | The project bounded DRC adapter resolved and SHA-256-bound KiCad 10.0.5 before launching its fixed-argument, private-environment execution. It capped report, stdout, and stderr bytes before strict UTF-8/duplicate-key/structure parsing and checked report/exit consistency. The private combined derivative completed with exit `0`, zero errors, and zero unconnected items; source bytes/inode/mtime remained unchanged. |
 | Limits | One two-pin/one-layer/common-grid fixture only. No apply/export/persistence authority, multilayer/via/zone capacity, electrical or fabrication claim, or general-board scaling result. |
+
+#### B-080 — route-bundle boundary and DRC-binding correction
+
+| Field | Recorded evidence |
+|---|---|
+| Correction | The route-bundle request boundary now rejects a non-list or fewer-than-two/more-than-eight reference collection before iterating or validating an element; an explosive nine-item list regression proves the upper-bound refusal does no caller-controlled element work. |
+| KiCad authority binding | The regenerated [`2026-08-05-route-bundle-v1.json`](../../benchmarks/results/routing/2026-08-05-route-bundle-v1.json) retains `DrcSummary.base_revision` `sha256:efbab994177e0737b4ed1ae7343631b969e5ab7c51e888dfe90311c362209f4d` and `drc_context_revision` `sha256:1c8dee9d3b4248b891b38ff23e49cc5e1bf2f296db22e216d9f3f38591c0e2ee` for the private combined derivative. The benchmark recomputes the derivative bytes and refuses a mismatched summary before reporting completed evidence. |
+| Interpretation | This corrects request-work and evidence-binding boundaries only. The artifact remains aggregate evidence for one disposable public-fixture derivative; it grants no apply/export/persistence authority and makes no general-board, electrical, or fabrication claim. |
