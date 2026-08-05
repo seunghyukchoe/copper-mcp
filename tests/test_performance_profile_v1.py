@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 import os
 import shutil
 import subprocess
 import sys
-import tarfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -38,53 +36,45 @@ def _git() -> str:
     return git
 
 
+def _git_head(root: Path) -> str:
+    return subprocess.run(  # noqa: S603 - locally resolved Git reads one local revision
+        [_git(), "rev-parse", "HEAD"],
+        check=True,
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    ).stdout.strip()
+
+
 @contextmanager
 def _isolated_worktree(tmp_path: Path, *, source_root: Path = ROOT) -> Iterator[Path]:
     worktree = tmp_path / "isolated-worktree"
-    archive = subprocess.run(  # noqa: S603 - locally resolved Git reads tracked HEAD only
-        [_git(), "archive", "--format=tar", "HEAD"],
-        check=True,
-        cwd=source_root,
-        capture_output=True,
-        timeout=30,
-    ).stdout
-    worktree.mkdir(parents=True)
-    with tarfile.open(fileobj=io.BytesIO(archive)) as bundle:
-        bundle.extractall(worktree, filter="data")
-    subprocess.run(  # noqa: S603 - initializes only the pytest-owned isolated checkout
-        [_git(), "init", "--quiet"],
-        check=True,
-        cwd=worktree,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    subprocess.run(  # noqa: S603 - stages only the isolated archive checkout
-        [_git(), "add", "--all"],
-        check=True,
-        cwd=worktree,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    subprocess.run(  # noqa: S603 - commits only the isolated archive checkout
+    source_head = _git_head(source_root)
+    subprocess.run(  # noqa: S603 - local non-shared clone into pytest-owned storage
         [
             _git(),
-            "-c",
-            "user.name=CopperMCP profile test",
-            "-c",
-            "user.email=profile-test@example.invalid",
-            "commit",
+            "clone",
+            "--no-local",
+            "--no-checkout",
             "--quiet",
-            "-m",
-            "isolated tracked snapshot",
+            str(source_root),
+            str(worktree),
         ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    subprocess.run(  # noqa: S603 - checks out the exact caller commit in isolated storage
+        [_git(), "checkout", "--detach", "--quiet", source_head],
         check=True,
         cwd=worktree,
         capture_output=True,
         text=True,
         timeout=30,
     )
+    assert _git_head(worktree) == source_head
     try:
         yield worktree
     finally:
@@ -114,12 +104,15 @@ def _run_profile(output: Path, *, root: Path) -> subprocess.CompletedProcess[str
 
 
 def _report(tmp_path: Path, *, parent_root: Path = ROOT) -> dict[str, object]:
+    parent_head = _git_head(parent_root)
     with _isolated_worktree(tmp_path, source_root=parent_root) as worktree:
         output = worktree / "profile.json"
         completed = _run_profile(output, root=worktree)
         assert completed.returncode == 0, completed.stderr
         assert completed.stdout == output.read_text(encoding="utf-8")
-        return json.loads(output.read_text(encoding="utf-8"))
+        report = json.loads(output.read_text(encoding="utf-8"))
+        assert report["provenance"]["git_head"] == parent_head
+        return report
 
 
 def test_performance_profile_has_fixed_identity_and_three_replayable_scenarios(
