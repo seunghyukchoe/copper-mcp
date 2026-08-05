@@ -216,24 +216,44 @@ def _scenario(
     }
 
 
-def _git_head() -> str:
+def _git_output(*arguments: str) -> str:
     git = shutil.which("git")
     if git is None:
-        return "unknown"
+        raise RuntimeError("performance profile baseline requires local Git provenance")
     try:
         return subprocess.run(  # noqa: S603 - executable is resolved locally with shutil.which
-            [git, "rev-parse", "HEAD"],
+            [git, *arguments],
             check=True,
             capture_output=True,
             cwd=_ROOT,
             text=True,
             timeout=5,
         ).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        return "unknown"
+    except (OSError, subprocess.SubprocessError) as error:
+        raise RuntimeError(
+            "performance profile baseline cannot establish Git provenance"
+        ) from error
 
 
-def _identity(*, warmups: int, samples: int) -> dict[str, Any]:
+def _clean_source_provenance() -> dict[str, bool | str]:
+    """Return bound source provenance only when no tracked or untracked input can drift."""
+
+    if _git_output("status", "--porcelain=v1", "--untracked-files=all"):
+        raise RuntimeError(
+            "performance profile baseline requires a clean tracked and untracked tree"
+        )
+    git_head = _git_output("rev-parse", "HEAD")
+    if len(git_head) != 40 or any(character not in "0123456789abcdef" for character in git_head):
+        raise RuntimeError("performance profile baseline Git provenance is malformed")
+    return {"clean_worktree": True, "git_head": git_head}
+
+
+def _identity(
+    *,
+    warmups: int,
+    samples: int,
+    source_provenance: Mapping[str, bool | str],
+) -> dict[str, Any]:
     return {
         "fixed_seed": _SEED,
         "fixture_manifest": {
@@ -248,6 +268,7 @@ def _identity(*, warmups: int, samples: int) -> dict[str, Any]:
         },
         "schema": _SCHEMA,
         "script_sha256": _sha256(_SCRIPT.read_bytes()),
+        "source_provenance": dict(source_provenance),
     }
 
 
@@ -257,6 +278,14 @@ def _validate_report(document: Mapping[str, Any]) -> None:
     expected_identity_digest = _sha256(_canonical_bytes(document["identity"]))
     if document.get("identity_digest") != expected_identity_digest:
         raise ValueError("performance profile identity digest is malformed")
+    source_provenance = document["identity"].get("source_provenance")
+    if (
+        not isinstance(source_provenance, dict)
+        or source_provenance.get("clean_worktree") is not True
+    ):
+        raise ValueError("performance profile clean provenance is malformed")
+    if source_provenance.get("git_head") != document.get("provenance", {}).get("git_head"):
+        raise ValueError("performance profile source provenance is not bound")
     report_without_run_id = dict(document)
     run_id = report_without_run_id.pop("run_id", None)
     if run_id != _sha256(_canonical_bytes(report_without_run_id)):
@@ -286,7 +315,12 @@ def _validate_report(document: Mapping[str, Any]) -> None:
 
 
 def build_report(*, warmups: int, samples: int) -> dict[str, Any]:
-    identity = _identity(warmups=warmups, samples=samples)
+    source_provenance = _clean_source_provenance()
+    identity = _identity(
+        warmups=warmups,
+        samples=samples,
+        source_provenance=source_provenance,
+    )
     run_started = time.monotonic_ns()
     document: dict[str, Any] = {
         "identity": identity,
@@ -304,7 +338,7 @@ def build_report(*, warmups: int, samples: int) -> dict[str, Any]:
             "public-contract, routing-policy, placement-policy, or mutation behavior changes",
         ],
         "provenance": {
-            "git_head": _git_head(),
+            **source_provenance,
             "machine": platform.machine() or "unknown",
             "python": platform.python_version(),
         },

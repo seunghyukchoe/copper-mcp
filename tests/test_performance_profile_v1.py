@@ -27,10 +27,9 @@ def _run_digest(report: dict[str, object]) -> str:
     return _canonical_digest(payload)
 
 
-def _report(tmp_path: Path) -> dict[str, object]:
-    output = tmp_path / "profile.json"
+def _run_profile(output: Path) -> subprocess.CompletedProcess[str]:
     environment = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
-    completed = subprocess.run(  # noqa: S603 - fixed script plus pytest-owned output path
+    return subprocess.run(  # noqa: S603 - fixed script plus pytest-owned output path
         [
             sys.executable,
             str(SCRIPT),
@@ -41,13 +40,19 @@ def _report(tmp_path: Path) -> dict[str, object]:
             "--warmups",
             "1",
         ],
-        check=True,
+        check=False,
         capture_output=True,
         cwd=ROOT,
         env=environment,
         text=True,
         timeout=120,
     )
+
+
+def _report(tmp_path: Path) -> dict[str, object]:
+    output = tmp_path / "profile.json"
+    completed = _run_profile(output)
+    assert completed.returncode == 0, completed.stderr
     assert completed.stdout == output.read_text(encoding="utf-8")
     return json.loads(output.read_text(encoding="utf-8"))
 
@@ -68,6 +73,9 @@ def test_performance_profile_has_fixed_identity_and_three_replayable_scenarios(
     }
     assert report["identity_digest"] == _canonical_digest(identity)
     assert report["run_id"] == _run_digest(report)
+    assert identity["source_provenance"]["clean_worktree"] is True
+    assert report["provenance"]["clean_worktree"] is True
+    assert identity["source_provenance"]["git_head"] == report["provenance"]["git_head"]
     scenarios = report["scenarios"]
     assert isinstance(scenarios, dict)
     assert set(scenarios) == {"placement", "routing", "scene"}
@@ -114,7 +122,40 @@ def test_committed_performance_profile_keeps_provenance_outside_deterministic_id
         "warmups": 2,
     }
     assert len(report["provenance"]["git_head"]) == 40
+    assert report["provenance"]["clean_worktree"] is True
+    assert report["identity"]["source_provenance"] == {
+        "clean_worktree": True,
+        "git_head": report["provenance"]["git_head"],
+    }
     rendered = json.dumps(report, sort_keys=True)
     assert str(ROOT) not in rendered
     for scenario in report["scenarios"].values():
         assert all("/" not in item["function"] for item in scenario["hotspots_cumulative"])
+
+
+def test_performance_profile_refuses_dirty_tracked_source(tmp_path: Path) -> None:
+    original = SCRIPT.read_bytes()
+    output = tmp_path / "profile.json"
+    try:
+        SCRIPT.write_bytes(original + b"\n")
+        completed = _run_profile(output)
+    finally:
+        SCRIPT.write_bytes(original)
+
+    assert completed.returncode != 0
+    assert "requires a clean tracked and untracked tree" in completed.stderr
+    assert not output.exists()
+
+
+def test_performance_profile_refuses_untracked_helper(tmp_path: Path) -> None:
+    helper = ROOT / "performance-profile-untracked-helper.py"
+    output = tmp_path / "profile.json"
+    try:
+        helper.write_text("# untracked file\n", encoding="utf-8")
+        completed = _run_profile(output)
+    finally:
+        helper.unlink(missing_ok=True)
+
+    assert completed.returncode != 0
+    assert "requires a clean tracked and untracked tree" in completed.stderr
+    assert not output.exists()

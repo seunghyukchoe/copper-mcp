@@ -15,10 +15,14 @@ and Circuit Scene pipelines without changing their public contracts?
   placement solver);
 - file-backed Circuit Scene observation (confined read, conversion, and scene projection).
 
-The fixture bytes, fixed seed, source-script digest, warmup/sample counts, and hotspot limit form a
-canonical `identity` object. `identity_digest` hashes that object only. Timing samples, profiler
-costs, operational span, machine, Python version, and Git head are deliberately outside that
-identity because they are environmental observations rather than deterministic inputs.
+Before reading a fixture, the baseline runner requires Git and a fully clean repository status,
+including untracked files. This is intentionally stricter than a tracked-only check: an untracked
+helper, fixture, or importable source file cannot silently affect a supposedly committed baseline.
+The verified `git_head` and `clean_worktree: true` are copied into both source provenance and the
+canonical `identity` object. `identity_digest` binds that source provenance, fixture bytes, fixed
+seed, source-script digest, warmup/sample counts, and hotspot limit. Timing samples, profiler
+costs, operational span, machine, and Python version remain outside identity because they are
+environmental observations rather than deterministic inputs.
 
 Each scenario first performs warmups, then records multiple **unprofiled** `time.perf_counter_ns`
 samples, checking that the result digest is identical for every sample. It then runs exactly one
