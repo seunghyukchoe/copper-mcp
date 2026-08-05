@@ -311,6 +311,7 @@ class PadlessFootprintTests(unittest.TestCase):
 
         self.assertEqual(result.status, "previewed")
         assert result.candidate is not None
+        self.assertNotIn(PADLESS_REF, {item.ref_id for item in result.candidate.placements})
 
     def test_a_padless_courtyard_is_a_stationary_collision_envelope(self) -> None:
         _, snapshot, view = _board(PADLESS_BOARD)
