@@ -28,6 +28,7 @@ from copper_mcp.routing import (
     NegotiatedRoutingRequest,
     NegotiatedRoutingStatus,
     RouteCandidate,
+    RouteConnection,
     RouteCost,
     RouteDiagnostic,
     RouteFailureCode,
@@ -47,6 +48,7 @@ BOARD_SOURCE = f"sha256:{'c' * 64}"
 LAYER = "layer:F.Cu"
 H_NET = "net:horizontal"
 V_NET = "net:vertical"
+C_NET = "net:connected"
 
 
 def _crossing_snapshot() -> object:
@@ -367,6 +369,8 @@ def _physical_clearance_snapshot() -> object:
         pad("pad:h2", H_NET, (9_000_000, 3_000_000)),
         pad("pad:v1", V_NET, (1_000_000, 3_900_000)),
         pad("pad:v2", V_NET, (9_000_000, 3_900_000)),
+        pad("pad:c1", C_NET, (1_000_000, 6_000_000)),
+        pad("pad:c2", C_NET, (9_000_000, 6_000_000)),
     )
     horizontal_class = NetClass(
         id="class:physical-low",
@@ -405,12 +409,17 @@ def _physical_clearance_snapshot() -> object:
             ),
         ),
         copper_layers=(Layer(id=LAYER, name="F.Cu", index=0, kind="signal"),),
-        nets=(Net(id=H_NET, name="HORIZONTAL"), Net(id=V_NET, name="VERTICAL")),
+        nets=(
+            Net(id=H_NET, name="HORIZONTAL"),
+            Net(id=V_NET, name="VERTICAL"),
+            Net(id=C_NET, name="CONNECTED"),
+        ),
         constraints=ConstraintSet(
             net_classes=(horizontal_class, vertical_class),
             assignments=(
                 NetClassAssignment(net_id=H_NET, net_class_id=horizontal_class.id),
                 NetClassAssignment(net_id=V_NET, net_class_id=vertical_class.id),
+                NetClassAssignment(net_id=C_NET, net_class_id=horizontal_class.id),
             ),
         ),
         footprints=(
@@ -427,6 +436,13 @@ def _physical_clearance_snapshot() -> object:
                 rotation_udeg=0,
                 side=FootprintSide.FRONT,
                 pad_ids=(pads[2].id, pads[3].id),
+            ),
+            Footprint(
+                id="footprint:c",
+                origin=pads[4].center,
+                rotation_udeg=0,
+                side=FootprintSide.FRONT,
+                pad_ids=(pads[4].id, pads[5].id),
             ),
         ),
         pads=pads,
@@ -534,6 +550,59 @@ def test_negotiated_acceptance_rejects_zero_overflow_physical_clearance_violatio
     assert result.total_physical_checks == 2
     assert result.diagnostic == "negotiated candidates violate pairwise physical clearance"
     assert result == negotiate_routes(snapshot, envelope, router=ParallelRouter())
+
+
+def test_physical_clearance_failure_discards_connection_evidence_atomically() -> None:
+    snapshot = _physical_clearance_snapshot()
+    horizontal = _physical_candidate(
+        snapshot,
+        H_NET,
+        (RoutePath((PointNM(1_000_000, 3_000_000), PointNM(9_000_000, 3_000_000))),),
+    )
+    vertical = _physical_candidate(
+        snapshot,
+        V_NET,
+        (RoutePath((PointNM(1_000_000, 3_900_000), PointNM(9_000_000, 3_900_000))),),
+    )
+    connection = RouteConnection(
+        base_revision=snapshot.snapshot_digest,
+        start_pad_id="pad:c1",
+        end_pad_id="pad:c2",
+        attachment_segments=0,
+        component_objects=2,
+    )
+
+    class ParallelRouter:
+        def propose(
+            self, _snapshot: object, request: RouteRequest, **_kwargs: object
+        ) -> RouteResult:
+            if request.net_id == H_NET:
+                return RouteResult(candidate=horizontal)
+            if request.net_id == V_NET:
+                return RouteResult(candidate=vertical)
+            return RouteResult(connected=connection)
+
+    requests = (
+        RouteRequest(snapshot.snapshot_digest, H_NET, LAYER, 1, _physical_settings()),
+        RouteRequest(snapshot.snapshot_digest, V_NET, LAYER, 2, _physical_settings()),
+        RouteRequest(snapshot.snapshot_digest, C_NET, LAYER, 3, _physical_settings()),
+    )
+    result = negotiate_routes(
+        snapshot,
+        NegotiatedRoutingRequest(
+            board_revision=snapshot.snapshot_digest,
+            requests=requests,
+            max_iterations=1,
+        ),
+        router=ParallelRouter(),
+    )
+
+    assert result.status is NegotiatedRoutingStatus.NO_PATH
+    assert result.candidates == ()
+    assert result.connections == ()
+    assert result.overflow_resources == ()
+    assert result.total_wire_length_nm == 0
+    assert result.unrouted_nets == (C_NET, H_NET, V_NET)
 
 
 def test_physical_clearance_accepts_exact_boundary_and_bounds_work() -> None:

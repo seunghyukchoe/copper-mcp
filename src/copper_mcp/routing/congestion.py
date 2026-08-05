@@ -645,10 +645,14 @@ def negotiate_routes(
             )
         if physical.failure is not None:
             # A lattice-clean allocation can still be physically illegal.  Never let this
-            # iteration contribute candidate copper to the best result or published response.
+            # iteration contribute candidate copper or connection evidence to the best result or
+            # published response.  Connections belong to the allocation as a whole: keeping one
+            # after its peer copper was discarded would misrepresent an incomplete proposal.
             unrouted.update(item.patch.net_id for item in candidates)
+            unrouted.update(connections)
             unrouted_tuple = tuple(sorted(unrouted))
             candidates = ()
+            connected = ()
             present_overflow = ()
             final_failure_message = physical.diagnostic
         score = _best_key(candidates, unrouted_tuple, present_overflow)
