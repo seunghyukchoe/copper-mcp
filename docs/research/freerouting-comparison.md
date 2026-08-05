@@ -54,6 +54,28 @@ process group is killed on overflow or timeout. The ranking is intentionally lex
 Board-text via/length values are secondary descriptive data.  KiCad DRC is authoritative;
 FreeRouting’s own score and CopperMCP’s internal checks are not substituted for it.
 
+## Closure receipts and command environment
+
+DRC-clean boards alone are deliberately insufficient. A completed comparison requires both
+content-addressed receipts in addition to both DRC reports:
+
+- `copper-mcp/freerouting-ses-import-receipt/v1` binds the source hash, the freshly produced,
+  nonempty bounded SES hash, the imported result-board hash, and workflow value
+  `kicad-specctra-ses-import`.
+- `copper-mcp/candidate-runner-receipt/v1` binds the source hash, an output emitted by the
+  successful optional CopperMCP runner, the evaluated board hash, and workflow value
+  `coppermcp-candidate-runner`.
+
+The receipt is an explicit provenance assertion, not a signature or a substitute for review.
+Any missing, malformed, mismatched, absent/invalid SES, or failed process leaves the report
+`unavailable_or_incomplete`, even if supplied boards are DRC-clean. This makes the evidence gap
+visible instead of allowing unrelated artifacts to close a comparison.
+
+All Java/JAR/KiCad/CopperMCP commands receive only `HOME`, `TMPDIR`, `PATH`, `LANG`, and `LC_ALL`;
+provider tokens and general inherited environment variables are not passed through. A supplied
+executable remains user-authorized code execution: process isolation here bounds lifecycle,
+output, and resource effects, but is not sandbox containment for malicious code.
+
 ## Reproduction procedure
 
 1. Create an Apache-2.0 or otherwise independently licensed fixture and record `origin`,
@@ -66,7 +88,8 @@ FreeRouting’s own score and CopperMCP’s internal checks are not substituted 
    disposable copy in KiCad as documented above.
 4. Produce CopperMCP’s competing disposable board using its supported candidate/replay path;
    preserve its source relation and supply it with `--copper-board`.  Supply the imported board
-   with `--freerouting-board`, then provide `--kicad-cli` to DRC both.
+   with `--freerouting-board`; create the matching receipt JSON files, then provide `--kicad-cli`
+   to DRC both.
 5. Treat `unavailable_or_incomplete` as a real outcome.  It means a prerequisite, an imported
    result, or authoritative DRC evidence is absent; it is neither a routing failure nor a quality
    win for either tool.
@@ -80,6 +103,8 @@ PYTHONPATH=src python scripts/benchmark_freerouting_comparison.py \
   --dsn work/independent-v1.dsn --java /path/to/java \
   --freerouting-jar /path/to/freerouting-2.2.4.jar --kicad-cli /path/to/kicad-cli \
   --copper-board work/copper.kicad_pcb --freerouting-board work/freerouting-imported.kicad_pcb \
+  --copper-receipt work/copper-receipt.json \
+  --freerouting-import-receipt work/freerouting-import-receipt.json \
   --seed 23 --timeout-seconds 300 --output benchmarks/results/routing/freerouting/run.json
 ```
 

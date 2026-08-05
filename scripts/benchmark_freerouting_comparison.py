@@ -59,6 +59,9 @@ MAX_DRC_REPORT_BYTES = 32 * 1024 * 1024
 MAX_JAR_BYTES = 512 * 1024 * 1024
 MAX_EXECUTABLE_BYTES = 128 * 1024 * 1024
 MAX_BOARD_ITEMS = 100_000
+FREEROUTING_RECEIPT_SCHEMA = "copper-mcp/freerouting-ses-import-receipt/v1"
+COPPER_RECEIPT_SCHEMA = "copper-mcp/candidate-runner-receipt/v1"
+_RECEIPT_SHA256 = re.compile(r"^sha256:[a-f0-9]{64}$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,6 +137,18 @@ def _kill_process(process: subprocess.Popen[bytes]) -> None:
     process.kill()
 
 
+def minimal_environment(workspace: Path) -> dict[str, str]:
+    """Return the only inherited environment visible to a benchmark child process."""
+
+    return {
+        "HOME": str(workspace),
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": os.defpath,
+        "TMPDIR": str(workspace),
+    }
+
+
 def run_process(argv: tuple[str, ...], timeout_seconds: int, cwd: Path) -> ProcessResult:
     """Run one process with bounded streaming capture and group termination on failure."""
 
@@ -146,6 +161,7 @@ def run_process(argv: tuple[str, ...], timeout_seconds: int, cwd: Path) -> Proce
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             start_new_session=os.name == "posix",
+            env=minimal_environment(cwd),
         )
     except OSError:
         return ProcessResult(
@@ -260,6 +276,72 @@ def _strict_json(payload: bytes, label: str) -> Any:
     except (UnicodeDecodeError, json.JSONDecodeError, RecursionError, ValueError) as error:
         raise ValueError(f"{label} is not bounded valid JSON") from error
     return value
+
+
+def _receipt(path: Path | None, schema: str) -> tuple[dict[str, str] | None, str]:
+    """Read an untrusted receipt as a small, path-free content binding."""
+
+    if path is None:
+        return None, "unavailable"
+    try:
+        value = _strict_json(read_bounded_bytes(path, MAX_PROVENANCE_BYTES), "receipt")
+    except (OSError, ValueError):
+        return None, "invalid"
+    if not isinstance(value, dict) or value.get("schema") != schema:
+        return None, "invalid"
+    required: tuple[str, ...] = ("source_sha256", "result_board_sha256")
+    if schema == FREEROUTING_RECEIPT_SCHEMA:
+        required += ("ses_sha256", "workflow")
+    else:
+        required += ("runner_output_sha256", "workflow")
+    if any(not isinstance(value.get(key), str) or len(value[key]) > 256 for key in required):
+        return None, "invalid"
+    if any(not _RECEIPT_SHA256.fullmatch(value[key]) for key in required if key.endswith("sha256")):
+        return None, "invalid"
+    expected_workflow = (
+        "kicad-specctra-ses-import"
+        if schema == FREEROUTING_RECEIPT_SCHEMA
+        else "coppermcp-candidate-runner"
+    )
+    if value["workflow"] != expected_workflow:
+        return None, "invalid"
+    return {key: value[key] for key in required}, "ok"
+
+
+def _validate_ses(path: Path) -> str | None:
+    """Accept only a bounded, nonempty Specctra-session shaped output."""
+
+    try:
+        payload = read_bounded_bytes(path, MAX_DSN_BYTES)
+        text = payload.decode("utf-8", errors="strict")
+    except (OSError, UnicodeDecodeError, ValueError):
+        return None
+    stripped = text.lstrip()
+    if not stripped.startswith("(session") or not stripped.rstrip().endswith(")"):
+        return None
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
+def _binding_status(
+    receipt: dict[str, str] | None,
+    *,
+    source_sha256: str | None,
+    result_board: Path | None,
+    output_sha256: str | None,
+    output_key: str,
+) -> str:
+    if receipt is None or source_sha256 is None or output_sha256 is None:
+        return "unavailable"
+    result_sha256 = _hash_or_none(result_board, MAX_BOARD_BYTES)
+    if result_sha256 is None:
+        return "unavailable"
+    if (
+        receipt["source_sha256"] != source_sha256
+        or receipt["result_board_sha256"] != result_sha256
+        or receipt[output_key] != output_sha256
+    ):
+        return "mismatch"
+    return "bound"
 
 
 def preflight(
@@ -452,6 +534,8 @@ def build_report(
     provenance: Path | None,
     copper_board: Path | None,
     freerouting_board: Path | None,
+    copper_receipt: Path | None,
+    freerouting_receipt: Path | None,
     copper_command: tuple[str, ...] | None,
     seed: int,
     timeout_seconds: int,
@@ -470,6 +554,8 @@ def build_report(
     )
     source_before = _hash_or_none(source, MAX_BOARD_BYTES)
     fixture, _ = _provenance(provenance)
+    free_receipt, free_receipt_status = _receipt(freerouting_receipt, FREEROUTING_RECEIPT_SCHEMA)
+    copper_run_receipt, copper_receipt_status = _receipt(copper_receipt, COPPER_RECEIPT_SCHEMA)
     report: dict[str, Any] = {
         "schema": SCHEMA,
         "recorded_at_utc": (timestamp or datetime.now(UTC)).replace(microsecond=0).isoformat(),
@@ -494,9 +580,15 @@ def build_report(
             "freerouting_boundary": "documented DSN/SES CLI",
             "source_preservation": "source bytes hashed before and after every process",
             "gpl_boundary": "released JAR process only; no FreeRouting source is copied or linked",
+            "command_environment": "minimal allowlisted environment; no inherited provider tokens",
+            "isolation_limit": (
+                "authorized executables are not sandboxed; isolation is lifecycle and resource "
+                "containment"
+            ),
         },
     }
     freerouting_process: ProcessResult | None = None
+    freerouting_ses_sha256: str | None = None
     if gate["available"] and dsn and java and jar:
         with tempfile.TemporaryDirectory(prefix="copper-mcp-freerouting-") as directory:
             workspace = Path(directory)
@@ -504,9 +596,12 @@ def build_report(
             freerouting_process = run_process(
                 freerouting_argv(java, jar, dsn, ses), timeout_seconds, workspace
             )
+            if freerouting_process.status == "ok":
+                freerouting_ses_sha256 = _validate_ses(ses)
             report["freerouting_process"] = {
                 **process_record(freerouting_process, "freerouting_dsn_ses"),
-                "ses_sha256": _hash_or_none(ses, MAX_DSN_BYTES),
+                "ses_sha256": freerouting_ses_sha256,
+                "ses_status": "valid" if freerouting_ses_sha256 else "missing_or_invalid",
             }
     else:
         report["freerouting_process"] = {
@@ -514,8 +609,25 @@ def build_report(
             "reason": "preflight did not close",
         }
 
+    freerouting_binding = (
+        _binding_status(
+            free_receipt,
+            source_sha256=source_before,
+            result_board=freerouting_board,
+            output_sha256=freerouting_ses_sha256
+            if freerouting_process and freerouting_process.status == "ok"
+            else None,
+            output_key="ses_sha256",
+        )
+        if free_receipt_status == "ok"
+        else free_receipt_status
+    )
+    report["freerouting_import_binding"] = {"status": freerouting_binding}
+
     copper_elapsed = 0
     generated_copper: Path | None = copper_board
+    copper_output_sha256: str | None = None
+    report["copper_process"] = {"status": "unavailable", "reason": "runner was not supplied"}
     if copper_command is not None and source_before is not None:
         with tempfile.TemporaryDirectory(prefix="copper-mcp-copper-runner-") as directory:
             workspace = Path(directory)
@@ -530,10 +642,28 @@ def build_report(
             report["copper_process"] = process_record(copper_process, "copper_runner")
             copper_elapsed = copper_process.elapsed_ns
             if copper_process.status == "ok" and output.is_file():
-                persisted = workspace / "result-copy.kicad_pcb"
-                persisted.write_bytes(read_bounded_bytes(output, MAX_BOARD_BYTES))
-                # The process output is ephemeral; an explicit board is required for DRC evidence.
-                report["copper_process"]["output_sha256"] = sha256_file(persisted, MAX_BOARD_BYTES)
+                try:
+                    output_bytes = read_bounded_bytes(output, MAX_BOARD_BYTES)
+                except (OSError, ValueError):
+                    report["copper_process"]["output_status"] = "missing_or_invalid"
+                else:
+                    copper_output_sha256 = "sha256:" + hashlib.sha256(output_bytes).hexdigest()
+                    report["copper_process"]["output_sha256"] = copper_output_sha256
+                    report["copper_process"]["output_status"] = "valid"
+            elif copper_process.status == "ok":
+                report["copper_process"]["output_status"] = "missing_or_invalid"
+    copper_binding = (
+        _binding_status(
+            copper_run_receipt,
+            source_sha256=source_before,
+            result_board=copper_board,
+            output_sha256=copper_output_sha256,
+            output_key="runner_output_sha256",
+        )
+        if copper_receipt_status == "ok"
+        else copper_receipt_status
+    )
+    report["copper_runner_binding"] = {"status": copper_binding}
     report["results"] = [
         _result_for_board(
             "copper_mcp", generated_copper, kicad_cli, timeout_seconds, ROOT, copper_elapsed
@@ -553,6 +683,8 @@ def build_report(
     report["comparison_closed"] = bool(
         gate["available"]
         and report["source_preserved"]
+        and freerouting_binding == "bound"
+        and copper_binding == "bound"
         and all(item.get("drc", {}).get("status") == "ok" for item in report["results"])
     )
     report["status"] = "completed" if report["comparison_closed"] else "unavailable_or_incomplete"
@@ -584,6 +716,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--freerouting-board", type=_path, help="KiCad copy after importing FreeRouting's SES."
     )
+    parser.add_argument("--freerouting-import-receipt", type=_path)
+    parser.add_argument("--copper-receipt", type=_path)
     parser.add_argument(
         "--copper-command-json",
         type=_path,
@@ -609,6 +743,8 @@ def main() -> int:
             provenance=args.fixture_provenance,
             copper_board=args.copper_board,
             freerouting_board=args.freerouting_board,
+            copper_receipt=args.copper_receipt,
+            freerouting_receipt=args.freerouting_import_receipt,
             copper_command=_parse_template(args.copper_command_json),
             seed=args.seed,
             timeout_seconds=args.timeout_seconds,

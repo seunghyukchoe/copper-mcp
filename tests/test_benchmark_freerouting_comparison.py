@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import sys
@@ -109,6 +110,165 @@ def test_report_process_evidence_never_includes_private_argv_or_child_output() -
     assert "argv" not in evidence
 
 
+def test_minimal_child_environment_does_not_inherit_provider_tokens(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "never-inherit")
+    environment = benchmark.minimal_environment(tmp_path)
+    assert "OPENAI_API_KEY" not in environment
+    assert set(environment) == {"HOME", "LANG", "LC_ALL", "PATH", "TMPDIR"}
+
+
+def _sha(payload: bytes) -> str:
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
+def _comparison_inputs(tmp_path: Path) -> dict[str, Path]:
+    source = tmp_path / "source.kicad_pcb"
+    board = tmp_path / "clean-but-unrelated.kicad_pcb"
+    dsn = tmp_path / "source.dsn"
+    provenance = tmp_path / "provenance.json"
+    for executable in ("java", "router.jar", "kicad-cli"):
+        (tmp_path / executable).write_bytes(b"tool")
+    source.write_text("(kicad_pcb (version 20240108))\n", encoding="utf-8")
+    board.write_text("(kicad_pcb (version 20240108))\n", encoding="utf-8")
+    dsn.write_text("(pcb test)\n", encoding="utf-8")
+    provenance.write_text(
+        json.dumps(
+            {
+                "origin": "independently-authored",
+                "license_spdx": "Apache-2.0",
+                "derivation_statement": "Authored for hostile harness tests.",
+            }
+        ),
+        encoding="utf-8",
+    )
+    return {
+        "source": source,
+        "board": board,
+        "dsn": dsn,
+        "provenance": provenance,
+        "java": tmp_path / "java",
+        "jar": tmp_path / "router.jar",
+        "kicad": tmp_path / "kicad-cli",
+    }
+
+
+def _clean_drc(*_args: object, **_kwargs: object) -> dict[str, object]:
+    return {"status": "ok", "hard_violations": 0, "unconnected": 0}
+
+
+def _build_kwargs(paths: dict[str, Path]) -> dict[str, Path]:
+    return {
+        "source": paths["source"],
+        "dsn": paths["dsn"],
+        "java": paths["java"],
+        "jar": paths["jar"],
+        "kicad_cli": paths["kicad"],
+        "provenance": paths["provenance"],
+    }
+
+
+def test_failed_freerouting_with_ses_and_clean_boards_cannot_close(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    paths = _comparison_inputs(tmp_path)
+    monkeypatch.setattr(
+        benchmark, "preflight", lambda **_kwargs: {"available": True, "reasons": [], "probes": {}}
+    )
+    monkeypatch.setattr(benchmark, "drc_metrics", _clean_drc)
+
+    def failed_router(argv: tuple[str, ...], *_args: object) -> object:
+        if "-do" in argv:
+            Path(argv[argv.index("-do") + 1]).write_text("(session)\n", encoding="utf-8")
+            return benchmark.ProcessResult(argv, 1, 1, "failed", "", "")
+        return benchmark.ProcessResult(argv, 1, 0, "ok", "", "")
+
+    monkeypatch.setattr(benchmark, "run_process", failed_router)
+    report = benchmark.build_report(
+        **_build_kwargs(paths),
+        copper_board=paths["board"],
+        freerouting_board=paths["board"],
+        copper_receipt=None,
+        freerouting_receipt=None,
+        copper_command=None,
+        seed=1,
+        timeout_seconds=1,
+    )
+    assert report["freerouting_process"]["status"] == "failed"
+    assert report["status"] == "unavailable_or_incomplete"
+
+
+def test_successful_router_without_valid_ses_cannot_close(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    paths = _comparison_inputs(tmp_path)
+    monkeypatch.setattr(
+        benchmark, "preflight", lambda **_kwargs: {"available": True, "reasons": [], "probes": {}}
+    )
+    monkeypatch.setattr(benchmark, "drc_metrics", _clean_drc)
+    monkeypatch.setattr(
+        benchmark,
+        "run_process",
+        lambda argv, *_args: benchmark.ProcessResult(argv, 1, 0, "ok", "", ""),
+    )
+    report = benchmark.build_report(
+        **_build_kwargs(paths),
+        copper_board=paths["board"],
+        freerouting_board=paths["board"],
+        copper_receipt=None,
+        freerouting_receipt=None,
+        copper_command=None,
+        seed=1,
+        timeout_seconds=1,
+    )
+    assert report["freerouting_process"]["ses_status"] == "missing_or_invalid"
+    assert report["status"] == "unavailable_or_incomplete"
+
+
+def test_unrelated_drc_clean_board_fails_ses_receipt_binding(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    paths = _comparison_inputs(tmp_path)
+    ses = b"(session)\n"
+    source_sha = _sha(paths["source"].read_bytes())
+    receipt = tmp_path / "freerouting-receipt.json"
+    receipt.write_text(
+        json.dumps(
+            {
+                "schema": benchmark.FREEROUTING_RECEIPT_SCHEMA,
+                "workflow": "kicad-specctra-ses-import",
+                "source_sha256": source_sha,
+                "ses_sha256": _sha(ses),
+                "result_board_sha256": _sha(b"not-the-evaluated-board"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        benchmark, "preflight", lambda **_kwargs: {"available": True, "reasons": [], "probes": {}}
+    )
+    monkeypatch.setattr(benchmark, "drc_metrics", _clean_drc)
+
+    def successful_router(argv: tuple[str, ...], *_args: object) -> object:
+        Path(argv[argv.index("-do") + 1]).write_bytes(ses)
+        return benchmark.ProcessResult(argv, 1, 0, "ok", "", "")
+
+    monkeypatch.setattr(benchmark, "run_process", successful_router)
+    report = benchmark.build_report(
+        **_build_kwargs(paths),
+        copper_board=paths["board"],
+        freerouting_board=paths["board"],
+        copper_receipt=None,
+        freerouting_receipt=receipt,
+        copper_command=None,
+        seed=1,
+        timeout_seconds=1,
+    )
+    assert report["freerouting_import_binding"]["status"] == "mismatch"
+    assert report["status"] == "unavailable_or_incomplete"
+
+
 def test_metric_priority_prefers_connectivity_and_drc_before_quality() -> None:
     clean = {
         "status": "ok",
@@ -150,6 +310,8 @@ def test_report_is_content_addressed_and_records_unavailable_preflight(tmp_path:
         provenance=provenance,
         copper_board=None,
         freerouting_board=None,
+        copper_receipt=None,
+        freerouting_receipt=None,
         copper_command=None,
         seed=23,
         timeout_seconds=1,
