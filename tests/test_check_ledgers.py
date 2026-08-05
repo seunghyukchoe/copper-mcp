@@ -244,6 +244,21 @@ def test_recorded_collision_does_not_excuse_a_second_duplicate(
     assert "D-003 is already allocated" in failures[0]
 
 
+def test_recorded_collision_excuses_only_one_duplicate_of_its_own_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A correction note records exactly one double allocation, so a third row fails."""
+    monkeypatch.setattr(
+        check_ledgers, "RECORDED_COLLISIONS", {(DECISION, "D-002"): "recorded by D-003"}
+    )
+    _write(tmp_path, DECISION, _decisions("D-001", "D-002", "D-002", "D-002", "D-003"))
+
+    failures, _ = _run_ids(tmp_path, monkeypatch)
+
+    assert len(failures) == 1
+    assert "excuses exactly one duplicate" in failures[0]
+
+
 def test_unused_collision_exception_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         check_ledgers, "RECORDED_COLLISIONS", {(DECISION, "D-009"): "recorded by nothing"}

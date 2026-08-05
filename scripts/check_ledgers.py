@@ -288,6 +288,7 @@ def _classify_duplicate(
     first: LedgerEntry,
     used_replays: set[tuple[str, str]],
     used_collisions: set[tuple[str, str]],
+    excused_duplicates: set[tuple[str, str]],
     failures: list[str],
     notes: list[str],
 ) -> None:
@@ -310,6 +311,17 @@ def _classify_duplicate(
     collision_key = (space.document, entry.identifier)
     if collision_key in RECORDED_COLLISIONS:
         used_collisions.add(collision_key)
+        # A correction note records exactly one double allocation, so the
+        # exception spends itself on the second occurrence and any further
+        # repeat of the same identifier is a new defect, not history.
+        if collision_key in excused_duplicates:
+            failures.append(
+                f"{space.document}:{entry.line} {entry.identifier} repeats again after its "
+                f"recorded collision; the correction note excuses exactly one duplicate, so "
+                "allocate the next free number instead of reusing this one"
+            )
+            return
+        excused_duplicates.add(collision_key)
         notes.append(
             f"{space.document}: {entry.identifier} is a recorded historical collision "
             f"(lines {first.line} and {entry.line}) — {RECORDED_COLLISIONS[collision_key]}"
@@ -327,6 +339,7 @@ def _check_ledger_ids(failures: list[str], notes: list[str]) -> dict[str, int]:
     highest: dict[str, int] = {}
     used_replays: set[tuple[str, str]] = set()
     used_collisions: set[tuple[str, str]] = set()
+    excused_duplicates: set[tuple[str, str]] = set()
 
     for space in LEDGER_ID_SPACES:
         path = ROOT / space.document
@@ -345,7 +358,14 @@ def _check_ledger_ids(failures: list[str], notes: list[str]) -> dict[str, int]:
                 first_seen[entry.number] = entry
             else:
                 _classify_duplicate(
-                    space, entry, seen, used_replays, used_collisions, failures, notes
+                    space,
+                    entry,
+                    seen,
+                    used_replays,
+                    used_collisions,
+                    excused_duplicates,
+                    failures,
+                    notes,
                 )
             if space.ordered and previous is not None and entry.number < previous.number:
                 # A recorded collision also displaces document order: merging two
