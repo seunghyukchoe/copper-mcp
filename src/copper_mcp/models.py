@@ -53,7 +53,15 @@ class BoardManifest:
 
 @dataclass(frozen=True, slots=True)
 class DrcSummary:
-    """Privacy-preserving evidence from an authoritative KiCad DRC run."""
+    """Privacy-preserving evidence from an authoritative KiCad DRC run.
+
+    ``passed`` is the compatibility hard-gate used by the routing/apply paths: it means that
+    KiCad reported no active errors or unconnected items.  It intentionally permits warnings and
+    exclusions because KiCad treats those as non-blocking findings.  ``clean`` is the stricter
+    presentation signal for public evidence: it is true only when the report has no findings or
+    ignored checks at all.  Keeping both signals prevents a warning-only report from being
+    advertised as a clean board while preserving the existing hard-gate semantics.
+    """
 
     base_revision: str
     drc_context_revision: str
@@ -68,6 +76,19 @@ class DrcSummary:
     violation_type_counts: Mapping[str, int]
     passed: bool
     schema_version: str = SCHEMA_VERSION
+
+    @property
+    def clean(self) -> bool:
+        """Whether the authoritative report contains no findings or ignored checks."""
+
+        return (
+            self.error_count == 0
+            and self.warning_count == 0
+            and self.exclusion_count == 0
+            and self.ignored_check_count == 0
+            and self.unconnected_count == 0
+            and not self.violation_type_counts
+        )
 
     def __post_init__(self) -> None:
         for name, revision in (
@@ -139,6 +160,7 @@ class DrcSummary:
             "unconnected_count": self.unconnected_count,
             "violation_type_counts": dict(self.violation_type_counts),
             "passed": self.passed,
+            "clean": self.clean,
             "schema_version": self.schema_version,
         }
 

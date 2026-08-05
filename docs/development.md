@@ -58,6 +58,11 @@ tool and `copper-mcp preview-route`, and only when the caller sets `include_drc`
 budgets. Preview must remain free of file writes, durable candidates, and jobs; a candidate-file
 export, persistence, or apply action still needs a separate public contract and security review.
 
+`run_layered_route_candidate_drc()` follows the same boundary for the narrow two-signal-layer
+proposal. It requires the original `LayeredRouteRequest`, replays the candidate before serialization,
+and binds full-stack through-vias to the private KiCad DRC context. The layered evidence remains an
+internal, read-only gate; it is not exposed through MCP or CLI and cannot issue an apply token.
+
 ## Public request boundary
 
 Every public service that accepts a JSON-shaped request parses it through `request_boundary.py`.

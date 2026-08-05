@@ -1,0 +1,30 @@
+{
+  "evidence_source_commit": "5a2c1073de2a97cbb69e3a54d5077db0d4a24ba8",
+  "fixture": "tests/fixtures/routing-policy/reference-input.json",
+  "fixture_sha256": "6b0ba439feaae88d4576617fdf71398028ba0c46f43411bb58ad3befd9b0d3ae",
+  "implementation_commit": "f1af095bfd6712969b0f9fb29933cd48aedef0dc",
+  "metrics": {
+    "closed_decision_accepted": true,
+    "copper_emitted": false,
+    "decision_bytes_sha256": "sha256:f32c14376c8ced7c110199ba139dd94d3ca7f6a386213d56b4d3f3dc5e07ece7",
+    "decision_digest": "sha256:f32c14376c8ced7c110199ba139dd94d3ca7f6a386213d56b4d3f3dc5e07ece7",
+    "deterministic_decision": true,
+    "deterministic_trace": true,
+    "hostile_decision_refused": true,
+    "physical_validity_claim": false,
+    "replay_count": 10,
+    "routing_invoked": false,
+    "routing_quality_claim": false,
+    "trace_bytes_sha256": "sha256:a0ca2e4fdd273b8113b1b51dcb04a7f5d09f0f6b55f59f70b51c7167d803cb10"
+  },
+  "non_claims": [
+    "route construction, candidate geometry, or copper emission",
+    "route-quality or model-quality improvement",
+    "physical validity, KiCad DRC, fabrication, or FreeRouting parity",
+    "trace-digest secrecy, unlinkability, or resistance to complete-record dictionary tests"
+  ],
+  "run_id": "sha256:b7ffb5991153a3612764296761a9813c669e536f282f49077c368678ac107ab7",
+  "schema": "copper-mcp/benchmark/routing-policy/v2",
+  "script": "scripts/benchmark_routing_policy.py",
+  "script_sha256": "6070cd25dac1a166cbeba8d5e6b3a78932b165416e9f1940ba26c2751c393e00"
+}

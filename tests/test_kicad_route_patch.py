@@ -93,6 +93,48 @@ def _with_back_copper(source: bytes) -> bytes:
     return source[:closing] + segment + source[closing:]
 
 
+def _three_pad_source() -> bytes:
+    third_footprint = b"""  (footprint "CopperMCP_RoutePad"
+    (layer "F.Cu")
+    (uuid "20000000-0000-0000-0000-000000000006")
+    (at 20 22 0)
+    (pad "1" smd rect
+      (at 0 0 0)
+      (size 2 2)
+      (layers "F.Cu" "F.Mask" "F.Paste")
+      (net "AUDIO")
+      (uuid "20000000-0000-0000-0000-000000000007")
+    )
+  )
+"""
+    return FIXTURE.read_bytes().replace(b"  (gr_rect", third_footprint + b"  (gr_rect")
+
+
+def _pre_batched_candidate() -> tuple[bytes, KiCadConstraintProfile, RouteCandidate]:
+    source = _three_pad_source()
+    profile = _profile()
+    conversion = parse_kicad_bytes(source, profile)
+    assert conversion.snapshot is not None
+    assert conversion.diagnostics == ()
+    snapshot = conversion.snapshot
+    result = AStarRouter.for_replay(
+        router_version="astar-grid/0.4.0",
+        policy="orthogonal-a-star-v1",
+        ordering_policy="component-mst-v1",
+        pad_count=3,
+    ).propose(
+        snapshot,
+        RouteRequest(
+            board_revision=snapshot.snapshot_digest,
+            net_id=net_id_for_name("AUDIO"),
+            layer_id="layer:F.Cu",
+            seed=23,
+        ),
+    )
+    assert result.candidate is not None
+    return source, profile, result.candidate
+
+
 def test_candidate_board_render_is_deterministic_read_only_and_round_trips() -> None:
     source, profile, candidate = _snapshot_and_candidate()
     snapshot = parse_kicad_bytes(source, profile).snapshot
@@ -121,6 +163,43 @@ def test_candidate_board_render_is_deterministic_read_only_and_round_trips() -> 
     assert patched.snapshot.content.source.generator == "copper-mcp"
     assert b'(generator "copper-mcp")' in first
     assert f'(generator_version "{__version__}")'.encode() in first
+
+
+def test_pre_batched_multi_pin_candidate_replays_and_renders_byte_deterministically() -> None:
+    source, profile, candidate = _pre_batched_candidate()
+    snapshot = parse_kicad_bytes(source, profile).snapshot
+    assert snapshot is not None
+    original_identity = canonical_candidate_bytes(candidate)
+
+    first = render_kicad_candidate_board(source, snapshot, candidate, profile)
+    second = render_kicad_candidate_board(source, snapshot, candidate, profile)
+
+    assert candidate.router_version == "astar-grid/0.4.0"
+    assert candidate.ordering_policy == "component-mst-v1"
+    assert canonical_candidate_bytes(candidate) == original_identity
+    assert first == second
+    patched = parse_kicad_bytes(first, profile)
+    assert patched.snapshot is not None
+    assert patched.diagnostics == ()
+    assert len(patched.snapshot.content.segments) == sum(
+        len(path.vertices) - 1 for path in candidate.patch.paths
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (("router_version", "unknown-router-v1"), ("ordering_policy", "batched-1-steiner-v1")),
+)
+def test_render_refuses_unknown_or_invalid_historical_replay_dispatch(
+    field: str, value: str
+) -> None:
+    source, profile, candidate = _pre_batched_candidate()
+    snapshot = parse_kicad_bytes(source, profile).snapshot
+    assert snapshot is not None
+    altered = _rehash(replace(candidate, candidate_id=EMPTY_DIGEST, **{field: value}))
+
+    with pytest.raises(KiCadRoutePatchError, match="router compatibility is unsupported"):
+        render_kicad_candidate_board(source, snapshot, altered, profile)
 
 
 def test_round_trip_preserves_canonical_order_with_existing_back_copper() -> None:
@@ -289,7 +368,7 @@ def test_candidate_board_render_rejects_stale_tampered_and_non_replayed_inputs()
             router_version="forged-router-v1",
         )
     )
-    with pytest.raises(KiCadRoutePatchError, match="deterministic router replay"):
+    with pytest.raises(KiCadRoutePatchError, match="router compatibility is unsupported"):
         render_kicad_candidate_board(source, snapshot, forged, profile)
 
 

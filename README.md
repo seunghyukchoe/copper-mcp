@@ -130,6 +130,12 @@ The non-negotiable boundary is simple:
   replace that is verified afterwards and rolled back if it fails. Route patches only: nothing
   applies a placement, there is no merge, no lock override, and no batch apply.
 - MCP tools and a stable CLI over the same application services.
+- An optional official `kicad-python` IPC observer and KiCad PCB-editor plugin that report only a
+  live board digest, version compatibility, and bounded object counts; they never mutate KiCad or
+  expose board text, net names, UUIDs, or geometry.
+- A read-only `observe_live_board_scene` bridge that converts the exact active-editor snapshot into
+  Circuit Scene `0.2.0` geometry under `board: "live"`, with optional stale board/snapshot digest
+  checks. Live routing, placement, DRC, and apply remain separate gates.
 - Professional CI, CodeQL, dependency auditing, release automation, issue forms, and project ledgers.
 
 See the [roadmap](docs/roadmap.md) for routing and KiCad IPC milestones.
@@ -170,7 +176,9 @@ meaning with bounded visual observation. Models may propose placement intent and
 placement previews or candidates; deterministic code remains responsible for snapping,
 connectivity, clearance, provenance, validation, and any separately authorized apply. Direct AI
 mutation of KiCad files or live editor state is not part of this architecture. Circuit Scene IR,
-placement preview/candidates, and placement apply are a north star and do not exist today.
+placement preview/candidates, the read-only live IPC observer, and the read-only IPC-to-scene
+bridge now exist; live placement/routing action gates, placement apply, and direct AI mutation
+remain future work.
 
 ## Quick start
 
@@ -182,6 +190,22 @@ source .venv/bin/activate
 python -m pip install -e ".[dev,security]"
 make check
 ```
+
+To inspect a running KiCad PCB Editor through the official local IPC binding, install the optional
+extra and enable KiCad's IPC server in the editor preferences:
+
+```bash
+python -m pip install -e ".[kicad]"
+export COPPER_MCP_WORKSPACE=/absolute/path/to/boards
+copper-mcp-server
+```
+
+Call the read-only MCP tool `inspect_live_board` for a redacted digest/metadata probe. To request
+semantic geometry from the active editor, call `observe_live_board_scene` with the same constraints
+and region fields as `observe_board_scene`, but set `board` to the literal `live`. KiCad 9/10
+requires a running GUI session, and the tools refuse a newer KiCad than the installed
+`kicad-python` binding by default. Include both returned digests on a repeat call when you need a
+stale-session refusal; live routing and placement still require file-backed action gates.
 
 Inspect a board without modifying it:
 
@@ -295,9 +319,21 @@ copper-mcp --workspace /absolute/path/to/boards preview-route example.kicad_pcb 
   --via-diameter-nm 800000 --via-drill-nm 400000 --drc
 ```
 
-The preview writes no file, creates no job, and stores no candidate. It succeeds only for the
-documented Board IR subset and the two-pad single-layer routing case; anything else returns a typed
-diagnostic or bounded conversion-code counts. The response contains the geometry CopperMCP
+An AI client does not need the hidden KiCad net name. It can copy a `net_id`, `board_revision`, and
+`snapshot_digest` from `observe_board_scene` into the revision-bound selector:
+
+```bash
+copper-mcp --workspace /absolute/path/to/boards preview-route example.kicad_pcb \
+  --net-ref-id net:name:... \
+  --expect-board-revision sha256:... --expect-snapshot-digest sha256:... \
+  --layer F.Cu --clearance-nm 250000 --track-width-nm 250000 \
+  --via-diameter-nm 800000 --via-drill-nm 400000
+```
+
+The preview writes no file, creates no job, and stores no candidate. A changed board or Board IR
+snapshot returns `stale_revision` instead of routing against state the client has not observed. It
+succeeds only for the documented Board IR and single-layer routing subset; anything else returns a
+typed diagnostic or bounded conversion-code counts. The response contains the geometry CopperMCP
 generated, so hosts that must not disclose generated copper to a model should not enable the
 `preview_route` tool.
 

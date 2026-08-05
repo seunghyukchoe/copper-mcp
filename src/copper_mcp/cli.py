@@ -55,15 +55,23 @@ def _preview_request(args: argparse.Namespace) -> dict[str, Any]:
         for option in _ROUTER_SETTING_OPTIONS
         if getattr(args, option) is not None
     }
-    return {
+    request: dict[str, Any] = {
         "board": args.path,
-        "net": args.net,
         "layer": args.layer,
         "seed": args.seed,
         "include_drc": args.drc,
         "constraints": _constraints(args),
         "settings": overrides,
     }
+    if args.net is not None:
+        request["net"] = args.net
+    else:
+        request["net_ref_id"] = args.net_ref_id
+    if args.expect_board_revision is not None:
+        request["expect_board_revision"] = args.expect_board_revision
+    if args.expect_snapshot_digest is not None:
+        request["expect_snapshot_digest"] = args.expect_snapshot_digest
+    return request
 
 
 def _scene_request(args: argparse.Namespace) -> dict[str, Any]:
@@ -195,10 +203,22 @@ def build_parser() -> argparse.ArgumentParser:
         board_ir_parser.add_argument(f"--{option.replace('_', '-')}", type=int, required=True)
 
     preview_parser = subparsers.add_parser(
-        "preview-route", help="Preview one two-pin route candidate without modifying files"
+        "preview-route", help="Preview one route candidate without modifying files"
     )
     preview_parser.add_argument("path", help="Board path relative to the workspace")
-    preview_parser.add_argument("--net", required=True, help="KiCad net name to route")
+    preview_selector = preview_parser.add_mutually_exclusive_group(required=True)
+    preview_selector.add_argument("--net", help="KiCad net name to route")
+    preview_selector.add_argument(
+        "--net-ref-id", help="Opaque net reference copied from Circuit Scene"
+    )
+    preview_parser.add_argument(
+        "--expect-board-revision",
+        help="Scene board revision; required with --net-ref-id",
+    )
+    preview_parser.add_argument(
+        "--expect-snapshot-digest",
+        help="Scene snapshot digest; required with --net-ref-id",
+    )
     preview_parser.add_argument("--layer", required=True, help="Copper layer name, such as F.Cu")
     for option in _CONSTRAINT_OPTIONS:
         preview_parser.add_argument(f"--{option.replace('_', '-')}", type=int, required=True)

@@ -1,0 +1,103 @@
+{
+    "benchmark": "layered-board-ir-adapter-v1",
+    "configuration": {
+        "case_count": 6,
+        "kiCad_invoked": false,
+        "repetitions_per_case": 10,
+        "router": "board-layered-a-star-v1",
+        "script_sha256": "0cebb5563952a4d4ba8510e0232c6b29d3c12e6fd8e52ff88eff673664d062f8"
+    },
+    "created_at_utc": "2026-08-04T15:39:10.297439+00:00",
+    "dataset": {
+        "external_content": false,
+        "fixture_set": "synthetic-two-layer-board-ir-v1",
+        "license": "not_applicable_independently_authored"
+    },
+    "environment": {
+        "platform": "macOS-26.5.2-arm64-arm-64bit",
+        "python": "3.12.13"
+    },
+    "metrics": {
+        "case_results": [
+            {
+                "candidate_id": "sha256:0fd68a4788eeae8de506d8913f8ad44c8fa9e4a2ebadc352f54ca70642aeb590",
+                "diagnostic": null,
+                "expanded_states": 9,
+                "name": "same_layer",
+                "obstacle_checks": 0,
+                "ok": true,
+                "path_count": 1,
+                "via_count": 0,
+                "wire_length_nm": 8000
+            },
+            {
+                "candidate_id": "sha256:9d69b0f7a3d5c9b8ba04575450806afe830fcd779e9dd6b0b48b9cf53d0238a9",
+                "diagnostic": null,
+                "expanded_states": 20,
+                "name": "via_required",
+                "obstacle_checks": 90,
+                "ok": true,
+                "path_count": 2,
+                "via_count": 2,
+                "wire_length_nm": 8000
+            },
+            {
+                "candidate_id": null,
+                "diagnostic": "no_path",
+                "expanded_states": 36,
+                "name": "both_layers_blocked",
+                "obstacle_checks": 312,
+                "ok": false,
+                "path_count": 0,
+                "via_count": 0,
+                "wire_length_nm": 0
+            },
+            {
+                "candidate_id": null,
+                "diagnostic": "no_path",
+                "expanded_states": 18,
+                "name": "via_keepout_blocked",
+                "obstacle_checks": 115,
+                "ok": false,
+                "path_count": 0,
+                "via_count": 0,
+                "wire_length_nm": 0
+            },
+            {
+                "candidate_id": null,
+                "diagnostic": "stale_revision",
+                "expanded_states": 0,
+                "name": "stale_revision",
+                "obstacle_checks": 0,
+                "ok": false,
+                "path_count": 0,
+                "via_count": 0,
+                "wire_length_nm": 0
+            },
+            {
+                "candidate_id": null,
+                "diagnostic": "off_grid",
+                "expanded_states": 0,
+                "name": "off_grid",
+                "obstacle_checks": 0,
+                "ok": false,
+                "path_count": 0,
+                "via_count": 0,
+                "wire_length_nm": 0
+            }
+        ],
+        "deterministic_replays": 60,
+        "source_unchanged": true,
+        "tamper_rejected": true,
+        "via_required_success": true
+    },
+    "not_claimed": [
+        "source-preserving KiCad serialization",
+        "KiCad DRC or refill authority",
+        "whole-board completion",
+        "multi-net congestion, rip-up, or FreeRouting parity",
+        "electrical, SI/PI, thermal, DFM, or fabrication readiness"
+    ],
+    "run_id": "sha256:6691b5c860ae3d48eb6e9c6710c5308247de6e43011486098e976f1a4f13f79a",
+    "source_commit": "b19b2d020ac017d34f0911176fc88733895f3d4d"
+}

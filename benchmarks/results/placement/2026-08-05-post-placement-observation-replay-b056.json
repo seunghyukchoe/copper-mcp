@@ -1,0 +1,63 @@
+{
+  "date_utc": "2026-08-05",
+  "environment": {
+    "kicad_cli": "/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli",
+    "python": "3.14.2"
+  },
+  "fixture": "placement-v0.1/placement-legal.kicad_pcb",
+  "metrics": {
+    "binding_signatures": 1,
+    "drc_summary": [
+      true,
+      false,
+      0,
+      0,
+      0,
+      5,
+      0
+    ],
+    "drc_summary_signatures": 1,
+    "median_observation_ns": 388642375,
+    "post_apply_board_bytes_preserved": true,
+    "repetitions": 3,
+    "same_revision_scene_drc_binding": true,
+    "workspace_mutations": false,
+    "workspace_state_after": {
+      "digest": "sha256:aa1aad576600947b500c18fdd06737288d20d43656594ae645b0a86aa79e632a",
+      "entries": 2,
+      "fingerprint_fields": [
+        "kind",
+        "path",
+        "mode",
+        "inode",
+        "mtime_ns",
+        "sha256",
+        "size",
+        "target"
+      ]
+    },
+    "workspace_state_before": {
+      "digest": "sha256:aa1aad576600947b500c18fdd06737288d20d43656594ae645b0a86aa79e632a",
+      "entries": 2,
+      "fingerprint_fields": [
+        "kind",
+        "path",
+        "mode",
+        "inode",
+        "mtime_ns",
+        "sha256",
+        "size",
+        "target"
+      ]
+    }
+  },
+  "not_claimed": [
+    "apply provenance beyond the returned revision",
+    "live editor CAS",
+    "ERC/electrical/fabrication signoff",
+    "FreeRouting parity"
+  ],
+  "run_id": "sha256:bca66bf635e4f669b959f371dd098168ca8fe4633696f07f32c779f60d1af8b3",
+  "schema": "copper-mcp/benchmark/post-placement-observation/v1",
+  "source_commit": "b49813027c8b024863847f53630dac7718cb0a48"
+}

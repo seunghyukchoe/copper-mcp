@@ -24,6 +24,13 @@ _MAX_OBSTACLE_CHECKS = 10_000_000
 SINGLE_PATH_ORDERING = "single-path"
 #: Deterministic minimum spanning tree over the net's initial connected components.
 COMPONENT_MST_ORDERING = "component-mst-v1"
+#: Bounded clean-room one-Steiner ordering heuristic over evolving component envelopes.
+#:
+#: This is deliberately not named FLUTE: the policy uses a median-point lower-cost signal to
+#: choose which components to merge, while the existing exact A* leg search still constructs and
+#: validates every emitted path.  The name is part of candidate identity so replay never
+#: silently changes topology.
+BATCHED_ONE_STEINER_ORDERING = "batched-1-steiner-v1"
 
 
 def _integer(name: str, value: int, *, minimum: int = 0, maximum: int = _JSON_SAFE_INTEGER) -> None:
@@ -416,6 +423,12 @@ class RouteResult:
 
 
 CancellationCheck = Callable[[], bool]
+
+# Internal, candidate-only policy hook used by negotiated multi-net routing.  The callback is
+# intentionally expressed in world coordinates rather than lattice indices so the deterministic
+# A* core does not expose its private search state to policy code.  A penalty is an integer search
+# ordering term; it is never included in a candidate's physical cost or treated as DRC evidence.
+CongestionPenalty = Callable[[PointNM, PointNM], int]
 
 
 class RoutingBackend(Protocol):

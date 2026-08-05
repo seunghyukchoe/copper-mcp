@@ -7,7 +7,20 @@
 disposable KiCad board, and the internal KiCad service can bind that private derivative to
 authoritative DRC evidence. A bounded, non-mutating preview now exposes that pipeline through MCP
 and the CLI. The slice remains smaller than issue #10's complete acceptance target: it does not
-route multiple nets, run durable jobs, persist or export candidate boards, or apply copper.
+route multiple nets, persist or export candidate boards, or apply copper. The protocol-independent
+`RoutingJobWorker` can execute one redacted job under a bounded CAS lease, but request/result
+persistence and MCP job tools remain separate roadmap gates.
+
+The internal `LayeredBoardRouter` is a separate Board IR-bound proposal seam. It accepts only the
+narrow two-signal-layer matrix in [ADR-0036](../adr/0036-board-ir-layered-proposal-adapter.md),
+emits immutable paths and through-vias, and is covered by B-018. The read-only MCP
+`preview_layered_route` surface now exposes that proposal seam with pad-reference net inference
+and double compare-and-swap binding. A disposable serializer replays the request, emits
+source-preserving segments and canonical full-stack through-vias, and proves a Board IR round
+trip. `verify_layered_candidate` now gates that serializer with explicit path/via topology,
+endpoint-layer, duplicate/crossing, and endpoint-via checks; its result keeps physical validation
+explicitly `not_modelled`. The public tool deliberately does not invoke the serializer.
+Authoritative DRC remains required before routing through vias can be marked complete.
 
 ## Accepted input
 
@@ -156,19 +169,22 @@ the obstacle-check budget, so the every-64-checks cancellation cadence applies u
 Connectivity is asked of nets of any width. When every pad of the net lands in one component the
 router returns a typed `RouteConnection` instead of a candidate, whatever the pad count; its
 `pad_count` field distinguishes the cases, and its `start_pad_id`/`end_pad_id` are the
-lexicographically first and last pads, which bound the set rather than naming a route. Routing a
-multi-pin net remains unsupported: a net that is not fully connected and has more than two pads gets
-the unchanged `invalid_two_pin_net` refusal. A net carrying a same-net via or zone is never claimed
-connected, because that copper is not represented here; a two-pin net names the via or zone
-directly, while a wider one is refused for its pad count, which is the more useful fact about it.
+lexicographically first and last pads, which bound the set rather than naming a route. A multi-pin
+net that is not fully connected now enters the bounded tree path, which supports up to nine evolving
+components. Larger or unsupported cases still fail closed with the typed `invalid_two_pin_net`
+diagnostic. A net carrying a same-net via or zone is never claimed connected, because that copper
+is not represented here; a two-pin net names the via or zone directly, while a wider one is refused
+for its pad count, which is the more useful fact about it.
 
 If both pads land in one component the router returns a typed `RouteConnection` instead of a
 candidate: the net is already connected on the selected layer and there is nothing to route. That is
 a terminal success, not a `RouteFailureCode`. Otherwise the search is seeded from every lattice node
 the source component's segment cores cover and terminates on any node the target component's cores
 cover; a rectangle's covered index range is solved directly rather than by scanning the lattice, and
-each emitted node charges the obstacle budget. Pads contribute only their centre node, so a board
-without same-net copper produces byte-identical geometry to the single-source contract.
+each emitted node charges the obstacle budget. Pads contribute only their centre node for two-pin
+routing, so a board without same-net copper produces byte-identical geometry to the single-source
+contract. Multi-pin attachment seeds from pad cores so off-grid pad centres do not make a valid tree
+impossible.
 
 Because two components cannot both contain the same node without having been unioned, the seed and
 target sets are provably disjoint and the emitted patch always has at least one edge. The heuristic
@@ -261,8 +277,12 @@ derivative records `copper-mcp` plus its package version as its KiCad writer.
 The rendered bytes stay under the same parser, byte, and total-object budgets and are parsed back
 through the supported KiCad adapter. The complete modeled content must equal the base snapshot after
 replacing only source revision and writer provenance and appending the expected segments. The
-function performs no file write, durable export, subprocess call, preview, MCP action, or board
-mutation. DRC orchestration remains a separate adapter boundary.
+function first runs the pure bounded layered-candidate topology verifier; it refuses disconnected,
+crossing, duplicate, stale, and unsupported endpoint-via geometry before rendering. It performs no
+file write, durable export, subprocess call, preview, MCP action, or board mutation.
+`run_layered_route_candidate_drc()` is the separate internal boundary that invokes
+authoritative KiCad DRC against this exact replay; it does not make the layered candidate public or
+grant apply authority.
 
 ## Candidate-bound authoritative DRC
 
@@ -287,6 +307,14 @@ an adapter failure; warning-only or exclusion-only evidence may still have a har
 candidate bytes, raw descriptions, coordinates, UUIDs, or net names are returned. A KiCad 10.0.5
 integration test runs this path from the original synthetic two-pad fixture and verifies that source
 bytes, inode, modification time, and workspace entries remain unchanged.
+
+The layered counterpart, `run_layered_route_candidate_drc()`, accepts the original
+`LayeredRouteRequest`, replays it through `LayeredBoardRouter`, renders the two-layer derivative with
+full-stack through-vias, and feeds the same private context and fixed CLI vector to KiCad. Its frozen
+evidence binds the layered candidate, Board IR base revision, source bytes, patched board, complete
+DRC context, and aggregate summary. A KiCad 10.0.5 run against the blocked-pad fixture reports zero
+errors and zero unconnected items while preserving the source inode, mtime, and bytes. This is a
+candidate-evidence gate, not multilayer completion, negotiated congestion, or FreeRouting parity.
 
 ## Public non-mutating preview
 
@@ -353,29 +381,42 @@ repository omits those flags, and the source is recaptured and compared afterwar
 enters Board IR: the router accepts verified islands as a parameter and never fetches them, so
 snapshots and their digests are unchanged and KiCad execution stays out of the search.
 
+For a foreign net, a matching fresh island set replaces that zone's conservative outline on the
+selected layer; each island is then an exact polygon obstacle with the strictest governing
+zone/net clearance plus the candidate track half-width. When multiple zones share a net/layer, the
+strictest zone clearance is used because island records do not carry a zone identifier. A fill
+island without a matching Board IR zone, or with a different source revision, is refused before
+search.
+
 Once freshness-bound, the pour is KiCad's own authority on where that copper is, so contact testing
 uses the polygon itself with exact integer geometry. Pad and track cores stay under-approximating;
 only the pour is exact. Reading is bounded by `max_fill_vertices`, default 50,000; CopperTone's pour
-is 4,314 vertices across two layers. Scope is deliberately connectivity only — using verified fill
-as a tighter routing *obstacle* than the conservative boundary envelope would change routed geometry
-on every zoned board and needs its own measurement.
+is 4,314 vertices across two layers. B-021 measures the narrow fill-aware routing core on a
+synthetic corridor: ten deterministic replays reduce wire length from 14,000 nm to 8,000 nm. The
+public preview now carries the same freshness evidence on routed candidates when
+`include_fill_authority` is set, with a typed `routing_effect` so an AI host can distinguish exact
+foreign-zone obstacles from same-net connectivity evidence. This is provenance, not a DRC or
+fabrication guarantee.
 
 ## Multi-pin trees
 
 A net with more than two pads is routed by sequential component merging. Connectivity analysis
-produces the net's initial components; those components are spanned by a minimum spanning tree with
-edges weighted by the exact integer rectilinear gap between component bounding boxes and ordered by
-`(gap, lower index, higher index)`, so the order is a pure function of the snapshot. Each edge is
-one leg, routed by the same multi-source/multi-target search a two-pin stub attachment uses: the
+produces the net's initial components. For at most nine evolving components, the clean-room
+`batched-1-steiner-v1` policy scores component pairs by the exact bounding-box gap minus a bounded
+median-point one-Steiner savings term, with stable index tie-breaks. It is a topology *ordering*
+guide, not a FLUTE lookup-table implementation or an optimality certificate. Larger nets retain the
+`component-mst-v1` order until a separately budgeted decomposition policy exists. Each ordered edge
+is one leg, routed by the same multi-source/multi-target search a two-pin stub attachment uses: the
 source component's copper supplies the seeds and the target component's the goals. A routed leg's
 copper joins the merged component, so later legs may attach anywhere along it, and because legs are
 same-net copper they are never obstacles to one another.
 
 What that claims is narrow and worth stating exactly: every pad ends in one component, each leg is
 optimal for the obstacles present *at the time that leg was routed*, and the whole result is
-reproducible. It does not claim Steiner optimality, and it does not revisit an earlier leg once a
-later one is routed. The ordering policy is recorded in candidate identity as `component-mst-v1`, so
-a FLUTE-guided or learned topology can be added later as a new policy without changing the contract.
+reproducible. It does not claim Steiner optimality, a global tree optimum, or FreeRouting parity,
+and it does not revisit an earlier leg once a later one is routed. The selected ordering policy is
+recorded in candidate identity, so a future FLUTE-guided, learned, or decomposed topology can be
+added as a new policy without changing the contract.
 
 Multi-pin legs seed from pad **cores** rather than pad centres. Requiring every pad centre to sit on
 one lattice is unworkable in practice: on this repository's own CopperTone board the largest grid
@@ -458,13 +499,18 @@ caller passes `include_fill_authority`, because believing a pour costs a KiCad r
 that the board's cached fill is what KiCad recomputes from it today. Without that flag `GND` is
 still refused, which is the honest default rather than a regression.
 
-Behind that sit routing *through* vias, which needs a layer-aware lattice this router does not have,
-and a lattice that does not require the pad-centre delta to divide by the grid step; neither is
-currently reached, because no net on this board still needs a route.
+Behind that sit routing *through* vias, which needs Board IR-bound layer-aware geometry this router
+does not yet have. An internal abstract two-layer A* oracle now exercises the maze-level primitive
+with explicit via transitions and deterministic budgets, but it does not model nanometre trace
+width/clearance, via annuli/drills, keepouts, net ownership, or KiCad serialization/DRC. The
+general production route contract therefore remains single-layer; the separate layered preview
+supports only its documented two-signal-layer subset and does not make this board a fully routed
+production design.
 
-Board IR handles a real two-layer audio board today, and the router still does not route one
-unaided. Attachment, polygon keepouts, and diagonal envelopes remain validated by purpose-built
-fixtures whose KiCad DRC evidence is real and which are checked to be discriminating. The
+Board IR handles a real two-layer audio board today, and the layered preview now routes only a
+bounded fixture subset with opt-in candidate-bound DRC evidence. Attachment, polygon keepouts, and
+diagonal envelopes remain validated by purpose-built fixtures whose KiCad DRC evidence is real and
+which are checked to be discriminating. The
 [roadmap](../roadmap.md) records the remainder as separate contracts.
 
 ## Safety boundary
@@ -478,10 +524,11 @@ It says nothing about electrical behavior, SI/PI, EMC, thermal performance, DFM,
 readiness, or hardware safety. Preview, persistence, and application require separate contracts.
 
 A committed `blocked-pad.kicad_pcb` fixture places a 2 mm x 8 mm foreign-net pad between the two
-endpoints. The router detours around it, and a KiCad 10.0.5 integration test asserts the resulting
-board reports zero DRC errors and zero unconnected items, so that rectangular obstacle path is
-checked against the authoritative tool rather than only against itself. No zone-specific KiCad DRC
-claim is made: candidate DRC intentionally does not refill zones, and cached fill is not authority.
+endpoints. The router detours around it, and the public `preview_layered_route` path can now opt in
+to the same private candidate replay: a KiCad 10.0.5 integration test asserts zero DRC errors, zero
+warnings, and zero unconnected items, with candidate/source/patched/context binding and unchanged
+source bytes, inode, and mtime. No zone-specific KiCad DRC claim is made: candidate DRC intentionally
+does not refill zones, and cached fill is not authority.
 The separate `blocked-zone.kicad_pcb` fixture exercises KiCad parsing through deterministic,
 read-only public preview and workspace-preservation checks, not authoritative zone-fill DRC.
 
@@ -514,4 +561,6 @@ See [ADR-0006](../adr/0006-bounded-deterministic-astar.md),
 [ADR-0011](../adr/0011-existing-copper-obstacles.md),
 [ADR-0012](../adr/0012-via-obstacles.md),
 [ADR-0013](../adr/0013-polygon-zone-obstacles.md),
-[ADR-0016](../adr/0016-same-net-attachment.md), and the [roadmap](../roadmap.md).
+[ADR-0016](../adr/0016-same-net-attachment.md),
+[ADR-0035](../adr/0035-internal-layered-search-oracle.md),
+[ADR-0036](../adr/0036-board-ir-layered-proposal-adapter.md), and the [roadmap](../roadmap.md).

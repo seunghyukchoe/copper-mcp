@@ -1,18 +1,19 @@
-# CopperMCP handoff — 2026-08-04
+# CopperMCP handoff — 2026-08-05
 
-State of the project after the Board IR 0.2 footprint-fidelity slice. This records the unreleased
+State of the project after the bounded placement-apply slice. This records the unreleased
 engineering state for whoever picks it up next, human or agent; it is not release authorization.
 
 ---
 
 ## 1. Where the project stands
 
-The slice branched from **`main` = `5f17f89`** as `feat/board-ir-v0-2-footprints`. Its exact head,
-full-gate count, hosted-CI result, and PR state must be read from Git/GitHub after integration rather
-than inferred from this document.
+The current work is on **`codex/live-route-proposal`** as a stacked PR chain. Its exact head,
+full-gate count, hosted-CI result, and PR state must be read from Git/GitHub rather than inferred
+from this document.
 
 **Released:** `v0.1.0` → `v0.4.0`, all with attested wheel and sdist artifacts. `v0.4.0` is the
-current release. The apply capability and the Board IR/Circuit Scene 0.2 work are unreleased; a
+current release. The route and bounded placement apply capabilities, plus the Board IR/Circuit Scene
+0.2 work, are unreleased; a
 future `v0.5.0` must follow the changelog, full-gate, and release-ledger process rather than treating
 this handoff as approval.
 
@@ -27,11 +28,11 @@ this handoff as approval.
 | Judge placement | `preview_placement` | Board IR-projected subjects, locked-move refusal, seven-rule intent language, three-valued legality |
 | Build | `render_circuit_schematic` | deterministic KiCad schematic from Circuit Intent IR |
 | Check | `run_board_drc` | fixed-argument headless DRC, read-only |
-| **Apply** | `apply_candidate` | route candidates written to the real file, **default off** |
+| **Apply route** | `apply_candidate` | route candidates written to the real file, **default off** |
+| **Apply placement** | `apply_placement_candidate` | bounded front-side pose candidates with placement-scoped token, CAS, backup, and atomic replacement, **default off** |
 
-Every one of these except `apply_candidate` is read-only or create-new. `apply_candidate` is the
-only surface that modifies an existing file, and it refuses unless the operator sets
-`COPPER_MCP_ALLOW_APPLY=1`.
+Every one of these except the two apply tools is read-only or create-new. Both apply tools refuse
+unless the operator sets `COPPER_MCP_ALLOW_APPLY=1`, and each requires its own single-use token.
 
 ---
 
@@ -90,15 +91,16 @@ These are not style preferences. Most of them were paid for with a bug. Preserve
   routed by its designer, and the router correctly recognizes that. Routing is proven on
   purpose-built fixtures with real KiCad DRC, not yet on a board that genuinely needed new copper.
   Finding or building that board is the missing empirical validation.
-- **Placement apply does not exist.** Preview and legalization only. Board IR 0.2 now binds
-  footprint pose, side, lock state, pad ownership, and its supported courtyard geometry, but still
-  omits author text, fabrication graphics, library identity, properties, and 3D-model pose. A pose
-  serializer cannot yet prove that it preserved everything KiCad would move or rewrite.
-- **Courtyard coverage is deliberately narrow.** The adapter accepts only front-side,
-  orthogonally rotated footprints with unfilled `fp_rect` centerlines on matching `F.CrtYd`.
-  Back-side footprints and line, polygon, arc, open, mixed, or mismatched courtyard topology fail
-  closed. `courtyard_overlap` remains `not_modelled` because the bounded side-aware evaluator is
-  absent, not because the supported rectangle is absent.
+- **Placement apply is deliberately narrow.** The file-backed service now applies only
+  replay-verified front-side, orthogonal, native-identity footprints with supported rectangular
+  `F.CrtYd` syntax. Author text, fabrication graphics, library identity, properties, 3D-model pose,
+  side flips, post-apply DRC/scene evidence, undo transactions, and live IPC mutation remain
+  outside the gate.
+- **Courtyard coverage is deliberately narrow.** The adapter observes bounded front/back
+  orthogonal footprints with matching rectangular courtyard layers, while the placement serializer
+  and apply path remain front-side-only. Line, polygon, arc, open, mixed, or mismatched courtyard
+  topology fails closed. Same-side rectangular overlap is evaluated exactly; configurable clearance
+  and general topology remain open.
 - **Apply gives a pre-apply copy, not a KiCad undo step.** Restoring is manual. IPC-based
   one-undo-commit apply is designed and deferred.
 - **Renders are whole-board even for a windowed scene**, and are advisory, never geometric
@@ -112,14 +114,13 @@ These are not style preferences. Most of them were paid for with a bug. Preserve
 
 ## 5. What to do next, in priority order
 
-1. **Generalize footprint/courtyard fidelity and implement legality.** Add source-oracle fixtures
-   before supporting back-side footprints or line/polygon/arc and multi-loop courtyard topology;
-   then build a bounded, side-aware evaluator. Until that evaluator exists,
-   `courtyard_overlap` must remain `not_modelled`.
-2. **Close the data-fidelity gap before placement apply.** Model and replay the author text,
+1. **Close placement data-fidelity and post-action gates.** Model and replay author text,
    fabrication graphics, library identity, properties, and 3D-model pose affected by a move, then
-   require exact source/revision binding and KiCad verification. Do not turn the existing preview
-   candidate into a write path by assumption.
+   add post-placement KiCad DRC/scene evidence, undo semantics, and live-editor CAS as separate
+   bounded contracts.
+2. **Generalize courtyard and side-aware geometry.** Add source-oracle fixtures for line/polygon/
+   arc and multi-loop topology, nonzero clearance, and safe side flips before widening mutation
+   support.
 3. **A board that actually needs routing.** Either author one or adopt a real open-hardware board
    with unrouted nets, then measure and record honest coverage. This converts the routing claims
    from fixture-proven to board-proven.
@@ -128,9 +129,11 @@ These are not style preferences. Most of them were paid for with a bug. Preserve
    in-memory document to a file digest; the research doc lays out the constraints.
 5. **`v0.5.0` release** once the unreleased surfaces have soaked, following the ledger discipline in
    `docs/ledgers/release-ledger.md`.
-6. **Deferred quality items**: fill-aware routing obstacles (currently connectivity only),
-   durable routing jobs and candidate persistence, the `PlacementBackend` solver seam, and the
-   `ordering_policy` seam for RSMT-guided topology. All are additive behind existing contracts.
+6. **Deferred quality items**: durable routing jobs and candidate persistence, negotiated
+   congestion/rip-up, the `PlacementBackend` solver seam, and the `ordering_policy` seam for
+   RSMT-guided topology. Fill-aware routing obstacles and their opt-in MCP provenance are now
+   complete for the bounded single-layer contract; all remaining items are additive behind
+   existing contracts.
 
 `R-033` (board regeneration) and issues #8 and #11 remain open on GitHub.
 
@@ -216,10 +219,10 @@ through 0026 for the recent arcs.
 
 ## 8. Public presence
 
-Development was published as it happened, and the posts are deliberately evidence-bound — real
-test counts, real DRC results, and limitations stated rather than omitted. The X account is
-`@studiodawol`; the session's thread runs from the kickoff post through the v0.4.0 release and the
-apply milestone, with each entry tied to a merged change.
+External social posting is paused by maintainer instruction. Keep public project communication in
+GitHub issues, pull requests, ledgers, release notes, and repository documentation. Any future
+social update must be explicitly re-authorized and remain evidence-bound — real test counts, real
+DRC results, and limitations stated rather than omitted.
 
 Repository discoverability: topics cover `mcp`, `model-context-protocol`, `kicad`, `pcb`,
 `pcb-automation`, `eda`, `autorouter`, `autorouting-research`, `ai-agents`, `llm-tools`,

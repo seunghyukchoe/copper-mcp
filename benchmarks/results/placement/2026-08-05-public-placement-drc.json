@@ -1,0 +1,37 @@
+{
+  "date_utc": "2026-08-05",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "fixture": "placement-v0.1/placement-legal.kicad_pcb",
+  "metrics": {
+    "aggregate_counts": {
+      "error_count": 0,
+      "exclusion_count": 0,
+      "ignored_check_count": 5,
+      "unconnected_count": 0,
+      "warning_count": 0
+    },
+    "aggregate_counts_deterministic": true,
+    "candidate_binding": true,
+    "clean_drc_runs": 0,
+    "context_binding": true,
+    "deterministic_evidence_digests": 1,
+    "kicad_version": "10.x",
+    "median_public_preview_drc_ns": 423686875,
+    "passed_drc_runs": 3,
+    "repetitions": 3,
+    "source_bytes_inode_mtime_preserved": true,
+    "workspace_mutations": 0
+  },
+  "not_claimed": [
+    "live placement DRC or IPC mutation",
+    "placement apply or KiCad undo",
+    "electrical or fabrication readiness",
+    "FreeRouting parity"
+  ],
+  "run_id": "sha256:96073306d5b6ca4c65730e90d7da91e4e28073f57527d065a878d3453ec76169",
+  "schema": "copper-mcp/benchmark/public-placement-preview-drc/v1",
+  "source_commit": "2d0172cf127522b73d5afa3c93bdcb49754038e5"
+}

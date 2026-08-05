@@ -1,0 +1,31 @@
+{
+  "date_utc": "2026-08-04T16:16:14+00:00",
+  "environment": {
+    "kicad_cli": "/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli",
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "fixture": "tests/fixtures/route-candidate/blocked-pad.kicad_pcb",
+  "metrics": {
+    "candidate_base_revision": "sha256:b313b00ca5c38b035168bc8195aee68c5e531a7f283eee4e3d263e864cd38ecc",
+    "candidate_id": "sha256:1ac8a82eca13195582fef2241571836341db1e8d8e04d87ab3fe728dd07857ee",
+    "deterministic_evidence": true,
+    "drc": true,
+    "error_count": 0,
+    "ignored_check_count": 5,
+    "kicad_invoked": true,
+    "kicad_version": "10.0.5",
+    "passed_runs": 10,
+    "patched_board_revision": "sha256:c732d5abaccb2d4521005ef15122d1038ff02f96a752df24ff640b69970f842c",
+    "patched_drc_context_revision": "sha256:a929034fa3e4ba7cfe9fcd2b5b0efd9c57b3d98566e691c24a74455229c7cc1c",
+    "repetitions": 10,
+    "source_unchanged": true,
+    "unconnected_count": 0,
+    "warning_count": 0,
+    "workspace_unchanged": true
+  },
+  "run_id": "sha256:4f71b18b7d6928680888fdc59b88658e0c9e24f126eb16d7e83d287b32d064cd",
+  "schema": "copper-mcp/benchmark/layered-kicad-drc/v1",
+  "script": "scripts/benchmark_layered_kicad_drc.py",
+  "source_commit": "b13d37d47b140847cf4dca31d6ebebfaa29c97ce"
+}

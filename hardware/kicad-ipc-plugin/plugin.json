@@ -1,0 +1,20 @@
+{
+  "$schema": "https://go.kicad.org/api/schemas/v1",
+  "identifier": "org.coppermcp.live-observer",
+  "name": "CopperMCP Live Observer",
+  "description": "Read-only redacted board summary for CopperMCP through KiCad IPC.",
+  "runtime": {
+    "type": "python",
+    "min_version": "3.11"
+  },
+  "actions": [
+    {
+      "identifier": "observe-live-board",
+      "name": "Observe Live Board",
+      "description": "Print a digest-bound, read-only board summary to the KiCad warning bar.",
+      "show-button": true,
+      "scopes": ["pcb"],
+      "entrypoint": "coppermcp_ipc_plugin.py"
+    }
+  ]
+}

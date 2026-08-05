@@ -78,12 +78,16 @@ def integer(name: str, value: Any, *, minimum: int, maximum: int) -> int:
 
 
 def text(name: str, value: Any, *, maximum: int) -> str:
-    """Accept only a bounded, control-character-free string."""
+    """Accept only bounded strict UTF-8 text without control characters."""
 
     if not isinstance(value, str) or not 1 <= len(value) <= maximum:
         raise RequestError(f"{name} must be a non-empty string of at most {maximum} characters")
     if _CONTROL_CHARACTERS.search(value):
         raise RequestError(f"{name} must not contain control characters")
+    try:
+        value.encode("utf-8", errors="strict")
+    except UnicodeEncodeError as error:
+        raise RequestError(f"{name} must contain valid Unicode scalar values") from error
     return value
 
 

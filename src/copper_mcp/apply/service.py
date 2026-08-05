@@ -33,15 +33,21 @@ from pathlib import Path
 from typing import Any
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
+from copper_mcp.adapters.kicad_placement_patch import KiCadPlacementPatchError
 from copper_mcp.adapters.kicad_route_patch import KiCadRoutePatchError
 from copper_mcp.apply.contracts import (
     ApplyDiagnostic,
     ApplyFailureCode,
     ApplyRequest,
     ApplyResult,
+    PlacementApplyRequest,
+    PlacementApplyResult,
     parse_apply_request,
+    parse_placement_apply_request,
 )
 from copper_mcp.apply.engine import ApplyEngineError, apply_route_candidate
+from copper_mcp.apply.placement_engine import apply_placement_candidate as apply_placement_bytes
+from copper_mcp.apply.placement_engine import verify_published_placement_board
 from copper_mcp.apply.tokens import (
     ApplyBinding,
     ApplyTokenAuthority,
@@ -49,6 +55,15 @@ from copper_mcp.apply.tokens import (
 )
 from copper_mcp.board_ir import NetClass, ParseLimits
 from copper_mcp.config import Settings
+from copper_mcp.placement.contracts import (
+    ORDERING_POLICY,
+    PLACEMENT_VERSION,
+    FootprintPlacement,
+    PlacementCandidate,
+    PlacementEvidence,
+    PlacementLegality,
+    RuleResult,
+)
 from copper_mcp.request_boundary import NET_CLASS_ID, NET_CLASS_NAME
 from copper_mcp.routing.astar import ROUTER_VERSION
 from copper_mcp.routing.contracts import RouteCandidate
@@ -179,6 +194,132 @@ def _candidate_from_manifest(payload: Any) -> RouteCandidate:
         raise ApplyEngineError("candidate manifest is malformed") from error
 
 
+def _placement_candidate_from_manifest(payload: Any) -> PlacementCandidate:
+    """Decode a bounded placement manifest without trusting its identity or verdict."""
+
+    if not isinstance(payload, Mapping):
+        raise ApplyEngineError("placement candidate manifest is malformed")
+
+    def strict_int(value: Any, message: str) -> int:
+        if type(value) is not int:  # bool is intentionally not an integer here
+            raise ApplyEngineError(message)
+        return value
+
+    def strict_text(value: Any, message: str) -> str:
+        if not isinstance(value, str) or len(value) > 256:
+            raise ApplyEngineError(message)
+        return value
+
+    def strict_bool(value: Any, message: str) -> bool:
+        if type(value) is not bool:
+            raise ApplyEngineError(message)
+        return value
+
+    try:
+        raw_placements = payload["placements"]
+        if not isinstance(raw_placements, list | tuple):
+            raise ApplyEngineError("placement candidate placements are malformed")
+        placements: list[FootprintPlacement] = []
+        for item in raw_placements:
+            if not isinstance(item, Mapping):
+                raise ApplyEngineError("placement entry is malformed")
+            origin = item["origin_nm"]
+            if not isinstance(origin, list | tuple) or len(origin) != 2:
+                raise ApplyEngineError("placement origin is malformed")
+            placements.append(
+                FootprintPlacement(
+                    ref_id=strict_text(item["ref_id"], "placement reference is malformed"),
+                    origin_x_nm=strict_int(origin[0], "placement origin is malformed"),
+                    origin_y_nm=strict_int(origin[1], "placement origin is malformed"),
+                    orientation_udeg=strict_int(
+                        item["orientation_udeg"], "placement rotation is malformed"
+                    ),
+                    side=strict_text(item["side"], "placement side is malformed"),
+                    moved=strict_bool(item["moved"], "placement moved flag is malformed"),
+                )
+            )
+        evidence_payload = payload["evidence"]
+        if not isinstance(evidence_payload, Mapping):
+            raise ApplyEngineError("placement evidence is malformed")
+        raw_rules = evidence_payload["rule_results"]
+        if not isinstance(raw_rules, list | tuple):
+            raise ApplyEngineError("placement rule evidence is malformed")
+        rules = tuple(
+            RuleResult(
+                rule_index=strict_int(item["rule_index"], "placement rule evidence is malformed"),
+                kind=strict_text(item["kind"], "placement rule evidence is malformed"),
+                status=strict_text(item["status"], "placement rule evidence is malformed"),
+                residual_nm=strict_int(item["residual_nm"], "placement rule evidence is malformed"),
+            )
+            for item in raw_rules
+            if isinstance(item, Mapping)
+        )
+        if len(rules) != len(raw_rules):
+            raise ApplyEngineError("placement rule evidence is malformed")
+        legality_payload = evidence_payload["legality"]
+        if not isinstance(legality_payload, Mapping):
+            raise ApplyEngineError("placement legality evidence is malformed")
+        legality = PlacementLegality(
+            pad_overlap=strict_text(
+                legality_payload["pad_overlap"], "placement legality evidence is malformed"
+            ),
+            outline_containment=strict_text(
+                legality_payload["outline_containment"],
+                "placement legality evidence is malformed",
+            ),
+            keepout_respect=strict_text(
+                legality_payload["keepout_respect"],
+                "placement legality evidence is malformed",
+            ),
+            courtyard_overlap=strict_text(
+                legality_payload.get("courtyard_overlap", "proven_clear"),
+                "placement legality evidence is malformed",
+            ),
+        )
+        candidate_id = strict_text(
+            payload["candidate_id"], "placement candidate identity is malformed"
+        )
+        base_revision = strict_text(
+            payload["base_revision"], "placement base revision is malformed"
+        )
+        view_revision = strict_text(
+            payload["view_revision"], "placement view revision is malformed"
+        )
+        ordering_policy = strict_text(
+            payload["ordering_policy"], "placement ordering policy is malformed"
+        )
+        placement_version = strict_text(
+            payload["placement_version"], "placement version is malformed"
+        )
+        if ordering_policy != ORDERING_POLICY or placement_version != PLACEMENT_VERSION:
+            raise ApplyEngineError("placement candidate version or ordering policy is malformed")
+        return PlacementCandidate(
+            candidate_id=candidate_id,
+            base_revision=base_revision,
+            view_revision=view_revision,
+            placements=tuple(placements),
+            evidence=PlacementEvidence(
+                rule_results=rules,
+                legality=legality,
+                checks_used=strict_int(
+                    evidence_payload["checks_used"], "placement evidence is malformed"
+                ),
+                inconclusive_pairs=strict_int(
+                    evidence_payload["inconclusive_pairs"], "placement evidence is malformed"
+                ),
+            ),
+            placement_grid_nm=strict_int(
+                payload["placement_grid_nm"], "placement candidate grid is malformed"
+            ),
+            ordering_policy=ordering_policy,
+            placement_version=placement_version,
+        )
+    except ApplyEngineError:
+        raise
+    except (KeyError, TypeError, ValueError, IndexError) as error:
+        raise ApplyEngineError("placement candidate manifest is malformed") from error
+
+
 def _refuse(
     request: ApplyRequest | None,
     board_path: str,
@@ -188,6 +329,24 @@ def _refuse(
     **extra: Any,
 ) -> ApplyResult:
     return ApplyResult(
+        status="refused",
+        board_path=board_path,
+        board_revision_before=board_revision,
+        request=request,
+        diagnostic=ApplyDiagnostic(code=code, message=message),
+        **extra,
+    )
+
+
+def _placement_refuse(
+    request: PlacementApplyRequest | None,
+    board_path: str,
+    board_revision: str | None,
+    code: ApplyFailureCode,
+    message: str,
+    **extra: Any,
+) -> PlacementApplyResult:
+    return PlacementApplyResult(
         status="refused",
         board_path=board_path,
         board_revision_before=board_revision,
@@ -391,12 +550,16 @@ def apply_candidate(
     except WorkspacePostRenameError as error:
         # The rename happened, so the board IS changed. Report that truthfully and attempt a
         # guarded rollback that only touches the file if it still holds exactly our bytes.
+        # A post-rename condition spends the capability even when the guarded rollback succeeds:
+        # otherwise the same token could replay a second write against the restored revision.
+        token_authority.consume(verified)
         restored = _guarded_restore(settings, board, error.published_revision)
+        final_revision = _final_observed_revision(settings, board)
         return ApplyResult(
             status="applied_but_unverified",
             board_path=board.relative_path,
             board_revision_before=board.revision,
-            board_revision_after=error.published_revision,
+            board_revision_after=final_revision,
             snapshot_digest_before=snapshot.snapshot_digest,
             base_revision=candidate.base_revision,
             candidate_id=candidate.candidate_id,
@@ -418,12 +581,46 @@ def apply_candidate(
             ),
         )
 
+    # Take one final observation immediately before reporting success.  The publication lock is
+    # released by replace_workspace_file before this point, so a writer can still win the tiny
+    # interval after the atomic rename.  We cannot eliminate that final nanosecond without a
+    # longer transaction, but a visible rewrite must not be reported as a verified apply.
+    final_revision = _final_observed_revision(settings, board)
+    if final_revision != applied.result_revision:
+        token_authority.consume(verified)
+        return ApplyResult(
+            status="applied_but_unverified",
+            board_path=board.relative_path,
+            board_revision_before=board.revision,
+            board_revision_after=final_revision,
+            snapshot_digest_before=snapshot.snapshot_digest,
+            base_revision=candidate.base_revision,
+            candidate_id=candidate.candidate_id,
+            request=request,
+            backup_path=backup_path,
+            bytes_added=applied.bytes_added,
+            segments_added=applied.segments_added,
+            diagnostic=ApplyDiagnostic(
+                code=ApplyFailureCode.APPLY_VERIFICATION_FAILED,
+                message=(
+                    "the authorized route was verified once, but "
+                    + (
+                        "the final board revision could not be observed; the board may be "
+                        "missing or unreadable; restore the pre-apply copy if needed"
+                        if final_revision is None
+                        else "the final observed board revision changed before return; "
+                        "concurrent bytes were left in place; restore the pre-apply copy if needed"
+                    )
+                ),
+            ),
+        )
+
     token_authority.consume(verified)
     return ApplyResult(
         status="applied",
         board_path=board.relative_path,
         board_revision_before=board.revision,
-        board_revision_after=applied.result_revision,
+        board_revision_after=final_revision,
         snapshot_digest_before=snapshot.snapshot_digest,
         base_revision=candidate.base_revision,
         candidate_id=candidate.candidate_id,
@@ -431,6 +628,326 @@ def apply_candidate(
         backup_path=backup_path,
         bytes_added=applied.bytes_added,
         segments_added=applied.segments_added,
+        verification=applied.verification,
+    )
+
+
+def apply_placement_candidate(
+    payload: Any,
+    settings: Settings,
+    token_authority: ApplyTokenAuthority,
+    *,
+    clock: Callable[[], float] | None = None,
+) -> PlacementApplyResult:
+    """Apply one authorized placement candidate to a workspace board.
+
+    This deliberately mirrors route application at the mutation boundary, but has its own
+    parser, token operation domain, pure engine, result vocabulary, and MCP tool.  A route token
+    can never authorize this function, and a placement candidate can never enter the additive
+    route patch path by accident.
+    """
+
+    if not isinstance(settings, Settings):
+        raise ApplyServiceError("placement apply settings are malformed")
+    if not isinstance(token_authority, ApplyTokenAuthority):
+        raise ApplyServiceError("placement apply token authority is malformed")
+    now = clock if callable(clock) else time.time
+
+    request = parse_placement_apply_request(payload)
+    try:
+        relative_path = resolve_workspace_relative_path(
+            settings.workspace, request.board, allowed_suffixes={".kicad_pcb"}
+        )
+    except WorkspaceViolationError as error:
+        return _placement_refuse(
+            request, request.board, None, ApplyFailureCode.INVALID_REQUEST, str(error)
+        )
+
+    if not settings.allow_apply:
+        return _placement_refuse(
+            request,
+            relative_path,
+            None,
+            ApplyFailureCode.APPLY_DISABLED,
+            "applying placement candidates is disabled; set COPPER_MCP_ALLOW_APPLY=1 to enable it",
+        )
+
+    binding = ApplyBinding(
+        candidate_id=str(request.candidate.get("candidate_id", "")),
+        base_revision=str(request.candidate.get("base_revision", "")),
+        board_revision=request.expect_board_revision,
+        relative_path=relative_path,
+        operation="placement",
+    )
+    try:
+        verified = token_authority.verify(request.apply_token, binding)
+    except ApplyTokenError as error:
+        return _placement_refuse(
+            request, relative_path, None, ApplyFailureCode(error.code), str(error)
+        )
+
+    board = _read_board(settings, request.board)
+    if lockfile_for(board.absolute_path).exists():
+        return _placement_refuse(
+            request,
+            board.relative_path,
+            board.revision,
+            ApplyFailureCode.KICAD_OPEN,
+            _lockfile_message(board.absolute_path),
+        )
+    if board.revision != request.expect_board_revision:
+        return _placement_refuse(
+            request,
+            board.relative_path,
+            board.revision,
+            ApplyFailureCode.STALE_CANDIDATE,
+            (
+                "the board changed since the placement preview; re-run the preview and review "
+                "the result"
+            ),
+        )
+
+    constraints = NetClass(id=NET_CLASS_ID, name=NET_CLASS_NAME, **request.constraints_payload())
+    profile = _profile(constraints)
+    limits = ParseLimits()
+    conversion = parse_kicad_bytes(board.content, profile, limits)
+    if conversion.snapshot is None or conversion.diagnostics:
+        return _placement_refuse(
+            request,
+            board.relative_path,
+            board.revision,
+            ApplyFailureCode.UNSUPPORTED_BOARD,
+            "this board is outside the supported Board IR subset",
+        )
+    snapshot = conversion.snapshot
+    try:
+        candidate = _placement_candidate_from_manifest(request.candidate)
+    except ApplyEngineError as error:
+        return _placement_refuse(
+            request,
+            board.relative_path,
+            board.revision,
+            ApplyFailureCode.INVALID_REQUEST,
+            str(error),
+        )
+    if snapshot.snapshot_digest != candidate.base_revision:
+        return _placement_refuse(
+            request,
+            board.relative_path,
+            board.revision,
+            ApplyFailureCode.STALE_CANDIDATE,
+            "the placement candidate was proposed against a different Board IR snapshot",
+        )
+
+    try:
+        applied = apply_placement_bytes(board.content, snapshot, candidate, profile, limits=limits)
+    except (ApplyEngineError, KiCadPlacementPatchError) as error:
+        return _placement_refuse(
+            request,
+            board.relative_path,
+            board.revision,
+            ApplyFailureCode.SPLICE_ASSERTION_FAILED,
+            str(error),
+        )
+
+    filesystem = unsafe_filesystem(board.absolute_path.parent)
+    if filesystem is not None:
+        return _placement_refuse(
+            request,
+            board.relative_path,
+            board.revision,
+            ApplyFailureCode.UNSAFE_FILESYSTEM,
+            (
+                f"the board is on a {filesystem} filesystem, where atomic replacement and fsync "
+                "do not carry their usual guarantees; copy it to local storage first"
+            ),
+        )
+    try:
+        backup_path = _write_backup(settings, board, now)
+    except (WorkspaceViolationError, OSError) as error:
+        return _placement_refuse(
+            request,
+            board.relative_path,
+            board.revision,
+            ApplyFailureCode.BACKUP_FAILED,
+            f"the pre-apply copy could not be written, so nothing was changed: {error}",
+        )
+
+    def _recheck_lockfile() -> None:
+        if lockfile_for(board.absolute_path).exists():
+            raise _LockfileAppearedError(board.absolute_path.name)
+
+    try:
+        replace_workspace_file(
+            settings.workspace,
+            board.relative_path,
+            applied.content,
+            allowed_suffixes={".kicad_pcb"},
+            max_bytes=settings.max_board_bytes,
+            expect_digest=board.revision,
+            precheck=_recheck_lockfile,
+        )
+    except _LockfileAppearedError:
+        return _placement_refuse(
+            request,
+            board.relative_path,
+            board.revision,
+            ApplyFailureCode.KICAD_OPEN,
+            _lockfile_message(board.absolute_path),
+            backup_path=backup_path,
+        )
+    except WorkspaceStaleError:
+        return _placement_refuse(
+            request,
+            board.relative_path,
+            board.revision,
+            ApplyFailureCode.STALE_CANDIDATE,
+            "the board changed while the placement candidate was being applied",
+            backup_path=backup_path,
+        )
+    except (WorkspaceViolationError, OSError) as error:
+        return _placement_refuse(
+            request,
+            board.relative_path,
+            board.revision,
+            ApplyFailureCode.APPLY_VERIFICATION_FAILED,
+            f"the board could not be replaced safely: {error}",
+            backup_path=backup_path,
+        )
+    except WorkspacePostRenameError as error:
+        # A post-rename condition spends the capability even when the guarded rollback succeeds;
+        # otherwise the same token could replay a second write against the restored revision.
+        token_authority.consume(verified)
+        restored = _guarded_restore(settings, board, error.published_revision)
+        final_revision = _observed_revision(
+            settings,
+            board,
+            fallback=board.revision if restored else error.published_revision,
+        )
+        return PlacementApplyResult(
+            status="applied_but_unverified",
+            board_path=board.relative_path,
+            board_revision_before=board.revision,
+            board_revision_after=final_revision,
+            snapshot_digest_before=snapshot.snapshot_digest,
+            base_revision=candidate.base_revision,
+            candidate_id=candidate.candidate_id,
+            request=request,
+            backup_path=backup_path,
+            bytes_changed=applied.bytes_changed,
+            footprints_moved=applied.footprints_moved,
+            diagnostic=ApplyDiagnostic(
+                code=ApplyFailureCode.APPLY_VERIFICATION_FAILED,
+                message=(
+                    "the board was written but could not be verified afterwards; "
+                    + (
+                        "the original was rolled back"
+                        if restored
+                        else "it now holds bytes we did not write, so it was left in place; "
+                        "restore the pre-apply copy if needed"
+                    )
+                ),
+            ),
+        )
+
+    published_revision = applied.result_revision
+    try:
+        published = _read_board(settings, board.relative_path)
+        published_revision = published.revision
+        verify_published_placement_board(
+            published.content,
+            board.content,
+            snapshot,
+            candidate,
+            profile,
+            limits=limits,
+        )
+    except (ApplyEngineError, WorkspaceViolationError, OSError):
+        # Never roll back bytes merely because they were observed after our rename: they may
+        # belong to a concurrent writer.  Restoration is allowed only if the board still holds
+        # the exact output this operation published.
+        # The rename already spent the capability, even when the guarded restore succeeds.
+        token_authority.consume(verified)
+        restored = _guarded_restore(settings, board, applied.result_revision)
+        final_revision = _observed_revision(
+            settings,
+            board,
+            fallback=published_revision,
+        )
+        return PlacementApplyResult(
+            status="applied_but_unverified",
+            board_path=board.relative_path,
+            board_revision_before=board.revision,
+            board_revision_after=final_revision,
+            snapshot_digest_before=snapshot.snapshot_digest,
+            base_revision=candidate.base_revision,
+            candidate_id=candidate.candidate_id,
+            request=request,
+            backup_path=backup_path,
+            bytes_changed=applied.bytes_changed,
+            footprints_moved=applied.footprints_moved,
+            diagnostic=ApplyDiagnostic(
+                code=ApplyFailureCode.APPLY_VERIFICATION_FAILED,
+                message=(
+                    "the placement board was written but failed post-publication verification; "
+                    + (
+                        "the original was rolled back"
+                        if restored
+                        else "it now holds bytes we did not write, so it was left in place; "
+                        "restore the pre-apply copy if needed"
+                    )
+                ),
+            ),
+        )
+
+    # Take one final observation immediately before reporting success.  The publication lock is
+    # released by replace_workspace_file before this post-publication verification, so a writer
+    # can still win the tiny interval after verification.  We cannot eliminate that last
+    # nanosecond without a longer transaction, but we can refuse to claim success when the
+    # reproducible race is visible and preserve the concurrent bytes.
+    observed_final_revision = _final_observed_revision(settings, board)
+    if observed_final_revision is None or observed_final_revision != published_revision:
+        token_authority.consume(verified)
+        return PlacementApplyResult(
+            status="applied_but_unverified",
+            board_path=board.relative_path,
+            board_revision_before=board.revision,
+            board_revision_after=observed_final_revision,
+            snapshot_digest_before=snapshot.snapshot_digest,
+            base_revision=candidate.base_revision,
+            candidate_id=candidate.candidate_id,
+            request=request,
+            backup_path=backup_path,
+            bytes_changed=applied.bytes_changed,
+            footprints_moved=applied.footprints_moved,
+            diagnostic=ApplyDiagnostic(
+                code=ApplyFailureCode.APPLY_VERIFICATION_FAILED,
+                message=(
+                    "the authorized placement was verified once, but "
+                    + (
+                        "the final board revision could not be observed; the board may be "
+                        "missing or unreadable; restore the pre-apply copy if needed"
+                        if observed_final_revision is None
+                        else "the final observed board revision changed before return; "
+                        "concurrent bytes were left in place; restore the pre-apply copy if needed"
+                    )
+                ),
+            ),
+        )
+
+    token_authority.consume(verified)
+    return PlacementApplyResult(
+        status="applied",
+        board_path=board.relative_path,
+        board_revision_before=board.revision,
+        board_revision_after=observed_final_revision,
+        snapshot_digest_before=snapshot.snapshot_digest,
+        base_revision=candidate.base_revision,
+        candidate_id=candidate.candidate_id,
+        request=request,
+        backup_path=backup_path,
+        bytes_changed=applied.bytes_changed,
+        footprints_moved=applied.footprints_moved,
         verification=applied.verification,
     )
 
@@ -568,10 +1085,40 @@ def _guarded_restore(settings: Settings, board: _Board, published_revision: str)
     return True
 
 
+def _observed_revision(settings: Settings, board: _Board, *, fallback: str) -> str:
+    """Return the digest actually visible after a post-rename recovery attempt.
+
+    A post-rename durability error can be raised after the replacement bytes are visible.  The
+    guarded restore has the same property: it may publish the original bytes and then fail while
+    syncing the directory.  Re-reading here keeps the response truthful even in that narrow
+    window; the fallback is used only when the file cannot be observed.
+    """
+
+    try:
+        return _read_board(settings, board.relative_path).revision
+    except (WorkspaceViolationError, OSError):
+        return fallback
+
+
+def _final_observed_revision(settings: Settings, board: _Board) -> str | None:
+    """Best-effort final observation for a successfully published apply.
+
+    Unlike recovery reporting, a success path must not substitute an expected digest after an
+    unreadable or missing board. Returning ``None`` makes the published-but-unobserved state
+    explicit so callers report it as ``applied_but_unverified`` and spend the token.
+    """
+
+    try:
+        return _read_board(settings, board.relative_path).revision
+    except (WorkspaceViolationError, OSError):
+        return None
+
+
 __all__ = [
     "MAX_BACKUPS_PER_BOARD",
     "ApplyServiceError",
     "apply_candidate",
+    "apply_placement_candidate",
     "lockfile_for",
     "unsafe_filesystem",
 ]

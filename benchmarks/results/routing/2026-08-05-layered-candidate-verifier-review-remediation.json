@@ -1,0 +1,25 @@
+{
+  "date_utc": "2026-08-04T21:35:55+00:00",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "fixture": "tests/fixtures/route-candidate/blocked-pad.kicad_pcb",
+  "metrics": {
+    "crossing_geometry_refused": true,
+    "deterministic_candidate_ids": true,
+    "disconnected_geometry_refused": true,
+    "duplicate_geometry_refused": true,
+    "endpoint_via_refused": true,
+    "path_count": 3,
+    "physical_validation": "not_modelled",
+    "repetitions": 10,
+    "stale_revision_refused": true,
+    "verified_replays": 10,
+    "via_count": 2
+  },
+  "run_id": "sha256:bce0deb65e8e9f3e02666f0da99c041c38f8b2689d5561f9b5746a2470c6a799",
+  "schema": "copper-mcp/benchmark/layered-candidate-verifier/v1",
+  "script": "scripts/benchmark_layered_candidate_verifier.py",
+  "source_commit": "d69f3b0b9e563ef5d4d6c1e99a6ef47508fdf51b"
+}

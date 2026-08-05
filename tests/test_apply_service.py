@@ -7,6 +7,7 @@ directory the test owns.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import unittest
 from dataclasses import replace
@@ -18,7 +19,7 @@ import pytest
 
 from copper_mcp.apply import ApplyTokenAuthority, apply_candidate, lockfile_for
 from copper_mcp.apply.contracts import ApplyRequestError, parse_apply_request
-from copper_mcp.apply.tokens import ApplyBinding, ApplyTokenError
+from copper_mcp.apply.tokens import MAX_CONSUMED_TOKENS, ApplyBinding, ApplyTokenError
 from copper_mcp.config import ConfigurationError, Settings
 from copper_mcp.mcp_contracts import ApplyCandidateToolResponse
 from copper_mcp.route_preview import preview_route
@@ -449,6 +450,58 @@ class StalenessTests(_Case):
         on_disk = f"sha256:{hashlib.sha256(self.fixture.board.read_bytes()).hexdigest()}"
         self.assertEqual(on_disk, winner["board_revision_after"])
 
+    def test_a_rewrite_before_final_observation_is_unverified_and_spends_token(
+        self,
+    ) -> None:
+        """A writer visible after publication must not be reported as our verified result."""
+
+        import copper_mcp.apply.service as service
+
+        third_party = self.fixture.original + b"\n(comment final-observation writer)\n"
+        real_observed_revision = service._final_observed_revision
+
+        def rewrite_then_observe(*args: Any, **kwargs: Any) -> str | None:
+            self.fixture.board.write_bytes(third_party)
+            return real_observed_revision(*args, **kwargs)
+
+        with patch.object(service, "_final_observed_revision", rewrite_then_observe):
+            document = self.fixture.apply()
+
+        expected_revision = f"sha256:{hashlib.sha256(third_party).hexdigest()}"
+        self.assertEqual(document["status"], "applied_but_unverified")
+        self.assertEqual(document["board_revision_after"], expected_revision)
+        self.assertEqual(self.fixture.board.read_bytes(), third_party)
+        assert document["diagnostic"] is not None
+        self.assertEqual(document["diagnostic"]["code"], "apply_verification_failed")
+
+        replay = self.fixture.apply()
+        assert replay["diagnostic"] is not None
+        self.assertEqual(replay["diagnostic"]["code"], "token_already_used")
+
+    def test_an_unreadable_final_board_is_not_reported_as_applied(self) -> None:
+        """A missing final board must not inherit the expected published digest."""
+
+        import copper_mcp.apply.service as service
+
+        real_observed_revision = service._final_observed_revision
+
+        def remove_then_observe(*args: Any, **kwargs: Any) -> str | None:
+            self.fixture.board.unlink()
+            return real_observed_revision(*args, **kwargs)
+
+        with patch.object(service, "_final_observed_revision", remove_then_observe):
+            document = self.fixture.apply()
+
+        self.assertEqual(document["status"], "applied_but_unverified")
+        self.assertIsNone(document["board_revision_after"])
+        assert document["diagnostic"] is not None
+        self.assertIn("could not be observed", document["diagnostic"]["message"])
+
+        self.fixture.board.write_bytes(self.fixture.original)
+        replay = self.fixture.apply()
+        assert replay["diagnostic"] is not None
+        self.assertEqual(replay["diagnostic"]["code"], "token_already_used")
+
     def test_a_stale_board_is_never_auto_refreshed(self) -> None:
         self.fixture.board.write_bytes(self.fixture.original + b"\n")
         document = self.fixture.apply()
@@ -539,13 +592,18 @@ class DurabilityTests(_Case):
 
         self.assertEqual(document["status"], "applied_but_unverified")
         self.assertIsNotNone(document["board_revision_after"])
-        self.assertNotEqual(document["board_revision_after"], document["board_revision_before"])
         assert document["diagnostic"] is not None
         self.assertEqual(document["diagnostic"]["code"], "apply_verification_failed")
         self.assertIsNotNone(document["backup_path"])
         # The board is genuinely one of the two known states, never torn.
         on_disk = self.fixture.board.read_bytes()
         self.assertIn(on_disk, (self.fixture.original,), "guarded rollback returns the original")
+        on_disk_revision = f"sha256:{hashlib.sha256(on_disk).hexdigest()}"
+        self.assertEqual(document["board_revision_after"], on_disk_revision)
+        self.assertEqual(document["board_revision_after"], document["board_revision_before"])
+        replay = self.fixture.apply()
+        assert replay["diagnostic"] is not None
+        self.assertEqual(replay["diagnostic"]["code"], "token_already_used")
 
     def test_a_backup_that_cannot_be_written_stops_the_apply(self) -> None:
         """No pre-apply copy means no way back, so the apply must not proceed."""
@@ -1037,6 +1095,34 @@ class TokenLifetimeTests(unittest.TestCase):
         authority.consume(authority.verify(second, binding))
         self.assertEqual(len(authority._consumed), 1, "the expired nonce must have been swept")
 
+    def test_sweep_removes_an_expired_nonce_consumed_after_a_newer_live_nonce(self) -> None:
+        """Consumption order cannot make an older expiry unreachable behind a live nonce."""
+
+        clock = [1_000_000.0]
+        authority = ApplyTokenAuthority(ttl_seconds=60, clock=lambda: clock[0])
+        binding = ApplyBinding("c", "sha256:" + "a" * 64, "sha256:" + "b" * 64, "b.kicad_pcb")
+
+        earlier = authority.issue(binding)
+        clock[0] += 30
+        later = authority.issue(binding)
+
+        later_verified = authority.verify(later, binding)
+        authority.consume(later_verified)
+        earlier_verified = authority.verify(earlier, binding)
+        authority.consume(earlier_verified)
+
+        # The earlier token expires first, but it was inserted second. Sweeping must remove it
+        # without deleting the later token, which remains a live replay refusal.
+        clock[0] += 31
+        trigger = authority.issue(binding)
+        authority.consume(authority.verify(trigger, binding))
+
+        self.assertNotIn(earlier_verified.identifier, authority._consumed)
+        self.assertIn(later_verified.identifier, authority._consumed)
+        with self.assertRaises(ApplyTokenError) as caught:
+            authority.verify(later, binding)
+        self.assertEqual(caught.exception.code, "token_already_used")
+
     def test_a_live_consumed_nonce_is_not_evicted_by_newer_arrivals(self) -> None:
         """A still-valid consumed nonce keeps rejecting replays while other tokens come and go."""
 
@@ -1057,6 +1143,35 @@ class TokenLifetimeTests(unittest.TestCase):
         with self.assertRaises(ApplyTokenError) as caught:
             authority.verify(guarded, binding)
         self.assertEqual(caught.exception.code, "token_already_used")
+
+    def test_a_tiny_capacity_hint_cannot_evict_a_live_consumed_nonce(self) -> None:
+        """Count pressure must never reopen a confirmation after a guarded board restore."""
+
+        clock = [1_000_000.0]
+        authority = ApplyTokenAuthority(
+            ttl_seconds=600,
+            max_consumed=1,
+            clock=lambda: clock[0],
+        )
+        binding = ApplyBinding("c", "sha256:" + "a" * 64, "sha256:" + "b" * 64, "b.kicad_pcb")
+
+        guarded = authority.issue(binding)
+        authority.consume(authority.verify(guarded, binding))
+        for _ in range(3):
+            other = authority.issue(binding)
+            authority.consume(authority.verify(other, binding))
+
+        self.assertGreater(len(authority._consumed), authority._max_consumed)
+        with self.assertRaises(ApplyTokenError) as caught:
+            authority.verify(guarded, binding)
+        self.assertEqual(caught.exception.code, "token_already_used")
+
+    def test_consumed_capacity_hint_must_be_a_positive_bounded_integer(self) -> None:
+        for hint in (False, 0, -1, MAX_CONSUMED_TOKENS + 1):
+            with self.subTest(hint=hint):
+                with self.assertRaises(ApplyTokenError) as caught:
+                    ApplyTokenAuthority(max_consumed=hint)
+                self.assertEqual(caught.exception.code, "invalid_token")
 
     def test_the_store_does_not_grow_without_bound(self) -> None:
         clock = [1_000_000.0]

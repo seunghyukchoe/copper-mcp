@@ -1,0 +1,32 @@
+{
+  "configuration": {
+    "predicate_type": "https://in-toto.io/attestation/link/v0.3"
+  },
+  "date_utc": "2026-08-05",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "metrics": {
+    "deterministic_bytes": true,
+    "dsse_envelope_emitted": false,
+    "kicad_invoked": false,
+    "material_revision_binding": true,
+    "median_build_and_serialize_ns": 19666.5,
+    "redacted_payload": true,
+    "repetitions": 128,
+    "schema_valid": true,
+    "signature_count": 0,
+    "statement_bytes": 1412,
+    "subject_candidate_binding": true
+  },
+  "not_claimed": [
+    "DSSE signature or verifier coverage",
+    "whole-board KiCad DRC quality",
+    "provenance or fabrication readiness",
+    "remote transport or persistence"
+  ],
+  "run_id": "sha256:080405e99f54c88a643abd4d20219a8c415222270604aed66c1060a509e1543e",
+  "schema": "copper-mcp/benchmark/drc-statement/v1",
+  "source_commit": "6b5c75e454db1a437bc947096bc61e0d4b7b9398"
+}

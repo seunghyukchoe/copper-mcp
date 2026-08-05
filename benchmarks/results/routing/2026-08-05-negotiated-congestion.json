@@ -1,0 +1,114 @@
+{
+  "authoritative_drc": {
+    "reason": "the metric is exact lattice occupancy only; no KiCad DRC was invoked",
+    "status": "not_run"
+  },
+  "baseline": {
+    "candidate_ids": [
+      "sha256:f28d0c61101a4943aea427f2908428ded900402ebad99c0d796051a330eb4b86",
+      "sha256:83b3c31d2495f464955ebf51e301095908023707d0f01518fb46bf8b91c401ea"
+    ],
+    "overflow_resources": [
+      {
+        "end": {
+          "x_nm": 6000000,
+          "y_nm": 5000000
+        },
+        "kind": "vertex",
+        "start": {
+          "x_nm": 6000000,
+          "y_nm": 5000000
+        },
+        "usage": 2
+      }
+    ],
+    "overflow_units": 1,
+    "status": "sequential",
+    "total_wire_length_nm": 16000000
+  },
+  "benchmark": "negotiated-congestion-kicad-crossing-v1",
+  "commit": "a68968d96a55b6f191c19bf668a356edfe13c8e1",
+  "configuration": {
+    "history_penalty_nm": 5000000,
+    "max_iterations": 8,
+    "max_total_expansions": 2000000,
+    "max_total_obstacle_checks": 10000000,
+    "present_penalty_nm": 20000000,
+    "settings": {
+      "bend_penalty_nm": 500000,
+      "grid_step_nm": 1000000,
+      "max_expansions": 20000,
+      "max_grid_nodes": 512,
+      "max_obstacle_checks": 200000,
+      "max_obstacles": 128,
+      "proximity_penalty_nm": 0
+    }
+  },
+  "dataset": {
+    "fixture": "benchmarks/audio/fixtures/negotiated-crossing-v1.kicad_pcb",
+    "fixture_sha256": "dbbfc5179cca7f644b90303ff3bc695f191ba94f7e5bbc8b4b1437d810ec83c7",
+    "generator_path": "scripts/benchmark_negotiated_congestion.py",
+    "generator_sha256": "e5db3d17b3d539ba275dbf0987c6261a838c722540c57b76ee7bf2350cd8a190",
+    "license": "Apache-2.0",
+    "provenance": "Committed KiCad fixture; converted through the Board IR adapter."
+  },
+  "dirty": true,
+  "environment": {
+    "accelerator": "none (CPU-only)",
+    "kicad": "not invoked; Board IR adapter only",
+    "machine": "arm64",
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "iterations": 3,
+  "metrics": {
+    "baseline_overflow_units": 1,
+    "negotiated_overflow_units": 0,
+    "overflow_reduction_units": 1,
+    "replay_deterministic": true
+  },
+  "recorded_at_utc": "2026-08-04T22:05:53+00:00",
+  "replays": [
+    {
+      "candidate_ids": [
+        "sha256:5d9c200781f343378c9e967283949c0cfa0e6f53fcbdcfd039a6d5c6ca89d33c",
+        "sha256:3a0334165830e06fb04fe6bc51e947ccf3f4cbeea1506d1d1850b358e28093ba"
+      ],
+      "diagnostic": null,
+      "iterations": 1,
+      "overflow_units": 0,
+      "ripups": 0,
+      "status": "completed",
+      "total_wire_length_nm": 26000000,
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:5d9c200781f343378c9e967283949c0cfa0e6f53fcbdcfd039a6d5c6ca89d33c",
+        "sha256:3a0334165830e06fb04fe6bc51e947ccf3f4cbeea1506d1d1850b358e28093ba"
+      ],
+      "diagnostic": null,
+      "iterations": 1,
+      "overflow_units": 0,
+      "ripups": 0,
+      "status": "completed",
+      "total_wire_length_nm": 26000000,
+      "unrouted_nets": []
+    },
+    {
+      "candidate_ids": [
+        "sha256:5d9c200781f343378c9e967283949c0cfa0e6f53fcbdcfd039a6d5c6ca89d33c",
+        "sha256:3a0334165830e06fb04fe6bc51e947ccf3f4cbeea1506d1d1850b358e28093ba"
+      ],
+      "diagnostic": null,
+      "iterations": 1,
+      "overflow_units": 0,
+      "ripups": 0,
+      "status": "completed",
+      "total_wire_length_nm": 26000000,
+      "unrouted_nets": []
+    }
+  ],
+  "run_id": "sha256:ee3320444a09e1a1e80023220eec96b75897d8518847b98390434119e6d9d6da",
+  "snapshot_digest": "sha256:acaf156090956d6e5ec91cbd68b5b0ef75f7e1767b9184366363869b23457e31"
+}

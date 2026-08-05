@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import heapq
 from dataclasses import dataclass
-from typing import cast
+from typing import TypeAlias, cast
 
 from copper_mcp.board_ir import BoardIRSnapshot
 from copper_mcp.routing.astar import (
@@ -23,7 +23,6 @@ from copper_mcp.routing.astar import (
     _prepare,
     _Problem,
     _proximity_step,
-    _Score,
     _start_states,
     _State,
     _WorkBudget,
@@ -36,6 +35,7 @@ from copper_mcp.routing.contracts import (
 )
 
 ORACLE_POLICY = "orthogonal-dijkstra-oracle-v1"
+_OracleScore: TypeAlias = tuple[int, int, int]
 
 
 def _nonnegative_integer(name: str, value: int) -> None:
@@ -106,8 +106,8 @@ def _search_dijkstra(problem: _Problem, work: _WorkBudget) -> DijkstraResult:
 
     settings = problem.request.settings
     start_states = _start_states(problem)
-    start_score: _Score = (0, 0, 0)
-    best: dict[_State, _Score] = dict.fromkeys(start_states, start_score)
+    start_score: _OracleScore = (0, 0, 0)
+    best: dict[_State, _OracleScore] = dict.fromkeys(start_states, start_score)
     frontier: list[tuple[int, int, int, int, int, int, int, _State]] = []
     counter = 0
     for state in start_states:
@@ -166,7 +166,7 @@ def _search_dijkstra(problem: _Problem, work: _WorkBudget) -> DijkstraResult:
                 + proximity_increment * settings.proximity_penalty_nm
             )
             next_state: _State = (next_ix, next_iy, next_direction)
-            next_score: _Score = (next_cost, next_bends, next_proximity)
+            next_score: _OracleScore = (next_cost, next_bends, next_proximity)
             if next_score >= best.get(next_state, (1 << 63, 1 << 63, 1 << 63)):
                 continue
             best[next_state] = next_score

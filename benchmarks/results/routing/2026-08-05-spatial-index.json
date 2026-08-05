@@ -1,0 +1,36 @@
+{
+  "benchmark": "routing-conservative-spatial-index-v1",
+  "configuration": {
+    "entry_count": 512,
+    "index_policy": "uniform-grid-with-linear-fallback-v1",
+    "query_count": 256,
+    "repetitions": 10
+  },
+  "environment": {
+    "machine": "arm64",
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "metrics": {
+    "bucket_count": 136,
+    "cell_size_nm": 5869,
+    "deterministic_replays": 256,
+    "exact_query_matches": 256,
+    "indexed": true,
+    "indexed_relation_checks": 636,
+    "legacy_relation_checks": 131072,
+    "median_indexed_query_ns": 306041.5,
+    "median_legacy_query_ns": 3989812.5,
+    "median_speedup": 13.037,
+    "queries": 256,
+    "relation_reduction_ratio": 0.995148
+  },
+  "not_claimed": [
+    "multi-net congestion optimization",
+    "FreeRouting parity",
+    "KiCad DRC or fabrication readiness",
+    "wall-clock performance outside this fixture and machine"
+  ],
+  "run_id": "sha256:99b35ca74757968063a496cd2bd88d9be03639b84bad536eebb7bd7d8277f111",
+  "source_commit": "9b829d5ba8fbfef3b868b3f334be7a9bb5c17653"
+}

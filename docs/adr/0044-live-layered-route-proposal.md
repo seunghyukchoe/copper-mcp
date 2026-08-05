@@ -1,0 +1,113 @@
+# ADR-0044: Live layered route proposals are session- and snapshot-bound
+
+- **Status:** Accepted
+- **Date:** 2026-08-05
+- **Deciders:** CopperMCP maintainers
+- **Related:** ADR-0030, ADR-0031, ADR-0036, ADR-0042, ADR-0043
+
+## Context
+
+CopperMCP can already observe an active KiCad PCB through the official `kicad-python` IPC
+binding, and it can propose a bounded two-signal-layer route from a file-backed Board IR
+snapshot. The missing fidelity seam was a via-capable proposal against the exact board that an AI
+has just inspected in the open editor.
+
+KiCad documents `Board.get_as_string()` as the complete board serialization and describes IPC as
+a synchronous, GUI-only request/reply API. The add-on guidance also states that
+`KICAD_API_TOKEN` is unique to a running KiCad instance and changes on restart:
+
+- [KiCad Board API](https://docs.kicad.org/kicad-python-main/board.html)
+- [KiCad IPC add-on guidance](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/)
+- [KiCad IPC API](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/)
+
+Board and Board IR digests alone cannot distinguish two editor instances that contain identical
+bytes. Conversely, a live IPC read can race a GUI save unless the serialization is confirmed.
+
+## Decision
+
+Add `preview_live_layered_route` as a read-only, idempotent MCP proposal surface with this
+pipeline:
+
+1. Require the literal `board: "live"`, two typed pad references, bounded net-class/grid/search
+   settings, and **three** compare-and-swap values: source board digest, converted Board IR
+   snapshot digest, and an opaque `hmac-sha256:<64 lowercase hex>` session revision. The session
+   revision is a domain-separated HMAC-SHA256 of `KICAD_API_TOKEN` using a fresh process-local
+   256-bit key; it is not a password hash, is not reusable across a fresh process, and is compared
+   in constant time after fixed-format validation.
+2. Reject unknown fields and raw `net`/`net_ref_id` selectors before opening IPC. The net is
+   inferred only after both pads are resolved in the converted snapshot and prove one non-null
+   net.
+3. Capture one bounded official IPC serialization, confirm a byte-identical second serialization,
+   verify the opaque session revision did not change during capture, and close the client in all
+   success and failure paths. The token and process key never enter a response, log, candidate,
+   or ledger.
+4. Convert those exact bytes through the existing Board IR 0.2 adapter and invoke the pure
+   two-layer A* router with the remaining request deadline. The capture deadline is checked
+   between synchronous IPC calls and throughout bounded serialized-item counting. A stale source
+   or session stops before conversion; a stale Board IR snapshot stops before search.
+5. Return the existing closed layered candidate/refusal union. A candidate is immutable and
+   content-addressed, but remains **unverified proposal geometry**: this surface does not serialize
+   KiCad objects, run DRC or refill, persist geometry, mint an apply token, or mutate the editor.
+   Endpoint-via legality and full electrical/fabrication validity remain explicitly unclaimed.
+
+The public `inspect_live_board` observation includes one required `session_revision` field. It is
+the same already-validated opaque PBKDF2 value used by the capture; a plugin-launched observation
+with no token reports `null`. This lets a client compose `inspect_live_board` →
+`observe_live_board_scene` → `preview_live_layered_route` using only public structured output:
+the observation supplies the session CAS and the scene supplies source/snapshot CAS values and
+pad refs. `null` is not a bypass—the preview still requires a fixed-format non-null value and
+therefore refuses it before a candidate can be produced.
+
+The common response accepts either the file-backed or live request echo, with the live schema
+preserving `board: "live"` and the session digest precondition. No raw board source, net name,
+socket path, token, or unvalidated diagnostic text crosses MCP.
+
+## Consequences
+
+Positive:
+
+- AI can propose through-via geometry against the same live editor instance and exact bytes it
+  observed, closing the highest-value observe → understand → propose fidelity gap.
+- File-backed and live paths share candidate canonicalization; the fake-IPC benchmark can compare
+  candidate identity directly with the file oracle.
+- IPC client closure and bounded remaining timeout prevent repeated proposals from leaking sockets
+  or silently exceeding a short route budget.
+
+Trade-offs and residuals:
+
+- The opaque session revision is only a same-process session CAS signal; KiCad exposes no atomic
+  board revision/event API, so an ABA change that returns to identical bytes between confirmations
+  remains possible. A fresh CopperMCP process intentionally refuses prior session revisions.
+- The official synchronous wrapper may block inside a call and allocates the returned serialization
+  before Python can enforce the byte ceiling; cooperative checks cannot forcibly pre-empt that
+  call. An isolated worker/process boundary remains open for hostile or unresponsive sessions.
+- The supported geometry is intentionally narrow (two signal layers, conservative envelopes,
+  full-stack vias). Real GUI IPC, KiCad DRC, serializer round-trip, endpoint-via legality,
+  electrical behavior, fabrication readiness, and FreeRouting parity require separate evidence.
+
+## Evidence
+
+- `tests/test_live_layered_route_preview.py`: deterministic file-oracle equality, three CAS paths,
+  timeout bounding, source immutability, no raw-net selector, and via-required fixture.
+- `tests/test_kicad_ipc.py`: client closure after success/failure and editor-context capture.
+- `scripts/benchmark_live_layered_route_preview.py` and
+  `benchmarks/results/routing/2026-08-05-live-layered-route-preview.json`: ten fake-IPC replays,
+  deterministic candidate IDs, stale/capture-race refusal, closure, and explicit no-GUI/no-DRC
+  metrics.
+
+## Superseding amendment — 2026-08-05
+
+D-129 supersedes only the HMAC derivation in decision item 1. The current session revision is
+`pbkdf2-hmac-sha256:<64 lowercase hex>`: PBKDF2-HMAC-SHA256 with `KICAD_API_TOKEN` as the
+limited-input input, a domain-separated fresh 256-bit process-local salt, fixed 200,000 iterations,
+and a 32-byte derived value. The prior HMAC wording remains as historical evidence in D-127,
+SEC-103, and R-102. Strict format validation and constant-time CAS comparison remain unchanged;
+previous HMAC and unkeyed SHA-256 wire values fail closed. This amendment changes no IPC mutation,
+candidate, source/snapshot CAS, routing, DRC, or apply authority.
+
+## Composability amendment — 2026-08-05
+
+D-130 makes the PBKDF2 session CAS visible in the closed public live-observation output, including
+an explicit `null` when no plugin token is present. This is disclosure of a bounded derived CAS
+value, not the KiCad token or process salt. It preserves fresh-process and token-change stale
+refusal and adds no mutation, DRC, apply, or persistent capability.

@@ -256,6 +256,69 @@ class CliTests(unittest.TestCase):
         self.assertIsNone(document["drc_evidence"])
         self.assertEqual(len(document["candidate"]["patch"]["paths"][0]["vertices_nm"]), 2)
 
+    def test_preview_route_accepts_the_revision_bound_scene_net_reference(self) -> None:
+        root = Path(__file__).parent / "fixtures" / "route-candidate"
+        constraints = [
+            "--clearance-nm",
+            "250000",
+            "--track-width-nm",
+            "250000",
+            "--via-diameter-nm",
+            "800000",
+            "--via-drill-nm",
+            "400000",
+        ]
+        scene_stdout = io.StringIO()
+        with redirect_stdout(scene_stdout):
+            self.assertEqual(
+                main(
+                    [
+                        "--workspace",
+                        str(root),
+                        "observe-scene",
+                        "two-pad.kicad_pcb",
+                        *constraints,
+                        "--region",
+                        "0",
+                        "0",
+                        "40000000",
+                        "30000000",
+                    ]
+                ),
+                0,
+            )
+        scene = json.loads(scene_stdout.getvalue())
+        net_ref_id = scene["static"]["pads"][0]["geometry"]["net_id"]
+
+        route_stdout = io.StringIO()
+        with redirect_stdout(route_stdout):
+            self.assertEqual(
+                main(
+                    [
+                        "--workspace",
+                        str(root),
+                        "preview-route",
+                        "two-pad.kicad_pcb",
+                        "--net-ref-id",
+                        net_ref_id,
+                        "--expect-board-revision",
+                        scene["board_revision"],
+                        "--expect-snapshot-digest",
+                        scene["snapshot_digest"],
+                        "--layer",
+                        "F.Cu",
+                        *constraints,
+                    ]
+                ),
+                0,
+            )
+
+        route = json.loads(route_stdout.getvalue())
+        self.assertEqual(route["status"], "routed")
+        self.assertEqual(route["request"]["net_ref_id"], net_ref_id)
+        self.assertNotIn("net", route["request"])
+        self.assertEqual(route["candidate"]["patch"]["net_id"], net_ref_id)
+
     def test_preview_route_reports_invalid_requests_without_a_traceback(self) -> None:
         root = Path(__file__).parent / "fixtures" / "route-candidate"
         stderr = io.StringIO()

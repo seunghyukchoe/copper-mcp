@@ -1,0 +1,32 @@
+{
+  "date_utc": "2026-08-04T17:46:09+00:00",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "fixture": "tests/fixtures/route-candidate/blocked-pad.kicad_pcb",
+  "metrics": {
+    "candidate_geometry_persistence": false,
+    "cas_refusal": true,
+    "create_latency_us": {
+      "p50": 499.292,
+      "p95": 743.042
+    },
+    "expiry_refusal": true,
+    "idempotent_create": true,
+    "mcp_tasks": false,
+    "records_rehydrated": true,
+    "redacted_storage": true,
+    "repetitions": 100,
+    "source_unchanged": true,
+    "transition_latency_us": {
+      "p50": 180.75,
+      "p95": 1651.958
+    },
+    "worker_execution": false
+  },
+  "run_id": "sha256:c6a01655da9938cb085679784bf6fa0f934df0095609978ff71b92c1c9a1c001",
+  "schema": "copper-mcp/benchmark/routing-job-ledger/v1",
+  "script": "scripts/benchmark_routing_jobs.py",
+  "source_commit": "519077cc158b773aaaed6b88319eaa941bf237cd"
+}

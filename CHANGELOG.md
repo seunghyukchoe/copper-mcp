@@ -6,8 +6,447 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Restored deterministic render and apply replay for valid low-degree multi-pin candidates made
+  before `batched-1-steiner-v1`. Replay now selects the candidate's recorded
+  `astar-grid/0.4.0` component-MST behavior instead of reinterpreting it with the current
+  one-Steiner default. Candidate bytes and identities are never refreshed; unknown or impossible
+  historical router/order combinations refuse before rendering or applying copper.
+
+### Added
+
+- Added a read-only live KiCad IPC fidelity oracle. When launched by a KiCad plugin with the
+  instance socket and token, it binds one confirmed live serialization to Board IR and Circuit
+  Scene through redacted digest equality evidence. Missing plugin credentials produce a canonical
+  non-failing capability skip before process settings are resolved; endpoint, token, timeout,
+  session, version, and generic configuration failures remain distinct redacted results. One
+  cooperative deadline spans capture and both conversion stages. This adds no MCP action, editor
+  mutation, DRC, routing, placement, apply, or live-editor success claim.
+
+- Added the first content-addressed held-out audio project-family evaluation. Its independently
+  authored Apache-2.0 fixture is isolated from the predeclared training family by a hash-bound
+  train/tune/held-out split, and the evaluator reads only the held-out board. Three exact replays
+  recorded Board IR support, eight legal placement candidates after 96 bounded evaluations, and
+  candidate-preview completion for 6/6 nets with no source mutation. No model, network, KiCad,
+  DRC/ERC, policy-quality, routing-quality, external-project, fabrication, or hardware claim is
+  inferred from this one-family baseline.
+
+- Added a clean-worktree performance-profile baseline for file-backed routing, bounded placement,
+  and Circuit Scene observation. Each scenario uses two warmups, five unprofiled timing samples
+  with an invariant output digest, and one separate bounded `cProfile` pass with stable redacted
+  function labels. The artifact identifies placement containment/intersection work as the largest
+  measured seam on its single arm64/Python 3.14.2 environment; it adds no Rust, SIMD, GPU,
+  acceleration, cross-machine, KiCad, DRC, or hardware-performance claim.
+
+- Added a packaged standalone deterministic exact local-repair operator for a conventionally
+  coordinator-supplied bounded lattice window. It emits only request-bound immutable local
+  proposals with fixed failure/cancellation states. The predeclared 5 × 5 detour fixture replays
+  identically 10/10 times at eight unit steps, two bends, and 50 expanded states; a one-expansion
+  budget and cancellation publish no route. It remains outside negotiated routing, MCP, Board IR,
+  KiCad, physical clearance, DRC, candidate application, and board mutation.
+
+- Added a bounded, in-memory routing-task handle broker and a runtime MCP Tasks compatibility
+  probe. The reference environment observed `mcp 2.0.0`, but the supported dependency range
+  remains `<3`; the observed runtime lacks the current Tasks wire/dispatcher contract and
+  CopperMCP lacks owner-bound durable task-handle lookup, so wire Tasks stay disabled and the
+  ordinary routing-job tools remain the fallback.
+
+- Negotiated multi-net routing now rejects a lattice-clean candidate set when its same-layer,
+  cross-net orthogonal copper violates the stricter assigned net-class clearance. Generic routing
+  backends are independently replayed through the deterministic reference core under a shared
+  half-budget allocation before they can be accounted for or published. This is a bounded
+  acceptance gate, not KiCad DRC or board-wide physical clearance.
+
+- Added an internal, bounded deterministic placement-search baseline. It evaluates only
+  legalizer-issued immutable candidates, scores the same-net Manhattan connectivity proxy in
+  `O(n log n)`, and propagates one deadline plus cancellation through scoring and legalization.
+  It is advisory and makes no KiCad mutation, routing-quality, DRC, or fabrication claim.
+
+- Added a closed, advisory AI routing-policy seam for deterministic net ordering and
+  coordinator-supplied corridor/repair-window selection. Its bounded, redacted trace omits board
+  geometry and raw identifiers; policy output cannot emit copper or bypass deterministic routing,
+  validation, DRC, or explicit apply authorization. Content digests remain linkable and are not
+  secret redactions. The exact internal `deterministic-reference-v1` profile now influences only
+  the initial negotiated net order; no-profile v2 result shape and candidate identity are
+  unchanged. This adds no MCP, model, corridor, repair, or apply authority.
+
+- Added an internal one-shot isolated worker protocol and admitted only its fixed
+  `deterministic-reference-worker-v1` backend to negotiated routing's initial net order. It accepts
+  the same neutral scalar, no-window input as the in-process reference; uses nonce- and
+  digest-bound canonical responses with bounded timeout/cancellation and sanitized child process
+  state; and rechecks the fixed policy identity, input digest, complete known-net permutation,
+  empty selections, and composite candidate binding before router construction. Any worker failure
+  refuses with no fallback or router call. Retry order, geometry, validation, and every routing
+  budget remain coordinator-owned. This adds no model, plugin, MCP, corridor, repair, KiCad,
+  copper, or apply authority, and it is not an OS sandbox.
+
+- Added the first real FreeRouting smoke record through the bounded GPL-isolated process boundary.
+  The official v2.2.2 JAR produced a valid SES for one CopperMCP-original two-pad fixture, and
+  KiCad GUI 10.0.5 DRC observations recorded zero hard violations and zero unconnected items on
+  both the imported FreeRouting result and CopperMCP's pure-kernel result. Source/report,
+  source/DSN-export, import, and runner relationships remain self-attested rather than causal;
+  the CopperMCP runner does not exercise MCP or the authorized apply service. The artifact
+  therefore retains `comparison_closed=false` and `unavailable_or_incomplete`, with no parity,
+  performance, whole-board, or sandbox-containment claim.
+
+- Added an OpenSSF-informed sustainability and supply-chain roadmap. It separates the Criticality
+  Score activity proxy from Scorecard controls, records the dated `0.23`/`5.8` baseline as an
+  estimate and a distinct API snapshot, and defines engineering-backed gates for a defensible
+  `0.4` target without synthetic project activity.
+
+- Live placement proposals now preserve one operation-wide deadline after IPC capture: Board IR
+  conversion, placement-view construction, legalization, optional evidence, and token preparation
+  receive only the remaining budget. An expired post-capture budget returns a typed refusal instead
+  of silently granting a second full placement window.
+
+- Post-placement observation now validates the complete scene request before any workspace read,
+  rejects stale board revisions before scanning DRC sidecars, and refuses padless footprint rule
+  references before syntactic infeasibility analysis. These boundaries keep malformed/stale work
+  fail-closed and preserve the supported placement contract.
+
+- Negotiated-congestion routing now treats cancellation-callback failures as cancellation and
+  never publishes a partial candidate from that iteration, including when a later net cancels an
+  otherwise productive pass or when cancellation arrives before the next retry. Layered candidate verification also
+  binds track width, via diameter, and via drill to the Board IR net-class assignment, rejecting
+  re-stamped dimensions before topology acceptance.
+
+- The post-placement observation benchmark now fingerprints workspace entry inode and mtime
+  metadata in addition to bytes, mode, and symlink targets. Its replay can therefore detect
+  metadata-only observer mutations instead of treating them as a clean workspace.
+
+- Live route and placement proposals now create their operation deadlines before IPC capture and
+  pass both the absolute deadline and remaining millisecond timeout into the bounded KiCad
+  adapter. A slow snapshot cannot silently consume the adapter default beyond the proposal budget.
+
+- Apply replay protection now retains every consumed nonce until its own expiry instead of
+  evicting live entries under count pressure. The compatibility capacity hint is validated but
+  cannot weaken single-use authorization after a pre-apply backup is restored.
+
+- Durable routing-job lookup now commits TTL purges even for malformed or unavailable IDs, and a
+  stale `CANCEL_REQUESTED` lease is terminally acknowledged instead of remaining stranded until
+  retention expiry. The lifecycle remains redacted and compare-and-swap bound.
+
+- Live KiCad IPC board counting now carries its cooperative operation deadline into bounded
+  S-expression decoding, with pre/post-decode and 4 KiB scan checkpoints. Expired large or
+  malformed snapshots fail with the typed deadline refusal instead of spending unbounded parse
+  time first (ADR-0063, B-051).
+
+- Placement legality now keeps supported rectangular courtyards from padless/graphics-only
+  footprints as stationary collision envelopes. Padless objects remain unplaceable and absent from
+  candidate manifests, but movable footprints can no longer be reported clear through them
+  (ADR-0062, B-050).
+
+- Added read-only `observe_post_placement`: a required-revision, single-capture Circuit Scene and
+  aggregate KiCad DRC observation. It is fail-closed on stale or changed context and never exposes
+  raw DRC output, issues apply authority, or changes a board (ADR-0061, B-045).
+
+- Added a separately authorized `apply_placement_candidate` MCP capability for the bounded
+  front-side, orthogonal, source-preserving footprint subset. File-backed previews issue a
+  placement-scoped single-use token only when the exact replay accepts the candidate; the apply
+  path uses operator opt-in, lockfile refusal, double CAS, a recoverable pre-apply copy, atomic
+  replacement, and a typed `footprints_moved`/`bytes_changed` result. Side flips, unsupported
+  footprint properties/graphics/library/3D-model syntax, no-op candidates, live IPC mutation, and
+  post-placement DRC remain fail-closed under ADR-0059.
+
+- Added a deterministic, CopperMCP-original Apache-2.0 synthetic RC audio-routing microcase.
+  Repeated previews produce one reproducible candidate and one new copper segment in a disposable
+  derivative; the source board is unchanged and the fixture makes no DRC, apply, production,
+  fabrication, or hardware claim. Evidence is recorded in B-043.
+
+- Added deterministic same-side courtyard legality to placement previews for the Board IR v0.2
+  rectangular subset. The legalizer transforms proposed poses, checks exact integer rectangle
+  overlap, treats front/back courtyards independently, and refuses overlapping candidates; custom
+  courtyard clearance, general topology, placement connectivity, and apply remain open under
+  ADR-0058.
+
+- Added a bounded `kicad_schematic_parity` verifier for the passive Circuit Intent subset. It
+  requires exact renderer replay and checks real KiCad format-E `kicadxml` component, pin, and
+  net-node parity with bounded hostile-input handling; authoritative ERC and schematic-to-PCB
+  parity remain open. The fixture and evidence are recorded under ADR-0056 and B-039.
+
+- Added front/back (`F.Cu`/`B.Cu`) observation for orthogonal footprints with matching rectangular
+  courtyard centerlines. The adapter preserves KiCad's authored board-frame child coordinates and
+  does not apply a second mirror; GUI flip-save, general courtyard topology, placement legality,
+  and apply remain open. The source/CLI oracle is recorded under ADR-0057 and B-040.
+
+- Added a bounded, deterministic negotiated-congestion coordinator for two-pin nets on one
+  signal-layer lattice. It uses present and historical edge/vertex pressure to reroute conflicted
+  candidates, binds each accepted candidate to the policy digest, and records structural overflow
+  evidence in B-036. It remains candidate-only: exact physical clearance, multilayer vias, KiCad
+  DRC, apply, and FreeRouting parity are not claimed.
+
+- Added an internal, candidate-bound KiCad DRC gate for the supported placement serializer. It runs
+  against a disposable private context, rechecks source/rule/library CAS, and returns only a
+  redacted aggregate summary; public/live placement and apply remain unchanged.
+
+- Added opt-in, file-backed placement DRC evidence to `preview_placement`. `include_drc: true`
+  replays the immutable candidate through the same private KiCad context gate and returns only
+  candidate/source/patched-board/context digests plus aggregate findings. `passed` remains the
+  hard error/connectivity signal while `clean` is stricter about warnings, exclusions, and ignored
+  checks; live placement, apply authority, raw reports, and fabrication claims remain excluded.
+  Evidence is recorded in B-044.
+
+- Added a redacted, deterministic unsigned in-toto Statement payload to candidate-bound DRC
+  evidence. The Link v0.3 payload binds the candidate and board revisions by digest, carries only
+  aggregate DRC byproducts, and is validated at the MCP boundary; DSSE signing and verification
+  remain intentionally deferred.
+
+- Added a deterministic conservative spatial index to the A* and benchmark Dijkstra obstacle
+  hot path. Exact integer legality predicates remain authoritative, small/pathological boards
+  fall back to linear scans, and candidate identity advances to `astar-grid/0.6.0` with policy
+  `orthogonal-a-star-spatial-index-v1`. B-033 records differential route equivalence and the
+  fixture-bounded reduction in exact obstacle relations; no congestion, FreeRouting, DRC, or
+  fabrication claim is made.
+
+- Added opt-in candidate-bound authoritative KiCad DRC evidence to file-backed
+  `preview_layered_route`. The closed response binds candidate, base, source, patched-board, and
+  DRC-context revisions while returning only aggregate findings; live layered preview and durable
+  routing jobs reject the flag instead of silently ignoring it. This remains a narrow two-signal-
+  layer proposal signal, not whole-board, refill, fabrication, or FreeRouting authority.
+
+- Hardened layered DRC evidence with a strict `clean` signal distinct from the hard-gate
+  compatibility field `passed`: warning, exclusion, unconnected, or ignored-check findings can no
+  longer be presented as a clean report. The public boundary now rejects malformed or
+  candidate-unbound authority, with warning-only and malformed-authority regressions recorded in
+  B-038.
+
+- Added a bounded `batched-1-steiner-v1` ordering policy for low-degree multi-pin nets. It keeps
+  the deterministic A* core and all geometry validation authoritative while reducing the recorded
+  four-pad fixture's wire length from 48 mm to 42 mm; no Steiner-optimality or FreeRouting parity
+  claim is made.
+
+- Added a bounded, restart-safe routing-job repository and ordinary MCP lifecycle surface. The
+  file-backed two-signal-layer queue persists deep-frozen normalized requests, redacted manifests,
+  and separately authorized content-addressed candidate geometry behind TTL/capacity limits;
+  `start_routing`, `get_routing_job`, `cancel_routing_job`, and `export_routing_candidate` never
+  apply copper, accept board bytes, or claim MCP Tasks compatibility.
+
+- Added a bounded SQLite `CandidateManifestStore` for restart-safe, content-addressed candidate
+  summaries. It persists only redacted identity, endpoint, cost, and metric metadata; route
+  geometry, board bytes, DRC findings, durable export, and MCP Tasks remain separate capabilities.
+
+- Added a protocol-independent `RoutingJobWorker` with one active CAS-backed lease, cooperative
+  cancellation, stale-lease recovery, and fail-closed invalid-candidate publication. The worker
+  stores only the existing redacted job record; candidate persistence/export and MCP Tasks remain
+  deferred until their request/result and authorization contracts are pinned.
+
+- Added a pure, bounded `verify_layered_candidate` gate for layered route topology. It binds
+  candidate identity, Board IR revision, endpoints, layer transitions, path/via continuity, and
+  duplicate/crossing geometry before the disposable serializer; physical validation remains an
+  explicit `not_modelled` result.
+
+- Added a transport-independent, revision-safe routing-job ledger. `RoutingJobStore` persists only
+  bounded redacted JSON records in SQLite, supports idempotent content-addressed creation,
+  compare-and-swap transitions, cooperative cancellation, restart rehydration, TTL/capacity
+  limits, and candidate ID/base-revision binding. It does not run background routing, persist
+  candidate geometry, expose MCP Tasks, export boards, or grant apply authority.
+
+- Added `preview_live_layered_route`, a read-only MCP proposal for bounded two-signal-layer routes
+  against the exact active KiCad IPC snapshot. It requires pad references plus source, Board IR,
+  and redacted KiCad-session compare-and-swap digests, reuses the file-backed candidate oracle,
+  and remains candidate-only with no DRC, refill, serializer, persistence, or apply authority.
+
+### Fixed
+
+- `inspect_live_board` now returns the opaque, fixed-format PBKDF2 session CAS as required
+  structured output when KiCad supplied a plugin token, or explicit `null` when it did not. This
+  makes the public inspection → live-scene → layered-preview flow composable while keeping the
+  token and process salt private; changed tokens and fresh CopperMCP processes still refuse stale
+  live-route requests.
+
+- Placement validation now preflights every declared subject in request order before syntactic
+  infeasibility analysis. A known padless subject paired with an unrelated front/back contradiction
+  now returns the established fixed `unsupported_geometry` refusal with no candidate.
+
+- Placement validation now preflights every explicit proposal anchor that names a known padless
+  footprint after rule references and before syntactic contradiction analysis. For each supported
+  anchor point (`center`, `north`, `south`, `east`, and `west`), that mixed request returns the
+  established `unsupported_geometry` refusal with no candidate instead of allowing unrelated
+  contradictory side rules to mask it as `infeasible_constraints`. Self-anchored proposals and
+  pure contradictions retain their existing behavior. This changes validation ordering only: it
+  adds no anchor geometry, padless placement, non-padless placement behavior, DRC, apply, or board
+  mutation capability.
+
+- Replaced the public unkeyed `sha256(KICAD_API_TOKEN)` live-session fingerprint with the fixed
+  `hmac-sha256:<64 lowercase hex>` wire type. A fresh 256-bit process-local key and
+  domain-separated HMAC-SHA256 make this precondition opaque, use constant-time comparison at
+  the session CAS checks, and deliberately refuse preconditions from a fresh process/restart.
+  The token and process key remain absent from outputs, errors, logs, candidates, and ledgers.
+
+- Superseded the prior HMAC session-revision derivation with fixed-work
+  `pbkdf2-hmac-sha256:<64 lowercase hex>`. The process-local 256-bit salt is domain-separated
+  and non-persistent; the fixed 200,000-iteration PBKDF2-HMAC-SHA256 derivation keeps
+  limited-input token guesses computationally expensive and remains bounded for local CAS.
+  The HMAC history remains recorded in D-127/SEC-103/R-102; legacy HMAC and unkeyed SHA-256 wire
+  values are refused.
+
+- Durable routing jobs now validate every immutable candidate-to-job completion binding and the
+  exact `RUNNING` lifecycle revision before writing bounded, owner-bound candidate artifacts, then
+  revalidate at the final lifecycle CAS. Invalid candidates, and direct queued, terminal,
+  cancel-requested, or stale-revision calls, leave no export or manifest; a worker returns a fixed
+  invalid-request failure while the direct publisher leaves its revision-bound job retryable.
+  Valid artifacts still publish
+  before completion, so capacity/serialization failure cannot create a completed job without an
+  export. A concurrent completion race can leave only an unreadable TTL-bounded orphan. Request
+  expiry and invalid cancellation text now also reach both request and lifecycle retention cleanup
+  before their fixed refusal.
+
+- Corrected the public policy benchmark provenance contract to name the artifact's
+  `evidence_harness_commit` field: the stable source/harness commit used by the embedded replay
+  command. The separately recorded artifact materialization commit remains distinct; no replay
+  artifact, measurement, policy authority, or routing behavior changed.
+
+- Hosted CI now checks out full Git history before running tests, so benchmark regressions that
+  replay an immutable `evidence_harness_commit` with `git show` do not fail only because the source
+  commit was omitted by a shallow clone. A workflow regression pins `fetch-depth: 0`; this proves
+  repository configuration, not hosted-run success or the correctness of a benchmark artifact.
+
+- Expired routing-candidate geometry exports now commit their TTL purge before returning the
+  deliberately uniform unavailable response. This preserves the access-retention boundary for
+  stored `candidate_json`; TTL is not a secure-erasure guarantee for SQLite, backups, or copies a
+  caller already received.
+
+- The advisory placement solver now checks cooperative cancellation again at its publication
+  boundary. When cancellation is observed, it returns an empty ranked-candidate set rather than
+  exposing a partially explored ranking; this does not hard-interrupt already-running work.
+
+- Unavailable routing-request lookups and unauthorized live candidate-export lookups now commit
+  any prior TTL cleanup before returning their uniform unavailable response. An unauthorized
+  live export remains intact, while unrelated expired private records are removed; decode and
+  integrity failures still roll back, and TTL is not secure erasure.
+
+- Malformed routing request and candidate-export handles now also begin and purge their stores
+  before the uniform unavailable response, committing expired private-record cleanup. Lookup
+  timestamps remain validated before any transaction, and TTL remains an access-retention policy,
+  not secure erasure.
+
+- Public routing-job/export lookups now defer store-owned handle validation until after retention
+  cleanup, and candidate-manifest lookup purges before malformed-ID not-found handling. Fixed
+  diagnostics and no-disclosure behavior are unchanged; timestamps remain validated first and
+  TTL is not secure erasure.
+
+- MCP routing get, cancel, and export entrypoints now accept handles broadly enough to reach the
+  purge-first service/store boundary. Their payloads remain closed, diagnostics remain fixed and
+  non-disclosing, valid requests are unchanged, and TTL is not secure erasure.
+
+### Changed
+
+- Corrected the spatial-index benchmark to count bucket candidates examined by the exact bounds
+  predicate rather than only final hits. The regenerated B-037 artifact reports `636` indexed
+  candidates versus `131,072` linear checks (`99.5148%` reduction); the older `31` metric is kept
+  only as historical evidence and is no longer used for performance claims.
+
 ### Security
 
+- Added a deterministic offline MCP excessive-agency regression evaluation. With apply enabled it
+  calls the public route and placement apply handlers using syntactically valid but unauthorized
+  tokens, requiring structured `invalid_token` before source access; it also covers closed
+  request schemas, stale revision, quotas, and output/report disclosure. The disposable workspace
+  comparison includes content, permissions, and metadata but the artifact records only stable
+  unchanged assertions. It invokes no model, network, KiCad process, or board mutation, and does
+  not evaluate application logging because the current source has no application logger sink.
+
+- `make security` and the hosted security workflow now pass `.` to `pip-audit`, resolving the
+  default production dependency graph instead of reporting unrelated packages installed in the
+  ambient interpreter. Project-path mode excludes every optional group (`dev`, `security`, and
+  `kicad`) even though CI installs `.[security]` to run the auditor; those groups need separate
+  explicit audits or lock evidence. Secret scanning is unchanged.
+
+- Hardened placement application after review: bounded manifest pose, grid, legality, and evidence
+  fields are rejected before board parsing; the destructive MCP request is closed at its nested
+  boundary; post-rename and post-publication paths spend the capability exactly once; and the
+  final board revision is re-read after guarded recovery so an observed rollback cannot report a
+  stale published digest. Published placement bytes are re-rendered and reparsed before a success
+  response, followed by a final best-effort digest observation that catches a visible rewrite after
+  verification. `applied_but_unverified` now explicitly permits a restored original revision or
+  concurrent bytes, and uses a null after-revision when the board cannot be observed; clients use
+  the reported digest and diagnostic rather than assuming that the authorized revision remains on
+  disk.
+
+- Route and placement apply now distinguish an unreadable or missing board at the final
+  publication observation from the expected digest: the capability is consumed and the result is
+  `applied_but_unverified` with a null after-revision instead of a false `applied` response.
+
+- Placement DRC evidence is now a public, read-only opt-in only for the documented file-backed
+  serializer subset. KiCad runs with fixed JSON DRC arguments and no refill/save flags against a
+  disposable context; source bytes, inode, and mtime remain unchanged, and malformed, stale, or
+  unbound evidence fails closed at the MCP contract boundary.
+
+- Routing-job and candidate-manifest TTL misses now commit their expiry purge before returning
+  the uniform unavailable diagnostic, so expired board-derived metadata cannot reappear after a
+  read-only miss. The boundary remains redacted and bounded; no routing or mutation authority is
+  added.
+
+- Routing workers now clear their in-memory lease even when an expired job disappears during
+  cancellation acknowledgement or publish-race resolution. This prevents a worker from being
+  stranded after a bounded store miss and adds no retry or mutation authority.
+
+- Live KiCad capture now checks the shared deadline while traversing the bounded serialized
+  S-expression and preserves the typed deadline refusal during confirmation. The official
+  synchronous IPC wrapper remains cooperative: a blocking third-party call cannot be forcibly
+  pre-empted by this Python process.
+
+- Closed the latest routing review-bot boundary gaps: public scene references now carry only
+  content-derived net identifiers; live IPC capture carries one cooperative operation deadline;
+  job failures persist fixed typed diagnostics; candidate completion and manifests bind request
+  identity, router policy, seed, and work budgets; expired manifest rows are purged transactionally;
+  and layered obstacle envelopes remain conservative before budget exhaustion. These changes add no
+  mutation, remote transport, or general multilayer authority.
+
+- Tightened the in-toto MCP contract so every resource descriptor has a required, closed nested
+  `sha256` digest object; `{}` and unknown digest algorithms now fail validation. B-034/B-035 were
+  replayed from the implementation commit and recorded as append-only current-contract evidence.
+
+- Layered serialization now refuses structurally disconnected, crossing, duplicate, stale, or
+  endpoint-via candidates before rendering. The layered router reserves endpoint pad envelopes for
+  tracks and blocks via transitions there, avoiding unsupported via-in-pad geometry without
+  claiming fabrication legality.
+
+- Added `preview_layered_route`, a loopback/file-backed, read-only MCP boundary that requires
+  both source and Board IR compare-and-swap digests, infers net identity from two pad references,
+  validates bounded settings, verifies candidate digests, and redacts board text/net names. It
+  cannot request DRC, refill, serialization, export, persistence, or apply authority.
+
+- Layered routing now validates every obstacle and search-budget field before reporting resource
+  exhaustion, and its physical envelopes include the candidate track half-width/via radius plus
+  explicit zone clearances. Malformed requests cannot be reclassified as stale revisions or escape
+  the non-throwing diagnostic contract. Fresh fill obstacles apply the same governing zone-clearance
+  rule as conservative zone envelopes.
+
+- `preview_live_placement` is revision-bound and read-only: malformed requests fail before IPC,
+  stale board/snapshot digests stop before candidate work, and no KiCad write, DRC, fill,
+  apply-token, or raw source can be requested through the contract.
+
+- Live IPC-to-scene conversion now keeps the exact UTF-8 snapshot paired with its redacted digest
+  and refuses a caller-supplied board or Board IR snapshot revision mismatch before returning a
+  scene. The live tool uses the literal `board: "live"`, refuses render delivery, and does not
+  grant routing, placement, DRC, or apply authority.
+- Live-scene requests are now fully preflighted before any IPC connection or board serialization:
+  malformed constraints, regions, layers, unknown fields, and the unsupported render flag fail at
+  the application boundary, keeping invalid MCP traffic from driving expensive KiCad reads.
+- The optional KiCad IPC observer is constrained to a local IPC socket, bounded by a connection
+  timeout and board-size/object-count ceilings, and refuses a future KiCad API version unless an
+  explicit development-only opt-in is supplied. It returns only numeric versions, a board digest,
+  byte count, object counts, and the socket kind; socket paths, tokens, board text, names, UUIDs,
+  and geometry never cross the MCP boundary. The bundled KiCad plugin exposes the same read-only
+  surface and does not mutate an open document.
+- KiCad IPC version validation now fails closed when the official binding returns a false result.
+  Observer counts come from the captured serialization rather than mutable per-object getters,
+  count only direct board-level net declarations, include circular graphics, and require a second
+  serialization to match before the revision is accepted. The wrapper still
+  allocates its complete response before Python can enforce the size ceiling; this residual API
+  limitation is documented, while bounded parsing and removal of extra collection materialization
+  reduce avoidable memory exposure.
+- Live IPC clients are now closed on every observation success and failure path, and live layered
+  proposals pass the remaining bounded route deadline into the official client. A hashed
+  `KICAD_API_TOKEN` session precondition prevents identical board bytes from silently crossing a
+  KiCad instance restart; the raw token remains outside all outputs and logs.
+- Scene-selected routes now require both the observed board revision and Board IR snapshot digest.
+  Stale source bytes are refused before Board IR conversion, while a stale snapshot is refused
+  immediately after it; neither can reach route search, fill authority, DRC, or apply-token
+  issuance. Shared request text now also rejects invalid Unicode surrogates before path handling or
+  net hashing, and malformed MCP requests remain behind the fixed non-echoing application boundary.
 - Board IR 0.2 makes footprint ownership revision-bound and budgeted: footprints count against the
   object ceiling, courtyard vertices and intersection work use polygon ceilings, one footprint is
   capped at 64 courtyard rings before geometry allocation, and Circuit Scene charges serialized
@@ -46,6 +485,47 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Freshness-verified foreign KiCad fill islands now replace the conservative whole-zone routing
+  envelope in the deterministic A* core. Matching zone/source revisions are required, stale or
+  unmatched fill fails closed, explicit zone clearance is retained, and `preview_route` now returns
+  the freshness-bound authority on routed candidates with a typed `routing_effect` when
+  `include_fill_authority` is requested.
+- Layered two-signal-layer candidates now have an internal, replay-bound authoritative KiCad DRC
+  gate. The gate serializes only a disposable derivative, preserves source bytes, binds the
+  complete private DRC context, and returns redacted aggregate evidence; it is not exposed through
+  MCP/CLI and does not grant apply authority.
+- Placement candidate rendering now preserves arbitrary exact Board IR pad angles while retaining
+  the orthogonal-only restriction on parent footprint poses. Layered A* now reports a distinct
+  obstacle-count budget diagnostic when a structurally valid request exceeds its configured ceiling.
+
+- Added an internal, Board IR-bound two-layer routing proposal adapter. It resolves exact
+  nanometre grid geometry, net-class width/clearance/via dimensions, foreign physical envelopes,
+  track versus via-only keepouts, immutable candidate identity, and fail-closed stale/off-grid/
+  unsupported diagnostics. This remains proposal-only: the public MCP wrapper exposes only the
+  bounded candidate contract; it does not serialize KiCad segments or vias, invoke DRC, mutate a
+  board, or claim production routing through vias.
+
+- Added a request-replayed, source-preserving serializer for the layered proposal seam. It emits
+  deterministic segment and full-stack through-via expressions, canonicalizes reversed via
+  transitions to KiCad copper-stack order, rejects native-identity collisions, and requires a
+  Board IR round trip equal to the source plus the candidate geometry. It remains disposable and
+  candidate-only: no file write, KiCad invocation, DRC, MCP exposure, or apply authority.
+
+- Added an internal, non-public two-layer A* search oracle with explicit via transitions,
+  deterministic tie-breaking, per-layer cell obstacles, cancellation, and bounded resource
+  accounting. It is algorithmic evidence toward via-capable routing only; it does not produce
+  Board IR/KiCad candidates, change existing single-layer candidate IDs, or claim DRC validity.
+
+- The KiCad IPC plugin README now documents the required copy into KiCad's configured PCB plugin
+  discovery directory. Installing `copper-mcp[kicad]` alone does not register the hardware-side
+  manifest or action, and the plugin remains intentionally outside the Python wheel.
+
+- `preview_route` accepts exactly one net selector: the existing private KiCad `net` name or a
+  Circuit Scene `net_ref_id`. The MCP tool now advertises a closed two-variant input schema and a
+  complete closed, status-specific structured-output union instead of an open object; impossible
+  candidate/connection/diagnostic combinations are no longer advertised. Its annotation is
+  conservatively non-idempotent because `include_apply_token` can mint a fresh capability even when
+  the candidate geometry is deterministic.
 - The active Board IR writer and decoder now target exact `copper.board-ir` `0.2.0`. Historical 0.1
   schema and golden data stay immutable, while migration requires re-converting the original board
   because flattened 0.1 pads cannot recover trustworthy parent identity or pose. Snapshot digests
@@ -53,6 +533,9 @@ All notable changes are documented here. The format follows
 - Placement grouping is now projected from the same Board IR snapshot that carries the pads and
   rejects mismatched source bytes, replacing the second out-of-band KiCad identity parse. Route
   serialization also requires native footprint identities before producing output.
+- File-backed placement previews now honor optional board and Board IR snapshot compare-and-swap
+  digests before placement-view/legalizer work; stale requests return a typed refusal instead of
+  echoing unverified preconditions.
 - Applied and backup files now keep the board's own **permission bits** instead of collapsing to
   `0600`, so group and CI readability and hard links survive an apply.
 - Pre-apply copies are written into a `.copper-mcp-backups/` subdirectory, not beside the board
@@ -67,6 +550,43 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added the public, candidate-only `preview_layered_route` MCP tool for the narrow two-signal-layer
+  Board IR router. It returns closed structured output with per-layer paths, full-stack vias,
+  deterministic metrics, and typed stale/unsupported/no-path diagnostics. B-024 records ten
+  schema-valid deterministic replays, stale CAS refusals, and unchanged source bytes; it does not
+  claim general multilayer routing, KiCad DRC, fabrication readiness, or FreeRouting parity.
+
+- `inspect_live_editor_context`, a read-only MCP surface for the active KiCad layer and bounded
+  native selection refs, bound to the raw board serialization and editor-context digests. It now
+  avoids treating a constraint-profile-dependent Circuit Scene snapshot as an IPC serialization
+  precondition. The FreeRouting comparison note documents its heuristic maze/rip-up architecture
+  and a common-board benchmark protocol; no general routing-quality superiority claim is made.
+
+- An internal source-preserving KiCad placement projection for the supported front-side,
+  orthogonal, unfilled-courtyard footprint subset. It is candidate-only, revision-bound, rejects
+  forged or incomplete placeable sets, preserves padless mechanical footprints and unrelated
+  source bytes, and reparses the disposable result against the expected Board IR transform.
+  Placement DRC, live editor mutation, undo, and post-action observation remain separate gates.
+
+- `preview_live_placement`, a deterministic placement proposal over one byte-confirmed active
+  KiCad IPC snapshot. It reuses the file-backed legalizer and requires both Circuit Scene digests;
+  B-014 records fake-client equality, replay, stale-precondition, and zero-mutation evidence.
+
+- `preview_live_route`, a read-only MCP route-proposal tool that consumes a Circuit Scene
+  `net_ref_id` plus both board/snapshot revisions, converts the exact active KiCad IPC snapshot,
+  and returns the existing deterministic candidate contract. DRC, zone refill, apply-token
+  issuance, live editor mutation, and real-session success remain explicitly unclaimed; B-013
+  records the fake-client oracle, stale-session refusals, and zero-call action preflight.
+- `observe_live_board_scene`, a read-only bridge from the active KiCad IPC document to Circuit
+  Scene `0.2.0`. It reuses exact Board IR geometry and author-text quarantine, with optional
+  compare-and-swap digests for stale-session refusal; live action gates remain separate.
+- An optional official `kicad-python` integration: the read-only `inspect_live_board` MCP tool and
+  `hardware/kicad-ipc-plugin` action provide a redacted live-board observation contract while
+  keeping placement, routing, DRC, and candidate application behind separate validated gates.
+- A reproducible MCP observation-to-action benchmark over the licensed RC low-pass audio fixture.
+  It pins the former 0/3 actionable Scene references against 3/3 revision-bound references, exact
+  candidate equality with the hidden-name oracle, stale-reference refusal, deterministic replay,
+  closed schemas, and an identical final private-workspace file tree.
 - First-class immutable Board IR footprints with exact origin, normalized rotation, side, lock
   state, total pad ownership, and canonical board-frame rectangular courtyard rings. A compact
   KiCad fixture pins all four orthogonal transforms and passes KiCad 10.0.5 DRC with zero violations
@@ -117,6 +637,15 @@ All notable changes are documented here. The format follows
   `--expect-board-revision` compare-and-swap the operator states explicitly.
 
 ### Fixed
+
+- `inspect_live_editor_context` no longer treats a Circuit Scene's constraint-profile-dependent
+  `snapshot_digest` as the raw IPC serialization precondition. The context read now binds to the
+  observed `board_revision`; its response alias remains explicit, and `context_digest` still
+  protects follow-up selection/layer reads.
+
+- Added a revision-bound `inspect_live_editor_context` MCP surface that reports only KiCad's
+  active layer and bounded native selection references. Unknown/empty selections, raw selection
+  strings, and editor mutations are refused or never read.
 
 - A failure while writing the pre-apply copy now returns a typed `backup_failed` refusal instead
   of escaping as an uncaught `OSError`. Found by crash injection: no copy means no way back, so

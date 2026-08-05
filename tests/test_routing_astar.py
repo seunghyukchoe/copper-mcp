@@ -41,6 +41,7 @@ from copper_mcp.routing import (
     RoutePath,
     RouteRequest,
     RouteResult,
+    VerifiedFill,
     canonical_candidate_bytes,
     verify_candidate_id,
 )
@@ -397,8 +398,8 @@ def test_straight_route_is_exact_replayable_and_content_addressed() -> None:
     first = _candidate(router.propose(snapshot, request))
     second = _candidate(router.propose(snapshot, request))
 
-    assert router.name == "orthogonal-a-star-v1"
-    assert first.router_version == "astar-grid/0.4.0"
+    assert router.name == "orthogonal-a-star-spatial-index-v1"
+    assert first.router_version == "astar-grid/0.6.0"
     assert first == second
     assert first.patch.paths[0].vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
     assert first.patch.width_nm == 200
@@ -2022,7 +2023,7 @@ def test_a_partly_connected_multi_pin_net_is_routed_as_a_tree() -> None:
 
     assert candidate == router.propose(snapshot, request).candidate
     assert candidate.pad_count == 3
-    assert candidate.ordering_policy == "component-mst-v1"
+    assert candidate.ordering_policy == "batched-1-steiner-v1"
     # Two components, so exactly one merge.
     assert len(candidate.patch.paths) == 1
     assert candidate.metrics.unrouted_connections == 0
@@ -2169,12 +2170,39 @@ def test_a_disconnected_multi_pin_net_is_routed_as_a_deterministic_tree() -> Non
     assert first == second
     assert canonical_candidate_bytes(first) == canonical_candidate_bytes(second)
     assert first.pad_count == 3
-    assert first.ordering_policy == "component-mst-v1"
+    assert first.ordering_policy == "batched-1-steiner-v1"
     # Three isolated pads are three components, so a spanning tree needs exactly two merges.
     assert len(first.patch.paths) == 2
     assert first.cost.length_nm == sum(path.length_nm for path in first.patch.paths)
     assert first.cost.bend_count == sum(path.bend_count for path in first.patch.paths)
     assert first.metrics.unrouted_connections == 0
+
+
+def test_pre_batched_multi_pin_replay_uses_the_recorded_component_mst_profile() -> None:
+    # Eight distant keepouts activate today's spatial index.  They stay far from the route, so
+    # the historical linear scan changes only recorded work, not legal geometry.
+    snapshot = _snapshot(
+        third_target=True,
+        keepouts=tuple((500 + index * 1_000, 500, 700 + index * 1_000, 700) for index in range(8)),
+    )
+    request = _request(snapshot)
+    legacy = _candidate(
+        AStarRouter.for_replay(
+            router_version="astar-grid/0.4.0",
+            policy="orthogonal-a-star-v1",
+            ordering_policy="component-mst-v1",
+            pad_count=3,
+        ).propose(snapshot, request)
+    )
+
+    replayed = _candidate(AStarRouter().replay(snapshot, legacy))
+    current = _candidate(AStarRouter().propose(snapshot, request))
+
+    assert legacy.ordering_policy == "component-mst-v1"
+    assert replayed == legacy
+    assert canonical_candidate_bytes(replayed) == canonical_candidate_bytes(legacy)
+    assert current.ordering_policy == "batched-1-steiner-v1"
+    assert legacy.metrics.obstacle_checks > current.metrics.obstacle_checks
 
 
 def test_every_tree_leg_starts_on_copper_that_already_belongs_to_the_net() -> None:
@@ -2459,8 +2487,6 @@ def test_a_multi_pin_pad_off_the_lattice_is_still_reached_through_its_core() -> 
 def test_verified_fill_from_another_board_is_refused() -> None:
     """Fill proved against a different board must never be believed for this one."""
 
-    from copper_mcp.routing import VerifiedFill
-
     snapshot = _snapshot(own_zone=_rectangle(1_000, 1_000, 2_000, 2_000))
     foreign = VerifiedFill(
         net_id=NET_ID,
@@ -2474,6 +2500,96 @@ def test_verified_fill_from_another_board_is_refused() -> None:
     _assert_failure(result, RouteFailureCode.STALE_FILL)
     assert result.diagnostic is not None
     assert "different board revision" in result.diagnostic.message
+
+
+def test_fresh_foreign_fill_replaces_conservative_zone_envelope() -> None:
+    """Fresh KiCad fill opens a clear corridor that the zone outline would conservatively block."""
+
+    snapshot = _snapshot(
+        foreign_zones=(_rectangle(3_000, 3_000, 7_000, 7_000),),
+    )
+    fill = VerifiedFill(
+        net_id=OTHER_NET_ID,
+        layer_id=LAYER_ID,
+        points=(
+            PointNM(3_000, 6_000),
+            PointNM(7_000, 6_000),
+            PointNM(7_000, 7_000),
+            PointNM(3_000, 7_000),
+        ),
+        source_revision=SOURCE_REVISION,
+    )
+
+    conservative = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+    exact = _candidate(AStarRouter().propose(snapshot, _request(snapshot), verified_fill=(fill,)))
+
+    assert conservative.cost.length_nm > 8_000
+    assert exact.cost.length_nm == 8_000
+    assert exact.patch.paths[0].vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
+
+
+def test_fresh_fill_respects_governing_zone_clearance_and_track_half_width() -> None:
+    """Exact fill still carries the zone's clearance rule around its copper polygon."""
+
+    fill_points = (
+        PointNM(3_000, 5_500),
+        PointNM(7_000, 5_500),
+        PointNM(7_000, 5_600),
+        PointNM(3_000, 5_600),
+    )
+
+    low_clearance = _snapshot(
+        foreign_zones=(_rectangle(3_000, 5_500, 7_000, 5_600),),
+        zone_clearance_nm=100,
+    )
+    low_fill = VerifiedFill(
+        net_id=OTHER_NET_ID,
+        layer_id=LAYER_ID,
+        points=fill_points,
+        source_revision=SOURCE_REVISION,
+    )
+    low_candidate = _candidate(
+        AStarRouter().propose(low_clearance, _request(low_clearance), verified_fill=(low_fill,))
+    )
+
+    high_clearance = _snapshot(
+        foreign_zones=(_rectangle(3_000, 5_500, 7_000, 5_600),),
+        zone_clearance_nm=1_000,
+    )
+    high_fill = VerifiedFill(
+        net_id=OTHER_NET_ID,
+        layer_id=LAYER_ID,
+        points=fill_points,
+        source_revision=SOURCE_REVISION,
+    )
+    high_candidate = _candidate(
+        AStarRouter().propose(
+            high_clearance,
+            _request(high_clearance),
+            verified_fill=(high_fill,),
+        )
+    )
+
+    # 100 nm route half-width + 100 nm zone clearance leaves the 5,000 nm centreline open;
+    # the 1,000 nm zone rule must inflate the same exact polygon and force a detour.
+    assert low_candidate.cost.length_nm == 8_000
+    assert high_candidate.cost.length_nm > low_candidate.cost.length_nm
+
+
+def test_verified_fill_without_a_board_ir_zone_is_refused() -> None:
+    snapshot = _snapshot()
+    fill = VerifiedFill(
+        net_id=OTHER_NET_ID,
+        layer_id=LAYER_ID,
+        points=(PointNM(3_000, 6_000), PointNM(7_000, 6_000), PointNM(7_000, 7_000)),
+        source_revision=SOURCE_REVISION,
+    )
+
+    result = AStarRouter().propose(snapshot, _request(snapshot), verified_fill=(fill,))
+
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert "matching Board IR zone" in result.diagnostic.message
 
 
 def test_the_multilayer_connectivity_model_shares_the_object_ceiling() -> None:

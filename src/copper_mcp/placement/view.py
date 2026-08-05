@@ -13,6 +13,7 @@ from copper_mcp.board_ir import (
     Pad,
     ParseLimits,
     PointNM,
+    Ring,
     validate_content,
     verify_snapshot,
 )
@@ -35,6 +36,8 @@ class FootprintView:
     locked: bool
     #: Union of the footprint's pad bounds in the board frame, as currently placed.
     hull: Rect
+    #: Exact rectangular courtyard rings in the current Board IR board frame.
+    courtyards: tuple[Ring, ...]
 
     def __post_init__(self) -> None:
         if not self.ref_id.startswith("footprint:"):
@@ -45,6 +48,31 @@ class FootprintView:
             raise PlacementViewError("a placeable footprint must own at least one pad")
         if not isinstance(self.locked, bool):
             raise PlacementViewError("footprint locked state must be boolean")
+        if not isinstance(self.courtyards, tuple) or not all(
+            isinstance(ring, Ring) for ring in self.courtyards
+        ):
+            raise PlacementViewError("footprint courtyards must be immutable rings")
+
+
+@dataclass(frozen=True, slots=True)
+class StationaryFootprintView:
+    """A padless footprint whose fixed courtyard still participates in collision checks."""
+
+    ref_id: str
+    origin: PointNM
+    orientation_udeg: int
+    side: str
+    courtyards: tuple[Ring, ...]
+
+    def __post_init__(self) -> None:
+        if not self.ref_id.startswith("footprint:"):
+            raise PlacementViewError("footprint reference must be typed")
+        if self.side not in {"front", "back"}:
+            raise PlacementViewError("footprint side must be front or back")
+        if not isinstance(self.courtyards, tuple) or not self.courtyards:
+            raise PlacementViewError("stationary footprint must carry a courtyard")
+        if not all(isinstance(ring, Ring) for ring in self.courtyards):
+            raise PlacementViewError("stationary footprint courtyards must be immutable rings")
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,11 +90,14 @@ class PlacementView:
     #: retained so a caller naming one is told it cannot be placed rather than that it does not
     #: exist. The second answer would be false: Board IR carries it and the scene reports it.
     padless_refs: frozenset[str] = frozenset()
+    #: Padless footprints with rectangular courtyards remain stationary collision envelopes.
+    stationary: Mapping[str, StationaryFootprintView] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "footprints", MappingProxyType(dict(self.footprints)))
         object.__setattr__(self, "owner_by_pad", MappingProxyType(dict(self.owner_by_pad)))
         object.__setattr__(self, "padless_refs", frozenset(self.padless_refs))
+        object.__setattr__(self, "stationary", MappingProxyType(dict(self.stationary)))
 
     def resolve(self, ref_id: str) -> FootprintView | None:
         """Resolve a footprint reference, or the footprint owning a pad reference."""
@@ -113,6 +144,7 @@ def build_placement_view(
     owner_by_pad: dict[str, str] = {}
     footprints: dict[str, FootprintView] = {}
     padless_refs: set[str] = set()
+    stationary: dict[str, StationaryFootprintView] = {}
 
     for footprint in snapshot.content.footprints:
         hull: Rect | None = None
@@ -133,6 +165,14 @@ def build_placement_view(
             # version has no copper hull with which to evaluate its pad-based rules. Its
             # identity is kept so naming it is refused as unplaceable rather than as unknown.
             padless_refs.add(footprint.id)
+            if footprint.courtyards:
+                stationary[footprint.id] = StationaryFootprintView(
+                    ref_id=footprint.id,
+                    origin=footprint.origin,
+                    orientation_udeg=footprint.rotation_udeg,
+                    side=footprint.side.value,
+                    courtyards=footprint.courtyards,
+                )
             continue
         footprints[footprint.id] = FootprintView(
             ref_id=footprint.id,
@@ -142,6 +182,7 @@ def build_placement_view(
             pad_ids=footprint.pad_ids,
             locked=footprint.locked,
             hull=hull,
+            courtyards=footprint.courtyards,
         )
 
     unowned = set(pads_by_id) - set(owner_by_pad)
@@ -155,6 +196,7 @@ def build_placement_view(
         footprints=footprints,
         owner_by_pad=owner_by_pad,
         padless_refs=frozenset(padless_refs),
+        stationary=stationary,
     )
 
 
@@ -162,5 +204,6 @@ __all__ = [
     "FootprintView",
     "PlacementView",
     "PlacementViewError",
+    "StationaryFootprintView",
     "build_placement_view",
 ]

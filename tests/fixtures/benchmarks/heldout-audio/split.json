@@ -1,0 +1,28 @@
+{
+  "evaluation_id": "audio-project-family-heldout-v1",
+  "family_definitions": {
+    "heldout": [
+      {
+        "family_id": "ac-coupled-signal-chain",
+        "fixture": "ac-coupled-signal-chain-v1.kicad_pcb",
+        "fixture_sha256": "2afcfabf4b6d910a21d507978686da1f24d5801521fbf6923724d4abd276b64f",
+        "topology_category": "synthetic-coupled-signal-chain"
+      }
+    ],
+    "training": [
+      {
+        "family_id": "passive-rc-low-pass",
+        "fixture": "benchmarks/audio/fixtures/rc-low-pass-routing-v1.kicad_pcb",
+        "fixture_sha256": "8cfea1dbcedbfede05905cdeb36160aa41f1022245f4dfe5c1e723aa503a758b",
+        "topology_category": "synthetic-passive-rc"
+      }
+    ],
+    "tuning": []
+  },
+  "leakage_controls": [
+    "The evaluator opens only the held-out fixture named in this manifest.",
+    "The training fixture is declared solely to make exclusion reviewable; it is never used for evaluation, policy fitting, threshold selection, or expected-metric calibration.",
+    "No learned policy or tunable parameter is present in this v1 reference evaluation, so the tuning partition is intentionally empty rather than silently reusing held-out data.",
+    "A fixture hash may appear in exactly one family partition."
+  ]
+}

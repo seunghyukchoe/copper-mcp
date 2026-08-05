@@ -1,0 +1,27 @@
+{
+  "benchmark": "kicad-schematic-parity-v1",
+  "environment": {
+    "kicad": "10.0.5",
+    "python": "3.12.13"
+  },
+  "fixture": "tests/fixtures/kicad-schematic/rc-low-pass-v1.kicadxml",
+  "metrics": {
+    "component_count": 2,
+    "component_parity": "passed",
+    "connection_count": 4,
+    "connectivity_parity": "passed",
+    "deterministic_source_replay": true,
+    "erc_claim": false,
+    "net_count": 3,
+    "schematic_to_pcb_claim": false,
+    "xml_budget_refusals": 4
+  },
+  "not_claimed": [
+    "authoritative ERC",
+    "schematic-to-PCB parity",
+    "electrical correctness"
+  ],
+  "run_id": "sha256:15acd84f6920e3464e85338ca6eec9f4eded230e5a2bf57e377fb3d248c39d98",
+  "schema": "copper-mcp/benchmark/kicad-schematic-parity/v1",
+  "source_commit": "e7fefc9"
+}

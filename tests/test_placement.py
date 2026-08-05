@@ -44,6 +44,9 @@ ROTATION_BOARD = ROOT / "tests" / "fixtures" / "board-ir-v0.1" / "footprint-rota
 FOOTPRINT_V02_BOARD = (
     ROOT / "tests" / "fixtures" / "board-ir-v0.2" / "footprint-pose-courtyard.kicad_pcb"
 )
+FRONT_BACK_FOOTPRINT_V02_BOARD = (
+    ROOT / "tests" / "fixtures" / "board-ir-v0.2" / "footprint-front-back-pose.kicad_pcb"
+)
 PADLESS_BOARD = ROOT / "tests" / "fixtures" / "board-ir-v0.2" / "padless-footprint.kicad_pcb"
 #: The graphics-only footprint in ``PADLESS_BOARD``: real in Board IR, reported by the scene,
 #: but owning no copper pad.
@@ -239,6 +242,93 @@ class PadlessFootprintTests(unittest.TestCase):
         self.assertIn("no copper pad", result.diagnostic.message)
         self.assertNotIn("does not exist", result.diagnostic.message)
 
+    def test_padless_subject_precedes_an_unrelated_front_back_contradiction(self) -> None:
+        """Subjects are preflighted before syntactic infeasibility is claimed."""
+
+        _, snapshot, view = _board(PADLESS_BOARD)
+        placeable = sorted(view.footprints)[0]
+
+        result = evaluate_placement(
+            _intent(
+                view,
+                PADLESS_BOARD.name,
+                subjects=[PADLESS_REF, placeable],
+                rules=[
+                    {"kind": "side", "subject": placeable, "side": "front"},
+                    {"kind": "side", "subject": placeable, "side": "back"},
+                ],
+            ),
+            snapshot,
+            view,
+        )
+
+        self.assertEqual(result.status, "refused")
+        self.assertIsNone(result.candidate)
+        assert result.diagnostic is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+        self.assertEqual(
+            result.diagnostic.message,
+            "a placement subject owns no copper pad, so it cannot be placed in v0.1",
+        )
+
+    def test_subject_preflight_stops_at_the_first_unknown_reference(self) -> None:
+        """A later padless ref cannot overwrite an earlier unknown-subject refusal."""
+
+        _, snapshot, view = _board(PADLESS_BOARD)
+        placeable = sorted(view.footprints)[0]
+        unknown_ref = "footprint:kicad:00000000-0000-0000-0000-00000000ffff"
+
+        result = evaluate_placement(
+            _intent(
+                view,
+                PADLESS_BOARD.name,
+                subjects=[unknown_ref, PADLESS_REF, placeable],
+                rules=[
+                    {"kind": "side", "subject": placeable, "side": "front"},
+                    {"kind": "side", "subject": placeable, "side": "back"},
+                ],
+            ),
+            snapshot,
+            view,
+        )
+
+        self.assertEqual(result.status, "refused")
+        self.assertIsNone(result.candidate)
+        assert result.diagnostic is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNRESOLVED_REF)
+        self.assertEqual(
+            result.diagnostic.message,
+            "a placement subject does not exist on this board",
+        )
+
+    def test_subject_preflight_keeps_an_earlier_padless_reference_precedence(self) -> None:
+        _, snapshot, view = _board(PADLESS_BOARD)
+        placeable = sorted(view.footprints)[0]
+        unknown_ref = "footprint:kicad:00000000-0000-0000-0000-00000000ffff"
+
+        result = evaluate_placement(
+            _intent(
+                view,
+                PADLESS_BOARD.name,
+                subjects=[PADLESS_REF, unknown_ref, placeable],
+                rules=[
+                    {"kind": "side", "subject": placeable, "side": "front"},
+                    {"kind": "side", "subject": placeable, "side": "back"},
+                ],
+            ),
+            snapshot,
+            view,
+        )
+
+        self.assertEqual(result.status, "refused")
+        self.assertIsNone(result.candidate)
+        assert result.diagnostic is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+        self.assertEqual(
+            result.diagnostic.message,
+            "a placement subject owns no copper pad, so it cannot be placed in v0.1",
+        )
+
     def test_a_padless_anchor_and_rule_subject_are_refused_the_same_way(self) -> None:
         _, snapshot, view = _board(PADLESS_BOARD)
         placeable = sorted(view.footprints)[0]
@@ -277,6 +367,138 @@ class PadlessFootprintTests(unittest.TestCase):
         self.assertEqual(ruled.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
         self.assertIn("no copper pad", ruled.diagnostic.message)
 
+    def test_padless_rule_ref_is_rejected_before_infeasible_rules(self) -> None:
+        _, snapshot, view = _board(PADLESS_BOARD)
+        placeable = sorted(view.footprints)[0]
+
+        result = evaluate_placement(
+            _intent(
+                view,
+                PADLESS_BOARD.name,
+                subjects=[placeable],
+                rules=[
+                    {"kind": "side", "subject": PADLESS_REF, "side": "front"},
+                    {"kind": "side", "subject": PADLESS_REF, "side": "back"},
+                ],
+            ),
+            snapshot,
+            view,
+        )
+
+        assert result.diagnostic is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+        self.assertIn("no copper pad", result.diagnostic.message)
+
+    def test_padless_proximity_target_precedes_an_unrelated_contradiction(self) -> None:
+        """Both operands of a proximity rule are unavailable when they are padless."""
+
+        _, snapshot, view = _board(PADLESS_BOARD)
+        placeable = sorted(view.footprints)[0]
+
+        result = evaluate_placement(
+            _intent(
+                view,
+                PADLESS_BOARD.name,
+                subjects=[placeable],
+                rules=[
+                    {
+                        "kind": "proximity",
+                        "subject": placeable,
+                        "target": PADLESS_REF,
+                        "max_distance_nm": 0,
+                    },
+                    {"kind": "side", "subject": placeable, "side": "front"},
+                    {"kind": "side", "subject": placeable, "side": "back"},
+                ],
+            ),
+            snapshot,
+            view,
+        )
+
+        self.assertEqual(result.status, "refused")
+        self.assertIsNone(result.candidate)
+        assert result.diagnostic is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+        self.assertEqual(
+            result.diagnostic.message,
+            "a placement subject owns no copper pad, so it cannot be placed in v0.1",
+        )
+
+    def test_proximity_target_preflight_stops_at_the_first_unknown_reference(self) -> None:
+        """A later padless target cannot overwrite an earlier unknown-target refusal."""
+
+        _, snapshot, view = _board(PADLESS_BOARD)
+        placeable = sorted(view.footprints)[0]
+        unknown_ref = "footprint:kicad:00000000-0000-0000-0000-00000000ffff"
+
+        for first, second, expected in (
+            (unknown_ref, PADLESS_REF, PlacementFailureCode.UNRESOLVED_REF),
+            (PADLESS_REF, unknown_ref, PlacementFailureCode.UNSUPPORTED_GEOMETRY),
+        ):
+            with self.subTest(first=first, second=second):
+                result = evaluate_placement(
+                    _intent(
+                        view,
+                        PADLESS_BOARD.name,
+                        subjects=[placeable],
+                        rules=[
+                            {
+                                "kind": "proximity",
+                                "subject": placeable,
+                                "target": first,
+                                "max_distance_nm": 0,
+                            },
+                            {
+                                "kind": "proximity",
+                                "subject": placeable,
+                                "target": second,
+                                "max_distance_nm": 0,
+                            },
+                        ],
+                    ),
+                    snapshot,
+                    view,
+                )
+
+                assert result.diagnostic is not None
+                self.assertEqual(result.diagnostic.code, expected)
+
+    def test_every_padless_proposal_anchor_precedes_an_unrelated_contradiction(self) -> None:
+        """Unsupported proposal anchors must not be masked by syntactic rule analysis."""
+
+        _, snapshot, view = _board(PADLESS_BOARD)
+        placeable = sorted(view.footprints)[0]
+        expected_message = "a placement subject owns no copper pad, so it cannot be placed in v0.1"
+        for anchor_point in ("center", "north", "south", "east", "west"):
+            with self.subTest(anchor_point=anchor_point):
+                result = evaluate_placement(
+                    _intent(
+                        view,
+                        PADLESS_BOARD.name,
+                        subjects=[placeable],
+                        proposals=[
+                            {
+                                "subject": placeable,
+                                "anchor": PADLESS_REF,
+                                "anchor_point": anchor_point,
+                                "offset_x_nm": 0,
+                            }
+                        ],
+                        rules=[
+                            {"kind": "side", "subject": placeable, "side": "front"},
+                            {"kind": "side", "subject": placeable, "side": "back"},
+                        ],
+                    ),
+                    snapshot,
+                    view,
+                )
+
+                self.assertEqual(result.status, "refused")
+                self.assertIsNone(result.candidate)
+                assert result.diagnostic is not None
+                self.assertEqual(result.diagnostic.code, PlacementFailureCode.UNSUPPORTED_GEOMETRY)
+                self.assertEqual(result.diagnostic.message, expected_message)
+
     def test_a_genuinely_absent_reference_is_still_unresolved(self) -> None:
         """Guard the guard: the honest refusal must not swallow the real unknown-ref case."""
 
@@ -308,6 +530,28 @@ class PadlessFootprintTests(unittest.TestCase):
 
         self.assertEqual(result.status, "previewed")
         assert result.candidate is not None
+        self.assertNotIn(PADLESS_REF, {item.ref_id for item in result.candidate.placements})
+
+    def test_a_padless_courtyard_is_a_stationary_collision_envelope(self) -> None:
+        _, snapshot, view = _board(PADLESS_BOARD)
+        placeable = sorted(view.footprints)[0]
+
+        result = evaluate_placement(
+            _intent(
+                view,
+                PADLESS_BOARD.name,
+                subjects=[placeable],
+                proposals=[{"subject": placeable, "offset_x_nm": 30_000_000}],
+            ),
+            snapshot,
+            view,
+        )
+
+        self.assertEqual(result.status, "refused")
+        assert result.diagnostic is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.ILLEGAL_PLACEMENT)
+        assert result.diagnostic.legality is not None
+        self.assertEqual(result.diagnostic.legality.courtyard_overlap, "violated")
 
 
 class RequestBoundaryTests(unittest.TestCase):
@@ -442,8 +686,44 @@ class LegalityTests(unittest.TestCase):
         self.assertEqual(legality.pad_overlap, "proven_clear")
         self.assertEqual(legality.outline_containment, "proven_inside")
         self.assertEqual(legality.keepout_respect, "proven_clear")
-        self.assertEqual(legality.courtyard_overlap, "not_modelled")
+        self.assertEqual(legality.courtyard_overlap, "proven_clear")
         self.assertTrue(legality.legal)
+
+    def test_same_side_rectangular_courtyards_are_exactly_checked(self) -> None:
+        """Courtyard overlap is independent from pad overlap on the bounded Board IR subset."""
+
+        source = FRONT_BACK_FOOTPRINT_V02_BOARD.read_bytes()
+        source = source.replace(b'(layer "B.Cu")', b'(layer "F.Cu")', 1)
+        source = source.replace(b'(layer "B.CrtYd")', b'(layer "F.CrtYd")', 1)
+        source = source.replace(b"(at 60 20 0)", b"(at 20 20 0)", 1)
+        parsed = parse_kicad_bytes(source, _profile(), ParseLimits())
+        assert parsed.snapshot is not None
+        view = build_placement_view(source, parsed.snapshot)
+        result = evaluate_placement(
+            _intent(view, "front-back-overlap.kicad_pcb"), parsed.snapshot, view
+        )
+
+        self.assertEqual(result.status, "refused")
+        assert result.diagnostic is not None
+        assert result.diagnostic.legality is not None
+        self.assertEqual(result.diagnostic.code, PlacementFailureCode.ILLEGAL_PLACEMENT)
+        self.assertEqual(result.diagnostic.legality.courtyard_overlap, "violated")
+        self.assertEqual(result.diagnostic.legality.pad_overlap, "proven_clear")
+
+    def test_front_and_back_courtyards_do_not_collide_across_sides(self) -> None:
+        source = FRONT_BACK_FOOTPRINT_V02_BOARD.read_bytes().replace(
+            b"(at 60 20 0)", b"(at 20 20 0)", 1
+        )
+        parsed = parse_kicad_bytes(source, _profile(), ParseLimits())
+        assert parsed.snapshot is not None
+        view = build_placement_view(source, parsed.snapshot)
+        result = evaluate_placement(
+            _intent(view, "front-back-cross-side.kicad_pcb"), parsed.snapshot, view
+        )
+
+        self.assertEqual(result.status, "previewed")
+        assert result.candidate is not None
+        self.assertEqual(result.candidate.evidence.legality.courtyard_overlap, "proven_clear")
 
     def test_each_illegality_is_reported_by_its_own_check(self) -> None:
         """Guard the guard: the three checks must be independent, not one flag in disguise."""

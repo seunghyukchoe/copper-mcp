@@ -17,9 +17,22 @@
 | `inspect_board` | None | Bounded read-only inspection inside the configured workspace. |
 | `run_board_drc` | Temporary report only | Fixed-argument KiCad DRC with a bounded, redacted summary. |
 | `inspect_board_ir` | None | Read-only Board IR conversion check and structural description. |
+| `inspect_live_board` | None | Optional `kicad-python` IPC observation of the first open PCB; returns numeric versions, a SHA-256 digest, byte count, bounded object counts, and a nullable opaque session CAS. |
 | `observe_board_scene` | None, or a process-local render artifact when `include_render` is set | Bounded, region-scoped semantic scene of one board, with board text quarantined. |
-| `apply_candidate` | **Replaces the board file**; disabled by default | The only mutating tool. Requires an operator flag and a single-use token. Route patches only. |
-| `preview_placement` | None | Deterministic legality preview for a proposed footprint placement. Never applies, and carries no DRC evidence. |
+| `observe_post_placement` | None | Read-only exact-revision observation: one file/context capture supplies both bounded semantic scene and aggregate redacted KiCad DRC. No token, candidate, render, or mutation input is accepted. |
+| `observe_live_board_scene` | None | Bounded Circuit Scene `0.2.0` from the active KiCad IPC document; uses `board: "live"` and optional stale-digest compare values. |
+| `preview_live_route` | None | Revision-bound, ref-anchored route proposal over one active KiCad IPC snapshot; never writes, runs DRC/fill, or grants apply authority. |
+| `preview_layered_route` | None | Revision-bound, pad-ref-anchored two-signal-layer proposal with explicit full-stack vias and opt-in candidate-bound aggregate DRC evidence; still no refill, serialization, export, or apply authority. |
+| `preview_live_layered_route` | None | Session-, source-, and Board IR-revision-bound via-capable proposal over one active KiCad IPC snapshot; candidate-only, with no DRC, refill, serialization, export, or apply authority. |
+| `start_routing` | Local SQLite job state and bounded worker activity | Persist and queue one file-backed two-signal-layer proposal; returns a redacted lifecycle record and never applies copper. |
+| `get_routing_job` | None | Read one authorization-bound routing lifecycle record and its normalized request after restart. |
+| `cancel_routing_job` | Local SQLite lifecycle state | Request cooperative cancellation for one authorization-bound queued or running proposal. |
+| `export_routing_candidate` | None | Explicitly disclose one immutable candidate geometry only after job and caller-context authorization succeed. |
+| `preview_live_placement` | None | Revision-bound, ref-anchored placement proposal over one active KiCad IPC snapshot; never writes, runs DRC, or grants apply authority. |
+| `inspect_live_editor_context` | None | Revision-bound active layer and bounded native selection references from the KiCad IPC editor; never reads raw selection text or mutates the editor. |
+| `apply_candidate` | **Replaces the board file**; disabled by default | Separately authorized route-patch mutation. Requires an operator flag and a route-scoped single-use token. |
+| `apply_placement_candidate` | **Replaces the board file**; disabled by default | Separately authorized bounded placement-pose mutation. Requires an operator flag and a placement-scoped single-use token. |
+| `preview_placement` | None, or a short-lived placement capability when explicitly requested | Deterministic legality preview for a proposed footprint placement. `include_drc: true` may request aggregate DRC evidence for the file-backed serializer subset; `include_apply_token: true` may request a placement token. Neither flag writes the source board or grants live authority. |
 | `preview_route` | None, or a temporary report when `include_drc` is set | Bounded, non-mutating two-pin route proposal on the documented Board IR subset. |
 | `render_circuit_schematic` | Process-local artifact only; stdio only | Validate structured Circuit Intent, require deterministic replay, and issue one opaque schematic resource capability. |
 | `validate_candidate` | None | Validate and normalize candidate metadata. |
@@ -45,6 +58,28 @@ returns the board revision, snapshot and constraint digests, Board IR schema and
 layer identities, and per-collection object counts, or bounded conversion diagnostic-code counts
 when the board is outside the subset. It never returns coordinates, net names, pad or net
 identities, UUIDs, or source bytes.
+
+`inspect_live_board` is a separate, no-argument read-only probe for an already-running KiCad PCB
+Editor. It lazily loads the optional official `kicad-python` binding, accepts only KiCad's local
+IPC socket, checks the binding/API version, and returns a redacted `kicad-ipc-live` record with a
+board digest, bounded object counts, and required `session_revision`. With a plugin token this is
+the opaque fixed-format PBKDF2 session CAS required by `preview_live_layered_route`; without one it
+is explicitly `null`, which remains unrouteable. It never returns the live serialization, net
+names, UUIDs, coordinates, tokens, or process salt. KiCad 9/10 requires a GUI session with the IPC
+server enabled; a future
+KiCad version is refused by default. This record is metadata-only and does not act as a route or
+placement authority.
+
+`observe_live_board_scene` takes the same constraints and region shape as `observe_board_scene`,
+but requires the literal `board: "live"` and refuses `include_render`. It captures one bounded
+IPC serialization, checks that its digest and byte count remain paired, and runs that exact source
+through Board IR and Circuit Scene conversion. Optional `expect_board_revision` and
+`expect_snapshot_digest` values provide compare-and-swap semantics for a caller re-observing the
+same editor; either mismatch is a typed refusal. The output reuses the closed Scene `0.2.0`
+contract with `board_path: "live"`, so it exposes exact geometry and typed references but no raw
+serialization, socket path, or token. Revision-bound live proposal gates now exist for placement and
+routing. These are read-only proposal surfaces: DRC, fill, editor mutation, and apply remain
+separate file-backed or future transaction surfaces.
 
 `observe_board_scene` takes one request object with a workspace-relative `board`, integer
 `constraints`, a mandatory `region`, and optional `layers` and `include_annotations`. The region is
@@ -127,9 +162,33 @@ through the process-local capability store, which a stateless HTTP deployment ca
 so that flag alone is refused off stdio while the semantic scene stays available everywhere. Its handler returns a closed contract, so it advertises a real `outputSchema`
 and returns populated `structuredContent`.
 
+`preview_live_placement` takes the same ref-anchored rules and proposals as the file-backed
+placement preview, but requires the literal `board: "live"`, scene footprint/pad references, and
+both `expect_board_revision` and `expect_snapshot_digest` values copied from the live scene. It
+captures one byte-confirmed KiCad IPC serialization and reuses the exact Board IR 0.2 snapshot,
+placement view, and deterministic legalizer. A board mismatch is refused before conversion; a
+snapshot mismatch is refused before placement-view/legalizer work. The output uses
+`board_path: "live"` only as a label and carries no source bytes, socket/token, DRC, fill,
+apply-token, or editor-write authority. The fake-client B-014 oracle covers candidate equality
+with the file-backed path, deterministic replay, stale preconditions, and zero mutating calls;
+it does not claim success against a running KiCad GUI session.
+
+`inspect_live_editor_context` requires `board: "live"` plus the raw board-serialization SHA-256
+precondition. It reads only the official Board `get_active_layer()`, `get_layer_name()`, and
+`get_selection()` APIs, confirms the board and editor context twice, and returns a context digest
+for follow-up compare-and-swap calls. Only allow-listed wrapper types with a validated native KIID
+become typed refs (`pad:kicad:<uuid>`, `segment:kicad:<uuid>`, and similar); unknown, empty,
+malformed, or over-budget selections fail closed. The service never calls
+`get_selection_as_string()`, returns no board text, coordinates, net names, or tokens, and exposes
+no write, DRC, placement, or routing authority. Its response `snapshot_digest` intentionally
+aliases the confirmed serialization digest; it does not accept a scene `snapshot_digest`, which is
+constraint-profile dependent and cannot be compared without receiving that same profile. Chain
+the scene's `board_revision` into this read, then use `context_digest` for subsequent CAS.
+
 `preview_placement` takes one request object with a workspace-relative `board`, integer
 `constraints`, and `subjects` - the footprint references a proposal may move - plus optional
-`rules`, `proposals` and `placement_grid_nm`. Rules come in seven kinds (proximity, alignment,
+`rules`, `proposals`, `placement_grid_nm`, `include_drc`, and the explicit `include_apply_token`
+capability request. Rules come in seven kinds (proximity, alignment,
 symmetry, edge, region, orientation, side) and name objects only by references a scene already
 returned. Proposals are anchored the same way, as an offset from another object's edge or
 centre; there is no field anywhere in the language that accepts an absolute coordinate, so every
@@ -143,10 +202,13 @@ carries evidence holding per-rule residuals and the legality record. `pad_overla
 **three-valued**: `proven_clear` when pad
 bounds are disjoint, `violated` when pad cores overlap, and `inconclusive` in between.
 `inconclusive` is not a failure and a candidate is still produced; it means neither clearance nor
-collision could be proven. `courtyard_overlap` has exactly one permitted value, `not_modelled`.
-Board IR 0.2 carries bounded courtyard geometry for the supported subset, but the placement
-legalizer has no side-aware courtyard legality evaluator yet; there is deliberately no vocabulary
-in which a response could claim that check was performed.
+collision could be proven. `courtyard_overlap` is exact for Board IR 0.2's rectangular courtyard
+subset: `proven_clear` or `violated`. Only footprints on the same physical side are compared, and
+edge contact is not overlap. A Board IR conversion rejects non-rectangular courtyard topology
+before a placement view exists, so the result cannot silently claim fidelity outside that subset.
+Padless/graphics-only footprints remain unavailable as subjects and anchors, but their supported
+courtyards remain stationary collision envelopes and are included in this same-side check; they are
+not emitted in the candidate manifest.
 
 A `refused` response carries a typed code: `unresolved_ref`, `infeasible_constraints`,
 `budget_exhausted`, `unsupported_geometry`, `illegal_placement`, `stale_revision` or
@@ -161,24 +223,60 @@ A proposal that would move a footprint whose Board IR `locked` field is true is 
 `unsupported_geometry` before a candidate is issued. Unlocking or applying that move is never
 implicit.
 
-**The tool never applies a placement, and a placement candidate is not bound to KiCad DRC.** What
-it claims is exactly what the deterministic legalizer proved. Moving a footprint moves its pads,
-so a placement candidate invalidates any route candidate bound to the same base revision, and
-observing a scene after a hypothetical placement is not supported. Like `preview_route`, the tool
-is exposed over both transports: the response is self-contained, retains no server-side state and
-holds no capability handle, so workspace confinement is what bounds the disclosure.
+**The public preview never applies a placement.** With `include_drc: true`, the file-backed tool
+may additionally run the same candidate through the private, disposable KiCad DRC gate. The
+response exposes only candidate/source/patched-board/context digests and the aggregate
+`DrcSummary`; it carries no raw report, board bytes, net names, UUIDs, or fabrication conclusion.
+`passed` means KiCad reported no active errors or unconnected items, while `clean` is stricter and
+also requires zero warnings, exclusions, ignored checks, and violation types. A warning-only
+report can therefore be `passed: true, clean: false`. The source board is never written, the
+candidate is re-bound to the captured source and context, and any timeout, unsupported syntax,
+context race, malformed report, or binding mismatch fails closed. Live placement and apply paths
+force `include_drc: false`. What the public tool claims without the flag is exactly what the
+deterministic legalizer proved. A file-backed preview may explicitly request a short-lived
+placement-scoped apply token; the token is issued only when the operator has enabled apply and the
+same pure source-preserving replay accepts the candidate. Moving a footprint moves its pads, so a
+placement candidate invalidates any route candidate bound to the same base revision, and observing
+a scene after a hypothetical placement is not supported. Live placement never grants apply
+authority.
 
-`preview_route` takes one request object with a workspace-relative `board`, a KiCad `net` name, a
-copper `layer` name, integer `constraints` for the applied net class, and optional `seed`,
-`settings`, and `include_drc` fields. Unknown fields, non-integer or out-of-range budgets, booleans
-supplied as integers, control characters, and unsupported layer names are rejected before any file
-is read. Every response carries a `status` of `routed`, `already_connected`, `not_routed`, or
-`unsupported_board`, the board revision, the Board IR snapshot digest when conversion succeeded, and
-the validated request. A routed response includes the candidate ID, endpoint pad IDs, integer
+`apply_placement_candidate` is the separately authorized file-level mutation surface for that
+narrow replay subset. It takes `board`, the `candidate` manifest from a preview,
+`apply_token`, `expect_board_revision`, and `constraints`. The token is operation-domain bound to
+placement, so a route token cannot cross the boundary. The service applies the same lockfile,
+double-CAS, pre-apply backup, atomic replacement, and truthful post-publication result contract
+as route apply. It refuses side flips, locked footprints, unsupported properties/text/fabrication
+graphics/library identity/3D-model pose, derived identities, and no-op candidates before a
+replacement. Its response reports `footprints_moved` and `bytes_changed`; KiCad-open and DRC
+stages remain `not_run` until independently verified.
+
+`preview_route` takes one request object with a workspace-relative `board`, a copper `layer` name,
+integer `constraints` for the applied net class, and **exactly one** net selector. `net` is the
+compatibility selector for a caller that already knows the KiCad net name. `net_ref_id` is the
+normal AI path: it is copied from Circuit Scene and requires that response's `board_revision` and
+`snapshot_digest` as `expect_board_revision` and `expect_snapshot_digest`. The reference is used
+directly rather than hashed as another name. A board-revision mismatch returns `stale_revision`
+before Board IR conversion and carries a null `snapshot_digest`; a snapshot mismatch is checked
+immediately after conversion. Both precede route search, zone-fill authority, DRC, and apply-token
+issuance. Raw names remain supported but are not required for a scene-to-route workflow.
+
+Optional `seed`, `settings`, `include_drc`, `include_fill_authority`, and `include_apply_token`
+fields control only the documented bounded work. Unknown fields, selector ambiguity, missing
+reference preconditions, non-integer or out-of-range budgets, booleans supplied as integers, control
+characters, and unsupported layer names are rejected through the non-echoing request boundary.
+The MCP tool advertises a closed two-variant input schema and a closed five-variant output union;
+each status fixes which of candidate, connection, diagnostic, conversion counts, DRC, fill, and
+token evidence may be non-null. Successful results are published as protocol `structuredContent`.
+Every response carries a
+`status` of `routed`, `already_connected`, `not_routed`, or `unsupported_board`, the board revision,
+the Board IR snapshot digest when conversion succeeded, and the validated request. A routed
+response includes the candidate ID, endpoint pad IDs, integer
 geometry, exact cost decomposition, deterministic search metrics, and the resource ceilings that
 produced it. Geometry is carried as `patch.paths`, a list of polylines: a two-pin proposal has one,
 and a multi-pin proposal has one per merged component, together forming a tree over the net. The
-response also reports `pad_count` and the `ordering_policy` that fixed the merge order. An unrouted response carries one typed, non-echoing diagnostic; an unsupported board
+response also reports `pad_count` and the `ordering_policy` that fixed the merge order. The current
+values are `single-path` for two-pin routes, `batched-1-steiner-v1` for low-degree multi-pin
+proposals (at most nine evolving components), and `component-mst-v1` for larger trees. An unrouted response carries one typed, non-echoing diagnostic; an unsupported board
 carries bounded conversion diagnostic-code counts instead of raw adapter text.
 
 `already_connected` is a terminal success, not a failure: the two pads already share one copper
@@ -190,20 +288,79 @@ the request names a single layer. It returns no geometry and no diagnostic, and 
 deliberately has no `RouteFailureCode`. Clients that switch exhaustively over the previous three
 statuses need a fourth branch.
 
-Setting `include_fill_authority` allows poured zone copper to count as connectivity evidence. KiCad
-refills a private disposable copy and the recomputed pour must reproduce the board's cache exactly;
-matching returns the claim with a `fill_authority` record carrying both digests, the KiCad version
-and the island and vertex counts, while a mismatch is refused with the typed `stale_fill` diagnostic
-rather than answering from either version. The workspace board is never refilled. The flag is opt-in
-because it spawns KiCad, and it changes nothing for a board without zones on the requested net.
+Setting `include_fill_authority` allows freshness-verified poured copper to participate in routing.
+KiCad refills a private disposable copy and the recomputed pour must reproduce the board's cache
+exactly; matching returns a `fill_authority` record carrying both digests, the KiCad version, island
+and vertex counts, and a `routing_effect` literal. On a routed result, `foreign_zone_obstacles`
+means exact islands replaced the conservative foreign-zone envelope, `connectivity_evidence` means
+same-net islands were available to prove contact, `both` means both roles were present, and
+`verified_context` means the selected-layer cache was verified but contained no island relevant to
+the route. On an `already_connected` result the effect is `connectivity_evidence`. A mismatch is
+refused with the typed `stale_fill` diagnostic rather than answering from either version. The
+workspace board is never refilled. The flag is opt-in because it spawns KiCad, and it changes
+nothing for a board without zones on the requested layer.
 
-Setting `include_drc` binds the proposal to candidate-bound authoritative KiCad DRC evidence, which
-returns the same aggregate, redacted summary as `run_board_drc` plus the candidate, source, patched
-board, and patched context revisions. The call fails rather than returning a candidate whose
-requested evidence is missing or does not bind. On an `already_connected` net the flag is skipped
-and `drc_evidence` is `null`, because that rule protects a proposal and none is being made. Preview
-writes no file, creates no job, and never returns source board bytes; it does return the geometry it
-generated, so a host that must not disclose generated copper to a model should not enable this tool.
+Setting `include_drc` on file-backed `preview_layered_route` binds the proposal to candidate-bound
+authoritative KiCad DRC evidence. The response returns the same aggregate, redacted summary as
+`run_board_drc` plus candidate, source, patched-board, and patched-context revisions. The call
+fails rather than returning a candidate whose requested evidence is missing or does not bind. The
+flag is explicitly disabled for `preview_live_layered_route` and durable routing jobs. On a
+non-routed status `drc_evidence` is `null`; no DRC is run without a candidate. Preview writes no
+file, creates no job, and never returns source board bytes; it does return the geometry it generated,
+so a host that must not disclose generated copper to a model should not enable this tool.
+
+The aggregate `passed` field is the compatibility hard gate: it means no active errors or
+unconnected items. The stricter `clean` field is true only when there are no errors, warnings,
+exclusions, ignored checks, unconnected items, or violation types. A warning-only result can
+therefore be `passed=true` and `clean=false`; neither field is a whole-board, fabrication, or
+FreeRouting-quality claim.
+
+When present, `drc_evidence.statement` is a deterministic unsigned in-toto Statement payload. Its
+subject is the candidate digest; Link v0.3 materials are fixed names for the source, Board IR base,
+patched board, and patched DRC context digests; and the byproducts contain only the existing
+aggregate DRC summary plus the `disposable-candidate` scope. No path, net name, UUID, coordinate,
+raw finding, board bytes, signature, or DSSE envelope is included. Canonical JSON bytes are exposed
+only through the internal evidence object; signing and verification remain separate future gates.
+
+`preview_layered_route` is the separate via-capable proposal surface. Its request names a
+workspace-relative `.kicad_pcb`, two `pad:` references, explicit net-class dimensions, and both
+the source-byte and Board IR snapshot digests copied from an observation. It does not accept a raw
+net selector. The service converts the exact source first, checks both compare-and-swap values,
+infers the common net from the pads, and then invokes the bounded Board IR adapter. The supported
+matrix is exactly two signal layers, a rectangular hole-free outline, conservative foreign
+geometry/keepout envelopes, and full-stack through-vias. A routed result carries a separate
+layered candidate with per-layer integer paths, via centers/dimensions, deterministic cost and
+search metrics, and a canonical candidate digest. Refusals carry only bounded status/code/count
+data; a conversion failure is `unsupported_board`, while a valid board outside the layered subset
+is `not_routed` with its snapshot digest.
+
+This tool is read-only and idempotent. Without `include_drc` it never calls `begin_commit`,
+`refill_zones`, or the KiCad DRC command. With the explicit flag it invokes only the bounded private
+candidate-DRC replay and returns aggregate evidence; it still returns no serialized patch, apply
+token, durable job, or persistent candidate. Its candidate is therefore an actionable proposal
+with an optional authority signal for a later reviewed serializer/apply flow, not a claim of whole-
+board or fabrication acceptance. B-024 covers deterministic calls and schema/CAS behavior; B-032
+covers the new evidence binding, and the blocked-pad KiCad fixture covers the narrow real-tool path.
+
+`preview_live_layered_route` applies the same candidate contract to the active editor. Its request
+uses `board: "live"`, two `pad:` references, the net-class/layer/search bounds, and source,
+Board IR, and redacted KiCad-session compare-and-swap digests. The service captures one bounded
+`Board.get_as_string()` serialization, confirms it byte-for-byte, closes the official IPC client,
+converts those exact bytes through the Board IR adapter, and infers the net only from the two pads.
+The session revision is `pbkdf2-hmac-sha256:<64 lowercase hex>`: fixed-work PBKDF2-HMAC-SHA256
+over `KICAD_API_TOKEN`, with a domain-separated fresh process-local 256-bit salt, rather than a
+public token hash. `inspect_live_board` publishes this opaque value (or `null` without a plugin
+token) so its structured output composes with the scene's public digests and pad refs. It is
+constant-time compared after fixed-format validation and intentionally fails after a fresh process
+or restart; neither token nor salt is returned. The remaining route
+deadline is passed to IPC and search, checked between synchronous IPC calls, and checked during
+bounded serialized-item counting.
+A stale session/source/snapshot refuses before candidate work,
+and the live candidate is compared against the file-backed oracle in B-026. The official wrapper
+is synchronous, so a third-party IPC call cannot be forcibly pre-empted by this Python process;
+this is a cooperative deadline, not a hard real-time guarantee. The supported
+two-signal-layer geometry remains proposal-only: endpoint-via legality, KiCad DRC, refill,
+serialization/export, apply, real GUI success, and electrical/fabrication claims are not implied.
 
 `render_circuit_schematic` takes one structured Circuit Intent `content` object. The shared service
 performs bounded semantic validation and normalization, computes the intent digest, renders the
@@ -237,13 +394,30 @@ it is non-destructive and performs no network access. Both the tool and dynamic 
 disabled for streamable HTTP until authenticated principals, session isolation, authorization, and
 per-principal quotas exist. Rendering over MCP never writes into the configured workspace.
 
-Candidate persistence, durable routing jobs, route/evidence resource exposure, and export remain
-deferred to the planned routing-service contract. Route-candidate apply is implemented and
-documented above; placement apply is not.
+The routing-job surface now composes four bounded SQLite tables behind a protocol-independent
+repository: lifecycle metadata, a normalized request envelope, a redacted candidate manifest, and
+an explicit geometry export. `start_routing` accepts only the current file-backed two-signal-layer
+request, stores it before dispatching a single local worker, and returns a deterministic job ID as
+an idempotency key rather than as authorization. `get_routing_job`, `cancel_routing_job`, and
+`export_routing_candidate` require the same caller-context digest; unknown, expired, and wrong-
+context records share an unavailable error. Requests are deep-frozen, bounded, and reject board
+bytes, prompts, credentials, DRC findings, and token-like fields. Candidate bytes are content-
+addressed, TTL/capacity bounded, and separately disclosed only by the export tool. The worker
+rechecks the source and Board IR CAS values before routing and publishes the manifest/export before
+the lifecycle CAS completion; an orphaned export is harmless and expires with the repository.
 
-`apply_candidate` is the only tool that changes a board, and it applies **route patches only**.
-It takes `board`, the `candidate` manifest from a preview, an `apply_token`,
-`expect_board_revision`, and `constraints`.
+This is an ordinary MCP job API, not a claim of MCP Tasks compatibility. The current Tasks extension
+(`io.modelcontextprotocol/tasks`) requires per-request capability negotiation, durable creation
+before returning a task handle, and a polymorphic result (`tasks/get`, `tasks/update`, and
+`tasks/cancel`). CopperMCP will add that adapter only after a pinned client matrix and task-handle
+authorization contract. Route-candidate and bounded placement apply are implemented and documented
+above; general placement fidelity and post-action observation remain open.
+
+`apply_candidate` changes a board only for **route patches**. The separate
+`apply_placement_candidate` tool is the corresponding bounded placement-pose mutation and has its
+own operation-scoped token. Both take a preview candidate, an `apply_token`, an expected board
+revision, and the same constraint profile; neither accepts model-generated copper or bypasses the
+deterministic replay gate.
 
 Three independent things must all hold. The operator must have set `COPPER_MCP_ALLOW_APPLY=1`
 (exactly `"0"` or `"1"`; the tool stays listed when it is off and refuses with `apply_disabled`,
@@ -269,9 +443,13 @@ back. It is not a KiCad undo step. KiCad's own `-bak` files are never touched.
 Publication is an atomic replace that preserves the board's permission bits. A failure *before*
 the rename leaves the board untouched and is a clean refusal; a failure *after* it means the
 board is already changed, and that is reported truthfully as **`applied_but_unverified`** with
-the real new revision rather than as "nothing changed". In that case a *guarded* rollback runs -
-it restores the pre-apply bytes only if the file still holds exactly what this apply wrote, so a
-concurrent writer's newer bytes are never clobbered. The `verification` matrix reports byte
+the best-effort observed final digest rather than as "nothing changed". The final digest may be
+the original when guarded rollback succeeds, a concurrent writer, or `null` when the board is
+missing/unreadable. In that case a *guarded* rollback runs - it restores the pre-apply bytes only if the file still holds
+exactly what this apply wrote, so a concurrent writer's newer bytes are never clobbered. The
+service also takes one last best-effort digest observation before a successful apply response so
+a visible rewrite after verification is not reported as `applied`; a longer editor transaction
+would still be needed to close the last nanosecond race. The `verification` matrix reports byte
 preservation, a fail-closed reparse and Board IR equality as `passed`, and reports
 `kicad_opened_board` and `drc_after_apply` as `not_run` - an applied board carries no DRC
 evidence. Failure codes are `invalid_request`, `apply_disabled`, `invalid_token`,
@@ -280,7 +458,10 @@ evidence. Failure codes are `invalid_request`, `apply_disabled`, `invalid_token`
 `apply_verification_failed`. The tool's annotations say `destructiveHint: true` and
 `readOnlyHint: false` truthfully, but they are advisory client hints and enforce nothing.
 
-Nothing applies a placement, and there is no merge, lock override, IPC apply or batch apply.
+There is no merge, lock override, IPC apply, or batch apply. The read-only
+`observe_post_placement` tool provides a bounded file-backed scene plus aggregate DRC observation
+for an explicitly expected board revision; it does not establish mutation provenance or provide an
+IPC/live-editor apply path.
 
 ## Planned tools
 
@@ -300,7 +481,10 @@ The planned Circuit Scene IR will add bounded semantic and visual observation pl
 intent. Models may request immutable placement previews/candidates; deterministic services own
 snapping, connectivity, clearance, provenance, and validation, and any eventual apply remains a
 separate explicit capability. Direct model-authored KiCad mutation is never an MCP shortcut. This is
-a high-fidelity north star; no Circuit Scene IR or placement tool is implemented today.
+a high-fidelity north star; live-scene action CAS, broader placement fidelity, and autonomous
+policy remain unimplemented. The narrow file-backed `apply_placement_candidate` capability is
+implemented as a separately authorized, default-off operation with closed request fields and
+post-publication verification.
 
 ## Compatibility
 

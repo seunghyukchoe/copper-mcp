@@ -1,0 +1,136 @@
+{
+  "evidence": {
+    "evaluation": {
+      "deterministic_replays": true,
+      "fixture": "tests/fixtures/benchmarks/heldout-audio/ac-coupled-signal-chain-v1.kicad_pcb",
+      "fixture_sha256": "2afcfabf4b6d910a21d507978686da1f24d5801521fbf6923724d4abd276b64f",
+      "license_sha256": "7ad27bd3d842c3cb15e67e107f51d6d5496470bc7b82f4fb91294721a75b6351",
+      "license_spdx": "Apache-2.0",
+      "metrics": {
+        "candidate_applied": false,
+        "inspection": {
+          "object_counts": {
+            "arcs": 0,
+            "copper_layers": 2,
+            "differential_pair_rules": 0,
+            "footprints": 6,
+            "keepouts": 0,
+            "length_rules": 0,
+            "net_class_assignments": 6,
+            "net_classes": 1,
+            "nets": 6,
+            "outline": 1,
+            "pads": 12,
+            "segments": 0,
+            "vias": 0,
+            "zones": 0
+          },
+          "snapshot_digest": "sha256:d30ff03272807e0a348e51a12fc837d889b432f276982cd0c4f0ff7884f828e9"
+        },
+        "kicad_invoked": false,
+        "network_access": false,
+        "placement": {
+          "best_connectivity_manhattan_nm": 198000000,
+          "best_violated_rules": 0,
+          "evaluations": 96,
+          "initial_connectivity_manhattan_nm": 202000000,
+          "initial_violated_rules": 0,
+          "legal_candidate_count": 8,
+          "status": "work_exhausted"
+        },
+        "routing": {
+          "attempted_nets": 6,
+          "completion_fraction": 1.0,
+          "hard_internal_violations": 0,
+          "per_net": [
+            {
+              "candidate_id": "sha256:cc3798a2cb5e354ba7b98f45f75b65d1e6f24c2af6dab4ad839296f02181baf3",
+              "expanded_states": 2328,
+              "hard_internal_violations": 0,
+              "net": "ACTIVE_LINK",
+              "obstacle_checks": 1181,
+              "wire_length_nm": 35000000
+            },
+            {
+              "candidate_id": "sha256:8277ca802b43dbe81d72179b0ae2d17981b53a9e0efd348423be7a8b0eebd352",
+              "expanded_states": 2048,
+              "hard_internal_violations": 0,
+              "net": "BIAS_LINK",
+              "obstacle_checks": 416,
+              "wire_length_nm": 28000000
+            },
+            {
+              "candidate_id": "sha256:2a677b252e21faa61a2a2364bb4e66aea1dc29b616855028d8bd9aba779dfe64",
+              "expanded_states": 13212,
+              "hard_internal_violations": 0,
+              "net": "GND",
+              "obstacle_checks": 710,
+              "wire_length_nm": 54000000
+            },
+            {
+              "candidate_id": "sha256:48a5f89dea8e1c3aaf115e1b99a141e65656d053daccf28dd059b9ba99d6af11",
+              "expanded_states": 144,
+              "hard_internal_violations": 0,
+              "net": "IN_COUPLING",
+              "obstacle_checks": 10,
+              "wire_length_nm": 36000000
+            },
+            {
+              "candidate_id": "sha256:6339c77f72b07e7a12e1c80ca34fdba3d6cb91d4dd4762c6b4922d6f01f71116",
+              "expanded_states": 140,
+              "hard_internal_violations": 0,
+              "net": "OUTPUT_LINK",
+              "obstacle_checks": 10,
+              "wire_length_nm": 35000000
+            },
+            {
+              "candidate_id": "sha256:c3f7db27149782c2c8b79e5452883276cc7c4c76915418598c0939898cdc0691",
+              "expanded_states": 1124,
+              "hard_internal_violations": 0,
+              "net": "OUT_COUPLING",
+              "obstacle_checks": 416,
+              "wire_length_nm": 17000000
+            }
+          ],
+          "routed_nets": 6,
+          "total_expanded_states": 18996,
+          "total_obstacle_checks": 2743,
+          "total_wire_length_nm": 205000000
+        },
+        "source_unchanged": true
+      },
+      "not_claimed": [
+        "policy training or policy quality",
+        "placement or routing quality improvement",
+        "KiCad DRC, ERC, electrical, signal-integrity, thermal, or fabrication readiness",
+        "source-board mutation, candidate apply, or live-editor behavior",
+        "external-project coverage or audio hardware performance"
+      ],
+      "repetitions": 3,
+      "replay_signature": "29b28fbab5baa7f8df04a958d21c90dbcd0ac53b1344f18d69156da5e7304bdd",
+      "split": {
+        "heldout_family_ids": [
+          "ac-coupled-signal-chain"
+        ],
+        "training_family_ids": [
+          "passive-rc-low-pass"
+        ],
+        "training_or_tuning_fixture_read": false,
+        "tuning_family_ids": []
+      }
+    },
+    "evidence_source_commit": "96110ee9c3dbf9769070abaaffefb85a4018a4cc",
+    "inputs": {
+      "scripts/benchmark_audio_heldout_evaluation.py": "4005dc59159786435bfd6c90bf15709a44832d4d6cca62a54b0e03a7f78b43c4",
+      "tests/fixtures/benchmarks/heldout-audio/LICENSE": "7ad27bd3d842c3cb15e67e107f51d6d5496470bc7b82f4fb91294721a75b6351",
+      "tests/fixtures/benchmarks/heldout-audio/ac-coupled-signal-chain-v1.kicad_pcb": "2afcfabf4b6d910a21d507978686da1f24d5801521fbf6923724d4abd276b64f",
+      "tests/fixtures/benchmarks/heldout-audio/provenance.json": "c577c7d77663aaea0ba95b0ad7d166ab935008ddc6ad64d95e8ebc5e823475a1",
+      "tests/fixtures/benchmarks/heldout-audio/split.json": "8828e6ee6369fae1509327d538c3ad2cbdfb320e9a0a265012c21b3295df798e"
+    },
+    "schema": "copper-mcp/benchmark/heldout-audio-project-family/evidence-v1",
+    "script": "scripts/benchmark_audio_heldout_evaluation.py"
+  },
+  "evidence_run_id": "sha256:34d83180f8fd5b62c17c0b1bc7d8306301d5949a7851e6f31b148177da261884",
+  "run_id": "sha256:44d3c793c0e5b76f856640ccc576692086b31c1688471362d210cef91a08587c",
+  "schema": "copper-mcp/benchmark/heldout-audio-project-family/artifact-v1"
+}

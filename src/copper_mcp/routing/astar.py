@@ -25,10 +25,12 @@ from copper_mcp.board_ir import (
     verify_snapshot,
 )
 from copper_mcp.routing.contracts import (
+    BATCHED_ONE_STEINER_ORDERING,
     COMPONENT_MST_ORDERING,
     SINGLE_PATH_ORDERING,
     AStarSettings,
     CancellationCheck,
+    CongestionPenalty,
     RouteCandidate,
     RouteConnection,
     RouteCost,
@@ -40,15 +42,25 @@ from copper_mcp.routing.contracts import (
     RouteRequest,
     RouteResult,
 )
+from copper_mcp.routing.spatial_index import ConservativeSpatialIndex, SpatialIndexEntry
+from copper_mcp.routing.steiner_ordering import batched_one_steiner_order
 
-ROUTER_VERSION = "astar-grid/0.4.0"
-ROUTING_POLICY = "orthogonal-a-star-v1"
+ROUTER_VERSION = "astar-grid/0.6.0"
+ROUTING_POLICY = "orthogonal-a-star-spatial-index-v1"
+_PRE_BATCHED_ROUTER_VERSION = "astar-grid/0.4.0"
+_PRE_SPATIAL_INDEX_ROUTER_VERSION = "astar-grid/0.5.0"
+_PRE_SPATIAL_INDEX_POLICY = "orthogonal-a-star-v1"
 _EMPTY_DIGEST = f"sha256:{'0' * 64}"
+_SPATIAL_INDEX_MIN_ENTRIES = 8
+_MAX_CONGESTION_PENALTY = 1_000_000_000
 
 _Rect: TypeAlias = tuple[int, int, int, int]
 _Node: TypeAlias = tuple[int, int]
 _State: TypeAlias = tuple[int, int, int]
-_Score: TypeAlias = tuple[int, int, int]
+# (policy cost, physical geometry cost, bends, proximity steps).  With no policy hook the first
+# two terms are equal, preserving the historical A* ordering exactly.  Congestion only changes
+# search ordering; candidate RouteCost remains the physical geometry decomposition.
+_Score: TypeAlias = tuple[int, int, int, int]
 _DIRECTIONS: tuple[tuple[int, int], ...] = (
     (1, 0),  # east
     (0, -1),  # north
@@ -56,6 +68,43 @@ _DIRECTIONS: tuple[tuple[int, int], ...] = (
     (0, 1),  # south
 )
 _NO_DIRECTION = len(_DIRECTIONS)
+
+
+@dataclass(frozen=True, slots=True)
+class _RouterIdentity:
+    """One supported deterministic router behavior recorded in candidate identity."""
+
+    router_version: str
+    policy: str
+    use_spatial_index: bool
+
+
+_CURRENT_ROUTER_IDENTITY = _RouterIdentity(ROUTER_VERSION, ROUTING_POLICY, True)
+_REPLAY_IDENTITIES = {
+    (ROUTER_VERSION, ROUTING_POLICY): _CURRENT_ROUTER_IDENTITY,
+    (_PRE_SPATIAL_INDEX_ROUTER_VERSION, _PRE_SPATIAL_INDEX_POLICY): _RouterIdentity(
+        _PRE_SPATIAL_INDEX_ROUTER_VERSION,
+        _PRE_SPATIAL_INDEX_POLICY,
+        False,
+    ),
+    (_PRE_BATCHED_ROUTER_VERSION, _PRE_SPATIAL_INDEX_POLICY): _RouterIdentity(
+        _PRE_BATCHED_ROUTER_VERSION,
+        _PRE_SPATIAL_INDEX_POLICY,
+        False,
+    ),
+}
+
+
+def _ordering_policy_for(identity: _RouterIdentity, pad_count: int) -> str:
+    """Return the only ordering policy this recorded router behavior can reproduce."""
+
+    if pad_count == 2:
+        return SINGLE_PATH_ORDERING
+    if identity.router_version == _PRE_BATCHED_ROUTER_VERSION:
+        return COMPONENT_MST_ORDERING
+    if pad_count <= 9:
+        return BATCHED_ONE_STEINER_ORDERING
+    return COMPONENT_MST_ORDERING
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +128,9 @@ class _Problem:
     safe_board: _Rect
     rect_obstacles: tuple[_Rect, ...]
     polygon_obstacles: tuple[_PolygonObstacle, ...]
+    rect_index: ConservativeSpatialIndex[_Rect]
+    polygon_index: ConservativeSpatialIndex[_PolygonObstacle]
+    use_spatial_index: bool
     min_ix: int
     max_ix: int
     min_iy: int
@@ -93,6 +145,7 @@ class _Problem:
     target_max_ix: int
     target_min_iy: int
     target_max_iy: int
+    congestion_penalty: CongestionPenalty | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,7 +177,13 @@ class _WorkBudget:
     obstacle_checks: int = 0
 
     def checkpoint(self) -> None:
-        if self.cancelled is not None and self.cancelled():
+        cancelled = False
+        if self.cancelled is not None:
+            try:
+                cancelled = bool(self.cancelled())
+            except Exception:  # pragma: no cover - defensive untrusted callback boundary
+                cancelled = True
+        if cancelled:
             raise _fail(
                 RouteFailureCode.CANCELLED,
                 "the routing search was cancelled",
@@ -219,6 +278,19 @@ def _inflate_rectangle(rectangle: _Rect, margin_nm: int) -> _Rect:
         min_y - margin_nm,
         max_x + margin_nm,
         max_y + margin_nm,
+    )
+
+
+def _point_bounds(first: PointNM, second: PointNM, padding_nm: int = 0) -> _Rect:
+    """Return a closed AABB for two points, conservatively padded in every direction."""
+
+    if isinstance(padding_nm, bool) or padding_nm < 0:
+        raise ValueError("point-bound padding must be a non-negative integer")
+    return (
+        min(first.x, second.x) - padding_nm,
+        min(first.y, second.y) - padding_nm,
+        max(first.x, second.x) + padding_nm,
+        max(first.y, second.y) + padding_nm,
     )
 
 
@@ -385,11 +457,19 @@ def _edge_is_legal(
 ) -> bool:
     if not _inside_closed(start, problem.safe_board) or not _inside_closed(end, problem.safe_board):
         return False
-    for obstacle in problem.rect_obstacles:
+    if problem.use_spatial_index:
+        work.checkpoint()
+        edge_bounds = _point_bounds(start, end)
+        rect_obstacles = problem.rect_index.query(edge_bounds)
+        polygon_obstacles = problem.polygon_index.query(edge_bounds)
+    else:
+        rect_obstacles = problem.rect_obstacles
+        polygon_obstacles = problem.polygon_obstacles
+    for obstacle in rect_obstacles:
         work.obstacle_check()
         if _edge_enters_open_rectangle(start, end, obstacle):
             return False
-    for polygon in problem.polygon_obstacles:
+    for polygon in polygon_obstacles:
         if _edge_within_polygon_offset(start, end, polygon, work):
             return False
     return True
@@ -400,14 +480,22 @@ def _proximity_step(point: PointNM, problem: _Problem, work: _WorkBudget) -> int
     min_x, min_y, max_x, max_y = problem.safe_board
     if min(point.x - min_x, max_x - point.x, point.y - min_y, max_y - point.y) < step:
         return 1
-    for obstacle in problem.rect_obstacles:
+    if problem.use_spatial_index:
+        work.checkpoint()
+        proximity_bounds = (point.x - step, point.y - step, point.x + step, point.y + step)
+        rect_obstacles = problem.rect_index.query(proximity_bounds)
+        polygon_obstacles = problem.polygon_index.query(proximity_bounds)
+    else:
+        rect_obstacles = problem.rect_obstacles
+        polygon_obstacles = problem.polygon_obstacles
+    for obstacle in rect_obstacles:
         work.obstacle_check()
         obstacle_min_x, obstacle_min_y, obstacle_max_x, obstacle_max_y = obstacle
         dx = max(obstacle_min_x - point.x, 0, point.x - obstacle_max_x)
         dy = max(obstacle_min_y - point.y, 0, point.y - obstacle_max_y)
         if max(dx, dy) < step:
             return 1
-    for polygon in problem.polygon_obstacles:
+    for polygon in polygon_obstacles:
         if _point_within_polygon_offset(
             point,
             polygon,
@@ -771,10 +859,12 @@ class VerifiedFill:
     proved current, which keeps KiCad execution out of the search and out of Board IR.
 
     ``source_revision`` is the board the evidence was established against, and preparation
-    refuses fill whose revision does not match the snapshot in hand. This is not a defence
-    against a caller determined to lie — an in-process caller can always construct whatever it
-    likes — but it does turn the realistic mistake, handing the router a pour proved on some
-    other board or an earlier revision of this one, from a silent wrong answer into a refusal.
+    refuses fill whose revision does not match the snapshot in hand. For a foreign net, the fresh
+    islands become exact selected-layer obstacles and replace that zone's conservative outline;
+    for the routed net, they remain connectivity evidence. This is not a defence against a caller
+    determined to lie — an in-process caller can always construct whatever it likes — but it does
+    turn the realistic mistake, handing the router a pour proved on some other board or an earlier
+    revision of this one, from a silent wrong answer into a refusal.
     """
 
     net_id: str
@@ -954,6 +1044,8 @@ def _prepare(
     request: RouteRequest,
     work: _WorkBudget,
     verified_fill: tuple[VerifiedFill, ...] = (),
+    congestion_penalty: CongestionPenalty | None = None,
+    use_spatial_index: bool = True,
 ) -> _Problem:
     work.checkpoint()
     try:
@@ -1056,6 +1148,9 @@ def _prepare(
             )
     blocking_zones: list[Zone] = []
     same_net_zone = False
+    verified_fill_zone_keys = frozenset(
+        (zone.net_id, zone.layer_id) for zone in content.zones if zone.net_id is not None
+    )
     # A same-net zone anywhere in the stack is unmodeled copper, and connectivity is a
     # multilayer question, so a pour on the back layer can carry a connection just as a front
     # one can. The gate therefore covers every copper layer, and is lifted only for a layer
@@ -1077,6 +1172,11 @@ def _prepare(
             raise _fail(
                 RouteFailureCode.STALE_FILL,
                 "verified zone fill was established against a different board revision",
+            )
+        if (island.net_id, island.layer_id) not in verified_fill_zone_keys:
+            raise _fail(
+                RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                "verified zone fill is not backed by a matching Board IR zone",
             )
     net_fill = tuple(island for island in verified_fill if island.net_id == request.net_id)
     if (same_net_via or net_fill) and not same_net_zone_present:
@@ -1114,6 +1214,14 @@ def _prepare(
                     RouteFailureCode.UNSUPPORTED_GEOMETRY,
                     "the selected net already carries a zone and is partially routed",
                 )
+            continue
+        # A fresh KiCad fill is tighter than treating the whole zone outline as copper. Replace
+        # the conservative envelope only when this net/layer has at least one verified island;
+        # the islands below then become the complete obstacle set for that zone family.
+        if (zone.net_id, zone.layer_id) in verified_fill_zone_keys and any(
+            island.net_id == zone.net_id and island.layer_id == zone.layer_id
+            for island in verified_fill
+        ):
             continue
         blocking_zones.append(zone)
     attachment_segments: list[Segment] = []
@@ -1287,6 +1395,17 @@ def _prepare(
             return net_class.clearance_nm
         return max(net_class.clearance_nm, other)
 
+    # A verified fill island is keyed by its net and layer rather than by a Board IR zone ID.
+    # There can be more than one zone for that pair, so use the strictest declared zone
+    # clearance.  This conservative association keeps a high-clearance zone from being
+    # under-modelled while remaining safe for older callers that only provide fill geometry.
+    zone_clearance_by_net_layer: dict[tuple[str, str], int] = {}
+    for zone in content.zones:
+        key = (zone.net_id, zone.layer_id)
+        zone_clearance_by_net_layer[key] = max(
+            zone_clearance_by_net_layer.get(key, 0), zone.clearance_nm
+        )
+
     for index, keepout in enumerate(content.keepouts):
         if index % 64 == 0:
             work.checkpoint()
@@ -1394,6 +1513,26 @@ def _prepare(
             )
         )
 
+    for index, island in enumerate(verified_fill):
+        if island.layer_id != request.layer_id or island.net_id == request.net_id:
+            continue
+        ensure_obstacle_capacity()
+        # The fill polygon is exact, but the route still has to respect both net-class
+        # clearance and the governing zone's own clearance.  Candidate half-width is retained
+        # here so the resulting obstacle is a conservative track-center exclusion envelope.
+        clearance_nm = max(
+            governing_clearance_nm(island.net_id),
+            zone_clearance_by_net_layer.get((island.net_id, island.layer_id), 0),
+        )
+        polygon_obstacles.append(
+            _PolygonObstacle(
+                source_id=f"fill:{island.net_id}:{island.layer_id}:{index}",
+                points=island.points,
+                bounds=_polygon_bounds(island.points, work),
+                margin_nm=half_width_nm + clearance_nm,
+            )
+        )
+
     step = request.settings.grid_step_nm
     delta_x = end_pad.center.x - start_pad.center.x
     delta_y = end_pad.center.y - start_pad.center.y
@@ -1454,6 +1593,32 @@ def _prepare(
     for rectangle in target_cores:
         target_nodes.update(attachment_nodes(rectangle))
 
+    rect_obstacle_tuple = tuple(sorted(rect_obstacles))
+    polygon_obstacle_tuple = tuple(sorted(polygon_obstacles, key=_polygon_obstacle_sort_key))
+    # Index bounds include one lattice step beyond the exact query envelope.  This is a safe
+    # superset for both edge legality and proximity scoring; exact predicates still decide.
+    rect_index = ConservativeSpatialIndex(
+        tuple(
+            SpatialIndexEntry(
+                ordinal=index,
+                bounds=_inflate_rectangle(rectangle, step),
+                value=rectangle,
+            )
+            for index, rectangle in enumerate(rect_obstacle_tuple)
+        ),
+        min_index_entries=_SPATIAL_INDEX_MIN_ENTRIES,
+    )
+    polygon_index = ConservativeSpatialIndex(
+        tuple(
+            SpatialIndexEntry(
+                ordinal=index,
+                bounds=_inflate_rectangle(polygon.bounds, polygon.margin_nm + step),
+                value=polygon,
+            )
+            for index, polygon in enumerate(polygon_obstacle_tuple)
+        ),
+        min_index_entries=_SPATIAL_INDEX_MIN_ENTRIES,
+    )
     problem = _Problem(
         snapshot=snapshot,
         request=request,
@@ -1462,8 +1627,11 @@ def _prepare(
         width_nm=net_class.track_width_nm,
         clearance_nm=net_class.clearance_nm,
         safe_board=safe_board,
-        rect_obstacles=tuple(sorted(rect_obstacles)),
-        polygon_obstacles=tuple(sorted(polygon_obstacles, key=_polygon_obstacle_sort_key)),
+        rect_obstacles=rect_obstacle_tuple,
+        polygon_obstacles=polygon_obstacle_tuple,
+        rect_index=rect_index,
+        polygon_index=polygon_index,
+        use_spatial_index=use_spatial_index,
         min_ix=min_ix,
         max_ix=max_ix,
         min_iy=min_iy,
@@ -1478,6 +1646,7 @@ def _prepare(
         target_max_ix=max(node[0] for node in target_nodes),
         target_min_iy=min(node[1] for node in target_nodes),
         target_max_iy=max(node[1] for node in target_nodes),
+        congestion_penalty=congestion_penalty,
     )
     for obstacle in problem.rect_obstacles:
         work.obstacle_check()
@@ -1631,6 +1800,7 @@ def _build_candidate(
     *,
     pad_count: int,
     ordering_policy: str,
+    identity: _RouterIdentity,
     work: _WorkBudget,
 ) -> RouteCandidate:
     settings = problem.request.settings
@@ -1679,8 +1849,8 @@ def _build_candidate(
             obstacle_checks=work.obstacle_checks,
         ),
         settings=settings,
-        router_version=ROUTER_VERSION,
-        policy=ROUTING_POLICY,
+        router_version=identity.router_version,
+        policy=identity.policy,
         seed=problem.request.seed,
     )
     digest = f"sha256:{hashlib.sha256(canonical_candidate_bytes(candidate)).hexdigest()}"
@@ -1702,16 +1872,17 @@ def _search(problem: _Problem, work: _WorkBudget) -> _Leg:
     settings = problem.request.settings
     start_states = _start_states(problem)
     start_state_set = frozenset(start_states)
-    start_score: _Score = (0, 0, 0)
+    start_score: _Score = (0, 0, 0, 0)
     best: dict[_State, _Score] = dict.fromkeys(start_states, start_score)
     parents: dict[_State, _State] = {}
-    frontier: list[tuple[int, int, int, int, int, int, int, int, _State]] = []
+    frontier: list[tuple[int, int, int, int, int, int, int, int, int, _State]] = []
     counter = 0
     for state in start_states:
         heapq.heappush(
             frontier,
             (
                 _heuristic(problem, state[0], state[1]),
+                0,
                 0,
                 0,
                 0,
@@ -1731,8 +1902,19 @@ def _search(problem: _Problem, work: _WorkBudget) -> _Leg:
 
     while frontier:
         work.checkpoint()
-        _, g_cost, bends, proximity_steps, iy, ix, direction, _, state = heapq.heappop(frontier)
-        if best.get(state) != (g_cost, bends, proximity_steps):
+        (
+            _,
+            policy_cost,
+            g_cost,
+            bends,
+            proximity_steps,
+            iy,
+            ix,
+            direction,
+            _,
+            state,
+        ) = heapq.heappop(frontier)
+        if best.get(state) != (policy_cost, g_cost, bends, proximity_steps):
             continue
         if (ix, iy) in problem.target_nodes:
             route_states = [state]
@@ -1793,9 +1975,45 @@ def _search(problem: _Problem, work: _WorkBudget) -> _Leg:
                 + bend_increment * settings.bend_penalty_nm
                 + proximity_increment * settings.proximity_penalty_nm
             )
+            congestion_increment = 0
+            if problem.congestion_penalty is not None:
+                try:
+                    raw_penalty = problem.congestion_penalty(current, destination)
+                except Exception as error:  # pragma: no cover - defensive boundary
+                    raise _fail(
+                        RouteFailureCode.UNSUPPORTED_CONSTRAINT,
+                        "the congestion policy failed closed",
+                        expanded_states=work.expanded_states,
+                        obstacle_checks=work.obstacle_checks,
+                    ) from error
+                if (
+                    isinstance(raw_penalty, bool)
+                    or not isinstance(raw_penalty, int)
+                    or raw_penalty < 0
+                    or raw_penalty > _MAX_CONGESTION_PENALTY
+                ):
+                    raise _fail(
+                        RouteFailureCode.UNSUPPORTED_CONSTRAINT,
+                        "the congestion policy returned an invalid penalty",
+                        expanded_states=work.expanded_states,
+                        obstacle_checks=work.obstacle_checks,
+                    )
+                congestion_increment = raw_penalty
             next_state: _State = (next_ix, next_iy, next_direction)
-            next_score: _Score = (next_cost, next_bends, next_proximity)
-            if next_score >= best.get(next_state, (1 << 63, 1 << 63, 1 << 63)):
+            next_policy_cost = (
+                policy_cost
+                + settings.grid_step_nm
+                + bend_increment * settings.bend_penalty_nm
+                + proximity_increment * settings.proximity_penalty_nm
+                + congestion_increment
+            )
+            next_score: _Score = (
+                next_policy_cost,
+                next_cost,
+                next_bends,
+                next_proximity,
+            )
+            if next_score >= best.get(next_state, (1 << 63, 1 << 63, 1 << 63, 1 << 63)):
                 continue
             best[next_state] = next_score
             parents[next_state] = state
@@ -1803,7 +2021,8 @@ def _search(problem: _Problem, work: _WorkBudget) -> _Leg:
             heapq.heappush(
                 frontier,
                 (
-                    next_cost + _heuristic(problem, next_ix, next_iy),
+                    next_policy_cost + _heuristic(problem, next_ix, next_iy),
+                    next_policy_cost,
                     next_cost,
                     next_bends,
                     next_proximity,
@@ -1898,6 +2117,14 @@ def _merge_order(
     return tuple(order)
 
 
+def _steiner_merge_order(
+    components: tuple[tuple[_Rect, ...], ...], work: _WorkBudget
+) -> tuple[tuple[int, int], ...]:
+    """Return the bounded one-Steiner-guided merge order for low-degree nets."""
+
+    return batched_one_steiner_order(components, checkpoint=work.obstacle_check)
+
+
 def _emitted_cores(leg: _Leg, half_width_nm: int) -> tuple[_Rect, ...]:
     """Return exact cores for one emitted leg, which is orthogonal by construction."""
 
@@ -1924,7 +2151,7 @@ def _emitted_cores(leg: _Leg, half_width_nm: int) -> tuple[_Rect, ...]:
     return tuple(cores)
 
 
-def _route_tree(problem: _Problem, work: _WorkBudget) -> RouteCandidate:
+def _route_tree(problem: _Problem, work: _WorkBudget, identity: _RouterIdentity) -> RouteCandidate:
     """Merge the net's components one leg at a time until a single component remains."""
 
     if problem.pad_count == 2:
@@ -1933,6 +2160,7 @@ def _route_tree(problem: _Problem, work: _WorkBudget) -> RouteCandidate:
             (_search(problem, work),),
             pad_count=2,
             ordering_policy=SINGLE_PATH_ORDERING,
+            identity=identity,
             work=work,
         )
 
@@ -1949,7 +2177,17 @@ def _route_tree(problem: _Problem, work: _WorkBudget) -> RouteCandidate:
 
     half_width_nm = problem.width_nm // 2
     legs: list[_Leg] = []
-    for first, second in _merge_order(problem.components, work):
+    ordering_policy = _ordering_policy_for(identity, problem.pad_count)
+    if ordering_policy == BATCHED_ONE_STEINER_ORDERING:
+        merge_order = _steiner_merge_order(problem.components, work)
+    elif ordering_policy == COMPONENT_MST_ORDERING:
+        # The cubic topology guide is intentionally limited to low-degree nets.  Large nets
+        # retain the previous bounded MST order until a separately budgeted decomposition policy
+        # exists; this keeps a hostile pad count from consuming the whole request on ordering.
+        merge_order = _merge_order(problem.components, work)
+    else:  # pragma: no cover - every identity is closed above this boundary
+        raise RuntimeError("internal router identity has no multi-pin ordering policy")
+    for first, second in merge_order:
         left, right = find(first), find(second)
         if left == right:
             continue
@@ -2004,7 +2242,8 @@ def _route_tree(problem: _Problem, work: _WorkBudget) -> RouteCandidate:
         problem,
         tuple(legs),
         pad_count=problem.pad_count,
-        ordering_policy=COMPONENT_MST_ORDERING,
+        ordering_policy=ordering_policy,
+        identity=identity,
         work=work,
     )
 
@@ -2013,7 +2252,16 @@ def _validate_public_inputs(
     snapshot: object,
     request: object,
     cancelled: object,
-) -> tuple[BoardIRSnapshot, RouteRequest, CancellationCheck | None] | RouteResult:
+    congestion_penalty: object,
+) -> (
+    tuple[
+        BoardIRSnapshot,
+        RouteRequest,
+        CancellationCheck | None,
+        CongestionPenalty | None,
+    ]
+    | RouteResult
+):
     if not isinstance(snapshot, BoardIRSnapshot):
         return _result_failure(
             _fail(
@@ -2021,18 +2269,64 @@ def _validate_public_inputs(
                 "the Board IR snapshot type is invalid",
             )
         )
-    if not isinstance(request, RouteRequest) or (cancelled is not None and not callable(cancelled)):
+    if (
+        not isinstance(request, RouteRequest)
+        or (cancelled is not None and not callable(cancelled))
+        or (congestion_penalty is not None and not callable(congestion_penalty))
+    ):
         return _result_failure(
             _fail(
                 RouteFailureCode.INVALID_REQUEST,
                 "the routing request type is invalid",
             )
         )
-    return snapshot, request, cast("CancellationCheck | None", cancelled)
+    return (
+        snapshot,
+        request,
+        cast("CancellationCheck | None", cancelled),
+        cast("CongestionPenalty | None", congestion_penalty),
+    )
 
 
 class AStarRouter:
     """Pure CPU reference backend for one exact two-pin route candidate."""
+
+    def __init__(self, identity: _RouterIdentity | None = None) -> None:
+        self._identity = identity or _CURRENT_ROUTER_IDENTITY
+
+    @classmethod
+    def for_replay(
+        cls,
+        *,
+        router_version: str,
+        policy: str,
+        ordering_policy: str,
+        pad_count: int,
+    ) -> AStarRouter:
+        """Select one recorded router behavior, refusing unknown historical combinations."""
+
+        identity = _REPLAY_IDENTITIES.get((router_version, policy))
+        if identity is None or ordering_policy != _ordering_policy_for(identity, pad_count):
+            raise ValueError("candidate router version and ordering policy are unsupported")
+        return cls(identity)
+
+    def replay(self, snapshot: BoardIRSnapshot, candidate: RouteCandidate) -> RouteResult:
+        """Replay one immutable candidate under its own closed router identity."""
+
+        router = self.for_replay(
+            router_version=candidate.router_version,
+            policy=candidate.policy,
+            ordering_policy=candidate.ordering_policy,
+            pad_count=candidate.pad_count,
+        )
+        request = RouteRequest(
+            board_revision=snapshot.snapshot_digest,
+            net_id=candidate.patch.net_id,
+            layer_id=candidate.patch.layer_id,
+            seed=candidate.seed,
+            settings=candidate.settings,
+        )
+        return router.propose(snapshot, request)
 
     @property
     def name(self) -> str:
@@ -2045,6 +2339,7 @@ class AStarRouter:
         *,
         cancelled: CancellationCheck | None = None,
         verified_fill: tuple[VerifiedFill, ...] = (),
+        congestion_penalty: CongestionPenalty | None = None,
     ) -> RouteResult:
         """Return an unapplied candidate, an already-connected record, or an expected failure.
 
@@ -2053,14 +2348,21 @@ class AStarRouter:
         does not exist as far as any claim here is concerned.
         """
 
-        validated = _validate_public_inputs(snapshot, request, cancelled)
+        validated = _validate_public_inputs(snapshot, request, cancelled, congestion_penalty)
         if isinstance(validated, RouteResult):
             return validated
-        checked_snapshot, checked_request, cancellation_check = validated
+        checked_snapshot, checked_request, cancellation_check, checked_penalty = validated
         work = _WorkBudget(settings=checked_request.settings, cancelled=cancellation_check)
         try:
-            problem = _prepare(checked_snapshot, checked_request, work, verified_fill)
-            return RouteResult(candidate=_route_tree(problem, work))
+            problem = _prepare(
+                checked_snapshot,
+                checked_request,
+                work,
+                verified_fill,
+                checked_penalty,
+                self._identity.use_spatial_index,
+            )
+            return RouteResult(candidate=_route_tree(problem, work, self._identity))
         except _AlreadyConnectedError as connection:
             return RouteResult(
                 connected=RouteConnection(

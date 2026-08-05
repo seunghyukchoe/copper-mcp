@@ -1,0 +1,157 @@
+{
+  "benchmark": "scene-route-referential-closure-v1",
+  "claims": [
+    "scene-route-referential-closure",
+    "revision-bound-net-selection",
+    "closed-preview-route-mcp-schema",
+    "deterministic-mcp-replay",
+    "unchanged-final-workspace-tree"
+  ],
+  "configuration": {
+    "constraints": {
+      "clearance_nm": 250000,
+      "track_width_nm": 250000,
+      "via_diameter_nm": 800000,
+      "via_drill_nm": 400000
+    },
+    "region_nm": [
+      0,
+      0,
+      100000000,
+      100000000
+    ],
+    "repetitions": 10,
+    "script_sha256": "adebb3768c21ab5ac4898d7a48c6eee934564956c8910df72d2236c52f5670a0",
+    "seed": 23,
+    "transport_path": "in_process_mcp_call_tool",
+    "warmups": 1
+  },
+  "created_at_utc": "2026-08-04T14:32:57.717175+00:00",
+  "dataset": {
+    "artifact_path": "benchmarks/audio/fixtures/rc-low-pass-routing-v1.kicad_pcb",
+    "artifact_sha256": "8cfea1dbcedbfede05905cdeb36160aa41f1022245f4dfe5c1e723aa503a758b",
+    "catalog_sha256": "a233d5b80241ca562a25b76c5cbf05b8ff0da6ca9971a713907949e0442a63f7",
+    "fixture_id": "rc-low-pass-routing-v1",
+    "license_sha256": "947af68b9ff8f542f5bba7a084e343573274741f4d7e4cbe1e4e9668a89331de",
+    "license_spdx": "Apache-2.0",
+    "third_party_content_included": false
+  },
+  "environment": {
+    "accelerator": null,
+    "dependencies": {
+      "jsonschema": "4.26.0",
+      "mcp": "2.0.0",
+      "pydantic": "2.13.4"
+    },
+    "kicad_invoked": false,
+    "machine": "arm64",
+    "physical_memory_bytes": 38654705664,
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "processor": "arm",
+    "python": "3.12.13"
+  },
+  "metrics": {
+    "candidate_equivalence": 3,
+    "deterministic_route_replays": 90,
+    "deterministic_scene_replays": 10,
+    "expected_deterministic_route_replays": 90,
+    "hidden_name_oracle_actionable": 3,
+    "legacy_scene_ref_actionable": 0,
+    "median_latency_ns": {
+      "legacy_miswire": 4817979,
+      "oracle": 15210187,
+      "reference": 20601437,
+      "scene": 2620813
+    },
+    "persistent_workspace_changes": 0,
+    "reference_actionable": 3,
+    "stale_board_revision_refusals": 3,
+    "stale_reference_refusals": 6,
+    "stale_snapshot_digest_refusals": 3,
+    "structured_payload_bytes": {
+      "reference_routes_total": 6820,
+      "scene": 5817
+    }
+  },
+  "not_claimed": [
+    "kicad-drc",
+    "whole-board-routing",
+    "multilayer-routing",
+    "placement",
+    "live-kicad-ipc",
+    "electrical-validation",
+    "fabrication-readiness",
+    "performance-generalization"
+  ],
+  "routes": [
+    {
+      "candidate_equivalent": true,
+      "candidate_id": "sha256:221846d2a86f8ffefd9bcef5c52fdd0d7ff31b89f065d2c784a78697b75c3d08",
+      "expected_pad_count": 2,
+      "legacy_status": "not_routed",
+      "net_ref_id": "net:name:55d6932f61223a9f317537bf2ab6ad57",
+      "oracle_net": "AUDIO_IN",
+      "oracle_status": "routed",
+      "reference_status": "routed",
+      "response_digests": {
+        "legacy_miswire": "sha256:2d39196b2c2e285e5e64cdfdbe551545450d25c7a43e1ab4607e92c61218b166",
+        "oracle": "sha256:2d10cc3aa5a21efa21437dad980b6d761c07f83ceec2115f0d11eb34f4184046",
+        "reference": "sha256:99bb2e6786d2d120e0b2afc326b6b545687fc5fa4ac9342f53e05f6fd483d0c4"
+      }
+    },
+    {
+      "candidate_equivalent": true,
+      "candidate_id": "sha256:a51ccbb98f8db1368ee1ca69516bf1da0ed197d4f8d38530be431471aea2cf14",
+      "expected_pad_count": 3,
+      "legacy_status": "not_routed",
+      "net_ref_id": "net:name:c75b84291a3f95b6e86b70c59fa5e117",
+      "oracle_net": "AUDIO_OUT",
+      "oracle_status": "routed",
+      "reference_status": "routed",
+      "response_digests": {
+        "legacy_miswire": "sha256:20acf0209aff8943cb9f74e8d12c46ae44e1503206c1ec99ae6f3bd73930126d",
+        "oracle": "sha256:83b1c2f66ee0a8384f0a6a5f21bcb10e32efc7c9b8d111ecd23ab5c35a799804",
+        "reference": "sha256:99fcdb7e0795e3402d4a5f2c6affe0632c212f28335a6775ec309de7abdf0fb4"
+      }
+    },
+    {
+      "candidate_equivalent": true,
+      "candidate_id": "sha256:2c1fac765745fe72adae527bd05d4e483fef67449b488948bc63751062e85ad3",
+      "expected_pad_count": 3,
+      "legacy_status": "not_routed",
+      "net_ref_id": "net:name:ccdd8d41edbac58e6d53310d1fccffd0",
+      "oracle_net": "GND",
+      "oracle_status": "routed",
+      "reference_status": "routed",
+      "response_digests": {
+        "legacy_miswire": "sha256:203c6cf588904725c44f96068c67e09a0d364bd72dbd93c499b5d7910fc767cb",
+        "oracle": "sha256:f867810554502037c9669f3cb7db942d7dcbc9bda46a832bc29d54f27d9d6d02",
+        "reference": "sha256:ef841921d0b761624f03e6660dc6519ca1c02353aafaa163287413dd3d15003b"
+      }
+    }
+  ],
+  "run_id": "sha256:0c47fdf0d2a35602ef6facba43648db09e637a0c897eb0dffbb8a380bae08543",
+  "scene": {
+    "board_revision": "sha256:8cfea1dbcedbfede05905cdeb36160aa41f1022245f4dfe5c1e723aa503a758b",
+    "net_ref_count": 3,
+    "normalized_response_digest": "sha256:be96353771ab418f2557a32744c5135451e47e4cad5755540adffa6f9cc34ba3",
+    "objects_omitted": 0,
+    "objects_returned": 14,
+    "snapshot_digest": "sha256:aee02f1df883eae37b1c045cfda22f2b5e233b16455c4516661db3439f471654"
+  },
+  "schema_evidence": {
+    "all_record_objects_closed": true,
+    "candidate_closed": true,
+    "closed_record_object_count": 20,
+    "input_wrapper_closed": true,
+    "output_closed": true,
+    "output_schema_digest": "sha256:38bf57bc4f306dfcbc9ea32a7593d3c24fc53f42ef82b9708ce073be21e70157",
+    "output_status_variants": 5,
+    "reference_selector_revision_bound": true,
+    "selector_variants": 2,
+    "selector_variants_closed": true
+  },
+  "source_commit": "d6ee84b582f47b1d05aa19b3cd997ac53a560062",
+  "tracked_worktree_dirty": false,
+  "untracked_file_count": 1
+}

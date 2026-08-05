@@ -2,7 +2,7 @@
 
 This module is the first public routing surface. It parses an untrusted request,
 reads one workspace board read-only, converts it through the fail-closed Board IR
-adapter, proposes exactly one deterministic two-pin candidate, and optionally binds
+adapter, proposes at most one deterministic single-layer candidate, and optionally binds
 that candidate to authoritative KiCad DRC evidence. It never writes, exports,
 persists, previews into KiCad, or applies copper.
 """
@@ -34,6 +34,7 @@ from copper_mcp.kicad_cli import (
     run_route_candidate_drc,
     run_zone_fill_authority,
 )
+from copper_mcp.kicad_ipc import capture_live_board
 from copper_mcp.models import SCHEMA_VERSION
 from copper_mcp.request_boundary import (
     CONSTRAINT_FIELDS,
@@ -62,9 +63,14 @@ from copper_mcp.routing import (
 from copper_mcp.security import read_workspace_file
 
 _SHA256_ID = re.compile(r"^sha256:[a-f0-9]{64}$")
+_NET_REF_ID = re.compile(r"^net:name:[0-9a-f]{32}$")
 _MAX_NET_NAME_CHARACTERS = 255
-_REQUIRED_FIELDS = ("board", "net", "layer", "constraints")
+_REQUIRED_FIELDS = ("board", "layer", "constraints")
 _OPTIONAL_FIELDS = (
+    "net",
+    "net_ref_id",
+    "expect_board_revision",
+    "expect_snapshot_digest",
     "seed",
     "settings",
     "include_drc",
@@ -72,6 +78,9 @@ _OPTIONAL_FIELDS = (
     "include_apply_token",
 )
 _SETTINGS_FIELDS = tuple(AStarSettings.__dataclass_fields__)
+_FILL_ROUTING_EFFECTS = frozenset(
+    {"foreign_zone_obstacles", "connectivity_evidence", "both", "verified_context"}
+)
 
 
 class RoutePreviewError(RequestError):
@@ -92,12 +101,15 @@ class RoutePreviewRequest:
     """One validated, immutable preview request built from untrusted input."""
 
     board: str
-    net: str
     layer: str
     constraints: NetClass
     settings: AStarSettings
     seed: int
     include_drc: bool
+    net: str | None = None
+    net_ref_id: str | None = None
+    expect_board_revision: str | None = None
+    expect_snapshot_digest: str | None = None
     include_fill_authority: bool = False
     include_apply_token: bool = False
 
@@ -111,13 +123,31 @@ class RoutePreviewRequest:
         boolean("include_apply_token", self.include_apply_token)
         integer("seed", self.seed, minimum=0, maximum=MAX_JSON_SAFE_INTEGER)
         board_path(self.board)
-        text("net", self.net, maximum=_MAX_NET_NAME_CHARACTERS)
         copper_layer("layer", self.layer)
+        if (self.net is None) == (self.net_ref_id is None):
+            raise RoutePreviewError("exactly one net selector is required")
+        if self.net is not None:
+            text("net", self.net, maximum=_MAX_NET_NAME_CHARACTERS)
+        if self.net_ref_id is not None:
+            _net_ref_id(self.net_ref_id)
+            if self.expect_board_revision is None or self.expect_snapshot_digest is None:
+                raise RoutePreviewError(
+                    "a net reference requires board and snapshot revision preconditions"
+                )
+        for name, revision in (
+            ("expect_board_revision", self.expect_board_revision),
+            ("expect_snapshot_digest", self.expect_snapshot_digest),
+        ):
+            if revision is not None:
+                _digest(name, revision)
 
     @property
     def net_id(self) -> str:
-        """Return the Board IR net identity for the requested KiCad net name."""
+        """Return the selected Board IR net identity without re-hashing a scene reference."""
 
+        if self.net_ref_id is not None:
+            return self.net_ref_id
+        assert self.net is not None
         return net_id_for_name(self.net)
 
     @property
@@ -135,9 +165,8 @@ class RoutePreviewRequest:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        document: dict[str, Any] = {
             "board": self.board,
-            "net": self.net,
             "layer": self.layer,
             "seed": self.seed,
             "include_drc": self.include_drc,
@@ -146,6 +175,33 @@ class RoutePreviewRequest:
             "constraints": {field: getattr(self.constraints, field) for field in CONSTRAINT_FIELDS},
             "settings": {field: getattr(self.settings, field) for field in _SETTINGS_FIELDS},
         }
+        if self.net is not None:
+            document["net"] = self.net
+        else:
+            document["net_ref_id"] = self.net_ref_id
+        if self.expect_board_revision is not None:
+            document["expect_board_revision"] = self.expect_board_revision
+        if self.expect_snapshot_digest is not None:
+            document["expect_snapshot_digest"] = self.expect_snapshot_digest
+        return document
+
+
+def _net_ref_id(value: Any) -> str:
+    """Validate one Board IR net reference without accepting a raw KiCad name."""
+
+    reference = text("net_ref_id", value, maximum=164)
+    if not _NET_REF_ID.fullmatch(reference):
+        raise RoutePreviewError("net_ref_id must be a stable Board IR net reference")
+    return reference
+
+
+def _digest(name: str, value: Any) -> str:
+    """Validate one content-addressed precondition without echoing its value."""
+
+    revision = text(name, value, maximum=71)
+    if not _SHA256_ID.fullmatch(revision):
+        raise RoutePreviewError(f"{name} must be content-addressed with sha256")
+    return revision
 
 
 def _settings(payload: Any) -> AStarSettings:
@@ -168,14 +224,31 @@ def parse_route_preview_request(payload: Any) -> RoutePreviewRequest:
         fields = mapping("request", payload)
         known_fields("request", fields, frozenset(_REQUIRED_FIELDS + _OPTIONAL_FIELDS))
         required_fields("request", fields, _REQUIRED_FIELDS)
+        if ("net" in fields) == ("net_ref_id" in fields):
+            raise RoutePreviewError("request must contain exactly one net selector")
         return RoutePreviewRequest(
             board=board_path(fields["board"]),
-            net=text("net", fields["net"], maximum=_MAX_NET_NAME_CHARACTERS),
             layer=copper_layer("layer", fields["layer"]),
             constraints=net_class_constraints(fields["constraints"]),
             settings=_settings(fields.get("settings", {})),
             seed=integer("seed", fields.get("seed", 0), minimum=0, maximum=MAX_JSON_SAFE_INTEGER),
             include_drc=boolean("include_drc", fields.get("include_drc", False)),
+            net=(
+                text("net", fields["net"], maximum=_MAX_NET_NAME_CHARACTERS)
+                if "net" in fields
+                else None
+            ),
+            net_ref_id=_net_ref_id(fields["net_ref_id"]) if "net_ref_id" in fields else None,
+            expect_board_revision=(
+                _digest("expect_board_revision", fields["expect_board_revision"])
+                if "expect_board_revision" in fields
+                else None
+            ),
+            expect_snapshot_digest=(
+                _digest("expect_snapshot_digest", fields["expect_snapshot_digest"])
+                if "expect_snapshot_digest" in fields
+                else None
+            ),
             include_fill_authority=boolean(
                 "include_fill_authority", fields.get("include_fill_authority", False)
             ),
@@ -231,6 +304,31 @@ def _candidate_to_dict(candidate: RouteCandidate) -> dict[str, Any]:
     }
 
 
+def _fill_routing_effect(
+    fills: tuple[VerifiedFill, ...],
+    routed_net_id: str,
+    routed_layer_id: str,
+) -> str:
+    """Describe how freshness-bound islands affected one routed preview.
+
+    The deterministic router remains the authority for geometry. This label only makes the
+    already-verified evidence legible to an MCP caller: foreign islands become exact obstacles,
+    same-net islands can prove connectivity, and an empty selected-layer cache is still a
+    verified context rather than an inferred absence of copper.
+    """
+
+    selected = tuple(fill for fill in fills if fill.layer_id == routed_layer_id)
+    foreign = any(fill.net_id != routed_net_id for fill in selected)
+    same_net = any(fill.net_id == routed_net_id for fill in selected)
+    if foreign and same_net:
+        return "both"
+    if foreign:
+        return "foreign_zone_obstacles"
+    if same_net:
+        return "connectivity_evidence"
+    return "verified_context"
+
+
 @dataclass(frozen=True, slots=True)
 class RoutePreview:
     """One immutable, side-effect-free preview of a proposed route candidate."""
@@ -243,6 +341,7 @@ class RoutePreview:
     candidate: RouteCandidate | None = None
     connection: RouteConnection | None = None
     fill_authority: ZoneFillAuthority | None = None
+    fill_routing_effect: str | None = None
     diagnostic: RouteDiagnostic | None = None
     conversion_diagnostic_counts: Mapping[str, int] = field(default_factory=dict)
     drc_evidence: RouteCandidateDrcEvidence | None = None
@@ -275,6 +374,12 @@ class RoutePreview:
             MappingProxyType(dict(sorted(counts.items()))),
         )
 
+        stale_before_conversion = (
+            self.status is RoutePreviewStatus.NOT_ROUTED
+            and self.snapshot_digest is None
+            and isinstance(self.diagnostic, RouteDiagnostic)
+            and self.diagnostic.code is RouteFailureCode.STALE_REVISION
+        )
         if self.status is RoutePreviewStatus.UNSUPPORTED_BOARD:
             if (
                 self.candidate is not None
@@ -284,6 +389,9 @@ class RoutePreview:
                 raise RoutePreviewError("an unsupported board cannot carry a routing outcome")
             if self.snapshot_digest is not None or not counts:
                 raise RoutePreviewError("an unsupported board must report conversion diagnostics")
+        elif stale_before_conversion:
+            if counts:
+                raise RoutePreviewError("a stale board must not report conversion errors")
         else:
             if counts:
                 raise RoutePreviewError("a converted board must not report conversion errors")
@@ -329,6 +437,27 @@ class RoutePreview:
                 raise RoutePreviewError("an apply token requires a routed candidate")
             if not self.request.include_apply_token:
                 raise RoutePreviewError("an apply token was not requested")
+
+        if self.fill_authority is not None:
+            if not isinstance(self.fill_authority, ZoneFillAuthority):
+                raise RoutePreviewError("fill authority is malformed")
+            if self.status not in (RoutePreviewStatus.ROUTED, RoutePreviewStatus.ALREADY_CONNECTED):
+                raise RoutePreviewError("fill authority requires a routing outcome")
+            if not self.request.include_fill_authority:
+                raise RoutePreviewError("fill authority was not requested")
+            if self.fill_authority.source_revision != self.board_revision:
+                raise RoutePreviewError("fill authority is not bound to the previewed board")
+            if self.fill_routing_effect not in _FILL_ROUTING_EFFECTS:
+                raise RoutePreviewError("fill authority routing effect is malformed")
+        elif self.fill_routing_effect is not None:
+            raise RoutePreviewError("fill routing effect requires fill authority")
+        if (
+            self.status is RoutePreviewStatus.ALREADY_CONNECTED
+            and self.connection is not None
+            and self.connection.fill_polygons
+            and self.fill_authority is None
+        ):
+            raise RoutePreviewError("fill-connected evidence requires fill authority")
 
         if self.drc_evidence is None:
             return
@@ -383,7 +512,12 @@ class RoutePreview:
             "drc_evidence": (None if self.drc_evidence is None else self.drc_evidence.to_dict()),
             "apply_token": self.apply_token,
             "fill_authority": (
-                None if self.fill_authority is None else self.fill_authority.to_dict()
+                None
+                if self.fill_authority is None
+                else {
+                    **self.fill_authority.to_dict(),
+                    "routing_effect": self.fill_routing_effect,
+                }
             ),
         }
 
@@ -442,6 +576,21 @@ def preview_route(
     source = board.content
     board_revision = f"sha256:{hashlib.sha256(source).hexdigest()}"
 
+    if (
+        request.expect_board_revision is not None
+        and request.expect_board_revision != board_revision
+    ):
+        return RoutePreview(
+            status=RoutePreviewStatus.NOT_ROUTED,
+            board_path=relative_path,
+            board_revision=board_revision,
+            request=request,
+            diagnostic=RouteDiagnostic(
+                code=RouteFailureCode.STALE_REVISION,
+                message="the observed scene no longer matches the current board bytes",
+            ),
+        )
+
     default_limits = ParseLimits()
     limits = replace(
         default_limits,
@@ -463,6 +612,22 @@ def preview_route(
     if snapshot.content.source.revision != board_revision:
         raise RoutePreviewError("converted board revision is inconsistent with its source bytes")
 
+    if (
+        request.expect_snapshot_digest is not None
+        and request.expect_snapshot_digest != snapshot.snapshot_digest
+    ):
+        return RoutePreview(
+            status=RoutePreviewStatus.NOT_ROUTED,
+            board_path=relative_path,
+            board_revision=board_revision,
+            request=request,
+            snapshot_digest=snapshot.snapshot_digest,
+            diagnostic=RouteDiagnostic(
+                code=RouteFailureCode.STALE_REVISION,
+                message="the observed scene no longer matches the current routing snapshot",
+            ),
+        )
+
     if time.monotonic() >= deadline:
         return RoutePreview(
             status=RoutePreviewStatus.NOT_ROUTED,
@@ -479,7 +644,7 @@ def preview_route(
     verified_fill: tuple[VerifiedFill, ...] = ()
     fill_authority: ZoneFillAuthority | None = None
     if request.include_fill_authority and any(
-        zone.net_id == request.net_id for zone in snapshot.content.zones
+        zone.layer_id == request.layer_id for zone in snapshot.content.zones
     ):
         # Poured copper may only be believed when KiCad has just confirmed the board's cache
         # still describes it. Refill happens on a private disposable copy, never here.
@@ -532,6 +697,9 @@ def preview_route(
             snapshot_digest=snapshot.snapshot_digest,
             connection=result.connected,
             fill_authority=fill_authority if result.connected.fill_polygons else None,
+            fill_routing_effect=(
+                "connectivity_evidence" if result.connected.fill_polygons else None
+            ),
         )
     if result.candidate is None:
         return RoutePreview(
@@ -570,6 +738,7 @@ def preview_route(
                 base_revision=result.candidate.base_revision,
                 board_revision=board_revision,
                 relative_path=relative_path,
+                operation="route",
             )
         )
     return RoutePreview(
@@ -579,6 +748,156 @@ def preview_route(
         request=request,
         snapshot_digest=snapshot.snapshot_digest,
         candidate=result.candidate,
+        fill_authority=fill_authority,
+        fill_routing_effect=(
+            _fill_routing_effect(
+                verified_fill,
+                request.net_id,
+                request.layer_id,
+            )
+            if fill_authority is not None
+            else None
+        ),
         drc_evidence=evidence,
         apply_token=apply_token,
+    )
+
+
+def preview_live_route(
+    payload: Any,
+    settings: Settings,
+    *,
+    client_factory: Any = None,
+) -> RoutePreview:
+    """Propose one read-only route against the exact active KiCad IPC snapshot.
+
+    Live proposals intentionally accept only a Circuit Scene ``net_ref_id`` and require both
+    revision preconditions. They never invoke KiCad DRC, zone refill, or apply-token issuance:
+    those operations need separate live session compare-and-swap contracts. The returned
+    candidate is bound to the captured source and Board IR snapshot, so an AI client can inspect
+    the active editor and receive a deterministic proposal without mutating it.
+    """
+
+    if not isinstance(settings, Settings):
+        raise RoutePreviewError("preview settings are malformed")
+    deadline = time.monotonic() + settings.max_route_preview_seconds
+    request = parse_route_preview_request(payload)
+    if request.board != "live":
+        raise RoutePreviewError("live route requests must set board to 'live'")
+    if request.net is not None or request.net_ref_id is None:
+        raise RoutePreviewError("live route requests require a Circuit Scene net reference")
+    if request.include_drc or request.include_fill_authority or request.include_apply_token:
+        raise RoutePreviewError("live route proposals are read-only and cannot request actions")
+
+    # Capture must share the preview's bounded wall-clock budget. The IPC binding accepts a
+    # millisecond timeout capped at ten seconds; passing both it and the absolute deadline keeps
+    # the individual call and its multi-step capture from silently consuming the default timeout.
+    remaining_ms = max(1, min(10_000, int((deadline - time.monotonic()) * 1_000)))
+    captured = capture_live_board(
+        settings,
+        client_factory=client_factory,
+        timeout_ms=remaining_ms,
+        deadline=deadline,
+    )
+    board_revision = captured.observation.board_digest
+    if (
+        request.expect_board_revision is not None
+        and request.expect_board_revision != board_revision
+    ):
+        return RoutePreview(
+            status=RoutePreviewStatus.NOT_ROUTED,
+            board_path="live",
+            board_revision=board_revision,
+            request=request,
+            diagnostic=RouteDiagnostic(
+                code=RouteFailureCode.STALE_REVISION,
+                message="the observed live board no longer matches the requested revision",
+            ),
+        )
+
+    default_limits = ParseLimits()
+    limits = replace(
+        default_limits,
+        max_input_bytes=min(default_limits.max_input_bytes, settings.max_board_bytes),
+    )
+    conversion = parse_kicad_bytes(captured.source, request.profile(), limits)
+    if conversion.snapshot is None or conversion.diagnostics:
+        counts = Counter(diagnostic.code for diagnostic in conversion.diagnostics)
+        return RoutePreview(
+            status=RoutePreviewStatus.UNSUPPORTED_BOARD,
+            board_path="live",
+            board_revision=board_revision,
+            request=request,
+            conversion_diagnostic_counts=counts,
+        )
+
+    snapshot = conversion.snapshot
+    if snapshot.content.source.revision != board_revision:
+        raise RoutePreviewError(
+            "converted live board revision is inconsistent with its source bytes"
+        )
+    if (
+        request.expect_snapshot_digest is not None
+        and request.expect_snapshot_digest != snapshot.snapshot_digest
+    ):
+        return RoutePreview(
+            status=RoutePreviewStatus.NOT_ROUTED,
+            board_path="live",
+            board_revision=board_revision,
+            request=request,
+            snapshot_digest=snapshot.snapshot_digest,
+            diagnostic=RouteDiagnostic(
+                code=RouteFailureCode.STALE_REVISION,
+                message="the observed live Board IR snapshot is stale",
+            ),
+        )
+    if time.monotonic() >= deadline:
+        return RoutePreview(
+            status=RoutePreviewStatus.NOT_ROUTED,
+            board_path="live",
+            board_revision=board_revision,
+            request=request,
+            snapshot_digest=snapshot.snapshot_digest,
+            diagnostic=RouteDiagnostic(
+                code=RouteFailureCode.CANCELLED,
+                message="the live route proposal deadline expired during board conversion",
+            ),
+        )
+
+    result = AStarRouter().propose(
+        snapshot,
+        RouteRequest(
+            board_revision=snapshot.snapshot_digest,
+            net_id=request.net_id,
+            layer_id=request.layer_id,
+            seed=request.seed,
+            settings=request.settings,
+        ),
+        cancelled=lambda: time.monotonic() >= deadline,
+    )
+    if result.connected is not None:
+        return RoutePreview(
+            status=RoutePreviewStatus.ALREADY_CONNECTED,
+            board_path="live",
+            board_revision=board_revision,
+            request=request,
+            snapshot_digest=snapshot.snapshot_digest,
+            connection=result.connected,
+        )
+    if result.candidate is None:
+        return RoutePreview(
+            status=RoutePreviewStatus.NOT_ROUTED,
+            board_path="live",
+            board_revision=board_revision,
+            request=request,
+            snapshot_digest=snapshot.snapshot_digest,
+            diagnostic=result.diagnostic,
+        )
+    return RoutePreview(
+        status=RoutePreviewStatus.ROUTED,
+        board_path="live",
+        board_revision=board_revision,
+        request=request,
+        snapshot_digest=snapshot.snapshot_digest,
+        candidate=result.candidate,
     )

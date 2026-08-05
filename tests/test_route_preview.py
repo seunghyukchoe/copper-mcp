@@ -15,18 +15,21 @@ import pytest
 import copper_mcp.kicad_cli as kicad_cli
 import copper_mcp.request_boundary as request_boundary
 import copper_mcp.route_preview as route_preview
+from copper_mcp.adapters import net_id_for_name
 from copper_mcp.board_ir import PointNM
 from copper_mcp.config import Settings
-from copper_mcp.kicad_cli import KiCadCliError, RouteCandidateDrcEvidence
+from copper_mcp.kicad_cli import KiCadCliError, RouteCandidateDrcEvidence, ZoneFillAuthority
 from copper_mcp.models import DrcSummary
 from copper_mcp.route_preview import (
     RoutePreview,
     RoutePreviewError,
     RoutePreviewStatus,
     parse_route_preview_request,
+    preview_live_route,
     preview_route,
 )
 from copper_mcp.routing import RouteConnection, RouteDiagnostic, RouteFailureCode
+from copper_mcp.zone_fill import FillIsland
 
 FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "two-pad.kicad_pcb"
 _DISCOVERED_KICAD_CLI = shutil.which("kicad-cli")
@@ -35,6 +38,37 @@ REAL_KICAD_CLI = (
     if _DISCOVERED_KICAD_CLI is not None
     else Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli")
 )
+
+
+class _FakeVersion:
+    major = 10
+    minor = 0
+    patch = 5
+
+
+class _FakeLiveBoard:
+    def __init__(self, source: str) -> None:
+        self._source = source
+
+    def get_as_string(self) -> str:
+        return self._source
+
+
+class _FakeLiveKiCad:
+    def __init__(self, source: str) -> None:
+        self._board = _FakeLiveBoard(source)
+
+    def get_version(self) -> _FakeVersion:
+        return _FakeVersion()
+
+    def get_api_version(self) -> _FakeVersion:
+        return _FakeVersion()
+
+    def check_version(self) -> bool:
+        return True
+
+    def get_board(self) -> _FakeLiveBoard:
+        return self._board
 
 
 def _request(**overrides: Any) -> dict[str, Any]:
@@ -176,6 +210,49 @@ def test_preview_routes_around_a_zone_outline_without_mutating_the_source(
         for point in first.candidate.patch.paths[0].vertices
     )
     assert _entries(tmp_path) == before
+
+
+def test_preview_exposes_fresh_foreign_fill_as_routing_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A routed candidate must tell an MCP caller when exact fill islands shaped the search."""
+
+    fixture = FIXTURE.parent / "blocked-zone.kicad_pcb"
+    board = tmp_path / fixture.name
+    board.write_bytes(fixture.read_bytes())
+    settings = Settings(workspace=tmp_path, max_drc_report_bytes=4096)
+    board_revision = f"sha256:{hashlib.sha256(board.read_bytes()).hexdigest()}"
+    authority = ZoneFillAuthority(
+        source_revision=board_revision,
+        context_revision=f"sha256:{'a' * 64}",
+        source_fill_digest=f"sha256:{'b' * 64}",
+        refilled_fill_digest=f"sha256:{'b' * 64}",
+        kicad_version="10.0.5",
+        fill_polygon_count=1,
+        fill_vertex_count=4,
+    )
+    island = FillIsland(
+        net_id=net_id_for_name("POWER"),
+        layer_id="layer:F.Cu",
+        points=(
+            PointNM(18_000_000, 11_000_000),
+            PointNM(22_000_000, 11_000_000),
+            PointNM(22_000_000, 14_000_000),
+            PointNM(18_000_000, 14_000_000),
+        ),
+    )
+    monkeypatch.setattr(route_preview, "run_zone_fill_authority", lambda *_: (authority, (island,)))
+
+    preview = preview_route(
+        _request(board=fixture.name, include_fill_authority=True),
+        settings,
+    )
+
+    assert preview.status is RoutePreviewStatus.ROUTED
+    assert preview.candidate is not None
+    assert preview.fill_authority is authority
+    assert preview.fill_routing_effect == "foreign_zone_obstacles"
+    assert preview.to_dict()["fill_authority"]["routing_effect"] == "foreign_zone_obstacles"
 
 
 def _copy_fixture(tmp_path: Path, name: str) -> Settings:
@@ -334,6 +411,229 @@ def test_preview_reports_a_diagnostic_for_an_unknown_net(tmp_path: Path) -> None
     assert preview.diagnostic.code is RouteFailureCode.INVALID_TWO_PIN_NET
 
 
+def _reference_request(preview: RoutePreview, **overrides: Any) -> dict[str, Any]:
+    assert preview.candidate is not None
+    assert preview.snapshot_digest is not None
+    request = _request()
+    del request["net"]
+    request.update(
+        {
+            "net_ref_id": preview.candidate.patch.net_id,
+            "expect_board_revision": preview.board_revision,
+            "expect_snapshot_digest": preview.snapshot_digest,
+        }
+    )
+    request.update(overrides)
+    return request
+
+
+def test_scene_net_reference_routes_the_same_candidate_as_the_hidden_name(tmp_path: Path) -> None:
+    _, settings = _workspace(tmp_path)
+    named = preview_route(_request(), settings)
+
+    referenced = preview_route(_reference_request(named), settings)
+
+    assert referenced.status is RoutePreviewStatus.ROUTED
+    assert referenced.candidate == named.candidate
+    assert referenced.board_revision == named.board_revision
+    assert referenced.snapshot_digest == named.snapshot_digest
+    request_echo = referenced.to_dict()["request"]
+    assert request_echo["net_ref_id"] == referenced.candidate.patch.net_id
+    assert request_echo["expect_board_revision"] == named.board_revision
+    assert request_echo["expect_snapshot_digest"] == named.snapshot_digest
+    assert "net" not in request_echo
+
+
+@pytest.mark.parametrize("precondition", ["board", "snapshot"])
+def test_scene_net_reference_refuses_a_stale_observation(tmp_path: Path, precondition: str) -> None:
+    board, settings = _workspace(tmp_path)
+    named = preview_route(_request(), settings)
+    request = _reference_request(named)
+    if precondition == "board":
+        board.write_bytes(board.read_bytes() + b"\n")
+    else:
+        request["expect_snapshot_digest"] = f"sha256:{'0' * 64}"
+
+    preview = preview_route(request, settings)
+
+    assert preview.status is RoutePreviewStatus.NOT_ROUTED
+    assert preview.candidate is None
+    assert preview.diagnostic is not None
+    assert preview.diagnostic.code is RouteFailureCode.STALE_REVISION
+    assert (preview.snapshot_digest is None) is (precondition == "board")
+
+
+def test_stale_board_reference_refuses_before_board_ir_conversion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    board, settings = _workspace(tmp_path)
+    named = preview_route(_request(), settings)
+    board.write_bytes(board.read_bytes() + b"\n")
+
+    def unexpected_conversion(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("stale source bytes must be refused before conversion")
+
+    monkeypatch.setattr(route_preview, "parse_kicad_bytes", unexpected_conversion)
+    stale = preview_route(_reference_request(named), settings)
+
+    assert stale.status is RoutePreviewStatus.NOT_ROUTED
+    assert stale.snapshot_digest is None
+    assert stale.diagnostic is not None
+    assert stale.diagnostic.code is RouteFailureCode.STALE_REVISION
+
+
+def test_scene_net_reference_requires_both_revision_preconditions() -> None:
+    for missing in ("expect_board_revision", "expect_snapshot_digest"):
+        request = _request()
+        del request["net"]
+        request.update(
+            {
+                "net_ref_id": "net:name:0123456789abcdef0123456789abcdef",
+                "expect_board_revision": f"sha256:{'1' * 64}",
+                "expect_snapshot_digest": f"sha256:{'2' * 64}",
+            }
+        )
+        del request[missing]
+        with pytest.raises(RoutePreviewError, match="revision preconditions"):
+            parse_route_preview_request(request)
+
+
+def _live_reference_request(preview: RoutePreview) -> dict[str, Any]:
+    request = _reference_request(preview)
+    request["board"] = "live"
+    return request
+
+
+def test_live_route_proposal_reuses_the_exact_ipc_snapshot_and_candidate(
+    tmp_path: Path,
+) -> None:
+    _, settings = _workspace(tmp_path)
+    named = preview_route(_request(), settings)
+    assert named.candidate is not None
+    source = FIXTURE.read_text(encoding="utf-8")
+
+    live = preview_live_route(
+        _live_reference_request(named),
+        settings,
+        client_factory=lambda **_: _FakeLiveKiCad(source),
+    )
+
+    assert live.status is RoutePreviewStatus.ROUTED
+    assert live.board_path == "live"
+    assert live.candidate == named.candidate
+    assert live.board_revision == named.board_revision
+    assert live.snapshot_digest == named.snapshot_digest
+    assert live.drc_evidence is None
+    assert live.fill_authority is None
+    assert live.apply_token is None
+    assert live.to_dict()["request"]["net_ref_id"] == named.candidate.patch.net_id
+
+
+def test_live_route_passes_remaining_preview_budget_to_ipc(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, settings = _workspace(tmp_path)
+    named = preview_route(_request(), settings)
+    assert named.candidate is not None
+    observed: dict[str, object] = {}
+    real_capture = route_preview.capture_live_board
+
+    def capture_with_observation(*args: object, **kwargs: object) -> object:
+        observed.update(kwargs)
+        return real_capture(*args, **kwargs)
+
+    monkeypatch.setattr(route_preview, "capture_live_board", capture_with_observation)
+    preview_live_route(
+        _live_reference_request(named),
+        replace(settings, max_route_preview_seconds=1),
+        client_factory=lambda **_: _FakeLiveKiCad(FIXTURE.read_text(encoding="utf-8")),
+    )
+
+    timeout_ms = observed["timeout_ms"]
+    assert isinstance(timeout_ms, int)
+    assert 1 <= timeout_ms <= 1_000
+    assert isinstance(observed["deadline"], float)
+
+
+def test_live_route_refuses_stale_board_before_conversion(tmp_path: Path) -> None:
+    _, settings = _workspace(tmp_path)
+    named = preview_route(_request(), settings)
+    assert named.candidate is not None
+    calls = 0
+
+    def factory(**_: Any) -> _FakeLiveKiCad:
+        nonlocal calls
+        calls += 1
+        return _FakeLiveKiCad(FIXTURE.read_text(encoding="utf-8"))
+
+    request = _live_reference_request(named)
+    request["expect_board_revision"] = f"sha256:{'0' * 64}"
+    stale = preview_live_route(request, settings, client_factory=factory)
+
+    assert stale.status is RoutePreviewStatus.NOT_ROUTED
+    assert stale.snapshot_digest is None
+    assert stale.diagnostic is not None
+    assert stale.diagnostic.code is RouteFailureCode.STALE_REVISION
+    assert calls == 1
+
+
+@pytest.mark.parametrize("field", ["include_drc", "include_fill_authority", "include_apply_token"])
+def test_live_route_rejects_action_authority_before_ipc_capture(tmp_path: Path, field: str) -> None:
+    _, settings = _workspace(tmp_path)
+    named = preview_route(_request(), settings)
+    calls = 0
+
+    def factory(**_: Any) -> _FakeLiveKiCad:
+        nonlocal calls
+        calls += 1
+        return _FakeLiveKiCad(FIXTURE.read_text(encoding="utf-8"))
+
+    request = _live_reference_request(named)
+    request[field] = True
+    with pytest.raises(RoutePreviewError, match="read-only"):
+        preview_live_route(request, settings, client_factory=factory)
+    assert calls == 0
+
+
+def test_route_request_requires_exactly_one_name_or_scene_reference() -> None:
+    without_selector = _request()
+    del without_selector["net"]
+    with pytest.raises(RoutePreviewError, match="exactly one"):
+        parse_route_preview_request(without_selector)
+
+    with pytest.raises(RoutePreviewError, match="exactly one"):
+        parse_route_preview_request(
+            _request(net_ref_id="net:name:0123456789abcdef0123456789abcdef")
+        )
+
+
+@pytest.mark.parametrize(
+    "net_ref_id",
+    [
+        "AUDIO",
+        "net:",
+        "net:x",
+        "pad:kicad:01234567-89ab-cdef-0123-456789abcdef",
+        "net:name:x\n",
+        "net:name:audio",
+    ],
+)
+def test_route_request_rejects_malformed_scene_net_references(net_ref_id: str) -> None:
+    request = _request()
+    del request["net"]
+    request.update(
+        {
+            "net_ref_id": net_ref_id,
+            "expect_board_revision": f"sha256:{'1' * 64}",
+            "expect_snapshot_digest": f"sha256:{'2' * 64}",
+        }
+    )
+
+    with pytest.raises(RoutePreviewError):
+        parse_route_preview_request(request)
+
+
 class _AdvancingClock:
     """A monotonic clock that always advances past any preview deadline."""
 
@@ -453,7 +753,9 @@ def test_preview_rejects_boards_outside_the_workspace(tmp_path: Path) -> None:
         {"net": "AUDIO", "layer": "F.Cu", "constraints": {}},
         _request(unexpected=1),
         _request(board=""),
+        _request(board="bad\ud800board.kicad_pcb"),
         _request(net="AUD\x00IO"),
+        _request(net="bad\ud800net"),
         _request(layer="F.Silkscreen"),
         _request(layer="F.Cu\n"),
         _request(seed=-1),
@@ -969,7 +1271,10 @@ def test_preview_routes_a_four_pad_net_as_a_tree(tmp_path: Path) -> None:
     assert first.status is RoutePreviewStatus.ROUTED
     assert first.candidate is not None
     assert first.candidate.pad_count == 4
-    assert first.candidate.ordering_policy == "component-mst-v1"
+    assert first.candidate.ordering_policy == "batched-1-steiner-v1"
+    # The topology guide shortens this four-pad tree from the recorded component-MST baseline
+    # (48 mm) to 42 mm while the real KiCad DRC oracle still accepts it.
+    assert first.candidate.cost.length_nm == 42_000_000
     # Four isolated pads are four components, so a spanning tree is exactly three merges.
     assert len(first.candidate.patch.paths) == 3
     document = first.to_dict()

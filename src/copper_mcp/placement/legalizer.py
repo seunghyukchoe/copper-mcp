@@ -79,6 +79,48 @@ def _reject_padless(view: PlacementView, ref: str) -> None:
         )
 
 
+def _reject_padless_preflight_refs(view: PlacementView, intent: PlacementIntent) -> None:
+    """Reject unsupported placement references before syntactic analysis.
+
+    Padless footprints are deliberately unavailable as placement subjects, anchors, and rule
+    references. Resolve subjects in request order before the rule-reference and proposal-anchor
+    scans. Each scan stops at its first unknown or padless reference, so a later unsupported
+    reference cannot overwrite an earlier ``unresolved_ref`` outcome. This keeps a
+    contradictory rule set from hiding an unsupported placement reference behind an
+    ``infeasible_constraints`` diagnostic.
+    """
+
+    for ref in intent.subject_refs:
+        if view.resolve(ref) is None:
+            _reject_padless(view, ref)
+            raise _UnresolvedError("a placement subject does not exist on this board")
+
+    rule_refs: list[str] = []
+    for rule in intent.rules:
+        if isinstance(rule, ProximityRule):
+            rule_refs.extend((rule.subject, rule.target))
+        elif isinstance(rule, EdgeRule | RegionRule | OrientationRule | SideRule):
+            rule_refs.append(rule.subject)
+        elif isinstance(rule, AlignmentRule):
+            rule_refs.extend(rule.members)
+        elif isinstance(rule, SymmetryRule):
+            rule_refs.append(rule.about)
+            rule_refs.extend(ref for pair in rule.pairs for ref in pair)
+    for ref in rule_refs:
+        # Rules may name an individual pad, which ``view.resolve`` intentionally does not
+        # resolve because it only returns placeable footprints.
+        if view.resolve(ref) is not None or ref in view.owner_by_pad:
+            continue
+        _reject_padless(view, ref)
+        raise _UnresolvedError("a rule names an object that does not exist on this board")
+
+    for proposal in intent.proposals:
+        if proposal.anchor is None or view.resolve(proposal.anchor) is not None:
+            continue
+        _reject_padless(view, proposal.anchor)
+        raise _UnresolvedError("a proposal anchors to an object that does not exist")
+
+
 class _UnsupportedError(RuntimeError):
     """Raised when the geometry is outside what this version models."""
 
@@ -116,6 +158,7 @@ class _PlacedFootprint:
     moved: bool
     pads: tuple[_PlacedPad, ...]
     hull: Rect
+    courtyards: tuple[Ring, ...]
 
 
 def snap(value: int, grid_nm: int) -> int:
@@ -130,6 +173,26 @@ def snap(value: int, grid_nm: int) -> int:
 
 def _inverse_rotate(offset: PointNM, orientation_udeg: int) -> PointNM:
     return rotate_offset(offset, (-orientation_udeg) % 360_000_000)
+
+
+def _place_ring(
+    ring: Ring,
+    original_origin: PointNM,
+    original_orientation_udeg: int,
+    new_origin: PointNM,
+    new_orientation_udeg: int,
+) -> Ring:
+    """Move one Board IR courtyard from its saved pose to a proposed orthogonal pose."""
+
+    points = []
+    for point in ring.points:
+        saved_local = _inverse_rotate(
+            PointNM(point.x - original_origin.x, point.y - original_origin.y),
+            original_orientation_udeg,
+        )
+        turned = rotate_offset(saved_local, new_orientation_udeg)
+        points.append(PointNM(new_origin.x + turned.x, new_origin.y + turned.y))
+    return Ring(tuple(points))
 
 
 def _place(
@@ -228,6 +291,16 @@ def _place(
             )
             hull = bounds if hull is None else union(hull, bounds)
         assert hull is not None  # a view never keeps a footprint without pads
+        courtyards = tuple(
+            _place_ring(
+                ring,
+                footprint.origin,
+                footprint.orientation_udeg,
+                origin,
+                orientation,
+            )
+            for ring in footprint.courtyards
+        )
         placed.append(
             _PlacedFootprint(
                 ref_id=ref_id,
@@ -237,6 +310,30 @@ def _place(
                 moved=moved,
                 pads=tuple(pads),
                 hull=hull,
+                courtyards=courtyards,
+            )
+        )
+    # Graphics-only footprints cannot be moved or used as rule references, but a rectangular
+    # courtyard on one is still physical board geometry. Include it as a fixed collision envelope
+    # while keeping it out of the candidate and rule-resolution maps below.
+    for ref_id in sorted(view.stationary):
+        budget.charge()
+        stationary_footprint = view.stationary[ref_id]
+        stationary_hull: Rect | None = None
+        for ring in stationary_footprint.courtyards:
+            bounds = ring_bounds(ring)
+            stationary_hull = bounds if stationary_hull is None else union(stationary_hull, bounds)
+        assert stationary_hull is not None
+        placed.append(
+            _PlacedFootprint(
+                ref_id=ref_id,
+                origin=stationary_footprint.origin,
+                orientation_udeg=stationary_footprint.orientation_udeg,
+                side=stationary_footprint.side,
+                moved=False,
+                pads=(),
+                hull=stationary_hull,
+                courtyards=stationary_footprint.courtyards,
             )
         )
     return tuple(placed)
@@ -333,6 +430,31 @@ def _keepout_respect(
                     continue
                 if rect_touches_ring(pad.bounds, keepout.boundary):
                     return "violated"
+    return "proven_clear"
+
+
+def _courtyard_overlap(placed: tuple[_PlacedFootprint, ...], budget: _Budget) -> str:
+    """Check exact rectangular courtyards on the same physical side.
+
+    Board IR v0.2 admits only axis-aligned rectangular courtyard rings. Their closed bounds are
+    therefore the exact geometry, and an open rectangle overlap treats edge contact as legal, as
+    KiCad's zero-clearance default does. Front and back courtyards are independent physical layers;
+    an overlap across sides is not a same-layer courtyard collision.
+    """
+
+    for first_index, first in enumerate(placed):
+        if not first.courtyards:
+            continue
+        for second in placed[first_index + 1 :]:
+            budget.charge()
+            if first.side != second.side or not second.courtyards:
+                continue
+            for left in first.courtyards:
+                left_bounds = ring_bounds(left)
+                for right in second.courtyards:
+                    budget.charge()
+                    if rects_overlap(left_bounds, ring_bounds(right)):
+                        return "violated"
     return "proven_clear"
 
 
@@ -521,9 +643,12 @@ def evaluate_placement(
         )
     budget = _Budget(max_checks=max_checks, deadline_seconds=deadline_seconds)
     try:
+        _reject_padless_preflight_refs(view, intent)
         _check_infeasible(intent)
         placed = _place(view, snapshot, intent, budget)
-        placed_by_ref = {item.ref_id: item for item in placed}
+        # Stationary padless envelopes participate in physical legality, but remain unavailable
+        # as subjects, anchors, and rule references as promised by the padless contract.
+        placed_by_ref = {item.ref_id: item for item in placed if item.ref_id in view.footprints}
         rule_results = tuple(
             _evaluate_rule(index, rule, placed_by_ref, view, snapshot, budget)
             for index, rule in enumerate(intent.rules)
@@ -533,6 +658,7 @@ def evaluate_placement(
             pad_overlap=overlap,
             outline_containment=_outline_containment(placed, snapshot, budget),
             keepout_respect=_keepout_respect(placed, snapshot, budget),
+            courtyard_overlap=_courtyard_overlap(placed, budget),
         )
     except _BudgetExhaustedError as error:
         return _refuse(
@@ -603,6 +729,7 @@ def evaluate_placement(
                     moved=item.moved,
                 )
                 for item in placed
+                if item.ref_id in view.footprints
             ),
             evidence=PlacementEvidence(
                 rule_results=rule_results,

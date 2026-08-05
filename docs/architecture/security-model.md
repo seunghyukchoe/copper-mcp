@@ -20,8 +20,9 @@ Terminology used throughout: DRC evidence is an **attestation** — a statement 
 bound to their digests, refused when any binding fails — while release-ledger rows are **provenance**
 in the SLSA sense, and the ledgers as a whole are an append-only **transparency record** rather than
 a cryptographic transparency log. There is no Merkle tree or signed checkpoint; Git history is the
-only integrity mechanism behind them. Emitting DRC evidence in the in-toto Statement envelope is
-future work, not a current property.
+only integrity mechanism behind them. Candidate DRC responses include an unsigned in-toto
+Statement payload with redacted Link v0.3 byproducts; DSSE signing, verification, persistence, and
+remote transport remain future work, not current properties.
 - Compute budgets for routing and AI inference.
 
 ## Trust boundaries
@@ -34,8 +35,10 @@ future work, not a current property.
 | Server → KiCad CLI | Argument injection, hangs, oversized or incompatible reports, context-file floods, stale evidence, inherited global configuration/plugins or credential-bearing environment, library-table escape to host or remote resources | Validated executable, fixed argument vector, minimal child environment, private configuration/state roots and working directory, snapshot-confined file-table dependencies only, environment/absolute/remote/plugin URI rejection, symlink/special-file rejection, POSIX file ceiling, cumulative byte/file-count bounds, discovery/process timeouts, strict contract, revision recheck |
 | AI output → policy | Prompt injection, invalid commands, cost exhaustion | Allowlisted typed actions, deterministic validation, token/iteration budgets |
 | Router → KiCad | Candidate/source/context misbinding, stale state, unsafe copper | Exact replay, immutable multi-revision evidence, live-context recheck, private candidate snapshot, separate apply authorization |
-| MCP input → preview | Unbounded search, unsupported-subset confusion, geometry disclosure, unverified candidates | Strict typed request parsing, caller-supplied constraints, wall-clock deadline over integer ceilings, fail-closed conversion with code-only diagnostics, opt-in authoritative DRC that fails closed, no write or job side effect |
-| Board IR scene → placement preview | Proprietary geometry disclosure, cross-revision subject confusion, truncated detail mistaken for complete geometry, unsupported courtyards treated as legal, locked-footprint movement | Region and object/detail ceilings, typed reference durability, quarantined author text, source/snapshot revision equality, fail-closed footprint conversion, explicit `not_modelled` legality, locked-move refusal, no placement apply |
+| Routing job ledger/worker/manifest/export → local SQLite | Board/prompt leakage, stale-worker overwrite, guessed or expired handles, tampered geometry, unbounded retention | Deep-frozen closed request envelopes and redacted manifests only, source/snapshot and candidate CAS binding, content-addressed idempotent specs/manifests/exports, SQLite transactions plus `job_id`/revision guards, bounded payload/count/TTL, single-worker CAS lease, cooperative cancellation, stale-lease recovery, explicit caller-context authorization, content-address verification on read, uniform unknown/expired errors; no board bytes, remote auth, apply authority, or MCP Tasks claim |
+| MCP input → preview | Unbounded search, unsupported-subset confusion, geometry disclosure, unverified candidates, stale fill provenance | Strict typed request parsing, caller-supplied constraints, wall-clock deadline over integer ceilings, fail-closed conversion with code-only diagnostics, freshness-bound opt-in fill authority with typed routing-effect provenance, opt-in authoritative DRC that fails closed, no write or job side effect |
+| Board IR scene → placement preview/apply | Proprietary geometry disclosure, cross-revision subject confusion, truncated detail mistaken for complete geometry, unsupported courtyards treated as legal, locked-footprint movement, unauthorized file mutation, unbound DRC authority | Region and object/detail ceilings, typed reference durability, quarantined author text, source/snapshot revision equality, fail-closed footprint conversion, exact same-side rectangular-courtyard check, locked-move refusal, candidate/source/patched-board/context DRC digests, explicit placement-scoped token, operator opt-in, lockfile refusal, double CAS, backup, atomic replacement |
+| Post-placement file observation → scene/DRC | Scene and DRC from different revisions, raw finding leakage, token/candidate mistaken for authority | Required expected digest; single board/rule/library capture; bounded scene and fixed private DRC from that capture; aggregate-only summary; context re-capture and fail-closed discard; no token/candidate/mutation/render. The final filesystem observation race remains open. |
 | Benchmark catalog → offline runner | Licence laundering, fabricated capability claims, copied third-party circuits, path/symlink escape, artifact substitution or replacement races, hidden network intake | Reference-only source records, no downloader, strict bounded schema, single-read validation snapshot, repository-confined paths, artifact and licence hashes, evidence-derived claims, explicit safety/derivation fields, original or separately open fixtures only |
 | Circuit Intent → schematic renderer | Malformed or oversized model topology, reference confusion, incomplete connectivity, S-expression injection, output amplification, false electrical/PCB claims | Strict bounded codec, typed IDs, complete-pin validation, canonical digest, escaped strings, original embedded symbols, deterministic 1 MB pure renderer, empty footprints, `on_board=no`, explicit non-claims |
 | MCP schematic build → artifact resource | Proprietary topology in model context, guessable capability, cross-client disclosure, unbounded retention, digest used as authorization, TTL mistaken for secure erasure | Redacted tool result, independent 256-bit opaque token, stdio-only process-local store, no listing/logging/persistence, 15-minute access expiry with documented lazy reclamation, 16-entry/16 MiB limits, 1 MB (1,000,000 bytes) artifact limit, uniform unavailable error, digest recheck |
@@ -86,7 +89,11 @@ context, and nested summary revisions; copied violation counts are immutable, mu
 aggregate findings, and KiCad's exit code must agree with report finding presence. The private
 board is part of a complete private input-context recapture after KiCad exits, and any private or live
 board/rule/library change discards the result. Candidate bytes and raw findings are not exposed
-through MCP or CLI.
+through MCP or CLI. File-backed `preview_placement` may opt into this same gate with
+`include_drc: true`; live placement and apply contracts force the flag off. The public result keeps
+only the digest bindings and aggregate `DrcSummary`, preserving the hard-gate `passed` signal while
+making the stricter warning/exclusion-aware `clean` signal explicit. A warning-only result is
+therefore usable as evidence that no hard error was reported, but cannot be presented as clean.
 
 The public `inspect_board_ir` and `preview_route` surfaces add no write path. Their accepted board
 bytes come from the descriptor-anchored snapshot, not a later pathname reopen. Both parse untrusted
@@ -94,9 +101,11 @@ requests through one shared boundary before any file is read: unknown fields, no
 out-of-range budgets, booleans supplied as integers, control characters, oversized net names, and
 non-copper layer names are rejected, rejections report counts rather than echoing caller-supplied
 field names, and routing constraints come only from typed caller values rather than from untrusted
-board content. A wall-clock deadline starts at the operation boundary and bounds the entire preview
-call — conversion, search, and the clamped KiCad timeout for optional DRC — above the existing grid,
-expansion, and obstacle ceilings. Unsupported boards
+board content. A wall-clock deadline starts at the operation boundary and bounds conversion,
+search, and the clamped KiCad timeout for optional DRC above the existing grid, expansion, and
+obstacle ceilings. Live IPC additionally checks the deadline between synchronous calls and during
+bounded serialized-item counting; because the official wrapper is synchronous, this remains
+cooperative and cannot forcibly pre-empt a blocking third-party call. Unsupported boards
 return bounded diagnostic-code counts, not raw adapter text, and routing failures return typed
 non-echoing diagnostics. Authoritative DRC runs only when the caller opts in, still yields aggregate
 redacted evidence, and fails the call when the evidence is missing or does not bind. A preview does
@@ -110,8 +119,10 @@ pruning, and every exact polygon-edge relation count against the obstacle-check 
 its 64-check cancellation cadence. The integer kernel uses no floating point or external geometry
 library, applies the strictest routed-net, zone-net, and zone clearance, and rejects same-net zones
 as partial routing. This can reject a route through a real fill void, but cannot use stale
-`filled_polygon` data to permit copper through an area the zone may occupy. Fill-aware routing stays
-blocked on a separately reviewed refill/freshness contract.
+`filled_polygon` data to permit copper through an area the zone may occupy. The deterministic core
+now accepts only the separately reviewed, source-revision-bound refill/freshness evidence and uses
+matching foreign fill islands as exact obstacles; the public preview advertises that provenance on
+routed candidates only when the caller opts into freshness authority, with a typed routing effect.
 
 Board IR inspection discloses only object counts, digests, units, and standard KiCad copper layer
 names. Coordinates, net names, pad and net identities, UUIDs, and source bytes are excluded, and a
@@ -163,18 +174,41 @@ explicit object/detail ceilings, reference durability is typed, and board-author
 as untrusted annotation data. The normalized render is digest-bound and advisory rather than
 geometric authority.
 
-The active KiCad adapter accepts only front-side footprints with orthogonal transforms and unfilled
-rectangular `fp_rect` courtyard centerlines on matching `F.CrtYd`; unsupported footprint or
-courtyard forms fail closed before a scene or placement view exists. Placement subjects are
+`inspect_live_board` additionally returns the fixed-format, process-local PBKDF2 session CAS when
+KiCad supplied a plugin token, or explicit `null` when it did not. This bounded derived value is
+necessary for public observe-to-preview composition, but it is neither the token nor a reusable
+credential: preview validates it strictly and uses constant-time comparison; token changes and a
+fresh CopperMCP process still fail closed. The process salt and token never cross the output
+boundary.
+
+The active KiCad adapter accepts front- or back-side footprints with orthogonal transforms and
+unfilled rectangular `fp_rect` courtyard centerlines on matching `F.CrtYd`/`B.CrtYd`; unsupported
+footprint or courtyard forms fail closed before a scene or placement view exists. KiCad-authored
+board-frame child coordinates are imported without a second back-side mirror. Placement subjects are
 projected from the same Board IR snapshot, and the supplied source bytes must match its source
 revision. AI output remains typed placement intent, a locked footprint cannot be moved, and
-`courtyard_overlap` remains the one-value `not_modelled` result because no bounded side-aware
-evaluator has run. Direct model-generated KiCad mutation and placement apply remain prohibited.
+`courtyard_overlap` is `proven_clear` or `violated` for the exact same-side rectangular-courtyard
+subset; front/back courtyards are independent and unsupported topology fails before evaluation.
+Padless footprints remain unavailable as placement subjects, but supported rectangular courtyards
+are retained as stationary collision envelopes and are excluded from candidate manifests.
+Direct model-generated KiCad mutation remains prohibited. The bounded file-level placement apply
+tool is separately operator-gated and placement-token-scoped; unsupported source constructs and
+live IPC mutation still fail closed. After publication it re-renders and reparses the authorized
+bytes, guards recovery against a concurrent digest, spends the capability exactly once, and takes
+a final best-effort digest observation before reporting success. An `applied_but_unverified`
+response therefore reports the observed final digest, which may be the restored original, a
+concurrent writer, or `null` when the board is missing/unreadable; it is not a promise that a new
+revision remains on disk.
 
 MCP schematic delivery validates a closed outer wrapper, closed Circuit Intent content, and closed
 structured output. Scalars, lists, and extra fields at those boundaries fail without echoing the
 offending field name or value. This prevents transport coercion or error text from bypassing the
 redacted build record.
+
+The optional schematic parity oracle treats KiCad `kicadxml` as hostile input: DTDs, entities,
+processing instructions, unknown structures, duplicate connectivity, and oversized XML fail before
+semantic comparison. Evidence contains only fixed passed literals, digests, and counts; it does not
+echo component names, net names, values, or raw XML.
 
 The KiCad report is opened through a no-follow, nonblocking descriptor and accepted only when
 descriptor metadata identifies a regular file. Its JSON decoder rejects duplicate keys, non-finite
@@ -194,8 +228,9 @@ release.
 
 ## Security acceptance for future placement mutation
 
-Placement apply remains blocked until Board IR can preserve and replay every source span affected by
-a pose edit, including the currently omitted author text, fabrication graphics, library identity,
-properties, and 3D-model pose. It additionally needs explicit authorization, revision-race tests,
-transaction or recoverable-undo behavior, complete audit metadata, KiCad verification,
-cancellation tests, and a dedicated security-ledger review.
+General placement mutation remains blocked until Board IR can preserve and replay every source span
+affected by a pose edit, including the currently omitted author text, fabrication graphics, library
+identity, properties, and 3D-model pose. The bounded front-side orthogonal subset now has explicit
+authorization, revision-race tests, recoverable-undo behavior, post-publication re-render/reparse,
+observed final-digest reporting, audit metadata, and a dedicated security review; KiCad DRC/scene
+verification, cancellation, undo transaction, and live IPC action remain open.

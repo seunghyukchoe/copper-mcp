@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<export version="E">
+  <design>
+    <source>rc-low-pass-v1.kicad_sch</source>
+    <date>2026-08-05T00:00:00</date>
+    <tool>Eeschema 10.0.5</tool>
+    <sheet number="1" name="/" tstamps="/">
+      <title_block>
+        <title>Original low-voltage RC audio low-pass intent</title>
+        <company/>
+        <rev/>
+        <date/>
+        <source>rc-low-pass-v1.kicad_sch</source>
+        <comment number="1" value="Generated from CopperMCP Circuit Intent IR 0.1.0"/>
+        <comment number="2" value="Circuit Intent source: sha256:06383cabd428aa52585b1e0f0c82dea6e6f434e55d154f6d2ee87e3879f49795"/>
+        <comment number="3" value="Circuit Intent counts: components=2, nets=3, ports=3"/>
+        <comment number="4" value=""/>
+        <comment number="5" value=""/>
+        <comment number="6" value=""/>
+        <comment number="7" value=""/>
+        <comment number="8" value=""/>
+        <comment number="9" value=""/>
+      </title_block>
+    </sheet>
+  </design>
+  <components>
+    <comp ref="C1">
+      <value>100n</value>
+      <description>CopperMCP original non-polarized capacitor primitive</description>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">CopperMCP original non-polarized capacitor primitive</field>
+      </fields>
+      <libsource lib="CopperMCP" part="C" description="CopperMCP original two-pin non-polarized capacitor primitive"/>
+      <property name="Sheetname" value="Root"/>
+      <property name="Sheetfile" value="rc-low-pass-v1.kicad_sch"/>
+      <property name="exclude_from_board"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>e3a52f60-f664-4f4c-bde3-0c5fb22681aa</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="2"/>
+            <pin num="1"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="R1">
+      <value>1k</value>
+      <description>CopperMCP original resistor primitive</description>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">CopperMCP original resistor primitive</field>
+      </fields>
+      <libsource lib="CopperMCP" part="R" description="CopperMCP original two-pin resistor primitive"/>
+      <property name="Sheetname" value="Root"/>
+      <property name="Sheetfile" value="rc-low-pass-v1.kicad_sch"/>
+      <property name="exclude_from_board"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>552f3cbc-96e9-43c1-b1ec-5c96454ce04a</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="2"/>
+            <pin num="1"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+  </components>
+  <libparts>
+    <libpart lib="CopperMCP" part="C">
+      <description>CopperMCP original two-pin non-polarized capacitor primitive</description>
+      <fields>
+        <field name="Reference">C</field>
+        <field name="Value">C</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">CopperMCP original two-pin non-polarized capacitor primitive</field>
+      </fields>
+      <pins>
+        <pin num="1" name="" type="passive"/>
+        <pin num="2" name="" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="CopperMCP" part="R">
+      <description>CopperMCP original two-pin resistor primitive</description>
+      <fields>
+        <field name="Reference">R</field>
+        <field name="Value">R</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">CopperMCP original two-pin resistor primitive</field>
+      </fields>
+      <pins>
+        <pin num="1" name="" type="passive"/>
+        <pin num="2" name="" type="passive"/>
+      </pins>
+    </libpart>
+  </libparts>
+  <libraries/>
+  <nets>
+    <net code="1" name="AUDIO_IN" class="Default">
+      <node ref="R1" pin="1" pintype="passive"/>
+    </net>
+    <net code="2" name="AUDIO_OUT" class="Default">
+      <node ref="C1" pin="1" pintype="passive"/>
+      <node ref="R1" pin="2" pintype="passive"/>
+    </net>
+    <net code="3" name="GND" class="Default">
+      <node ref="C1" pin="2" pintype="passive"/>
+    </net>
+  </nets>
+</export>

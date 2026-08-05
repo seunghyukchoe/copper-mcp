@@ -6,7 +6,11 @@ than the internal architecture, so routing remains usable through other hosts.
 
 from __future__ import annotations
 
-from typing import Any
+import os
+import threading
+from concurrent.futures import Future, ThreadPoolExecutor
+from pathlib import Path
+from typing import Annotated, Any, get_args
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.context import Context
@@ -30,7 +34,44 @@ from copper_mcp.mcp_contracts import (
     CircuitIntentToolContent,
     CircuitSceneToolResponse,
     CircuitSchematicToolResponse,
+    Digest,
+    LayeredRoutePreviewToolRequest,
+    LayeredRoutePreviewToolResponse,
+    LiveBoardObservationToolResponse,
+    LiveCircuitSceneToolRequest,
+    LiveEditorContextToolRequest,
+    LiveEditorContextToolResponse,
+    LiveLayeredRoutePreviewToolRequest,
+    LivePlacementToolRequest,
+    LiveRoutePreviewToolRequest,
+    PlacementApplyToolRequest,
+    PlacementApplyToolResponse,
+    PlacementPreviewToolRequest,
     PlacementPreviewToolResponse,
+    PostPlacementObservationToolRequest,
+    PostPlacementObservationToolResponse,
+    RoutePreviewToolRequest,
+    RoutePreviewToolResponse,
+    RoutingCandidateExportToolResponse,
+    RoutingJobRequest,
+    RoutingJobToolResponse,
+)
+from copper_mcp.routing import RoutingJobRepository
+from copper_mcp.routing_job_service import (
+    RoutingJobServiceError,
+    execute_routing_job,
+)
+from copper_mcp.routing_job_service import (
+    cancel_routing_job as cancel_routing_job_service,
+)
+from copper_mcp.routing_job_service import (
+    export_routing_candidate as export_routing_candidate_service,
+)
+from copper_mcp.routing_job_service import (
+    get_routing_job as get_routing_job_service,
+)
+from copper_mcp.routing_job_service import (
+    start_routing_job as start_routing_job_service,
 )
 from copper_mcp.scene_render import (
     SCENE_RENDER_URI_TEMPLATE,
@@ -44,10 +85,23 @@ from copper_mcp.schematic_artifacts import (
     SchematicArtifactUnavailableError,
 )
 from copper_mcp.tools import apply_candidate as apply_candidate_service
+from copper_mcp.tools import apply_placement_candidate as apply_placement_candidate_service
 from copper_mcp.tools import compare_candidates as compare_candidates_service
 from copper_mcp.tools import inspect_board as inspect_board_service
 from copper_mcp.tools import inspect_board_ir as inspect_board_ir_service
+from copper_mcp.tools import inspect_live_board as inspect_live_board_service
+from copper_mcp.tools import (
+    inspect_live_editor_context_raw as inspect_live_editor_context_service_raw,
+)
 from copper_mcp.tools import observe_board_scene_raw as observe_board_scene_service_raw
+from copper_mcp.tools import observe_live_board_scene_raw as observe_live_board_scene_service_raw
+from copper_mcp.tools import observe_post_placement as observe_post_placement_service
+from copper_mcp.tools import preview_layered_route as preview_layered_route_service
+from copper_mcp.tools import (
+    preview_live_layered_route_raw as preview_live_layered_route_service_raw,
+)
+from copper_mcp.tools import preview_live_placement_raw as preview_live_placement_service_raw
+from copper_mcp.tools import preview_live_route_raw as preview_live_route_service_raw
 from copper_mcp.tools import preview_placement as preview_placement_service
 from copper_mcp.tools import preview_route as preview_route_service
 from copper_mcp.tools import render_circuit_schematic as render_circuit_schematic_service
@@ -62,18 +116,86 @@ _SCENE_RENDERS = SceneRenderStore()
 #: server invalidates every outstanding token. That is intended for a short-lived confirmation.
 _APPLY_TOKENS = ApplyTokenAuthority()
 SCENE_RENDER_MIME_TYPE = "image/svg+xml"
+_ROUTING_REPOSITORY: RoutingJobRepository | None = None
+_ROUTING_REPOSITORY_LOCK = threading.RLock()
+_ROUTING_FUTURES: dict[str, Future[Any]] = {}
+_ROUTING_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="copper-routing")
+
+# Retain the exact, closed schema advertised to MCP clients while deliberately accepting every
+# runtime JSON value.  The routing-job service owns untrusted request parsing and returns its
+# fixed non-echoing refusal; allowing Pydantic to validate nested values here could disclose them
+# in a framework-generated error before that boundary runs.
+RoutingJobToolRequest = Annotated[Any, *get_args(RoutingJobRequest)[1:]]
+
+
+def _routing_repository() -> RoutingJobRepository:
+    """Open the ignored local routing ledger lazily, so read-only imports do not write state."""
+
+    global _ROUTING_REPOSITORY
+    with _ROUTING_REPOSITORY_LOCK:
+        if _ROUTING_REPOSITORY is not None:
+            return _ROUTING_REPOSITORY
+        configured = os.environ.get("COPPER_MCP_ROUTING_JOB_STORE", "").strip()
+        path = (
+            Path(configured)
+            if configured
+            else _SETTINGS.workspace / ".copper-mcp" / "routing.sqlite3"
+        )
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            path.parent.chmod(0o700)
+            _ROUTING_REPOSITORY = RoutingJobRepository(path)
+        except OSError as error:
+            raise RoutingJobServiceError("routing job persistence is unavailable") from error
+        return _ROUTING_REPOSITORY
+
+
+def _schedule_routing_job(job_id: str, authorization_digest: str) -> None:
+    repository = _routing_repository()
+    with _ROUTING_REPOSITORY_LOCK:
+        existing = _ROUTING_FUTURES.get(job_id)
+        if existing is not None and not existing.done():
+            return
+
+        future = _ROUTING_EXECUTOR.submit(
+            execute_routing_job,
+            job_id,
+            authorization_digest,
+            _SETTINGS,
+            repository,
+        )
+        _ROUTING_FUTURES[job_id] = future
+
+        def _forget(_completed: Future[Any]) -> None:
+            with _ROUTING_REPOSITORY_LOCK:
+                if _ROUTING_FUTURES.get(job_id) is _completed:
+                    _ROUTING_FUTURES.pop(job_id, None)
+
+        future.add_done_callback(_forget)
 
 
 class CopperMCPServer(MCPServer[None]):
     """MCP server with a private-value-safe schematic argument boundary."""
 
     async def list_tools(self) -> list[Tool]:
-        """Advertise the schematic wrapper as a closed argument object."""
+        """Advertise private-value-safe structured wrappers as closed argument objects."""
 
         listed = await super().list_tools()
         result: list[Tool] = []
         for tool in listed:
-            if tool.name != "render_circuit_schematic":
+            if tool.name not in {
+                "preview_route",
+                "preview_live_route",
+                "preview_layered_route",
+                "preview_live_layered_route",
+                "render_circuit_schematic",
+                "observe_live_board_scene",
+                "observe_post_placement",
+                "preview_live_placement",
+                "preview_placement",
+                "inspect_live_editor_context",
+                "start_routing",
+            }:
                 result.append(tool)
                 continue
             schema = dict(tool.input_schema)
@@ -87,10 +209,43 @@ class CopperMCPServer(MCPServer[None]):
         arguments: dict[str, Any],
         context: Context[None, Any] | None = None,
     ) -> CallToolResult | InputRequiredResult:
-        """Reject unknown schematic wrapper fields before echoing validation can run."""
+        """Reject unknown structured wrapper fields before echoing validation can run."""
 
         if name == "render_circuit_schematic" and set(arguments) != {"content"}:
             raise ToolError("schematic tool arguments are malformed")
+        if name == "preview_route" and set(arguments) != {"request"}:
+            raise ToolError("route tool arguments are malformed")
+        if name == "preview_live_route" and set(arguments) != {"request"}:
+            raise ToolError("live route tool arguments are malformed")
+        if name == "preview_layered_route" and set(arguments) != {"request"}:
+            raise ToolError("layered route tool arguments are malformed")
+        if name == "preview_live_layered_route" and set(arguments) != {"request"}:
+            raise ToolError("live layered route tool arguments are malformed")
+        if name == "observe_live_board_scene" and set(arguments) != {"request"}:
+            raise ToolError("live scene tool arguments are malformed")
+        if name == "observe_post_placement" and set(arguments) != {"request"}:
+            raise ToolError("post-placement observation arguments are malformed")
+        if name == "preview_live_placement" and set(arguments) != {"request"}:
+            raise ToolError("live placement tool arguments are malformed")
+        if name == "preview_placement" and set(arguments) != {"request"}:
+            raise ToolError("placement tool arguments are malformed")
+        if name == "inspect_live_editor_context" and set(arguments) != {"request"}:
+            raise ToolError("live editor context tool arguments are malformed")
+        if name == "start_routing" and set(arguments) != {"request", "authorization_digest"}:
+            raise ToolError("routing job start arguments are malformed")
+        if name == "get_routing_job" and set(arguments) != {"job_id", "authorization_digest"}:
+            raise ToolError("routing job lookup arguments are malformed")
+        if name == "cancel_routing_job" and frozenset(arguments) not in {
+            frozenset({"job_id", "authorization_digest"}),
+            frozenset({"job_id", "authorization_digest", "reason"}),
+        }:
+            raise ToolError("routing job cancellation arguments are malformed")
+        if name == "export_routing_candidate" and set(arguments) != {
+            "job_id",
+            "candidate_id",
+            "authorization_digest",
+        }:
+            raise ToolError("routing candidate export arguments are malformed")
         return await super().call_tool(name, arguments, context)
 
 
@@ -126,6 +281,77 @@ def run_board_drc(path: str) -> dict[str, Any]:
     return run_board_drc_service(path, _SETTINGS)
 
 
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def inspect_live_board() -> LiveBoardObservationToolResponse:
+    """Observe the first open KiCad PCB through a local, read-only IPC session.
+
+    Requires the optional ``kicad-python`` package and a running KiCad PCB Editor
+    with its IPC server enabled. Only versions, a board digest, byte count, and
+    bounded object counts are returned; board text, net names, UUIDs, and geometry
+    are intentionally withheld until a live snapshot can carry Circuit Scene's
+    revision contract.
+    """
+
+    return LiveBoardObservationToolResponse.model_validate(inspect_live_board_service(_SETTINGS))
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def observe_live_board_scene(
+    request: LiveCircuitSceneToolRequest,
+) -> CircuitSceneToolResponse:
+    """Observe the active KiCad PCB as a revision-bound Circuit Scene.
+
+    Set ``request.board`` to the literal ``"live"`` and provide the same bounded constraints
+    and region shape as ``observe_board_scene``. The scene's board revision is the digest of the
+    exact IPC serialization parsed into Board IR, so every reference is tied to one snapshot.
+    This read-only bridge does not yet make placement, routing, DRC, or apply operations live;
+    those actions must add their own session compare-and-swap gate.
+    """
+
+    scene = observe_live_board_scene_service_raw(request, _SETTINGS)
+    return CircuitSceneToolResponse.model_validate(scene.to_dict())
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def inspect_live_editor_context(
+    request: LiveEditorContextToolRequest,
+) -> LiveEditorContextToolResponse:
+    """Inspect the active layer and selected native item refs without mutation.
+
+    The request must carry the raw board serialization digest from a live observation. An
+    optional context digest makes a follow-up compare-and-swap read fail closed if the operator
+    changes the selection or active layer. No board text, coordinates, net names, selection
+    strings, project tokens, or write APIs are read or returned.
+    """
+
+    context = inspect_live_editor_context_service_raw(request, _SETTINGS)
+    return LiveEditorContextToolResponse.model_validate(context.to_dict())
+
+
 @mcp.tool()
 def inspect_board_ir(request: dict[str, Any]) -> dict[str, Any]:
     """Report whether a board converts to the supported Board IR and describe its structure."""
@@ -133,15 +359,259 @@ def inspect_board_ir(request: dict[str, Any]) -> dict[str, Any]:
     return inspect_board_ir_service(request, _SETTINGS)
 
 
-@mcp.tool()
-def preview_route(request: dict[str, Any]) -> dict[str, Any]:
-    """Preview one deterministic two-pin route candidate without modifying any file.
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=False,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def preview_route(request: RoutePreviewToolRequest) -> RoutePreviewToolResponse:
+    """Preview one deterministic route candidate without modifying any file.
+
+    Select exactly one net either by the compatibility ``net`` field (a KiCad net name the
+    caller already knows), or by ``net_ref_id`` copied from Circuit Scene. A reference call
+    must also copy that scene's ``board_revision`` and ``snapshot_digest`` into
+    ``expect_board_revision`` and ``expect_snapshot_digest``; a changed board or constraint
+    snapshot returns ``stale_revision`` before routing.
 
     Setting ``include_apply_token`` additionally returns a single-use token authorizing
     ``apply_candidate`` for exactly this candidate, board revision and path.
     """
 
-    return preview_route_service(request, _SETTINGS, _APPLY_TOKENS)
+    return RoutePreviewToolResponse.model_validate(
+        preview_route_service(request, _SETTINGS, _APPLY_TOKENS)
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def preview_live_route(request: LiveRoutePreviewToolRequest) -> RoutePreviewToolResponse:
+    """Propose one route against the exact active KiCad IPC snapshot without mutation.
+
+    The request must use a Circuit Scene ``net_ref_id`` and both scene revision preconditions.
+    Live proposals do not run DRC, refill zones, mint apply tokens, or modify the KiCad editor;
+    those are separate session compare-and-swap contracts.
+    """
+
+    return RoutePreviewToolResponse.model_validate(
+        preview_live_route_service_raw(request, _SETTINGS).to_dict()
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def preview_layered_route(
+    request: LayeredRoutePreviewToolRequest,
+) -> LayeredRoutePreviewToolResponse:
+    """Propose one revision-bound two-signal-layer route without mutation.
+
+    The selected net is inferred from ``start_pad_id`` and ``end_pad_id`` in the converted
+    Board IR snapshot. The result is an immutable candidate or a bounded typed refusal. With
+    ``include_drc`` the same candidate is replayed through private authoritative KiCad DRC and
+    returns only aggregate, revision-bound evidence; no source bytes, mutation, or apply token
+    crosses the boundary.
+    """
+
+    return LayeredRoutePreviewToolResponse.model_validate(
+        preview_layered_route_service(request, _SETTINGS)
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def preview_live_layered_route(
+    request: LiveLayeredRoutePreviewToolRequest,
+) -> LayeredRoutePreviewToolResponse:
+    """Propose a bounded via-capable route against one active KiCad snapshot.
+
+    The endpoint pads provide net identity only after the exact IPC serialization has been
+    converted through Board IR. The request also carries the source, Board IR, and redacted
+    KiCad-session CAS digests. The proposal is candidate-only: it does not run DRC, refill zones,
+    write the editor, or mint an apply token.
+    """
+
+    return LayeredRoutePreviewToolResponse.model_validate(
+        preview_live_layered_route_service_raw(request, _SETTINGS)
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def start_routing(
+    request: RoutingJobToolRequest,
+    authorization_digest: Digest,
+) -> RoutingJobToolResponse:
+    """Queue one durable, file-backed layered route proposal and dispatch the local worker.
+
+    The request is validated and persisted before this tool returns. The caller supplies an
+    opaque context digest that must be repeated for lookup, cancellation, and geometry export;
+    the deterministic job ID is only an idempotency key. This first queue refuses live-editor
+    requests and never applies copper or runs DRC.
+    """
+
+    try:
+        repository = _routing_repository()
+        result = start_routing_job_service(
+            {
+                "request": request,
+                "authorization_digest": authorization_digest,
+            },
+            _SETTINGS,
+            repository,
+        )
+        _schedule_routing_job(str(result["job_id"]), authorization_digest)
+        return RoutingJobToolResponse.model_validate(result)
+    except RoutingJobServiceError as error:
+        raise ToolError("routing job request was refused") from error
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def get_routing_job(job_id: object, authorization_digest: object) -> RoutingJobToolResponse:
+    """Read one durable routing-job record and its normalized request.
+
+    Handles are checked by the retention-owning repository rather than the transport schema so
+    malformed JSON values still trigger bounded expiry cleanup before the fixed unavailable reply.
+    """
+
+    try:
+        result = get_routing_job_service(
+            {"job_id": job_id, "authorization_digest": authorization_digest},
+            _routing_repository(),
+        )
+        return RoutingJobToolResponse.model_validate(result)
+    except RoutingJobServiceError as error:
+        raise ToolError("routing job is unavailable") from error
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=False,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def cancel_routing_job(
+    job_id: object,
+    authorization_digest: object,
+    reason: str = "caller_requested",
+) -> RoutingJobToolResponse:
+    """Request cooperative cancellation of one queued or running route proposal."""
+
+    try:
+        result = cancel_routing_job_service(
+            {
+                "job_id": job_id,
+                "authorization_digest": authorization_digest,
+                "reason": reason,
+            },
+            _routing_repository(),
+        )
+        return RoutingJobToolResponse.model_validate(result)
+    except RoutingJobServiceError as error:
+        raise ToolError("routing job cancellation was refused") from error
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def export_routing_candidate(
+    job_id: object,
+    candidate_id: object,
+    authorization_digest: object,
+) -> RoutingCandidateExportToolResponse:
+    """Return candidate geometry only after the job's caller-context authorization succeeds.
+
+    Handles reach the geometry-retention boundary before validation so malformed values cannot
+    bypass TTL cleanup; no geometry is returned unless every later authorization check succeeds.
+    """
+
+    try:
+        result = export_routing_candidate_service(
+            {
+                "job_id": job_id,
+                "candidate_id": candidate_id,
+                "authorization_digest": authorization_digest,
+            },
+            _routing_repository(),
+        )
+        return RoutingCandidateExportToolResponse.model_validate(
+            {
+                "schema_version": "1.0",
+                "candidate": result,
+                "geometry_disclosure": "explicitly_authorized",
+            }
+        )
+    except RoutingJobServiceError as error:
+        raise ToolError("routing candidate export is unavailable") from error
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def preview_live_placement(request: LivePlacementToolRequest) -> PlacementPreviewToolResponse:
+    """Preview a ref-anchored placement against the active KiCad snapshot without mutation.
+
+    The request must use ``board: 'live'`` plus both digests copied from a live Circuit Scene.
+    The exact IPC serialization is converted through Board IR and the deterministic placement
+    legalizer; KiCad writes, DRC, fill, apply tokens, and raw source are deliberately absent.
+    """
+
+    return PlacementPreviewToolResponse.model_validate(
+        preview_live_placement_service_raw(request, _SETTINGS).to_dict()
+    )
 
 
 @mcp.tool(
@@ -228,7 +698,32 @@ def observe_board_scene(request: dict[str, Any]) -> CircuitSceneToolResponse:
     ),
     structured_output=True,
 )
-def preview_placement(request: dict[str, Any]) -> PlacementPreviewToolResponse:
+def observe_post_placement(
+    request: PostPlacementObservationToolRequest,
+) -> PostPlacementObservationToolResponse:
+    """Observe one exact post-placement board revision with semantic scene and redacted DRC.
+
+    Copy ``expect_board_revision`` from a successful placement-apply response. The tool captures
+    the board, project/rule/library context once, builds the scene from those bytes, runs fixed
+    private KiCad DRC against the same capture, and rejects the entire result if context changes.
+    It neither applies candidates nor issues or consumes tokens.
+    """
+
+    return PostPlacementObservationToolResponse.model_validate(
+        observe_post_placement_service(request, _SETTINGS)
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def preview_placement(request: PlacementPreviewToolRequest) -> PlacementPreviewToolResponse:
     """Validate a proposed footprint placement against a board, without changing anything.
 
     ``request`` takes ``board``, ``constraints``, and ``subjects`` (the footprint references
@@ -242,14 +737,17 @@ def preview_placement(request: dict[str, Any]) -> PlacementPreviewToolResponse:
     A ``previewed`` result carries an immutable candidate whose legality was proven
     deterministically. Note that ``pad_overlap`` is three-valued: ``inconclusive`` means
     neither clearance nor collision could be proven, and is not a failure. Courtyard overlap is
-    reported as ``not_modelled`` and is genuinely not checked. This tool never applies a
-    placement, and a placement is not bound to KiCad DRC evidence in this version.
+    reported as ``proven_clear`` or ``violated`` for the bounded same-side rectangular-courtyard
+    subset. Unsupported courtyard topology fails closed. This tool never applies a
+    placement. ``include_drc`` is an opt-in, file-backed replay through KiCad DRC. It returns
+    only aggregate findings and digest bindings for a disposable patched board; it never grants
+    placement apply authority or exposes board bytes. Live placement does not support DRC.
     """
 
     # Both transports, like preview_route: one self-contained response, no server-side state,
     # no capability handle to resolve. Workspace confinement is what bounds the disclosure.
     return PlacementPreviewToolResponse.model_validate(
-        preview_placement_service(request, _SETTINGS)
+        preview_placement_service(request, _SETTINGS, _APPLY_TOKENS)
     )
 
 
@@ -268,7 +766,7 @@ def preview_placement(request: dict[str, Any]) -> PlacementPreviewToolResponse:
 def apply_candidate(request: dict[str, Any]) -> ApplyCandidateToolResponse:
     """Apply a previewed route candidate to a board, replacing the file on disk.
 
-    **This is the only tool that changes a board.** It is disabled unless the operator set
+    This route-only mutation tool is disabled unless the operator set
     `COPPER_MCP_ALLOW_APPLY=1`, and it additionally requires an `apply_token` issued by
     `preview_route` for this exact candidate, board revision and path. A model cannot enable
     the flag or mint a token.
@@ -282,14 +780,37 @@ def apply_candidate(request: dict[str, Any]) -> ApplyCandidateToolResponse:
     the board and its path is returned - **that copy is the undo**, restored by copying it
     back. This is not a KiCad undo step.
 
-    Only additive route patches are applied. Nothing here applies a placement, and the applied
-    board carries no DRC evidence: the reported verification covers byte preservation, a
-    fail-closed reparse, and Board IR equality, and says `not_run` for anything involving
-    KiCad.
+    Only additive route patches are applied. Placement mutation is a separate tool with its own
+    operation-scoped token. The applied board carries no DRC evidence: the reported verification
+    covers byte preservation, a fail-closed reparse, and Board IR equality, and says `not_run` for
+    anything involving KiCad.
     """
 
     return ApplyCandidateToolResponse.model_validate(
         apply_candidate_service(request, _SETTINGS, _APPLY_TOKENS)
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=True,
+        idempotent_hint=False,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def apply_placement_candidate(request: PlacementApplyToolRequest) -> PlacementApplyToolResponse:
+    """Apply a separately authorized bounded placement candidate to a board file.
+
+    The operation is disabled unless ``COPPER_MCP_ALLOW_APPLY=1`` and requires a placement-
+    scoped, single-use token issued by ``preview_placement`` with ``include_apply_token: true``.
+    Only the source-preserving front-side orthogonal footprint subset is admitted; unsupported
+    properties, side changes, and geometry refuse before any write.
+    """
+
+    return PlacementApplyToolResponse.model_validate(
+        apply_placement_candidate_service(request, _SETTINGS, _APPLY_TOKENS)
     )
 
 

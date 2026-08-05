@@ -24,7 +24,11 @@ implementations; no external code is copied.
   wrapper code is redistributed under permissive terms — and **REST** (DAC 2021 RL RSMT) uses
   CUHK's non-OSI CU-SD license. None may become dependencies of this project without independent
   legal review. The first routing slice deliberately uses a clean-room MST-over-components order
-  instead, and the candidate's recorded `ordering_policy` keeps richer topology sources external.
+  instead. The current implementation adds a clean-room bounded one-Steiner *ordering* guide
+  (`batched-1-steiner-v1`) for at most nine evolving components; it does not copy FLUTE tables,
+  claim optimality, or make a richer topology source a runtime dependency. The candidate's recorded
+  `ordering_policy` keeps future FLUTE-guided, learned, and decomposed policies externally
+  selectable.
 - **TritonRoute / OpenROAD `drt`** and **InstantGR** (ICCAD 2024 GPU global routing) are
   **BSD-3-Clause**: legitimate architectural references. **OrthoRoute** (hobbyist GPU PathFinder
   for KiCad) is MIT.

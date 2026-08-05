@@ -1,0 +1,29 @@
+{
+  "date_utc": "2026-08-05",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "fixture": "board-ir-v0.2/footprint-pose-courtyard.kicad_pcb",
+  "metrics": {
+    "all_clean": true,
+    "candidate_binding": true,
+    "clean_drc_runs": 3,
+    "context_binding": true,
+    "kicad_version": "10.x",
+    "median_private_drc_ns": 3088695417,
+    "repetitions": 3,
+    "source_bytes_inode_mtime_preserved": true,
+    "workspace_mutations": 0
+  },
+  "not_claimed": [
+    "unsupported footprint geometry or back-side placement",
+    "public or live placement DRC",
+    "placement apply or KiCad undo",
+    "electrical or fabrication readiness",
+    "FreeRouting parity"
+  ],
+  "run_id": "sha256:7e72b2586d1d2208ce0972bd7b8077ac9c30901beec814ec2c633b62c115fa1a",
+  "schema": "copper-mcp/benchmark/placement-candidate-drc/v1",
+  "source_commit": "6b5c75e454db1a437bc947096bc61e0d4b7b9398"
+}
