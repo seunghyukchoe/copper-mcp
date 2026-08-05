@@ -129,15 +129,27 @@ class PlacementSolverScore:
 
 @dataclass(frozen=True, slots=True)
 class RankedPlacement:
-    """One legalizer-issued candidate and the solver's explicitly limited score."""
+    """One legalizer-issued candidate and the solver's explicitly limited score.
+
+    ``scoring_policy`` names the policy that produced ``score``, so a ranked entry carries its own
+    provenance rather than borrowing it from the enclosing result.  When the policy is route-aware,
+    ``route_evidence`` additionally carries the estimator id and probe-settings digest.
+    """
 
     result: PlacementResult
     score: PlacementSolverScore
+    scoring_policy: PlacementScoringPolicy
     route_evidence: RouteAwareEvidence | None = None
 
     def __post_init__(self) -> None:
         if self.result.status != "previewed" or self.result.candidate is None:
             raise PlacementSolverError("ranked placements must be legalizer-issued candidates")
+        if not isinstance(self.scoring_policy, PlacementScoringPolicy):
+            raise PlacementSolverError("ranked placements must name a supported scoring policy")
+        if (self.scoring_policy is PlacementScoringPolicy.ROUTE_AWARE_ASTAR) != (
+            self.route_evidence is not None
+        ):
+            raise PlacementSolverError("route evidence must accompany exactly the route-aware rank")
 
     @property
     def candidate(self) -> PlacementCandidate:
@@ -149,9 +161,15 @@ class RankedPlacement:
 
 @dataclass(frozen=True, slots=True)
 class PlacementSolveResult:
-    """The bounded outcome; no entry can contain an unlegalized placement."""
+    """The bounded outcome; no entry can contain an unlegalized placement.
+
+    ``scoring_policy`` is recorded rather than inferred.  Two solves of one intent under different
+    policies explore different successors, because the score orders the beam, so a result that did
+    not name its policy could not be compared with another one honestly.
+    """
 
     status: str
+    scoring_policy: PlacementScoringPolicy
     initial: PlacementResult | None
     initial_score: PlacementSolverScore | None
     ranked: tuple[RankedPlacement, ...]
@@ -160,6 +178,8 @@ class PlacementSolveResult:
     route_probe_limit: int = 0
 
     def __post_init__(self) -> None:
+        if not isinstance(self.scoring_policy, PlacementScoringPolicy):
+            raise PlacementSolverError("solver scoring policy is malformed")
         if self.status not in {
             "completed",
             "cancelled",
@@ -216,9 +236,10 @@ def solve_placement(
         raise PlacementSolverError("settings must be a PlacementSolverSettings")
     if cancelled is not None and not callable(cancelled):
         raise PlacementSolverError("cancelled must be callable")
+    policy = settings.scoring_policy
     route_budget = (
         RouteProbeBudget(settings.route_probe_settings.max_total_probes)
-        if settings.scoring_policy is PlacementScoringPolicy.ROUTE_AWARE_ASTAR
+        if policy is PlacementScoringPolicy.ROUTE_AWARE_ASTAR
         else None
     )
 
@@ -231,6 +252,7 @@ def solve_placement(
     ) -> PlacementSolveResult:
         return PlacementSolveResult(
             status,
+            policy,
             initial,
             initial_score,
             ranked,
@@ -295,7 +317,7 @@ def solve_placement(
     if score_status is not None:
         return outcome(score_status, initial, None, (), evaluations)
     assert initial_score is not None
-    initial_ranked = RankedPlacement(initial, initial_score, initial_evidence)
+    initial_ranked = RankedPlacement(initial, initial_score, policy, initial_evidence)
     known: dict[str, RankedPlacement] = {initial_ranked.candidate.candidate_id: initial_ranked}
     movable = _movable_refs(search_intent, view)
     initial_state = _SearchState(
@@ -344,7 +366,7 @@ def solve_placement(
                         status = score_status
                         break
                     assert score is not None
-                    proposed_ranked = RankedPlacement(result, score, evidence)
+                    proposed_ranked = RankedPlacement(result, score, policy, evidence)
                     candidate_id = proposed_ranked.candidate.candidate_id
                     if candidate_id in known:
                         continue
@@ -476,6 +498,42 @@ def _proposal_for_pose(
         offset_y_nm=placement.origin_y_nm - hull_centre_y,
         orientation_udeg=placement.orientation_udeg,
         side=placement.side,
+    )
+
+
+def score_placement_candidate(
+    candidate: PlacementCandidate,
+    snapshot: BoardIRSnapshot,
+    view: PlacementView,
+    *,
+    settings: PlacementSolverSettings | None = None,
+    route_budget: RouteProbeBudget | None = None,
+) -> tuple[PlacementSolverScore | None, RouteAwareEvidence | None, str | None]:
+    """Score one already-legalized candidate under a stated policy, outside any search.
+
+    This is the seam a re-ranking comparison needs.  ``solve_placement`` cannot supply one, because
+    its score orders the beam and therefore decides which successors are ever generated: two solves
+    under two policies are two different searches, not two orderings of one candidate set.  Applying
+    both scores to one fixed set of candidates is a separate, weaker, and honestly different
+    measurement, and this function is how it is taken.
+
+    It grants no new authority: the candidate must already have been issued by the legalizer, and
+    every binding check in the route-aware path still applies.
+    """
+
+    if settings is None:
+        settings = PlacementSolverSettings()
+    if not isinstance(settings, PlacementSolverSettings):
+        raise PlacementSolverError("settings must be a PlacementSolverSettings")
+    if route_budget is None and settings.scoring_policy is PlacementScoringPolicy.ROUTE_AWARE_ASTAR:
+        route_budget = RouteProbeBudget(settings.route_probe_settings.max_total_probes)
+    return _score(
+        candidate,
+        snapshot,
+        view,
+        settings=settings,
+        stopped=lambda: None,
+        route_budget=route_budget,
     )
 
 
@@ -629,4 +687,13 @@ def _rank_key(item: RankedPlacement) -> tuple[PlacementSolverScore, str]:
 
 
 def _state_key(item: _SearchState) -> tuple[PlacementSolverScore, str]:
+    """Order the beam.
+
+    This is why a scoring policy is a *search* choice and not a presentation choice: the surviving
+    beam decides which successors are generated next, so changing the score changes which candidates
+    are ever explored.  Two solves under two policies are two different bounded searches over
+    overlapping-at-best candidate sets, and no benchmark may describe them as one shared set
+    re-ordered.  ``score_placement_candidate`` exists for the re-ranking measurement.
+    """
+
     return _rank_key(item.ranked)
