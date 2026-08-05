@@ -10,9 +10,17 @@ Generalize the internal Board-IR layered proposal seam from exactly two to two t
 ordered **signal** copper layers. The immutable search state is `(x, y, layer)`; cardinal moves
 have a positive `move_cost`, and each cross-layer transition has the explicit positive `via_cost`.
 The only accepted transition is the Board IR v0.2 full-stack through-via: it can enter or leave on
-any supported signal layer but its recorded physical span is the first-to-last layer of the ordered
-stack. Blind, buried, microvia, padstack-specific, plane/mixed-layer, and per-span cost modes fail
-closed.
+any supported signal layer but its recorded physical span is the first-and-last layer of the
+ordered stack. Blind, buried, microvia, padstack-specific, plane/mixed-layer, and per-span cost
+modes fail closed.
+
+That span is an **unordered pair**. The KiCad serializer has always compared it as a set and always
+writes the canonical outer ordering, so the recorded order carries no physical meaning. A two-layer
+stack therefore keeps recording the traversed pair in traversal order, which is what every
+two-layer candidate ever issued contains and what its content address hashes; from three layers up
+there is no legacy identity, and recording a traversed inner pair would misstate a full-stack via
+as a blind or buried one, so the canonical outer pair is recorded. The structural verifier compares
+the pair as a set for every stack width, which is the only rule that accepts both.
 
 All track and via keepouts remain layer-scoped. The stack has a hard 2..8 layer budget plus bounded
 router node, expansion, obstacle, and obstacle-check work. An omitted `max_vias` preserves the
@@ -39,11 +47,32 @@ durable exports, and apply then need their own contract/version review.
 ## Evidence
 
 The committed three-layer oracle blocks both layers available to the two-layer configuration but
-deterministically traverses the clear inner layer with two full-stack transitions. Separate
+deterministically traverses the clear inner layer with two full-stack transitions. A committed
+four-layer KiCad fixture accepted by KiCad 10.0.5 proves the same behavior, and the public file,
+live, and durable boundaries, on real parsed bytes rather than a patched snapshot. Separate
 regressions preserve a 65-via two-layer route with an omitted cap, reject a restamped 66-via
-candidate under an explicit 65-via cap, and prove the file, live, and durable boundaries reject an
-internal three-layer snapshot. Negative tests also cover over-wide stacks, zero via budget, invalid
-full-stack span, stale revision, cancellation, and layer-scoped keepouts.
+candidate under an explicit 65-via cap, and prove the boundaries reject an internal three-layer
+snapshot. Negative tests also cover over-wide stacks, zero via budget, invalid full-stack span,
+stale revision, cancellation, and layer-scoped keepouts.
+
+Two-layer, three-layer, and four-layer candidate identities are pinned as committed digests, so a
+change to the content-addressed payload cannot pass a green suite. `B-078` records the exact
+`(x, y, layer, vias_used)` Dijkstra differential over seeded 2..5-layer capped lattices, an
+independent legality replay of each returned path, and the pinned via-policy boundary.
+
+## Non-claims
+
+Beyond the promotion gates above, this decision does not claim:
+
+- **Via-barrel clearance.** The structural verifier refuses route copper crossing a full-stack via
+  barrel it does not terminate on, which is a topology check on the candidate's own geometry. It is
+  not an annular-ring, drill-to-copper, or foreign-net barrel clearance rule; those remain KiCad's.
+- **Six through eight layer search evidence.** The stack budget admits up to eight layers, but the
+  recorded differential covers two through five. Wider stacks are bounded and fail closed, not
+  measured.
+- **Optimality of the Pareto front prune.** The `(node, vias)` `g_score` is the sound dominance
+  key; the per-coordinate Pareto front is an additional prune on top of it. Its via-awareness is
+  not independently differentiated by the recorded suite.
 
 ## References
 

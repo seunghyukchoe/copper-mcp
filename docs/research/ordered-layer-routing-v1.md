@@ -5,11 +5,18 @@
 ## Evidence and design
 
 KiCad's official PCB S-expression format gives each copper layer an ordinal and defines a via by
-the canonical layer pair it connects. The current Board IR intentionally represents only full-stack
-through vias, so this increment uses the widest truthful subset: 2..8 ordered signal layers and
-one full-stack transition cost. Its per-layer state and obstacles are a deterministic finite graph;
-the Manhattan-plus-one-transition heuristic is admissible because every permitted move and via has
-a positive stated cost.
+the canonical layer pair it connects. That pair identifies the span; it does not encode a
+direction, and the serializer emits the canonical outer ordering regardless of how the route
+reached the via. The current Board IR intentionally represents only full-stack through vias, so
+this increment uses the widest truthful subset: 2..8 ordered signal layers and one full-stack
+transition cost. Its per-layer state and obstacles are a deterministic finite graph; the
+Manhattan-plus-one-transition heuristic is admissible because every permitted move and via has a
+positive stated cost.
+
+A finite via cap makes the coordinate alone an unsound dominance key: a cheaper arrival can have
+exhausted the budget while a more expensive arrival at the same coordinate can still complete. The
+capped search therefore carries the via count in its state, and the recorded differential is an
+exact `(x, y, layer, vias_used)` uniform-cost oracle rather than a coordinate-only one.
 
 Hart, Nilsson, and Raphael provide the primary A* minimum-cost-path basis. Lee's foundational maze
 routing work is the historical routing counterpart. Neither source proves KiCad clearance,
