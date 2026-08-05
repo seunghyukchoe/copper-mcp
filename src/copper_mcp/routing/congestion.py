@@ -562,6 +562,55 @@ def _router_result_is_bound(
         return False
 
 
+def _results_are_semantically_equal(left: RouteResult, right: RouteResult) -> bool:
+    """Compare trusted route semantics while allowing backend labels before re-identification."""
+
+    try:
+        if left.candidate is not None and right.candidate is not None:
+            return (
+                left.candidate.base_revision == right.candidate.base_revision
+                and left.candidate.start_pad_id == right.candidate.start_pad_id
+                and left.candidate.end_pad_id == right.candidate.end_pad_id
+                and left.candidate.patch == right.candidate.patch
+                and left.candidate.cost == right.candidate.cost
+                and left.candidate.metrics == right.candidate.metrics
+                and left.candidate.settings == right.candidate.settings
+                and left.candidate.seed == right.candidate.seed
+                and left.candidate.pad_count == right.candidate.pad_count
+                and left.candidate.ordering_policy == right.candidate.ordering_policy
+            )
+        if left.connected is not None and right.connected is not None:
+            return left.connected == right.connected
+        if left.diagnostic is not None and right.diagnostic is not None:
+            return left.diagnostic == right.diagnostic
+    except Exception:  # pragma: no cover - an in-process router is an untrusted boundary
+        return False
+    return False
+
+
+def _result_work(result: RouteResult) -> tuple[int, int]:
+    """Return already-validated deterministic work counts for one router invocation."""
+
+    if result.candidate is not None:
+        return result.candidate.metrics.expanded_states, result.candidate.metrics.obstacle_checks
+    if result.connected is not None:
+        return 0, result.connected.obstacle_checks
+    assert result.diagnostic is not None
+    return result.diagnostic.expanded_states, result.diagnostic.obstacle_checks
+
+
+def _is_exact_reference_router(router: object) -> bool:
+    """Return true only for an unmodified built-in reference-router method."""
+
+    try:
+        return (
+            type(router) is AStarRouter
+            and getattr(router.propose, "__func__", None) is AStarRouter.propose
+        )
+    except Exception:  # pragma: no cover - router dispatch is an untrusted boundary
+        return False
+
+
 def _router_boundary_failure(
     envelope: NegotiatedRoutingRequest,
     ordered: tuple[RouteRequest, ...],
@@ -669,6 +718,8 @@ def negotiate_routes(
 
     cancellation_check = cast(CancellationCheck | None, cancelled)
     selected_router = router or AStarRouter()
+    replay_custom_router = not _is_exact_reference_router(selected_router)
+    reference_router = AStarRouter()
     ordered = tuple(sorted(checked_envelope.requests, key=lambda item: (item.net_id, item.seed)))
     ledger = CongestionLedger(
         grid_step_nm=checked_envelope.grid_step_nm,
@@ -725,11 +776,27 @@ def negotiate_routes(
                 failure_message = "the negotiated routing budget was exhausted"
                 unrouted.update(item.net_id for item in current_order if item.net_id not in working)
                 break
+            # A generic backend receives only half of the remaining allowance.  The same clipped
+            # request is replayed through the reference core before publication, so both searches
+            # together remain within the caller-authorised coordinator ceiling.  The exact
+            # built-in AStarRouter needs no redundant replay and retains the full remainder.
+            verification_expansions = (
+                remaining_expansions // 2 if replay_custom_router else remaining_expansions
+            )
+            verification_obstacle_checks = (
+                remaining_obstacle_checks // 2
+                if replay_custom_router
+                else remaining_obstacle_checks
+            )
+            if verification_expansions <= 0 or verification_obstacle_checks <= 0:
+                failure_message = "the negotiated routing budget was exhausted"
+                unrouted.update(item.net_id for item in current_order if item.net_id not in working)
+                break
             bounded_settings = replace(
                 request.settings,
-                max_expansions=min(request.settings.max_expansions, remaining_expansions),
+                max_expansions=min(request.settings.max_expansions, verification_expansions),
                 max_obstacle_checks=min(
-                    request.settings.max_obstacle_checks, remaining_obstacle_checks
+                    request.settings.max_obstacle_checks, verification_obstacle_checks
                 ),
             )
             bounded_request = replace(request, settings=bounded_settings)
@@ -756,6 +823,65 @@ def negotiate_routes(
                     ripups=ripups,
                     total_physical_checks=total_physical_checks,
                 )
+            if (
+                result.diagnostic is not None
+                and result.diagnostic.code is RouteFailureCode.CANCELLED
+            ):
+                # Cancellation never publishes proposal data.  It is safe to honour promptly,
+                # including from a custom backend, rather than starting a fresh replay after the
+                # caller's cancellation state may have changed.
+                cancelled_during_iteration = True
+                break
+            verification_result: RouteResult | None = None
+            if replay_custom_router:
+                try:
+                    verification_result = reference_router.propose(
+                        checked_snapshot,
+                        bounded_request,
+                        cancelled=cancellation_check,
+                        congestion_penalty=ledger.penalty,
+                    )
+                except Exception:  # pragma: no cover - defensive reference-core boundary
+                    return _router_boundary_failure(
+                        checked_envelope,
+                        ordered,
+                        iterations=iteration,
+                        ripups=ripups,
+                        total_physical_checks=total_physical_checks,
+                    )
+                if not _router_result_is_bound(
+                    verification_result, checked_snapshot, bounded_request
+                ):
+                    return _router_boundary_failure(
+                        checked_envelope,
+                        ordered,
+                        iterations=iteration,
+                        ripups=ripups,
+                        total_physical_checks=total_physical_checks,
+                    )
+                if (
+                    verification_result.diagnostic is not None
+                    and verification_result.diagnostic.code is RouteFailureCode.CANCELLED
+                ):
+                    cancelled_during_iteration = True
+                    break
+                if not _results_are_semantically_equal(result, verification_result):
+                    return _router_boundary_failure(
+                        checked_envelope,
+                        ordered,
+                        iterations=iteration,
+                        ripups=ripups,
+                        total_physical_checks=total_physical_checks,
+                    )
+            result_expansions, result_obstacle_checks = _result_work(result)
+            total_expansions += result_expansions
+            total_obstacle_checks += result_obstacle_checks
+            if verification_result is not None:
+                verification_expansions, verification_obstacle_checks = _result_work(
+                    verification_result
+                )
+                total_expansions += verification_expansions
+                total_obstacle_checks += verification_obstacle_checks
             if result.candidate is not None:
                 try:
                     marked = _reidentify_candidate(result.candidate, checked_envelope.policy_digest)
@@ -768,22 +894,10 @@ def negotiate_routes(
                         ripups=ripups,
                         total_physical_checks=total_physical_checks,
                     )
-                # Account only after every candidate identity and ledger-geometry precondition
-                # above has succeeded.  An external router never gets to advance a budget merely
-                # by claiming metrics beside an unbound candidate.
-                total_expansions += result.candidate.metrics.expanded_states
-                total_obstacle_checks += result.candidate.metrics.obstacle_checks
                 working[request.net_id] = marked
             elif result.connected is not None:
-                total_obstacle_checks += result.connected.obstacle_checks
                 connections[request.net_id] = result.connected
             else:
-                if result.diagnostic is not None:
-                    total_expansions += result.diagnostic.expanded_states
-                    total_obstacle_checks += result.diagnostic.obstacle_checks
-                    if result.diagnostic.code is RouteFailureCode.CANCELLED:
-                        cancelled_during_iteration = True
-                        break
                 unrouted.add(request.net_id)
                 failure_message = "one or more negotiated nets did not produce a candidate"
         if len(working) + len(connections) < len(ordered):

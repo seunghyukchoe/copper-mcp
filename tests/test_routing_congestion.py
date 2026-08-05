@@ -401,6 +401,107 @@ def test_negotiated_router_rejects_unbound_candidate_identities_before_accountin
         )
 
 
+def test_negotiated_router_rejects_self_hashed_illegal_geometry_from_custom_router() -> None:
+    snapshot = _crossing_snapshot()
+    horizontal, vertical = _requests(snapshot)
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=(horizontal, vertical),
+    )
+    reference = AStarRouter().propose(snapshot, horizontal)
+    assert reference.candidate is not None
+    candidate = reference.candidate
+
+    def self_hashed_path(vertices: tuple[PointNM, ...]) -> RouteCandidate:
+        path = RoutePath(vertices)
+        patch = replace(candidate.patch, paths=(path,))
+        cost = RouteCost(
+            length_nm=patch.length_nm,
+            bend_count=path.bend_count,
+            bend_cost_nm=path.bend_count * candidate.settings.bend_penalty_nm,
+            proximity_steps=0,
+            proximity_cost_nm=0,
+            via_cost_nm=0,
+            total_cost_nm=patch.length_nm + path.bend_count * candidate.settings.bend_penalty_nm,
+        )
+        return _resign(
+            replace(
+                candidate,
+                patch=patch,
+                cost=cost,
+                metrics=replace(
+                    candidate.metrics,
+                    wire_length_nm=patch.length_nm,
+                    expanded_states=1,
+                    peak_frontier_states=1,
+                    obstacle_checks=0,
+                ),
+            )
+        )
+
+    # The first path crosses V's selected-layer pad; the second does not start on H's pad.
+    # Both have authentic self-hashes and request metadata, so only independent core replay can
+    # distinguish them from a legal proposal.
+    invalid_candidates = (
+        self_hashed_path(
+            (
+                PointNM(2_000_000, 5_000_000),
+                PointNM(6_000_000, 5_000_000),
+                PointNM(6_000_000, 1_000_000),
+                PointNM(10_000_000, 1_000_000),
+                PointNM(10_000_000, 5_000_000),
+            )
+        ),
+        self_hashed_path(
+            (
+                PointNM(2_000_000, 4_000_000),
+                PointNM(10_000_000, 4_000_000),
+                PointNM(10_000_000, 5_000_000),
+            )
+        ),
+    )
+
+    class SelfHashedGeometryRouter:
+        def __init__(self, invalid: RouteCandidate) -> None:
+            self.invalid = invalid
+            self.reference = AStarRouter()
+
+        def propose(
+            self, router_snapshot: object, request: RouteRequest, **kwargs: object
+        ) -> RouteResult:
+            if request.net_id == H_NET:
+                return RouteResult(candidate=self.invalid)
+            return self.reference.propose(router_snapshot, request, **kwargs)
+
+    for invalid in invalid_candidates:
+        _assert_unbound_router_result(
+            negotiate_routes(snapshot, envelope, router=SelfHashedGeometryRouter(invalid))
+        )
+
+
+def test_negotiated_router_accepts_reference_equivalent_custom_router_after_replay() -> None:
+    snapshot = _crossing_snapshot()
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_requests(snapshot),
+    )
+
+    class ReferenceEquivalentRouter:
+        def __init__(self) -> None:
+            self.reference = AStarRouter()
+
+        def propose(
+            self, router_snapshot: object, request: RouteRequest, **kwargs: object
+        ) -> RouteResult:
+            return self.reference.propose(router_snapshot, request, **kwargs)
+
+    result = negotiate_routes(snapshot, envelope, router=ReferenceEquivalentRouter())
+
+    assert result.status is NegotiatedRoutingStatus.COMPLETED
+    assert result.ok
+    assert len(result.candidates) == 2
+
+
 def test_negotiated_router_rejects_unbound_connections_and_router_failures_atomically() -> None:
     snapshot = _crossing_snapshot()
     envelope = NegotiatedRoutingRequest(
@@ -461,7 +562,7 @@ def test_negotiated_router_rejects_unbound_connections_and_router_failures_atomi
     _assert_unbound_router_result(negotiate_routes(snapshot, envelope, router=MalformedRouter()))
 
 
-def test_negotiated_router_discards_prior_partial_pass_before_next_iteration() -> None:
+def test_negotiated_router_discards_prior_partial_pass_when_replay_is_cancelled() -> None:
     snapshot = _crossing_snapshot()
     envelope = NegotiatedRoutingRequest(
         board_revision=snapshot.snapshot_digest,
@@ -492,7 +593,9 @@ def test_negotiated_router_discards_prior_partial_pass_before_next_iteration() -
     router = FirstCandidateThenNoPath()
     result = negotiate_routes(snapshot, envelope, router=router, cancelled=cancelled)
 
-    assert router.calls == 2
+    # The candidate-producing call is never published when the independent reference replay is
+    # cancelled before the next custom-router invocation.
+    assert router.calls == 1
     assert result.status is NegotiatedRoutingStatus.CANCELLED
     assert result.iterations == 1
     assert result.candidates == ()
@@ -685,44 +788,20 @@ def test_negotiated_acceptance_rejects_zero_overflow_physical_clearance_violatio
     ledger.add_candidate(vertical)
     assert ledger.overflow_resources() == ()
 
-    class ParallelRouter:
-        def propose(
-            self, _snapshot: object, request: RouteRequest, **_kwargs: object
-        ) -> RouteResult:
-            return RouteResult(candidate=horizontal if request.net_id == H_NET else vertical)
-
-    requests = (
-        RouteRequest(snapshot.snapshot_digest, H_NET, LAYER, 1, _physical_settings()),
-        RouteRequest(snapshot.snapshot_digest, V_NET, LAYER, 2, _physical_settings()),
+    result = verify_negotiated_physical_clearance(
+        snapshot,
+        (horizontal, vertical),
+        layer_id=LAYER,
+        max_pair_checks=2,
     )
-    envelope = NegotiatedRoutingRequest(
-        board_revision=snapshot.snapshot_digest,
-        requests=requests,
-        max_iterations=2,
-    )
-    result = negotiate_routes(snapshot, envelope, router=ParallelRouter())
 
-    assert result.status is NegotiatedRoutingStatus.NO_PATH
-    assert result.candidates == ()
-    assert result.unrouted_nets == (H_NET, V_NET)
-    assert result.overflow_resources == ()
-    assert result.total_physical_checks == 2
+    assert result.failure is PhysicalClearanceFailure.CLEARANCE_VIOLATION
+    assert result.pair_checks == 1
     assert result.diagnostic == "negotiated candidates violate pairwise physical clearance"
-    assert result == negotiate_routes(snapshot, envelope, router=ParallelRouter())
 
 
-def test_physical_clearance_failure_discards_connection_evidence_atomically() -> None:
+def test_replay_failure_discards_prior_candidate_and_connection_evidence_atomically() -> None:
     snapshot = _physical_clearance_snapshot()
-    horizontal = _physical_candidate(
-        snapshot,
-        H_NET,
-        (RoutePath((PointNM(1_000_000, 3_000_000), PointNM(9_000_000, 3_000_000))),),
-    )
-    vertical = _physical_candidate(
-        snapshot,
-        V_NET,
-        (RoutePath((PointNM(1_000_000, 3_900_000), PointNM(9_000_000, 3_900_000))),),
-    )
     connection = RouteConnection(
         base_revision=snapshot.snapshot_digest,
         start_pad_id="pad:c1",
@@ -731,15 +810,16 @@ def test_physical_clearance_failure_discards_connection_evidence_atomically() ->
         component_objects=2,
     )
 
-    class ParallelRouter:
+    class CandidateThenUnboundConnectionRouter:
+        def __init__(self) -> None:
+            self.reference = AStarRouter()
+
         def propose(
-            self, _snapshot: object, request: RouteRequest, **_kwargs: object
+            self, router_snapshot: object, request: RouteRequest, **kwargs: object
         ) -> RouteResult:
-            if request.net_id == H_NET:
-                return RouteResult(candidate=horizontal)
-            if request.net_id == V_NET:
-                return RouteResult(candidate=vertical)
-            return RouteResult(connected=connection)
+            if request.net_id == C_NET:
+                return RouteResult(connected=connection)
+            return self.reference.propose(router_snapshot, request, **kwargs)
 
     requests = (
         RouteRequest(snapshot.snapshot_digest, H_NET, LAYER, 1, _physical_settings()),
@@ -753,10 +833,10 @@ def test_physical_clearance_failure_discards_connection_evidence_atomically() ->
             requests=requests,
             max_iterations=1,
         ),
-        router=ParallelRouter(),
+        router=CandidateThenUnboundConnectionRouter(),
     )
 
-    assert result.status is NegotiatedRoutingStatus.NO_PATH
+    assert result.status is NegotiatedRoutingStatus.INVALID_REQUEST
     assert result.candidates == ()
     assert result.connections == ()
     assert result.overflow_resources == ()
