@@ -182,14 +182,15 @@ fresh CopperMCP process still fail closed. The process salt and token never cros
 boundary.
 
 The active KiCad adapter accepts front- or back-side footprints with orthogonal transforms and
-unfilled rectangular `fp_rect` courtyard centerlines on matching `F.CrtYd`/`B.CrtYd`; unsupported
-footprint or courtyard forms fail closed before a scene or placement view exists. KiCad-authored
+unfilled orthogonal `fp_rect`, `fp_poly`, or closed `fp_line` courtyard centerlines on matching
+`F.CrtYd`/`B.CrtYd`; unsupported footprint or courtyard forms fail closed before a scene or
+placement view exists. KiCad-authored
 board-frame child coordinates are imported without a second back-side mirror. Placement subjects are
 projected from the same Board IR snapshot, and the supplied source bytes must match its source
 revision. AI output remains typed placement intent, a locked footprint cannot be moved, and
-`courtyard_overlap` is `proven_clear` or `violated` for the exact same-side rectangular-courtyard
-subset; front/back courtyards are independent and unsupported topology fails before evaluation.
-Padless footprints remain unavailable as placement subjects, but supported rectangular courtyards
+`courtyard_overlap` is `proven_clear` or `violated` for the exact same-side simple-orthogonal
+courtyard subset; front/back courtyards are independent and unsupported topology fails before
+evaluation. Padless footprints remain unavailable as placement subjects, but supported orthogonal courtyards
 are retained as stationary collision envelopes and are excluded from candidate manifests.
 Direct model-generated KiCad mutation remains prohibited. The bounded file-level placement apply
 tool is separately operator-gated and placement-token-scoped; unsupported source constructs and

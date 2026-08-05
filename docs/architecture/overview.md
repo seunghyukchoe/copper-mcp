@@ -53,7 +53,7 @@ live revision before it can release the synchronous connection.
 | `mcp_server.py` | MCP tools/resources and transport configuration. |
 
 Board IR `0.2.0` is the domain and source-adapter foundation. It adds immutable footprint pose,
-side, lock state, total pad ownership, and bounded board-frame rectangular courtyard rings to the
+side, lock state, total pad ownership, and bounded board-frame simple orthogonal courtyard rings to the
 geometry already used by routing. A narrow deterministic
 [two-pin routing baseline](routing-baseline.md) now produces immutable in-memory candidates for
 supported synthetic Board IR inputs. The pure adapter can serialize an exact replayed candidate in
@@ -125,13 +125,13 @@ contract.
 
 Placement preview resolves its subjects from the same Board IR snapshot and refuses source bytes
 whose revision does not match. Observation now accepts the bounded front- and back-side,
-orthogonal, unfilled-rectangular-courtyard subset and imports KiCad's authored child coordinates
+orthogonal, unfilled-courtyard subset (rectangles, polygons, and closed line chains) and imports KiCad's authored child coordinates
 without a second mirror. The placement derivative remains deliberately stricter: front side only,
 with unsupported topology and back-side edits failing closed. A locked footprint cannot be moved.
-`courtyard_overlap` is exact for the bounded rectangular Board IR subset: same-side rings return
+`courtyard_overlap` is exact for the bounded simple orthogonal Board IR subset: same-side rings return
 `proven_clear` or `violated`, while front/back rings are evaluated independently. Unsupported
 topology fails closed before the view exists. Padless footprints remain unplaceable, while their
-supported rectangular courtyards stay in the stationary collision envelope. File-backed placement
+supported orthogonal courtyards stay in the stationary collision envelope. File-backed placement
 apply now exists as a separate,
 default-off, placement-token-scoped operation for the front-side orthogonal source-preserving
 subset; models never write KiCad syntax, mutate a live editor, or bypass deterministic candidate

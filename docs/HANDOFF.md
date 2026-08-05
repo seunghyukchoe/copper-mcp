@@ -97,10 +97,11 @@ These are not style preferences. Most of them were paid for with a bug. Preserve
   side flips, post-apply DRC/scene evidence, undo transactions, and live IPC mutation remain
   outside the gate.
 - **Courtyard coverage is deliberately narrow.** The adapter observes bounded front/back
-  orthogonal footprints with matching rectangular courtyard layers, while the placement serializer
-  and apply path remain front-side-only. Line, polygon, arc, open, mixed, or mismatched courtyard
-  topology fails closed. Same-side rectangular overlap is evaluated exactly; configurable clearance
-  and general topology remain open.
+  orthogonal footprints with matching unfilled `fp_rect`, orthogonal `fp_poly`, or closed
+  orthogonal `fp_line` courtyard layers, while the placement serializer and apply path remain
+  front-side-only and rectangle-only. Arcs, curves, diagonals, filled, open, branching, mixed, or
+  mismatched courtyard topology fails closed. Same-side simple-orthogonal overlap is evaluated
+  exactly; configurable clearance and general topology remain open.
 - **Apply gives a pre-apply copy, not a KiCad undo step.** Restoring is manual. IPC-based
   one-undo-commit apply is designed and deferred.
 - **Renders are whole-board even for a windowed scene**, and are advisory, never geometric

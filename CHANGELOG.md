@@ -16,6 +16,14 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Board IR and placement legality now accept a bounded exact courtyard topology: unfilled
+  orthogonal `fp_poly` shapes and unordered closed orthogonal `fp_line` chains on the matching
+  KiCad courtyard layer, alongside rectangles. The legalizer uses integer positive-area overlap
+  rather than bounding boxes, charges its existing work budget, and refuses diagonal, curved,
+  filled, open, branching, duplicate-edge, or otherwise unsupported shapes. The source fixture is
+  resaved by KiCad 10.0.5 and has a zero-violation/zero-unconnected DRC oracle. Placement apply
+  remains rectangular-only and does not rewrite this new observation topology.
+
 - Added a read-only live KiCad IPC fidelity oracle. When launched by a KiCad plugin with the
   instance socket and token, it binds one confirmed live serialization to Board IR and Circuit
   Scene through redacted digest equality evidence. Missing plugin credentials produce a canonical
