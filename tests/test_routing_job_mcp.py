@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import sqlite3
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,6 +19,15 @@ from copper_mcp.routing_job_service import (
     RoutingJobServiceError,
     _prepare_layered_job,
     execute_routing_job,
+)
+from copper_mcp.routing_job_service import (
+    export_routing_candidate as export_routing_candidate_service,
+)
+from copper_mcp.routing_job_service import (
+    get_routing_job as get_routing_job_service,
+)
+from copper_mcp.routing_job_service import (
+    start_routing_job as start_routing_job_service,
 )
 
 FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "two-pad.kicad_pcb"
@@ -224,5 +234,83 @@ def test_job_worker_persists_result_and_explicit_geometry_export(tmp_path: Path)
             )
         assert exported.structured_content["geometry_disclosure"] == "explicitly_authorized"
         assert exported.structured_content["candidate"]["candidate_id"] == completed.candidate_id
+    finally:
+        repository.close()
+
+
+def test_service_malformed_job_id_commits_expired_request_cleanup(tmp_path: Path) -> None:
+    """Malformed service handles reach the repository's purge-first lookup boundary."""
+
+    settings, request, authorization = _workspace(tmp_path)
+    path = tmp_path / "malformed-service-job.sqlite3"
+    repository = RoutingJobRepository(path, ttl_ms=10)
+    try:
+        with patch("copper_mcp.routing.job_repository._now_ms", return_value=100):
+            started = start_routing_job_service(
+                {"request": request, "authorization_digest": authorization},
+                settings,
+                repository,
+            )
+
+        with patch("copper_mcp.routing.job_repository._now_ms", return_value=110):
+            with pytest.raises(RoutingJobServiceError, match="routing job is unavailable"):
+                get_routing_job_service(
+                    {"job_id": "malformed-job-id", "authorization_digest": authorization},
+                    repository,
+                )
+
+        with sqlite3.connect(path) as connection:
+            retained = connection.execute(
+                "SELECT request_json FROM routing_job_requests WHERE job_id = ?",
+                (started["job_id"],),
+            ).fetchone()
+        assert retained is None
+    finally:
+        repository.close()
+
+
+def test_service_malformed_candidate_id_commits_expired_geometry_cleanup(tmp_path: Path) -> None:
+    """Malformed candidate handles reach export retention before the service refuses."""
+
+    settings, request, authorization = _workspace(tmp_path)
+    path = tmp_path / "malformed-service-export.sqlite3"
+    repository = RoutingJobRepository(path, ttl_ms=10)
+    try:
+        with patch("copper_mcp.routing.job_repository._now_ms", return_value=100):
+            started = start_routing_job_service(
+                {"request": request, "authorization_digest": authorization},
+                settings,
+                repository,
+            )
+        with (
+            patch("copper_mcp.routing.job_repository._now_ms", return_value=102),
+            patch("copper_mcp.routing.jobs._store_clock_ms", return_value=102),
+            patch("copper_mcp.routing.job_worker._wall_clock_ms", return_value=102),
+        ):
+            completed = execute_routing_job(
+                str(started["job_id"]), authorization, settings, repository
+            )
+        assert completed.candidate_id is not None
+
+        with patch("copper_mcp.routing.job_repository._now_ms", return_value=112):
+            with pytest.raises(
+                RoutingJobServiceError,
+                match="routing candidate export is unavailable",
+            ):
+                export_routing_candidate_service(
+                    {
+                        "job_id": started["job_id"],
+                        "candidate_id": "malformed-candidate-id",
+                        "authorization_digest": authorization,
+                    },
+                    repository,
+                )
+
+        with sqlite3.connect(path) as connection:
+            retained = connection.execute(
+                "SELECT candidate_json FROM routing_candidate_exports WHERE candidate_id = ?",
+                (completed.candidate_id,),
+            ).fetchone()
+        assert retained is None
     finally:
         repository.close()

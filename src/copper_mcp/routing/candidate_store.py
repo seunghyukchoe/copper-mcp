@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final, cast
+from typing import Final, NoReturn, cast
 
 from copper_mcp.routing.jobs import RoutingJobSpec
 
@@ -497,6 +497,12 @@ class CandidateManifestStore:
         else:
             self._connection.rollback()
 
+    def _raise_not_found_after_retention(self) -> NoReturn:
+        """Commit expired-row cleanup before returning the uniform public miss."""
+
+        self._finish(commit=True)
+        raise CandidateManifestNotFoundError("candidate manifest is unavailable") from None
+
     def _purge_locked(self, now_ms: int) -> int:
         cursor = self._connection.execute(
             "DELETE FROM routing_candidate_manifests WHERE expires_at_ms <= ?", (now_ms,)
@@ -615,19 +621,15 @@ class CandidateManifestStore:
 
     def get(self, candidate_id: str, *, now_ms: int | None = None) -> CandidateManifest:
         timestamp = self._time(now_ms)
-        if not isinstance(candidate_id, str) or _SHA256_RE.fullmatch(candidate_id) is None:
-            raise CandidateManifestNotFoundError("candidate manifest is unavailable")
         with self._lock:
             self._transaction()
             try:
                 self._purge_locked(timestamp)
+                if not isinstance(candidate_id, str) or _SHA256_RE.fullmatch(candidate_id) is None:
+                    self._raise_not_found_after_retention()
                 row = self._row_locked(candidate_id)
                 if row is None:
-                    # Expiry is a durable retention boundary, even when the caller only
-                    # observes a miss. Commit the purge before returning the uniform not-found
-                    # error; rolling it back would retain expired board-derived metadata.
-                    self._finish(commit=True)
-                    raise CandidateManifestNotFoundError("candidate manifest is unavailable")
+                    self._raise_not_found_after_retention()
                 manifest = self._manifest_from_row(row)
                 self._finish(commit=True)
                 return manifest

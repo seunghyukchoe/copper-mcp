@@ -38,7 +38,11 @@ from copper_mcp.routing import (
     RoutingJobRepository,
     RoutingJobStatus,
 )
-from copper_mcp.routing.job_repository import RoutingCandidateExportUnavailableError
+from copper_mcp.routing.job_repository import (
+    RoutingCandidateExportUnavailableError,
+    RoutingJobRequestEnvelope,
+    RoutingJobRequestUnavailableError,
+)
 from copper_mcp.routing.job_worker import (
     CancellationProbe,
     RoutingJobCancelledError,
@@ -114,6 +118,19 @@ def _outer(
 
 def _authorization(fields: Mapping[str, Any]) -> str:
     return _digest("authorization_digest", fields.get("authorization_digest"))
+
+
+def _lookup_job(
+    repository: RoutingJobRepository,
+    job_id: Any,
+    authorization_digest: Any,
+) -> tuple[RoutingJobRecord, RoutingJobRequestEnvelope]:
+    """Use the repository's purge-first handle boundary for public job lookups."""
+
+    try:
+        return repository.get(job_id, authorization_digest)
+    except RoutingJobRequestUnavailableError:
+        raise RoutingJobServiceError("routing job is unavailable") from None
 
 
 def _prepare_layered_job(payload: object, settings: Settings) -> PreparedLayeredRoutingJob:
@@ -269,9 +286,11 @@ def get_routing_job(
     repository: RoutingJobRepository,
 ) -> dict[str, object]:
     fields = _outer("routing job lookup", payload, ("job_id", "authorization_digest"))
-    authorization = _authorization(fields)
-    job_id = _digest("job_id", fields.get("job_id"))
-    record, envelope = repository.get(job_id, authorization)
+    record, envelope = _lookup_job(
+        repository,
+        fields["job_id"],
+        fields["authorization_digest"],
+    )
     return _job_document(record, request=envelope.request)
 
 
@@ -285,8 +304,6 @@ def cancel_routing_job(
         ("job_id", "authorization_digest"),
         optional=("reason",),
     )
-    authorization = _authorization(fields)
-    job_id = _digest("job_id", fields.get("job_id"))
     reason = fields.get("reason", "caller_requested")
     if (
         not isinstance(reason, str)
@@ -294,7 +311,9 @@ def cancel_routing_job(
         or any(ord(character) < 0x20 for character in reason)
     ):
         raise RoutingJobServiceError("cancellation reason is malformed")
-    record, _ = repository.get(job_id, authorization)
+    job_id = fields["job_id"]
+    authorization = fields["authorization_digest"]
+    record, _ = _lookup_job(repository, job_id, authorization)
     cancelled = repository.jobs.request_cancel(
         job_id,
         expected_revision=record.revision,
@@ -312,16 +331,27 @@ def export_routing_candidate(
         payload,
         ("job_id", "candidate_id", "authorization_digest"),
     )
-    authorization = _authorization(fields)
-    job_id = _digest("job_id", fields.get("job_id"))
-    candidate_id = _digest("candidate_id", fields.get("candidate_id"))
-    record, _ = repository.get(job_id, authorization)
-    if record.status is not RoutingJobStatus.COMPLETED or record.candidate_id != candidate_id:
-        raise RoutingJobServiceError("routing candidate export is unavailable")
+    job_id = fields["job_id"]
+    candidate_id = fields["candidate_id"]
+    authorization = fields["authorization_digest"]
     try:
-        return repository.exports.get(job_id, candidate_id, authorization)
-    except RoutingCandidateExportUnavailableError as error:
-        raise RoutingJobServiceError("routing candidate export is unavailable") from error
+        # Export storage owns geometry retention, so it validates every public candidate handle
+        # before the lifecycle lookup.  Nothing is returned until that lookup confirms the
+        # completed job and caller context, preserving the no-geometry-on-miss boundary.
+        candidate = repository.exports.get(job_id, candidate_id, authorization)
+    except RoutingCandidateExportUnavailableError:
+        candidate = None
+    try:
+        record, _ = _lookup_job(repository, job_id, authorization)
+    except RoutingJobServiceError:
+        raise RoutingJobServiceError("routing candidate export is unavailable") from None
+    if (
+        candidate is None
+        or record.status is not RoutingJobStatus.COMPLETED
+        or record.candidate_id != candidate_id
+    ):
+        raise RoutingJobServiceError("routing candidate export is unavailable")
+    return candidate
 
 
 def _failure_code(code: LayeredRouteFailureCode) -> RoutingJobFailureCode:

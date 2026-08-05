@@ -214,6 +214,11 @@ All notable changes are documented here. The format follows
   timestamps remain validated before any transaction, and TTL remains an access-retention policy,
   not secure erasure.
 
+- Public routing-job/export lookups now defer store-owned handle validation until after retention
+  cleanup, and candidate-manifest lookup purges before malformed-ID not-found handling. Fixed
+  diagnostics and no-disclosure behavior are unchanged; timestamps remain validated first and
+  TTL is not secure erasure.
+
 ### Changed
 
 - Corrected the spatial-index benchmark to count bucket candidates examined by the exact bounds

@@ -111,6 +111,27 @@ def test_expiry_is_bounded_and_unknown_and_expired_are_uniform(tmp_path: Path) -
     connection.close()
 
 
+def test_malformed_candidate_id_commits_expired_manifest_purge(tmp_path: Path) -> None:
+    """Malformed manifest handles cannot bypass the durable TTL retention boundary."""
+
+    path = tmp_path / "malformed-manifest-expiry.sqlite3"
+    manifest = _manifest()
+    with CandidateManifestStore(path, ttl_ms=10) as store:
+        store.put(manifest, now_ms=100)
+        with pytest.raises(CandidateManifestNotFoundError) as malformed:
+            store.get("malformed-candidate-id", now_ms=110)
+        with pytest.raises(CandidateManifestNotFoundError) as unknown:
+            store.get(_digest("d"), now_ms=110)
+        assert str(malformed.value) == str(unknown.value)
+
+    with sqlite3.connect(path) as connection:
+        retained = connection.execute(
+            "SELECT manifest_json FROM routing_candidate_manifests WHERE candidate_id = ?",
+            (manifest.candidate_id,),
+        ).fetchone()
+    assert retained is None
+
+
 def test_capacity_purges_expired_rows_before_refusing_new_manifest(tmp_path: Path) -> None:
     path = tmp_path / "candidate-manifests.sqlite3"
     first = _manifest(fill="a")
