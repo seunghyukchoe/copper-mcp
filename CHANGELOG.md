@@ -234,9 +234,11 @@ All notable changes are documented here. The format follows
 
 ### Security
 
-- `make security` and the hosted security workflow now pass `.` to `pip-audit`, resolving
-  CopperMCP's declared project graph instead of reporting unrelated packages installed in the
-  ambient interpreter. Secret scanning is unchanged.
+- `make security` and the hosted security workflow now pass `.` to `pip-audit`, resolving the
+  default production dependency graph instead of reporting unrelated packages installed in the
+  ambient interpreter. Project-path mode excludes every optional group (`dev`, `security`, and
+  `kicad`) even though CI installs `.[security]` to run the auditor; those groups need separate
+  explicit audits or lock evidence. Secret scanning is unchanged.
 
 - Hardened placement application after review: bounded manifest pose, grid, legality, and evidence
   fields are rejected before board parsing; the destructive MCP request is closed at its nested

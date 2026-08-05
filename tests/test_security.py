@@ -55,11 +55,17 @@ class WorkspaceSecurityTests(unittest.TestCase):
         self.assertIn("$(PYTHON) -m pip_audit .", make_recipes)
         self.assertNotIn("$(PYTHON) -m pip_audit", make_recipes)
 
-        workflow_run = _workflow_named_step_run(
+        workflow_secret_scan_run = _workflow_named_step_run(
+            REPOSITORY_ROOT / ".github/workflows/security.yml",
+            "Scan repository for secrets",
+        )
+        self.assertEqual(workflow_secret_scan_run, "python scripts/check_secrets.py")
+
+        workflow_dependency_audit_run = _workflow_named_step_run(
             REPOSITORY_ROOT / ".github/workflows/security.yml",
             "Audit Python dependencies",
         )
-        self.assertEqual(workflow_run, "python -m pip_audit .")
+        self.assertEqual(workflow_dependency_audit_run, "python -m pip_audit .")
 
     def test_descriptor_anchored_read_returns_exact_immutable_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
