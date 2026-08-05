@@ -766,3 +766,14 @@ are the audit copies for the original run IDs.
 | Metrics | Baseline `previewed`; collision `refused`; `stationary_padless_courtyards=1`; `collision_courtyard_overlap=violated`; source SHA-256 `sha256:cd235d2a11a12ef68e9f8039f05f790494f7e4969e190c495396f13fcbd77102`; workspace mutations `0` |
 | Artifact | [`2026-08-05-padless-courtyard.json`](../../benchmarks/results/placement/2026-08-05-padless-courtyard.json) |
 | Interpretation | This measures the bounded fix prompted by KiCad's courtyard-placement semantics and the review-bot reproduction. It covers only rectangular Board IR v0.2 courtyards; custom clearance, arbitrary topology, DRC, apply, fabrication, and FreeRouting parity remain unclaimed. |
+
+#### B-051 — cooperative IPC parser deadline replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:fe76a3536d5613dd4825f6e8ffbbbf8e3d97eb341ca4c6fc9d6de333297782ca` |
+| Date and commit | 2026-08-05; source commit `c00ea8c59cb69560772d14ae6cfc53b794da1a2e` |
+| Configuration | `copper-mcp/benchmark/ipc-deadline-parse/v1`; one 900,011-byte malformed board payload with an already-expired typed callback and fixed parser ceilings |
+| Metrics | Deadline refusal `true`; callback invoked once before parser materialization; parser completion `false`; elapsed `24,875 ns` on this host; payload digest recorded in the artifact |
+| Artifact | [`2026-08-05-ipc-deadline-parse.json`](../../benchmarks/results/routing/2026-08-05-ipc-deadline-parse.json) |
+| Interpretation | This measures cooperative early refusal and typed error preservation. It does not claim hard process pre-emption, interruption during one atomic UTF-8 decode, or interruption of a blocking official KiCad IPC call. |

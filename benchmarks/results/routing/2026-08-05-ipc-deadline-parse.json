@@ -1,0 +1,19 @@
+{
+  "date_utc": "2026-08-05",
+  "metrics": {
+    "deadline_callback_calls": 1,
+    "deadline_refused": true,
+    "elapsed_ns": 24875,
+    "parser_invocation_completed": false,
+    "payload_bytes": 900011,
+    "payload_sha256": "sha256:71e456c10b05f480ab595c50cdec77205e4286d8f260a1ca971d6ac8130460cc"
+  },
+  "not_claimed": [
+    "hard process preemption",
+    "UTF-8 decode interruption",
+    "blocking KiCad IPC call interruption"
+  ],
+  "run_id": "sha256:fe76a3536d5613dd4825f6e8ffbbbf8e3d97eb341ca4c6fc9d6de333297782ca",
+  "schema": "copper-mcp/benchmark/ipc-deadline-parse/v1",
+  "source_commit": "c00ea8c59cb69560772d14ae6cfc53b794da1a2e"
+}
