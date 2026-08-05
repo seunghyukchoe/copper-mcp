@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Route the public two-pad FreeRouting comparison fixture with CopperMCP.
 
-This is deliberately a narrow, non-MCP benchmark runner.  The comparison harness invokes it
-in a disposable child workspace, so it proves the same preview-and-apply path exposed to the
-MCP server without granting an external benchmark command any access to a user's workspace.
+This is deliberately a narrow, non-MCP benchmark runner. The comparison harness invokes it in a
+disposable child workspace, exercising workspace ``preview_route`` plus the pure
+``apply_route_candidate`` kernel without granting an external benchmark command any access to a
+user's workspace. It does not exercise MCP transport, apply authorization tokens, CAS, backups,
+or atomic publication and must not be described as the public MCP apply-service path.
 """
 
 from __future__ import annotations

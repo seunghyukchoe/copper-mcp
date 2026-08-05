@@ -1,8 +1,8 @@
 {
   "comparison_closed": false,
   "copper_process": {
-    "elapsed_ns": 222048167,
-    "output_sha256": "sha256:b0f8493b6e2b01e4861f86b14eaf9aceaf92fa0aac9318a84c1ba6fcc6768ffb",
+    "elapsed_ns": 217019417,
+    "output_sha256": "sha256:fa8478e410daf85145203f331db0f7161a9b3c9e94507dbc93092db181ff8276",
     "output_status": "valid",
     "returncode": 0,
     "role": "copper_runner",
@@ -12,19 +12,23 @@
     "status": "bound"
   },
   "fixture": {
-    "dsn_sha256": "sha256:55fda62cc8fcd9dc881069b7ec9c74ecefcf23cdccaf2a456e4e70da8797717c",
+    "dsn_sha256": "sha256:1596d6987d8cb5605c9acffd40bff02cd62845d5be31fb4b228c6379472b3210",
+    "dsn_source_export_binding": {
+      "status": "self_attested_unverified",
+      "workflow": "kicad-ui-specctra-dsn-export"
+    },
     "provenance": {
       "license_spdx": "Apache-2.0",
       "origin": "coppermcp-original"
     },
-    "provenance_sha256": "sha256:fe58df4c89ac3cb188305019c062b9e2c0fc1398cfcf3dbc5a4fad0745bf93c8",
-    "source_sha256": "sha256:a45d1b5c5fbbb48a9522dba4a88befaadcc2fb96f1227de9d9f883744508bd35"
+    "provenance_sha256": "sha256:a580643d21461c1fa4714857bdead95366767f5a7c9052a451fd6b5600070b01",
+    "source_sha256": "sha256:f2bb74d00f9195237ecebbf15d55c1e0175c38cc0ca65b3281edf64a3ee45c9c"
   },
   "freerouting_import_binding": {
     "status": "bound"
   },
   "freerouting_process": {
-    "elapsed_ns": 3160354417,
+    "elapsed_ns": 2901804459,
     "returncode": 0,
     "role": "freerouting_dsn_ses",
     "ses_sha256": "sha256:eb016ba1a7a4e680c472787dcf49b5f115c969d33603951b9b9fb3e94ba8fc4a",
@@ -53,54 +57,57 @@
     },
     "reasons": []
   },
-  "recorded_at_utc": "2026-08-05T06:48:25+00:00",
+  "recorded_at_utc": "2026-08-05T07:30:18+00:00",
   "results": [
     {
-      "board_sha256": "sha256:b0f8493b6e2b01e4861f86b14eaf9aceaf92fa0aac9318a84c1ba6fcc6768ffb",
+      "board_sha256": "sha256:fa8478e410daf85145203f331db0f7161a9b3c9e94507dbc93092db181ff8276",
       "drc": {
+        "board_sha256": "sha256:fa8478e410daf85145203f331db0f7161a9b3c9e94507dbc93092db181ff8276",
         "hard_violations": 0,
-        "kicad_version": "10.0.5",
-        "process": {
-          "elapsed_ns": 1610677125,
-          "returncode": 0,
-          "role": "kicad_drc",
-          "status": "ok"
-        },
-        "report_sha256": "sha256:7dad9dca384eec89c9eaed58f56a1b0bf7b89fa4042e996b256ab772c64892e4",
+        "report_sha256": "sha256:9722a51f2d676f65d7eafb0976a6ccd94e5ad1740af7a2925ec73fc274f4f428",
         "status": "ok",
-        "unconnected": 0
+        "unconnected": 0,
+        "workflow": "kicad-gui-drc-report"
       },
-      "elapsed_ns": 222048167,
+      "elapsed_ns": 217019417,
       "length_nm": 20000000,
       "name": "copper_mcp",
       "status": "ok",
       "vias": 0
     },
     {
-      "board_sha256": "sha256:8804a38030061f672eeba1bf519c11d60d81aa1c82d33335c432e21b71f192be",
+      "board_sha256": "sha256:99a6c10f975b155363e5386d2c2906c5d600bfaef02414b6be2b7d01b5c61755",
       "drc": {
+        "board_sha256": "sha256:99a6c10f975b155363e5386d2c2906c5d600bfaef02414b6be2b7d01b5c61755",
         "hard_violations": 0,
-        "kicad_version": "10.0.5",
-        "process": {
-          "elapsed_ns": 1669477875,
-          "returncode": 0,
-          "role": "kicad_drc",
-          "status": "ok"
-        },
-        "report_sha256": "sha256:fed4ef25a412f394b95768b0cc881b0c05fc7f6907378aebd8705053485719c7",
+        "report_sha256": "sha256:c14c15720e5fcad576859e795b59cbe53297eefd154924fe719534d024beeff4",
         "status": "ok",
-        "unconnected": 0
+        "unconnected": 0,
+        "workflow": "kicad-gui-drc-report"
       },
-      "elapsed_ns": 3160354417,
+      "elapsed_ns": 2901804459,
       "length_nm": 20000000,
       "name": "freerouting",
       "status": "ok",
       "vias": 0
     }
   ],
-  "run_id": "sha256:d3ae3243a9d123b59f7abfcc6354aaa1d07b21a802b5606bd74e8b80b3be461d",
+  "run_id": "sha256:03d7d5b951165ba843170afa191bb7b1db5de8420f18d264cd342a5635a446b9",
   "schema": "copper-mcp/benchmark/freerouting-comparison/v1",
   "seed": 0,
+  "source_drc": {
+    "board_sha256": "sha256:f2bb74d00f9195237ecebbf15d55c1e0175c38cc0ca65b3281edf64a3ee45c9c",
+    "hard_violations": 0,
+    "report_sha256": "sha256:6dbc0a14a5ba8594246db23ad81ca5bff1900694bb6ebdf02ea52f8c494378d7",
+    "status": "ok",
+    "unconnected": 1,
+    "workflow": "kicad-gui-drc-report"
+  },
+  "source_drc_binding": {
+    "expected_hard_violations": 0,
+    "expected_intentional_unconnected_items": 1,
+    "status": "bound"
+  },
   "source_preserved": true,
   "status": "unavailable_or_incomplete",
   "timeout_seconds": 120,

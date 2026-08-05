@@ -127,6 +127,80 @@ def test_drc_metrics_accepts_kicad_cli_v10_basename_source_field(
     assert observed == {"source": "result.kicad_pcb"}
 
 
+def test_source_drc_binding_requires_declared_exact_baseline_and_source_hash() -> None:
+    source_sha = "sha256:" + "a" * 64
+    expectation = {"hard_violations": 0, "intentional_unconnected_items": 1}
+    drc = {
+        "status": "ok",
+        "board_sha256": source_sha,
+        "hard_violations": 0,
+        "unconnected": 1,
+        "report_sha256": "sha256:" + "b" * 64,
+    }
+
+    assert benchmark.source_drc_binding(source_sha, drc, expectation)["status"] == "bound"
+    assert benchmark.source_drc_binding(source_sha, drc, None)["status"] == "unavailable"
+    assert (
+        benchmark.source_drc_binding(
+            source_sha,
+            {**drc, "unconnected": 0},
+            expectation,
+        )["status"]
+        == "mismatch"
+    )
+    assert (
+        benchmark.source_drc_binding(
+            source_sha,
+            {**drc, "board_sha256": "sha256:" + "c" * 64},
+            expectation,
+        )["status"]
+        == "mismatch"
+    )
+
+
+def test_gui_source_drc_requires_named_report_and_exact_report_counts(tmp_path: Path) -> None:
+    source = tmp_path / "source.kicad_pcb"
+    source.write_text("(kicad_pcb (version 20240108))\n", encoding="utf-8")
+    report = tmp_path / "source.rpt"
+    report.write_text(
+        "\n".join(
+            (
+                "** Drc report for source.kicad_pcb **",
+                "** Found 0 DRC violations **",
+                "** Found 1 unconnected pads **",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    evidence = benchmark.gui_source_drc_metrics(source, report)
+
+    assert evidence["status"] == "ok"
+    assert evidence["board_sha256"] == _sha(source.read_bytes())
+    assert evidence["report_sha256"] == _sha(report.read_bytes())
+    assert evidence["hard_violations"] == 0
+    assert evidence["unconnected"] == 1
+    assert benchmark.gui_source_drc_metrics(source, None)["status"] == "unavailable"
+    report.write_text("** Drc report for another.kicad_pcb **", encoding="utf-8")
+    assert benchmark.gui_source_drc_metrics(source, report)["status"] == "failed"
+
+
+def test_dsn_export_relationship_is_never_inferred_from_separate_hashes(tmp_path: Path) -> None:
+    provenance = tmp_path / "provenance.json"
+    provenance.write_text(
+        json.dumps(
+            {
+                "origin": "coppermcp-original",
+                "license_spdx": "Apache-2.0",
+                "derivation_statement": "Authored for this test.",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert benchmark.dsn_source_export_binding(provenance) == {"status": "unavailable"}
+
+
 def test_report_process_evidence_never_includes_private_argv_or_child_output() -> None:
     result = benchmark.ProcessResult(
         ("/private/customer/token=never",),
@@ -249,6 +323,11 @@ def test_committed_real_run_remains_explicitly_incomplete_evidence() -> None:
     assert report["status"] == "unavailable_or_incomplete"
     assert report["incomplete_reason"] == "self_attested_unverified"
     assert report["toolchain"]["freerouting_release_provenance_status"] == "verified"
+    assert report["source_drc"]["status"] == "ok"
+    assert report["source_drc"]["hard_violations"] == 0
+    assert report["source_drc"]["unconnected"] == 1
+    assert report["source_drc_binding"]["status"] == "bound"
+    assert report["fixture"]["dsn_source_export_binding"]["status"] == "self_attested_unverified"
     assert all(item["drc"]["status"] == "ok" for item in report["results"])
 
 

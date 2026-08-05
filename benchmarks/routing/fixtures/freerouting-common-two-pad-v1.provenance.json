@@ -1,5 +1,14 @@
 {
   "derivation_statement": "Original CopperMCP two-pad routing fixture, extended with explicit KiCad reference and value properties so KiCad can export the board to Specctra DSN. It contains one intentionally unrouted AUDIO net and no third-party design content.",
+  "dsn_source_export": {
+    "workflow": "kicad-ui-specctra-dsn-export",
+    "status": "self_attested_unverified",
+    "statement": "A KiCad UI export produced this DSN from the public fixture; its transient export path was redacted before commit. The harness does not regenerate or compare DSN output and must not infer a causal relationship from separate content hashes."
+  },
   "license_spdx": "Apache-2.0",
-  "origin": "coppermcp-original"
+  "origin": "coppermcp-original",
+  "source_drc_expectation": {
+    "hard_violations": 0,
+    "intentional_unconnected_items": 1
+  }
 }

@@ -1,4 +1,4 @@
-(pcb "/tmp/coppermcp-terra-freerouting-real/benchmarks/routing/fixtures/freerouting-common-two-pad-v1.dsn"
+(pcb "freerouting-common-two-pad-v1.kicad_pcb"
   (parser
     (string_quote ")
     (space_in_quoted_tokens on)
