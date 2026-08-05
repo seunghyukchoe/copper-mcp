@@ -561,6 +561,9 @@ def _route_capped(
             nx, ny, _ = neighbor
             if not min_x <= nx <= max_x or not min_y <= ny <= max_y:
                 continue
+            tentative_vias = queued_vias + int(is_via)
+            if tentative_vias > via_limit:
+                continue
             relation_checks = len(request.obstacles)
             if is_via:
                 relation_checks += len(request.via_obstacles)
@@ -574,9 +577,6 @@ def _route_capped(
             if _blocked(neighbor, request.obstacles) or (
                 is_via and _via_blocked(current, layers, request.via_obstacles)
             ):
-                continue
-            tentative_vias = queued_vias + int(is_via)
-            if tentative_vias > via_limit:
                 continue
             step_cost = settings.via_cost if is_via else settings.move_cost
             tentative_g = queued_g + step_cost

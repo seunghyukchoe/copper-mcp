@@ -176,6 +176,29 @@ def test_stack_and_via_budgets_fail_closed() -> None:
     assert via_limited.diagnostic.code is LayeredFailureCode.NO_PATH
 
 
+def test_forbidden_vias_do_not_consume_obstacle_budget() -> None:
+    """Both in-bounds via targets are rejected before their keepout relations are inspected."""
+
+    result = route_layered(
+        LayeredAStarRequest(
+            board_revision=REVISION,
+            bounds=(0, 0, 0, 0),
+            start=LayeredPoint(0, 0, 0),
+            goal=LayeredPoint(0, 0, 1),
+            via_obstacles=(LayeredObstacle(0, 1, 1, 1, 1),),
+            layers=(0, 1, 2),
+            settings=LayeredAStarSettings(max_vias=0, max_obstacle_checks=1),
+        )
+    )
+
+    assert result.diagnostic is not None
+    assert result.diagnostic.code is LayeredFailureCode.NO_PATH
+    assert result.metrics.expanded_nodes == 1
+    assert result.metrics.discovered_nodes == 1
+    assert result.metrics.peak_frontier_nodes == 1
+    assert result.metrics.obstacle_checks == 0
+
+
 def _review_capped_via_request(
     *, settings: LayeredAStarSettings | None = None
 ) -> LayeredAStarRequest:
