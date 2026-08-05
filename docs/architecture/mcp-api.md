@@ -423,12 +423,13 @@ back. It is not a KiCad undo step. KiCad's own `-bak` files are never touched.
 Publication is an atomic replace that preserves the board's permission bits. A failure *before*
 the rename leaves the board untouched and is a clean refusal; a failure *after* it means the
 board is already changed, and that is reported truthfully as **`applied_but_unverified`** with
-the best-effort observed final digest rather than as "nothing changed". The final digest may
-equal the original when guarded rollback succeeds, or may describe a concurrent writer. In that
+the best-effort observed final digest rather than as "nothing changed". The final digest may be
+the original when guarded rollback succeeds, a concurrent writer, or `null` when the board is
+missing/unreadable. In that
 case a *guarded* rollback runs - it restores the pre-apply bytes only if the file still holds
 exactly what this apply wrote, so a concurrent writer's newer bytes are never clobbered. The
-service also takes one last best-effort digest observation before a successful placement response
-so a visible rewrite after verification is not reported as `applied`; a longer editor transaction
+service also takes one last best-effort digest observation before a successful apply response so
+a visible rewrite after verification is not reported as `applied`; a longer editor transaction
 would still be needed to close the last nanosecond race. The `verification` matrix reports byte
 preservation, a fail-closed reparse and Board IR equality as `passed`, and reports
 `kicad_opened_board` and `drc_after_apply` as `not_run` - an applied board carries no DRC

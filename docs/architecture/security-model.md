@@ -182,8 +182,9 @@ tool is separately operator-gated and placement-token-scoped; unsupported source
 live IPC mutation still fail closed. After publication it re-renders and reparses the authorized
 bytes, guards recovery against a concurrent digest, spends the capability exactly once, and takes
 a final best-effort digest observation before reporting success. An `applied_but_unverified`
-response therefore reports the observed final digest, which may be the restored original or a
-concurrent writer; it is not a promise that a new revision remains on disk.
+response therefore reports the observed final digest, which may be the restored original, a
+concurrent writer, or `null` when the board is missing/unreadable; it is not a promise that a new
+revision remains on disk.
 
 MCP schematic delivery validates a closed outer wrapper, closed Circuit Intent content, and closed
 structured output. Scalars, lists, and extra fields at those boundaries fail without echoing the

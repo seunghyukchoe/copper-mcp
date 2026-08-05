@@ -123,8 +123,13 @@ All notable changes are documented here. The format follows
   stale published digest. Published placement bytes are re-rendered and reparsed before a success
   response, followed by a final best-effort digest observation that catches a visible rewrite after
   verification. `applied_but_unverified` now explicitly permits a restored original revision or
-  concurrent bytes; clients use the reported digest and diagnostic rather than assuming that the
-  authorized revision remains on disk.
+  concurrent bytes, and uses a null after-revision when the board cannot be observed; clients use
+  the reported digest and diagnostic rather than assuming that the authorized revision remains on
+  disk.
+
+- Route and placement apply now distinguish an unreadable or missing board at the final
+  publication observation from the expected digest: the capability is consumed and the result is
+  `applied_but_unverified` with a null after-revision instead of a false `applied` response.
 
 - Routing-job and candidate-manifest TTL misses now commit their expiry purge before returning
   the uniform unavailable diagnostic, so expired board-derived metadata cannot reappear after a

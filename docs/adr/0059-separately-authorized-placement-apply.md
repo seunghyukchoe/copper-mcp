@@ -73,9 +73,10 @@ validation and explicit operator authorization.
 - Post-publication verification now checks the actual published bytes against a fresh authorized
   replay and Board IR parse. A concurrent writer or recovery-sync failure returns
   `applied_but_unverified` with the digest observed on disk and cannot replay the same capability;
-  that digest may equal the original when guarded rollback succeeded. A final best-effort
-  observation before success catches a visible rewrite after verification, while a longer editor
-  transaction would still be required to close the last nanosecond race.
+  that digest may equal the original when guarded rollback succeeded or be `null` when the board
+  cannot be observed. A final best-effort observation before success catches a visible rewrite
+  after verification, while a longer editor transaction would still be required to close the last
+  nanosecond race.
 - A real KiCad DRC run, post-apply scene observation, side-aware flip serialization, arbitrary
   courtyard topology, and a genuine KiCad undo transaction remain open. The response reports
   KiCad-open and DRC stages as `not_run` until those checks are actually executed.
