@@ -131,7 +131,7 @@ def parse_route_bundle_request(payload: Any) -> RouteBundleRequest:
         known_fields("request", fields, frozenset(_REQUIRED_FIELDS + _OPTIONAL_FIELDS))
         required_fields("request", fields, _REQUIRED_FIELDS)
         raw_refs = fields["net_ref_ids"]
-        if not isinstance(raw_refs, list):
+        if type(raw_refs) is not list:
             raise RouteBundleError("net_ref_ids must be an ordered list")
         if not 2 <= len(raw_refs) <= _MAX_NETS:
             raise RouteBundleError("route bundles require a bounded set of net references")

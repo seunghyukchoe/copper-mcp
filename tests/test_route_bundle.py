@@ -126,18 +126,34 @@ def test_preview_refuses_stale_or_duplicate_reference_bundle_without_a_partial_p
         preview_route_bundle(duplicate, Settings(workspace=tmp_path))
 
 
-def test_oversized_reference_list_refuses_before_element_iteration(tmp_path: Path) -> None:
-    class ExplosiveList(list[object]):
+def test_oversized_builtin_reference_list_refuses_before_element_validation(
+    tmp_path: Path,
+) -> None:
+    source = FIXTURE.read_bytes()
+    board = tmp_path / FIXTURE.name
+    board.write_bytes(source)
+    payload = _payload(board.name, source)
+    payload["net_ref_ids"] = [object()] * 9
+
+    with pytest.raises(RouteBundleError, match="bounded set of net references"):
+        parse_route_bundle_request(payload)
+
+
+def test_list_subclass_refuses_before_len_or_iteration(tmp_path: Path) -> None:
+    class ExplosiveLenList(list[object]):
+        def __len__(self) -> int:
+            raise AssertionError("list subclasses must be rejected before len")
+
         def __iter__(self):  # type: ignore[override]
-            raise AssertionError("oversized references must not be iterated")
+            raise AssertionError("list subclasses must be rejected before iteration")
 
     source = FIXTURE.read_bytes()
     board = tmp_path / FIXTURE.name
     board.write_bytes(source)
     payload = _payload(board.name, source)
-    payload["net_ref_ids"] = ExplosiveList([object()] * 9)
+    payload["net_ref_ids"] = ExplosiveLenList([object()] * 9)
 
-    with pytest.raises(RouteBundleError, match="bounded set of net references"):
+    with pytest.raises(RouteBundleError, match="net_ref_ids must be an ordered list"):
         parse_route_bundle_request(payload)
 
 
