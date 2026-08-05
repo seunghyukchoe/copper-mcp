@@ -1034,3 +1034,13 @@ are the audit copies for the original run IDs.
 | Metric preservation | The regenerated three-replay signature remains `29b28fbab5baa7f8df04a958d21c90dbcd0ac53b1344f18d69156da5e7304bdd`: 6/6 routed nets, `205,000,000 nm` total wire length, 8 legal placement candidates after 96 evaluations, and zero internal routing violations. |
 | Replay guard | The detached clean-worktree regression now proves, using only local Git ancestry, that the artifact source is an ancestor of the checkout before cloning or checkout. It does not fetch, skip, xfail, or relax the clean-source byte replay. |
 | Interpretation | This is a provenance and CI-availability correction only. It adds no fixture, capability, quality, KiCad, network, model, electrical, fabrication, or hardware claim. |
+
+#### B-079 — bounded composed route-bundle KiCad replay
+
+| Field | Recorded evidence |
+|---|---|
+| Artifact | [`2026-08-05-route-bundle-v1.json`](../../benchmarks/results/routing/2026-08-05-route-bundle-v1.json) |
+| Dataset | CopperMCP-original Apache-2.0 `negotiated-crossing-v1.kicad_pcb`, SHA-256 `dbbfc5179cca7f644b90303ff3bc695f191ba94f7e5bbc8b4b1437d810ec83c7`. |
+| Metrics | Independent same-base candidates overflow one lattice unit; the two-net route bundle replayed identically, completed with zero overflow and three exact physical pair checks, at 26 mm total length. |
+| KiCad authority | The project bounded DRC adapter resolved and SHA-256-bound KiCad 10.0.5 before launching its fixed-argument, private-environment execution. It capped report, stdout, and stderr bytes before strict UTF-8/duplicate-key/structure parsing and checked report/exit consistency. The private combined derivative completed with exit `0`, zero errors, and zero unconnected items; source bytes/inode/mtime remained unchanged. |
+| Limits | One two-pin/one-layer/common-grid fixture only. No apply/export/persistence authority, multilayer/via/zone capacity, electrical or fabrication claim, or general-board scaling result. |

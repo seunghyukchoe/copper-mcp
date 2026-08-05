@@ -1,0 +1,51 @@
+{
+  "authoritative_kicad_drc": {
+    "drc_schema": "https://schemas.kicad.org/drc.v1.json",
+    "error_count": 0,
+    "exclusion_count": 0,
+    "executable": "/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli",
+    "executable_sha256": "sha256:852c180a8c923beb6173b54bd6cc0bd66714e52ebfdd451ef0e061224bc954f5",
+    "execution": "copper_mcp.kicad_cli.run_board_drc",
+    "exit_code": 0,
+    "ignored_check_count": 5,
+    "kicad_version": "10.0.5",
+    "passed": true,
+    "status": "completed",
+    "unconnected_count": 0,
+    "warning_count": 0
+  },
+  "baseline": {
+    "same_base_independent_overflow_units": 1
+  },
+  "bundle": {
+    "bundle_id": "sha256:5eda7cfc4646373d4dd8a843ca95eadf210e0808e09510260454a914ec75fdb9",
+    "candidate_count": 2,
+    "combined_derivative": true,
+    "core_replays": 1,
+    "overflow_units": 0,
+    "physical_pair_checks": 3,
+    "total_wire_length_nm": 26000000
+  },
+  "candidate_applied": false,
+  "fixture": "benchmarks/audio/fixtures/negotiated-crossing-v1.kicad_pcb",
+  "fixture_origin": "CopperMCP-original committed public fixture",
+  "fixture_sha256": "dbbfc5179cca7f644b90303ff3bc695f191ba94f7e5bbc8b4b1437d810ec83c7",
+  "license": "Apache-2.0",
+  "metric": {
+    "improved": true,
+    "overflow_reduction_units": 1
+  },
+  "not_claimed": [
+    "apply_authority",
+    "board_mutation",
+    "electrical_validation",
+    "fabrication_readiness",
+    "general_board_scaling"
+  ],
+  "recorded_at_utc": "2026-08-05T11:57:16+00:00",
+  "run_id": "sha256:2d0570acd7f7838868c825701fdae52fefe2bbf17046cce5e82610cd50e9bb99",
+  "schema": "copper-mcp/benchmark/route-bundle/v1",
+  "script": "scripts/benchmark_route_bundle.py",
+  "script_sha256": "eb126a08d7f74f56cecccd0efb19ca672de5d635caf47b400f2192d88b5a258e",
+  "source_unchanged": true
+}

@@ -35,6 +35,12 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added `preview_route_bundle`, a closed read-only MCP/application-service surface that accepts a
+  bounded ordered set of revision-bound Circuit Scene net references and publishes one immutable
+  multi-net plan only after deterministic composition replay and cross-net physical-clearance
+  acceptance. It never issues an apply token, writes a board, exports a derivative, or returns a
+  partial plan. A committed public-fixture replay records one combined private KiCad DRC derivative.
+
 - Hardened the optional harness-owned KiCad/FreeRouting transaction behind an internal
   provider-created aggregate-quota workspace capability. The harness validates canonical
   owner-private, non-symlink roots; keeps temporary directories and child `cwd`/`HOME`/`TMPDIR`

@@ -1061,6 +1061,88 @@ class RoutePreviewToolResponse(
     """Strict status-specific structured output contract for ``preview_route``."""
 
 
+class RouteBundleRequestContract(_ClosedContract):
+    """Closed, reference-only request for one atomic same-layer route composition."""
+
+    board: Annotated[
+        str,
+        Field(min_length=1, max_length=4096, pattern=r"^[^\u0000-\u001f\u007f]+$"),
+    ]
+    layer: LayerName
+    constraints: RouteConstraintsContract
+    net_ref_ids: Annotated[list[NetRefId], Field(min_length=2, max_length=8)]
+    expect_board_revision: Digest
+    expect_snapshot_digest: Digest
+    seed: NonNegativeInteger = 0
+    settings: RouteSettingsContract = Field(default_factory=RouteSettingsContract)
+
+
+RouteBundleToolRequest = Annotated[
+    Any,
+    WithJsonSchema(_inline_json_schema(RouteBundleRequestContract)),
+]
+
+
+class RouteBundleMetricsContract(_ClosedContract):
+    candidate_count: Annotated[int, Field(ge=2, le=8)]
+    core_replays: Literal[1]
+    physical_pair_checks: NonNegativeInteger
+    total_wire_length_nm: NonNegativeInteger
+
+
+class RouteBundlePlanContract(_ClosedContract):
+    bundle_id: Digest
+    base_revision: Digest
+    layer_id: LayerId
+    net_ref_ids: Annotated[list[NetRefId], Field(min_length=2, max_length=8)]
+    candidates: Annotated[list[RouteCandidateContract], Field(min_length=2, max_length=8)]
+    metrics: RouteBundleMetricsContract
+
+
+class _RouteBundlePreviewCommonContract(_ClosedContract):
+    schema_version: Literal["1.0"]
+    board_path: Annotated[
+        str,
+        Field(min_length=1, max_length=4096, pattern=r"^[^\u0000-\u001f\u007f]+$"),
+    ]
+    board_revision: Digest
+    request: RouteBundleRequestContract
+
+
+class RoutedRouteBundlePreviewContract(_RouteBundlePreviewCommonContract):
+    status: Literal["routed"]
+    snapshot_digest: Digest
+    plan: RouteBundlePlanContract
+    diagnostic: None
+    conversion_diagnostic_counts: EmptyRouteDiagnosticCounts
+
+
+class NotRoutedRouteBundlePreviewContract(_RouteBundlePreviewCommonContract):
+    status: Literal["not_routed"]
+    snapshot_digest: Digest | None
+    plan: None
+    diagnostic: Annotated[str, Field(min_length=1, max_length=256)]
+    conversion_diagnostic_counts: EmptyRouteDiagnosticCounts
+
+
+class UnsupportedRouteBundlePreviewContract(_RouteBundlePreviewCommonContract):
+    status: Literal["unsupported_board"]
+    snapshot_digest: None
+    plan: None
+    diagnostic: None
+    conversion_diagnostic_counts: RouteDiagnosticCounts
+
+
+class RouteBundleToolResponse(
+    RootModel[
+        RoutedRouteBundlePreviewContract
+        | NotRoutedRouteBundlePreviewContract
+        | UnsupportedRouteBundlePreviewContract
+    ]
+):
+    """Strict status-specific structured output for ``preview_route_bundle``."""
+
+
 class LayeredRouteSettingsContract(_ClosedContract):
     """Bounded policy and resource ceilings for the two-signal-layer router."""
 

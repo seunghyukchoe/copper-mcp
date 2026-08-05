@@ -338,6 +338,26 @@ class KiCadCliTests(unittest.TestCase):
                 with self.assertRaisesRegex(KiCadCliError, "configured limit"):
                     run_board_drc(self.board.name, self.settings)
 
+    def test_rejects_oversized_stdout_or_stderr_before_report_decode(self) -> None:
+        def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            stdout = kwargs["stdout"]
+            stderr = kwargs["stderr"]
+            assert hasattr(stdout, "write") and hasattr(stderr, "write")
+            stdout.write(b"x" * 1025)
+            stderr.write(b"y" * 1025)
+            stdout.flush()
+            stderr.flush()
+            report_path = Path(command[command.index("--output") + 1])
+            report_path.write_text(json.dumps(drc_report()), encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0)
+
+        with patch(
+            "copper_mcp.kicad_cli.discover_kicad_cli", return_value=Path("/trusted/kicad-cli")
+        ):
+            with patch("copper_mcp.kicad_cli.subprocess.run", side_effect=run):
+                with self.assertRaisesRegex(KiCadCliError, "configured limit"):
+                    run_board_drc(self.board.name, self.settings)
+
     def test_rejects_symlinked_report_without_reading_its_target(self) -> None:
         outside = self.workspace / "outside-report.json"
         outside.write_text(
