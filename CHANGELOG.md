@@ -42,6 +42,24 @@ All notable changes are documented here. The format follows
   unbudgeted encoded copy is created. An in-budget mid-observation edit is still the
   connection-class refusal it was. The same fix applies to the editor-context capture. (#76)
 
+### Added
+
+- Committed golden identities for every content-addressed surface, in a new
+  `tests/test_golden_identities.py`. Each pin asserts an exact digest recomputed from a committed
+  fixture, and — where a canonical payload can change without changing its byte length — the
+  payload length alongside it. The surfaces pinned are the single-layer route candidate ID, the
+  placement candidate ID, the route bundle ID with its coordinator policy-envelope digest, the
+  Board IR 0.2 snapshot/constraint digests and the legacy 0.1 fixture digests, the Circuit Intent
+  snapshot digest and the rendered schematic artifact digest, Circuit Scene board/snapshot
+  revisions and annotation reference IDs, the `title-line-v1` deterministic render digest, the
+  routing job ID and request digest (ADR-0043), the redacted candidate manifest digest
+  (ADR-0047), the persisted candidate export digest (ADR-0048), the routing policy input,
+  decision and worker-frame digests, the exact local repair input and route digests, the zone
+  fill digest, the unsigned in-toto DRC statement digest (ADR-0052), the live editor context
+  digest (ADR-0044), and net reference IDs. **Changing any pinned value is a breaking change**
+  that requires a deliberate version bump and a migration note for persisted artifacts; the
+  module says so in its own docstring. No production behavior changed.
+
 ### Changed
 
 - Board IR conversion reports a foreign S-expression root under its own diagnostic code,
