@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+from dataclasses import replace
+
 import pytest
 
 from copper_mcp.board_ir import (
@@ -37,6 +40,7 @@ from copper_mcp.routing import (
     RoutePath,
     RouteRequest,
     RouteResult,
+    canonical_candidate_bytes,
     negotiate_routes,
 )
 from copper_mcp.routing.physical_clearance import (
@@ -166,6 +170,27 @@ def _requests(snapshot: object) -> tuple[RouteRequest, RouteRequest]:
             settings=settings,
         ),
     )
+
+
+def _resign(candidate: RouteCandidate) -> RouteCandidate:
+    """Return test-only candidate metadata with an honest canonical identity."""
+
+    return replace(
+        candidate,
+        candidate_id=f"sha256:{hashlib.sha256(canonical_candidate_bytes(candidate)).hexdigest()}",
+    )
+
+
+def _assert_unbound_router_result(result: object) -> None:
+    assert hasattr(result, "status")
+    assert result.status is NegotiatedRoutingStatus.INVALID_REQUEST
+    assert not result.ok
+    assert result.candidates == ()
+    assert result.connections == ()
+    assert result.unrouted_nets == (H_NET, V_NET)
+    assert result.overflow_resources == ()
+    assert result.total_wire_length_nm == 0
+    assert result.diagnostic == "the negotiated router result failed identity validation"
 
 
 def test_negotiated_crossing_replay_removes_baseline_lattice_overflow() -> None:
@@ -304,6 +329,136 @@ def test_negotiated_router_discards_current_iteration_when_later_net_cancels() -
     assert result.unrouted_nets == (H_NET, V_NET)
     assert result.overflow_resources == ()
     assert result.total_wire_length_nm == 0
+
+
+def test_negotiated_router_rejects_unbound_candidate_identities_before_accounting() -> None:
+    """A generic router cannot relabel, replay, or overspend a clipped request."""
+
+    snapshot = _crossing_snapshot()
+    horizontal, vertical = _requests(snapshot)
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=(horizontal, vertical),
+    )
+    reference = AStarRouter().propose(snapshot, horizontal)
+    assert reference.candidate is not None
+    candidate = reference.candidate
+    expanded_settings = replace(
+        candidate.settings,
+        max_expansions=candidate.settings.max_expansions + 1,
+    )
+    invalid_candidates = (
+        _resign(replace(candidate, patch=replace(candidate.patch, net_id=V_NET))),
+        _resign(replace(candidate, base_revision=f"sha256:{'a' * 64}")),
+        _resign(replace(candidate, patch=replace(candidate.patch, layer_id="layer:B.Cu"))),
+        _resign(replace(candidate, start_pad_id="pad:v1", end_pad_id="pad:v2")),
+        _resign(replace(candidate, start_pad_id="pad:h2", end_pad_id="pad:h1")),
+        _resign(replace(candidate, seed=candidate.seed + 1)),
+        _resign(
+            replace(
+                candidate,
+                settings=replace(
+                    candidate.settings,
+                    max_grid_nodes=candidate.settings.max_grid_nodes + 1,
+                ),
+            )
+        ),
+        replace(candidate, candidate_id=f"sha256:{'0' * 64}"),
+        _resign(
+            replace(
+                candidate,
+                pad_count=3,
+                ordering_policy=COMPONENT_MST_ORDERING,
+            )
+        ),
+        _resign(
+            replace(
+                candidate,
+                settings=expanded_settings,
+                metrics=replace(
+                    candidate.metrics,
+                    expanded_states=expanded_settings.max_expansions,
+                ),
+            )
+        ),
+    )
+
+    class FirstUnboundCandidateRouter:
+        def __init__(self, unbound: RouteCandidate) -> None:
+            self.unbound = unbound
+            self.reference = AStarRouter()
+
+        def propose(
+            self, router_snapshot: object, request: RouteRequest, **kwargs: object
+        ) -> RouteResult:
+            if request.net_id == H_NET:
+                return RouteResult(candidate=self.unbound)
+            return self.reference.propose(router_snapshot, request, **kwargs)
+
+    for invalid in invalid_candidates:
+        _assert_unbound_router_result(
+            negotiate_routes(snapshot, envelope, router=FirstUnboundCandidateRouter(invalid))
+        )
+
+
+def test_negotiated_router_rejects_unbound_connections_and_router_failures_atomically() -> None:
+    snapshot = _crossing_snapshot()
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_requests(snapshot),
+    )
+    wrong_pads = RouteConnection(
+        base_revision=snapshot.snapshot_digest,
+        start_pad_id="pad:v1",
+        end_pad_id="pad:v2",
+        attachment_segments=0,
+        component_objects=2,
+    )
+    oversized_work = RouteConnection(
+        base_revision=snapshot.snapshot_digest,
+        start_pad_id="pad:h1",
+        end_pad_id="pad:h2",
+        attachment_segments=0,
+        component_objects=2,
+        obstacle_checks=100_001,
+    )
+
+    class FirstUnboundConnectionRouter:
+        def __init__(self, unbound: RouteConnection) -> None:
+            self.unbound = unbound
+
+        def propose(
+            self, _snapshot: object, _request: RouteRequest, **_kwargs: object
+        ) -> RouteResult:
+            return RouteResult(connected=self.unbound)
+
+    for unbound in (wrong_pads, oversized_work):
+        _assert_unbound_router_result(
+            negotiate_routes(snapshot, envelope, router=FirstUnboundConnectionRouter(unbound))
+        )
+
+    class SecondRouterFailure:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.reference = AStarRouter()
+
+        def propose(
+            self, router_snapshot: object, request: RouteRequest, **kwargs: object
+        ) -> RouteResult:
+            self.calls += 1
+            if self.calls == 2:
+                raise RuntimeError("untrusted router transport failed")
+            return self.reference.propose(router_snapshot, request, **kwargs)
+
+    _assert_unbound_router_result(
+        negotiate_routes(snapshot, envelope, router=SecondRouterFailure())
+    )
+
+    class MalformedRouter:
+        def propose(self, _snapshot: object, _request: RouteRequest, **_kwargs: object) -> object:
+            return object()
+
+    _assert_unbound_router_result(negotiate_routes(snapshot, envelope, router=MalformedRouter()))
 
 
 def test_negotiated_router_discards_prior_partial_pass_before_next_iteration() -> None:
@@ -472,7 +627,7 @@ def _physical_candidate(
     assert hasattr(snapshot, "snapshot_digest")
     patch = RoutePatch(net_id=net_id, layer_id=LAYER, width_nm=600_000, paths=paths)
     settings = _physical_settings()
-    return RouteCandidate(
+    candidate = RouteCandidate(
         candidate_id=f"sha256:{'0' * 64}",
         base_revision=snapshot.snapshot_digest,
         start_pad_id="pad:h1" if net_id == H_NET else "pad:v1",
@@ -499,9 +654,13 @@ def _physical_candidate(
         settings=settings,
         router_version="test",
         policy="test",
-        seed=1,
+        seed={H_NET: 1, V_NET: 2, C_NET: 3}[net_id],
         pad_count=pad_count,
         ordering_policy=COMPONENT_MST_ORDERING if pad_count > 2 else "single-path",
+    )
+    return replace(
+        candidate,
+        candidate_id=f"sha256:{hashlib.sha256(canonical_candidate_bytes(candidate)).hexdigest()}",
     )
 
 

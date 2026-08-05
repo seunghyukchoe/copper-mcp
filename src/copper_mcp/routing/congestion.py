@@ -18,14 +18,23 @@ from enum import StrEnum
 from itertools import pairwise
 from typing import TypeAlias, cast
 
-from copper_mcp.board_ir import BoardIRSnapshot, BoardIRValidationError, PointNM, verify_snapshot
+from copper_mcp.board_ir import (
+    BoardIRSnapshot,
+    BoardIRValidationError,
+    Pad,
+    PointNM,
+    verify_snapshot,
+)
 from copper_mcp.routing.astar import AStarRouter, canonical_candidate_bytes, verify_candidate_id
 from copper_mcp.routing.contracts import (
+    SINGLE_PATH_ORDERING,
     CancellationCheck,
     RouteCandidate,
     RouteConnection,
+    RouteDiagnostic,
     RouteFailureCode,
     RouteRequest,
+    RouteResult,
 )
 from copper_mcp.routing.physical_clearance import (
     PhysicalClearanceFailure,
@@ -405,9 +414,9 @@ def _cancelled(cancelled: CancellationCheck | None) -> bool:
         return True
 
 
-def _request_pad_centres(
-    snapshot: BoardIRSnapshot, request: RouteRequest
-) -> tuple[PointNM, ...] | None:
+def _request_pads(snapshot: BoardIRSnapshot, request: RouteRequest) -> tuple[Pad, ...] | None:
+    """Return the exact selected-layer pad identities for one negotiated request."""
+
     pads = tuple(
         sorted(
             (
@@ -420,7 +429,164 @@ def _request_pad_centres(
     )
     if len(pads) != 2:
         return None
-    return tuple(pad.center for pad in pads)
+    return pads
+
+
+def _request_pad_centres(
+    snapshot: BoardIRSnapshot, request: RouteRequest
+) -> tuple[PointNM, ...] | None:
+    pads = _request_pads(snapshot, request)
+    return None if pads is None else tuple(pad.center for pad in pads)
+
+
+def _requested_track_width(snapshot: BoardIRSnapshot, request: RouteRequest) -> int | None:
+    """Resolve the one immutable net-class width that the request is allowed to emit."""
+
+    classes = {item.id: item.track_width_nm for item in snapshot.content.constraints.net_classes}
+    assignment = next(
+        (
+            item
+            for item in snapshot.content.constraints.assignments
+            if item.net_id == request.net_id
+        ),
+        None,
+    )
+    return None if assignment is None else classes.get(assignment.net_class_id)
+
+
+def _candidate_is_bound(
+    candidate: object,
+    snapshot: BoardIRSnapshot,
+    request: RouteRequest,
+) -> bool:
+    """Prove a pluggable candidate still belongs to this exact bounded invocation.
+
+    The generic router seam is an untrusted boundary.  A candidate ID binds every canonical
+    geometry byte and metadata field, while this check binds those bytes to the current immutable
+    snapshot, the *bounded* request settings, and the selected net's exact two pad identities.
+    It deliberately runs before accounting, re-identification, or ledger mutation.
+    """
+
+    try:
+        if not isinstance(candidate, RouteCandidate):
+            return False
+        pads = _request_pads(snapshot, request)
+        expected_width = _requested_track_width(snapshot, request)
+        if pads is None or expected_width is None:
+            return False
+        if (
+            candidate.base_revision != snapshot.snapshot_digest
+            or candidate.base_revision != request.board_revision
+            or candidate.patch.net_id != request.net_id
+            or candidate.patch.layer_id != request.layer_id
+            or candidate.patch.width_nm != expected_width
+            or candidate.seed != request.seed
+            or candidate.settings != request.settings
+            or candidate.start_pad_id != pads[0].id
+            or candidate.end_pad_id != pads[1].id
+            or candidate.pad_count != 2
+            or candidate.ordering_policy != SINGLE_PATH_ORDERING
+            or len(candidate.patch.paths) != 1
+        ):
+            return False
+        # ``candidate_id`` covers the unmodified patch geometry, cost, metrics, route settings,
+        # and endpoint IDs.  Re-identifying first would otherwise let a backend smuggle a forged
+        # or stale payload behind a newly computed negotiated ID.
+        verify_candidate_id(candidate)
+    except Exception:  # pragma: no cover - an in-process router is an untrusted boundary
+        return False
+    return True
+
+
+def _connection_is_bound(
+    connection: object,
+    snapshot: BoardIRSnapshot,
+    request: RouteRequest,
+) -> bool:
+    """Verify the limited identity and work evidence available for an already-connected net."""
+
+    try:
+        if not isinstance(connection, RouteConnection):
+            return False
+        pads = _request_pads(snapshot, request)
+        if pads is None:
+            return False
+        return (
+            connection.base_revision == snapshot.snapshot_digest
+            and connection.base_revision == request.board_revision
+            and connection.start_pad_id == pads[0].id
+            and connection.end_pad_id == pads[1].id
+            and connection.pad_count == 2
+            and not isinstance(connection.obstacle_checks, bool)
+            and 0 <= connection.obstacle_checks <= request.settings.max_obstacle_checks
+        )
+    except Exception:  # pragma: no cover - an in-process router is an untrusted boundary
+        return False
+
+
+def _diagnostic_is_bounded(diagnostic: object, request: RouteRequest) -> bool:
+    """Accept only typed failure accounting that fits this clipped request budget."""
+
+    try:
+        if not isinstance(diagnostic, RouteDiagnostic):
+            return False
+        return (
+            not isinstance(diagnostic.expanded_states, bool)
+            and not isinstance(diagnostic.obstacle_checks, bool)
+            and 0 <= diagnostic.expanded_states <= request.settings.max_expansions
+            and 0 <= diagnostic.obstacle_checks <= request.settings.max_obstacle_checks
+        )
+    except Exception:  # pragma: no cover - an in-process router is an untrusted boundary
+        return False
+
+
+def _router_result_is_bound(
+    result: object,
+    snapshot: BoardIRSnapshot,
+    request: RouteRequest,
+) -> bool:
+    """Validate one generic-router outcome before accepting any of its work accounting."""
+
+    try:
+        if not isinstance(result, RouteResult):
+            return False
+        present = (result.candidate, result.connected, result.diagnostic)
+        if sum(item is not None for item in present) != 1:
+            return False
+        if result.candidate is not None:
+            return _candidate_is_bound(result.candidate, snapshot, request)
+        if result.connected is not None:
+            return _connection_is_bound(result.connected, snapshot, request)
+        return _diagnostic_is_bounded(result.diagnostic, request)
+    except Exception:  # pragma: no cover - an in-process router is an untrusted boundary
+        return False
+
+
+def _router_boundary_failure(
+    envelope: NegotiatedRoutingRequest,
+    ordered: tuple[RouteRequest, ...],
+    *,
+    iterations: int,
+    ripups: int,
+    total_physical_checks: int,
+) -> NegotiatedRoutingResult:
+    """Fail closed without preserving a prefix from an unbound router invocation."""
+
+    return NegotiatedRoutingResult(
+        status=NegotiatedRoutingStatus.INVALID_REQUEST,
+        board_revision=envelope.board_revision,
+        candidates=(),
+        connections=(),
+        unrouted_nets=tuple(item.net_id for item in ordered),
+        iterations=iterations,
+        ripups=ripups,
+        overflow_resources=(),
+        overflow_units=0,
+        total_wire_length_nm=0,
+        total_physical_checks=total_physical_checks,
+        diagnostic="the negotiated router result failed identity validation",
+        policy_digest=envelope.policy_digest,
+    )
 
 
 def _validate_snapshot_requests(
@@ -567,19 +733,49 @@ def negotiate_routes(
                 ),
             )
             bounded_request = replace(request, settings=bounded_settings)
-            result = selected_router.propose(
-                checked_snapshot,
-                bounded_request,
-                cancelled=cancellation_check,
-                congestion_penalty=ledger.penalty,
-            )
+            try:
+                result = selected_router.propose(
+                    checked_snapshot,
+                    bounded_request,
+                    cancelled=cancellation_check,
+                    congestion_penalty=ledger.penalty,
+                )
+            except Exception:  # pragma: no cover - a pluggable router must never escape this seam
+                return _router_boundary_failure(
+                    checked_envelope,
+                    ordered,
+                    iterations=iteration,
+                    ripups=ripups,
+                    total_physical_checks=total_physical_checks,
+                )
+            if not _router_result_is_bound(result, checked_snapshot, bounded_request):
+                return _router_boundary_failure(
+                    checked_envelope,
+                    ordered,
+                    iterations=iteration,
+                    ripups=ripups,
+                    total_physical_checks=total_physical_checks,
+                )
             if result.candidate is not None:
+                try:
+                    marked = _reidentify_candidate(result.candidate, checked_envelope.policy_digest)
+                    ledger.add_candidate(marked)
+                except Exception:  # pragma: no cover - reject malformed canonical route geometry
+                    return _router_boundary_failure(
+                        checked_envelope,
+                        ordered,
+                        iterations=iteration,
+                        ripups=ripups,
+                        total_physical_checks=total_physical_checks,
+                    )
+                # Account only after every candidate identity and ledger-geometry precondition
+                # above has succeeded.  An external router never gets to advance a budget merely
+                # by claiming metrics beside an unbound candidate.
                 total_expansions += result.candidate.metrics.expanded_states
                 total_obstacle_checks += result.candidate.metrics.obstacle_checks
-                marked = _reidentify_candidate(result.candidate, checked_envelope.policy_digest)
                 working[request.net_id] = marked
-                ledger.add_candidate(marked)
             elif result.connected is not None:
+                total_obstacle_checks += result.connected.obstacle_checks
                 connections[request.net_id] = result.connected
             else:
                 if result.diagnostic is not None:
