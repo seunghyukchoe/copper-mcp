@@ -151,6 +151,10 @@ documentation, ledger updates, and benchmark evidence.
 - [x] Attachment to existing same-net copper and bounded partial-route completion.
 - [ ] Multilayer vias and keepouts.
 - [~] Negotiated-congestion multi-net routing.
+  - [x] Read-only route-bundle preview: two through eight known net references now compose into
+    one immutable revision-bound plan only after deterministic whole-composition replay and the
+    existing exact cross-net clearance gate. B-079 records a KiCad-checked private combined
+    derivative; apply/export, multilayer, and general-board claims remain separate.
   - [x] Bounded candidate-only present/history congestion ledger with exact lattice edge/vertex
     occupancy, deterministic rip-up order, policy-digest-bound candidates, cancellation, and
     fixed iteration/routing budgets.

@@ -1,4 +1,4 @@
-# ADR-0066: Keep ordered-layer routing bounded and non-serializing
+# ADR-0068: Keep ordered-layer routing bounded and non-serializing
 
 - Status: Accepted
 - Date: 2026-08-05

@@ -79,6 +79,9 @@ class KiCadCliTests(unittest.TestCase):
     ) -> object:
         def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
             self.assertFalse(kwargs["shell"])
+            self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
+            self.assertIs(kwargs["stdout"], subprocess.DEVNULL)
+            self.assertIs(kwargs["stderr"], subprocess.DEVNULL)
             self.assertNotIn("preexec_fn", kwargs)
             self.assertNotIn("--refill-zones", command)
             self.assertNotIn("--save-board", command)
