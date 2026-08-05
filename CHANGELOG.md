@@ -8,6 +8,11 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added an OpenSSF-informed sustainability and supply-chain roadmap. It separates the Criticality
+  Score activity proxy from Scorecard controls, records the dated `0.23`/`5.8` baseline as an
+  estimate and a distinct API snapshot, and defines engineering-backed gates for a defensible
+  `0.4` target without synthetic project activity.
+
 - Live placement proposals now preserve one operation-wide deadline after IPC capture: Board IR
   conversion, placement-view construction, legalization, optional evidence, and token preparation
   receive only the remaining budget. An expired post-capture budget returns a typed refusal instead

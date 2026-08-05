@@ -251,3 +251,51 @@ placement, and the policy-plugin work.
 - [ ] Optional GPU candidate search after end-to-end profiling.
 - [ ] Local exact repair for bounded congestion windows.
 - [ ] SI/PI/thermal/DFM surrogate hooks with authoritative signoff.
+
+## M6 — Sustainable open-source project and supply-chain maturity (OpenSSF-informed)
+
+This is a cross-cutting milestone for the 0.5.x+ line. OpenSSF Criticality Score is useful as a
+diagnostic for project activity and adoption, but it is not a quality target by itself. The work
+below is deliberately tied to healthier engineering, contributor experience, and release safety;
+synthetic commits, releases, issues, or comments are prohibited. The baseline and source links are
+recorded in [the OpenSSF research note](research/openssf-criticality-and-supply-chain.md).
+
+- [x] Record a dated, reproducible baseline: an estimated Criticality Score of about `0.23/1.00`
+  from the available public signals (the official public row did not yet include this new
+  repository) and a distinct OpenSSF Scorecard snapshot of `5.8/10` on 2026-08-04. Keep the two
+  measures separate and label estimates as estimates.
+- [~] Make contribution onboarding real rather than nominal. `CONTRIBUTING.md`, the Code of
+  Conduct, issue templates, labels, CODEOWNERS, reproducible fixtures, and good-first issues exist;
+  add a small contributor validation path, explicit maintainer/reviewer roles, and documented
+  review expectations as the contributor base grows.
+- [~] Operate issues and discussions as an engineering feedback loop. Keep triage labels and
+  response/closure reasons, publish a lightweight monthly review of open/closed/security issues,
+  and use Discussions or an equivalent RFC surface for public-contract and KiCad compatibility
+  questions without closing issues merely to improve a metric.
+- [~] Make every release useful and verifiable. Continue SemVer, Keep a Changelog, release-ledger,
+  CI, dependency updates, and tag-only attestations; add signed-tag or independently verifiable
+  release provenance, a documented support window, and a material-change release cadence before
+  treating the release gate as complete.
+- [~] Close repository-level supply-chain gaps surfaced by Scorecard: configure and continuously
+  verify branch protection/code-owner review, improve packaging metadata, add signed-release
+  verification, and complete the CII/OpenSSF best-practices profile. Do not claim a check is fixed
+  until a hosted run or API response proves it.
+- [ ] Build an adoption and evidence path: versioned audio-board examples, reproducible benchmark
+  commands, downstream smoke tests, citations, and a small set of independent users or projects
+  that can validate the documented MCP/KiCad contracts without uploading proprietary boards.
+- [ ] Reduce maintainer bus factor for security and releases with at least two active reviewers,
+  documented succession/security contacts, and CODEOWNERS coverage for routing, MCP, KiCad, and
+  release workflows. This is a people/process gate, not something an agent can self-certify.
+- [ ] Add a monthly project-health snapshot to the append-only ledgers: official Criticality Score
+  when published, otherwise the exact input snapshot and reconstruction method; Scorecard result;
+  CI/release/issue/contributor counts; and links to the underlying public evidence. Never put
+  credentials, private boards, or private contributor data in the snapshot.
+
+### 0.4 target and exit criteria
+
+The project may report “Criticality Score ≥ 0.4” only after the official public service reports at
+least `0.40` for two consecutive monthly snapshots, or after two independently reproducible
+reconstructions are available while the official row is still delayed. The milestone is not closed
+by the number alone: the contributor, review, release-provenance, supply-chain, and adoption gates
+above must have current evidence, and the project must remain useful even if OpenSSF changes its
+formula or publication cadence.

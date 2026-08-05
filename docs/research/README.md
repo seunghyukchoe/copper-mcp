@@ -22,6 +22,9 @@ that every product feature, price, or repository release will remain current.
   exact hidden-name equivalence oracle and limitations.
 - [KiCad IPC observer references](./kicad-ipc-references.md) records the official socket,
   plugin, version, and `kicad-python` boundaries behind the redacted live-board observer.
+- [OpenSSF criticality and supply-chain](./openssf-criticality-and-supply-chain.md) separates the
+  Criticality activity proxy from Scorecard controls and maps the dated baseline to sustainable
+  contributor, release, review, and adoption work.
 
 ## Terms used in this review
 
