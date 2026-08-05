@@ -29,6 +29,9 @@ permutation, empty window selections, and decision digest.  Any bad frame, child
 cancellation, extra output, identity mismatch, or validation failure becomes the single fixed
 `POLICY_WORKER_REJECTED` error; child diagnostics are discarded.
 
+These SHA-256 values and nonce are content/correlation bindings only. They are not a signature,
+authentication mechanism, or proof of the worker's origin.
+
 The worker launches only `sys.executable` with an argument sequence, `shell=False`, isolated
 Python mode, a replacement three-variable locale/timezone environment, `close_fds=True`, no
 passed descriptors, a temporary working directory, and a new POSIX session.  It has no

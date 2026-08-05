@@ -327,8 +327,10 @@ def decode_policy_worker_response(frame: bytes) -> PolicyWorkerResponse:
     Requests intentionally accept any bounded, closed JSON representation before
     being canonicalized for their digest.  Responses are different: the parent
     receives child bytes, so accepting whitespace or member-order variants would
-    make a signed/bound receipt ambiguous.  Re-encode the fully validated object
-    and require exact byte equality before it crosses the process boundary.
+    make a bound receipt ambiguous.  The digests are content bindings, not a
+    signature, authentication mechanism, or origin proof.  Re-encode the fully
+    validated object and require exact byte equality before it crosses the
+    process boundary.
     """
 
     root = _decode_frame(frame)
