@@ -63,8 +63,8 @@ def test_route_scoring_refuses_tampered_or_stale_candidates_before_projection(
         candidate = finalise_candidate(replace(candidate, view_revision="sha256:" + "0" * 64))
     monkeypatch.setattr(
         route_scoring,
-        "project_legal_candidate_snapshot",
-        lambda *_args: pytest.fail("projection must not run for an invalid candidate binding"),
+        "_project_footprint",
+        lambda *_args: pytest.fail("placements must not be used for an invalid candidate binding"),
     )
 
     with pytest.raises(route_scoring.RouteScoringError):
@@ -75,3 +75,39 @@ def test_route_scoring_refuses_tampered_or_stale_candidates_before_projection(
             settings=benchmark.PROBE_SETTINGS,
             stopped=lambda: None,
         )
+
+
+@pytest.mark.parametrize(
+    "binding",
+    ("tampered_candidate_id", "stale_base_revision", "stale_view_revision"),
+)
+def test_projection_helper_refuses_invalid_bindings_before_using_placements(
+    monkeypatch: pytest.MonkeyPatch, binding: str
+) -> None:
+    _source, snapshot, view, intent = benchmark._fixture()
+    result = benchmark.solve_placement(
+        intent,
+        snapshot,
+        view,
+        settings=benchmark.PlacementSolverSettings(
+            **benchmark.SEARCH_SETTINGS,
+            scoring_policy=benchmark.PlacementScoringPolicy.ROUTE_AWARE_ASTAR,
+            route_probe_settings=benchmark.PROBE_SETTINGS,
+        ),
+    )
+    assert result.ranked
+    candidate = result.ranked[0].candidate
+    if binding == "tampered_candidate_id":
+        candidate = replace(candidate, candidate_id="sha256:" + "0" * 64)
+    elif binding == "stale_base_revision":
+        candidate = finalise_candidate(replace(candidate, base_revision="sha256:" + "0" * 64))
+    else:
+        candidate = finalise_candidate(replace(candidate, view_revision="sha256:" + "0" * 64))
+    monkeypatch.setattr(
+        route_scoring,
+        "_project_footprint",
+        lambda *_args: pytest.fail("placements must not be used before binding validation"),
+    )
+
+    with pytest.raises(route_scoring.RouteScoringError):
+        route_scoring.project_legal_candidate_snapshot(candidate, snapshot, view)

@@ -40,6 +40,10 @@ class RouteScoringError(ValueError):
     """Raised when a closed route-aware scoring policy is malformed."""
 
 
+class _CandidateBindingError(RouteScoringError):
+    """A fail-closed candidate/snapshot/view binding refusal."""
+
+
 @dataclass(frozen=True, slots=True)
 class RouteProbeSettings:
     """Closed, integer-only resource limits for independent routing probes.
@@ -176,9 +180,10 @@ def score_route_aware_candidate(
         raise RouteScoringError("operation_budget limit must match route probe settings")
     if (status := stopped()) is not None:
         return None, status
-    _verify_candidate_binding(candidate, snapshot, view)
     try:
         projected = project_legal_candidate_snapshot(candidate, snapshot, view)
+    except _CandidateBindingError:
+        raise
     except (ValueError, RouteScoringError):
         # A legalizer candidate that cannot be represented by this intentionally narrow virtual
         # projection receives no invented route completion.  It is a deterministic failed probe.
@@ -256,13 +261,13 @@ def _verify_candidate_binding(
     try:
         verify_placement_id(candidate)
     except PlacementError as error:
-        raise RouteScoringError("placement candidate identity is invalid") from error
+        raise _CandidateBindingError("placement candidate identity is invalid") from error
     if candidate.base_revision != snapshot.snapshot_digest:
-        raise RouteScoringError("placement candidate is stale for the Board IR snapshot")
+        raise _CandidateBindingError("placement candidate is stale for the Board IR snapshot")
     if candidate.view_revision != view.board_revision:
-        raise RouteScoringError("placement candidate is stale for the placement view")
+        raise _CandidateBindingError("placement candidate is stale for the placement view")
     if view.snapshot_digest != snapshot.snapshot_digest:
-        raise RouteScoringError("placement view is not bound to the Board IR snapshot")
+        raise _CandidateBindingError("placement view is not bound to the Board IR snapshot")
 
 
 def project_legal_candidate_snapshot(
@@ -275,6 +280,7 @@ def project_legal_candidate_snapshot(
     orthogonal pose the legalizer emitted.  Side flips remain outside its conservative support.
     """
 
+    _verify_candidate_binding(candidate, snapshot, view)
     placements = {item.ref_id: item for item in candidate.placements}
     if len(placements) != len(candidate.placements):
         raise RouteScoringError("candidate footprint placements are not unique")
