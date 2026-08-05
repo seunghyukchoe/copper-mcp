@@ -30,15 +30,18 @@ The JSON decoder is closed-shape, duplicate-key rejecting, UTF-8 and 64 kB bound
 bounded, integer-only, and rejects booleans used as numbers.  Inputs are frozen dataclasses and
 cap nets, candidate windows, action windows, coordinates, and scores.
 
-The training-oriented `RoutingPolicyTrace` retains only input/decision digests, policy identity,
-counts, and deterministic opaque 24-hex-character action tokens.  Tokens are derived solely from
-the coordinator's canonical option ordinal, action category, and published decision position—not
-from an input digest plus a net ID, window JSON, coordinate, or scalar feature.  This prevents a
-reader from dictionary-testing low-entropy raw names or candidate windows against a published
-token.  The trace excludes net IDs, revision, coordinates, bounds, scalar features, pads, paths,
-widths, board bytes, prompts, model output, and candidate geometry.  It is a reproducibility label
-for an offline local corpus, not a board export or a claim that a selected policy action is
-physically valid.
+The training-oriented `RoutingPolicyTrace` retains input/decision digests, policy identity,
+counts, and deterministic 24-hex-character ordinal action tokens.  The digests are deliberately
+content-addressed, so they are linkable pseudonymous bindings—not secret redactions.  A reader who
+knows or can guess a complete low-entropy canonical input or decision (including its board
+revision) can dictionary-test it against a published digest; traces therefore remain within their
+intended trust boundary.  Tokens are separately derived solely from the coordinator's canonical
+option ordinal, action category, and published decision position—not from an input digest plus a
+net ID, window JSON, coordinate, or scalar feature.  A token alone cannot be tested against a
+guessed raw name or candidate window.  The trace omits raw net IDs, revision text, coordinates,
+bounds, scalar features, pads, paths, widths, board bytes, prompts, model output, and candidate
+geometry.  It is a reproducibility label for an offline local corpus, not a board export or a
+claim that a selected policy action is physically valid.
 
 ## Evidence and transfer limits
 

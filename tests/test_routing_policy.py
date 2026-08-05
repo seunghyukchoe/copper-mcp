@@ -90,6 +90,23 @@ def test_trace_tokens_cannot_be_reproduced_from_raw_names_or_window_json() -> No
     )
 
 
+def test_trace_digests_are_linkable_bindings_but_ordinal_tokens_exclude_source_values() -> None:
+    policy_input = _input()
+    decision = evaluate_policy(DeterministicReferencePolicy(), policy_input)
+    trace = redacted_policy_trace(policy_input, decision)
+    different_input = replace(policy_input, board_revision="sha256:" + "b" * 64)
+    different_decision = evaluate_policy(DeterministicReferencePolicy(), different_input)
+    different_trace = redacted_policy_trace(different_input, different_decision)
+
+    assert trace.input_digest == policy_input_digest(policy_input)
+    assert trace.decision_digest == policy_decision_digest(decision)
+    assert trace.input_digest != different_trace.input_digest
+    assert trace.decision_digest != different_trace.decision_digest
+    assert trace.ordered_net_tokens == different_trace.ordered_net_tokens
+    assert trace.corridor_hint_tokens == different_trace.corridor_hint_tokens
+    assert trace.repair_window_tokens == different_trace.repair_window_tokens
+
+
 def test_contracts_are_frozen_and_windows_are_only_coordinator_supplied_options() -> None:
     policy_input = _input()
     decision = evaluate_policy(DeterministicReferencePolicy(), policy_input)
@@ -186,6 +203,11 @@ def test_oversize_json_and_out_of_bounds_windows_fail_closed() -> None:
     escaped = CorridorCandidate("net:clock", PolicyBounds(-1, 0, 1, 1), 1, 1)
     with pytest.raises(ValueError, match="not supplied"):
         redacted_policy_trace(policy_input, replace(decision, corridor_hints=(escaped,)))
+
+
+def test_lone_surrogate_json_text_is_rejected_with_a_fixed_boundary_error() -> None:
+    with pytest.raises(ValueError, match="policy input is not valid UTF-8"):
+        decode_policy_input_json("\ud800")
 
 
 def test_evaluate_policy_rejects_unbound_or_incomplete_advisory_output() -> None:

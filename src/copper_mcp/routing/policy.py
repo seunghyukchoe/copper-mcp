@@ -465,11 +465,13 @@ def _take_per_net(
 
 
 def _token(category: str, coordinator_ordinal: int, decision_position: int) -> str:
-    """Return a stable token derived only from public action positions.
+    """Return a stable ordinal token derived only from public action positions.
 
     The ordinal is the coordinator's canonical tuple position, while ``decision_position`` is the
     action's position in the published tuple.  Neither raw IDs, bounds, scores, nor any digest of
-    them participates, so a trace reader cannot test a guessed net name or window JSON against it.
+    them participates, so this token alone cannot test a guessed net name or window JSON.  The
+    trace's content-addressing digests are separate, linkable pseudonymous bindings and must not
+    be treated as a secret redaction mechanism.
     """
 
     _integer("trace coordinator ordinal", coordinator_ordinal, maximum=_MAX_WINDOWS)
@@ -481,7 +483,12 @@ def _token(category: str, coordinator_ordinal: int, decision_position: int) -> s
 
 @dataclass(frozen=True, slots=True)
 class RoutingPolicyTrace:
-    """Redacted deterministic action record for offline local policy-learning experiments."""
+    """Pseudonymous deterministic action record for offline local policy-learning experiments.
+
+    Raw identifiers, geometry, and feature values are omitted, but the retained input and decision
+    digests are deterministic content bindings.  They are useful for local reproducibility and
+    correlation, not secret or unlinkable redactions.
+    """
 
     input_digest: str
     decision_digest: str
@@ -547,7 +554,13 @@ def redacted_policy_trace(
     policy_input: RoutingPolicyInput,
     decision: RoutingPolicyDecision,
 ) -> RoutingPolicyTrace:
-    """Return an immutable trace without board coordinates, net IDs, copper, or raw features."""
+    """Return a trace without raw board coordinates, net IDs, copper, or feature values.
+
+    The retained input and decision SHA-256 values deliberately bind the trace to its canonical
+    source.  They are linkable and can be dictionary-tested when a reader knows or guesses the
+    complete low-entropy source record; callers must keep such traces inside the intended trust
+    boundary.  The separate ordinal tokens do not derive from those raw values.
+    """
 
     _assert_selected_candidates(policy_input, decision)
     input_digest = policy_input_digest(policy_input)
@@ -682,7 +695,11 @@ def decode_policy_input_json(payload: str | bytes) -> RoutingPolicyInput:
         except UnicodeDecodeError as error:
             raise ValueError("policy input is not valid UTF-8") from error
     elif isinstance(payload, str):
-        if len(payload.encode("utf-8", errors="strict")) > _MAX_JSON_BYTES:
+        try:
+            encoded_payload = payload.encode("utf-8", errors="strict")
+        except UnicodeError as error:
+            raise ValueError("policy input is not valid UTF-8") from error
+        if len(encoded_payload) > _MAX_JSON_BYTES:
             raise ValueError("policy input exceeds the byte budget")
         text = payload
     else:
