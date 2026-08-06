@@ -8,8 +8,11 @@ up on one net.  This module converts one such document into an ordinary
 corpus reaches the deterministic router through exactly the same canonical verification and typed
 refusals as a KiCad board does.
 
-This is a benchmark seam, not a tool surface.  It has no MCP exposure, no apply authority, and no
-file mutation; it produces a snapshot and a list of requests and nothing else.
+This is an import seam, not a tool surface.  It has no MCP exposure, no apply authority, and no
+file mutation; it produces a snapshot and a list of requests and nothing else.  It has two
+callers: the benchmark scripts, and the read-only foreign-route verification seam
+(:mod:`copper_mcp.foreign_route_verification`), which relies on exactly the conservative
+directions of error documented below.
 
 Direction of error
 ------------------

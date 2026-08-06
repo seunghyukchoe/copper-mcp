@@ -250,6 +250,38 @@ and DRC stages report `not_run`.
 Moving a footprint moves its pads, so applying a placement invalidates any route candidate bound to
 the same base revision.
 
+## Verify a foreign route (SimpleRouteJson)
+
+`verify-foreign-route` is the disposer half of "AI proposes, deterministic code disposes" for
+proposers CopperMCP did not write — an ML autorouter, a third-party solver, anything that emits a
+tscircuit SimpleRouteJson solution. It is read-only, exists as a library plus this CLI command
+(deliberately no MCP tool yet), and either verifies the submitted geometry or refuses with a typed
+reason. It never repairs a route, never mints a candidate identity, and never issues any apply
+authority.
+
+```bash
+copper-mcp --workspace /absolute/path/to/boards verify-foreign-route \
+  problem.json solution.json \
+  --expect-problem-sha256 "$(shasum -a 256 /absolute/path/to/boards/problem.json | cut -d' ' -f1)"
+```
+
+`--expect-problem-sha256` is the revision binding: CopperMCP hashes the problem bytes itself and
+refuses on any mismatch, so a solution cannot be verified against a board it was not declared for.
+Every trace in the solution must carry the `connection_name` it claims to route; an unattributed
+trace is refused, because clearance between traces is only defined when their nets are known.
+
+The verdict is deliberately narrow. `clearance_and_connectivity_verified` means: within the
+modelled subset, the over-approximated geometry showed no exact-clearance violation against the
+imported obstacle model, stayed inside the board outline, and joins every pad of every multi-pad
+net — assuming traces and vias are fabricated at exactly the stated widths and the declared policy
+dimensions (`--clearance-nm`, `--via-diameter-nm`, `--via-drill-nm`; the import defaults
+otherwise). The response says what it does **not** claim in its own fields: `kicad_drc` is
+`not_run`, `repair` is `not_attempted`, `apply_authority` is `none`, `origin` is
+`foreign_untrusted`, and there is no `candidate_id` field at all. A solution that asserts a
+reserved CopperMCP identity key (for example `candidate_id`) is refused as `forged_identity`
+rather than having the key ignored. Refusals are data, not errors: the command exits 0 with
+`verdict: "refused"` and a bounded, non-echoing refusal record.
+
 ## Build a schematic from Circuit Intent
 
 Build a deterministic schematic from a strict Circuit Intent snapshot. This is the only current

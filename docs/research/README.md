@@ -136,6 +136,11 @@ When adding a document, add it to the list below in the same sentence form — *
   unlicensed, PCBench MIT, PCBWorld split and unreleased, FreeRouting GPL-3.0), and the harness
   lessons from an abandoned upstream benchmark. It claims no baseline comparison and no
   generalisation beyond LLM-generated 2-layer boards.
+- [Foreign candidate verification](./foreign-candidate-verification-v1.md) surveys how DRC
+  engines, LVS, and formal equivalence checkers treat geometry produced by tools they do not
+  trust, cites the tscircuit Z01 release's explicit deferral of obstacle avoidance and DRC
+  compliance, and justifies the verify-or-refuse contract for foreign SimpleRouteJson solutions.
+  It claims no ML-quality assessment and no baseline comparison.
 - [KiCad copper layer numbering](./kicad-copper-layer-numbering-v1.md) establishes, from KiCad's
   own enumeration and board writer rather than from one sample board, that copper is numbered
   `F.Cu=0`, `B.Cu=2`, `InN.Cu=2+2N` and declared front-to-back so the IDs do not ascend, that this

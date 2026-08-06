@@ -8,6 +8,30 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **CopperMCP now verifies routes it did not produce — and refuses to adopt them.** A new
+  read-only seam, `copper_mcp.foreign_route_verification` with a `copper-mcp
+  verify-foreign-route` CLI adapter (deliberately no MCP tool yet), accepts a tscircuit
+  SimpleRouteJson problem document plus a foreign solution's `traces` — the format ML
+  autorouters emit — and returns one typed verdict with per-check evidence: document contract,
+  revision binding, identity hygiene, problem import, structural continuity, trace width, board
+  containment, exact clearance, and pad-complete connectivity, in that order, refusal-first
+  (ADR-0076, D-154, SEC-121, R-117). The trust boundary is the point: the caller's expected
+  problem sha256 is compared against a digest computed in-process; a solution asserting any
+  reserved CopperMCP identity or authority key is refused as `forged_identity` rather than
+  ignored; no candidate identity is ever minted; and the response structurally has no
+  `candidate_id`, `base_revision`, or `apply_token` field, so a verified foreign route can
+  never be laundered into a native candidate or become applyable — re-proposing natively is the
+  only path to copper. A pass claims exactly `clearance_and_connectivity_verified` under the
+  declared policy dimensions and says so in its own fields: `kicad_drc: "not_run"`,
+  `repair: "not_attempted"`, `apply_authority: "none"`, `origin: "foreign_untrusted"`, plus an
+  explicit non-claims list. Every direction of error refuses: route widths round up for
+  clearance and down for connectivity, vias block and join every declared layer, pad attachment
+  uses inscribed cores shrunk by the import's recorded rounding, and a millimetre token that is
+  inexact at nanometre resolution charges a worst-case slack against the submission — an
+  exactly-legal separation still verifies when the tokens are exact, and the identical geometry
+  written with IEEE-754 residue is refused. All comparisons are exact doubled-nanometre integer
+  arithmetic at arbitrary angles, under one closed pair-check budget whose exhaustion refuses
+  rather than passes.
 - **CopperMCP now has a routing benchmark on boards it did not author, and the first honest number
   from it is 59.83%.** A benchmark-only import seam converts tscircuit SimpleRouteJson problems
   into ordinary verified Board IR snapshots and ordinary route requests, so an external corpus

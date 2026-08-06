@@ -11,9 +11,14 @@ from pathlib import Path
 from typing import Any
 
 from copper_mcp.adapters.kicad_schematic import MAX_RENDERED_SCHEMATIC_BYTES
+from copper_mcp.benchmarks.simple_route_json import DEFAULT_IMPORT_POLICY, ImportPolicy
 from copper_mcp.circuit_intent_service import build_schematic_from_snapshot_json
 from copper_mcp.circuit_ir.limits import MAX_CIRCUIT_INPUT_BYTES
 from copper_mcp.config import ConfigurationError, Settings
+from copper_mcp.foreign_route_verification import (
+    ForeignRouteVerificationLimits,
+    verify_foreign_simple_route_json,
+)
 from copper_mcp.kicad_cli import KiCadCliError
 from copper_mcp.kicad_file import BoardFormatError, load_json_file
 from copper_mcp.models import candidate_from_dict, rank_candidates
@@ -323,6 +328,28 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser = subparsers.add_parser("validate-candidate", help="Validate candidate JSON")
     validate_parser.add_argument("path", help="Candidate path relative to the workspace")
 
+    foreign_parser = subparsers.add_parser(
+        "verify-foreign-route",
+        help=(
+            "Verify a foreign SimpleRouteJson solution against its problem document; "
+            "read-only, mints no identity, and never issues apply authority"
+        ),
+    )
+    foreign_parser.add_argument(
+        "problem", help="SimpleRouteJson problem file relative to the workspace"
+    )
+    foreign_parser.add_argument(
+        "solution", help="Foreign solution file with traces, relative to the workspace"
+    )
+    foreign_parser.add_argument(
+        "--expect-problem-sha256",
+        required=True,
+        help="The sha256 of the exact problem document the solution claims to solve",
+    )
+    foreign_parser.add_argument("--clearance-nm", type=int, default=None)
+    foreign_parser.add_argument("--via-diameter-nm", type=int, default=None)
+    foreign_parser.add_argument("--via-drill-nm", type=int, default=None)
+
     compare_parser = subparsers.add_parser("compare", help="Rank candidate JSON files")
     compare_parser.add_argument(
         "paths", nargs="+", help="Candidate paths relative to the workspace"
@@ -431,6 +458,46 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if args.command == "validate-candidate":
             _json_dump(candidate_from_dict(_load_candidate(args.path, settings)).to_dict())
+            return 0
+        if args.command == "verify-foreign-route":
+            limits = ForeignRouteVerificationLimits()
+            policy = DEFAULT_IMPORT_POLICY
+            if any(
+                value is not None
+                for value in (args.clearance_nm, args.via_diameter_nm, args.via_drill_nm)
+            ):
+                policy = ImportPolicy(
+                    clearance_nm=args.clearance_nm
+                    if args.clearance_nm is not None
+                    else DEFAULT_IMPORT_POLICY.clearance_nm,
+                    via_diameter_nm=args.via_diameter_nm
+                    if args.via_diameter_nm is not None
+                    else DEFAULT_IMPORT_POLICY.via_diameter_nm,
+                    via_drill_nm=args.via_drill_nm
+                    if args.via_drill_nm is not None
+                    else DEFAULT_IMPORT_POLICY.via_drill_nm,
+                )
+            problem = read_workspace_file(
+                settings.workspace,
+                args.problem,
+                allowed_suffixes={".json"},
+                max_bytes=limits.max_document_bytes,
+            )
+            solution = read_workspace_file(
+                settings.workspace,
+                args.solution,
+                allowed_suffixes={".json"},
+                max_bytes=limits.max_document_bytes,
+            )
+            _json_dump(
+                verify_foreign_simple_route_json(
+                    problem.content,
+                    solution.content,
+                    expected_problem_sha256=args.expect_problem_sha256,
+                    policy=policy,
+                    limits=limits,
+                ).to_dict()
+            )
             return 0
         if args.command == "compare":
             candidates = [
