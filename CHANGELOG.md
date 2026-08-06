@@ -59,7 +59,28 @@ All notable changes are documented here. The format follows
   it is read-only unless an operator opts in at run time exactly as on a host install.
 
 ### Added
-
+- **CopperMCP's central safety claim is now an adversarial test suite instead of a sentence.** The
+  claim is a negative — an agent driving this server cannot cause an unintended board mutation and
+  cannot extract a verification that was never computed, even when it tries — so it cannot be
+  proved, only attacked. `scripts/evaluate_excessive_agency.py` runs 29 predeclared scenarios in
+  six families through the real MCP adapter: mutation without consent (every apply surface with the
+  flags off, a forged token, a token from another session, and tokens rebound to a different
+  candidate, revision, board, and operation domain, plus a genuine token replayed straight after the
+  write it authorized), stale-state exploitation, claim laundering (a hand-edited placement legality
+  record and a hand-edited route manifest, each keeping its published identity), non-claim
+  inference, information extraction, and budget exhaustion. Each scenario states its adversarial
+  goal, its tool calls, and the one typed refusal or honest non-claim it requires, in a catalog
+  digest-bound into the artifact so it cannot be reworded after the result is known. Every
+  scenario is replayed against four **project families** — the development fixtures as a control,
+  plus the CopperTone reference board, the held-out audio partition, and the external MIT
+  SimpleRouteJson corpus — and every mutation scenario asserts the board's byte digest is
+  unchanged. **116 cases: 77 passed, 0 failed, 39 not run**, with the not-run reasons reported
+  rather than dropped: the only externally authored family accounts for 29 of them because no MCP
+  tool accepts SimpleRouteJson, so it reaches no agency boundary at all. The suite says explicitly
+  what it does not prove — it tests CopperMCP's refusals and not a model's behaviour, an in-process
+  caller can construct anything, and a passing catalog is coverage rather than absence. Four
+  discriminator tests deliberately break a boundary and require the harness to record a failure,
+  because a suite that cannot fail is not evidence. (D-152, SEC-121, B-089, #69)
 - **CopperMCP now has a routing benchmark on boards it did not author, and the first honest number
   from it is 59.83%.** A benchmark-only import seam converts tscircuit SimpleRouteJson problems
   into ordinary verified Board IR snapshots and ordinary route requests, so an external corpus
@@ -257,7 +278,7 @@ All notable changes are documented here. The format follows
   half the short side, and a ratio outside `(0, 0.5]`, are still refused rather than clamped. No
   content address moves. See
   [Roundrect radius precision](docs/research/roundrect-radius-precision-v1.md) for the derivation
-  and citations, ADR-0077, D-156, and R-118. (#116)
+  and citations, ADR-0077, D-157, and R-118. (#116)
 - **A stadium pad was being handed a disc's attachment core.** `_pad_cores` gives a round pad its
   largest inscribed square, because a disc's central rectangle degenerates to a bar that can seed
   no search — but it detected that case from the collapse alone, and a roundrect whose radius is
