@@ -1,6 +1,6 @@
 {
   "configuration": {
-    "adapter_sha256": "sha256:1643d40c7a84c24a48fadd0832d769dfffdbb73379f1e4ced87221516c3a8c78",
+    "adapter_sha256": "sha256:fb64b59f5727d792de30d82b1e9c0b7eab606d071569a29c8c8bc3ff8db5ec66",
     "adapter_version": "simple-route-json-import-v1",
     "fixed_grid_step_nm": 250000,
     "grid_step_ladder_nm": [
@@ -1479,13 +1479,13 @@
     "that the committed 20-board subset represents the full 36-board corpus",
     "routing optimality: the recorded ratio is against a loose provable lower bound, not against an optimal route"
   ],
-  "run_id": "sha256:374f7f2ea8c08f2f80c81723ff38fb1a7bbb0e8b96deee5a7f4a99f7233c9641",
+  "run_id": "sha256:feb4924accf3a657780957623f87a995caa04ee8af823d4f4da526319ff3e12a",
   "schema": "copper-mcp/benchmark/simple-route-json-corpus/v1",
-  "source_commit": "d036d8872c93954b7a0726f1a54465dcef7d682b",
+  "source_commit": "40889bdef6b4370a15e1cbea8fe19ed8c8478ca7",
   "timing": {
     "mean_wall_seconds": {
-      "divisor-aligned": 3.441,
-      "fixed": 3.404
+      "divisor-aligned": 3.427,
+      "fixed": 3.461
     },
     "repetitions": 3
   }
