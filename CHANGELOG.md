@@ -56,7 +56,7 @@ All notable changes are documented here. The format follows
   transcribed, and the in-archive copy is deliberately a different document — exactly one version,
   no `download_sha256` — because KiCad's submission CI cross-checks the two. Submission to the
   official repository stays a human step, prepared as a checklist in the plugin README. (#98,
-  D-152, SEC-121)
+  D-154, SEC-121)
 - **A `requirements.txt` that must exist and must install nothing.** KiCad marks a Python IPC
   plugin *ready* only after pip exits 0 against that file, and skips unready plugins in both
   `GetActionsForScope` and `InvokeAction` — so a plugin shipped without it installs, discovers,
@@ -98,7 +98,7 @@ All notable changes are documented here. The format follows
   what it does not prove — it tests CopperMCP's refusals and not a model's behaviour, an in-process
   caller can construct anything, and a passing catalog is coverage rather than absence. Four
   discriminator tests deliberately break a boundary and require the harness to record a failure,
-  because a suite that cannot fail is not evidence. (D-152, SEC-121, B-089, #69)
+  because a suite that cannot fail is not evidence. (D-156, SEC-122, B-090, #69)
 - **CopperMCP now has a routing benchmark on boards it did not author, and the first honest number
   from it is 59.83%.** A benchmark-only import seam converts tscircuit SimpleRouteJson problems
   into ordinary verified Board IR snapshots and ordinary route requests, so an external corpus
@@ -274,7 +274,7 @@ All notable changes are documented here. The format follows
   obstacle and backwards for an outline, and a chord is inscribed only when the arc bulges away from
   the board interior. Work stays bounded — the segment count and the quadratic simplicity test each
   charge a declared budget. No schema, digest, or diagnostic code changes, and no golden identity
-  moves. ([ADR-0076](docs/adr/0076-segment-assembled-edge-cuts-outline.md), D-154, R-117)
+  moves. ([ADR-0076](docs/adr/0076-segment-assembled-edge-cuts-outline.md), D-155, R-117)
 - **A roundrect corner radius is now rounded, not refused — and the direction is the opposite of
   the obvious one.** KiCad never stores a roundrect's radius. It stores a ten-significant-digit
   `roundrect_rratio` scaling the pad's *shorter* side, and recomputes
