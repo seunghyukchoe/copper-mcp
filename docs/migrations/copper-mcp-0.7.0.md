@@ -13,7 +13,7 @@ Every structural parse budget used to refuse under the single Board IR conversio
 `inspect_board_ir` publishes `conversion_diagnostic_counts` — a count over diagnostic *codes* — and
 the messages that did distinguish them are dropped before a caller sees them. An operator was told
 that a limit was hit and never which one, at exactly the moment six of those limits became settable
-([ADR-0076](../adr/0076-discriminated-configurable-parse-budgets.md), #112).
+([ADR-0079](../adr/0079-discriminated-configurable-parse-budgets.md), #112).
 
 0.7.0 refuses under `budget.exceeded.<budget>`, where `<budget>` is the `ParseLimits` field name
 without its `max_` prefix:

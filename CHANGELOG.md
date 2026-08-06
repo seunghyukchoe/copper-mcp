@@ -6,8 +6,81 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Board metadata that KiCad writes into essentially every real board no longer refuses the whole
+  document. `solder_mask_min_width` joins `pad_to_mask_clearance` as accepted setup metadata — it
+  bounds mask slivers, not copper — and `descr` and `tags`, the library documentation strings
+  copied into every placed footprint, are accepted as footprint metadata. Across the 23 real
+  boards this was found on, `descr` and `tags` appeared 2,518 times each, so their absence from
+  the allowlist refused nearly everything. `point`, which carries `at`/`size`/`layer` like the
+  `fp_*` primitives, now goes through the same layer-aware path instead of the metadata
+  allowlist, so a `point` on a routing layer is refused exactly as a stray `fp_line` is. The
+  allowlists stay closed: an unrecognised setup or footprint field is still a typed refusal, and
+  a regression pins that.
+
 ### Added
 
+- **The KiCad plugin is now a Plugin and Content Manager package, and installing it still grants
+  nothing.** `scripts/build_pcm_package.py` produces `com.github.seunghyukchoe.coppermcp-live-observer`
+  as a reproducible archive alongside the wheel and sdist, attested under the same `dist/*` subject
+  path. The format was read from KiCad's published JSON Schema and its addons-metadata CI rather
+  than from the prose guide, which contradicts the schema on six fields; both schema versions are
+  vendored under `schemas/kicad-pcm/` and the package validates against **both**, because a
+  `plugin`-typed package is served to KiCad 6.0–9.x through the down-converted v1 lists as well as
+  to 10.0+, and v1 is the stricter document. The archive is **stored, not deflated**, written in one
+  declared sorted order with the 1980 ZIP epoch, mode 0644, and Unix host on every entry, so its
+  bytes are a pure function of member names, contents, and order — byte-identical across Python
+  3.12 and 3.14, two timezones, and different hash seeds. That is a correctness requirement, not a
+  nicety: a version merged into the KiCad repository is immutable, so a rebuild that differed would
+  be unfixable in place. The `download_sha256`, `download_size`, and `install_size` in the
+  submission metadata are measured from the artifact the script just built, so no digest is ever
+  transcribed, and the in-archive copy is deliberately a different document — exactly one version,
+  no `download_sha256` — because KiCad's submission CI cross-checks the two. Submission to the
+  official repository stays a human step, prepared as a checklist in the plugin README. (#98,
+  D-152, SEC-121)
+- **A `requirements.txt` that must exist and must install nothing.** KiCad marks a Python IPC
+  plugin *ready* only after pip exits 0 against that file, and skips unready plugins in both
+  `GetActionsForScope` and `InvokeAction` — so a plugin shipped without it installs, discovers,
+  validates, and then never appears in the toolbar, with the reason only in a trace log. Naming
+  `copper-mcp` in it fails the same way for the opposite reason: KiCad resolves it against PyPI
+  under `--only-binary :all:`, and CopperMCP is deliberately unpublished there. The per-plugin
+  environment is created with `--system-site-packages`, so the operator's own
+  `pip install 'copper-mcp[kicad]'` is what supplies the import, and the entrypoint now refuses
+  with a fixed, actionable sentence when it has not been done. (#98)
+
+- A container image for the MCP server. `Dockerfile` builds a wheel and installs it into a
+  slim Python base as a non-root user, with `/workspace` as the mounted board directory and the
+  stdio transport as the entrypoint. It deliberately does **not** bundle KiCad: board inspection,
+  DRC, ERC, and rendering delegate to an authoritative `kicad-cli`, and shipping one inside the
+  image would let a caller believe those surfaces answered when the host's own KiCad is what must
+  answer for them. Without KiCad the server still starts and lists all 27 tools, refusing the
+  KiCad-backed ones with their normal typed diagnostics. No mutation flag is set in the image, so
+  it is read-only unless an operator opts in at run time exactly as on a host install.
+
+### Added
+- **CopperMCP's central safety claim is now an adversarial test suite instead of a sentence.** The
+  claim is a negative — an agent driving this server cannot cause an unintended board mutation and
+  cannot extract a verification that was never computed, even when it tries — so it cannot be
+  proved, only attacked. `scripts/evaluate_excessive_agency.py` runs 29 predeclared scenarios in
+  six families through the real MCP adapter: mutation without consent (every apply surface with the
+  flags off, a forged token, a token from another session, and tokens rebound to a different
+  candidate, revision, board, and operation domain, plus a genuine token replayed straight after the
+  write it authorized), stale-state exploitation, claim laundering (a hand-edited placement legality
+  record and a hand-edited route manifest, each keeping its published identity), non-claim
+  inference, information extraction, and budget exhaustion. Each scenario states its adversarial
+  goal, its tool calls, and the one typed refusal or honest non-claim it requires, in a catalog
+  digest-bound into the artifact so it cannot be reworded after the result is known. Every
+  scenario is replayed against four **project families** — the development fixtures as a control,
+  plus the CopperTone reference board, the held-out audio partition, and the external MIT
+  SimpleRouteJson corpus — and every mutation scenario asserts the board's byte digest is
+  unchanged. **116 cases: 77 passed, 0 failed, 39 not run**, with the not-run reasons reported
+  rather than dropped: the only externally authored family accounts for 29 of them because no MCP
+  tool accepts SimpleRouteJson, so it reaches no agency boundary at all. The suite says explicitly
+  what it does not prove — it tests CopperMCP's refusals and not a model's behaviour, an in-process
+  caller can construct anything, and a passing catalog is coverage rather than absence. Four
+  discriminator tests deliberately break a boundary and require the harness to record a failure,
+  because a suite that cannot fail is not evidence. (D-152, SEC-121, B-089, #69)
 - **CopperMCP now has a routing benchmark on boards it did not author, and the first honest number
   from it is 59.83%.** A benchmark-only import seam converts tscircuit SimpleRouteJson problems
   into ordinary verified Board IR snapshots and ordinary route requests, so an external corpus
@@ -158,6 +231,33 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- **A board outline drawn with the line tool is now a board outline.** The adapter accepted exactly
+  one `Edge.Cuts` primitive — a single unfilled `gr_rect` — and refused everything else with
+  `unsupported.construct`. `gr_rect` is what KiCad writes for the *rectangle tool*; draw the same
+  outline with the line tool, or draw any shape that is not a rectangle, and you get `gr_line`
+  segments, which was most real boards and every non-rectangular one. Segments on `Edge.Cuts` now
+  chain into the single imported contour, verified against a real four-layer board whose four
+  segments assemble into its exact 159 × 150 mm rectangle. (#111)
+
+  **The direction of error inverts here, and that is the whole decision.** Every obstacle in this
+  project is *over*-approximated, because a larger obstacle only makes the router refuse more. The
+  board outline is routing **room**, so it may only be *under*-approximated: a modelled outline one
+  nanometre larger than the drawn one hands the router copper the fabricated board does not have.
+  Assembled from straight segments joined at *exactly* coincident endpoints, the ring's vertices are
+  the drawn endpoints and nothing is synthesized, so containment holds with equality.
+
+  Nothing is repaired. KiCad chains its own outline with a non-zero tolerance and will close a small
+  gap for you; a 10 µm near-miss — inside KiCad's own epsilon — is refused here instead, because
+  closing a gap adds board area no drawn segment encloses. A zero-length segment, a duplicate
+  segment, an open contour, a branching spur, two disjoint loops, and a self-intersection each refuse
+  with a typed code and are never guessed at, since every plausible repair invents board. Arcs,
+  circles, polygons and curves on `Edge.Cuts` stay refused with a diagnostic that now names the
+  curve: ADR-0072's conservative sagitta bound is an *upper* bound on an arc, which is right for an
+  obstacle and backwards for an outline, and a chord is inscribed only when the arc bulges away from
+  the board interior. Work stays bounded — the segment count and the quadratic simplicity test each
+  charge a declared budget. No schema, digest, or diagnostic code changes, and no golden identity
+  moves. ([ADR-0079](docs/adr/0076-segment-assembled-edge-cuts-outline.md), D-154, R-117)
+
 - **A courtyard drawn as a ring is a ring, not a solid disc.** A footprint whose courtyard is an
   outer boundary plus an inner ring — a donut — was compared ring-by-ring as two independent solids,
   so a part legitimately placed in the hole was reported as a courtyard collision and the candidate
@@ -227,6 +327,12 @@ All notable changes are documented here. The format follows
   [KiCad copper layer numbering](docs/research/kicad-copper-layer-numbering-v1.md) for the
   derivation and citations, D-153, and R-116 for the class of defect — a validation rule no fixture
   ever contradicted. (#104)
+### Changed
+
+- The KiCad plugin entrypoint imports `copper_mcp.kicad_ipc` inside `main()` rather than at module
+  scope. A PCM install delivers the plugin file and not CopperMCP, so at module scope a new user's
+  first click was an unhandled `ImportError` that put a filesystem path into KiCad's warning bar.
+  It is now one line naming the pip command, with no path and no traceback. (#98, SEC-121)
 
 ## [0.6.0] - 2026-08-06
 

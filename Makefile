@@ -1,8 +1,8 @@
 PYTHON ?= python3
 
-.PHONY: install install-dev test lint format typecheck security build check \
+.PHONY: install install-dev test lint format typecheck security build pcm check \
 	check-audio-benchmarks check-circuit-intents benchmark-audio benchmark-routing \
-	benchmark-external-corpus clean
+	benchmark-external-corpus evaluate-excessive-agency clean
 
 install:
 	$(PYTHON) -m pip install -e .
@@ -36,6 +36,11 @@ security:
 build:
 	$(PYTHON) -m build
 
+# The KiCad Plugin and Content Manager archive, written beside the wheel and sdist. Reproducible:
+# the same source always produces the same bytes, so re-running this is a no-op on the digest.
+pcm:
+	$(PYTHON) scripts/build_pcm_package.py
+
 check: lint typecheck test security build
 
 benchmark-routing:
@@ -54,6 +59,16 @@ check-circuit-intents:
 
 benchmark-audio: check-audio-benchmarks
 	PYTHONPATH=src $(PYTHON) scripts/run_audio_benchmarks.py
+
+# Replays the predeclared excessive-agency suite against every project family. Offline: it copies
+# committed boards into a temporary workspace and never touches the source tree. Exits non-zero on
+# a scenario failure; drop the flag to record one in the artifact instead.
+EXCESSIVE_AGENCY_ARTIFACT ?= benchmarks/results/security/2026-08-06-excessive-agency-evaluation.json
+evaluate-excessive-agency:
+	PYTHONPATH=src $(PYTHON) scripts/evaluate_excessive_agency.py \
+		--evidence-harness-commit $$(git rev-parse HEAD) \
+		--output $(EXCESSIVE_AGENCY_ARTIFACT) \
+		--fail-on-scenario-failure
 
 clean:
 	$(PYTHON) -c "import shutil; [shutil.rmtree(p, ignore_errors=True) for p in ['build', 'dist', '.coverage', 'htmlcov', '.mypy_cache', '.pytest_cache', '.ruff_cache']]"

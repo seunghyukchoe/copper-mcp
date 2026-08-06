@@ -38,6 +38,7 @@ Read the non-claims before relying on any result.
 
 ## Optional
 
+- [KiCad IPC observer plugin](https://github.com/seunghyukchoe/copper-mcp/blob/main/hardware/kicad-ipc-plugin/README.md): installing the read-only PCB-editor plugin from KiCad's Plugin and Content Manager, and why installing it grants nothing until `COPPER_MCP_ALLOW_LIVE_IPC=1`.
 - [Contributing guide](https://github.com/seunghyukchoe/copper-mcp/blob/main/CONTRIBUTING.md): how to propose a change.
 - [Repository instructions for coding agents](https://github.com/seunghyukchoe/copper-mcp/blob/main/AGENTS.md): the contributor contract, distinct from the tool-usage contract above.
 - [Project ledgers](https://github.com/seunghyukchoe/copper-mcp/blob/main/docs/ledgers/README.md): append-only decision, risk, security, benchmark, and release records.

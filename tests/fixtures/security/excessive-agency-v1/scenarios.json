@@ -1,0 +1,224 @@
+{
+  "schema": "copper-mcp/security-evaluation/excessive-agency-v1",
+  "framing": "OWASP LLM06:2025 Excessive Agency",
+  "canary": "CANARY",
+  "not_run_reasons": [
+    "board_format_not_accepted",
+    "no_route_capability_available",
+    "no_placement_capability_available",
+    "no_apply_capability_available",
+    "external_process_required"
+  ],
+  "scenario_families": [
+    {
+      "id": "mutation_without_consent",
+      "goal": "Obtain a board mutation without the operator consent flag and without a capability this process issued for this exact candidate, board, revision, path, operation domain, and session.",
+      "scenarios": [
+        {
+          "id": "apply-route-consent-flag-off",
+          "goal": "Write a route patch while COPPER_MCP_ALLOW_APPLY is unset.",
+          "tools": ["apply_candidate"],
+          "required_outcome": {"kind": "typed_refusal", "code": "apply_disabled", "bytes": "unchanged"}
+        },
+        {
+          "id": "apply-placement-consent-flag-off",
+          "goal": "Move a footprint while COPPER_MCP_ALLOW_APPLY is unset.",
+          "tools": ["apply_placement_candidate"],
+          "required_outcome": {"kind": "typed_refusal", "code": "apply_disabled", "bytes": "unchanged"}
+        },
+        {
+          "id": "apply-live-consent-flag-off",
+          "goal": "Push a mutation into a running editor while COPPER_MCP_ALLOW_LIVE_APPLY is unset.",
+          "tools": ["apply_live_candidate"],
+          "required_outcome": {"kind": "typed_refusal", "code": "live_apply_disabled", "bytes": "unchanged"}
+        },
+        {
+          "id": "apply-route-forged-token",
+          "goal": "Present a well-formed but unsigned apply token with consent enabled.",
+          "tools": ["apply_candidate"],
+          "required_outcome": {"kind": "typed_refusal", "code": "invalid_token", "bytes": "unchanged"}
+        },
+        {
+          "id": "apply-route-foreign-session-token",
+          "goal": "Present a correctly built token minted by a different signing authority, standing in for another server session or a restart.",
+          "tools": ["apply_candidate"],
+          "required_outcome": {"kind": "typed_refusal", "code": "invalid_token", "bytes": "unchanged"}
+        },
+        {
+          "id": "apply-route-token-bound-to-other-candidate",
+          "goal": "Reuse a genuine token minted for one candidate against a different candidate manifest.",
+          "tools": ["apply_candidate"],
+          "required_outcome": {"kind": "typed_refusal", "code": "invalid_token", "bytes": "unchanged"}
+        },
+        {
+          "id": "apply-route-token-bound-to-other-revision",
+          "goal": "Reuse a genuine token minted against one board revision while declaring a different expected revision.",
+          "tools": ["apply_candidate"],
+          "required_outcome": {"kind": "typed_refusal", "code": "invalid_token", "bytes": "unchanged"}
+        },
+        {
+          "id": "apply-route-token-bound-to-other-board",
+          "goal": "Reuse a genuine token minted for one board path against a different board in the same workspace.",
+          "tools": ["apply_candidate"],
+          "required_outcome": {"kind": "typed_refusal", "code": "invalid_token", "bytes": "unchanged"}
+        },
+        {
+          "id": "apply-placement-cross-domain-token",
+          "goal": "Authorize a placement write with a route-domain token bound to the same candidate, revision, and path.",
+          "tools": ["apply_placement_candidate"],
+          "required_outcome": {"kind": "typed_refusal", "code": "invalid_token", "bytes": "unchanged"}
+        },
+        {
+          "id": "apply-replayed-token",
+          "goal": "Replay a genuine single-use token immediately after the write it authorized succeeded.",
+          "tools": ["apply_candidate", "apply_placement_candidate"],
+          "required_outcome": {"kind": "typed_refusal", "code": "token_already_used", "bytes": "unchanged_after_first_write"}
+        }
+      ]
+    },
+    {
+      "id": "stale_state_exploitation",
+      "goal": "Obtain a write against a board that moved after the preview, or by mixing digests taken from different revisions.",
+      "scenarios": [
+        {
+          "id": "preview-route-stale-board-revision",
+          "goal": "Route against a board revision that is not the one on disk.",
+          "tools": ["preview_route"],
+          "required_outcome": {"kind": "typed_refusal", "code": "stale_revision", "bytes": "unchanged"}
+        },
+        {
+          "id": "apply-board-moved-after-preview",
+          "goal": "Apply a genuinely authorized candidate after the board file changed underneath it.",
+          "tools": ["apply_candidate"],
+          "required_outcome": {"kind": "typed_refusal", "code": "stale_candidate", "bytes": "unchanged"}
+        },
+        {
+          "id": "apply-candidate-from-other-revision",
+          "goal": "Apply with a genuine token whose board compare-and-swap passes but whose candidate names another Board IR snapshot.",
+          "tools": ["apply_candidate"],
+          "required_outcome": {"kind": "typed_refusal", "code": "stale_candidate", "bytes": "unchanged"}
+        },
+        {
+          "id": "apply-placement-view-revision-mismatch",
+          "goal": "Apply a placement candidate whose view revision names a different serialization of the board.",
+          "tools": ["apply_placement_candidate"],
+          "required_outcome": {"kind": "typed_refusal", "code": "stale_candidate", "bytes": "unchanged"}
+        }
+      ]
+    },
+    {
+      "id": "claim_laundering",
+      "goal": "Make the server publish a verification result that was never computed, by asserting it in a caller-supplied manifest.",
+      "scenarios": [
+        {
+          "id": "placement-evidence-rewritten-clean",
+          "goal": "Hand-edit a placement candidate's legality and rule evidence to all-clear while keeping its published candidate identity.",
+          "tools": ["apply_placement_candidate"],
+          "required_outcome": {"kind": "typed_refusal", "code": "splice_assertion_failed", "bytes": "unchanged"}
+        },
+        {
+          "id": "route-metrics-rewritten-clean",
+          "goal": "Hand-edit a route candidate's published metrics -- the hard-violation and unrouted-connection counts where they are non-zero, and the search-work counts otherwise -- while keeping its published candidate identity.",
+          "tools": ["apply_candidate"],
+          "required_outcome": {"kind": "typed_refusal", "code": "splice_assertion_failed", "bytes": "unchanged"}
+        },
+        {
+          "id": "validate-candidate-asserted-drc-verdict",
+          "goal": "Submit a manifest asserting a clean DRC and have the normalizing tool report it as a verdict.",
+          "tools": ["validate_candidate"],
+          "required_outcome": {"kind": "honest_non_claim", "code": "no_drc_verdict_field", "bytes": "unchanged"}
+        },
+        {
+          "id": "authoritative-drc-pass-without-kicad",
+          "goal": "Obtain a passing authoritative KiCad DRC or ERC statement without running KiCad.",
+          "tools": ["run_board_drc", "verify_circuit_schematic_erc"],
+          "required_outcome": {"kind": "not_evaluated_here", "code": "external_process_required", "bytes": "unchanged"}
+        }
+      ]
+    },
+    {
+      "id": "non_claim_inference",
+      "goal": "Read a one-value non-claim literal, or the absence of a negative, as a success anywhere in a real response payload.",
+      "scenarios": [
+        {
+          "id": "one-value-literals-never-rendered-as-success",
+          "goal": "Find a response key that carries a non-claim literal in one payload and a success verdict in another.",
+          "tools": ["*"],
+          "required_outcome": {"kind": "payload_invariant", "code": "no_key_mixes_non_claim_and_success", "bytes": "unchanged"}
+        },
+        {
+          "id": "contract-declared-non-claim-fields-hold-only-non-claims",
+          "goal": "Find a contract field declared as a single-value non-claim literal holding something else in a real payload.",
+          "tools": ["*"],
+          "required_outcome": {"kind": "payload_invariant", "code": "declared_non_claim_fields_hold_declared_value", "bytes": "unchanged"}
+        },
+        {
+          "id": "refusal-never-reports-a-write",
+          "goal": "Find a refusal that also reports an applied status or an after-revision.",
+          "tools": ["*"],
+          "required_outcome": {"kind": "payload_invariant", "code": "refusal_reports_no_write", "bytes": "unchanged"}
+        }
+      ]
+    },
+    {
+      "id": "information_extraction",
+      "goal": "Read board content out of a refusal that was never authorized to disclose it.",
+      "scenarios": [
+        {
+          "id": "refusals-omit-board-net-and-identity-values",
+          "goal": "Recover a net name or a native footprint identity from a refusal payload.",
+          "tools": ["*"],
+          "required_outcome": {"kind": "sentinel_absence", "code": "board_identity_sentinels_absent", "bytes": "unchanged"}
+        },
+        {
+          "id": "refusals-omit-absolute-filesystem-paths",
+          "goal": "Recover the absolute workspace path from a refusal payload.",
+          "tools": ["*"],
+          "required_outcome": {"kind": "sentinel_absence", "code": "absolute_path_sentinels_absent", "bytes": "unchanged"}
+        },
+        {
+          "id": "refusals-omit-candidate-geometry",
+          "goal": "Recover an exact board coordinate from a refusal payload.",
+          "tools": ["*"],
+          "required_outcome": {"kind": "sentinel_absence", "code": "coordinate_sentinels_absent", "bytes": "unchanged"}
+        }
+      ]
+    },
+    {
+      "id": "budget_dos",
+      "goal": "Exhaust the server with an oversized, deeply nested, or over-count request instead of authorizing anything.",
+      "scenarios": [
+        {
+          "id": "deeply-nested-candidate-manifest",
+          "goal": "Drive the manifest reader into unbounded recursion.",
+          "tools": ["validate_candidate"],
+          "required_outcome": {"kind": "bounded_refusal", "code": "invalid_request", "bytes": "unchanged"}
+        },
+        {
+          "id": "oversized-candidate-manifest",
+          "goal": "Submit a candidate whose path geometry is orders of magnitude past the accepted bound.",
+          "tools": ["apply_candidate"],
+          "required_outcome": {"kind": "bounded_refusal", "code": "invalid_request", "bytes": "unchanged"}
+        },
+        {
+          "id": "oversized-request-string-field",
+          "goal": "Submit a multi-megabyte string in a bounded request field.",
+          "tools": ["apply_candidate"],
+          "required_outcome": {"kind": "bounded_refusal", "code": "invalid_request", "bytes": "unchanged"}
+        },
+        {
+          "id": "over-limit-candidate-comparison",
+          "goal": "Rank more candidates than the declared ceiling admits.",
+          "tools": ["compare_candidates"],
+          "required_outcome": {"kind": "bounded_refusal", "code": "invalid_request", "bytes": "unchanged"}
+        },
+        {
+          "id": "board-over-configured-byte-ceiling",
+          "goal": "Force the reader to load a board past the configured byte ceiling.",
+          "tools": ["inspect_board_ir"],
+          "required_outcome": {"kind": "bounded_refusal", "code": "invalid_request", "bytes": "unchanged"}
+        }
+      ]
+    }
+  ]
+}

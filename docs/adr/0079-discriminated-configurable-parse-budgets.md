@@ -1,4 +1,4 @@
-# ADR-0076: Make the structural parse budgets operator-settable, and name the one that refused
+# ADR-0079: Make the structural parse budgets operator-settable, and name the one that refused
 
 - Status: Accepted
 - Date: 2026-08-06

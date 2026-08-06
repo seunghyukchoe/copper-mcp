@@ -86,6 +86,11 @@ When adding a document, add it to the list below in the same sentence form — *
   the owner-bound, durable-storage gates that keep experimental wire Tasks disabled.
 - [MCP excessive-agency evaluation](./mcp-excessive-agency-evaluation.md) defines the seven-case
   offline capability, disclosure, revision, and quota regression boundary.
+- [Excessive-agency evaluation v1](./excessive-agency-eval-v1.md) builds the systematic 29-scenario
+  adversarial suite on top of that boundary and replays it against four project families, three of
+  them held out. It reports 77 passes, 0 failures, and 39 scenarios that could not run — including
+  the finding that the only externally authored family reaches no agency boundary at all — and it
+  refuses to claim that any of this measures a model's behaviour.
 - [Circuit Scene IR references](./circuit-scene-ir-references.md) grounds the typed semantic/visual
   observation contract and its disclosure limits.
 - [FreeRouting real-run evidence](./freerouting-real-run-v2.md) records the first public,
@@ -142,6 +147,14 @@ When adding a document, add it to the list below in the same sentence form — *
   numbering replaced a different consecutive one at KiCad 9, and that the two cannot both be
   accepted at once. It claims nothing about non-copper ordinals, the pre-4.0 legacy format, or
   KiCad 11.
+- [KiCad PCM distribution](./kicad-pcm-distribution-v1.md) records the addon package format from
+  the published JSON Schema and the addons-metadata CI rather than the prose guide, listing the six
+  fields on which the two disagree; the archive whitelist, icon bounds, size tolerances, and
+  version-immutability rules a submission is judged against; the split between the in-archive and
+  submitted `metadata.json`; and the two behaviours in KiCad's own plugin manager that decide
+  whether a Python IPC plugin is reachable at all — a `requirements.txt` it cannot use to install
+  CopperMCP, and a `--system-site-packages` venv that is why it does not need to. It claims no
+  submission, acceptance, or publication, and no observed behaviour on any platform.
 
 ## Terms used in this review
 
