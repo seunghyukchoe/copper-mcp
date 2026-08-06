@@ -862,6 +862,15 @@ def _pad_cores(pad: Pad) -> tuple[_Rect, ...] | None:
     contact the previous model found. Emitting both is a strict enlargement of what the pad
     offers, and since every rectangle here contains the pad centre they all share one
     component, so a pad is never split by its own decomposition.
+
+    The disc treatment is gated on the pad actually *being* a disc, not on its core having
+    collapsed. A roundrect whose radius is half its shorter side is a stadium, and its core
+    collapses in exactly the same way - but it is nowhere near as tall as a disc of its longer
+    half extent, so reading the collapse as "round pad" gave a 2.0 x 1.0 mm stadium a core
+    reaching 1.0 mm from the centre in y where the copper stops at 0.5 mm. That claims copper
+    that is not there, which is the one direction an attachment core may never err in. KiCad
+    writes exactly that pad for a ratio of 0.5, so this is reachable from a real board, and it
+    became easier to reach once a fractional radius started rounding up onto the boundary.
     """
 
     extent = _pad_core_extent(pad)
@@ -877,8 +886,12 @@ def _pad_cores(pad: Pad) -> tuple[_Rect, ...] | None:
     )
     if half_x_nm != 0 and half_y_nm != 0:
         return (core,)
-    # A degenerate bar means a round pad; give it real area in both axes as well. The bar runs
-    # along whichever axis is non-zero, so the perpendicular bar simply swaps the half extents.
+    if pad.shape not in {PadShape.CIRCLE, PadShape.OVAL} or pad.size_x_nm != pad.size_y_nm:
+        # Not a disc, so there is no inscribed square to claim. The degenerate bar is still a
+        # true subset of the copper, and staying with it under-approximates rather than invents.
+        return (core,)
+    # The bar runs along whichever axis is non-zero, so the perpendicular bar simply swaps the
+    # half extents. For a disc that perpendicular bar is the pad's other diameter.
     radius_nm = max(half_x_nm, half_y_nm)
     inscribed_nm = isqrt(radius_nm * radius_nm // 2)
     if inscribed_nm < 1:

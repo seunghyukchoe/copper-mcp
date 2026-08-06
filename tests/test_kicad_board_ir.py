@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tracemalloc
 from collections.abc import Callable
+from fractions import Fraction
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,7 @@ from copper_mcp.board_ir import (
     ZonePadConnection,
     encode_snapshot,
 )
+from copper_mcp.placement.geometry import pad_bounds, pad_core
 
 TEST_ROOT = Path(__file__).parent
 REPOSITORY_ROOT = TEST_ROOT.parent
@@ -2147,3 +2149,211 @@ def test_pathological_segment_outline_hits_a_budget_instead_of_spinning() -> Non
 
     assert result.snapshot is None
     assert result.diagnostics[0].code == "budget.exceeded"
+
+
+# --- roundrect corner-radius precision (issue #116, ADR-0077) -----------------------------
+#
+# KiCad stores a roundrect corner as a ratio of the pad's shorter side and recomputes the
+# radius on every read, so an ordinary ratio on an ordinary pad lands on a fractional
+# nanometre. The adapter used to refuse that outright, which rejected five of twenty-three
+# real boards for a quarter-nanometre. These tests pin the rounding *direction*, not merely
+# that the board converts: a control below asserts the modelled pad relates to the true pad
+# the one safe way, and fails if the ceiling is flipped to a floor.
+
+_SHORT_SIDE_NM = 1_000_000  # the subset fixture's roundrect pad is 2.0 x 1.0 mm
+
+
+def _with_ratio(ratio: bytes, *, size: bytes | None = None) -> bytes:
+    """Return the subset fixture with the roundrect pad's ratio, and optionally size, replaced."""
+
+    source = _replace(
+        SUBSET_BOARD.read_bytes(), b"(roundrect_rratio 0.25)", b"(roundrect_rratio " + ratio + b")"
+    )
+    if size is not None:
+        source = _replace_after(source, b'(pad "1" smd roundrect', b"(size 2 1)", size)
+    return source
+
+
+def _exact_radius_nm(ratio: str, short_side_nm: int = _SHORT_SIDE_NM) -> Fraction:
+    """The mathematically exact ``ratio * short_side``, with no rounding anywhere."""
+
+    return Fraction(ratio) * short_side_nm
+
+
+def _roundrect_pad(snapshot: BoardIRSnapshot) -> Pad:
+    return next(pad for pad in snapshot.content.pads if pad.shape is PadShape.ROUNDRECT)
+
+
+def _inside_true_roundrect(
+    point: tuple[Fraction, Fraction],
+    half_x: Fraction,
+    half_y: Fraction,
+    radius: Fraction,
+) -> bool:
+    """Exact containment in a roundrect of *fractional* corner radius, centred on the origin.
+
+    A roundrect is the Minkowski sum of a disc of radius ``r`` with the rectangle inset by ``r``
+    on every side, so a point is inside exactly when its distance to that inset rectangle is at
+    most ``r``. Everything here is :class:`~fractions.Fraction`, so the boundary case is decided
+    exactly rather than within a tolerance - which matters, because the whole question is what
+    happens a fraction of a nanometre either side of the boundary.
+    """
+
+    delta_x = max(abs(point[0]) - (half_x - radius), Fraction(0))
+    delta_y = max(abs(point[1]) - (half_y - radius), Fraction(0))
+    return delta_x * delta_x + delta_y * delta_y <= radius * radius
+
+
+def test_fractional_roundrect_radius_converts_and_records_the_rounding() -> None:
+    """A radius that is not a whole nanometre converts, and says by how much it moved."""
+
+    # 0.2083333333 is the shape of ratio KiCad actually writes: ten significant digits, from a
+    # radius the user set in millimetres. Against a 1.0 mm short side it is 208,333.3333 nm.
+    result = parse_kicad_bytes(_with_ratio(b"0.2083333333"), constraint_profile())
+
+    assert result.snapshot is not None, result.diagnostics
+    assert result.diagnostics == ()
+    assert _roundrect_pad(result.snapshot).roundrect_radius_nm == 208_334
+    assert result.max_roundrect_rounding_nm == 1
+
+
+def test_exact_roundrect_radius_reports_no_rounding() -> None:
+    """The residue is measured, not assumed: an exact board must report a clean zero.
+
+    The token carries trailing zeros so that a wider denominator is exercised too: the residue
+    must come from the arithmetic, not from how many digits the ratio happens to be written with.
+    """
+
+    result = parse_kicad_bytes(_with_ratio(b"0.250000"), constraint_profile())
+
+    assert result.snapshot is not None, result.diagnostics
+    assert _roundrect_pad(result.snapshot).roundrect_radius_nm == 250_000
+    assert result.max_roundrect_rounding_nm == 0
+
+
+def test_roundrect_ratio_of_exactly_one_half_converts_as_a_stadium() -> None:
+    """0.5 is the top of KiCad's own clamp, and makes the short edges vanish entirely."""
+
+    result = parse_kicad_bytes(_with_ratio(b"0.5"), constraint_profile())
+
+    assert result.snapshot is not None, result.diagnostics
+    pad = _roundrect_pad(result.snapshot)
+    assert pad.roundrect_radius_nm == 500_000
+    assert pad.roundrect_radius_nm * 2 == min(pad.size_x_nm, pad.size_y_nm)
+    assert result.max_roundrect_rounding_nm == 0
+
+
+@pytest.mark.parametrize("ratio", [b"0", b"0.0", b"0.000000"])
+def test_roundrect_ratio_of_exactly_zero_is_refused(ratio: bytes) -> None:
+    """KiCad calls a zero-ratio roundrect a rect; Board IR cannot express one, so it refuses.
+
+    This is a deliberate non-claim rather than an oversight. Converting it to ``PadShape.RECT``
+    would be defensible on KiCad's own wording, but that is a shape decision and not a
+    precision one, so it stays refused until it is made on purpose.
+    """
+
+    result = parse_kicad_bytes(_with_ratio(ratio), constraint_profile())
+
+    assert result.snapshot is None
+    assert [item.code for item in result.diagnostics] == ["geometry.invalid"]
+    assert result.diagnostics[0].message == "roundrect ratio must be in (0, 0.5]"
+
+
+@pytest.mark.parametrize("ratio", [b"0.5000001", b"0.6", b"1"])
+def test_roundrect_ratio_above_one_half_is_still_refused(ratio: bytes) -> None:
+    """Out of the supported range is refused, never clamped into it."""
+
+    result = parse_kicad_bytes(_with_ratio(ratio), constraint_profile())
+
+    assert result.snapshot is None
+    assert [item.code for item in result.diagnostics] == ["geometry.invalid"]
+
+
+def test_roundrect_radius_rounding_past_half_the_short_side_is_refused() -> None:
+    """Rounding up must never manufacture a radius the shape cannot hold.
+
+    An odd-nanometre short side with a ratio of one half puts the exact radius half a
+    nanometre above the largest representable one. Rounding *down* to fit would hand the pad a
+    core taller than its real copper, so this refuses instead of clamping.
+    """
+
+    result = parse_kicad_bytes(_with_ratio(b"0.5", size=b"(size 2 1.000001)"), constraint_profile())
+
+    assert result.snapshot is None
+    assert [item.code for item in result.diagnostics] == ["integer.precision"]
+    assert (
+        result.diagnostics[0].message == "roundrect radius rounds up beyond half the short pad side"
+    )
+
+
+def test_rounding_direction_keeps_the_attachment_core_inside_the_true_pad() -> None:
+    """The control: the modelled pad must relate to the true pad the *safe* way.
+
+    A pad plays two roles and they pull opposite ways on a corner radius, because a larger
+    radius means more rounding and therefore *less* copper. This test pins the role that
+    actually reads the value. As attachment copper the pad offers an under-approximating inner
+    core - the full-width band left after the corners are cut - and every corner of that band
+    must lie inside the pad KiCad would really draw. Rounding the radius up shrinks the band
+    and keeps it inside; rounding it down lifts the band's top edge a fraction of a nanometre
+    into the rounded corner, claiming copper that is not there and so licensing the router to
+    assert a connection the board does not have.
+
+    Flipping the ceiling in ``_roundrect_radius`` to a floor fails this test on the containment
+    assertion below - it is the geometry that is pinned, not the arithmetic, so the assertion
+    that breaks is the one naming a core corner that has left the copper.
+    """
+
+    ratio = "0.2083333333"
+    snapshot = parse_success(_with_ratio(ratio.encode()), constraint_profile())
+    pad = _roundrect_pad(snapshot)
+    assert pad.roundrect_radius_nm is not None
+
+    exact_radius = _exact_radius_nm(ratio)
+    assert exact_radius.denominator != 1, "the fixture must exercise a genuinely fractional radius"
+
+    # The safety property itself: every corner of the modelled attachment core lies inside the
+    # pad KiCad would really draw. Checked first, and exactly, because this is the claim - the
+    # rounding rule below is only the mechanism that delivers it.
+    core = pad_core(pad, origin=PointNM(0, 0))
+    assert core is not None
+    half_x, half_y = Fraction(pad.size_x_nm, 2), Fraction(pad.size_y_nm, 2)
+    for corner in (
+        (Fraction(core[0]), Fraction(core[1])),
+        (Fraction(core[2]), Fraction(core[1])),
+        (Fraction(core[0]), Fraction(core[3])),
+        (Fraction(core[2]), Fraction(core[3])),
+    ):
+        assert _inside_true_roundrect(corner, half_x, half_y, exact_radius), (
+            f"modelled attachment core corner {corner} lies outside the true pad "
+            f"(exact radius {exact_radius}); the radius was rounded the unsafe way"
+        )
+
+    # The mechanism. The modelled radius is at least the exact one, and at least the integer
+    # radius KiCad itself derives with KiROUND - the ceiling dominates both, so the safety
+    # argument never has to adjudicate which of the two is the authoritative reference.
+    assert pad.roundrect_radius_nm >= exact_radius
+    # KiROUND is round-half-away-from-zero, which for a positive radius is floor(x + 1/2).
+    assert pad.roundrect_radius_nm >= (exact_radius + Fraction(1, 2)).__floor__()
+
+
+def test_rounding_the_radius_never_shrinks_the_pad_obstacle() -> None:
+    """The other role, stated rather than assumed: the obstacle does not read the radius.
+
+    This is what makes a single rounding rule sufficient for both roles. If an obstacle model
+    ever starts consulting the corner radius, rounding up would begin to under-approximate
+    copper and this test is where that shows up.
+    """
+
+    tight = parse_success(_with_ratio(b"0.0000001"), constraint_profile())
+    generous = parse_success(_with_ratio(b"0.5"), constraint_profile())
+
+    tight_pad, generous_pad = _roundrect_pad(tight), _roundrect_pad(generous)
+    assert tight_pad.roundrect_radius_nm != generous_pad.roundrect_radius_nm
+    assert pad_bounds(tight_pad) == pad_bounds(generous_pad)
+    # And the envelope really is the whole rectangle, not something the radius trimmed.
+    assert pad_bounds(generous_pad) == (
+        generous_pad.center.x - generous_pad.size_x_nm // 2,
+        generous_pad.center.y - generous_pad.size_y_nm // 2,
+        generous_pad.center.x + generous_pad.size_x_nm // 2,
+        generous_pad.center.y + generous_pad.size_y_nm // 2,
+    )
