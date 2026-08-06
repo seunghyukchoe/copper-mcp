@@ -425,8 +425,15 @@ class ViaKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class Via:
+    """One through via.
+
+    ``net_id`` is ``None`` for copper KiCad stores on net 0 — stitching vias and orphaned
+    copper. Such a via is still a physical obstacle everywhere geometry is consulted, but it
+    can never satisfy a connectivity claim: no request net compares equal to ``None``.
+    """
+
     id: str
-    net_id: str
+    net_id: str | None
     center: PointNM
     diameter_nm: int
     drill_nm: int
@@ -437,7 +444,8 @@ class Via:
 
     def __post_init__(self) -> None:
         _typed_id("via ID", self.id, "via:")
-        _typed_id("net ID", self.net_id, "net:")
+        if self.net_id is not None:
+            _typed_id("net ID", self.net_id, "net:")
         if not isinstance(self.center, PointNM):
             raise ValueError("via center must be a PointNM")
         if not isinstance(self.kind, ViaKind):
@@ -458,8 +466,10 @@ class Via:
 
 @dataclass(frozen=True, slots=True)
 class Segment:
+    """One straight track. ``net_id`` is ``None`` for net-0 (orphaned) copper; see ``Via``."""
+
     id: str
-    net_id: str
+    net_id: str | None
     layer_id: str
     start: PointNM
     end: PointNM
@@ -468,7 +478,8 @@ class Segment:
 
     def __post_init__(self) -> None:
         _typed_id("segment ID", self.id, "segment:")
-        _typed_id("net ID", self.net_id, "net:")
+        if self.net_id is not None:
+            _typed_id("net ID", self.net_id, "net:")
         _typed_id("layer ID", self.layer_id, "layer:")
         if not isinstance(self.start, PointNM) or not isinstance(self.end, PointNM):
             raise ValueError("segment endpoints must be PointNM values")
@@ -481,8 +492,10 @@ class Segment:
 
 @dataclass(frozen=True, slots=True)
 class Arc:
+    """One curved track. ``net_id`` is ``None`` for net-0 (orphaned) copper; see ``Via``."""
+
     id: str
-    net_id: str
+    net_id: str | None
     layer_id: str
     start: PointNM
     mid: PointNM
@@ -492,7 +505,8 @@ class Arc:
 
     def __post_init__(self) -> None:
         _typed_id("arc ID", self.id, "arc:")
-        _typed_id("net ID", self.net_id, "net:")
+        if self.net_id is not None:
+            _typed_id("net ID", self.net_id, "net:")
         _typed_id("layer ID", self.layer_id, "layer:")
         if not all(isinstance(point, PointNM) for point in (self.start, self.mid, self.end)):
             raise ValueError("arc control points must be PointNM values")

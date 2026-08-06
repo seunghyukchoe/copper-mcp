@@ -761,8 +761,13 @@ class LayeredBoardRouter:
                     "diagonal foreign segments are not modeled",
                 )
             rectangle = segment_rectangle
+            # Netless (net-0) copper has no class of its own; the widest clearance on the
+            # board is the only choice that cannot under-inflate its envelope.
             clearance = max(
-                net_class.clearance_nm, clearance_by_net.get(segment.net_id, widest_clearance)
+                net_class.clearance_nm,
+                widest_clearance
+                if segment.net_id is None
+                else clearance_by_net.get(segment.net_id, widest_clearance),
             )
             if not add_obstacle(
                 rectangle,
@@ -788,8 +793,13 @@ class LayeredBoardRouter:
                 via.center.x + radius,
                 via.center.y + radius,
             )
+            # A netless stitching via is cleared like any other foreign copper, by the
+            # widest class on the board.
             clearance = max(
-                net_class.clearance_nm, clearance_by_net.get(via.net_id, widest_clearance)
+                net_class.clearance_nm,
+                widest_clearance
+                if via.net_id is None
+                else clearance_by_net.get(via.net_id, widest_clearance),
             )
             for layer in range(len(layers)):
                 # The foreign via rectangle already contains its own radius. Inflate it by the

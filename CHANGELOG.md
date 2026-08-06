@@ -8,6 +8,19 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Copper saved on KiCad's net 0 — stitching vias and orphaned tracks, which KiCad 10 writes as
+  `(net "")` — no longer refuses the whole document with `via has no routable net`, the largest
+  single cause in the issue #116 real-board survey (queued on 7 of 12 boards, which carry 115
+  netless vias and 2,687 netless track segments between them). Such copper converts as an
+  obstacle with no connectivity contribution: `net_id` is `None` on the `Via`, `Segment`, or
+  `Arc`, the item never matches any request net, its clearance is the widest class on the board,
+  and no already-connected claim can pass through it — pinned by mutation-checked router tests
+  in both the via-join and segment-attachment directions. All three saved spellings of "no net"
+  (`(net "")`, `(net 0)`, `(net 0 "")`) resolve identically; a negative ordinal is now an
+  explicit typed `net.unknown` refusal, and a netless via is still held to every geometric rule.
+  Board IR, codec, JSON schema 0.2.0, and scene contracts widen `net_id` to nullable in place —
+  strictly additive, with every existing content address byte-identical (ADR-0078, D-158,
+  R-119, #119).
 - Board metadata that KiCad writes into essentially every real board no longer refuses the whole
   document. `solder_mask_min_width` joins `pad_to_mask_clearance` as accepted setup metadata — it
   bounds mask slivers, not copper — and `descr` and `tags`, the library documentation strings

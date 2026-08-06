@@ -721,8 +721,11 @@ class _Converter:
             if len(net_reference) > 16:
                 self.fail("integer.precision", "numeric net reference is malformed", locator)
             net_code = int(net_reference)
-            if net_code <= 0:
+            if net_code == 0:
+                # KiCad's net 0 is the "unconnected" net: real copper with no netlist claim.
                 return None
+            if net_code < 0:
+                self.fail("net.unknown", "numeric net reference is negative", locator)
             canonical_code = str(net_code)
             if canonical_code not in self.legacy_nets:
                 self.fail("net.unknown", "numeric net reference has no declaration", locator)
@@ -1418,16 +1421,17 @@ class _Converter:
                 allowed=frozenset({"locked"}),
                 locator=locator,
             )
+            # KiCad stores stitching and orphaned copper on net 0 ("no net"). That copper is
+            # physically present whatever its net, so it converts as an obstacle with no
+            # connectivity contribution (net_id None) instead of refusing the document.
             net_name = self._net_name(expression, locator)
-            if net_name is None:
-                self.fail("net.unknown", "segment has no routable net", locator)
             layer_ids = self._layer_ids(expression, locator)
             if len(layer_ids) != 1:
                 self.fail("unknown.layer", "segment must reference one copper layer", locator)
             result.append(
                 Segment(
                     id=self._identity("segment", expression, locator),
-                    net_id=net_id_for_name(net_name),
+                    net_id=net_id_for_name(net_name) if net_name is not None else None,
                     layer_id=layer_ids[0],
                     start=self._point(expression, "start", locator),
                     end=self._point(expression, "end", locator),
@@ -1457,16 +1461,15 @@ class _Converter:
                 allowed=frozenset({"locked"}),
                 locator=locator,
             )
+            # Net-0 arcs convert as netless obstacles for the same reason segments do.
             net_name = self._net_name(expression, locator)
-            if net_name is None:
-                self.fail("net.unknown", "track arc has no routable net", locator)
             layer_ids = self._layer_ids(expression, locator)
             if len(layer_ids) != 1:
                 self.fail("unknown.layer", "track arc must reference one copper layer", locator)
             result.append(
                 Arc(
                     id=self._identity("arc", expression, locator),
-                    net_id=net_id_for_name(net_name),
+                    net_id=net_id_for_name(net_name) if net_name is not None else None,
                     layer_id=layer_ids[0],
                     start=self._point(expression, "start", locator),
                     mid=self._point(expression, "mid", locator),
@@ -1542,9 +1545,10 @@ class _Converter:
                     object_kind="via",
                 )
             self._validate_neutral_via_treatment(expression, locator)
+            # A stitching via saved on KiCad's net 0 is real copper: barrel and annulus occupy
+            # space on every layer they cross. It converts as an obstacle with no connectivity
+            # contribution (net_id None); every geometric check below still applies to it.
             net_name = self._net_name(expression, locator)
-            if net_name is None:
-                self.fail("net.unknown", "via has no routable net", locator)
             layer_ids = self._layer_ids(expression, locator)
             if len(layer_ids) != 2:
                 self.fail("unknown.layer", "through via must reference two copper layers", locator)
@@ -1559,7 +1563,7 @@ class _Converter:
             result.append(
                 Via(
                     id=self._identity("via", expression, locator),
-                    net_id=net_id_for_name(net_name),
+                    net_id=net_id_for_name(net_name) if net_name is not None else None,
                     center=self._point(expression, "at", locator),
                     diameter_nm=self._mm(
                         self._values(expression, "size", locator, minimum=1, maximum=1)[0],
