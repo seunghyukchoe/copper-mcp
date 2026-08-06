@@ -111,10 +111,10 @@ class LiveApplyBinding:
     The file binding names a workspace-relative path, because a file is identified by where it
     is. An open document is not: KiCad's IPC API exposes no filesystem path for the board it has
     in memory, so the only identity available is *which editor process* and *which serialization
-    of its document*. This binding therefore replaces ``relative_path`` with the opaque
-    process-local session revision, and a token minted against one editor instance can never
-    verify after that editor restarts — the session revision is unreproducible across processes
-    by construction (see ``kicad_ipc._session_revision``).
+    of its document*. This binding therefore replaces ``relative_path`` with the session
+    revision, and a token minted against one editor instance cannot verify after that editor
+    restarts — the revision is derived from the instance identity KiCad itself reports, which is
+    regenerated per editor process (see ``kicad_ipc._observed_instance_token``).
 
     ``base_revision`` is the converted Board IR snapshot digest the candidate was routed
     against; ``board_revision`` is the digest of the exact serialization the editor returned.

@@ -71,10 +71,19 @@ server keys commits by the client's *name* — and `DocumentSpecifier` offers on
 
 `LiveApplyBinding` therefore replaces `relative_path` with the opaque process-local session
 revision already used by the live preview CAS, and binds `(candidate_id, base_revision,
-board_revision, session_revision, operation="live_route")`. Because that session revision is
-unreproducible across processes by construction, **a token minted against one editor cannot
-verify after that editor restarts** — which is the correct answer, since a restarted editor is
-not the document the caller previewed.
+board_revision, session_revision, operation="live_route")`. That session revision is derived from
+the instance identity *the editor itself reports* — KiCad's API server generates one `KIID` per
+process and stamps it into every response header, and its own add-on documentation names
+detecting a mid-session restart as the intended use — so **a token minted against one editor
+cannot verify after that editor restarts**, because the value the editor reports has changed.
+
+An earlier draft of this record justified the same conclusion by the process-local PBKDF2 salt.
+That reasoning was wrong and an adversarial review caught it: the salt and `KICAD_API_TOKEN` are
+both fixed for the lifetime of the *CopperMCP* process, which a restarting KiCad cannot write to,
+so a value derived from them identifies this server and observes nothing about the editor. The
+salt still serves its own narrower purpose — it keeps the published revision an opaque handle
+rather than an offline-testable fingerprint of the editor's credential — but it is not what makes
+the revision move.
 
 Separation from the file surface is by **HMAC domain**, not by a field value:
 `copper-mcp/live-apply-token/v1` against `copper-mcp/apply-token/v1`. No arrangement of field

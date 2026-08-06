@@ -42,7 +42,9 @@ from copper_mcp.kicad_ipc import (
     KicadIpcConnectionError,
     KicadIpcDeadlineError,
     KicadIpcDisabledError,
+    KicadIpcError,
     KicadIpcPayloadError,
+    KicadIpcPayloadTypeError,
     KicadIpcUnavailableError,
     KicadIpcVersionError,
     _is_session_revision,
@@ -534,6 +536,17 @@ def apply_live_candidate(
             request=request,
             verified=verified,
         )
+    except KicadIpcPayloadTypeError as error:
+        # Checked before its `KicadIpcPayloadError` base. A payload of the wrong *kind* -- a
+        # non-text snapshot, undecodable board text, a broken snapshot invariant -- is an editor
+        # or binding fault, and reporting it as a budget overrun would send the operator to raise
+        # a limit that was never the problem.
+        return _refuse(
+            LiveApplyFailureCode.LIVE_EDITOR_UNAVAILABLE,
+            str(error),
+            request=request,
+            verified=verified,
+        )
     except KicadIpcPayloadError as error:
         return _refuse(
             LiveApplyFailureCode.LIVE_BOARD_OVER_BUDGET,
@@ -548,6 +561,18 @@ def apply_live_candidate(
             LiveApplyFailureCode.DEADLINE_EXPIRED, str(error), request=request, verified=verified
         )
     except KicadIpcConnectionError as error:
+        return _refuse(
+            LiveApplyFailureCode.LIVE_EDITOR_UNAVAILABLE,
+            str(error),
+            request=request,
+            verified=verified,
+        )
+    except KicadIpcError as error:
+        # Catch-all for the base class, which `LiveBoardObservation.__post_init__` raises from
+        # outside `_capture_live_board_from_client`'s own try block. None of those is reachable
+        # through the current fake, so this is latent -- but without it an untyped observer fault
+        # would escape as an unhandled `RuntimeError` from an MCP tool, which is neither the
+        # embedder fault `LiveApplyError` is reserved for nor a typed refusal.
         return _refuse(
             LiveApplyFailureCode.LIVE_EDITOR_UNAVAILABLE,
             str(error),
@@ -637,10 +662,17 @@ def apply_live_candidate(
         expected_board_revision=snapshot.snapshot_digest,
         limits=_LIMITS,
     )
-    if not verification.ok or candidate.candidate_id != request.candidate_id:
-        # The identity is recomputed from the geometry, so a manifest whose `candidate_id` was
-        # rewritten to match a token fails here rather than earlier -- which is why binding the
-        # token to a claimed identity is safe.
+    if not verification.ok:
+        # `verify_layered_candidate` recomputes the identity from the geometry
+        # (`routing/layered_candidate_verifier.py`, `verify_layered_candidate_id`), so a manifest
+        # whose `candidate_id` was rewritten to match a token fails inside `verification.ok`.
+        # That recomputation is what makes binding the token to a claimed identity safe.
+        #
+        # There is deliberately no `candidate.candidate_id != request.candidate_id` clause here.
+        # Both sides are `_digest(..., <the manifest>.get("candidate_id"))` over the same mapping
+        # -- `request.candidate` *is* the document `candidate` was built from -- so the
+        # comparison was two reads of one key and no input could fail it. It read as a second,
+        # independent check while contributing nothing, which is worse than its absence.
         return _refuse(
             LiveApplyFailureCode.CANDIDATE_VERIFICATION_FAILED,
             verification.diagnostic.message,

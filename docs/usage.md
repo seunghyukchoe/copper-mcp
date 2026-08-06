@@ -372,7 +372,8 @@ editor must also grant permission to overwrite their boards.
 Get a capability from `preview_live_layered_route` with `include_apply_token: true`. It is minted
 only for a `routed` proposal and only when live apply is enabled; otherwise `apply_token` is
 `null`. The capability is bound to the candidate, the board revision, the converted snapshot **and**
-the editor session, so it cannot survive a KiCad restart and cannot be replayed against the
+the editor session — via the instance identity KiCad reports, which is regenerated per editor
+process — so it cannot survive a KiCad restart and cannot be replayed against the
 file-backed `apply_candidate`.
 
 When the mutation lands it will change the in-memory document only — one entry in KiCad's own undo

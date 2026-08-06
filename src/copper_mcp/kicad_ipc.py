@@ -55,9 +55,11 @@ _SHAPE_HEADS = {"gr_line", "gr_rect", "gr_arc", "gr_poly", "gr_curve", "gr_circl
 _MAX_EDITOR_SELECTION = 256
 _SESSION_REVISION_PREFIX = "pbkdf2-hmac-sha256:"
 _SESSION_REVISION_HEX_LENGTH = 64
-# This salt is intentionally process-local and never serialized. KiCad documents that the plugin
-# token identifies one running editor; binding it with fresh 256-bit local entropy makes the
-# public session precondition opaque and intentionally invalid after a fresh process start.
+# This salt is intentionally process-local and never serialized. It makes the public session
+# precondition an opaque handle rather than a fingerprint of the editor's instance token, so a
+# holder of one revision cannot test candidate token values offline. It is *not* what makes the
+# revision change across editor restarts -- see `_session_revision`, whose input is the identity
+# the editor itself reports.
 _SESSION_REVISION_SALT = secrets.token_bytes(32)
 # Python's hashlib documentation recommends hundreds of thousands of SHA-256 PBKDF2 iterations
 # for limited-input secrets. Keep this fixed, CPU-only cost bounded for the local live-CAS path.
@@ -133,6 +135,17 @@ class KicadIpcPayloadError(KicadIpcError):
     """Raised when a live board snapshot exceeds the configured safety budget."""
 
 
+class KicadIpcPayloadTypeError(KicadIpcPayloadError):
+    """Raised when KiCad's payload is the wrong *kind* of thing, not the wrong size.
+
+    A non-text snapshot, undecodable board text, or a broken internal invariant is an editor or
+    binding fault that no budget change fixes. It subclasses the budget error so existing
+    handlers stay correct, and every boundary that distinguishes the two must catch this first --
+    the same ordering ``KicadIpcDeadlineError`` uses against its connection base. Reporting one
+    as the other is the conflation SEC-118 guarded against in the opposite direction.
+    """
+
+
 class KicadIpcDisabledError(KicadIpcError):
     """Raised when live IPC capture is attempted without the operator opt-in."""
 
@@ -204,25 +217,88 @@ def _socket_path() -> tuple[str | None, str]:
     raise KicadIpcConfigurationError("KICAD_API_SOCKET must identify a local IPC endpoint")
 
 
-def _session_revision() -> str | None:
-    """Return an opaque, process-local PBKDF2 binding for KiCad's instance token.
+def _validate_configured_token() -> None:
+    """Refuse a malformed ``KICAD_API_TOKEN`` before it is handed to the binding.
 
-    The token itself is a credential, not a password verifier.  A plain SHA-256 fingerprint
-    would let an observer test candidate token values offline. PBKDF2-HMAC-SHA256 with a
-    non-persistent process salt makes offline guesses deliberately expensive and keeps the wire
-    value suitable only for same-process CAS; a fresh process cannot reproduce a prior value and
-    must refuse it as stale.
+    This is an *endpoint configuration* check and nothing more. ``kipy`` reads the variable
+    itself to seed the credential it sends, so a value carrying a control character is a
+    deployment fault worth typing here rather than letting it surface as an opaque transport
+    error. It deliberately says nothing about session identity: the environment block belongs to
+    the CopperMCP process, so nothing derived from it can observe the editor. See
+    :func:`_observed_instance_token` for the value that can.
     """
 
     raw = os.environ.get("KICAD_API_TOKEN", "")
     if not raw:
-        return None
-    if len(raw) > _MAX_TOKEN_CHARS or any(ord(char) < 0x20 for char in raw):
+        return
+    if len(raw) > _MAX_TOKEN_CHARS or any(ord(character) < 0x20 for character in raw):
         raise KicadIpcConfigurationError("KICAD_API_TOKEN is invalid")
     try:
-        encoded = raw.encode("utf-8", errors="strict")
+        raw.encode("utf-8", errors="strict")
     except UnicodeError as error:
         raise KicadIpcConfigurationError("KICAD_API_TOKEN is invalid") from error
+
+
+def _observed_instance_token(client: object) -> str | None:
+    """Return the instance identity the connected KiCad reported, or ``None``.
+
+    KiCad's API server holds one ``m_token``, initialized as ``KIID().AsStdString()`` -- a fresh
+    random UUID per ``KICAD_API_SERVER``, which ``PGM_BASE`` owns as a per-process singleton --
+    and stamps it into ``ApiResponseHeader.kicad_token`` on every reply, success or error
+    (``common/api/api_server.cpp``). KiCad's own add-on documentation names this use: the token
+    "is unique to the running instance of KiCad, and can be used by long-running clients to
+    detect if KiCad restarts in the middle of a session."
+
+    ``kipy``'s ``KiCadClient.send`` records it on ``self._kicad_token``, adopting the server's
+    value when the client started without one. That attribute is the only exposure: ``kipy``
+    0.7.1 publishes no accessor for it, so this reads the documented internal and treats any
+    departure from that shape as *no identity observed*.
+
+    Reading it from the connection rather than from ``os.environ["KICAD_API_TOKEN"]`` is the
+    whole point. CopperMCP's own environment block is fixed for the lifetime of the CopperMCP
+    process and a restarting KiCad cannot write to it, so an environment-derived value identifies
+    *this* process and observes nothing about the editor.
+
+    Returning ``None`` is a fail-closed outcome, not a permissive one: a capture with no session
+    revision cannot satisfy the live compare-and-swap, so every live apply against it refuses.
+    """
+
+    inner = getattr(client, "_client", None)
+    raw = getattr(inner, "_kicad_token", None)
+    if raw is None:
+        # A future `kipy` may publish the value; prefer a public accessor when one exists.
+        raw = getattr(client, "kicad_token", None)
+    if not isinstance(raw, str) or not raw:
+        return None
+    if len(raw) > _MAX_TOKEN_CHARS or any(ord(character) < 0x20 for character in raw):
+        return None
+    return raw
+
+
+def _session_revision(instance_token: str | None) -> str | None:
+    """Return an opaque, process-local PBKDF2 binding for KiCad's *observed* instance token.
+
+    The identity comes from the editor -- see :func:`_observed_instance_token` -- so it changes
+    exactly when the editor process changes, which is the property the live session
+    compare-and-swap needs and the only one it may claim.
+
+    The token itself is a credential, not a password verifier.  A plain SHA-256 fingerprint
+    would let an observer test candidate token values offline. PBKDF2-HMAC-SHA256 with a
+    non-persistent process salt makes offline guesses deliberately expensive. The salt also
+    means the wire value is not comparable across CopperMCP restarts; that is a second,
+    independent staleness source stacked on the editor identity, not a substitute for it.
+    """
+
+    if not instance_token:
+        return None
+    if len(instance_token) > _MAX_TOKEN_CHARS or any(
+        ord(character) < 0x20 for character in instance_token
+    ):
+        raise KicadIpcConfigurationError("KiCad reported an invalid instance identity")
+    try:
+        encoded = instance_token.encode("utf-8", errors="strict")
+    except UnicodeError as error:
+        raise KicadIpcConfigurationError("KiCad reported an invalid instance identity") from error
     tag = hashlib.pbkdf2_hmac(
         "sha256",
         encoded,
@@ -322,7 +398,7 @@ def _confirmation_within_budget(confirmation: str, max_bytes: int) -> None:
     try:
         over_budget = _exceeds_utf8_budget(confirmation, max_bytes)
     except UnicodeError as error:
-        raise KicadIpcPayloadError("KiCad returned invalid board text") from error
+        raise KicadIpcPayloadTypeError("KiCad returned invalid board text") from error
     if over_budget:
         raise KicadIpcPayloadError("KiCad board confirmation exceeds the observation budget")
 
@@ -358,7 +434,7 @@ def _count_serialized_items(
     # adapter refuses a foreign root, but nothing downstream of it re-derives these counts, so
     # the observation boundary has to establish the document type for itself.
     if root.head != _KICAD_PCB_ROOT:
-        raise KicadIpcPayloadError("KiCad returned a serialization whose root is not kicad_pcb")
+        raise KicadIpcPayloadTypeError("KiCad returned a serialization whose root is not kicad_pcb")
     counts = dict.fromkeys(_COUNT_NAMES, 0)
     stack: list[tuple[SExpr, bool]] = [(root, False)]
     while stack:
@@ -474,16 +550,20 @@ class LiveBoardSnapshot:
 
     def __post_init__(self) -> None:
         if not isinstance(self.source, bytes) or not self.source:
-            raise KicadIpcPayloadError("live board source is empty")
+            raise KicadIpcPayloadTypeError("live board source is empty")
         if len(self.source) != self.observation.board_bytes:
-            raise KicadIpcPayloadError("live board source size is not bound to its observation")
+            raise KicadIpcPayloadTypeError("live board source size is not bound to its observation")
         digest = f"sha256:{hashlib.sha256(self.source).hexdigest()}"
         if digest != self.observation.board_digest:
-            raise KicadIpcPayloadError("live board source digest is not bound to its observation")
+            raise KicadIpcPayloadTypeError(
+                "live board source digest is not bound to its observation"
+            )
         if self.session_revision is not None and not _is_session_revision(self.session_revision):
-            raise KicadIpcPayloadError("live IPC session revision is invalid")
+            raise KicadIpcPayloadTypeError("live IPC session revision is invalid")
         if self.session_revision != self.observation.session_revision:
-            raise KicadIpcPayloadError("live IPC session revision is not bound to its observation")
+            raise KicadIpcPayloadTypeError(
+                "live IPC session revision is not bound to its observation"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -638,7 +718,7 @@ def _capture_live_editor_context_from_client(
         board = cast(_EditorContextBoardLike, client.get_board())
         source = board.get_as_string()
         if not isinstance(source, str):
-            raise KicadIpcPayloadError("KiCad returned a non-text board snapshot")
+            raise KicadIpcPayloadTypeError("KiCad returned a non-text board snapshot")
         source_bytes = source.encode("utf-8", errors="strict")
         max_bytes = min(settings.max_board_bytes, 64 * 1024 * 1024)
         if not 1 <= len(source_bytes) <= max_bytes:
@@ -665,7 +745,7 @@ def _capture_live_editor_context_from_client(
     except Exception as error:
         raise KicadIpcConnectionError("KiCad editor context observation failed") from error
     if not isinstance(confirmation, str):
-        raise KicadIpcPayloadError("KiCad returned a non-text board snapshot")
+        raise KicadIpcPayloadTypeError("KiCad returned a non-text board snapshot")
     # Same budget rule as the first read, and in the same unit: charge UTF-8 bytes, so an
     # oversized second read is refused as a payload-budget violation rather than encoded in
     # full and then reported as if the operator had edited the board.
@@ -721,7 +801,7 @@ def capture_live_board(
         raise KicadIpcConfigurationError("IPC deadline is malformed")
 
     socket_path, socket_kind = _socket_path()
-    session_revision = _session_revision()
+    _validate_configured_token()
     factory = client_factory or _load_kicad_factory()
     try:
         if socket_path is None:
@@ -739,7 +819,6 @@ def capture_live_board(
             active_settings,
             socket_kind=socket_kind,
             allow_future_api=allow_future_api,
-            session_revision=session_revision,
             deadline=deadline,
         )
     finally:
@@ -752,7 +831,6 @@ def _capture_live_board_from_client(
     *,
     socket_kind: str,
     allow_future_api: bool,
-    session_revision: str | None,
     deadline: float | None,
 ) -> LiveBoardSnapshot:
     """Read one board while the public capture function owns client closure."""
@@ -764,6 +842,9 @@ def _capture_live_board_from_client(
     try:
         check_deadline()
         kicad_version = _version_string(client.get_version())
+        # Read only after a reply has been exchanged: `kipy` adopts the server's token from the
+        # first successful response, so before this point the client may hold nothing at all.
+        instance_token = _observed_instance_token(client)
         check_deadline()
         api_version = _version_string(client.get_api_version())
         check_deadline()
@@ -792,11 +873,11 @@ def _capture_live_board_from_client(
         raise KicadIpcConnectionError("KiCad IPC observation failed") from error
 
     if not isinstance(source, str):
-        raise KicadIpcPayloadError("KiCad returned a non-text board snapshot")
+        raise KicadIpcPayloadTypeError("KiCad returned a non-text board snapshot")
     try:
         source_bytes = source.encode("utf-8", errors="strict")
     except UnicodeError as error:
-        raise KicadIpcPayloadError("KiCad returned invalid board text") from error
+        raise KicadIpcPayloadTypeError("KiCad returned invalid board text") from error
     if not 1 <= len(source_bytes) <= min(settings.max_board_bytes, 64 * 1024 * 1024):
         raise KicadIpcPayloadError("KiCad board snapshot exceeds the observation budget")
 
@@ -817,7 +898,7 @@ def _capture_live_board_from_client(
             "KiCad changed before observation could be confirmed"
         ) from error
     if not isinstance(confirmation, str):
-        raise KicadIpcPayloadError("KiCad returned a non-text board snapshot")
+        raise KicadIpcPayloadTypeError("KiCad returned a non-text board snapshot")
     # Charge the confirmation against the same budget as the first read, in the same unit, and
     # without materializing a whole second encoding of it. Refusing here keeps an oversized
     # second read a payload-budget refusal instead of mis-reporting it as a concurrent board
@@ -825,15 +906,18 @@ def _capture_live_board_from_client(
     _confirmation_within_budget(confirmation, max_bytes)
     if confirmation != source:
         raise KicadIpcConnectionError("KiCad board changed during observation")
-    confirmed_session_revision = _session_revision()
-    if session_revision is None:
-        session_matches = confirmed_session_revision is None
-    elif confirmed_session_revision is None:
+    # The identity is re-read from the same connection after the confirming board read, so a
+    # capture that spanned two different editor instances cannot be published as one.
+    confirmed_instance_token = _observed_instance_token(client)
+    if instance_token is None:
+        session_matches = confirmed_instance_token is None
+    elif confirmed_instance_token is None:
         session_matches = False
     else:
-        session_matches = hmac.compare_digest(confirmed_session_revision, session_revision)
+        session_matches = hmac.compare_digest(confirmed_instance_token, instance_token)
     if not session_matches:
         raise KicadIpcConnectionError("KiCad IPC session changed during observation")
+    session_revision = _session_revision(instance_token)
     observation = LiveBoardObservation(
         kicad_version=kicad_version,
         api_version=api_version,

@@ -24,6 +24,9 @@ from copper_mcp.kicad_ipc_oracle import probe_live_kicad_ipc
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "circuit-scene-v0.1" / "scene-region.kicad_pcb"
+# The per-process identity KiCad's API server returns in every response envelope.
+EDITOR_INSTANCE_TOKEN = "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
+RESTARTED_EDITOR_INSTANCE_TOKEN = "9c5b94b1-35ad-49bb-b118-8e8fc24abf80"
 
 
 class AuthenticationError(Exception):
@@ -49,11 +52,25 @@ class _Board:
         raise AttributeError(name)
 
 
+class _FakeKipyClient:
+    """Mirror of ``kipy.client.KiCadClient``'s learned-instance-token attribute."""
+
+    def __init__(self, instance_token: str) -> None:
+        self._kicad_token = instance_token
+
+
 class _KiCad:
-    def __init__(self, board: _Board, *, future: bool = False) -> None:
+    def __init__(
+        self,
+        board: _Board,
+        *,
+        future: bool = False,
+        instance_token: str = EDITOR_INSTANCE_TOKEN,
+    ) -> None:
         self.board = board
         self.future = future
         self.closed = False
+        self._client = _FakeKipyClient(instance_token)
 
     @staticmethod
     def get_version() -> SimpleNamespace:
@@ -263,7 +280,15 @@ def test_oracle_deadline_refuses_after_capture_without_later_conversion_work() -
 
 
 def test_oracle_detects_a_session_change_after_capture_without_board_text() -> None:
+    """The editor swaps identity between the two board reads, so no capture is published.
+
+    The change is made where it can actually happen -- on the connection, in the identity KiCad
+    reports -- rather than by rewriting CopperMCP's own ``KICAD_API_TOKEN``, which a KiCad
+    restart has no way to do.
+    """
+
     source = FIXTURE.read_text(encoding="utf-8")
+    client = _FakeKipyClient(EDITOR_INSTANCE_TOKEN)
 
     class SessionChangingBoard(_Board):
         calls = 0
@@ -271,13 +296,14 @@ def test_oracle_detects_a_session_change_after_capture_without_board_text() -> N
         def get_as_string(self) -> str:
             self.calls += 1
             if self.calls == 2:
-                os.environ["KICAD_API_TOKEN"] = "new-session-token"
+                client._kicad_token = RESTARTED_EDITOR_INSTANCE_TOKEN
             return source
 
+    kicad = _KiCad(SessionChangingBoard(source))
+    kicad._client = client
+
     with patch.dict(os.environ, _environment(), clear=False):
-        result = probe_live_kicad_ipc(
-            _settings(), client_factory=lambda **_: _KiCad(SessionChangingBoard(source))
-        )
+        result = probe_live_kicad_ipc(_settings(), client_factory=lambda **_: kicad)
 
     assert (result.status, result.capability) == ("refused", "kicad_session_changed")
     assert result.to_dict()["board_digest"] is None

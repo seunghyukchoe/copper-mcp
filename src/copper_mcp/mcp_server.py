@@ -236,6 +236,12 @@ class CopperMCPServer(MCPServer[None]):
             raise ToolError("layered route tool arguments are malformed")
         if name == "preview_live_layered_route" and set(arguments) != {"request"}:
             raise ToolError("live layered route tool arguments are malformed")
+        if name == "apply_live_candidate" and set(arguments) != {"request"}:
+            # `LiveApplyToolRequest` is an `Annotated[Any, WithJsonSchema(...)]`, so the SDK
+            # validates nothing here and this guard is the only enforcement of the closed object
+            # the listing advertises. Silently dropping a misplaced `apply_token` would report a
+            # missing field the caller did in fact send.
+            raise ToolError("live apply tool arguments are malformed")
         if name == "observe_live_board_scene" and set(arguments) != {"request"}:
             raise ToolError("live scene tool arguments are malformed")
         if name == "observe_post_placement" and set(arguments) != {"request"}:

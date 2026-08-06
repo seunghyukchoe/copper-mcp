@@ -159,7 +159,7 @@ infinite recursion present in 0.7.1 and on `main`; only `.code` and `str(exc)` a
 | KiCad still starting | `ApiError(AS_NOT_READY)` | `live_editor_unavailable` |
 | A commit is already open for this client name | `ApiError(AS_BAD_REQUEST)`, *"already has a commit in progress"* | `live_editor_unavailable` |
 | Board changed between preview and apply | nothing; no detection exists | `stale_board_revision`, from CopperMCP's own re-read |
-| Editor restarted between preview and apply | nothing; `KICAD_API_TOKEN` changes | `stale_session` |
+| Editor restarted between preview and apply | the reported instance identity changes | `stale_session`, or `live_editor_unavailable` first if the restart also rotated `KICAD_API_TOKEN` |
 | User presses Ctrl+Z while a commit is open | undocumented and unguarded | not detectable; see §6 |
 | Another API client mutates concurrently | independent `COMMIT` objects on the same `BOARD`; no locking | not detectable; see §6 |
 

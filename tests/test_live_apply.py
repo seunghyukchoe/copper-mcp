@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+import copper_mcp.apply.tokens as tokens_module
 import copper_mcp.kicad_ipc as kicad_ipc
 import copper_mcp.live_apply as live_apply
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
@@ -35,6 +36,11 @@ from copper_mcp.request_boundary import RequestError
 
 FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "two-pad.kicad_pcb"
 SESSION_TOKEN = "copper-mcp-test-kicad-session"
+# The identity KiCad's API server generates once per process and returns in every response
+# envelope. A restarted editor reports a different one; CopperMCP's own environment cannot
+# change it, which is the whole point of deriving the session revision from it.
+EDITOR_INSTANCE_TOKEN = "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
+RESTARTED_EDITOR_INSTANCE_TOKEN = "9c5b94b1-35ad-49bb-b118-8e8fc24abf80"
 CONSTRAINTS = {
     "clearance_nm": 250_000,
     "track_width_nm": 250_000,
@@ -63,9 +69,22 @@ class _FakeLiveBoard:
         return self._source
 
 
+class _FakeKipyClient:
+    """Mirror of ``kipy.client.KiCadClient``'s learned-instance-token attribute.
+
+    The real client stores the token KiCad returned in ``ApiResponseHeader.kicad_token`` on
+    ``self._kicad_token``.  The fake carries it at the same place so that these tests exercise
+    the production accessor rather than a bespoke test-only seam.
+    """
+
+    def __init__(self, instance_token: str) -> None:
+        self._kicad_token = instance_token
+
+
 class _FakeLiveKiCad:
-    def __init__(self, source: str) -> None:
+    def __init__(self, source: str, instance_token: str = EDITOR_INSTANCE_TOKEN) -> None:
         self._board = _FakeLiveBoard(source)
+        self._client = _FakeKipyClient(instance_token)
 
     def get_version(self) -> _FakeVersion:
         return _FakeVersion()
@@ -80,17 +99,21 @@ class _FakeLiveKiCad:
         return self._board
 
 
-def _client_factory(source: bytes) -> Any:
+def _client_factory(source: bytes, instance_token: str = EDITOR_INSTANCE_TOKEN) -> Any:
     text = source.decode("utf-8")
 
     def factory(**_: object) -> _FakeLiveKiCad:
-        return _FakeLiveKiCad(text)
+        return _FakeLiveKiCad(text, instance_token)
 
     return factory
 
 
-def _session_revision() -> str:
-    revision = kicad_ipc._session_revision()
+def _unreachable(**_: object) -> Any:
+    raise AssertionError("a refusal before the endpoint must not create an IPC client")
+
+
+def _session_revision(instance_token: str = EDITOR_INSTANCE_TOKEN) -> str:
+    revision = kicad_ipc._session_revision(instance_token)
     assert revision is not None
     return revision
 
@@ -369,6 +392,49 @@ def test_a_file_apply_token_can_never_authorize_the_live_surface(tmp_path: Path)
     assert diagnostic["code"] == LiveApplyFailureCode.INVALID_TOKEN.value
 
 
+def test_the_live_binding_prefixes_the_live_domain_and_never_the_file_domain() -> None:
+    """The domain is the mechanism, so assert the domain -- not a field value downstream of it.
+
+    The refusal above is satisfied by *any* difference between the two payloads, and the two
+    ``operation`` value sets happen to be disjoint, so it passes with the domain deleted. That
+    is the belt-and-braces trap: ADR-0074 explicitly disclaims the ``operation`` field as the
+    separating mechanism, so a test that only observes it proves the wrong thing. These
+    assertions read the bytes the MAC is actually taken over.
+    """
+
+    expires_at = 1_800_000_000
+    live = LiveApplyBinding(
+        candidate_id="candidate:0",
+        base_revision="sha256:" + "a" * 64,
+        board_revision="sha256:" + "b" * 64,
+        session_revision=_session_revision(),
+    )
+    file_binding = ApplyBinding(
+        candidate_id="candidate:0",
+        base_revision="sha256:" + "a" * 64,
+        board_revision="sha256:" + "b" * 64,
+        relative_path=_session_revision(),
+    )
+    live_payload = live.payload(expires_at)
+    file_payload = file_binding.payload(expires_at)
+
+    assert live_payload.startswith(tokens_module._LIVE_DOMAIN)
+    assert not live_payload.startswith(tokens_module._DOMAIN)
+    assert file_payload.startswith(tokens_module._DOMAIN)
+    assert not file_payload.startswith(tokens_module._LIVE_DOMAIN)
+    assert tokens_module._LIVE_DOMAIN != tokens_module._DOMAIN
+
+    # And the domain is what an attacker would have to forge: neither payload's remainder may
+    # be reachable under the other domain, whatever the `operation` values happen to be.
+    assert (
+        tokens_module._LIVE_DOMAIN + live_payload.removeprefix(tokens_module._LIVE_DOMAIN)
+        == live_payload
+    )
+    assert not live_payload.removeprefix(tokens_module._LIVE_DOMAIN).startswith(
+        tokens_module._DOMAIN
+    )
+
+
 def test_a_spent_capability_is_refused_as_already_used(tmp_path: Path) -> None:
     authority = ApplyTokenAuthority()
     preview = _preview(tmp_path, authority)
@@ -457,15 +523,84 @@ def test_a_board_edited_since_the_preview_is_refused_as_stale(tmp_path: Path) ->
     ]
 
 
-def test_a_restarted_editor_is_refused_as_a_stale_session(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_both_flags_off_reports_the_live_apply_grant_first(tmp_path: Path) -> None:
+    """Pin the reporting order, which nothing else covers.
+
+    The PR argues explicitly for reporting order "so the operator learns *which* grant is
+    missing", and both orders fail closed, so only a test can hold it. `live_apply_disabled` is
+    named first because it is the grant specific to this tool; `live_ipc_disabled` is shared
+    with every live surface and is the less informative answer to "why can't I apply?".
+    """
+
+    settings = Settings(workspace=tmp_path, allow_live_ipc=False, allow_live_apply=False)
+    result = dict(
+        apply_live_candidate({}, settings, ApplyTokenAuthority(), client_factory=_unreachable)
+    )
+    diagnostic = result["diagnostic"]
+    assert isinstance(diagnostic, dict)
+    assert diagnostic["code"] == LiveApplyFailureCode.LIVE_APPLY_DISABLED.value
+    assert result["preconditions_verified"] == []
+
+
+def test_a_candidate_id_rewritten_to_match_the_token_is_refused_by_the_verifier(
+    tmp_path: Path,
 ) -> None:
+    """The binding is sound, and this pins *where* it is enforced.
+
+    `request.candidate_id` and `candidate.candidate_id` are both read from the manifest's own
+    `candidate_id` key, so comparing them is a tautology that no input can fail. The check that
+    actually earns the comment is the recomputation inside `verify_layered_candidate_id`, which
+    re-derives the identity from the geometry. This moves the geometry and rewrites the claimed
+    identity to match the token: the tautological comparison is satisfied throughout, and the
+    refusal must still arrive.
+    """
+
+    authority = ApplyTokenAuthority()
+    preview = _preview(tmp_path, authority)
+    request = _authorized_request(preview)
+    candidate = dict(request["candidate"])
+    patch = dict(candidate["patch"])
+    paths = [dict(path) for path in patch["paths"]]
+    # Move the geometry and leave the claimed identity alone, so it still matches the token.
+    paths[0]["vertices_nm"] = [[x + 1_000, y] for x, y in paths[0]["vertices_nm"]]
+    patch["paths"] = paths
+    candidate["patch"] = patch
+    request["candidate"] = candidate
+
+    # Both operands of the removed comparison are `_digest(..., <manifest>["candidate_id"])` over
+    # this same mapping, so they agree for every possible input -- including this tampered one.
+    parsed = live_apply.parse_live_apply_request(request)
+    rebuilt = live_apply.layered_candidate_from_document(parsed.candidate)
+    assert rebuilt.candidate_id == parsed.candidate_id
+
+    # The refusal therefore comes from the geometry recomputation, not from that comparison.
+    result = _apply(tmp_path, request, authority)
+    diagnostic = result["diagnostic"]
+    assert isinstance(diagnostic, dict)
+    assert diagnostic["code"] == LiveApplyFailureCode.CANDIDATE_VERIFICATION_FAILED.value
+
+
+def test_a_restarted_editor_is_refused_as_a_stale_session(tmp_path: Path) -> None:
+    """The restart is modelled at the editor, which is the only place it can happen.
+
+    A KiCad restart constructs a fresh ``KICAD_API_SERVER`` whose ``m_token`` is a new random
+    ``KIID``, and every response envelope carries it. It does **not** rewrite CopperMCP's own
+    environment block -- a previous version of this test monkeypatched ``KICAD_API_TOKEN`` and
+    so modelled an event the restart cannot cause. Here the editor reports a different instance
+    and CopperMCP's environment is untouched, which is the real shape of the hazard: the board
+    bytes are byte-identical and the capability still must not carry over.
+    """
+
     authority = ApplyTokenAuthority()
     request = _authorized_request(_preview(tmp_path, authority))
-    # A fresh editor process gets a fresh `KICAD_API_TOKEN`. The board bytes may be byte-identical
-    # and the capability still must not carry over: it is not the same document.
-    monkeypatch.setenv("KICAD_API_TOKEN", "a-different-kicad-instance")
-    result = _apply(tmp_path, request, authority)
+    result = dict(
+        apply_live_candidate(
+            request,
+            _enabled(tmp_path),
+            authority,
+            client_factory=_client_factory(FIXTURE.read_bytes(), RESTARTED_EDITOR_INSTANCE_TOKEN),
+        )
+    )
     diagnostic = result["diagnostic"]
     assert isinstance(diagnostic, dict)
     assert diagnostic["code"] == LiveApplyFailureCode.STALE_SESSION.value
@@ -475,13 +610,40 @@ def test_a_restarted_editor_is_refused_as_a_stale_session(
     )
 
 
-def test_a_board_with_no_reachable_session_is_refused(
+def test_the_session_revision_tracks_the_editor_and_not_coppermcp_s_environment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The converse of the restart test, and the reason the leg is not inert.
+
+    Rotating ``KICAD_API_TOKEN`` inside CopperMCP's own process is not a KiCad restart and must
+    not be readable as one. If the session revision were derived from that variable -- as it was
+    before this was corrected -- this apply would refuse with ``stale_session`` for an editor
+    that never went away, and the genuine restart above would be accepted.
+    """
+
     authority = ApplyTokenAuthority()
     request = _authorized_request(_preview(tmp_path, authority))
-    monkeypatch.delenv("KICAD_API_TOKEN", raising=False)
+    monkeypatch.setenv("KICAD_API_TOKEN", "an-unrelated-rotation-of-our-own-environment")
     result = _apply(tmp_path, request, authority)
+    diagnostic = result["diagnostic"]
+    assert isinstance(diagnostic, dict)
+    assert diagnostic["code"] == LiveApplyFailureCode.CAPABILITY_NOT_IMPLEMENTED.value
+
+
+def test_an_editor_that_reports_no_instance_identity_is_refused(tmp_path: Path) -> None:
+    """Fail closed: no observable editor identity means no session binding, not a free pass."""
+
+    authority = ApplyTokenAuthority()
+    request = _authorized_request(_preview(tmp_path, authority))
+
+    def factory(**_: object) -> Any:
+        client = _FakeLiveKiCad(FIXTURE.read_bytes().decode("utf-8"))
+        del client._client._kicad_token
+        return client
+
+    result = dict(
+        apply_live_candidate(request, _enabled(tmp_path), authority, client_factory=factory)
+    )
     diagnostic = result["diagnostic"]
     assert isinstance(diagnostic, dict)
     assert diagnostic["code"] == LiveApplyFailureCode.STALE_SESSION.value
@@ -641,12 +803,26 @@ def test_a_malformed_request_is_refused_without_reaching_the_editor(
             kicad_ipc.KicadIpcPayloadError("too big"),
             LiveApplyFailureCode.LIVE_BOARD_OVER_BUDGET,
         ),
+        # A payload KiCad returned in an unusable *shape* is not a budget overrun. It is checked
+        # before its `KicadIpcPayloadError` base, the same way the deadline precedes its
+        # connection base, so a type fault is never reported as an operator-fixable size limit.
+        (
+            kicad_ipc.KicadIpcPayloadTypeError("not text"),
+            LiveApplyFailureCode.LIVE_EDITOR_UNAVAILABLE,
+        ),
         (kicad_ipc.KicadIpcDeadlineError("expired"), LiveApplyFailureCode.DEADLINE_EXPIRED),
         (
             kicad_ipc.KicadIpcConnectionError("closed"),
             LiveApplyFailureCode.LIVE_EDITOR_UNAVAILABLE,
         ),
         (kicad_ipc.KicadIpcDisabledError("off"), LiveApplyFailureCode.LIVE_IPC_DISABLED),
+        # P3-4: the base class itself. `LiveBoardObservation.__post_init__` raises it in seven
+        # places from outside the capture's own try block, so without a catch-all it would leave
+        # the MCP tool as an unhandled RuntimeError rather than a typed refusal.
+        (
+            kicad_ipc.KicadIpcError("untyped observer fault"),
+            LiveApplyFailureCode.LIVE_EDITOR_UNAVAILABLE,
+        ),
     ],
 )
 def test_every_capture_failure_maps_to_its_own_refusal(
@@ -756,6 +932,32 @@ def test_the_mcp_tool_stays_listed_and_truthfully_annotated() -> None:
         "expect_snapshot_digest",
         "expect_session_revision",
     }
+
+
+def test_apply_live_candidate_enforces_the_closed_object_it_advertises() -> None:
+    """Advertising `additionalProperties: false` is not enforcing it.
+
+    ``LiveApplyToolRequest`` is an ``Annotated[Any, WithJsonSchema(...)]``, so the SDK does not
+    validate the wrapper: the ``call_tool`` guard is the only enforcement there is. Without it an
+    extra top-level argument is silently discarded -- and the field most likely to be misplaced
+    is ``apply_token``, which every document discusses at top level, so the caller would be told
+    their request is missing the very field they sent.
+    """
+
+    import asyncio
+
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    from copper_mcp.mcp_server import mcp
+
+    with pytest.raises(ToolError, match="live apply tool arguments are malformed"):
+        asyncio.run(mcp.call_tool("apply_live_candidate", {"request": {}, "smuggled": 1}))
+
+    # The misplaced-token shape specifically, which is the reachable user-facing failure.
+    with pytest.raises(ToolError, match="live apply tool arguments are malformed"):
+        asyncio.run(
+            mcp.call_tool("apply_live_candidate", {"request": {}, "apply_token": "at_top_level"})
+        )
 
 
 @pytest.mark.parametrize(
