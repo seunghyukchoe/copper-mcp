@@ -2485,6 +2485,10 @@ def test_a_multi_pin_net_without_same_net_copper_is_routed_from_its_pads_alone()
         (PadShape.OVAL, 2_000_000, 1_200_000, None),
         (PadShape.RECT, 1_000_000, 600_000, None),
         (PadShape.ROUNDRECT, 1_200_000, 1_400_000, 240_000),
+        # A radius of exactly half the short side: the corners meet and the pad is a stadium,
+        # so its central band collapses to a bar. Every other case here has a band with real
+        # height, which is the fixture monoculture that let a disc-shaped core go unnoticed.
+        (PadShape.ROUNDRECT, 2_000_000, 1_000_000, 500_000),
     ],
 )
 def test_every_pad_core_rectangle_lies_inside_the_pad(
@@ -2523,6 +2527,33 @@ def test_every_pad_core_rectangle_lies_inside_the_pad(
                 offset_y = max(abs(corner_y) - spine[1], 0)
                 inside = offset_x * offset_x + offset_y * offset_y <= short * short
             assert inside, (shape, (corner_x, corner_y))
+
+
+def test_a_stadium_roundrect_pad_is_not_mistaken_for_a_round_pad() -> None:
+    """A collapsed core means "no band left", not "this pad is a disc".
+
+    ``_pad_cores`` gives a round pad its inscribed square, because a disc's central rectangle
+    degenerates to a bar and a bar seeds no search. It used to detect that case by the collapse
+    alone - and a roundrect whose radius is half its shorter side collapses identically while
+    being nowhere near as tall as a disc of its longer half extent. This 2.0 x 1.0 mm stadium
+    was handed a core reaching 1.0 mm from the centre in y, where its copper stops at 0.5 mm:
+    an attachment core claiming copper that is not there, which is the one direction it may
+    never err in. KiCad writes this pad for a `roundrect_rratio` of 0.5.
+    """
+
+    stadium = replace(
+        _pad("pad:stadium", (0, 0)),
+        shape=PadShape.ROUNDRECT,
+        size_x_nm=2_000_000,
+        size_y_nm=1_000_000,
+        roundrect_radius_nm=500_000,
+    )
+
+    cores = _pad_cores(stadium)
+
+    assert cores == ((-1_000_000, 0, 1_000_000, 0),)
+    for _, minimum_y, _, maximum_y in cores:
+        assert abs(minimum_y) <= 500_000 and abs(maximum_y) <= 500_000
 
 
 def test_a_round_pad_offers_attachment_area_on_both_axes() -> None:

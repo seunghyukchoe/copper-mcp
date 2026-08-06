@@ -257,7 +257,38 @@ All notable changes are documented here. The format follows
   the board interior. Work stays bounded — the segment count and the quadratic simplicity test each
   charge a declared budget. No schema, digest, or diagnostic code changes, and no golden identity
   moves. ([ADR-0076](docs/adr/0076-segment-assembled-edge-cuts-outline.md), D-154, R-117)
-
+- **A roundrect corner radius is now rounded, not refused — and the direction is the opposite of
+  the obvious one.** KiCad never stores a roundrect's radius. It stores a ten-significant-digit
+  `roundrect_rratio` scaling the pad's *shorter* side, and recomputes
+  `KiROUND(ratio * min(size.x, size.y))` on every read, so an ordinary ratio on an ordinary pad
+  lands on a fractional nanometre — 0.203125 of a 650,000 nm side is 132,031.25 nm. The adapter
+  refused that as `roundrect radius is not an exact nanometre`, which was fail-closed and honest
+  but was the **first refusal on 5 of 23 real boards** for a sub-nanometre encoding artifact. Across
+  that tree, 592 of 4,537 roundrect pads carry a fractional radius and the worst residue is 0.80 nm.
+  The radius now rounds **up**, and the reason is not that a pad is copper: a larger radius means
+  *more* corner rounding and therefore a *smaller* pad, so rounding the copper outward and rounding
+  the radius up are opposite instructions. The roles settle it instead, and do not conflict, because
+  only one reads the value — every obstacle model over-approximates a pad by its full bounding box
+  and discards the corner rounding, while the radius is consumed only by the under-approximating
+  attachment core, which a larger radius shrinks. Rounding up is safe under both candidate
+  references without choosing between them, since `ceil(x)` is at least the exact radius *and* at
+  least the integer radius KiCad itself derives. The amount is recorded as
+  `ConversionResult.max_roundrect_rounding_nm` rather than hidden, and deliberately not as a
+  diagnostic, because every caller treats a diagnostic as a refusal. A radius that rounds up past
+  half the short side, and a ratio outside `(0, 0.5]`, are still refused rather than clamped. No
+  content address moves. See
+  [Roundrect radius precision](docs/research/roundrect-radius-precision-v1.md) for the derivation
+  and citations, ADR-0077, D-157, and R-118. (#116)
+- **A stadium pad was being handed a disc's attachment core.** `_pad_cores` gives a round pad its
+  largest inscribed square, because a disc's central rectangle degenerates to a bar that can seed
+  no search — but it detected that case from the collapse alone, and a roundrect whose radius is
+  exactly half its shorter side is a stadium and collapses identically. A 2.0 x 1.0 mm stadium was
+  therefore given a core reaching 1.0 mm from its centre in y, where its copper stops at 0.5 mm:
+  an attachment core claiming copper that is not there, which is the one direction it may never err
+  in, and reachable from any board where KiCad wrote a `roundrect_rratio` of 0.5. The inscribed
+  square is now gated on the pad being a disc. Every roundrect in the core-containment
+  parametrisation had a band with real height, so no fixture could have caught it; a stadium case
+  is added. (#116, R-118)
 - **A courtyard drawn as a ring is a ring, not a solid disc.** A footprint whose courtyard is an
   outer boundary plus an inner ring — a donut — was compared ring-by-ring as two independent solids,
   so a part legitimately placed in the hole was reported as a courtyard collision and the candidate

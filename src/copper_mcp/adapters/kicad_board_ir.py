@@ -92,7 +92,7 @@ _ROOT_ROUTING_HEADS = frozenset({"arc", "footprint", "segment", "via", "zone"})
 # The only root graphics that may sit on ``Edge.Cuts``: one unfilled rectangle, or straight
 # segments that chain into exactly one closed simple loop.  Both carry the board outline as an
 # exact integer polygon whose vertices are drawn points, so neither can model more room than the
-# board has.  See docs/research/edge-cuts-outline-assembly-v1.md and ADR-0076.
+# board has.  See docs/research/edge-cuts-outline-assembly-v1.md and ADR-0077.
 _EDGE_CUTS_OUTLINE_HEADS = frozenset({"gr_line", "gr_rect"})
 # Curved outline primitives, refused separately so the diagnostic names the curve rather than
 # reporting the same message as an unsupported layer.  An outline curve needs an *inscribed*
@@ -215,6 +215,8 @@ class _Converter:
         self.profile = profile
         self.limits = limits
         self.source_revision = f"sha256:{hashlib.sha256(payload).hexdigest()}"
+        # Largest single roundrect radius rounding, in nanometres, measured rather than asserted.
+        self.max_roundrect_rounding_nm = 0
         if self.root.head != KICAD_PCB_ROOT_HEAD:
             self.fail(
                 FOREIGN_ROOT_DIAGNOSTIC_CODE,
@@ -865,7 +867,43 @@ class _Converter:
             self.fail("integer.overflow", "transformed point exceeds the integer range", locator)
         return PointNM(x, y)
 
-    def _roundrect_radius(self, ratio: str, short_side_nm: int, locator: str) -> int:
+    def _roundrect_radius(self, ratio: str, short_side_nm: int, locator: str) -> tuple[int, int]:
+        """Return the modelled corner radius and the nanometres it was rounded up by.
+
+        KiCad stores a roundrect corner as a dimensionless *ratio* of the pad's shorter side and
+        recomputes the radius on every read as ``KiROUND(ratio * min(size.x, size.y))``
+        (``PADSTACK::RoundRectRadius``), while writing the ratio back with only ten significant
+        digits.  The product of an ordinary ratio and an ordinary pad side is therefore routinely
+        a *fractional* nanometre: 0.203125 of a 650,000 nm side is 132,031.25 nm.  Refusing that
+        - which this adapter used to do - rejected five of twenty-three real boards for a
+        quarter-nanometre, which is a precision artifact and not a modelling gap (issue #116).
+
+        **The rounding is up, and the reason is not the obvious one.**  A pad is copper, so the
+        instinct is to over-approximate it; but a *larger* radius means *more* corner rounding and
+        therefore a *smaller* pad, so "round the copper outward" and "round the radius up" are
+        opposite instructions.  The two roles resolve it separately, and they do not conflict:
+
+        - As an **obstacle**, a pad is over-approximated by its full axis-aligned bounding box -
+          ``_pad_extent`` in the router, ``pad_half_extents`` in placement and the scene, none of
+          which consult the radius at all.  Corner rounding is discarded, conservatively, before
+          the radius could matter.  So no rounding of the radius can shrink an obstacle.
+        - As **attachment copper**, the radius is consumed only by the under-approximating inner
+          core, which is the full-width band ``half_y - radius`` (``pad_core``,
+          ``_pad_core_extent``).  A larger radius shrinks that band, and a band strictly inside
+          the true pad is exactly what keeps the router from asserting a connection the board does
+          not have.
+
+        Rounding *up* is therefore the safe direction for the only role that reads the value, and
+        it is safe against both candidate references without having to adjudicate between them:
+        ``ceil(x) >= x`` covers the exact real radius, and ``ceil(x) >= KiROUND(x)`` covers the
+        integer radius KiCad itself renders.  The modelled core is never taller than the true one
+        under either reading.
+
+        The arithmetic is exact integer rational - the ratio's own numerator and denominator over
+        a pad side that ``mm_to_nm`` already produced exactly - so no binary float and no decimal
+        precision context is involved, and ``remainder`` decides the rounding with no tolerance.
+        """
+
         if len(ratio) > 64 or not _PLAIN_DECIMAL.fullmatch(ratio):
             self.fail("integer.precision", "roundrect ratio is malformed", locator)
         whole, _, fraction = ratio.partition(".")
@@ -874,11 +912,22 @@ class _Converter:
         if numerator <= 0 or numerator * 2 > denominator:
             self.fail("geometry.invalid", "roundrect ratio must be in (0, 0.5]", locator)
         scaled_radius = numerator * short_side_nm
-        radius = scaled_radius // denominator
-        remainder = scaled_radius % denominator
+        radius, remainder = divmod(scaled_radius, denominator)
+        rounding_nm = 0
         if remainder:
-            self.fail("integer.precision", "roundrect radius is not an exact nanometre", locator)
-        return radius
+            radius += 1
+            rounding_nm = 1
+        if radius * 2 > short_side_nm:
+            # Only reachable for a ratio within a half-nanometre of 0.5 on an odd-nanometre side,
+            # where the exact pad has a sub-nanometre middle band. Rounding down instead would
+            # give the pad a core taller than its real copper, and clamping to the representable
+            # maximum would do the same, so this refuses rather than picking either.
+            self.fail(
+                "integer.precision",
+                "roundrect radius rounds up beyond half the short pad side",
+                locator,
+            )
+        return radius, rounding_nm
 
     def _courtyards(
         self,
@@ -1259,7 +1308,12 @@ class _Converter:
                         minimum=1,
                         maximum=1,
                     )[0]
-                    radius = self._roundrect_radius(ratio, min(size_x, size_y), locator)
+                    radius, rounding_nm = self._roundrect_radius(
+                        ratio, min(size_x, size_y), locator
+                    )
+                    self.max_roundrect_rounding_nm = max(
+                        self.max_roundrect_rounding_nm, rounding_nm
+                    )
                 remove_unused = self._values(
                     pad,
                     "remove_unused_layers",
@@ -2050,7 +2104,10 @@ class _Converter:
             zones=zones,
             keepouts=keepouts,
         )
-        return ConversionResult(snapshot=make_snapshot(content))
+        return ConversionResult(
+            snapshot=make_snapshot(content),
+            max_roundrect_rounding_nm=self.max_roundrect_rounding_nm,
+        )
 
 
 def parse_kicad_bytes(
