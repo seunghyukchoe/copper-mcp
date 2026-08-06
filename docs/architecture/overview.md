@@ -129,8 +129,11 @@ whose revision does not match. Observation now accepts the bounded front- and ba
 orthogonal, unfilled-courtyard subset (rectangles, polygons, and closed line chains) and imports KiCad's authored child coordinates
 without a second mirror. The placement derivative remains deliberately stricter: front side only,
 with unsupported topology and back-side edits failing closed. A locked footprint cannot be moved.
-`courtyard_overlap` is exact for the bounded simple orthogonal Board IR subset: same-side rings return
-`proven_clear` or `violated`, while front/back rings are evaluated independently. Unsupported
+`courtyard_overlap` models KiCad 10.0.5's cached courtyard for the bounded simple orthogonal Board
+IR subset. A footprint's rings are one even-odd region, so a nested ring is a hole rather than a
+second solid, and each region is contracted by the 5,000 nm cache inset before the collision test.
+Same-side regions return `proven_clear`, `inconclusive`, or `violated`, while front/back rings are
+evaluated independently. Unsupported
 topology fails closed before the view exists. Padless footprints remain unplaceable, while their
 supported orthogonal courtyards stay in the stationary collision envelope. File-backed placement
 apply now exists as a separate,

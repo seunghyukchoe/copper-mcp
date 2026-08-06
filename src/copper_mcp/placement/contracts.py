@@ -608,9 +608,13 @@ class PlacementLegality:
     pad_overlap: str
     outline_containment: str
     keepout_respect: str
-    #: Exact for Board IR v0.2's simple orthogonal courtyard subset and evaluated only between
-    #: footprints on the same physical side. Edge contact is not overlap; unsupported topology is
-    #: rejected by the Board IR contract before a placement view exists.
+    #: Three-valued, and evaluated only between footprints on the same physical side. A footprint's
+    #: rings are one even-odd region, so a ring nested inside another is a hole rather than a second
+    #: solid, and each region is contracted by KiCad 10.0.5's cached-courtyard inset before the
+    #: collision test. ``violated`` is exact parity with that model, ``proven_clear`` is a proof
+    #: that no contracted region can touch, and ``inconclusive`` is the band where raw geometry and
+    #: KiCad's contracted cache disagree — claimed as neither rather than as a confident answer.
+    #: Unsupported topology is rejected by the Board IR contract before a placement view exists.
     courtyard_overlap: str = "proven_clear"
 
     def __post_init__(self) -> None:
@@ -620,8 +624,8 @@ class PlacementLegality:
             raise PlacementError("outline containment is malformed")
         if self.keepout_respect not in {"proven_clear", "violated"}:
             raise PlacementError("keepout respect is malformed")
-        if self.courtyard_overlap not in {"proven_clear", "violated"}:
-            raise PlacementError("courtyard overlap must be proven_clear or violated")
+        if self.courtyard_overlap not in {"proven_clear", "inconclusive", "violated"}:
+            raise PlacementError("courtyard overlap must be three-valued")
 
     @property
     def legal(self) -> bool:
@@ -631,7 +635,7 @@ class PlacementLegality:
             self.pad_overlap != "violated"
             and self.outline_containment == "proven_inside"
             and self.keepout_respect == "proven_clear"
-            and self.courtyard_overlap == "proven_clear"
+            and self.courtyard_overlap != "violated"
         )
 
     def to_dict(self) -> dict[str, Any]:

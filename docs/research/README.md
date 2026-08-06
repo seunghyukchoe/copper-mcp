@@ -96,6 +96,12 @@ When adding a document, add it to the list below in the same sentence form — *
 - [KiCad orthogonal courtyard topology](./kicad-orthogonal-courtyard-topology.md) grounds ADR-0065's
   exact decimal-to-nanometre courtyard chain reconstruction in the official S-expression
   specification, copying no external code.
+- [Courtyard oracle parity](./courtyard-oracle-parity-v1.md) grounds ADR-0075 in KiCad 10.0.5's own
+  source and in measurements against the real `kicad-cli`: the courtyard cache is contracted by
+  5,000 nm so a collision needs 10,000 nm of penetration, and a footprint's rings are one even-odd
+  region in which a nested ring is a hole — a topology 31 shipping KiCad library footprints actually
+  use. It records the sub-threshold band as an explicit non-claim, and claims nothing about arcs,
+  custom courtyard clearance, the tiny-shape band, or intersecting same-footprint rings.
 - [KiCad arc tracks as routing obstacles](./kicad-arc-track-obstacles-v1.md) grounds ADR-0070's
   conservative arc envelope in the official S-expression arc grammar and the inscribed-angle
   theorem, and states plainly that the envelope is loose for a near-semicircular arc and claims

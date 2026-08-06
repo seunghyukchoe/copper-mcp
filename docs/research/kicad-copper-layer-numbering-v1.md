@@ -1,7 +1,7 @@
 # KiCad copper layer numbering
 
 Research date: 2026-08-06.  This note supports the correction recorded as
-[D-152](../ledgers/decision-ledger.md) and [R-115](../ledgers/risk-register.md), and grounds the
+[D-153](../ledgers/decision-ledger.md) and [R-116](../ledgers/risk-register.md), and grounds the
 copper-stack validation in `src/copper_mcp/adapters/kicad_board_ir.py`.  No external code is
 copied; the quoted fragments below are short excerpts from KiCad's published API documentation,
 cited so the arithmetic can be re-derived rather than trusted.
