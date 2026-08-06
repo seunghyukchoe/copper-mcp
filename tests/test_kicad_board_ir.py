@@ -2118,7 +2118,7 @@ def test_segment_outline_charges_a_segment_budget() -> None:
     )
 
     assert result.snapshot is None
-    assert result.diagnostics[0].code == "budget.exceeded"
+    assert result.diagnostics[0].code == "budget.exceeded.vertices_per_ring"
     assert "Edge.Cuts outline segment budget" in result.diagnostics[0].message
 
 
@@ -2148,4 +2148,7 @@ def test_pathological_segment_outline_hits_a_budget_instead_of_spinning() -> Non
     )
 
     assert result.snapshot is None
-    assert result.diagnostics[0].code == "budget.exceeded"
+    # The test fixes ``max_intersection_tests``, so that budget is the one that binds;
+    # the property being pinned is that a pathological outline is bounded at all, not
+    # which ceiling happens to stop it first.
+    assert result.diagnostics[0].code.startswith("budget.exceeded.")
