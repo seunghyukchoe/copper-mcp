@@ -942,6 +942,41 @@ def test_unmodeled_setup_routing_constraints_are_rejected() -> None:
     assert result.diagnostics[0].code == "unsupported.construct"
 
 
+def test_soldermask_minimum_width_is_accepted_as_setup_metadata() -> None:
+    """A mask-sliver bound constrains no copper, so carrying it must not refuse the board.
+
+    Real boards were refused outright for declaring `solder_mask_min_width`, which sits in the
+    same class as the already-accepted `pad_to_mask_clearance`: it bounds mask generation, not
+    the copper geometry CopperMCP models.
+    """
+
+    source = _replace(
+        SUBSET_BOARD.read_bytes(),
+        b'  (generator "pcbnew")',
+        b'  (generator "pcbnew")\n  (setup (solder_mask_min_width 0.25))',
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.diagnostics == ()
+    assert result.snapshot is not None
+
+
+def test_an_unknown_setup_field_is_still_refused() -> None:
+    """Accepting one mask field must not turn the setup block into an open allowlist."""
+
+    source = _replace(
+        SUBSET_BOARD.read_bytes(),
+        b'  (generator "pcbnew")',
+        b'  (generator "pcbnew")\n  (setup (some_future_routing_rule 5))',
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+
+
 def test_multiple_native_identity_fields_are_rejected() -> None:
     source = _replace(
         SUBSET_BOARD.read_bytes(),

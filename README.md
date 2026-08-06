@@ -161,7 +161,12 @@ counts, plus an `observe_live_board_scene` bridge that converts the exact active
 into Circuit Scene `0.2.0` geometry. They never mutate KiCad or expose board text, net names, UUIDs,
 or geometry beyond the scene contract. Reaching a running editor is an outbound action, so it is off
 by default behind the exact `COPPER_MCP_ALLOW_LIVE_IPC` flag; with it off the live tools stay listed
-and refuse, and no IPC socket is read from the environment or opened.
+and refuse, and no IPC socket is read from the environment or opened. The plugin half installs from
+KiCad's **Plugin and Content Manager** as `com.github.seunghyukchoe.coppermcp-live-observer`
+(KiCad 9.0.1+) — and installing it grants nothing on its own, because the flag above still has to be
+set in the environment KiCad was launched from. See
+[the plugin README](hardware/kicad-ipc-plugin/README.md) for the two steps the PCM cannot perform
+for you.
 
 **Live editor mutation: gated, designed, and not implemented.** `apply_live_candidate` verifies
 every precondition for a one-undo-step apply into a running KiCad — a third operator opt-in

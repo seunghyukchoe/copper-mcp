@@ -108,6 +108,12 @@ _SETUP_METADATA_HEADS = frozenset(
         "pad_to_mask_clearance",
         "pcbplotparams",
         "plugging",
+        # Soldermask sliver minimum. Like `pad_to_mask_clearance` above it constrains mask
+        # generation, not copper: it bounds how thin a mask web may get between apertures.
+        # CopperMCP models copper geometry and makes no soldermask claim, so accepting it as
+        # metadata ignores nothing it would otherwise have honoured. Found on real boards that
+        # were refused outright for carrying it.
+        "solder_mask_min_width",
         "tenting",
     }
 )
@@ -115,6 +121,11 @@ _FOOTPRINT_METADATA_HEADS = frozenset(
     {
         "at",
         "attr",
+        # Library documentation strings KiCad copies into every placed footprint: a human
+        # description and search tags. They carry no geometry, no layer, and no constraint, so
+        # refusing them refused essentially every real board -- they appeared 2,518 times each
+        # across the 23 boards this gap was found on.
+        "descr",
         "duplicate_pad_numbers_are_jumpers",
         "embedded_fonts",
         "layer",
@@ -124,6 +135,7 @@ _FOOTPRINT_METADATA_HEADS = frozenset(
         "pad",
         "path",
         "property",
+        "tags",
         "tstamp",
         "uuid",
     }
@@ -426,7 +438,12 @@ class _Converter:
                         f"{locator}.zone",
                         object_kind="zone",
                     )
-                if head.startswith("fp_") or head == "property":
+                # `point` is layer-bearing like the `fp_*` primitives -- it carries `at`, `size`
+                # and `layer` -- so it goes through the same layer-aware path rather than the
+                # metadata allowlist. That keeps the copper question decided by the layer, not by
+                # the head: a `point` on a routing layer is refused exactly as a stray `fp_line`
+                # is, and one on a documentation layer is ignored exactly as silkscreen is.
+                if head.startswith("fp_") or head in {"property", "point"}:
                     layer = self._graphic_layer(item, f"{locator}.graphic")
                     if layer in _COURTYARD_LAYERS:
                         if head not in {"fp_line", "fp_poly", "fp_rect"}:
