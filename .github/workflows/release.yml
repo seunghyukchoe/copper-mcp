@@ -44,6 +44,12 @@ jobs:
         run: python scripts/check_version.py --tag "${RELEASE_VERSION}"
       - name: Run release gate
         run: make check
+      # The KiCad Plugin and Content Manager archive is built into the same dist/ directory as the
+      # wheel and the sdist, so `actions/attest` covers it under the existing `dist/*` subject path
+      # and `gh release create` uploads it. There is deliberately no separate attestation step to
+      # fall out of step with the Python distributions.
+      - name: Build the KiCad PCM package
+        run: python scripts/build_pcm_package.py --expect-version "${RELEASE_VERSION}"
       - name: Upload distributions
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:

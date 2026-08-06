@@ -101,6 +101,12 @@ When adding a document, add it to the list below in the same sentence form — *
 - [KiCad orthogonal courtyard topology](./kicad-orthogonal-courtyard-topology.md) grounds ADR-0065's
   exact decimal-to-nanometre courtyard chain reconstruction in the official S-expression
   specification, copying no external code.
+- [Courtyard oracle parity](./courtyard-oracle-parity-v1.md) grounds ADR-0075 in KiCad 10.0.5's own
+  source and in measurements against the real `kicad-cli`: the courtyard cache is contracted by
+  5,000 nm so a collision needs 10,000 nm of penetration, and a footprint's rings are one even-odd
+  region in which a nested ring is a hole — a topology 31 shipping KiCad library footprints actually
+  use. It records the sub-threshold band as an explicit non-claim, and claims nothing about arcs,
+  custom courtyard clearance, the tiny-shape band, or intersecting same-footprint rings.
 - [KiCad arc tracks as routing obstacles](./kicad-arc-track-obstacles-v1.md) grounds ADR-0070's
   conservative arc envelope in the official S-expression arc grammar and the inscribed-angle
   theorem, and states plainly that the envelope is loose for a near-semicircular arc and claims
@@ -135,6 +141,20 @@ When adding a document, add it to the list below in the same sentence form — *
   unlicensed, PCBench MIT, PCBWorld split and unreleased, FreeRouting GPL-3.0), and the harness
   lessons from an abandoned upstream benchmark. It claims no baseline comparison and no
   generalisation beyond LLM-generated 2-layer boards.
+- [KiCad copper layer numbering](./kicad-copper-layer-numbering-v1.md) establishes, from KiCad's
+  own enumeration and board writer rather than from one sample board, that copper is numbered
+  `F.Cu=0`, `B.Cu=2`, `InN.Cu=2+2N` and declared front-to-back so the IDs do not ascend, that this
+  numbering replaced a different consecutive one at KiCad 9, and that the two cannot both be
+  accepted at once. It claims nothing about non-copper ordinals, the pre-4.0 legacy format, or
+  KiCad 11.
+- [KiCad PCM distribution](./kicad-pcm-distribution-v1.md) records the addon package format from
+  the published JSON Schema and the addons-metadata CI rather than the prose guide, listing the six
+  fields on which the two disagree; the archive whitelist, icon bounds, size tolerances, and
+  version-immutability rules a submission is judged against; the split between the in-archive and
+  submitted `metadata.json`; and the two behaviours in KiCad's own plugin manager that decide
+  whether a Python IPC plugin is reachable at all — a `requirements.txt` it cannot use to install
+  CopperMCP, and a `--system-site-packages` venv that is why it does not need to. It claims no
+  submission, acceptance, or publication, and no observed behaviour on any platform.
 
 ## Terms used in this review
 

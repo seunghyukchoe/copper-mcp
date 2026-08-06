@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-.PHONY: install install-dev test lint format typecheck security build check \
+.PHONY: install install-dev test lint format typecheck security build pcm check \
 	check-audio-benchmarks check-circuit-intents benchmark-audio benchmark-routing \
 	benchmark-external-corpus evaluate-excessive-agency clean
 
@@ -35,6 +35,11 @@ security:
 
 build:
 	$(PYTHON) -m build
+
+# The KiCad Plugin and Content Manager archive, written beside the wheel and sdist. Reproducible:
+# the same source always produces the same bytes, so re-running this is a no-op on the digest.
+pcm:
+	$(PYTHON) scripts/build_pcm_package.py
 
 check: lint typecheck test security build
 

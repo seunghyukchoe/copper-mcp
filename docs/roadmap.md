@@ -51,7 +51,22 @@ documentation, ledger updates, and benchmark evidence.
   orthogonal courtyard rings: unfilled `fp_rect`, `fp_poly`, and unordered complete `fp_line`
   cycles. The immutable v0.1 schema remains as legacy compatibility evidence.
 - [x] Board IR application-service and MCP exposure as a read-only structural summary.
-- [ ] Broader KiCad geometry and rule coverage.
+- [~] Broader KiCad geometry and rule coverage. Foreign-net arc tracks spanning at most half a
+  turn are now a conservative integer polygon envelope obstacle on the single-layer router, with
+  distinct typed refusals for an arc past half a turn and for an arc on the routed net. Curved
+  board outlines, additional pad shapes (custom/chamfered), placement-enabled rule areas, net-tie
+  footprints, and oval holes remain refused and are still open, by the tracking issue's own
+  accounting of what it left.
+- [x] Copper stack validated against KiCad's own layer numbering rather than a synthesized
+  arithmetic rule, correcting a defect that had refused every real board with more than two copper
+  layers behind the same fail-closed diagnostic a two-layer board also uses. Declaration position
+  fixes the layer name; the name fixes KiCad's own declared ID (`F.Cu=0`, `B.Cu=2`,
+  `In{N}.Cu=2+2N`), so a four-layer board's IDs deliberately do not ascend. Board IR's own
+  `Layer.index` and every two-layer content address are unchanged.
+- [ ] Board outlines drawn as `gr_line` on `Edge.Cuts` are refused; only `gr_rect` is accepted
+  today, which blocks ordinary real boards whose outline is not a single rectangle.
+- [ ] Parse budgets are fixed and not operator-configurable, so some ordinary real boards are
+  refused purely on size rather than on any modelling gap.
 - [x] Headless `kicad-cli pcb drc --format json` validation.
 - [x] Minimal KiCad child environment, private working directory, bounded private
   global-configuration/state roots, and snapshot-confined file-table dependencies.
@@ -89,6 +104,11 @@ documentation, ledger updates, and benchmark evidence.
 - [x] Diagonal foreign-net copper as conservative exact-integer swept-square envelopes.
 - [x] Diagonal copper on the routed net as attachment copper, using a chain of exact integer squares
   that is provably inside the track and provably self-connected.
+- [x] Foreign-net KiCad arc tracks spanning at most half a turn as a conservative integer polygon
+  envelope obstacle on the single-layer router, using the same swept-square construction as
+  diagonal segments with a larger radius (ADR-0072). An arc past half a turn and an arc on the
+  routed net are each a distinct typed refusal; the layered proposal adapter's blanket arc refusal
+  is unchanged, since its obstacle model is rectangles only.
 - [x] Freshness-bound zone fill authority: cached fill is admitted as connectivity evidence only
   when a fresh KiCad refill on a disposable copy reproduces it exactly.
 - [x] Fill-aware zone *routing*: the deterministic A* core replaces a matching foreign-zone
@@ -150,6 +170,12 @@ documentation, ledger updates, and benchmark evidence.
   - [x] Candidate topology gate: revision/endpoint binding, path-via adjacency, ordered-stack
     full-stack transitions, duplicate/crossing rejection, bounded pair checks, and explicit
     physical-validation non-claim.
+  - [x] Freshness-verified same-layer zone fill now replaces the layered adapter's conservative
+    zone-outline envelope with verified fill islands, carried as bounding boxes since the layered
+    lattice model is rectangular, behind four ordered fail-closed gates (ADR-0070, B-086). A public
+    `preview_layered_route` fill-authority contract with an ADR-0040-style `routing_effect` label,
+    same-net poured attachment in the layered seam, and exact polygon layered collision remain
+    open.
 - [x] Attachment to existing same-net copper and bounded partial-route completion.
 - [ ] Multilayer vias and keepouts.
 - [~] Negotiated-congestion multi-net routing.
@@ -172,6 +198,15 @@ documentation, ledger updates, and benchmark evidence.
     rejected deterministically.
     KiCad DRC, existing-board copper, pads, vias, zones, custom rules, multilayer geometry, and
     physical-conflict-guided rerouting remain open.
+  - [x] Three separately declared, separately digest-bound negotiation policy slots — net order,
+    per-iteration cost-update rule, and rip-up selection — each a closed enumeration member plus
+    bounded integer weights that compose into one plan digest the published evidence re-derives
+    (ADR-0073). This is opt-in behind a distinct `negotiated-congestion-plan-v4` identity; absent a
+    declared plan, the existing coordinator, ordering, accounting, and `negotiated-congestion-v2`
+    identities are byte-for-byte unchanged. B-087 sweeps ten declared plans over 330 replays with
+    zero divergence and finds six worse than the default on the one fixture where negotiation
+    genuinely iterates, including both rip-up rules and history decay, which fail to converge;
+    multilayer/via negotiation, KiCad DRC, electrical, and fabrication authority are unchanged.
 - [~] Incremental spatial index and bounded rip-up/reroute.
   - [x] Immutable conservative obstacle index for exact A*/Dijkstra query narrowing, with
     canonical linear fallback, differential route tests, and B-033 evidence.
@@ -200,6 +235,11 @@ documentation, ledger updates, and benchmark evidence.
     item asks for is still not measured** — FreeRouting is recorded as `not_run`, and a
     SimpleRouteJson-to-DSN bridge, a common corpus neither router helped define, and an equivalent
     performance protocol all remain required.
+  - [ ] Position CopperMCP as a verification harness for externally generated route candidates
+    (starting with tscircuit / SimpleRouteJson solution output): convert an external candidate to
+    CopperMCP's own candidate identity and run the full verification stack — exact clearance,
+    structural verification, real KiCad DRC — returning accepted/refused with typed diagnostics
+    and evidence, never a silently repaired route.
 
 - [~] Emit candidate DRC evidence as a deterministic, unsigned in-toto Statement payload using
   Link v0.3, with digest-bound subjects/materials and aggregate redacted byproducts. DSSE signing,
@@ -235,9 +275,19 @@ documentation, ledger updates, and benchmark evidence.
   introduced.
 - [~] Revision-race protection is implemented (double compare-and-swap, typed `stale_candidate`,
   never auto-refreshed). **One KiCad undo commit is not**: the pre-apply copy is a file the user
-  restores manually and never appears in KiCad's undo stack. A real single-undo transaction
-  needs the IPC API, deferred because it mutates an in-memory document whose state cannot be
-  bound to a file digest.
+  restores manually and never appears in KiCad's undo stack. A real single-undo transaction needs
+  the IPC API's `begin_commit`/`push_commit`/`create_items`/`update_items` primitives, which are
+  documented and not experimental. This corrects an earlier assumption: an in-memory document
+  *can* be bound to a content identity through `get_as_string`, just never to the on-disk file
+  digest, since the gap between the two is exactly the dirty flag the protocol omits (ADR-0074).
+  `apply_live_candidate` now ships every precondition a live mutation would need — an operator
+  opt-in `COPPER_MCP_ALLOW_LIVE_APPLY` deliberately independent of the two existing consent flags,
+  a session/board/snapshot triple compare-and-swap bound under its own HMAC domain, and a full
+  candidate replay against the live board — then refuses with `capability_not_implemented` from
+  the exact point `begin_commit` would be called. The mutation itself still waits on adversarial
+  review: the IPC protocol exposes no revision, dirty flag, or conditional write, and `kipy`
+  discards the per-item status a caller would need to confirm a partial write, so these hazards are
+  recorded rather than mitigated.
 - [~] Placement apply. `apply_placement_candidate` is now separately authorized from route apply:
   file-backed previews may explicitly request a placement-scoped single-use token, and the pure
   source-preserving replay plus atomic file service applies front-side orthogonal footprints with
@@ -283,12 +333,21 @@ placement, and the policy-plugin work.
   geometry remain open gates.
 - [~] Deterministic snapping, connectivity, clearance, rule, provenance, and revision validation for
   every placement candidate. Grid snapping, rule residuals, three-valued pad overlap, outline
-  containment, keepout respect, exact same-side simple closed orthogonal-courtyard overlap, and
-  dual-digest binding are implemented, including stationary supported courtyards from padless
-  footprints while keeping those footprints out of candidate manifests. Board IR accepts unfilled
-  `fp_rect`, `fp_poly`, and unordered complete `fp_line` cycles only when they normalize to simple
-  closed horizontal/vertical rings; B-073 measures the resulting exact positive-area legality.
-  Pad-net connectivity after a placement, nonzero custom clearance, and general topology remain
+  containment, keepout respect, and dual-digest binding are implemented, including stationary
+  supported courtyards from padless footprints while keeping those footprints out of candidate
+  manifests. Same-side courtyard overlap is now three-valued (`proven_clear`/`violated`/
+  `inconclusive`) and bound to what KiCad 10.0.5 actually compares — a cached `SHAPE_POLY_SET`
+  contracted by a 5,000 nm `BuildCourtyardCaches` inset, so a collision needs 10,000 nm of nominal
+  penetration, and an even-odd ring-nesting rule under which a donut courtyard's centre is
+  occupiable (ADR-0075, closing issues #72 and #74). This corrects, rather than restates, an
+  earlier "exact" claim: the prior model treated every courtyard ring as an independent solid and
+  falsely refused donut courtyards, a topology most RF shield-can footprints use. B-089 records 0
+  false-positive violations and 0 false-negative clears over 15 real-KiCad cases, with the
+  sub-10,000 nm band where the two models genuinely disagree reported as `inconclusive` rather than
+  rounded either way. Board IR accepts unfilled `fp_rect`, `fp_poly`, and unordered complete
+  `fp_line` cycles only when they normalize to simple closed horizontal/vertical rings; B-073
+  measures the resulting exact positive-area legality. Pad-net connectivity after a placement,
+  nonzero custom clearance, arcs and non-orthogonal courtyard geometry, and general topology remain
   future work.
 - [~] Broaden courtyard geometry and side-aware placement safely. Bounded `F.Cu`/`B.Cu`
   observation imports simple closed orthogonal rectangles, polygons, and unordered line cycles
@@ -386,6 +445,17 @@ recorded in [the OpenSSF research note](research/openssf-criticality-and-supply-
   verify branch protection/code-owner review, improve packaging metadata, add signed-release
   verification, and complete the CII/OpenSSF best-practices profile. Do not claim a check is fixed
   until a hosted run or API response proves it.
+- [x] Ship a tested agent-facing usage contract, `docs/agents.md`, that restates every typed
+  refusal as the next action an agent should take — for example, `stale_revision` means re-observe
+  and rebuild the candidate, and `apply_disabled` is a question for the operator, never something
+  to route around. `tests/test_agents_doc.py` mechanically asserts every MCP tool it lists is still
+  registered, every registered tool appears in it, and every diagnostic code it names still exists,
+  so the document cannot silently drift from the implementation; a root `llms.txt` points an LLM at
+  it first.
+- [ ] Package the KiCad IPC plugin for the official Plugin and Content Manager (PCM), so
+  `hardware/kicad-ipc-plugin` no longer needs a manual install, while keeping the
+  token-never-leaves-the-plugin property and `COPPER_MCP_ALLOW_LIVE_IPC` default-off documented in
+  the listing.
 - [ ] Build an adoption and evidence path: versioned audio-board examples, reproducible benchmark
   commands, downstream smoke tests, citations, and a small set of independent users or projects
   that can validate the documented MCP/KiCad contracts without uploading proprietary boards.

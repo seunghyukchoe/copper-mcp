@@ -8,6 +8,44 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **The KiCad plugin is now a Plugin and Content Manager package, and installing it still grants
+  nothing.** `scripts/build_pcm_package.py` produces `com.github.seunghyukchoe.coppermcp-live-observer`
+  as a reproducible archive alongside the wheel and sdist, attested under the same `dist/*` subject
+  path. The format was read from KiCad's published JSON Schema and its addons-metadata CI rather
+  than from the prose guide, which contradicts the schema on six fields; both schema versions are
+  vendored under `schemas/kicad-pcm/` and the package validates against **both**, because a
+  `plugin`-typed package is served to KiCad 6.0–9.x through the down-converted v1 lists as well as
+  to 10.0+, and v1 is the stricter document. The archive is **stored, not deflated**, written in one
+  declared sorted order with the 1980 ZIP epoch, mode 0644, and Unix host on every entry, so its
+  bytes are a pure function of member names, contents, and order — byte-identical across Python
+  3.12 and 3.14, two timezones, and different hash seeds. That is a correctness requirement, not a
+  nicety: a version merged into the KiCad repository is immutable, so a rebuild that differed would
+  be unfixable in place. The `download_sha256`, `download_size`, and `install_size` in the
+  submission metadata are measured from the artifact the script just built, so no digest is ever
+  transcribed, and the in-archive copy is deliberately a different document — exactly one version,
+  no `download_sha256` — because KiCad's submission CI cross-checks the two. Submission to the
+  official repository stays a human step, prepared as a checklist in the plugin README. (#98,
+  D-152, SEC-121)
+- **A `requirements.txt` that must exist and must install nothing.** KiCad marks a Python IPC
+  plugin *ready* only after pip exits 0 against that file, and skips unready plugins in both
+  `GetActionsForScope` and `InvokeAction` — so a plugin shipped without it installs, discovers,
+  validates, and then never appears in the toolbar, with the reason only in a trace log. Naming
+  `copper-mcp` in it fails the same way for the opposite reason: KiCad resolves it against PyPI
+  under `--only-binary :all:`, and CopperMCP is deliberately unpublished there. The per-plugin
+  environment is created with `--system-site-packages`, so the operator's own
+  `pip install 'copper-mcp[kicad]'` is what supplies the import, and the entrypoint now refuses
+  with a fixed, actionable sentence when it has not been done. (#98)
+
+- A container image for the MCP server. `Dockerfile` builds a wheel and installs it into a
+  slim Python base as a non-root user, with `/workspace` as the mounted board directory and the
+  stdio transport as the entrypoint. It deliberately does **not** bundle KiCad: board inspection,
+  DRC, ERC, and rendering delegate to an authoritative `kicad-cli`, and shipping one inside the
+  image would let a caller believe those surfaces answered when the host's own KiCad is what must
+  answer for them. Without KiCad the server still starts and lists all 27 tools, refusing the
+  KiCad-backed ones with their normal typed diagnostics. No mutation flag is set in the image, so
+  it is read-only unless an operator opts in at run time exactly as on a host install.
+
+### Added
 - **CopperMCP's central safety claim is now an adversarial test suite instead of a sentence.** The
   claim is a negative — an agent driving this server cannot cause an unintended board mutation and
   cannot extract a verification that was never computed, even when it tries — so it cannot be
@@ -177,6 +215,84 @@ All notable changes are documented here. The format follows
   This is an internal seam: no public contract, response field, candidate identity rule, router
   version, DRC authority, or apply semantics changes, and `preview_layered_route` does not yet
   report fill-aware provenance the way `preview_route` does. (#63)
+
+### Fixed
+
+- **A courtyard drawn as a ring is a ring, not a solid disc.** A footprint whose courtyard is an
+  outer boundary plus an inner ring — a donut — was compared ring-by-ring as two independent solids,
+  so a part legitimately placed in the hole was reported as a courtyard collision and the candidate
+  was refused. KiCad does not agree, and the disagreement is not a matter of interpretation:
+  `buildContourHierarchy` counts how many contours contain each contour and makes an odd count a
+  *hole* in the parent with one fewer parents, so a nested ring removes material. Real
+  `kicad-cli` 10.0.5 reports **zero violations** for exactly the arrangement CopperMCP was refusing.
+  Rings of one footprint are now pooled into a single even-odd scanline region, which reproduces
+  KiCad's hierarchy exactly for the disjoint and strictly nested rings Board IR admits. This
+  mattered in practice rather than in principle: the official KiCad footprint library ships **31
+  footprints with nested `F.CrtYd` rings**, almost all RF shielding cans, where the ring *is* the can
+  wall and the interior is deliberately left occupiable — so the old behavior refused every part
+  placed under every shield can in the library. Direction of error is the point here: refusing more
+  is not automatically safe when the refusal is published as per-rule evidence, because a
+  conservative *answer* was still a false *claim*. (#74)
+
+### Changed
+
+- **Courtyard legality is now three-valued, and ADR-0058's "exact" claim is corrected rather than
+  restated.** KiCad's courtyard DRC never looks at footprint graphics; it collides a cached
+  `SHAPE_POLY_SET` that `FOOTPRINT::BuildCourtyardCaches` contracts by
+  `maxError = pcbIUScale.mmToIU( 0.005 )` — exactly 5,000 nm — before the test. Both footprints are
+  contracted, so a zero-clearance collision needs 10,000 nm of nominal penetration. Measured against
+  the real tool: 9,999 nm is clear, 10,000 nm reports `courtyards_overlap`, and the same threshold
+  applies independently to each axis for corner-only overlap. CopperMCP reported a violation from
+  1 nm, so every verdict in that band was a refusal KiCad does not share. `courtyard_overlap`
+  therefore joins `pad_overlap` as three-valued: `proven_clear` where the raw regions share no area
+  (a proof for *any* ring shape, since contraction only ever shrinks a region — the outline moves in
+  and any hole grows), `violated` where the shared area contains a 10,000 nm square witness (exact
+  parity with KiCad), and `inconclusive` in between. The band is **not** silently resolved: calling
+  it `violated` would assert a collision the authoritative tool denies, and calling it
+  `proven_clear` would deny an overlap the geometry has, so neither is claimed. `inconclusive` is not
+  a violation — matching the existing `pad_overlap` convention — so a sub-threshold interference is
+  now previewed rather than refused, with the non-claim recorded in the published evidence; a caller
+  needing the stricter reading can treat `inconclusive` as a failure, which is exactly what the
+  three-valued vocabulary makes expressible. `scripts/benchmark_courtyard_oracle_parity.py` replaces
+  the old `kicad_invoked: false` posture with a real oracle and measures **10/15 exact parity, 5/15
+  conceded `inconclusive`, 0 contradictions, 0 false-positive violations, 0 false-negative clears**
+  over 15 cases, refusing to emit an artifact if any contradiction appears. No Board IR digest moves
+  and the golden placement candidate identity is unchanged. The tiny-shape band, arcs, custom
+  courtyard clearance, and same-footprint rings that touch or properly intersect remain declared
+  non-claims. (ADR-0075, D-152, B-089, R-115, #72)
+- **Boards with more than two copper layers convert again — every real 4-, 6-, or 8-layer KiCad
+  board was being refused.** The Board IR adapter validated the copper stack by requiring each
+  layer's declared ID to equal `declaration_position * 2`, i.e. `F.Cu=0, In1.Cu=2, In2.Cu=4,
+  B.Cu=6`. KiCad has never numbered layers that way: copper takes the *even* values with the
+  technical layers interleaved on the odd ones, so it is `F.Cu=0`, `B.Cu=2`, and `In{N}.Cu=2+2N`,
+  and because KiCad writes the stack front-to-back a four-layer board declares `0, 4, 6, 2` —
+  deliberately not ascending. A two-layer board satisfies both rules coincidentally, and two-layer
+  boards were every fixture in the repository, so the whole suite stayed green while every real
+  multilayer board was refused with `unsupported.construct` "copper layer IDs, names, or
+  declaration order are unsupported". The adapter now checks the two invariants separately: the
+  declaration position fixes the *name*, and the name fixes the *ID* through KiCad's own table.
+  This unblocks multilayer inspection, scene observation, placement preview, DRC binding, and the
+  2–8 signal layer ordered router (ADR-0068) on real boards — all verified end to end on four- and
+  six-layer boards, with no downstream surface found to have a separate blocker.
+  The rule stays fail-closed and is *not* loosened into accepting anything: a duplicate ID, a gap
+  in the inner sequence, a misnamed position, a back layer that is not `B.Cu`, a missing front or
+  back copper layer, an inner index past KiCad's `In30.Cu`, KiCad's own pre-version-9 numbering
+  (`F.Cu=0, In1..In30 = 1..30, B.Cu=31` — a real numbering, but not this format version's), and
+  the superseded `position * 2` numbering all still refuse with the same typed diagnostic.
+  Nothing published moves: `Layer.index` remains the declaration position, so the Board IR copper
+  stack is still dense and front-to-back, and every two-layer content address is byte-identical.
+  The one identity that changed is this repository's own four-layer *test fixture*, which had been
+  written in the invented numbering and is now correct; its pinned route-candidate ID is re-pinned
+  in place, with the router and `LAYERED_ROUTER_VERSION` untouched. See
+  [KiCad copper layer numbering](docs/research/kicad-copper-layer-numbering-v1.md) for the
+  derivation and citations, D-153, and R-116 for the class of defect — a validation rule no fixture
+  ever contradicted. (#104)
+### Changed
+
+- The KiCad plugin entrypoint imports `copper_mcp.kicad_ipc` inside `main()` rather than at module
+  scope. A PCM install delivers the plugin file and not CopperMCP, so at module scope a new user's
+  first click was an unhandled `ImportError` that put a filesystem path into KiCad's warning bar.
+  It is now one line naming the pip command, with no path and no traceback. (#98, SEC-121)
 
 ## [0.6.0] - 2026-08-06
 
