@@ -724,27 +724,29 @@ def test_geometry_package_has_no_mcp_gui_filesystem_or_adapter_imports() -> None
         ), f"forbidden Board IR import in {source_path}: {sorted(imports)}"
 
 
-def test_board_ir_v0_2_accepts_only_orthogonal_courtyard_rings() -> None:
+def test_board_ir_v0_2_accepts_only_octilinear_courtyard_rings() -> None:
     """Externally-produced Board IR must obey the adapter's exact courtyard subset.
 
-    The adapter can now import a simple closed line-chain or unfilled polygon, but only when it
-    is orthogonal.  Validation must accept the same bounded topology while continuing to refuse
-    diagonal geometry, otherwise a hand-written JSON snapshot could claim a collision region that
-    the deterministic legalizer does not model.
+    The adapter can import a simple closed line-chain or unfilled polygon whose edges are
+    horizontal, vertical, or exact 45-degree chamfers.  Validation must accept the same bounded
+    topology while continuing to refuse arbitrary-slope geometry, otherwise a hand-written JSON
+    snapshot could claim a collision region that the deterministic legalizer does not model.
     """
 
     content = sample_content()
     footprint = content.footprints[0]
 
+    # Every edge of this triangle is horizontal or an exact 45-degree diagonal, so it is inside
+    # the octilinear subset and must round-trip - it used to be refused when the subset was
+    # orthogonal-only.
     triangle = _ring(((1_000_000, 1_000_000), (7_000_000, 1_000_000), (4_000_000, 4_000_000)))
-    with pytest.raises(BoardIRValidationError) as triangle_error:
-        make_snapshot(
-            replace(
-                content,
-                footprints=(replace(footprint, courtyards=(triangle,)), *content.footprints[1:]),
-            )
+    chamfer_snapshot = make_snapshot(
+        replace(
+            content,
+            footprints=(replace(footprint, courtyards=(triangle,)), *content.footprints[1:]),
         )
-    assert triangle_error.value.code == "unsupported.topology"
+    )
+    assert decode_snapshot_json(encode_snapshot(chamfer_snapshot)) == chamfer_snapshot
 
     concave_orthogonal = _ring(
         (
@@ -769,7 +771,8 @@ def test_board_ir_v0_2_accepts_only_orthogonal_courtyard_rings() -> None:
     )
     assert decode_snapshot_json(encode_snapshot(snapshot)) == snapshot
 
-    # A four-vertex ring is not enough: the corners must form an axis-aligned rectangle.
+    # A four-vertex ring is not enough: an edge of arbitrary slope stays outside the subset,
+    # exactly as a rectangle rotated by a non-multiple of 45 degrees would.
     skewed = _ring(
         (
             (1_000_000, 1_000_000),
@@ -788,8 +791,7 @@ def test_board_ir_v0_2_accepts_only_orthogonal_courtyard_rings() -> None:
     assert skew_error.value.code == "unsupported.topology"
 
     # The refusal names the contract, never the caller's geometry.
-    for error in (triangle_error, skew_error):
-        assert "1000000" not in error.value.message
+    assert "1000000" not in skew_error.value.message
 
 
 def test_board_ir_v0_2_accepts_orthogonal_courtyards_at_every_quarter_turn() -> None:

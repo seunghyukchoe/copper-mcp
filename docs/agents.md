@@ -158,7 +158,7 @@ if you want to learn this before committing to a preview.
 | `unsupported.document` | The serialization's root is not `kicad_pcb`. You handed the reader something that is not a board. |
 | `unsupported.version` | The board's format version is outside the documented range. |
 | `unsupported.construct` | The board uses a construct the converter deliberately does not model. |
-| `unsupported.topology` | Geometry topology outside the supported subset — for example a courtyard that is not a simple closed orthogonal ring. |
+| `unsupported.topology` | Geometry topology outside the supported subset — for example a courtyard ring with an arbitrary-slope edge (edges must be axis-aligned or exact 45-degree chamfers), or a courtyard circle overlapping a sibling courtyard shape. |
 | `unsupported.transform` | A pose or transform the converter cannot represent exactly. |
 | `geometry.invalid` | Geometry that fails the Board IR contract. |
 | `geometry.missing` | Geometry a construct requires is absent. |

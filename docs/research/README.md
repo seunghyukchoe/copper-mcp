@@ -102,6 +102,12 @@ When adding a document, add it to the list below in the same sentence form — *
   region in which a nested ring is a hole — a topology 31 shipping KiCad library footprints actually
   use. It records the sub-threshold band as an explicit non-claim, and claims nothing about arcs,
   custom courtyard clearance, the tiny-shape band, or intersecting same-footprint rings.
+- [Chamfered and circular courtyards](./courtyard-curved-shapes-v1.md) measures what the #116
+  refused boards actually carry — exact 45-degree chamfers and exact-radius circles, no rotated
+  rectangles, no arcs — pins KiCad 10.0.5's inward circle polygonisation band against the real
+  `kicad-cli`, and restates ADR-0072's outward-envelope direction for a keep-out on an
+  evidence-publishing surface: outer bounds may only prove clearance, inner bounds may only prove
+  violation, and everything between is a declared concession.
 - [KiCad arc tracks as routing obstacles](./kicad-arc-track-obstacles-v1.md) grounds ADR-0070's
   conservative arc envelope in the official S-expression arc grammar and the inscribed-angle
   theorem, and states plainly that the envelope is loose for a near-semicircular arc and claims

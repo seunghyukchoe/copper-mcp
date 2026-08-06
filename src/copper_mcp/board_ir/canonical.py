@@ -15,6 +15,7 @@ from copper_mcp.board_ir.types import (
     BoardIRContent,
     BoardIRSnapshot,
     ConstraintSet,
+    CourtyardCircle,
     Footprint,
     Keepout,
     Layer,
@@ -130,8 +131,12 @@ def _outline(contour: OutlineContour) -> dict[str, JsonValue]:
     }
 
 
+def _courtyard_circle(circle: CourtyardCircle) -> dict[str, JsonValue]:
+    return {"center": _point(circle.center), "radius_nm": circle.radius_nm}
+
+
 def _footprint(item: Footprint) -> dict[str, JsonValue]:
-    return {
+    payload: dict[str, JsonValue] = {
         "courtyards": [_ring(courtyard) for courtyard in item.courtyards],
         "id": item.id,
         "locked": item.locked,
@@ -140,6 +145,15 @@ def _footprint(item: Footprint) -> dict[str, JsonValue]:
         "rotation_udeg": item.rotation_udeg,
         "side": item.side.value,
     }
+    # The key is emitted only when a circle exists.  Every snapshot digest minted before
+    # circular courtyards were representable therefore keeps encoding byte-for-byte the same
+    # payload, which is what keeps the committed golden identities - and every caller-persisted
+    # snapshot digest - verifiable without a schema-version bump.
+    if item.courtyard_circles:
+        payload["courtyard_circles"] = [
+            _courtyard_circle(circle) for circle in item.courtyard_circles
+        ]
+    return payload
 
 
 def _pad(item: Pad, order: dict[str, int]) -> dict[str, JsonValue]:
@@ -336,6 +350,12 @@ def normalize_content(content: BoardIRContent) -> BoardIRContent:
                                     for courtyard in item.courtyards
                                 ),
                                 key=lambda ring: ring.points,
+                            )
+                        ),
+                        courtyard_circles=tuple(
+                            sorted(
+                                item.courtyard_circles,
+                                key=lambda circle: (circle.center, circle.radius_nm),
                             )
                         ),
                     )

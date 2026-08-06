@@ -21,6 +21,24 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **Chamfered and circular courtyards convert, and their legality claims stay honest.** The
+  #116 survey's two courtyard causes — `courtyard edges must be non-zero and axis-aligned`
+  (measured to be exact 45-degree electrolytic-capacitor chamfers, not the hypothesised rotated
+  rectangles) and `courtyard primitive is unsupported by Board IR v0.2` (104 `fp_circle`
+  outlines, zero arcs) — are removed by widening Board IR 0.2.0 to octilinear courtyard rings
+  and a new exact `CourtyardCircle` value. Legality brackets every published verdict by
+  direction: only an outer bound may prove `proven_clear`, only an inner bound witnessed past
+  each side's worst-case cache loss may prove `violated` (two insets, strictly, for a circle,
+  whose cache KiCad polygonises inward before contracting — a 10,001 nm development claim the
+  real tool contradicted and the oracle benchmark caught), and everything between is
+  `inconclusive`. Uncertifiable arrangements degrade to claims-nothing bounds; `fp_arc`,
+  inexact radii, arbitrary slopes, and non-quarter-turn poses stay typed refusals. The
+  canonical encoder emits `courtyard_circles` only when present, so every existing snapshot
+  digest, scene revision, and golden identity is byte-stable. Measured against real
+  `kicad-cli` 10.0.5 over 23 cases: 12 exact parity, 11 conceded, 0 contradictions; on the
+  #116 tree, courtyard-stage refusals drop from 13 boards to zero. (#116, ADR-0077, D-156,
+  R-118, B-090)
+
 - **The KiCad plugin is now a Plugin and Content Manager package, and installing it still grants
   nothing.** `scripts/build_pcm_package.py` produces `com.github.seunghyukchoe.coppermcp-live-observer`
   as a reproducible archive alongside the wheel and sdist, attested under the same `dist/*` subject

@@ -18,6 +18,7 @@ from copper_mcp.board_ir.types import (
     BoardIRContent,
     BoardIRSnapshot,
     ConstraintSet,
+    CourtyardCircle,
     DifferentialPairRule,
     Footprint,
     FootprintSide,
@@ -494,6 +495,13 @@ def _decode_content(value: object) -> BoardIRContent:
         path="content.items",
     )
 
+    def decode_courtyard_circle(raw: object, circle_path: str) -> CourtyardCircle:
+        entry = _object(raw, required={"center", "radius_nm"}, path=circle_path)
+        return CourtyardCircle(
+            center=_point(entry["center"], f"{circle_path}.center"),
+            radius_nm=_integer(entry["radius_nm"], f"{circle_path}.radius_nm"),
+        )
+
     def decode_footprint(raw: object, entry_path: str) -> Footprint:
         entry = _object(
             raw,
@@ -506,10 +514,16 @@ def _decode_content(value: object) -> BoardIRContent:
                 "courtyards",
                 "locked",
             },
+            # The canonical encoder omits the key entirely when a footprint has no circular
+            # courtyard, so pre-existing snapshots decode unchanged and their digests hold.
+            optional={"courtyard_circles"},
             path=entry_path,
         )
         courtyard_values = _array(entry["courtyards"], f"{entry_path}.courtyards")
-        if len(courtyard_values) > 64:
+        circle_values = _array(
+            entry.get("courtyard_circles", []), f"{entry_path}.courtyard_circles"
+        )
+        if len(courtyard_values) + len(circle_values) > 64:
             raise BoardIRValidationError(
                 "schema.limit",
                 "footprint courtyard limit exceeded",
@@ -529,6 +543,10 @@ def _decode_content(value: object) -> BoardIRContent:
             courtyards=tuple(
                 _ring(courtyard, f"{entry_path}.courtyards[{courtyard_index}]")
                 for courtyard_index, courtyard in enumerate(courtyard_values)
+            ),
+            courtyard_circles=tuple(
+                decode_courtyard_circle(circle, f"{entry_path}.courtyard_circles[{circle_index}]")
+                for circle_index, circle in enumerate(circle_values)
             ),
             locked=_boolean(entry["locked"], f"{entry_path}.locked"),
         )

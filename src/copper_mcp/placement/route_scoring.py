@@ -421,6 +421,10 @@ def _project_footprint(footprint: Footprint, placement: FootprintPlacement) -> F
             Ring(tuple(_project_point(point, footprint, placement) for point in courtyard.points))
             for courtyard in footprint.courtyards
         ),
+        courtyard_circles=tuple(
+            replace(circle, center=_project_point(circle.center, footprint, placement))
+            for circle in footprint.courtyard_circles
+        ),
     )
 
 
