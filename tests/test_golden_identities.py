@@ -369,11 +369,18 @@ def test_route_bundle_identity_matches_its_committed_golden_value(tmp_path: Path
 # The intent digest is embedded in the rendered schematic itself, so the two move together.  A
 # change to either requires a Circuit IR schema version bump and a migration note: a caller
 # holding a schematic artifact can no longer prove which intent produced it.
+#
+# ``SCHEMATIC_ARTIFACT_DIGEST`` is the one pin in this module that is **version-coupled**: the
+# renderer writes ``(generator_version "<package version>")`` into the schematic as provenance, so
+# the artifact bytes — and therefore this digest — change on every release.  Re-pin it in the
+# release commit that bumps the version; that is not a contract change, and it is why the byte
+# length is pinned separately (it stays 7,715 only while the version string keeps its length).
+# Pinned at CopperMCP 0.6.0.
 CIRCUIT_INTENT_SNAPSHOT_DIGEST = (
     "sha256:06383cabd428aa52585b1e0f0c82dea6e6f434e55d154f6d2ee87e3879f49795"
 )
 SCHEMATIC_ARTIFACT_DIGEST = (
-    "sha256:4e61504bf48e41473e2a754075a52f141cd9de7693648f77eba42e4ae499d2c5"
+    "sha256:d87d47e56487dcbe1b37b8deb41e1b2fe548324294a18eb2ed209ad2766fd273"
 )
 SCHEMATIC_ARTIFACT_BYTES = 7_715
 

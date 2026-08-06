@@ -1,4 +1,4 @@
-# ADR-0070: Authoritative KiCad schematic ERC and generated-schematic round trip
+# ADR-0071: Authoritative KiCad schematic ERC and generated-schematic round trip
 
 - Status: Accepted
 - Date: 2026-08-06

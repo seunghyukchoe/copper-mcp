@@ -112,7 +112,7 @@ result reports `erc: completed` with `passed` and `clean` as two separate signal
 Schematic-to-board parity, electrical validation, and board readiness stay non-claims there too.
 Keeping ERC out of the build path is deliberate: rendering must remain usable with no KiCad
 install, and a render is not the place to spend a subprocess budget the caller did not ask for.
-See [ADR-0070](../adr/0070-authoritative-schematic-erc.md).
+See [ADR-0071](../adr/0071-authoritative-schematic-erc.md).
 
 ## Deliberate non-claims
 

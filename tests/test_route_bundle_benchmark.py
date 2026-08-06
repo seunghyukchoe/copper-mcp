@@ -26,7 +26,13 @@ def test_committed_route_bundle_artifact_binds_its_inputs_and_clean_kicad_eviden
             ).encode()
         ).hexdigest()
     )
-    assert report["copper_mcp_version"] == "0.5.0"
+    # CopperMCP writes ``(generator_version "<package version>")`` into every board it renders,
+    # so ``authoritative_kicad_drc.base_revision`` below is only reproducible by the exact
+    # version that recorded it.  This artifact is therefore regenerated in the release commit
+    # that bumps the version, and both assertions must keep agreeing: the literal names the
+    # release the measurement belongs to, and the equality proves the shipping source can still
+    # reproduce its own committed evidence.
+    assert report["copper_mcp_version"] == "0.6.0"
     assert report["copper_mcp_version"] == copper_mcp.__version__
     assert report["fixture"] == benchmark.FIXTURE.relative_to(benchmark.ROOT).as_posix()
     assert report["fixture_sha256"] == hashlib.sha256(benchmark.FIXTURE.read_bytes()).hexdigest()

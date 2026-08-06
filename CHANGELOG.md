@@ -6,6 +6,35 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The bounded ordered-layer router can use freshness-verified zone fill instead of writing off a
+  whole layer.** `LayeredRouteRequest` gained an optional `verified_fill` tuple carrying the same
+  `VerifiedFill` value the single-layer core has accepted since ADR-0039, so one caller-side
+  ADR-0021 freshness proof now serves both routers. A foreign zone previously contributed its whole
+  boundary bounding box as a track and via obstacle on its layer, which is correct for a cached
+  fill nobody has checked and wrong for a pour with a real routing window: on the reference
+  fixture, a route that had to detour 14,000 nm around the outline runs 8,000 nm straight through
+  the verified void, with no vias. Nothing shrinks without proof. Malformed evidence is
+  `invalid_request` at the input boundary; an island proved against another source revision is
+  `stale_revision`; an island with no Board IR zone of the same net and layer, or whose bounding
+  box escapes that zone's, is `unsupported_geometry`. Islands are carried as bounding boxes rather
+  than exact polygons because the layered lattice model is rectangular, and containment makes
+  "the union of island boxes fits inside the zone box" a checked precondition rather than an
+  assumption about KiCad — so the replacement can only ever remove area the conservative envelope
+  had blocked, and clearance inflation is unchanged. Absent evidence keeps the old behavior exactly.
+  This is an internal seam: no public contract, response field, candidate identity rule, router
+  version, DRC authority, or apply semantics changes, and `preview_layered_route` does not yet
+  report fill-aware provenance the way `preview_route` does. (#63)
+
+## [0.6.0] - 2026-08-06
+
+Upgrading from 0.5.0: see the [0.6.0 migration notes](docs/migrations/copper-mcp-0.6.0.md).
+Live KiCad IPC observation is now off by default and requires `COPPER_MCP_ALLOW_LIVE_IPC=1`; a
+serialization whose root is not `kicad_pcb` reports the new `unsupported.document` diagnostic code
+instead of `syntax.invalid`; and a digest taken over rendered board or schematic bytes is
+reproducible only by the version that recorded it.
+
 ### Security
 
 - **Live KiCad IPC observation now requires an explicit operator opt-in and is off by default.**
@@ -76,7 +105,7 @@ All notable changes are documented here. The format follows
   `.kicad_pro`, KiCad applies its default severities: no user project can weaken the verdict, and
   equally the verdict is not necessarily what that user's project would report. A missing KiCad CLI
   is a typed refusal, never a verdict.
-  ([ADR-0070](docs/adr/0070-authoritative-schematic-erc.md), D-144, SEC-119, #66)
+  ([ADR-0071](docs/adr/0071-authoritative-schematic-erc.md), D-145, SEC-119, #66)
 
 - `scripts/check_ledgers.py` now validates ledger identifier allocation, and a new sibling
   `scripts/check_adr_numbers.py` validates ADR numbers. Both run in `make lint` and CI. A duplicate
@@ -325,6 +354,22 @@ All notable changes are documented here. The format follows
 - [ADR-0066](docs/adr/0066-atomic-route-bundle-preview.md) records the public route-bundle contract:
   the all-or-nothing publication rule, the double-negotiation determinism requirement, the digest
   binding, and the explicit non-claims.
+
+### Fixed
+
+- Named the version-coupled evidence that a release has to re-pin, and re-pinned it. CopperMCP
+  writes `(generator_version "<package version>")` into every board and schematic it renders, so
+  two committed content addresses move on any version bump: the golden schematic artifact digest in
+  `tests/test_golden_identities.py`, and the private combined-derivative `base_revision` and
+  DRC-context revision recorded in the route-bundle benchmark artifact. Bumping to `0.6.0` made
+  both fail, in CI as well as locally, which would have made the project unreleasable without
+  either weakening a pin or silently rewriting evidence. The route-bundle artifact is regenerated
+  under `0.6.0` — every measured quantity, including the bundle identity, is unchanged, and `B-085`
+  records that the `0.5.0` revisions remain correct for `0.5.0` — the schematic pin is re-pinned
+  with a comment saying it is the one version-coupled pin in that module, and `docs/releasing.md`
+  now carries the re-pin as an explicit numbered step rather than as folklore. Every other golden
+  identity is version-independent and did not move.
+
 
 ## [0.5.0] - 2026-08-05
 
@@ -1707,7 +1752,8 @@ All notable changes are documented here. The format follows
   lifetimes, timeouts, strict contract parsing, and before/after DRC-context revision checks.
 - The development dependency floor excludes pytest versions affected by `PYSEC-2026-1845`.
 
-[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.2.0...v0.3.0
