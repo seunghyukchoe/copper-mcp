@@ -8,6 +8,17 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- A container image for the MCP server. `Dockerfile` builds a wheel and installs it into a
+  slim Python base as a non-root user, with `/workspace` as the mounted board directory and the
+  stdio transport as the entrypoint. It deliberately does **not** bundle KiCad: board inspection,
+  DRC, ERC, and rendering delegate to an authoritative `kicad-cli`, and shipping one inside the
+  image would let a caller believe those surfaces answered when the host's own KiCad is what must
+  answer for them. Without KiCad the server still starts and lists all 27 tools, refusing the
+  KiCad-backed ones with their normal typed diagnostics. No mutation flag is set in the image, so
+  it is read-only unless an operator opts in at run time exactly as on a host install.
+
+### Added
+
 - **CopperMCP now has a routing benchmark on boards it did not author, and the first honest number
   from it is 59.83%.** A benchmark-only import seam converts tscircuit SimpleRouteJson problems
   into ordinary verified Board IR snapshots and ordinary route requests, so an external corpus
