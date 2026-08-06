@@ -13,6 +13,10 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from copper_mcp.adapters import KiCadConstraintProfile, net_id_for_name, parse_kicad_bytes
+from copper_mcp.adapters.kicad_placement_patch import (
+    KiCadPlacementPatchError,
+    _require_native_geometry_identities,
+)
 from copper_mcp.adapters.sexpr import SExprError, parse_sexpr
 from copper_mcp.board_ir import (
     BoardIRSnapshot,
@@ -41,6 +45,7 @@ FRONT_BACK_FOOTPRINT_V02_BOARD = (
 ORTHOGONAL_COURTYARD_BOARD = (
     TEST_ROOT / "fixtures" / "board-ir-v0.2" / "courtyard-orthogonal-chains.kicad_pcb"
 )
+REUSED_UUID_BOARD = TEST_ROOT / "fixtures" / "board-ir-v0.2" / "reused-footprint-uuid.kicad_pcb"
 MALFORMED_BOARD = TEST_ROOT / "fixtures" / "board-ir-v0.1" / "malformed-unbalanced.kicad_pcb"
 _DISCOVERED_KICAD_CLI = shutil.which("kicad-cli")
 REAL_KICAD_CLI = (
@@ -642,6 +647,62 @@ def test_v02_footprint_without_a_courtyard_has_an_explicit_empty_state() -> None
     assert all(len(footprint.courtyards) == 1 for footprint in snapshot.content.footprints[1:])
 
 
+def test_reused_kicad_uuid_converts_with_distinct_derived_identities() -> None:
+    """A KiCad UUID reused across footprint instances is not a Board IR identity.
+
+    KiCad's format says a UUID "should be globally unique" without requiring it, and 9 of the 12
+    real boards surveyed in issue #116 name one UUID per footprint *type* rather than per
+    instance.  Board IR identity is per object, so the converter must not project a reused value:
+    every object sharing it degrades to the revision-derived name, and the untouched neighbour
+    keeps its native one.  See docs/research/kicad-uuid-uniqueness-v1.md.
+    """
+
+    snapshot = parse_success(REUSED_UUID_BOARD.read_bytes(), constraint_profile())
+    content = snapshot.content
+
+    footprint_ids = [footprint.id for footprint in content.footprints]
+    pad_ids = [pad.id for pad in content.pads]
+    assert len(footprint_ids) == len(set(footprint_ids)) == 3
+    assert len(pad_ids) == len(set(pad_ids)) == 5
+
+    reused = "b1000000-0000-0000-0000-000000000001"
+    assert not any(reused in identity for identity in footprint_ids)
+    assert sum(":derived:" in identity for identity in footprint_ids) == 2
+    # The footprint whose UUID this board never reuses keeps its native identity, so the fallback
+    # is scoped to the ambiguity rather than applied to the whole board.
+    assert "footprint:kicad:b1000000-0000-0000-0000-000000000021" in footprint_ids
+    assert "pad:kicad:b1000000-0000-0000-0000-000000000023" in pad_ids
+    assert sum(":derived:" in identity for identity in pad_ids) == 4
+
+    owned = [identity for footprint in content.footprints for identity in footprint.pad_ids]
+    assert sorted(owned) == sorted(pad_ids)
+
+
+def test_reused_kicad_uuid_identities_are_stable_across_conversions() -> None:
+    """The fallback is a function of the file, not of iteration order or a fresh random name."""
+
+    source = REUSED_UUID_BOARD.read_bytes()
+
+    first = parse_success(source, constraint_profile())
+    second = parse_success(source, constraint_profile())
+
+    assert first.snapshot_digest == second.snapshot_digest
+
+
+def test_reused_kicad_uuid_board_is_refused_by_source_preserving_write_back() -> None:
+    """Unblocking inspection must not unblock a write-back that cannot name its target.
+
+    A board that reuses one UUID across 45 resistors cannot be patched by that UUID without
+    risking the wrong component, so the derived identities keep every source-preserving patch
+    path refusing, which is the conservative direction.
+    """
+
+    snapshot = parse_success(REUSED_UUID_BOARD.read_bytes(), constraint_profile())
+
+    with pytest.raises(KiCadPlacementPatchError):
+        _require_native_geometry_identities(snapshot)
+
+
 def test_v02_mismatched_courtyard_layer_fails_closed() -> None:
     source = _replace(
         FOOTPRINT_V02_BOARD.read_bytes(),
@@ -1065,6 +1126,39 @@ def test_adapter_semantic_diagnostics_never_echo_attacker_controlled_ids() -> No
     ).casefold()
     assert diagnostic.code == "geometry.self_intersection"
     assert "secret_audio_design" not in rendered
+
+
+def test_semantic_refusal_names_the_failing_invariant_without_echoing_the_board() -> None:
+    """A semantic refusal has to be actionable, and naming an invariant is not echoing content.
+
+    Board IR validation messages are fixed strings chosen by ``copper_mcp.board_ir``; everything
+    board-derived travels in the error locator, which this refusal drops.  Before this test the
+    wrapper said only "failed semantic validation", which named no rule and left issue #116's
+    survey with an undiagnosable entry.
+    """
+
+    source = SUBSET_BOARD.read_bytes()
+    source = _replace(
+        source,
+        b'    (uuid "10000000-0000-0000-0000-000000000008")',
+        b'    (uuid "SECRET_AUDIO_DESIGN")',
+    )
+    source = _replace(
+        source,
+        b"      (pts (xy 1 1) (xy 39 1) (xy 39 29) (xy 1 29))",
+        b"      (pts (xy 0 0) (xy 4 0) (xy 0 4) (xy 3 3))",
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.code == "geometry.self_intersection"
+    assert diagnostic.message == (
+        "converted Board IR content failed semantic validation: ring must not self-intersect"
+    )
+    assert diagnostic.source_locator == "kicad_pcb"
+    assert "secret_audio_design" not in diagnostic.message.casefold()
 
 
 def test_four_layer_board_uses_kicads_real_copper_numbering() -> None:

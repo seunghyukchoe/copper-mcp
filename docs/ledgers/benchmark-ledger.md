@@ -1268,5 +1268,5 @@ part of the result rather than an omission from it.
 | Adversarial | {"previous_defaults": [{"bytes": 16777200, "elapsed_ns": 756947417, "outcome": "budget.exceeded.nodes", "peak_traced_bytes": 80224431, "shape": "deep", "traced_elapsed_ns": 5313154500}, {"bytes": 16777215, "elapsed_ns": 59027250, "outcome": |
 | Claim | The defaults are derived from this distribution with headroom, not chosen. Nothing here claims a board *will* parse: a board inside every budget can still be refused for a modelling gap. |
 | Non-claims | No timing or memory claim on other hardware; no claim that the adversarial set is exhaustive; the corpus is not a random sample of KiCad boards in the world. |
-| Records | [D-159](decision-ledger.md), [SEC-123](security-ledger.md), [ADR-0079](../adr/0079-discriminated-configurable-parse-budgets.md) |
+| Records | [D-160](decision-ledger.md), [SEC-123](security-ledger.md), [ADR-0079](../adr/0079-discriminated-configurable-parse-budgets.md) |
 

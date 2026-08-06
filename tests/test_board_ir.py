@@ -433,6 +433,65 @@ def test_every_pad_has_exactly_one_first_class_footprint_owner() -> None:
         assert caught.value.code == expected_code
 
 
+def test_duplicate_geometry_ids_are_still_refused_after_the_uuid_reuse_fallback() -> None:
+    """The adapter stopped *creating* duplicate geometry IDs; the invariant that rejects them stays.
+
+    Issue #116's `identity.duplicate` refusal was fixed in the KiCad converter, which must not
+    project a reused KiCad UUID as an identity.  This control exists so that fix cannot be
+    mistaken for licence to relax the rule: content that genuinely names two objects the same is
+    still refused, with the invariant named and no board-derived text in the message.
+    """
+
+    content = sample_content()
+    duplicates = (
+        replace(content, segments=(content.segments[0], replace(content.segments[0]))),
+        replace(content, vias=(content.vias[0], replace(content.vias[0]))),
+        replace(content, arcs=(content.arcs[0], replace(content.arcs[0]))),
+        replace(content, zones=(content.zones[0], replace(content.zones[0]))),
+    )
+
+    for candidate in duplicates:
+        with pytest.raises(BoardIRValidationError) as caught:
+            validate_content(candidate)
+        assert caught.value.code == "identity.duplicate"
+        assert caught.value.message == "duplicate geometry ID"
+
+
+def test_validation_messages_name_invariants_without_echoing_board_content() -> None:
+    """Every refusal message the adapter surfaces has to be a fixed string this module chose.
+
+    The adapter now appends the validation message to its refusal, so a message built from an
+    object ID would leak board content into a diagnostic that deliberately drops the locator.
+    """
+
+    content = sample_content()
+    amplifier, mechanical = content.footprints
+    leaky = (
+        replace(
+            content,
+            footprints=(
+                replace(amplifier, pad_ids=(*amplifier.pad_ids, amplifier.pad_ids[0])),
+                mechanical,
+            ),
+        ),
+        replace(
+            content,
+            pads=(
+                replace(content.pads[0], layer_ids=(content.copper_layers[0].id,) * 2),
+                *content.pads[1:],
+            ),
+        ),
+    )
+    expected = ("duplicate pad ownership within one footprint", "duplicate layer reference")
+
+    for candidate, fragment in zip(leaky, expected, strict=True):
+        with pytest.raises(BoardIRValidationError) as caught:
+            validate_content(candidate)
+        assert caught.value.message.startswith(fragment)
+        assert ":" not in caught.value.message
+        assert caught.value.source_locator != caught.value.message
+
+
 def test_footprints_and_courtyards_are_charged_to_validation_budgets() -> None:
     content = sample_content()
     object_groups = (

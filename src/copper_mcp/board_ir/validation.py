@@ -52,11 +52,18 @@ class BoardIRValidationError(ValueError):
         return f"{self.code} at {self.source_locator}: {self.message}"
 
 
-def _require_unique(values: Iterable[str], *, kind: str) -> set[str]:
+def _require_unique(values: Iterable[str], *, kind: str, locator: str | None = None) -> set[str]:
+    """Require distinct values, naming the invariant without echoing any board content.
+
+    ``kind`` reaches the caller inside a refusal message, so it must stay a fixed string chosen by
+    this module.  Anything derived from the board — an object ID, a footprint name — belongs in
+    ``locator``, which the adapter deliberately does not echo.
+    """
+
     materialized = list(values)
     unique = set(materialized)
     if len(unique) != len(materialized):
-        raise BoardIRValidationError("identity.duplicate", f"duplicate {kind}", kind)
+        raise BoardIRValidationError("identity.duplicate", f"duplicate {kind}", locator or kind)
     return unique
 
 
@@ -234,7 +241,9 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
                 "footprint courtyard limit exceeded",
                 footprint.id,
             )
-        _require_unique(footprint.pad_ids, kind=f"pad ownership in {footprint.id}")
+        _require_unique(
+            footprint.pad_ids, kind="pad ownership within one footprint", locator=footprint.id
+        )
         if not set(footprint.pad_ids) <= pad_ids:
             raise BoardIRValidationError(
                 "reference.unknown",
@@ -257,7 +266,7 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
             )
 
     def require_layers(references: tuple[str, ...], locator: str) -> None:
-        _require_unique(references, kind=f"layer reference in {locator}")
+        _require_unique(references, kind="layer reference within one item", locator=locator)
         if not set(references) <= layer_ids:
             raise BoardIRValidationError(
                 "unknown.layer", "item references an unknown copper layer", locator
