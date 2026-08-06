@@ -150,6 +150,15 @@ When adding a document, add it to the list below in the same sentence form — *
   whether a Python IPC plugin is reachable at all — a `requirements.txt` it cannot use to install
   CopperMCP, and a `--system-site-packages` venv that is why it does not need to. It claims no
   submission, acceptance, or publication, and no observed behaviour on any platform.
+- [Roundrect radius precision](./roundrect-radius-precision-v1.md) establishes from KiCad's own
+  padstack source, not from the format prose, that a roundrect corner radius is never stored — a
+  ten-significant-digit ratio of the pad's shorter side is, and the radius is recomputed and
+  `KiROUND`ed on every read — so an ordinary pad lands on a fractional nanometre; it measures 592
+  such pads among 4,537 across 23 real boards with a worst residue of 0.80 nm, and argues the
+  rounding direction by geometry role rather than by "a pad is copper", which points the wrong way
+  because a larger radius means a smaller pad. It claims nothing about chamfered pads, per-layer
+  padstacks, board format versions other than `20260206`, or that the 23-board tree is
+  representative of KiCad boards generally.
 
 ## Terms used in this review
 

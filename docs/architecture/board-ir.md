@@ -80,6 +80,14 @@ board. The schema is the field-level reference.
   widths, diameters, and drills cannot be zero; typed non-negative values may be zero.
 - Millimetre/degree source tokens use ordinary decimal notation and must convert exactly. There is no
   rounding path for sub-nanometre or sub-microdegree input.
+- A roundrect `roundrect_rratio` is the one exception, and it rounds in a single direction. KiCad
+  stores a ratio of the pad's shorter side rather than a radius, so the product is routinely a
+  fractional nanometre; it is rounded **up**, because the radius is read only by the
+  under-approximating attachment core and a larger radius shrinks that core, while every obstacle
+  model over-approximates the pad by its full bounding box and never consults the radius at all.
+  The largest such round-up on a board is reported as `ConversionResult.max_roundrect_rounding_nm`.
+  A ratio outside `(0, 0.5]`, or one whose rounded-up radius would exceed half the short side, is
+  refused rather than clamped. See [ADR-0076](../adr/0076-roundrect-corner-radius-rounding.md).
 - IDs use type prefixes such as `layer:`, `net:`, `class:`, `footprint:`, `pad:`, `via:`,
   `segment:`, `arc:`, `zone:`, `keepout:`, `contour:`, and `rule:`. IDs and display names have
   different roles.

@@ -42,10 +42,20 @@ class Diagnostic:
 
 @dataclass(frozen=True, slots=True)
 class ConversionResult:
-    """Fail-closed adapter result: any error suppresses the snapshot."""
+    """Fail-closed adapter result: any error suppresses the snapshot.
+
+    ``max_roundrect_rounding_nm`` is the largest number of nanometres any single roundrect
+    corner radius was rounded *up* by, and is zero for a board whose radii are already exact
+    nanometres.  It is deliberately **not** a diagnostic: every caller of ``parse_kicad_bytes``
+    treats a non-empty ``diagnostics`` tuple as a refusal, so reporting a rounding this way
+    would refuse the board it exists to admit.  It is the same measured-rather-than-asserted
+    quantity the SimpleRouteJson importer reports as ``max_outward_rounding_nm``: a caller that
+    needs bit-exact pad geometry can read it and decline, instead of being told nothing.
+    """
 
     snapshot: BoardIRSnapshot | None
     diagnostics: tuple[Diagnostic, ...] = ()
+    max_roundrect_rounding_nm: int = 0
 
     def __post_init__(self) -> None:
         if self.snapshot is not None and not isinstance(self.snapshot, BoardIRSnapshot):
@@ -54,8 +64,16 @@ class ConversionResult:
             isinstance(item, Diagnostic) for item in self.diagnostics
         ):
             raise ValueError("conversion diagnostics must be an immutable tuple")
+        if (
+            isinstance(self.max_roundrect_rounding_nm, bool)
+            or not isinstance(self.max_roundrect_rounding_nm, int)
+            or self.max_roundrect_rounding_nm < 0
+        ):
+            raise ValueError("conversion rounding must be a non-negative integer nanometre count")
         has_error = any(item.severity is Severity.ERROR for item in self.diagnostics)
         if has_error and self.snapshot is not None:
             raise ValueError("conversion errors cannot accompany a snapshot")
         if not has_error and self.snapshot is None:
             raise ValueError("a failed conversion must include an error diagnostic")
+        if self.snapshot is None and self.max_roundrect_rounding_nm:
+            raise ValueError("a failed conversion cannot report a rounding")
