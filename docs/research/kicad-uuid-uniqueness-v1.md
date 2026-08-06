@@ -26,8 +26,10 @@ twelve-board tree found the same reuse on **nine of twelve boards**, always and 
 and their pads, never on segments, arcs, vias, or zones.  On one board, 113 footprints carried
 just 11 distinct UUIDs, and the correspondence was exact: every instance of a given footprint
 *type* shared one UUID, with 45 distinct resistors — distinct reference designators, distinct
-positions — all named `2927ef2a…`.  Their pads collided the same way, because the whole footprint
-block is repeated verbatim apart from pose and reference.
+positions — all sharing a single value.  Their pads collided the same way, because the whole
+footprint block is repeated verbatim apart from pose and reference.  (No value from those boards
+is reproduced here or anywhere in this repository; the reproduction fixture under
+`tests/fixtures/board-ir-v0.2/` is hand-written.)
 
 So on these boards a `uuid` names a footprint **type**, not a footprint **instance**.  That is the
 false assumption, and it is the same shape as the one behind issue #104: a rule inferred from
