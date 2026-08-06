@@ -29,11 +29,12 @@ from copper_mcp.adapters.kicad_route_patch import (
     KiCadRoutePatchError,
     render_kicad_candidate_board,
 )
+from copper_mcp.adapters.kicad_schematic import MAX_RENDERED_SCHEMATIC_BYTES
 from copper_mcp.adapters.sexpr import SExpr, SExprError, atoms, parse_sexpr
 from copper_mcp.attestation import build_candidate_drc_statement, canonical_statement_bytes
 from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
-from copper_mcp.models import DrcSummary
+from copper_mcp.models import DrcSummary, ErcSummary
 from copper_mcp.routing import LayeredRouteCandidate, LayeredRouteRequest, RouteCandidate
 from copper_mcp.scene_render import (
     RENDER_LAYERS,
@@ -56,8 +57,12 @@ from copper_mcp.zone_fill import (
 )
 
 KICAD_DRC_SCHEMA = "https://schemas.kicad.org/drc.v1.json"
+KICAD_ERC_SCHEMA = "https://schemas.kicad.org/erc.v1.json"
 _MACOS_KICAD_CLI = Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli")
 _ACCEPTED_DRC_RETURN_CODES = frozenset({0, 5})
+_ACCEPTED_ERC_RETURN_CODES = frozenset({0, 5})
+_MAX_ERC_SHEETS = 1_000
+_MAX_ERC_VIOLATIONS = 100_000
 _SEVERITIES = frozenset({"error", "warning"})
 _INCLUDED_SEVERITIES = frozenset({"error", "warning", "exclusion"})
 _DRC_CONTEXT_SUFFIXES = (".kicad_pro", ".kicad_dru")
@@ -1196,6 +1201,357 @@ def run_board_drc(requested_path: str, settings: Settings) -> DrcSummary:
             "board or DRC rules changed while KiCad DRC was running; result discarded"
         )
     return summary
+
+
+def _parse_erc_report(
+    payload: bytes,
+    *,
+    return_code: int,
+    intent_digest: str,
+    schematic_digest: str,
+    expected_source: str,
+) -> ErcSummary:
+    """Accept only the reviewed KiCad ERC report shape and reduce it to redacted counts.
+
+    The bounded-JSON helpers are shared with the DRC path on purpose: they are generic
+    depth/value/duplicate-key guards, not DRC semantics.  Nothing here decides what an electrical
+    rule violation *is* — KiCad already did that, and this function only transports the verdict.
+    """
+
+    try:
+        text = payload.decode("utf-8", errors="strict")
+        _preflight_drc_json(text)
+        report: Any = json.loads(
+            text,
+            object_pairs_hook=_drc_object_pairs,
+            parse_constant=_reject_json_constant,
+            parse_float=_finite_json_float,
+        )
+        _validate_drc_json_tree(report)
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError, ValueError) as error:
+        raise KiCadCliError("KiCad ERC report is not valid UTF-8 JSON") from error
+    if not isinstance(report, dict):
+        raise KiCadCliError("KiCad ERC report must be a JSON object")
+    if report.get("$schema") != KICAD_ERC_SCHEMA:
+        raise KiCadCliError("KiCad ERC report schema is unsupported")
+    if report.get("coordinate_units") != "mm":
+        raise KiCadCliError("KiCad ERC report must use millimetres")
+    if report.get("source") != expected_source:
+        raise KiCadCliError("KiCad ERC report source does not match the schematic snapshot")
+    report_date = report.get("date")
+    if not isinstance(report_date, str):
+        raise KiCadCliError("KiCad ERC report has no valid generation date")
+    try:
+        datetime.fromisoformat(report_date.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise KiCadCliError("KiCad ERC report has no valid generation date") from error
+    if not _KICAD_DATE_TIME.fullmatch(report_date):
+        raise KiCadCliError("KiCad ERC report has no valid generation date")
+    kicad_version = report.get("kicad_version")
+    if not isinstance(kicad_version, str) or not _KICAD_VERSION.fullmatch(kicad_version):
+        raise KiCadCliError("KiCad ERC report has no valid version")
+    included_severities = report.get("included_severities")
+    if (
+        not isinstance(included_severities, list)
+        or len(included_severities) != len(_INCLUDED_SEVERITIES)
+        or not all(isinstance(item, str) for item in included_severities)
+        or frozenset(included_severities) != _INCLUDED_SEVERITIES
+    ):
+        raise KiCadCliError("KiCad ERC report did not include all requested severities")
+    ignored_checks = report.get("ignored_checks")
+    if not isinstance(ignored_checks, list) or len(ignored_checks) > 10_000:
+        raise KiCadCliError("KiCad ERC ignored-check collection is malformed")
+    for ignored_check in ignored_checks:
+        if not isinstance(ignored_check, dict):
+            raise KiCadCliError("KiCad ERC ignored check is malformed")
+        check_key = ignored_check.get("key")
+        description = ignored_check.get("description")
+        if (
+            not isinstance(check_key, str)
+            or not 1 <= len(check_key) <= 128
+            or not isinstance(description, str)
+        ):
+            raise KiCadCliError("KiCad ERC ignored check fields are malformed")
+
+    # ERC reports are nested per sheet, unlike the flat DRC report. A hierarchical schematic
+    # would carry several sheets; the bounded passive subset renders exactly one.
+    sheets = report.get("sheets")
+    if not isinstance(sheets, list) or not sheets or len(sheets) > _MAX_ERC_SHEETS:
+        raise KiCadCliError("KiCad ERC report sheet collection is malformed")
+
+    severity_counts: Counter[str] = Counter()
+    violation_type_counts: Counter[str] = Counter()
+    exclusion_count = 0
+    total_violations = 0
+    seen_sheet_paths: set[str] = set()
+    for sheet in sheets:
+        if not isinstance(sheet, dict):
+            raise KiCadCliError("KiCad ERC sheet is malformed")
+        sheet_path = sheet.get("path")
+        uuid_path = sheet.get("uuid_path")
+        violations = sheet.get("violations")
+        if (
+            not isinstance(sheet_path, str)
+            or not 1 <= len(sheet_path) <= 1024
+            or not isinstance(uuid_path, str)
+            or not 1 <= len(uuid_path) <= 1024
+        ):
+            raise KiCadCliError("KiCad ERC sheet identity is malformed")
+        if sheet_path in seen_sheet_paths:
+            raise KiCadCliError("KiCad ERC report contains a duplicate sheet")
+        seen_sheet_paths.add(sheet_path)
+        if not isinstance(violations, list):
+            raise KiCadCliError("KiCad ERC sheet violations are malformed")
+        total_violations += len(violations)
+        if total_violations > _MAX_ERC_VIOLATIONS:
+            raise KiCadCliError("KiCad ERC report contains too many findings")
+        for violation in violations:
+            if not isinstance(violation, dict):
+                raise KiCadCliError("KiCad ERC violation is malformed")
+            violation_type = violation.get("type")
+            description = violation.get("description")
+            severity = violation.get("severity")
+            items = violation.get("items")
+            excluded = violation.get("excluded", False)
+            if not isinstance(violation_type, str) or not 1 <= len(violation_type) <= 128:
+                raise KiCadCliError("KiCad ERC violation type is malformed")
+            if (
+                not isinstance(description, str)
+                or not isinstance(items, list)
+                or not all(isinstance(item, dict) for item in items)
+            ):
+                raise KiCadCliError("KiCad ERC violation fields are malformed")
+            if severity not in _SEVERITIES:
+                raise KiCadCliError("KiCad ERC violation severity is unsupported")
+            if not isinstance(excluded, bool):
+                raise KiCadCliError("KiCad ERC violation exclusion is malformed")
+            if excluded:
+                exclusion_count += 1
+            else:
+                severity_counts[severity] += 1
+            violation_type_counts[violation_type] += 1
+
+    expected_return_code = 5 if total_violations else 0
+    if return_code != expected_return_code:
+        raise KiCadCliError("KiCad ERC exit code does not match the report findings")
+
+    error_count = severity_counts["error"]
+    return ErcSummary(
+        intent_digest=intent_digest,
+        schematic_digest=schematic_digest,
+        kicad_version=kicad_version,
+        erc_schema=KICAD_ERC_SCHEMA,
+        coordinate_units="mm",
+        error_count=error_count,
+        warning_count=severity_counts["warning"],
+        exclusion_count=exclusion_count,
+        ignored_check_count=len(ignored_checks),
+        sheet_count=len(sheets),
+        violation_type_counts=dict(sorted(violation_type_counts.items())),
+        passed=error_count == 0,
+    )
+
+
+SCHEMATIC_SNAPSHOT_NAME = "circuit.kicad_sch"
+
+
+def _run_bounded_schematic_command(
+    schematic: bytes,
+    *,
+    subcommand: tuple[str, ...],
+    flags: tuple[str, ...],
+    output_name: str,
+    output_suffix: str,
+    accepted_return_codes: frozenset[int],
+    label: str,
+    settings: Settings,
+) -> tuple[bytes, int]:
+    """Run one fixed-argument ``kicad-cli sch`` command over CopperMCP's own rendered bytes.
+
+    The input is never a workspace file: it is the deterministic render of a Circuit Intent
+    snapshot the caller already submitted. That is what lets this path skip the library-table
+    discovery and project snapshotting the board DRC adapter needs, and it means the subprocess
+    is handed no user design data that did not already arrive through the tool argument.
+
+    The schematic is written into a private read-only directory, the argument vector is fixed
+    (no caller-supplied flags, no ``--define-var``), the child runs under the same ``RLIMIT_FSIZE``
+    wrapper and private HOME/config environment as DRC, and the tree is re-validated afterwards so
+    an unexpected side effect or a mutated input is refused rather than reported.
+    """
+
+    if not isinstance(schematic, bytes) or not schematic:
+        raise KiCadCliError("schematic bytes are malformed")
+    if len(schematic) > MAX_RENDERED_SCHEMATIC_BYTES:
+        raise KiCadCliError("schematic exceeds the rendered byte ceiling")
+
+    executable = discover_kicad_cli(settings)
+    if os.name != "posix":
+        raise KiCadCliError(f"bounded KiCad {label} execution is unsupported on this platform")
+    python_executable = _validated_executable(Path(sys.executable))
+    bounded_exec = _BOUNDED_EXEC.resolve(strict=True)
+    if python_executable is None or not bounded_exec.is_file():
+        raise KiCadCliError(f"bounded KiCad {label} execution helper is unavailable")
+
+    with tempfile.TemporaryDirectory(prefix="copper-mcp-sch-") as temporary_directory:
+        temporary_root = Path(temporary_directory)
+        try:
+            temporary_root.chmod(0o700)
+        except OSError as error:
+            raise KiCadCliError(f"private KiCad {label} directory could not be secured") from error
+        snapshot_root = temporary_root / "schematic"
+        schematic_path = snapshot_root / SCHEMATIC_SNAPSHOT_NAME
+        try:
+            snapshot_root.mkdir(mode=0o700)
+            schematic_path.write_bytes(schematic)
+            _make_snapshot_read_only(snapshot_root)
+            snapshot_root = snapshot_root.resolve(strict=True)
+            schematic_path = schematic_path.resolve(strict=True)
+        except OSError as error:
+            raise KiCadCliError(f"private KiCad {label} schematic could not be written") from error
+        output_path = temporary_root / output_name
+        private_state = temporary_root / "process-state"
+        try:
+            child_environment = _private_kicad_environment(private_state)
+        except OSError as error:
+            raise KiCadCliError("private KiCad process state could not be created") from error
+        kicad_command = [
+            str(executable),
+            "sch",
+            *subcommand,
+            *flags,
+            "--output",
+            str(output_path),
+            str(schematic_path),
+        ]
+        command = [
+            str(python_executable),
+            "-I",
+            str(bounded_exec),
+            str(settings.max_drc_report_bytes),
+            *kicad_command,
+        ]
+        try:
+            # Untrusted child diagnostics keep a zero-byte parent capture budget, matching the
+            # DRC path: a chatty-but-valid run cannot spend the RLIMIT_FSIZE output budget on
+            # bytes nobody reads.
+            completed = subprocess.run(  # noqa: S603
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                shell=False,
+                timeout=settings.kicad_timeout_seconds,
+                env=child_environment,
+                cwd=child_environment["TMPDIR"],
+            )
+        except subprocess.TimeoutExpired as error:
+            raise KiCadCliError(f"KiCad {label} timed out") from error
+        _validate_private_kicad_state(private_state, settings)
+        try:
+            _validate_snapshot_tree(snapshot_root, frozenset({SCHEMATIC_SNAPSHOT_NAME}), settings)
+        except KiCadCliError as error:
+            raise KiCadCliError(
+                f"private KiCad {label} schematic changed during the run"
+            ) from error
+        if completed.returncode == -signal.SIGXFSZ:
+            raise KiCadCliError(f"KiCad {label} output exceeds the configured limit")
+        if completed.returncode not in accepted_return_codes:
+            raise KiCadCliError(f"KiCad {label} failed with exit code {completed.returncode}")
+        try:
+            if schematic_path.read_bytes() != schematic:
+                raise KiCadCliError(f"KiCad {label} modified its own schematic input")
+        except OSError as error:
+            raise KiCadCliError(f"private KiCad {label} schematic could not be re-read") from error
+        try:
+            output = read_workspace_file(
+                temporary_root,
+                output_path.name,
+                allowed_suffixes={output_suffix},
+                max_bytes=settings.max_drc_report_bytes,
+            ).content
+        except FileNotFoundError as error:
+            raise KiCadCliError(f"KiCad {label} did not create an output file") from error
+        except WorkspaceViolationError as error:
+            if isinstance(error.__cause__, FileNotFoundError):
+                raise KiCadCliError(f"KiCad {label} did not create an output file") from error
+            raise KiCadCliError(f"KiCad {label} output exceeds the configured limit") from error
+
+    return output, completed.returncode
+
+
+def _validated_schematic_digests(
+    schematic: bytes,
+    intent_digest: str,
+    schematic_digest: str,
+) -> None:
+    """Refuse any binding whose digests are malformed or do not match the bytes."""
+
+    for name, digest in (
+        ("intent digest", intent_digest),
+        ("schematic digest", schematic_digest),
+    ):
+        if not isinstance(digest, str) or not _SHA256_ID.fullmatch(digest):
+            raise KiCadCliError(f"{name} is malformed")
+    if not isinstance(schematic, bytes) or not schematic:
+        raise KiCadCliError("schematic bytes are malformed")
+    if _revision(schematic) != schematic_digest:
+        raise KiCadCliError("schematic digest does not match the schematic bytes")
+
+
+def run_circuit_schematic_erc(
+    schematic: bytes,
+    *,
+    intent_digest: str,
+    schematic_digest: str,
+    settings: Settings,
+) -> ErcSummary:
+    """Run fixed-argument KiCad ERC over one rendered schematic and bind the verdict to it."""
+
+    _validated_schematic_digests(schematic, intent_digest, schematic_digest)
+    report, return_code = _run_bounded_schematic_command(
+        schematic,
+        subcommand=("erc",),
+        flags=("--format", "json", "--units", "mm", "--severity-all", "--exit-code-violations"),
+        output_name="erc.json",
+        output_suffix=".json",
+        accepted_return_codes=_ACCEPTED_ERC_RETURN_CODES,
+        label="ERC",
+        settings=settings,
+    )
+    return _parse_erc_report(
+        report,
+        return_code=return_code,
+        intent_digest=intent_digest,
+        schematic_digest=schematic_digest,
+        expected_source=SCHEMATIC_SNAPSHOT_NAME,
+    )
+
+
+def export_circuit_schematic_netlist(
+    schematic: bytes,
+    *,
+    settings: Settings,
+) -> bytes:
+    """Export one rendered schematic to a KiCad format-E XML netlist for round-trip parity.
+
+    This is the read-back half of the round trip: KiCad re-parses bytes CopperMCP wrote and
+    reports the connectivity *it* found, which the pure parity verifier then compares against the
+    immutable Circuit Intent snapshot. Returning the raw XML here is deliberate — it stays inside
+    the process and only digests and counts ever reach a caller.
+    """
+
+    netlist, _ = _run_bounded_schematic_command(
+        schematic,
+        subcommand=("export", "netlist"),
+        flags=("--format", "kicadxml"),
+        output_name="netlist.xml",
+        output_suffix=".xml",
+        accepted_return_codes=frozenset({0}),
+        label="netlist export",
+        settings=settings,
+    )
+    return netlist
 
 
 def run_route_candidate_drc(

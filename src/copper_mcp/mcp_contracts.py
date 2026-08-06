@@ -208,6 +208,100 @@ class CircuitSchematicToolResponse(_ClosedContract):
     verification: SchematicVerificationContract
 
 
+class SchematicSummaryContract(_ClosedContract):
+    """Redacted identity of the exact schematic bytes KiCad was given."""
+
+    kind: Literal["kicad_schematic"]
+    mime_type: Literal["application/x-kicad-schematic"]
+    format_version: Literal["20250114"]
+    artifact_digest: Digest
+    intent_digest: Digest
+    size_bytes: Annotated[int, Field(ge=1, le=1_000_000)]
+
+
+class ErcCountsContract(_ClosedContract):
+    """Aggregate ERC finding counts. No description, coordinate, or UUID is carried."""
+
+    errors: Annotated[int, Field(ge=0, le=100_000)]
+    warnings: Annotated[int, Field(ge=0, le=100_000)]
+    exclusions: Annotated[int, Field(ge=0, le=100_000)]
+    ignored_checks: Annotated[int, Field(ge=0, le=10_000)]
+    sheets: Annotated[int, Field(ge=1, le=1_000)]
+
+
+class ErcEvidenceContract(_ClosedContract):
+    """Authoritative KiCad ERC verdict, transported rather than reinterpreted.
+
+    ``passed`` means KiCad reported no error-severity violation. ``clean`` is stricter and is
+    true only when the report has no findings and no ignored checks at all, so a warning-only
+    schematic can never present itself as ERC-clean.
+    """
+
+    authority: Literal["kicad-cli-sch-erc"]
+    kicad_version: Annotated[str, Field(min_length=1, max_length=128)]
+    erc_schema: Literal["https://schemas.kicad.org/erc.v1.json"]
+    coordinate_units: Literal["mm"]
+    counts: ErcCountsContract
+    violation_type_counts: dict[
+        Annotated[str, Field(min_length=1, max_length=128)],
+        Annotated[int, Field(ge=0, le=100_000)],
+    ]
+    passed: bool
+    clean: bool
+
+
+class SchematicRoundTripCountsContract(_ClosedContract):
+    """Structure KiCad itself found when it re-read the generated schematic."""
+
+    components: Annotated[int, Field(ge=1, le=64)]
+    nets: Annotated[int, Field(ge=1, le=128)]
+    connections: Annotated[int, Field(ge=1, le=512)]
+
+
+class SchematicRoundTripContract(_ClosedContract):
+    """Read-back equivalence between the written schematic and the source intent."""
+
+    authority: Literal["kicad-cli-sch-export-netlist"]
+    netlist_format_version: Literal["E"]
+    counts: SchematicRoundTripCountsContract
+    source_replay: Literal["passed"]
+    component_parity: Literal["passed"]
+    connectivity_parity: Literal["passed"]
+
+
+class SchematicErcVerificationContract(_ClosedContract):
+    """Exact performed and explicitly unperformed verification stages.
+
+    Each field is a single-value literal so the contract itself records the claim. ``erc`` is
+    ``completed`` rather than ``passed`` because the run's verdict lives in the ERC evidence
+    above; a completed run is not the same as a clean one.
+    """
+
+    intent_topology: Literal["passed"]
+    artifact_digest: Literal["passed"]
+    provenance_binding: Literal["passed"]
+    deterministic_replay: Literal["passed"]
+    kicad_cli_parse: Literal["passed"]
+    erc: Literal["completed"]
+    schematic_round_trip: Literal["passed"]
+    schematic_board_parity: Literal["not_run"]
+    electrical_validation: Literal["not_run"]
+    board_ready: Literal[False]
+
+
+class CircuitSchematicErcToolResponse(_ClosedContract):
+    """Strict structured output contract for the authoritative schematic ERC tool."""
+
+    schema_: Literal["copper.circuit-schematic-erc"] = Field(alias="schema")
+    schema_version: Literal["0.1.0"]
+    status: Literal["checked"]
+    intent: CircuitIntentSummaryContract
+    schematic: SchematicSummaryContract
+    erc: ErcEvidenceContract
+    round_trip: SchematicRoundTripContract
+    verification: SchematicErcVerificationContract
+
+
 class LiveBoardObservationToolResponse(_ClosedContract):
     """Redacted, read-only summary returned by the optional KiCad IPC observer."""
 
@@ -1915,6 +2009,7 @@ __all__ = [
     "CircuitIntentContentContract",
     "CircuitIntentToolContent",
     "CircuitSceneToolResponse",
+    "CircuitSchematicErcToolResponse",
     "CircuitSchematicToolResponse",
     "LayeredRoutePreviewToolRequest",
     "LayeredRoutePreviewToolResponse",

@@ -30,9 +30,11 @@ documentation, ledger updates, and benchmark evidence.
   separated labels/properties, real KiCad SVG inspection, and a structural regression.
 - [x] Descriptor-anchored workspace reads and exact-lowercase create-only schematic output.
 - [~] Schematic round trip, authoritative ERC, and source-to-board connectivity parity. The
-  bounded passive subset now has exact deterministic schematic replay plus real KiCad `kicadxml`
-  component/connectivity parity through the reusable `kicad_schematic_parity` verifier. Authoritative
-  ERC, source-to-PCB connectivity parity, and broader symbol/library coverage remain open.
+  bounded passive subset now has exact deterministic schematic replay, authoritative `kicad-cli sch
+  erc` evidence bound to the generated schematic digest, and a live KiCad round trip that exports a
+  `kicadxml` netlist and checks recovered components and nets against the source intent through the
+  reusable `kicad_schematic_parity` verifier. Source-to-PCB connectivity parity and broader
+  symbol/library coverage remain open.
 - [~] Live KiCad IPC snapshot to Circuit Scene and route-proposal binding. `observe_live_board_scene`
   converts the exact captured IPC serialization through Board IR, and `preview_live_route` now
   returns a deterministic read-only candidate from a scene `net_ref_id` with both stale-session
