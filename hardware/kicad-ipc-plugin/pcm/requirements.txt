@@ -1,0 +1,25 @@
+# Deliberately empty. This file must exist and must install nothing.
+#
+# It must EXIST because KiCad refuses to mark a Python IPC plugin ready without it. On every
+# reload, API_PLUGIN_MANAGER queues a CREATE_ENV or INSTALL_REQUIREMENTS job per Python plugin;
+# the install job reports "requirements.txt could not be read" when the file is missing, and the
+# plugin identifier is added to m_readyPlugins only when pip returns 0. GetActionsForScope and
+# InvokeAction both skip plugins that are not ready, so a Python IPC plugin shipped without this
+# file registers, validates, and then never appears in the toolbar or the menu.
+#
+# It must install NOTHING because it cannot install what CopperMCP needs. KiCad runs
+#   pip install --no-input --isolated --only-binary :all: --require-virtualenv --exists-action i -r
+# against PyPI, and copper-mcp is deliberately not published to PyPI (see docs/releasing.md).
+# A line naming it here would make pip exit non-zero, which is the same failure as the missing
+# file: the action never becomes reachable. Listing kicad-python alone would install the binding
+# without the package that drives it, which buys nothing and starts a dependency this plugin does
+# not own.
+#
+# What supplies the import instead: KiCad creates the per-plugin environment with
+# `python -m venv --system-site-packages`, so whatever is installed in the interpreter configured
+# under Preferences > Plugins is importable here. Installing `copper-mcp[kicad]` into that
+# interpreter is the documented step, and the entrypoint refuses with a named, actionable message
+# when it has not been done.
+#
+# Sources for the two behaviours above, read 2026-08-06:
+#   https://gitlab.com/kicad/code/kicad/-/raw/master/common/api/api_plugin_manager.cpp

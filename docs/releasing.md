@@ -7,8 +7,11 @@ notes, build attestations, and an append-only release ledger.
 
 1. Confirm the milestone is complete and all blocking issues are closed.
 2. Run `make check` from a clean checkout.
-3. Update `pyproject.toml`, `src/copper_mcp/__init__.py`, `CITATION.cff`, and any versioned
-   schemas. `scripts/check_version.py` requires the first two to agree.
+3. Update `pyproject.toml`, `src/copper_mcp/__init__.py`, `CITATION.cff`,
+   `hardware/kicad-ipc-plugin/pcm/metadata.json`, and any versioned schemas.
+   `scripts/check_version.py` requires the first two to agree, and
+   `scripts/build_pcm_package.py` refuses to build a KiCad package whose declared version has
+   drifted from `pyproject.toml`.
 4. Re-pin the version-coupled evidence. CopperMCP writes
    `(generator_version "<package version>")` into every board and schematic it renders, so any
    digest taken over rendered bytes changes with the version and is reproducible only by the
@@ -42,11 +45,42 @@ release or a release attestation.
 1. Merge the release pull request to `main`.
 2. Create and push an annotated tag: `git tag -a vX.Y.Z -m "CopperMCP X.Y.Z"`.
 3. The tag-triggered release workflow rebuilds, tests, audits, attests, and creates the GitHub
-   release.
+   release. It builds three artifacts, not two: the wheel, the source distribution, and the KiCad
+   Plugin and Content Manager package. All three land in `dist/`, so `actions/attest` covers the
+   PCM archive under the same `subject-path: dist/*` as the Python distributions and no separate
+   attestation step exists to fall out of step.
 4. Verify checksums, provenance, generated notes, and downloadable artifacts.
+5. Confirm the release carries `coppermcp-live-observer-X.Y.Z.zip` and
+   `coppermcp-live-observer-X.Y.Z.metadata.json`. The `.metadata.json` sidecar is the
+   repository-side document for a KiCad addon submission: it is the in-archive metadata plus a
+   `download_url`, `download_sha256`, `download_size`, and `install_size` measured from the
+   archive that was just built. Nothing in it is transcribed by hand.
+6. Re-derive the archive locally and confirm it matches the published asset byte for byte:
+
+   ```bash
+   python scripts/build_pcm_package.py --expect-version vX.Y.Z --no-write
+   ```
+
+   The build is reproducible, so the printed `download_sha256` must equal the digest of the
+   downloaded release asset. A mismatch means the release was not built from this source.
 
 Publishing to PyPI is intentionally disabled until package ownership, trusted publishing, and a
-separate supply-chain review are complete.
+separate supply-chain review are complete. This is also why the PCM package's `requirements.txt`
+installs nothing: KiCad resolves it against PyPI, so it cannot be used to deliver CopperMCP itself.
+See [the PCM distribution research note](research/kicad-pcm-distribution-v1.md).
+
+## Submit the KiCad package
+
+Submission to the official KiCad addon repository is a **human step**, deliberately not automated.
+It is a merge request against a third party's repository under a real GitLab account, and it
+carries attestations — maintainer identity, licensing, content policy — that only the maintainer
+can make. The release workflow prepares everything up to that point and stops.
+
+The checklist is in
+[`hardware/kicad-ipc-plugin/README.md`](../hardware/kicad-ipc-plugin/README.md#submitting-to-the-official-kicad-addon-repository).
+Note that a published version is immutable in the KiCad repository — `download_sha256`,
+`download_size`, and `install_size` can never change for a version already merged — so submit only
+after the GitHub release asset is final and publicly downloadable.
 
 ## After release
 
