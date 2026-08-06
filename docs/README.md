@@ -15,6 +15,7 @@ The repository root holds the front door ([`README.md`](../README.md)), the agen
 |---|---|
 | Understand what CopperMCP is and try it | [`README.md`](../README.md) at the repository root |
 | Use the CLI and MCP tools in depth | [Usage guide](usage.md) |
+| Drive CopperMCP as an AI agent | [Agent contract](agents.md) |
 | Understand the system boundaries | [Architecture overview](architecture/overview.md) |
 | Contribute a change | [`CONTRIBUTING.md`](../CONTRIBUTING.md), then [Development guide](development.md) |
 | Pick up the project as a continuing maintainer or agent | [Handoff documents](handoff/README.md) |
@@ -54,6 +55,10 @@ contract.
 
 - [Development guide](development.md) — environment, the quality gate, and local workflow.
 - [Usage guide](usage.md) — every CLI command and MCP tool, with the limits each one declares.
+- [Agent contract](agents.md) — the agent-facing usage contract: tool-by-tool digest bindings, every
+  refusal code stated as the action to take next, digest discipline, end-to-end workflows, and the
+  one-value literals. `tests/test_agents_doc.py` fails when it drifts from the source. The root
+  [`llms.txt`](../llms.txt) points here first.
 - [Release process](releasing.md) — versioning, tagging, attestation, and ledger authorization.
 - [GitHub repository setup checklist](github-setup.md) — the protections that live in GitHub
   settings rather than in this repository.

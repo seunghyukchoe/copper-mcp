@@ -1,0 +1,44 @@
+# CopperMCP
+
+> A local-first, open-source PCB automation platform. It lets an AI client read a KiCad board as
+> typed, exact-integer geometry, propose routes and placements, and validate them against
+> authoritative KiCad DRC — without ever letting the model write copper. Every generated result is
+> an immutable candidate bound to an exact board revision until a human explicitly applies it.
+
+CopperMCP is an MCP server (26 tools) plus a CLI over the same application services. The
+non-negotiable boundary: AI may interpret constraints and propose net ordering, corridors, cost
+weights, and repairs; deterministic code owns geometry, connectivity, DRC, provenance, and file
+mutation. Exactly two operations modify a file, both off by default behind an operator environment
+flag plus an operation-scoped single-use token that no model can mint.
+
+CopperMCP is MVP-alpha. Unverified values are modelled as explicit one-value literals (`not_run`,
+`not_modelled`, `inconclusive`) rather than implied, and every refusal is typed and non-echoing.
+Read the non-claims before relying on any result.
+
+## Agent contract
+
+- [Driving CopperMCP as an AI agent](https://github.com/seunghyukchoe/copper-mcp/blob/main/docs/agents.md): the canonical agent-facing usage contract — tool-by-tool bindings, every refusal code as an action to take next, digest discipline, end-to-end workflows, and the one-value literals. Start here.
+- [MCP API contract](https://github.com/seunghyukchoe/copper-mcp/blob/main/docs/architecture/mcp-api.md): the tool surface in contract terms, including structured inputs, output unions, and resource URIs.
+- [Usage guide](https://github.com/seunghyukchoe/copper-mcp/blob/main/docs/usage.md): every CLI command and MCP tool, with the limits each one declares.
+
+## Project
+
+- [README](https://github.com/seunghyukchoe/copper-mcp/blob/main/README.md): what CopperMCP does and, just as prominently, what it does not claim.
+- [Documentation index](https://github.com/seunghyukchoe/copper-mcp/blob/main/docs/README.md): what every document owns.
+- [Architecture overview](https://github.com/seunghyukchoe/copper-mcp/blob/main/docs/architecture/overview.md): system boundaries and layer responsibilities.
+- [Security and threat model](https://github.com/seunghyukchoe/copper-mcp/blob/main/docs/architecture/security-model.md): assets, adversaries, boundaries, and the invariants that keep untrusted input contained.
+- [Roadmap](https://github.com/seunghyukchoe/copper-mcp/blob/main/docs/roadmap.md): what comes next.
+
+## Contracts
+
+- [Board IR and KiCad adapter contract](https://github.com/seunghyukchoe/copper-mcp/blob/main/docs/architecture/board-ir.md): the canonical exact-integer board snapshot and the narrow read-only KiCad converter.
+- [Circuit Intent IR and KiCad schematic contract](https://github.com/seunghyukchoe/copper-mcp/blob/main/docs/architecture/circuit-intent.md): the logical topology contract and deterministic schematic rendering.
+- [Deterministic A* routing baseline](https://github.com/seunghyukchoe/copper-mcp/blob/main/docs/architecture/routing-baseline.md): the candidate-only CPU reference router.
+- [Architecture Decision Records](https://github.com/seunghyukchoe/copper-mcp/blob/main/docs/adr/README.md): durable decisions and their tradeoffs.
+
+## Optional
+
+- [Contributing guide](https://github.com/seunghyukchoe/copper-mcp/blob/main/CONTRIBUTING.md): how to propose a change.
+- [Repository instructions for coding agents](https://github.com/seunghyukchoe/copper-mcp/blob/main/AGENTS.md): the contributor contract, distinct from the tool-usage contract above.
+- [Project ledgers](https://github.com/seunghyukchoe/copper-mcp/blob/main/docs/ledgers/README.md): append-only decision, risk, security, benchmark, and release records.
+- [Changelog](https://github.com/seunghyukchoe/copper-mcp/blob/main/CHANGELOG.md): notable changes, Keep a Changelog format.
