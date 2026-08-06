@@ -347,6 +347,36 @@ The IPC observer and the KiCad PCB-editor plugin report only a live board digest
 compatibility, and bounded object counts; they never mutate KiCad or expose board text, net names,
 UUIDs, or geometry.
 
+### Install the KiCad plugin from the Plugin and Content Manager
+
+The PCB-editor half of that surface ships as a KiCad addon package,
+`com.github.seunghyukchoe.coppermcp-live-observer`, requiring KiCad 9.0.1 or newer. Install it
+through **Tools → Plugin and Content Manager**, then finish two steps the PCM cannot do for you:
+
+```bash
+# 1. Into the interpreter shown under Preferences > Plugins, not necessarily this one.
+python -m pip install 'copper-mcp[kicad]'
+# 2. In the environment KiCad is launched from, before KiCad starts.
+export COPPER_MCP_ALLOW_LIVE_IPC=1
+```
+
+**Installing the plugin grants nothing by itself.** It is the observation half of a boundary whose
+server half is off by default, and the flag above is the same one that gates every live surface
+described in this document. Without it the plugin's action prints
+`CopperMCP IPC observer unavailable: KicadIpcDisabledError` and reads nothing — it does not fall
+back to discovering a socket. Without the pip install it refuses with a message naming that step.
+Neither is a bug; the button being inert until you have authorized the host is the design.
+
+CopperMCP is not on PyPI, so KiCad cannot install it for you: the PCM resolves a plugin's
+`requirements.txt` against PyPI under `--only-binary :all:`, and the shipped file therefore
+installs nothing on purpose. KiCad builds the per-plugin environment with `--system-site-packages`,
+which is what makes step 1 visible to the plugin. `KICAD_API_TOKEN`, which KiCad hands to every
+launched plugin, never leaves the plugin process.
+
+See [`hardware/kicad-ipc-plugin/README.md`](../hardware/kicad-ipc-plugin/README.md) for the
+development install, the package build, and the submission checklist, and
+[the PCM distribution research note](research/kicad-pcm-distribution-v1.md) for the format itself.
+
 ## Live apply: what is gated, and what is not implemented
 
 `apply_live_candidate` is the surface that will one day push a candidate into the running editor as

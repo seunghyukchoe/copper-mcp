@@ -8,6 +8,34 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **The KiCad plugin is now a Plugin and Content Manager package, and installing it still grants
+  nothing.** `scripts/build_pcm_package.py` produces `com.github.seunghyukchoe.coppermcp-live-observer`
+  as a reproducible archive alongside the wheel and sdist, attested under the same `dist/*` subject
+  path. The format was read from KiCad's published JSON Schema and its addons-metadata CI rather
+  than from the prose guide, which contradicts the schema on six fields; both schema versions are
+  vendored under `schemas/kicad-pcm/` and the package validates against **both**, because a
+  `plugin`-typed package is served to KiCad 6.0–9.x through the down-converted v1 lists as well as
+  to 10.0+, and v1 is the stricter document. The archive is **stored, not deflated**, written in one
+  declared sorted order with the 1980 ZIP epoch, mode 0644, and Unix host on every entry, so its
+  bytes are a pure function of member names, contents, and order — byte-identical across Python
+  3.12 and 3.14, two timezones, and different hash seeds. That is a correctness requirement, not a
+  nicety: a version merged into the KiCad repository is immutable, so a rebuild that differed would
+  be unfixable in place. The `download_sha256`, `download_size`, and `install_size` in the
+  submission metadata are measured from the artifact the script just built, so no digest is ever
+  transcribed, and the in-archive copy is deliberately a different document — exactly one version,
+  no `download_sha256` — because KiCad's submission CI cross-checks the two. Submission to the
+  official repository stays a human step, prepared as a checklist in the plugin README. (#98,
+  D-152, SEC-121)
+- **A `requirements.txt` that must exist and must install nothing.** KiCad marks a Python IPC
+  plugin *ready* only after pip exits 0 against that file, and skips unready plugins in both
+  `GetActionsForScope` and `InvokeAction` — so a plugin shipped without it installs, discovers,
+  validates, and then never appears in the toolbar, with the reason only in a trace log. Naming
+  `copper-mcp` in it fails the same way for the opposite reason: KiCad resolves it against PyPI
+  under `--only-binary :all:`, and CopperMCP is deliberately unpublished there. The per-plugin
+  environment is created with `--system-site-packages`, so the operator's own
+  `pip install 'copper-mcp[kicad]'` is what supplies the import, and the entrypoint now refuses
+  with a fixed, actionable sentence when it has not been done. (#98)
+
 - **CopperMCP now has a routing benchmark on boards it did not author, and the first honest number
   from it is 59.83%.** A benchmark-only import seam converts tscircuit SimpleRouteJson problems
   into ordinary verified Board IR snapshots and ordinary route requests, so an external corpus
@@ -155,6 +183,13 @@ All notable changes are documented here. The format follows
   This is an internal seam: no public contract, response field, candidate identity rule, router
   version, DRC authority, or apply semantics changes, and `preview_layered_route` does not yet
   report fill-aware provenance the way `preview_route` does. (#63)
+
+### Changed
+
+- The KiCad plugin entrypoint imports `copper_mcp.kicad_ipc` inside `main()` rather than at module
+  scope. A PCM install delivers the plugin file and not CopperMCP, so at module scope a new user's
+  first click was an unhandled `ImportError` that put a filesystem path into KiCad's warning bar.
+  It is now one line naming the pip command, with no path and no traceback. (#98, SEC-121)
 
 ## [0.6.0] - 2026-08-06
 
