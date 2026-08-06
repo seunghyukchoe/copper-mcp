@@ -156,8 +156,9 @@ reason a scenario did not run.
 
 ### What the harness had to be stopped from doing
 
-Two findings came out of building the suite rather than running it, and both are recorded because
-they are the failure mode this kind of harness has.
+Three findings came out of building the suite rather than running it, and all three are recorded
+because they are the failure mode this kind of harness has: a check that cannot distinguish a
+refusal from something that merely looks like one.
 
 1. **A vacuous edit reads as a pass.** The first version of `route-metrics-rewritten-clean` zeroed
    `hard_internal_violations` and `unrouted_connections` on a candidate whose values were already
