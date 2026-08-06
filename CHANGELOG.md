@@ -8,6 +8,33 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- **A KiCad UUID that a board reuses is no longer treated as a Board IR identity.** Issue #116's
+  one undiagnosed `converted Board IR content failed semantic validation` refusal turned out to be
+  `identity.duplicate` on `geometry ID`, and 9 of the 12 real boards surveyed carry the same
+  reuse — always footprints and their pads, never segments, arcs, vias or zones. On one board 113
+  footprints share just 11 UUIDs, 45 distinct resistors among them: the value names a footprint
+  *type*, not an instance. The uniqueness rule was right and is untouched — Board IR footprints own
+  pads by ID and every patch names its target by ID — so the fix is in the converter, which was
+  asserting an identity the format never promised. KiCad's specification says a UUID *should be*
+  globally unique, which is an expectation of the writer and grants a reader no key, and KiCad's
+  own copy-paste and re-link workflows are tracked as producing duplicates. A UUID used once still
+  becomes that object's ID exactly as before, so no content address moves. A UUID used by two or
+  more objects of one kind is an identity of none of them: they all fall back together to the
+  existing revision-derived name, because letting the first claimant keep the native one would
+  assert precisely the identity the file cannot support. Write-back stays refused, since every
+  source-preserving patch path already rejects a snapshot containing a derived identity — a board
+  that names 45 resistors alike cannot be patched by that name without risking the wrong one — so
+  this unblocks inspection and leaves mutation closed. ([D-158](docs/ledgers/decision-ledger.md),
+  [R-119](docs/ledgers/risk-register.md),
+  [KiCad UUID uniqueness](docs/research/kicad-uuid-uniqueness-v1.md), #116)
+- A semantic-validation refusal now names the invariant it failed instead of only saying that one
+  failed. `converted Board IR content failed semantic validation` was a wrapper that identified no
+  rule and no construct, which is what left #116's survey with an entry nobody could act on; it now
+  carries the validator's own message. Naming the rule is not echoing the board: every Board IR
+  validation message is a fixed string chosen by `copper_mcp.board_ir`, and the two that were built
+  from an object ID are rebuilt so the board-derived text travels in the locator the refusal drops.
+  ([D-158](docs/ledgers/decision-ledger.md), #116)
+
 - Board metadata that KiCad writes into essentially every real board no longer refuses the whole
   document. `solder_mask_min_width` joins `pad_to_mask_clearance` as accepted setup metadata — it
   bounds mask slivers, not copper — and `descr` and `tags`, the library documentation strings
