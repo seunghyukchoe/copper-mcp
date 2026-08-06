@@ -62,7 +62,14 @@ REAL_FIXTURE_NET_CLASS = NetClass(
 LEGACY_TWO_LAYER_CANDIDATE_ID = (
     "sha256:5ea134fc319c5a7fa4b7d64b9e6cc47b8439f60c821391c3c3e4c46678f82818"
 )
-FOUR_LAYER_CANDIDATE_ID = "sha256:dc1fcf371857653df95fd7f9a7a2f7fcb16dbc19308144864cd1e23eeb63ab0e"
+# Re-pinned once, in the fix for issue #104 (D-152), from
+# sha256:dc1fcf371857653df95fd7f9a7a2f7fcb16dbc19308144864cd1e23eeb63ab0e.  The router did not
+# change and LAYERED_ROUTER_VERSION did not move: the *fixture* changed.  It declared its copper
+# layers with IDs KiCad never writes (In1.Cu=2, In2.Cu=4, B.Cu=6 - CopperMCP's own mistaken
+# position*2 rule), and a candidate ID binds the board revision, which is a digest of the file's
+# bytes.  Correcting the fixture to KiCad's real numbering therefore re-addresses it.  No published
+# artifact is affected, because this address only ever named this repository's own test board.
+FOUR_LAYER_CANDIDATE_ID = "sha256:efff3a13e708233dcc1e45b4b26b12ee9762b812e970d7e46f28070605b97fe0"
 THREE_LAYER_CANDIDATE_ID = "sha256:31c68bbe5333a1eea0d7894df1799338718f72d90276d857741d1fcb8ce3c3ac"
 
 
@@ -339,7 +346,12 @@ def test_two_layer_return_via_pins_its_committed_candidate_identity() -> None:
 
 
 def test_real_four_layer_fixture_pins_its_committed_candidate_identity() -> None:
-    """Pin a candidate built from a committed, KiCad 10.0.5-accepted four-layer board.
+    """Pin a candidate built from a committed four-layer board in KiCad's real copper numbering.
+
+    The fixture now declares ``F.Cu=0, In1.Cu=4, In2.Cu=6, B.Cu=2`` - front-to-back declaration
+    order, non-ascending IDs - as KiCad writes it.  It previously carried CopperMCP's own invented
+    numbering, which is why a defect that refused every real four-layer board went unseen (#104);
+    see ``docs/research/kicad-copper-layer-numbering-v1.md``.
 
     Three or more layers have no legacy identity to preserve, and a traversed inner pair would
     misstate a full-stack through via as a blind/buried one Board IR v0.2 cannot represent, so the

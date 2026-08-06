@@ -184,6 +184,77 @@ All notable changes are documented here. The format follows
   version, DRC authority, or apply semantics changes, and `preview_layered_route` does not yet
   report fill-aware provenance the way `preview_route` does. (#63)
 
+### Fixed
+
+- **A courtyard drawn as a ring is a ring, not a solid disc.** A footprint whose courtyard is an
+  outer boundary plus an inner ring — a donut — was compared ring-by-ring as two independent solids,
+  so a part legitimately placed in the hole was reported as a courtyard collision and the candidate
+  was refused. KiCad does not agree, and the disagreement is not a matter of interpretation:
+  `buildContourHierarchy` counts how many contours contain each contour and makes an odd count a
+  *hole* in the parent with one fewer parents, so a nested ring removes material. Real
+  `kicad-cli` 10.0.5 reports **zero violations** for exactly the arrangement CopperMCP was refusing.
+  Rings of one footprint are now pooled into a single even-odd scanline region, which reproduces
+  KiCad's hierarchy exactly for the disjoint and strictly nested rings Board IR admits. This
+  mattered in practice rather than in principle: the official KiCad footprint library ships **31
+  footprints with nested `F.CrtYd` rings**, almost all RF shielding cans, where the ring *is* the can
+  wall and the interior is deliberately left occupiable — so the old behavior refused every part
+  placed under every shield can in the library. Direction of error is the point here: refusing more
+  is not automatically safe when the refusal is published as per-rule evidence, because a
+  conservative *answer* was still a false *claim*. (#74)
+
+### Changed
+
+- **Courtyard legality is now three-valued, and ADR-0058's "exact" claim is corrected rather than
+  restated.** KiCad's courtyard DRC never looks at footprint graphics; it collides a cached
+  `SHAPE_POLY_SET` that `FOOTPRINT::BuildCourtyardCaches` contracts by
+  `maxError = pcbIUScale.mmToIU( 0.005 )` — exactly 5,000 nm — before the test. Both footprints are
+  contracted, so a zero-clearance collision needs 10,000 nm of nominal penetration. Measured against
+  the real tool: 9,999 nm is clear, 10,000 nm reports `courtyards_overlap`, and the same threshold
+  applies independently to each axis for corner-only overlap. CopperMCP reported a violation from
+  1 nm, so every verdict in that band was a refusal KiCad does not share. `courtyard_overlap`
+  therefore joins `pad_overlap` as three-valued: `proven_clear` where the raw regions share no area
+  (a proof for *any* ring shape, since contraction only ever shrinks a region — the outline moves in
+  and any hole grows), `violated` where the shared area contains a 10,000 nm square witness (exact
+  parity with KiCad), and `inconclusive` in between. The band is **not** silently resolved: calling
+  it `violated` would assert a collision the authoritative tool denies, and calling it
+  `proven_clear` would deny an overlap the geometry has, so neither is claimed. `inconclusive` is not
+  a violation — matching the existing `pad_overlap` convention — so a sub-threshold interference is
+  now previewed rather than refused, with the non-claim recorded in the published evidence; a caller
+  needing the stricter reading can treat `inconclusive` as a failure, which is exactly what the
+  three-valued vocabulary makes expressible. `scripts/benchmark_courtyard_oracle_parity.py` replaces
+  the old `kicad_invoked: false` posture with a real oracle and measures **10/15 exact parity, 5/15
+  conceded `inconclusive`, 0 contradictions, 0 false-positive violations, 0 false-negative clears**
+  over 15 cases, refusing to emit an artifact if any contradiction appears. No Board IR digest moves
+  and the golden placement candidate identity is unchanged. The tiny-shape band, arcs, custom
+  courtyard clearance, and same-footprint rings that touch or properly intersect remain declared
+  non-claims. (ADR-0075, D-152, B-089, R-115, #72)
+- **Boards with more than two copper layers convert again — every real 4-, 6-, or 8-layer KiCad
+  board was being refused.** The Board IR adapter validated the copper stack by requiring each
+  layer's declared ID to equal `declaration_position * 2`, i.e. `F.Cu=0, In1.Cu=2, In2.Cu=4,
+  B.Cu=6`. KiCad has never numbered layers that way: copper takes the *even* values with the
+  technical layers interleaved on the odd ones, so it is `F.Cu=0`, `B.Cu=2`, and `In{N}.Cu=2+2N`,
+  and because KiCad writes the stack front-to-back a four-layer board declares `0, 4, 6, 2` —
+  deliberately not ascending. A two-layer board satisfies both rules coincidentally, and two-layer
+  boards were every fixture in the repository, so the whole suite stayed green while every real
+  multilayer board was refused with `unsupported.construct` "copper layer IDs, names, or
+  declaration order are unsupported". The adapter now checks the two invariants separately: the
+  declaration position fixes the *name*, and the name fixes the *ID* through KiCad's own table.
+  This unblocks multilayer inspection, scene observation, placement preview, DRC binding, and the
+  2–8 signal layer ordered router (ADR-0068) on real boards — all verified end to end on four- and
+  six-layer boards, with no downstream surface found to have a separate blocker.
+  The rule stays fail-closed and is *not* loosened into accepting anything: a duplicate ID, a gap
+  in the inner sequence, a misnamed position, a back layer that is not `B.Cu`, a missing front or
+  back copper layer, an inner index past KiCad's `In30.Cu`, KiCad's own pre-version-9 numbering
+  (`F.Cu=0, In1..In30 = 1..30, B.Cu=31` — a real numbering, but not this format version's), and
+  the superseded `position * 2` numbering all still refuse with the same typed diagnostic.
+  Nothing published moves: `Layer.index` remains the declaration position, so the Board IR copper
+  stack is still dense and front-to-back, and every two-layer content address is byte-identical.
+  The one identity that changed is this repository's own four-layer *test fixture*, which had been
+  written in the invented numbering and is now correct; its pinned route-candidate ID is re-pinned
+  in place, with the router and `LAYERED_ROUTER_VERSION` untouched. See
+  [KiCad copper layer numbering](docs/research/kicad-copper-layer-numbering-v1.md) for the
+  derivation and citations, D-153, and R-116 for the class of defect — a validation rule no fixture
+  ever contradicted. (#104)
 ### Changed
 
 - The KiCad plugin entrypoint imports `copper_mcp.kicad_ipc` inside `main()` rather than at module

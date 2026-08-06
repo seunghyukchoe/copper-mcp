@@ -668,14 +668,37 @@ def test_v02_malformed_courtyard_line_fails_closed() -> None:
     assert "unsupported semantic field" in result.diagnostics[0].message
 
 
+TWO_LAYER_STACK = b'    (0 "F.Cu" signal)\n    (2 "B.Cu" signal)'
+
+
+def _with_copper_stack(stack: bytes) -> bytes:
+    """Replace the subset board's two-layer copper stack with ``stack``.
+
+    KiCad writes copper layers in physical stack order - ``F.Cu``, ``In1.Cu`` ... ``InN.Cu``,
+    ``B.Cu`` - while numbering them ``F.Cu=0``, ``B.Cu=2``, ``InN.Cu=2+2N``, so the declared
+    ordinals do not ascend.  See ``docs/research/kicad-copper-layer-numbering-v1.md``.
+    """
+
+    return _replace(SUBSET_BOARD.read_bytes(), TWO_LAYER_STACK, stack)
+
+
 def _four_layer_source() -> bytes:
-    return _replace(
-        SUBSET_BOARD.read_bytes(),
-        b'    (0 "F.Cu" signal)\n    (2 "B.Cu" signal)',
+    return _with_copper_stack(
         b'    (0 "F.Cu" signal)\n'
-        b'    (2 "In1.Cu" signal)\n'
-        b'    (4 "In2.Cu" signal)\n'
-        b'    (6 "B.Cu" signal)',
+        b'    (4 "In1.Cu" signal)\n'
+        b'    (6 "In2.Cu" signal)\n'
+        b'    (2 "B.Cu" signal)'
+    )
+
+
+def _six_layer_source() -> bytes:
+    return _with_copper_stack(
+        b'    (0 "F.Cu" signal)\n'
+        b'    (4 "In1.Cu" signal)\n'
+        b'    (6 "In2.Cu" power)\n'
+        b'    (8 "In3.Cu" power)\n'
+        b'    (10 "In4.Cu" signal)\n'
+        b'    (2 "B.Cu" signal)'
     )
 
 
@@ -1007,6 +1030,184 @@ def test_adapter_semantic_diagnostics_never_echo_attacker_controlled_ids() -> No
     ).casefold()
     assert diagnostic.code == "geometry.self_intersection"
     assert "secret_audio_design" not in rendered
+
+
+def test_four_layer_board_uses_kicads_real_copper_numbering() -> None:
+    """A four-layer stack as KiCad actually writes it converts to the physical stack order.
+
+    KiCad numbers copper ``F.Cu=0``, ``B.Cu=2``, ``InN.Cu=2+2N`` and declares it front-to-back,
+    so the ordinals in the file are ``0, 4, 6, 2`` - deliberately not ascending.  Board IR keeps
+    ``index`` as the *declaration position*, so the IR stack stays dense and front-to-back.
+    """
+
+    content = parse_success(_four_layer_source(), constraint_profile(assign_signal=True)).content
+
+    assert [(layer.id, layer.name, layer.index, layer.kind) for layer in content.copper_layers] == [
+        ("layer:F.Cu", "F.Cu", 0, "signal"),
+        ("layer:In1.Cu", "In1.Cu", 1, "signal"),
+        ("layer:In2.Cu", "In2.Cu", 2, "signal"),
+        ("layer:B.Cu", "B.Cu", 3, "signal"),
+    ]
+
+
+def test_six_layer_board_converts_with_inner_plane_layers() -> None:
+    content = parse_success(_six_layer_source(), constraint_profile(assign_signal=True)).content
+
+    assert [(layer.name, layer.index, layer.kind) for layer in content.copper_layers] == [
+        ("F.Cu", 0, "signal"),
+        ("In1.Cu", 1, "signal"),
+        ("In2.Cu", 2, "plane"),
+        ("In3.Cu", 3, "plane"),
+        ("In4.Cu", 4, "signal"),
+        ("B.Cu", 5, "signal"),
+    ]
+
+
+def test_single_inner_layer_board_converts() -> None:
+    source = _with_copper_stack(
+        b'    (0 "F.Cu" signal)\n    (4 "In1.Cu" signal)\n    (2 "B.Cu" signal)'
+    )
+
+    content = parse_success(source, constraint_profile(assign_signal=True)).content
+
+    assert [layer.name for layer in content.copper_layers] == ["F.Cu", "In1.Cu", "B.Cu"]
+
+
+@pytest.mark.parametrize(
+    ("label", "stack"),
+    [
+        # The rule CopperMCP used to enforce (issue #104): position * 2.  ``In1.Cu = 2`` is
+        # B.Cu's ordinal, so accepting it would silently misidentify the stack.
+        (
+            "coppermcp's old position-times-two numbering",
+            b'    (0 "F.Cu" signal)\n'
+            b'    (2 "In1.Cu" signal)\n'
+            b'    (4 "In2.Cu" signal)\n'
+            b'    (6 "B.Cu" signal)',
+        ),
+        # KiCad's own pre-V9 numbering: real, but not this format version's.  Ordinal 1 is
+        # F.Mask and 31 is a technical layer under the numbering 20260206 boards use.
+        (
+            "kicad's pre-v9 numbering",
+            b'    (0 "F.Cu" signal)\n'
+            b'    (1 "In1.Cu" signal)\n'
+            b'    (2 "In2.Cu" signal)\n'
+            b'    (31 "B.Cu" signal)',
+        ),
+        (
+            "numeric rather than physical declaration order",
+            b'    (0 "F.Cu" signal)\n'
+            b'    (2 "B.Cu" signal)\n'
+            b'    (4 "In1.Cu" signal)\n'
+            b'    (6 "In2.Cu" signal)',
+        ),
+        (
+            "duplicate ordinal",
+            b'    (0 "F.Cu" signal)\n'
+            b'    (4 "In1.Cu" signal)\n'
+            b'    (4 "In2.Cu" signal)\n'
+            b'    (2 "B.Cu" signal)',
+        ),
+        (
+            "duplicate front copper layer",
+            b'    (0 "F.Cu" signal)\n'
+            b'    (0 "F.Cu" signal)\n'
+            b'    (6 "In2.Cu" signal)\n'
+            b'    (2 "B.Cu" signal)',
+        ),
+        (
+            "gap in the inner layer sequence",
+            b'    (0 "F.Cu" signal)\n'
+            b'    (4 "In1.Cu" signal)\n'
+            b'    (8 "In3.Cu" signal)\n'
+            b'    (2 "B.Cu" signal)',
+        ),
+        (
+            "inner layer carrying an ordinal from another position",
+            b'    (0 "F.Cu" signal)\n'
+            b'    (6 "In1.Cu" signal)\n'
+            b'    (4 "In2.Cu" signal)\n'
+            b'    (2 "B.Cu" signal)',
+        ),
+        (
+            "back copper that is not B.Cu",
+            b'    (0 "F.Cu" signal)\n'
+            b'    (4 "In1.Cu" signal)\n'
+            b'    (6 "In2.Cu" signal)\n'
+            b'    (8 "In3.Cu" signal)',
+        ),
+        (
+            "front copper that is not F.Cu",
+            b'    (4 "In1.Cu" signal)\n    (6 "In2.Cu" signal)\n    (2 "B.Cu" signal)',
+        ),
+        (
+            "inner layer beyond KiCad's In30.Cu",
+            b'    (0 "F.Cu" signal)\n    (64 "In31.Cu" signal)\n    (2 "B.Cu" signal)',
+        ),
+        (
+            "front copper numbered as an inner layer",
+            b'    (4 "F.Cu" signal)\n    (2 "B.Cu" signal)',
+        ),
+        (
+            "back copper numbered under the old rule",
+            b'    (0 "F.Cu" signal)\n'
+            b'    (4 "In1.Cu" signal)\n'
+            b'    (6 "In2.Cu" signal)\n'
+            b'    (8 "B.Cu" signal)',
+        ),
+    ],
+)
+def test_malformed_copper_stacks_are_still_refused(label: str, stack: bytes) -> None:
+    """Widening the rule to KiCad's real numbering must not widen it into accepting garbage."""
+
+    result = parse_kicad_bytes(_with_copper_stack(stack), constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None, label
+    assert [diagnostic.code for diagnostic in result.diagnostics] == ["unsupported.construct"], (
+        label
+    )
+    assert result.diagnostics[0].object_kind == "layer", label
+
+
+def test_stack_deeper_than_kicads_thirty_inner_layers_is_refused() -> None:
+    """KiCad stops at ``In30.Cu``; a 33rd copper layer has no ID to check against.
+
+    The positional name for that slot is ``In31.Cu``, which is absent from KiCad's table, so the
+    entry is refused rather than extrapolated - even though `2+2N` would happily keep counting.
+    """
+
+    inner = b"".join(
+        b'    (%d "In%d.Cu" signal)\n' % (2 + 2 * index, index) for index in range(1, 32)
+    )
+    source = _with_copper_stack(b'    (0 "F.Cu" signal)\n' + inner + b'    (2 "B.Cu" signal)')
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].object_kind == "layer"
+
+
+def test_thirty_two_layer_stack_is_the_deepest_kicad_stack_and_converts() -> None:
+    inner = b"".join(
+        b'    (%d "In%d.Cu" signal)\n' % (2 + 2 * index, index) for index in range(1, 31)
+    )
+    source = _with_copper_stack(b'    (0 "F.Cu" signal)\n' + inner + b'    (2 "B.Cu" signal)')
+
+    content = parse_success(source, constraint_profile(assign_signal=True)).content
+
+    assert len(content.copper_layers) == 32
+    assert [layer.name for layer in content.copper_layers[-2:]] == ["In30.Cu", "B.Cu"]
+    assert [layer.index for layer in content.copper_layers] == list(range(32))
+
+
+def test_board_without_back_copper_is_refused() -> None:
+    result = parse_kicad_bytes(
+        _with_copper_stack(b'    (0 "F.Cu" signal)'), constraint_profile(assign_signal=True)
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unknown.layer"
 
 
 def test_f_and_b_wildcard_excludes_inner_layers() -> None:

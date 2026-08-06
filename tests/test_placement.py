@@ -22,7 +22,7 @@ from typing import Any
 import pytest
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
-from copper_mcp.board_ir import NetClass, ParseLimits, make_snapshot
+from copper_mcp.board_ir import NetClass, ParseLimits, PointNM, Ring, make_snapshot
 from copper_mcp.placement import (
     ORDERING_POLICY,
     PLACEMENT_VERSION,
@@ -34,8 +34,16 @@ from copper_mcp.placement import (
     parse_placement_intent,
     verify_placement_id,
 )
-from copper_mcp.placement.contracts import canonical_candidate_bytes
-from copper_mcp.placement.geometry import pad_bounds, pad_core, rects_overlap
+from copper_mcp.placement.contracts import PlacementLegality, canonical_candidate_bytes
+from copper_mcp.placement.geometry import (
+    COURTYARD_CACHE_INSET_NM,
+    COURTYARD_COLLISION_THRESHOLD_NM,
+    orthogonal_courtyard_region_overlap,
+    orthogonal_rings_overlap_open,
+    pad_bounds,
+    pad_core,
+    rects_overlap,
+)
 from copper_mcp.placement.legalizer import snap
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +59,9 @@ PADLESS_BOARD = ROOT / "tests" / "fixtures" / "board-ir-v0.2" / "padless-footpri
 ORTHOGONAL_COURTYARD_BOARD = (
     ROOT / "tests" / "fixtures" / "board-ir-v0.2" / "courtyard-orthogonal-chains.kicad_pcb"
 )
+#: A socket whose courtyard is a ring: an outer wall with an inner hole the centre part occupies.
+#: Real KiCad 10.0.5 reports no violation on it, which is the whole point of the fixture.
+DONUT_COURTYARD_BOARD = ROOT / "tests" / "fixtures" / "board-ir-v0.2" / "courtyard-donut.kicad_pcb"
 #: The graphics-only footprint in ``PADLESS_BOARD``: real in Board IR, reported by the scene,
 #: but owning no copper pad.
 PADLESS_REF = "footprint:kicad:93000000-0000-0000-0000-000000000011"
@@ -832,6 +843,191 @@ class LegalityTests(unittest.TestCase):
                 self.assertTrue(rects_overlap(bounds, core))
 
 
+def _square(x0: int, y0: int, x1: int, y1: int) -> Ring:
+    """An axis-aligned courtyard ring in nanometres."""
+
+    return Ring(
+        points=(PointNM(x0, y0), PointNM(x1, y0), PointNM(x1, y1), PointNM(x0, y1)),
+    )
+
+
+class CourtyardCacheInsetTests(unittest.TestCase):
+    """Pin the KiCad 10.0.5 cached-courtyard inset (ADR-0075, issue #72).
+
+    ``FOOTPRINT::BuildCourtyardCaches`` contracts each cached outline by ``maxError = 0.005 mm``
+    (``pcbnew/footprint.cpp:3701``/``:3712``), so a collision needs twice that in penetration.
+    ``KiCadCourtyardOracleTests`` below re-measures the same offsets against the real tool; these
+    cases are the deterministic half of the same claim and run without KiCad installed.
+    """
+
+    def test_the_inset_constants_are_the_kicad_10_0_5_values(self) -> None:
+        self.assertEqual(COURTYARD_CACHE_INSET_NM, 5_000)
+        self.assertEqual(COURTYARD_COLLISION_THRESHOLD_NM, 10_000)
+
+    def _verdict(self, penetration_nm: int, *, height_nm: int = 10_000_000) -> str:
+        left = _square(0, 0, 10_000_000, height_nm)
+        right = _square(10_000_000 - penetration_nm, 0, 20_000_000, height_nm)
+        return orthogonal_courtyard_region_overlap((left,), (right,))
+
+    def test_separated_and_edge_touching_courtyards_are_proven_clear(self) -> None:
+        for penetration in (-1_000_000, -1, 0):
+            with self.subTest(penetration_nm=penetration):
+                self.assertEqual(self._verdict(penetration), "proven_clear")
+
+    def test_penetration_one_nm_inside_the_inset_band_is_inconclusive(self) -> None:
+        """The band where raw geometry and KiCad's contracted cache genuinely disagree."""
+
+        for penetration in (1, 5_000, 9_998, 9_999):
+            with self.subTest(penetration_nm=penetration):
+                self.assertEqual(self._verdict(penetration), "inconclusive")
+
+    def test_penetration_exactly_at_the_inset_threshold_is_violated(self) -> None:
+        """Contracted caches that merely touch are a collision, so the bound is inclusive."""
+
+        self.assertEqual(self._verdict(10_000), "violated")
+
+    def test_penetration_one_nm_past_the_threshold_is_violated(self) -> None:
+        self.assertEqual(self._verdict(10_001), "violated")
+
+    def test_a_corner_only_overlap_needs_the_threshold_on_both_axes(self) -> None:
+        """A shared strip narrower than the threshold in *either* axis cannot be certified."""
+
+        self.assertEqual(self._verdict(10_000, height_nm=9_999), "inconclusive")
+        self.assertEqual(self._verdict(9_999, height_nm=10_000), "inconclusive")
+        self.assertEqual(self._verdict(10_000, height_nm=10_000), "violated")
+
+    def test_a_courtyard_thinner_than_the_threshold_is_never_certified(self) -> None:
+        """KiCad contracts such a shape out of existence; its band was measured as unstable."""
+
+        thin = _square(0, 0, 9_000, 10_000_000)
+        overlapping = _square(0, 0, 9_000, 10_000_000)
+        self.assertEqual(
+            orthogonal_courtyard_region_overlap((thin,), (overlapping,)), "inconclusive"
+        )
+
+    def test_a_negative_inset_is_refused_rather_than_silently_accepted(self) -> None:
+        left = _square(0, 0, 1_000_000, 1_000_000)
+        with self.assertRaises(ValueError):
+            orthogonal_courtyard_region_overlap((left,), (left,), inset_nm=-1)
+
+
+class CourtyardRingNestingTests(unittest.TestCase):
+    """A donut courtyard is an outline plus a hole, not two solids (ADR-0075, issue #74).
+
+    KiCad's ``buildContourHierarchy`` counts containing contours and makes an odd count a hole
+    (``pcbnew/convert_shape_list_to_polygon.cpp:373-400``, ``:446``).  Pooling every ring's
+    crossings before pairing them reproduces exactly that even-odd fill.
+    """
+
+    #: Outer 0..30 mm with a 10..20 mm hole.
+    DONUT = (
+        _square(0, 0, 30_000_000, 30_000_000),
+        _square(10_000_000, 10_000_000, 20_000_000, 20_000_000),
+    )
+
+    def test_a_footprint_inside_the_hole_is_proven_clear(self) -> None:
+        inside = _square(12_000_000, 12_000_000, 18_000_000, 18_000_000)
+        self.assertEqual(orthogonal_courtyard_region_overlap(self.DONUT, (inside,)), "proven_clear")
+
+    def test_a_footprint_on_the_annulus_is_violated(self) -> None:
+        on_ring = _square(2_000_000, 2_000_000, 8_000_000, 8_000_000)
+        self.assertEqual(orthogonal_courtyard_region_overlap(self.DONUT, (on_ring,)), "violated")
+
+    def test_a_footprint_straddling_the_hole_edge_is_violated(self) -> None:
+        straddle = _square(5_000_000, 12_000_000, 15_000_000, 18_000_000)
+        self.assertEqual(orthogonal_courtyard_region_overlap(self.DONUT, (straddle,)), "violated")
+
+    def test_treating_the_rings_as_two_solids_would_give_the_wrong_answer(self) -> None:
+        """Guard the guard: the fix must not be indistinguishable from the bug it replaces."""
+
+        inside = _square(12_000_000, 12_000_000, 18_000_000, 18_000_000)
+        outer, hole = self.DONUT
+        self.assertTrue(orthogonal_rings_overlap_open(outer, inside))
+        self.assertTrue(orthogonal_rings_overlap_open(hole, inside))
+        self.assertEqual(orthogonal_courtyard_region_overlap(self.DONUT, (inside,)), "proven_clear")
+
+    def test_two_disjoint_rings_on_one_footprint_stay_two_solids(self) -> None:
+        """Even-odd must not turn side-by-side shapes into a hole."""
+
+        pair = (
+            _square(0, 0, 10_000_000, 10_000_000),
+            _square(20_000_000, 0, 30_000_000, 10_000_000),
+        )
+        on_second = _square(22_000_000, 2_000_000, 28_000_000, 8_000_000)
+        between = _square(12_000_000, 2_000_000, 18_000_000, 8_000_000)
+        self.assertEqual(orthogonal_courtyard_region_overlap(pair, (on_second,)), "violated")
+        self.assertEqual(orthogonal_courtyard_region_overlap(pair, (between,)), "proven_clear")
+
+    def test_the_donut_fixture_is_previewed_rather_than_refused(self) -> None:
+        _, snapshot, view = _board(DONUT_COURTYARD_BOARD)
+        result = evaluate_placement(_intent(view, DONUT_COURTYARD_BOARD.name), snapshot, view)
+
+        self.assertEqual(result.status, "previewed")
+        assert result.candidate is not None
+        self.assertEqual(result.candidate.evidence.legality.courtyard_overlap, "proven_clear")
+
+    def test_moving_the_insert_onto_the_socket_wall_is_refused(self) -> None:
+        """The same fixture must still prove a real collision, or the hole fix proves nothing."""
+
+        _, snapshot, view = _board(DONUT_COURTYARD_BOARD)
+        insert = next(ref for ref in sorted(view.footprints) if ref.endswith("011"))
+        result = evaluate_placement(
+            _intent(
+                view,
+                DONUT_COURTYARD_BOARD.name,
+                proposals=[{"subject": insert, "offset_x_nm": -9_000_000}],
+            ),
+            snapshot,
+            view,
+        )
+
+        self.assertEqual(result.status, "refused")
+        assert result.diagnostic is not None
+        assert result.diagnostic.legality is not None
+        self.assertEqual(result.diagnostic.legality.courtyard_overlap, "violated")
+
+
+class CourtyardInconclusiveContractTests(unittest.TestCase):
+    """``inconclusive`` must reach the published contract intact, never as a silent pass."""
+
+    def test_the_legality_contract_accepts_the_third_value(self) -> None:
+        legality = PlacementLegality(
+            pad_overlap="proven_clear",
+            outline_containment="proven_inside",
+            keepout_respect="proven_clear",
+            courtyard_overlap="inconclusive",
+        )
+        self.assertEqual(legality.to_dict()["courtyard_overlap"], "inconclusive")
+
+    def test_an_inconclusive_courtyard_is_not_a_violation_but_is_not_proven_clear(self) -> None:
+        inconclusive = PlacementLegality(
+            pad_overlap="proven_clear",
+            outline_containment="proven_inside",
+            keepout_respect="proven_clear",
+            courtyard_overlap="inconclusive",
+        )
+        self.assertTrue(inconclusive.legal)
+        self.assertNotEqual(inconclusive.to_dict()["courtyard_overlap"], "proven_clear")
+
+    def test_a_violated_courtyard_is_still_illegal(self) -> None:
+        violated = PlacementLegality(
+            pad_overlap="proven_clear",
+            outline_containment="proven_inside",
+            keepout_respect="proven_clear",
+            courtyard_overlap="violated",
+        )
+        self.assertFalse(violated.legal)
+
+    def test_a_fourth_value_is_refused(self) -> None:
+        with self.assertRaises(PlacementError):
+            PlacementLegality(
+                pad_overlap="proven_clear",
+                outline_containment="proven_inside",
+                keepout_respect="proven_clear",
+                courtyard_overlap="not_modelled",
+            )
+
+
 class FailureTaxonomyTests(unittest.TestCase):
     def test_an_unresolved_reference_is_its_own_code(self) -> None:
         _, snapshot, view = _board(FIXTURES / "placement-legal.kicad_pcb")
@@ -1457,6 +1653,106 @@ class KiCadOracleTests(unittest.TestCase):
         result = _evaluate(board)
         self.assertEqual(result.status, "previewed")
         self.assertEqual(self._drc_errors(board), 0)
+
+
+@pytest.mark.skipif(not REAL_KICAD_CLI.is_file(), reason="KiCad CLI is not installed")
+class KiCadCourtyardOracleTests(unittest.TestCase):
+    """Corroborate the courtyard model against real ``kicad-cli`` 10.0.5 (ADR-0075).
+
+    These read KiCad's own ``courtyards_overlap`` verdict rather than an error count, because the
+    claim under test is specifically about the courtyard provider and not about DRC in general.
+    """
+
+    def _courtyard_violations(self, board: Path) -> int:
+        import json
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            shutil.copy2(board, work / board.name)
+            report = work / "drc.json"
+            completed = subprocess.run(  # noqa: S603 - fixed local argv, trusted discovered CLI
+                [
+                    str(REAL_KICAD_CLI),
+                    "pcb",
+                    "drc",
+                    "--format",
+                    "json",
+                    "--units",
+                    "mm",
+                    "--severity-all",
+                    "-o",
+                    str(report),
+                    str(work / board.name),
+                ],
+                capture_output=True,
+                check=False,
+                timeout=180,
+            )
+            self.assertIn(completed.returncode, (0, 5), completed.stderr)
+            payload = json.loads(report.read_text(encoding="utf-8"))
+        return sum(
+            1
+            for violation in payload.get("violations", [])
+            if violation.get("type") == "courtyards_overlap"
+        )
+
+    def test_kicad_reports_no_overlap_for_a_part_inside_a_donut_courtyard(self) -> None:
+        """Issue #74: the hole is a hole. Treating the rings as solids contradicts the tool."""
+
+        self.assertEqual(self._courtyard_violations(DONUT_COURTYARD_BOARD), 0)
+        _, snapshot, view = _board(DONUT_COURTYARD_BOARD)
+        result = evaluate_placement(_intent(view, DONUT_COURTYARD_BOARD.name), snapshot, view)
+        assert result.candidate is not None
+        self.assertEqual(result.candidate.evidence.legality.courtyard_overlap, "proven_clear")
+
+    def test_kicad_agrees_at_and_below_the_cached_courtyard_inset_threshold(self) -> None:
+        """Issue #72: 9,999 nm of penetration is clear to KiCad and 10,000 nm is a collision.
+
+        The deterministic model must never contradict that: ``violated`` only where KiCad reports
+        the overlap, and never ``proven_clear`` where real geometry overlaps.
+        """
+
+        below = ROOT / "tests" / "fixtures" / "board-ir-v0.2" / "courtyard-inset-below.kicad_pcb"
+        at_threshold = (
+            ROOT / "tests" / "fixtures" / "board-ir-v0.2" / "courtyard-inset-at.kicad_pcb"
+        )
+
+        self.assertEqual(self._courtyard_violations(below), 0)
+        self.assertEqual(self._courtyard_violations(at_threshold), 1)
+
+        _, snapshot, view = _board(below)
+        previewed = evaluate_placement(_intent(view, below.name), snapshot, view)
+        assert previewed.candidate is not None
+        self.assertEqual(previewed.candidate.evidence.legality.courtyard_overlap, "inconclusive")
+
+        _, snapshot, view = _board(at_threshold)
+        refused = evaluate_placement(_intent(view, at_threshold.name), snapshot, view)
+        assert refused.diagnostic is not None
+        assert refused.diagnostic.legality is not None
+        self.assertEqual(refused.diagnostic.legality.courtyard_overlap, "violated")
+
+    def test_every_courtyard_violation_is_also_a_kicad_courtyard_violation(self) -> None:
+        """The one-way binding: a proof of collision must be one the authoritative tool shares."""
+
+        source = FRONT_BACK_FOOTPRINT_V02_BOARD.read_bytes()
+        source = source.replace(b'(layer "B.Cu")', b'(layer "F.Cu")', 1)
+        source = source.replace(b'(layer "B.CrtYd")', b'(layer "F.CrtYd")', 1)
+        source = source.replace(b"(at 60 20 0)", b"(at 20 20 0)", 1)
+        parsed = parse_kicad_bytes(source, _profile(), ParseLimits())
+        assert parsed.snapshot is not None
+        view = build_placement_view(source, parsed.snapshot)
+        result = evaluate_placement(_intent(view, "same-side.kicad_pcb"), parsed.snapshot, view)
+        assert result.diagnostic is not None
+        assert result.diagnostic.legality is not None
+        self.assertEqual(result.diagnostic.legality.courtyard_overlap, "violated")
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            board = Path(directory) / "same-side.kicad_pcb"
+            board.write_bytes(source)
+            self.assertGreater(self._courtyard_violations(board), 0)
 
 
 class CopperToneScaleTests(unittest.TestCase):
