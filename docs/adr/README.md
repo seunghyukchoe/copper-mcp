@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0070**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0071**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -116,8 +116,9 @@ never silently widens it.
 | [0067](0067-route-aware-placement-ranking.md) | Keep route-aware placement ranking private, bounded, and opt-in | Accepted |
 | [0068](0068-bounded-ordered-layer-routing.md) | Keep ordered-layer routing bounded and non-serializing | Accepted |
 | [0069](0069-operator-gated-live-ipc-observation.md) | Gate live KiCad IPC on an operator opt-in and establish document type at the observer | Accepted |
+| [0070](0070-layered-fill-aware-obstacles.md) | Shrink a layered zone envelope only against proved fill | Accepted |
 
-Sixty-nine numbers, sixty-eight records, no duplicates — and `scripts/check_adr_numbers.py` now
+Seventy numbers, sixty-nine records, no duplicates — and `scripts/check_adr_numbers.py` now
 proves that last clause on every run rather than asserting it. Only 0027 is unused; see
 **Known gap** above.
 
@@ -127,7 +128,7 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 
 - **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051.
 - **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
-  0066.
+  0066, 0070.
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060.
 - **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065.
 - **Circuit Scene and rendering** — 0010, 0022, 0023, 0028, 0056.
@@ -187,3 +188,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0067: Keep route-aware placement ranking private, bounded, and opt-in](0067-route-aware-placement-ranking.md)
 - [ADR-0068: Keep ordered-layer routing bounded and non-serializing](0068-bounded-ordered-layer-routing.md)
 - [ADR-0069: Gate live KiCad IPC on an operator opt-in and establish document type at the observer](0069-operator-gated-live-ipc-observation.md)
+- [ADR-0070: Shrink a layered zone envelope only against proved fill](0070-layered-fill-aware-obstacles.md)

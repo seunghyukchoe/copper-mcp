@@ -340,6 +340,19 @@ result or a general performance comparison.
 | Artifact | [`2026-08-05-fill-aware-routing-remediation.json`](../../benchmarks/results/routing/2026-08-05-fill-aware-routing-remediation.json) |
 | Interpretation | This substantiates both the route-quality replay and the matching-zone safety gate after review remediation. It remains synthetic core evidence and does not claim real-board refill, KiCad DRC, whole-board completion, electrical behavior, fabrication readiness, or FreeRouting parity. |
 
+### B-086 — Layered fill-aware zone obstacles
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:aa63918b6d855b7c61d4abc6c4d2a13b0ff03814246e568bd9fd9e0db529acf5` |
+| Date and commit | 2026-08-05 22:02:15 UTC; measured on `feat/fill-aware-routing-obstacles` with the ADR-0070 adapter change applied on top of `9746bdbc04f7998dbaec849436c13e05d0edc14a`, before the implementing commit existed |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
+| Dataset | Independently generated synthetic Board IR fixture `synthetic-layered-fill-corridor-v1`: two AUDIO pads, one rectangular POWER zone on the front signal layer, a full-height back-layer track keepout that forecloses a via escape, and a verified upper fill island leaving a lower corridor; no external or proprietary design data |
+| Configuration | `layered-fill-obstacles-v1`; ten deterministic replays each for conservative and freshness-verified modes; 1,000 nm grid; bounded two-layer ordered-stack adapter; rectangular island envelopes; source-revision, matching-zone, and outline-containment gates; CPU-only |
+| Metrics | Deterministic conservative 10/10; deterministic fill-aware 10/10; conservative wire length 14,000 nm with 0 vias; fill-aware wire length 8,000 nm with 0 vias; reduction 6,000 nm; nested-island lengths 8,000 → 10,000 → 12,000 → 14,000 nm with `growth_monotonic=true`; stale evidence refused `stale_revision`; orphaned island refused `unsupported_geometry`; island escaping its outline refused `unsupported_geometry`; KiCad invocation `false`; DRC `false` |
+| Artifact | [`2026-08-06-layered-fill-obstacles.json`](../../benchmarks/results/routing/2026-08-06-layered-fill-obstacles.json) |
+| Interpretation | This measures a route-quality improvement in the internal bounded ordered-layer proposal seam, and records the metamorphic monotonicity property and all three fail-closed gates as real invocations rather than metadata claims. The outline-sized island reproducing the conservative length is the bound on how much the replacement can ever open. It does not establish zone-refill behavior beyond ADR-0021, exact polygon layered collision, same-net poured attachment, a public layered fill-authority contract, whole-board completion, electrical correctness, DFM, fabrication readiness, or FreeRouting parity. |
+
 ### B-024 — Public layered route-preview contract
 
 | Field | Recorded evidence |
