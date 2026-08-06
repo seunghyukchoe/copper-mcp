@@ -188,6 +188,18 @@ documentation, ledger updates, and benchmark evidence.
   `unavailable_or_incomplete`. A harness-owned SES-import transaction, constrained candidate
   runner, broader common corpus, and equivalent performance protocol remain required; bounded
   external execution is not sandbox containment.
+  - [x] External-corpus intake and an in-repo harness. A benchmark-only SimpleRouteJson import seam
+    converts tscircuit interchange problems into ordinary verified Board IR snapshots and route
+    requests, over-approximating every obstacle and refusing typed rather than dropping anything it
+    cannot represent. 20 of the 36 MIT-licensed `dwiel/tscircuit-benchmark` boards ship under
+    `benchmarks/corpora/` with attribution and digests for all 36; `tscircuit/autorouting` carries
+    no licence at all and is cited but not redistributed, and PCBWorld is announced but unreleased.
+    B-088 records the first run on data this project did not author: 70 of 117 nets routed at
+    1.1711× a provable lower bound, with every two-pin net refused because the reference lattice
+    requires the pad-centre delta to divide by the grid step. **The cross-router comparison this
+    item asks for is still not measured** — FreeRouting is recorded as `not_run`, and a
+    SimpleRouteJson-to-DSN bridge, a common corpus neither router helped define, and an equivalent
+    performance protocol all remain required.
 
 - [~] Emit candidate DRC evidence as a deterministic, unsigned in-toto Statement payload using
   Link v0.3, with digest-bound subjects/materials and aggregate redacted byproducts. DSSE signing,

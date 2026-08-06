@@ -118,6 +118,12 @@ When adding a document, add it to the list below in the same sentence form — *
 - [OpenSSF criticality and supply-chain](./openssf-criticality-and-supply-chain.md) separates the
   Criticality activity proxy from Scorecard controls and maps the dated baseline to sustainable
   contributor, release, review, and adoption work.
+- [Open-baseline routing benchmarks](./open-baseline-benchmarks-v1.md) records the SimpleRouteJson
+  interchange as actually specified, the millimetre-to-nanometre rule and its rounding directions,
+  a per-corpus licensing determination with URLs (tscircuit-benchmark MIT, tscircuit/autorouting
+  unlicensed, PCBench MIT, PCBWorld split and unreleased, FreeRouting GPL-3.0), and the harness
+  lessons from an abandoned upstream benchmark. It claims no baseline comparison and no
+  generalisation beyond LLM-generated 2-layer boards.
 
 ## Terms used in this review
 
