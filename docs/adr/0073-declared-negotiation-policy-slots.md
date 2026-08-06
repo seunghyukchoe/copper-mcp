@@ -8,7 +8,7 @@
   [ADR-0066](0066-atomic-route-bundle-preview.md),
   [Negotiated congestion research](../research/negotiated-congestion-v1.md),
   [Multi-pin routing references](../research/multi-pin-routing-references.md),
-  D-147, B-087
+  D-148, B-087
 
 ## Context
 
