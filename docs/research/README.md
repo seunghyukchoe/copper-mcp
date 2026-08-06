@@ -49,6 +49,11 @@ When adding a document, add it to the list below in the same sentence form — *
   receipt-bound comparison harness and why it cannot yet declare a result.
 - [Multi-pin routing references](./multi-pin-routing-references.md) grounds deterministic component
   merging and the limits of the current topology policy.
+- [Negotiated congestion v1](./negotiated-congestion-v1.md) surveys what PathFinder, VPR, and the
+  modern negotiation-based routers actually specify for net order, the per-iteration cost update,
+  and rip-up selection; it corrects the common misattribution of VPR's history rule to PathFinder,
+  records the published evidence that unbounded history can degrade a solution, and lists what
+  could not be verified.
 - [Negotiated physical-clearance acceptance](./negotiated-physical-clearance.md) defines the
   bounded exact-integer, same-layer candidate-pair gate that supplements lattice congestion
   accounting without claiming board-wide or KiCad physical verification.

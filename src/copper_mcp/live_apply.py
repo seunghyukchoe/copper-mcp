@@ -1,6 +1,6 @@
 """Preconditions for a one-undo-commit apply into a running KiCad editor.
 
-This module owns the *authorization and binding* half of ADR-0073. It performs, in order, every
+This module owns the *authorization and binding* half of ADR-0074. It performs, in order, every
 check that must hold before CopperMCP would be entitled to mutate a document the operator has
 open in front of them — three-flag operator consent, a live-scoped single-use capability token,
 a session compare-and-swap, a board-serialization compare-and-swap, a Board IR snapshot
@@ -11,7 +11,7 @@ It then refuses with ``capability_not_implemented``.
 
 That refusal is the point of the slice, not an omission in it. The mutation itself is one
 ``begin_commit`` / ``push_commit`` pair, and the honest statement of what CopperMCP can prove
-about that pair is recorded in [ADR-0073](../../docs/adr/0073-live-ipc-one-undo-commit-apply.md)
+about that pair is recorded in [ADR-0074](../../docs/adr/0074-live-ipc-one-undo-commit-apply.md)
 and its research note. Shipping the preconditions without the mutation gives operators and
 reviewers a surface whose refusals are real — every code below is reachable and tested — while
 the destructive step stays behind an adversarial review that has not happened yet. A half-working

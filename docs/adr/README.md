@@ -5,8 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0074**.
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0071**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0075**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -120,9 +119,10 @@ never silently widens it.
 | [0070](0070-layered-fill-aware-obstacles.md) | Shrink a layered zone envelope only against proved fill | Accepted |
 | [0071](0071-authoritative-schematic-erc.md) | Authoritative KiCad schematic ERC and generated-schematic round trip | Accepted |
 | [0072](0072-conservative-arc-track-envelopes.md) | Model foreign arc tracks as conservative integer envelopes rather than refusing the board | Accepted |
-| [0073](0073-live-ipc-one-undo-commit-apply.md) | Gate live editor mutation on its own consent, and ship its preconditions before it | Accepted |
+| [0073](0073-declared-negotiation-policy-slots.md) | Declare negotiation strategy as three separately digest-bound policy slots | Accepted |
+| [0074](0074-live-ipc-one-undo-commit-apply.md) | Gate live editor mutation on its own consent, and ship its preconditions before it | Accepted |
 
-Seventy-two numbers, seventy-one records, no duplicates — and `scripts/check_adr_numbers.py` now
+Seventy-four numbers, seventy-three records, no duplicates — and `scripts/check_adr_numbers.py` now
 proves that last clause on every run rather than asserting it. Only 0027 is unused; see
 **Known gap** above.
 
@@ -132,14 +132,14 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 
 - **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070.
 - **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
-  0066, 0070.
+  0066, 0070, 0073.
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060.
 - **Circuit Intent and schematic verification** — 0014, 0015, 0056, 0070.
 - **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065.
 - **Circuit Scene and rendering** — 0010, 0022, 0023, 0028, 0056.
-- **Live KiCad IPC** — 0029, 0030, 0031, 0032, 0033, 0044, 0063, 0069.
+- **Live KiCad IPC** — 0029, 0030, 0031, 0032, 0033, 0044, 0063, 0069, 0074.
 - **Durable jobs and persistence** — 0043, 0046, 0047, 0048.
-- **Mutation and authorization** — 0001, 0025, 0059.
+- **Mutation and authorization** — 0001, 0025, 0059, 0074.
 
 - [ADR-0001: Candidate-first mutation model](0001-candidate-first.md)
 - [ADR-0002: MCP is an external adapter](0002-mcp-adapter.md)
@@ -196,4 +196,5 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0070: Shrink a layered zone envelope only against proved fill](0070-layered-fill-aware-obstacles.md)
 - [ADR-0071: Authoritative KiCad schematic ERC and generated-schematic round trip](0071-authoritative-schematic-erc.md)
 - [ADR-0072: Conservative integer envelopes for foreign arc tracks](0072-conservative-arc-track-envelopes.md)
-- [ADR-0073: Gate live editor mutation on its own consent, and ship its preconditions before it](0073-live-ipc-one-undo-commit-apply.md)
+- [ADR-0073: Declare negotiation strategy as three separately digest-bound policy slots](0073-declared-negotiation-policy-slots.md)
+- [ADR-0074: Gate live editor mutation on its own consent, and ship its preconditions before it](0074-live-ipc-one-undo-commit-apply.md)

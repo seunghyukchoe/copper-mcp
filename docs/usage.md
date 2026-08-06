@@ -377,7 +377,7 @@ file-backed `apply_candidate`.
 
 When the mutation lands it will change the in-memory document only — one entry in KiCad's own undo
 stack, no file written until you save — and it will re-observe the result rather than assume it.
-See [ADR-0073](adr/0073-live-ipc-one-undo-commit-apply.md) and the
+See [ADR-0074](adr/0074-live-ipc-one-undo-commit-apply.md) and the
 [IPC apply research](research/ipc-apply-v1.md) for why the protocol makes that re-observation
 mandatory rather than optional.
 

@@ -171,7 +171,7 @@ editor session as well as the board, and a compare-and-swap against the session,
 serialization, and the converted snapshot — then refuses with `capability_not_implemented`. The
 mutation waits for adversarial review, because KiCad's IPC API offers no revision or conditional
 write and `kipy` discards the per-item status that would prove a push landed. See
-[ADR-0073](docs/adr/0073-live-ipc-one-undo-commit-apply.md).
+[ADR-0074](docs/adr/0074-live-ipc-one-undo-commit-apply.md).
 
 Plus professional CI, CodeQL, dependency auditing, release automation, issue forms, and
 [project ledgers](docs/ledgers/README.md). See the [roadmap](docs/roadmap.md) for what comes next.

@@ -72,7 +72,7 @@ ADR-0069 granted observation only, and it deliberately neither implies nor requi
 `COPPER_MCP_ALLOW_APPLY`, which authorises replacing a file on disk. **The mutation is not
 implemented:** the tool verifies consent, a live-scoped capability, and the session, board, and
 snapshot compare-and-swap values, replays the candidate against the live board, and then refuses
-with `capability_not_implemented`. See [ADR-0073](../adr/0073-live-ipc-one-undo-commit-apply.md).
+with `capability_not_implemented`. See [ADR-0074](../adr/0074-live-ipc-one-undo-commit-apply.md).
 
 `inspect_live_board` is a separate, no-argument read-only probe for an already-running KiCad PCB
 Editor. It lazily loads the optional official `kicad-python` binding, accepts only KiCad's local

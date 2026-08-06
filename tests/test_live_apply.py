@@ -1,4 +1,4 @@
-"""Regressions for the gated live one-undo-commit apply preconditions (ADR-0073).
+"""Regressions for the gated live one-undo-commit apply preconditions (ADR-0074).
 
 The mutation is not implemented, so these tests pin the two things that *are*: that no path
 reaches a running editor without three separate consents and a live-scoped capability, and that
@@ -263,7 +263,7 @@ def test_live_apply_also_requires_the_observation_opt_in(tmp_path: Path) -> None
 
 
 def test_file_apply_consent_neither_grants_nor_is_required_by_live_apply(tmp_path: Path) -> None:
-    """`COPPER_MCP_ALLOW_APPLY` is orthogonal in both directions (ADR-0073)."""
+    """`COPPER_MCP_ALLOW_APPLY` is orthogonal in both directions (ADR-0074)."""
 
     authority = ApplyTokenAuthority()
     # Granting file apply must not grant live apply.

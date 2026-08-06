@@ -5,7 +5,7 @@
 
 This document covers exactly one question: **what can CopperMCP prove about a mutation pushed
 into a running KiCad editor over the IPC API?** It is a dated snapshot of external evidence,
-gathered for [ADR-0073](../adr/0073-live-ipc-one-undo-commit-apply.md), and it is not revised as
+gathered for [ADR-0074](../adr/0074-live-ipc-one-undo-commit-apply.md), and it is not revised as
 the code moves.
 
 It refuses to claim anything about mutation through the SWIG bindings, about the schematic

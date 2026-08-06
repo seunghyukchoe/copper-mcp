@@ -61,7 +61,7 @@ class Settings:
     #: rather than the conjunction of the two above: ADR-0069 recorded that the live opt-in
     #: "enables observation only", and ADR-0025's flag is documented as replacing a file on
     #: disk. Reading an already-granted pair as mutation consent would retroactively widen what
-    #: past operators agreed to. See ADR-0073.
+    #: past operators agreed to. See ADR-0074.
     allow_live_apply: bool = False
 
     @classmethod
