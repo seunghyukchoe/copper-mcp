@@ -130,6 +130,12 @@ When adding a document, add it to the list below in the same sentence form — *
   unlicensed, PCBench MIT, PCBWorld split and unreleased, FreeRouting GPL-3.0), and the harness
   lessons from an abandoned upstream benchmark. It claims no baseline comparison and no
   generalisation beyond LLM-generated 2-layer boards.
+- [KiCad copper layer numbering](./kicad-copper-layer-numbering-v1.md) establishes, from KiCad's
+  own enumeration and board writer rather than from one sample board, that copper is numbered
+  `F.Cu=0`, `B.Cu=2`, `InN.Cu=2+2N` and declared front-to-back so the IDs do not ascend, that this
+  numbering replaced a different consecutive one at KiCad 9, and that the two cannot both be
+  accepted at once. It claims nothing about non-copper ordinals, the pre-4.0 legacy format, or
+  KiCad 11.
 
 ## Terms used in this review
 

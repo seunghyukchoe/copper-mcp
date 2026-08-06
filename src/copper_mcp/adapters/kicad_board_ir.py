@@ -60,6 +60,20 @@ KICAD_PCB_ROOT_HEAD = "kicad_pcb"
 # a truthful unsupported result. It used to be reported as a generic ``syntax.invalid``.
 FOREIGN_ROOT_DIAGNOSTIC_CODE = "unsupported.document"
 _COURTYARD_LAYERS = frozenset({"F.CrtYd", "B.CrtYd"})
+# KiCad's copper layer IDs as written into the board file, for the format versions above.
+# ``F.Cu=0``, ``B.Cu=2``, ``InN.Cu=2+2N`` for 1 <= N <= 30 - copper takes the even values and the
+# technical layers are interleaved on the odd ones.  This is *not* the numbering KiCad used before
+# version 9, which was consecutive with the back layer last (``F.Cu=0``, ``In1..In30 = 1..30``,
+# ``B.Cu=31``) and which KiCad itself converts via ``BoardLayerFromLegacyId``.  Only one numbering
+# can be correct at a time: under the current scheme, ID 1 is ``F.Mask``, so a validator that
+# accepted both would accept boards whose stack it had misread.  The choice is made for us by
+# ``_SUPPORTED_KICAD_PCB_VERSIONS`` above, which refuses pre-V9 documents with a typed
+# ``unsupported.version`` diagnostic before this table is ever consulted - so widening that set
+# past a V9 boundary is not a version-string edit, it needs a second numbering rule here.
+# Derivation and citations: docs/research/kicad-copper-layer-numbering-v1.md.
+_KICAD_COPPER_LAYER_IDS: dict[str, int] = {"F.Cu": 0, "B.Cu": 2} | {
+    f"In{inner}.Cu": 2 + 2 * inner for inner in range(1, 31)
+}
 _ROOT_METADATA_HEADS = frozenset(
     {
         "embedded_fonts",
@@ -574,6 +588,12 @@ class _Converter:
             )
         result: list[Layer] = []
         for ordinal, (source_index, name, kind) in enumerate(copper_entries):
+            # Two independent invariants, and conflating them is what produced issue #104.
+            # ``ordinal`` is the *declaration position*: KiCad writes copper front-to-back, so the
+            # name a position must carry is positional.  The ID that name must carry is not - it
+            # comes from KiCad's own enumeration, in which copper takes the even values with the
+            # technical layers interleaved on the odd ones.  The declared IDs of a four-layer
+            # board are therefore 0, 4, 6, 2 and do not ascend.
             expected_name = (
                 "F.Cu"
                 if ordinal == 0
@@ -581,7 +601,11 @@ class _Converter:
                 if ordinal == len(copper_entries) - 1
                 else f"In{ordinal}.Cu"
             )
-            if source_index != ordinal * 2 or name != expected_name:
+            # A name KiCad's table does not carry (``In31.Cu`` and beyond) yields a sentinel no
+            # unsigned source index can equal, so a deeper stack is refused rather than
+            # extrapolated - even though ``2 + 2N`` would happily keep counting.
+            expected_index = _KICAD_COPPER_LAYER_IDS.get(expected_name, -1)
+            if name != expected_name or source_index != expected_index:
                 self.fail(
                     "unsupported.construct",
                     "copper layer IDs, names, or declaration order are unsupported",
