@@ -2149,7 +2149,9 @@ def test_pathological_segment_outline_hits_a_budget_instead_of_spinning() -> Non
 
     assert result.snapshot is None
     assert result.diagnostics[0].code == "budget.exceeded"
-# --- roundrect corner-radius precision (issue #116, ADR-0076) -----------------------------
+
+
+# --- roundrect corner-radius precision (issue #116, ADR-0077) -----------------------------
 #
 # KiCad stores a roundrect corner as a ratio of the pad's shorter side and recomputes the
 # radius on every read, so an ordinary ratio on an ordinary pad lands on a fractional
