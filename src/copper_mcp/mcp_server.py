@@ -60,6 +60,7 @@ from copper_mcp.mcp_contracts import (
     RoutingCandidateExportToolResponse,
     RoutingJobRequest,
     RoutingJobToolResponse,
+    SourceToBoardParityToolResponse,
 )
 from copper_mcp.routing import RoutingJobRepository
 from copper_mcp.routing_job_service import (
@@ -116,6 +117,7 @@ from copper_mcp.tools import run_board_drc as run_board_drc_service
 from copper_mcp.tools import server_info as server_info_service
 from copper_mcp.tools import validate_candidate as validate_candidate_service
 from copper_mcp.tools import verify_circuit_schematic_erc as verify_circuit_schematic_erc_service
+from copper_mcp.tools import verify_source_to_board_parity as verify_source_to_board_parity_service
 
 _SETTINGS = Settings.from_env()
 _SCHEMATIC_ARTIFACTS = SchematicArtifactStore()
@@ -200,6 +202,7 @@ class CopperMCPServer(MCPServer[None]):
                 "apply_live_candidate",
                 "render_circuit_schematic",
                 "verify_circuit_schematic_erc",
+                "verify_source_to_board_parity",
                 "observe_live_board_scene",
                 "observe_post_placement",
                 "preview_live_placement",
@@ -226,6 +229,8 @@ class CopperMCPServer(MCPServer[None]):
             raise ToolError("schematic tool arguments are malformed")
         if name == "verify_circuit_schematic_erc" and set(arguments) != {"content"}:
             raise ToolError("schematic ERC tool arguments are malformed")
+        if name == "verify_source_to_board_parity" and set(arguments) != {"content", "board"}:
+            raise ToolError("source-to-board parity tool arguments are malformed")
         if name == "preview_route" and set(arguments) != {"request"}:
             raise ToolError("route tool arguments are malformed")
         if name == "preview_route_bundle" and set(arguments) != {"request"}:
@@ -330,6 +335,45 @@ def verify_circuit_schematic_erc(
 
     result = verify_circuit_schematic_erc_service(content, _SETTINGS)
     return CircuitSchematicErcToolResponse.model_validate(result.to_dict())
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def verify_source_to_board_parity(
+    content: CircuitIntentToolContent,
+    board: str,
+) -> SourceToBoardParityToolResponse:
+    """Check whether a workspace board implements a Circuit Intent's connectivity.
+
+    ``content`` takes the same Circuit Intent 0.1.0 object as ``render_circuit_schematic``;
+    ``board`` is a ``.kicad_pcb`` path inside the configured workspace, read but never written.
+    KiCad's own ``pcb drc --schematic-parity`` decides the verdict.
+
+    The board is compared against a *board-eligible projection* of the intent, whose digest is
+    reported separately under ``parity_projection``. The delivered schematic marks every symbol
+    ``on_board no`` and so never enters KiCad's board-side netlist; comparing against it would
+    make a correct board and a wrong one produce identical output. A ``passed`` result therefore
+    claims that the board matches the intent's connectivity — not that it matches the delivered
+    schematic file, and not that footprints, electrical behaviour, or manufacturability were
+    checked, each of which is an explicit non-claim in ``verification``.
+
+    ``verification.parity_oracle_live`` is not decorative. An empty parity array is
+    indistinguishable from a parity check that never ran, so the verdict is refused outright
+    unless KiCad demonstrably accounted for every component.
+
+    Only digests, counts, and KiCad's parity-type keys are returned — never board or schematic
+    bytes, net or component names, values, coordinates, UUIDs, or KiCad description text.
+    """
+
+    result = verify_source_to_board_parity_service(content, board, _SETTINGS)
+    return SourceToBoardParityToolResponse.model_validate(result.to_dict())
 
 
 @mcp.tool(

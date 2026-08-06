@@ -65,6 +65,10 @@ from copper_mcp.schematic_erc_service import (
     CircuitSchematicErcResult,
     verify_schematic_erc_from_content,
 )
+from copper_mcp.source_to_board_parity_service import (
+    SourceToBoardParityResult,
+    verify_source_to_board_parity_from_content,
+)
 
 
 def server_info() -> dict[str, Any]:
@@ -131,6 +135,17 @@ def verify_circuit_schematic_erc(
 
     active_settings = settings or Settings.from_env()
     return verify_schematic_erc_from_content(content, active_settings)
+
+
+def verify_source_to_board_parity(
+    content: Any,
+    board: str,
+    settings: Settings | None = None,
+) -> SourceToBoardParityResult:
+    """Check whether a workspace board implements structured circuit content's connectivity."""
+
+    active_settings = settings or Settings.from_env()
+    return verify_source_to_board_parity_from_content(content, board, active_settings)
 
 
 def inspect_board(path: str, settings: Settings | None = None) -> dict[str, Any]:

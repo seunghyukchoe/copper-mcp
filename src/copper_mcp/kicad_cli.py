@@ -15,10 +15,11 @@ import sys
 import tempfile
 import time
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Literal
 
 from copper_mcp.adapters.kicad_board_ir import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.adapters.kicad_layered_route_patch import (
@@ -1552,6 +1553,386 @@ def export_circuit_schematic_netlist(
         settings=settings,
     )
     return netlist
+
+
+PARITY_SNAPSHOT_STEM = "parity"
+PARITY_BOARD_SNAPSHOT_NAME = f"{PARITY_SNAPSHOT_STEM}.kicad_pcb"
+PARITY_SCHEMATIC_SNAPSHOT_NAME = f"{PARITY_SNAPSHOT_STEM}.kicad_sch"
+
+# Findings that speak to whether the board implements the intent's connectivity. These decide the
+# verdict. Keys are KiCad's own settings keys; see docs/research/source-to-board-parity-v1.md.
+PARITY_CONNECTIVITY_TYPES = frozenset(
+    {"net_conflict", "missing_footprint", "extra_footprint", "duplicate_footprints"}
+)
+# Findings that are the unavoidable signature of a footprint-less Circuit Intent: the projection's
+# empty Footprint and its Description cannot equal whatever the board's footprint carries. They are
+# disclosed as counts and never treated as parity failures.
+PARITY_PROJECTION_TYPES = frozenset(
+    {
+        "footprint_symbol_mismatch",
+        "footprint_symbol_field_mismatch",
+        "footprint_filters_mismatch",
+    }
+)
+_PARITY_TYPES = PARITY_CONNECTIVITY_TYPES | PARITY_PROJECTION_TYPES
+_MAX_PARITY_FINDINGS = 100_000
+
+
+@dataclass(frozen=True, slots=True)
+class SourceToBoardParityEvidence:
+    """Redacted evidence that KiCad compared this exact board to this exact intent projection.
+
+    Every field is a digest, a count, or a fixed literal. Parity descriptions embed net names
+    verbatim and affected items carry UUIDs and coordinates, so nothing from a finding's body
+    crosses this boundary — only how many of each KiCad type occurred.
+
+    ``passed`` means KiCad reported no connectivity-class parity finding. It is only meaningful
+    alongside ``oracle_live``, which records that the liveness invariant of ADR-0076 held: an empty
+    ``schematic_parity`` array is otherwise indistinguishable from a parity check that never ran.
+    """
+
+    intent_digest: str
+    schematic_digest: str
+    parity_schematic_digest: str
+    board_revision: str
+    kicad_version: str
+    drc_schema: str
+    coordinate_units: str
+    component_count: int
+    connectivity_finding_count: int
+    projection_finding_count: int
+    parity_type_counts: Mapping[str, int]
+    oracle_live: Literal["passed"]
+    passed: bool
+
+    def __post_init__(self) -> None:
+        for name, digest in (
+            ("intent digest", self.intent_digest),
+            ("schematic digest", self.schematic_digest),
+            ("parity schematic digest", self.parity_schematic_digest),
+            ("board revision", self.board_revision),
+        ):
+            if not isinstance(digest, str) or not _SHA256_ID.fullmatch(digest):
+                raise ValueError(f"source-to-board parity {name} is malformed")
+        if self.schematic_digest == self.parity_schematic_digest:
+            raise ValueError("parity projection must differ from the delivered schematic")
+        if self.drc_schema != KICAD_DRC_SCHEMA or self.coordinate_units != "mm":
+            raise ValueError("source-to-board parity report contract is unsupported")
+        if not isinstance(self.kicad_version, str) or not _KICAD_VERSION.fullmatch(
+            self.kicad_version
+        ):
+            raise ValueError("source-to-board parity KiCad version is malformed")
+        if isinstance(self.component_count, bool) or self.component_count < 1:
+            raise ValueError("source-to-board parity requires at least one component")
+        for name, value in (
+            ("connectivity", self.connectivity_finding_count),
+            ("projection", self.projection_finding_count),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"source-to-board parity {name} count is malformed")
+        if self.oracle_live != "passed":
+            raise ValueError("source-to-board parity evidence cannot represent a dead oracle")
+        if not isinstance(self.passed, bool):
+            raise ValueError("source-to-board parity verdict is malformed")
+        # The verdict is derived, never asserted independently of the counts it summarises.
+        if self.passed != (self.connectivity_finding_count == 0):
+            raise ValueError("source-to-board parity verdict does not match its findings")
+
+
+def _parse_parity_report(
+    payload: bytes,
+    *,
+    return_code: int,
+    component_count: int,
+    intent_digest: str,
+    schematic_digest: str,
+    parity_schematic_digest: str,
+    board_revision: str,
+) -> SourceToBoardParityEvidence:
+    """Accept only the reviewed DRC report shape and reduce its parity array to counts.
+
+    Nothing here decides what parity *is* — KiCad already did. This transports the verdict and
+    enforces the one thing KiCad will not tell us: whether the check actually ran.
+    """
+
+    try:
+        text = payload.decode("utf-8", errors="strict")
+        _preflight_drc_json(text)
+        report: Any = json.loads(
+            text,
+            object_pairs_hook=_drc_object_pairs,
+            parse_constant=_reject_json_constant,
+            parse_float=_finite_json_float,
+        )
+        _validate_drc_json_tree(report)
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError, ValueError) as error:
+        raise KiCadCliError("KiCad parity report is not valid UTF-8 JSON") from error
+    if not isinstance(report, dict):
+        raise KiCadCliError("KiCad parity report must be a JSON object")
+    if report.get("$schema") != KICAD_DRC_SCHEMA:
+        raise KiCadCliError("KiCad parity report schema is unsupported")
+    if report.get("coordinate_units") != "mm":
+        raise KiCadCliError("KiCad parity report must use millimetres")
+    if report.get("source") != PARITY_BOARD_SNAPSHOT_NAME:
+        raise KiCadCliError("KiCad parity report source does not match the board snapshot")
+    report_date = report.get("date")
+    if not isinstance(report_date, str):
+        raise KiCadCliError("KiCad parity report has no valid generation date")
+    try:
+        datetime.fromisoformat(report_date.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise KiCadCliError("KiCad parity report has no valid generation date") from error
+    if not _KICAD_DATE_TIME.fullmatch(report_date):
+        raise KiCadCliError("KiCad parity report has no valid generation date")
+    kicad_version = report.get("kicad_version")
+    if not isinstance(kicad_version, str) or not _KICAD_VERSION.fullmatch(kicad_version):
+        raise KiCadCliError("KiCad parity report has no valid version")
+    # We never pass --exit-code-violations: exit 5 ORs three unrelated providers together and a
+    # board with no schematic at all still returns it. A parity run must exit cleanly.
+    if return_code != 0:
+        raise KiCadCliError("KiCad parity run did not complete cleanly")
+
+    included_severities = report.get("included_severities")
+    if (
+        not isinstance(included_severities, list)
+        or len(included_severities) != len(_INCLUDED_SEVERITIES)
+        or not all(isinstance(item, str) for item in included_severities)
+        or frozenset(included_severities) != _INCLUDED_SEVERITIES
+    ):
+        # Parity findings are warning-severity, so a narrowed severity set silently empties the
+        # array for a genuinely mismatched board.
+        raise KiCadCliError("KiCad parity report did not include all requested severities")
+    for collection in ("violations", "unconnected_items"):
+        if not isinstance(report.get(collection), list):
+            raise KiCadCliError("KiCad parity report collections are malformed")
+    schematic_parity = report.get("schematic_parity")
+    if not isinstance(schematic_parity, list) or len(schematic_parity) > _MAX_PARITY_FINDINGS:
+        raise KiCadCliError("KiCad parity collection is malformed")
+
+    parity_type_counts: Counter[str] = Counter()
+    for finding in schematic_parity:
+        if not isinstance(finding, dict):
+            raise KiCadCliError("KiCad parity finding is malformed")
+        finding_type = finding.get("type")
+        description = finding.get("description")
+        severity = finding.get("severity")
+        items = finding.get("items")
+        excluded = finding.get("excluded", False)
+        if not isinstance(finding_type, str) or not 1 <= len(finding_type) <= 128:
+            raise KiCadCliError("KiCad parity finding type is malformed")
+        if (
+            not isinstance(description, str)
+            or not isinstance(items, list)
+            or not all(isinstance(item, dict) for item in items)
+        ):
+            raise KiCadCliError("KiCad parity finding fields are malformed")
+        if severity not in _SEVERITIES:
+            raise KiCadCliError("KiCad parity finding severity is unsupported")
+        if not isinstance(excluded, bool):
+            raise KiCadCliError("KiCad parity finding exclusion is malformed")
+        if finding_type not in _PARITY_TYPES:
+            # An unreviewed parity type may carry semantics this contract has not considered.
+            raise KiCadCliError("KiCad parity report contains an unreviewed finding type")
+        if excluded:
+            raise KiCadCliError("KiCad parity findings cannot be excluded in a private snapshot")
+        parity_type_counts[finding_type] += 1
+
+    # ADR-0076's liveness invariant. Under a board-eligible, footprint-less projection every
+    # component must appear exactly once as either missing_footprint (absent from the board) or
+    # footprint_symbol_mismatch (present, but the symbol carries no footprint identifier). A sum
+    # of zero is what an unfetched netlist, a suppressed severity, or a board-excluded projection
+    # all look like -- and all three otherwise present as a clean pass.
+    accounted = (
+        parity_type_counts["missing_footprint"] + parity_type_counts["footprint_symbol_mismatch"]
+    )
+    if accounted != component_count:
+        raise KiCadCliError(
+            "KiCad parity oracle did not account for every component; the parity check did not run"
+        )
+
+    connectivity_finding_count = sum(
+        count for name, count in parity_type_counts.items() if name in PARITY_CONNECTIVITY_TYPES
+    )
+    projection_finding_count = sum(
+        count for name, count in parity_type_counts.items() if name in PARITY_PROJECTION_TYPES
+    )
+    return SourceToBoardParityEvidence(
+        intent_digest=intent_digest,
+        schematic_digest=schematic_digest,
+        parity_schematic_digest=parity_schematic_digest,
+        board_revision=board_revision,
+        kicad_version=kicad_version,
+        drc_schema=KICAD_DRC_SCHEMA,
+        coordinate_units="mm",
+        component_count=component_count,
+        connectivity_finding_count=connectivity_finding_count,
+        projection_finding_count=projection_finding_count,
+        parity_type_counts=dict(sorted(parity_type_counts.items())),
+        oracle_live="passed",
+        passed=connectivity_finding_count == 0,
+    )
+
+
+def run_source_to_board_parity(
+    requested_path: str,
+    projection: bytes,
+    *,
+    component_count: int,
+    intent_digest: str,
+    schematic_digest: str,
+    parity_schematic_digest: str,
+    settings: Settings,
+) -> SourceToBoardParityEvidence:
+    """Ask KiCad whether one workspace board implements one Circuit Intent's connectivity.
+
+    Unlike the ERC and netlist paths, this one *does* take a workspace board, because there is no
+    other way to have a board to compare against. The board is read through the bounded workspace
+    reader and copied, with the intent's board-eligible projection, into a private read-only
+    snapshot under a fixed basename -- which is the only mechanism KiCad offers for pairing them,
+    since ``JobExportDrc`` derives the schematic path by swapping the board's extension.
+
+    No project file is written. KiCad therefore applies compiled-in default severities, so no user
+    project can weaken this verdict -- and equally, the verdict is not necessarily what that user's
+    project would report.
+    """
+
+    if type(projection) is not bytes or not projection:
+        raise KiCadCliError("parity projection bytes are malformed")
+    if len(projection) > MAX_RENDERED_SCHEMATIC_BYTES:
+        raise KiCadCliError("parity projection exceeds the rendered byte ceiling")
+    if isinstance(component_count, bool) or not isinstance(component_count, int):
+        raise KiCadCliError("parity component count is malformed")
+    if component_count < 1:
+        raise KiCadCliError("source-to-board parity requires at least one component")
+    for name, digest in (
+        ("intent digest", intent_digest),
+        ("schematic digest", schematic_digest),
+        ("parity schematic digest", parity_schematic_digest),
+    ):
+        if not isinstance(digest, str) or not _SHA256_ID.fullmatch(digest):
+            raise KiCadCliError(f"parity {name} is malformed")
+    if _revision(projection) != parity_schematic_digest:
+        raise KiCadCliError("parity projection digest does not match the projection bytes")
+    if schematic_digest == parity_schematic_digest:
+        raise KiCadCliError("parity projection must differ from the delivered schematic")
+
+    board = read_workspace_file(
+        settings.workspace,
+        requested_path,
+        allowed_suffixes={".kicad_pcb"},
+        max_bytes=settings.max_board_bytes,
+    )
+    board_bytes = board.content
+    board_revision = _revision(board_bytes)
+
+    executable = discover_kicad_cli(settings)
+    if os.name != "posix":
+        raise KiCadCliError("bounded KiCad parity execution is unsupported on this platform")
+    python_executable = _validated_executable(Path(sys.executable))
+    bounded_exec = _BOUNDED_EXEC.resolve(strict=True)
+    if python_executable is None or not bounded_exec.is_file():
+        raise KiCadCliError("bounded KiCad parity execution helper is unavailable")
+
+    with tempfile.TemporaryDirectory(prefix="copper-mcp-parity-") as temporary_directory:
+        temporary_root = Path(temporary_directory)
+        try:
+            temporary_root.chmod(0o700)
+        except OSError as error:
+            raise KiCadCliError("private KiCad parity directory could not be secured") from error
+        snapshot_root = temporary_root / "parity"
+        board_path = snapshot_root / PARITY_BOARD_SNAPSHOT_NAME
+        schematic_path = snapshot_root / PARITY_SCHEMATIC_SNAPSHOT_NAME
+        try:
+            snapshot_root.mkdir(mode=0o700)
+            board_path.write_bytes(board_bytes)
+            schematic_path.write_bytes(projection)
+            _make_snapshot_read_only(snapshot_root)
+            snapshot_root = snapshot_root.resolve(strict=True)
+            board_path = board_path.resolve(strict=True)
+        except OSError as error:
+            raise KiCadCliError("private KiCad parity snapshot could not be written") from error
+        output_path = temporary_root / "parity.json"
+        private_state = temporary_root / "process-state"
+        try:
+            child_environment = _private_kicad_environment(private_state)
+        except OSError as error:
+            raise KiCadCliError("private KiCad process state could not be created") from error
+        kicad_command = [
+            str(executable),
+            "pcb",
+            "drc",
+            "--schematic-parity",
+            "--format",
+            "json",
+            "--units",
+            "mm",
+            "--severity-all",
+            "--output",
+            str(output_path),
+            str(board_path),
+        ]
+        command = [
+            str(python_executable),
+            "-I",
+            str(bounded_exec),
+            str(settings.max_drc_report_bytes),
+            *kicad_command,
+        ]
+        try:
+            completed = subprocess.run(  # noqa: S603
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                shell=False,
+                timeout=settings.kicad_timeout_seconds,
+                env=child_environment,
+                cwd=child_environment["TMPDIR"],
+            )
+        except subprocess.TimeoutExpired as error:
+            raise KiCadCliError("KiCad parity run timed out") from error
+        _validate_private_kicad_state(private_state, settings)
+        try:
+            _validate_snapshot_tree(
+                snapshot_root,
+                frozenset({PARITY_BOARD_SNAPSHOT_NAME, PARITY_SCHEMATIC_SNAPSHOT_NAME}),
+                settings,
+            )
+        except KiCadCliError as error:
+            raise KiCadCliError("private KiCad parity snapshot changed during the run") from error
+        if completed.returncode == -signal.SIGXFSZ:
+            raise KiCadCliError("KiCad parity output exceeds the configured limit")
+        try:
+            if board_path.read_bytes() != board_bytes:
+                raise KiCadCliError("KiCad parity run modified its own board input")
+            if schematic_path.read_bytes() != projection:
+                raise KiCadCliError("KiCad parity run modified its own projection input")
+        except OSError as error:
+            raise KiCadCliError("private KiCad parity inputs could not be re-read") from error
+        try:
+            report = read_workspace_file(
+                temporary_root,
+                output_path.name,
+                allowed_suffixes={".json"},
+                max_bytes=settings.max_drc_report_bytes,
+            ).content
+        except FileNotFoundError as error:
+            raise KiCadCliError("KiCad parity run did not create an output file") from error
+        except WorkspaceViolationError as error:
+            if isinstance(error.__cause__, FileNotFoundError):
+                raise KiCadCliError("KiCad parity run did not create an output file") from error
+            raise KiCadCliError("KiCad parity output exceeds the configured limit") from error
+
+    return _parse_parity_report(
+        report,
+        return_code=completed.returncode,
+        component_count=component_count,
+        intent_digest=intent_digest,
+        schematic_digest=schematic_digest,
+        parity_schematic_digest=parity_schematic_digest,
+        board_revision=board_revision,
+    )
 
 
 def run_route_candidate_drc(
