@@ -1,4 +1,4 @@
-# ADR-0076: Roundrect corner radii round up, by geometry role
+# ADR-0077: Roundrect corner radii round up, by geometry role
 
 - Status: Accepted
 - Date: 2026-08-06
@@ -92,7 +92,7 @@ published digest can change. The golden identity pins are unchanged.
 The safety argument rests on a property of the current code — that no obstacle model consults the
 corner radius — rather than on a general truth. Nothing in the type system enforces it. It is
 pinned by a test asserting the obstacle envelope is independent of the radius, and carried as
-R-117.
+R-118.
 
 The roundrect refusal is eliminated on all 5 boards that hit it. None of the 5 converts as a
 result: each has further, independent gaps — rotated courtyards and circle/arc courtyard

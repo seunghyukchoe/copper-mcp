@@ -87,7 +87,7 @@ board. The schema is the field-level reference.
   model over-approximates the pad by its full bounding box and never consults the radius at all.
   The largest such round-up on a board is reported as `ConversionResult.max_roundrect_rounding_nm`.
   A ratio outside `(0, 0.5]`, or one whose rounded-up radius would exceed half the short side, is
-  refused rather than clamped. See [ADR-0076](../adr/0076-roundrect-corner-radius-rounding.md).
+  refused rather than clamped. See [ADR-0077](../adr/0077-roundrect-corner-radius-rounding.md).
 - IDs use type prefixes such as `layer:`, `net:`, `class:`, `footprint:`, `pad:`, `via:`,
   `segment:`, `arc:`, `zone:`, `keepout:`, `contour:`, and `rule:`. IDs and display names have
   different roles.
@@ -155,7 +155,7 @@ contains a bounded machine-readable diagnostic and no snapshot.
 |---|---|
 | Board metadata | Exact KiCad PCB format version `20260206`, optional `generator`, ordered copper declarations `0/F.Cu`, contiguous even-numbered inner layers, then `B.Cu`, and a narrow setup-metadata allowlist with KiCad-default front/back via tenting. |
 | Nets | Quote-aware named item-level net references and legacy numeric root declarations; quoted numeric text remains a name while bare signed numeric tokens retain legacy net-code meaning. |
-| Outline | Exactly one `gr_rect` on `Edge.Cuts`; it becomes the single imported contour. |
+| Outline | Exactly one contour on `Edge.Cuts`, drawn either as one unfilled `gr_rect` or as `gr_line` segments that chain, by exact endpoint coincidence, into one closed simple loop. See [ADR-0077](../adr/0076-segment-assembled-edge-cuts-outline.md). |
 | Footprints/pads | Footprints on `F.Cu` or `B.Cu` with rotations in 90-degree increments, exact origin/side/lock/pad ownership, and optional unfilled `fp_rect`, orthogonal `fp_poly`, or closed orthogonal `fp_line` courtyard centerlines on the matching layer; `smd`, `thru_hole`, and `np_thru_hole` pads; circle, rect, oval, and roundrect shapes; round or oval drills; copper layer names, `*.Cu`, and `F&B.Cu`. |
 | Routed copper | Net-bound straight `segment` items, exact start/mid/end `arc` items, and through vias spanning the declared copper stack. |
 | Zones | Net-bound, single-copper-layer, solid zones with one polygon loop; explicit priority, thermal/through-hole-thermal/solid/none pad connection, always/never island removal, clearance, and conditionally required thermal dimensions. |
@@ -169,8 +169,8 @@ are deterministic from net names.
 
 The converter performs a version-specific semantic preflight. Root and footprint graphics on any
 copper layer are rejected. Footprint graphics on `Edge.Cuts` are also rejected, and the only accepted
-root `Edge.Cuts` primitive is the one unfilled rectangle. Non-routing documentation graphics may be
-ignored. Supported unfilled orthogonal courtyard centerlines are the exception: they become
+root `Edge.Cuts` primitives are one unfilled rectangle and straight `gr_line` segments.
+Non-routing documentation graphics may be ignored. Supported unfilled orthogonal courtyard centerlines are the exception: they become
 canonical board-frame rings. For the supported front/back footprint subset, KiCad's authored board-frame child
 coordinates are imported as written; the adapter does not apply a second mirror when a footprint
 is on `B.Cu`. `filled_polygon` data is treated as a derived KiCad fill cache: v0.2 records zone fill intent,
@@ -181,8 +181,12 @@ not cached fill geometry, fill freshness, or connectivity proof.
 The adapter fails closed on any unsupported construct required to represent the board faithfully,
 including:
 
-- `Edge.Cuts` lines, arcs, circles, polygons, curves, additional rectangles, and mixed/non-rectangular
-  outlines;
+- `Edge.Cuts` arcs, circles, polygons and curves; more than one outline contour, including a
+  rectangle drawn alongside a segment loop; and any segment set that is not exactly one closed
+  simple loop — an open contour, a near-miss gap KiCad's own chaining tolerance would close, a
+  branching spur, a duplicate or zero-length segment, a self-intersection, or two disjoint loops.
+  The outline is routing room, so it is never repaired into something larger than what was drawn;
+- `Edge.Cuts` outline holes;
 - root or footprint-local text/graphics on copper, and any footprint-local `Edge.Cuts` primitive;
 - footprint rotations not divisible by 90 degrees;
 - curved, diagonal, filled, open, branching, duplicate-edge, mixed-layer, or other unsupported

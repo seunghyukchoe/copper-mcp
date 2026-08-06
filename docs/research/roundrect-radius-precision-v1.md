@@ -1,7 +1,7 @@
 # KiCad roundrect corner radius and the fractional-nanometre residue
 
 Research date: 2026-08-06.  This note supports
-[ADR-0076](../adr/0076-roundrect-corner-radius-rounding.md) and the roundrect row of
+[ADR-0077](../adr/0077-roundrect-corner-radius-rounding.md) and the roundrect row of
 [issue #116](https://github.com/seunghyukchoe/copper-mcp/issues/116).  No external code is
 copied.  Source references are pinned to KiCad `master` at commit
 `bd56dda8fd857d2ac39004e74f2eb382f13675c2`; the padstack indirection described below arrived in

@@ -6,6 +6,19 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Board metadata that KiCad writes into essentially every real board no longer refuses the whole
+  document. `solder_mask_min_width` joins `pad_to_mask_clearance` as accepted setup metadata — it
+  bounds mask slivers, not copper — and `descr` and `tags`, the library documentation strings
+  copied into every placed footprint, are accepted as footprint metadata. Across the 23 real
+  boards this was found on, `descr` and `tags` appeared 2,518 times each, so their absence from
+  the allowlist refused nearly everything. `point`, which carries `at`/`size`/`layer` like the
+  `fp_*` primitives, now goes through the same layer-aware path instead of the metadata
+  allowlist, so a `point` on a routing layer is refused exactly as a stray `fp_line` is. The
+  allowlists stay closed: an unrecognised setup or footprint field is still a typed refusal, and
+  a regression pins that.
+
 ### Added
 
 - **The KiCad plugin is now a Plugin and Content Manager package, and installing it still grants
@@ -197,6 +210,32 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- **A board outline drawn with the line tool is now a board outline.** The adapter accepted exactly
+  one `Edge.Cuts` primitive — a single unfilled `gr_rect` — and refused everything else with
+  `unsupported.construct`. `gr_rect` is what KiCad writes for the *rectangle tool*; draw the same
+  outline with the line tool, or draw any shape that is not a rectangle, and you get `gr_line`
+  segments, which was most real boards and every non-rectangular one. Segments on `Edge.Cuts` now
+  chain into the single imported contour, verified against a real four-layer board whose four
+  segments assemble into its exact 159 × 150 mm rectangle. (#111)
+
+  **The direction of error inverts here, and that is the whole decision.** Every obstacle in this
+  project is *over*-approximated, because a larger obstacle only makes the router refuse more. The
+  board outline is routing **room**, so it may only be *under*-approximated: a modelled outline one
+  nanometre larger than the drawn one hands the router copper the fabricated board does not have.
+  Assembled from straight segments joined at *exactly* coincident endpoints, the ring's vertices are
+  the drawn endpoints and nothing is synthesized, so containment holds with equality.
+
+  Nothing is repaired. KiCad chains its own outline with a non-zero tolerance and will close a small
+  gap for you; a 10 µm near-miss — inside KiCad's own epsilon — is refused here instead, because
+  closing a gap adds board area no drawn segment encloses. A zero-length segment, a duplicate
+  segment, an open contour, a branching spur, two disjoint loops, and a self-intersection each refuse
+  with a typed code and are never guessed at, since every plausible repair invents board. Arcs,
+  circles, polygons and curves on `Edge.Cuts` stay refused with a diagnostic that now names the
+  curve: ADR-0072's conservative sagitta bound is an *upper* bound on an arc, which is right for an
+  obstacle and backwards for an outline, and a chord is inscribed only when the arc bulges away from
+  the board interior. Work stays bounded — the segment count and the quadratic simplicity test each
+  charge a declared budget. No schema, digest, or diagnostic code changes, and no golden identity
+  moves. ([ADR-0076](docs/adr/0076-segment-assembled-edge-cuts-outline.md), D-154, R-117)
 - **A roundrect corner radius is now rounded, not refused — and the direction is the opposite of
   the obvious one.** KiCad never stores a roundrect's radius. It stores a ten-significant-digit
   `roundrect_rratio` scaling the pad's *shorter* side, and recomputes
@@ -218,7 +257,7 @@ All notable changes are documented here. The format follows
   half the short side, and a ratio outside `(0, 0.5]`, are still refused rather than clamped. No
   content address moves. See
   [Roundrect radius precision](docs/research/roundrect-radius-precision-v1.md) for the derivation
-  and citations, ADR-0076, D-155, and R-117. (#116)
+  and citations, ADR-0077, D-156, and R-118. (#116)
 - **A stadium pad was being handed a disc's attachment core.** `_pad_cores` gives a round pad its
   largest inscribed square, because a disc's central rectangle degenerates to a bar that can seed
   no search — but it detected that case from the collapse alone, and a roundrect whose radius is
@@ -228,7 +267,7 @@ All notable changes are documented here. The format follows
   in, and reachable from any board where KiCad wrote a `roundrect_rratio` of 0.5. The inscribed
   square is now gated on the pad being a disc. Every roundrect in the core-containment
   parametrisation had a band with real height, so no fixture could have caught it; a stadium case
-  is added. (#116, R-117)
+  is added. (#116, R-118)
 - **A courtyard drawn as a ring is a ring, not a solid disc.** A footprint whose courtyard is an
   outer boundary plus an inner ring — a donut — was compared ring-by-ring as two independent solids,
   so a part legitimately placed in the hole was reported as a courtyard collision and the candidate
