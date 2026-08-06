@@ -38,7 +38,7 @@ All notable changes are documented here. The format follows
   transcribed, and the in-archive copy is deliberately a different document — exactly one version,
   no `download_sha256` — because KiCad's submission CI cross-checks the two. Submission to the
   official repository stays a human step, prepared as a checklist in the plugin README. (#98,
-  D-152, SEC-121)
+  D-154, SEC-121)
 - **A `requirements.txt` that must exist and must install nothing.** KiCad marks a Python IPC
   plugin *ready* only after pip exits 0 against that file, and skips unready plugins in both
   `GetActionsForScope` and `InvokeAction` — so a plugin shipped without it installs, discovers,
@@ -80,7 +80,7 @@ All notable changes are documented here. The format follows
   what it does not prove — it tests CopperMCP's refusals and not a model's behaviour, an in-process
   caller can construct anything, and a passing catalog is coverage rather than absence. Four
   discriminator tests deliberately break a boundary and require the harness to record a failure,
-  because a suite that cannot fail is not evidence. (D-152, SEC-121, B-089, #69)
+  because a suite that cannot fail is not evidence. (D-156, SEC-122, B-090, #69)
 - **CopperMCP now has a routing benchmark on boards it did not author, and the first honest number
   from it is 59.83%.** A benchmark-only import seam converts tscircuit SimpleRouteJson problems
   into ordinary verified Board IR snapshots and ordinary route requests, so an external corpus
@@ -256,6 +256,39 @@ All notable changes are documented here. The format follows
   obstacle and backwards for an outline, and a chord is inscribed only when the arc bulges away from
   the board interior. Work stays bounded — the segment count and the quadratic simplicity test each
   charge a declared budget. No schema, digest, or diagnostic code changes, and no golden identity
+  moves. ([ADR-0076](docs/adr/0076-segment-assembled-edge-cuts-outline.md), D-155, R-117)
+- **A roundrect corner radius is now rounded, not refused — and the direction is the opposite of
+  the obvious one.** KiCad never stores a roundrect's radius. It stores a ten-significant-digit
+  `roundrect_rratio` scaling the pad's *shorter* side, and recomputes
+  `KiROUND(ratio * min(size.x, size.y))` on every read, so an ordinary ratio on an ordinary pad
+  lands on a fractional nanometre — 0.203125 of a 650,000 nm side is 132,031.25 nm. The adapter
+  refused that as `roundrect radius is not an exact nanometre`, which was fail-closed and honest
+  but was the **first refusal on 5 of 23 real boards** for a sub-nanometre encoding artifact. Across
+  that tree, 592 of 4,537 roundrect pads carry a fractional radius and the worst residue is 0.80 nm.
+  The radius now rounds **up**, and the reason is not that a pad is copper: a larger radius means
+  *more* corner rounding and therefore a *smaller* pad, so rounding the copper outward and rounding
+  the radius up are opposite instructions. The roles settle it instead, and do not conflict, because
+  only one reads the value — every obstacle model over-approximates a pad by its full bounding box
+  and discards the corner rounding, while the radius is consumed only by the under-approximating
+  attachment core, which a larger radius shrinks. Rounding up is safe under both candidate
+  references without choosing between them, since `ceil(x)` is at least the exact radius *and* at
+  least the integer radius KiCad itself derives. The amount is recorded as
+  `ConversionResult.max_roundrect_rounding_nm` rather than hidden, and deliberately not as a
+  diagnostic, because every caller treats a diagnostic as a refusal. A radius that rounds up past
+  half the short side, and a ratio outside `(0, 0.5]`, are still refused rather than clamped. No
+  content address moves. See
+  [Roundrect radius precision](docs/research/roundrect-radius-precision-v1.md) for the derivation
+  and citations, ADR-0077, D-157, and R-118. (#116)
+- **A stadium pad was being handed a disc's attachment core.** `_pad_cores` gives a round pad its
+  largest inscribed square, because a disc's central rectangle degenerates to a bar that can seed
+  no search — but it detected that case from the collapse alone, and a roundrect whose radius is
+  exactly half its shorter side is a stadium and collapses identically. A 2.0 x 1.0 mm stadium was
+  therefore given a core reaching 1.0 mm from its centre in y, where its copper stops at 0.5 mm:
+  an attachment core claiming copper that is not there, which is the one direction it may never err
+  in, and reachable from any board where KiCad wrote a `roundrect_rratio` of 0.5. The inscribed
+  square is now gated on the pad being a disc. Every roundrect in the core-containment
+  parametrisation had a band with real height, so no fixture could have caught it; a stadium case
+  is added. (#116, R-118)
   moves. ([ADR-0079](docs/adr/0076-segment-assembled-edge-cuts-outline.md), D-154, R-117)
 
 - **A courtyard drawn as a ring is a ring, not a solid disc.** A footprint whose courtyard is an
