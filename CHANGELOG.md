@@ -8,6 +8,54 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **CopperMCP now has a routing benchmark on boards it did not author, and the first honest number
+  from it is 59.83%.** A benchmark-only import seam converts tscircuit SimpleRouteJson problems
+  into ordinary verified Board IR snapshots and ordinary route requests, so an external corpus
+  meets the same canonical verification, clearance model, and typed refusals as a KiCad board. It
+  is not an MCP tool and changes no public contract: it lives in a `copper_mcp.benchmarks`
+  subpackage that only `scripts/` and `tests/` import. One invariant governs every mapping — each
+  imported copper rectangle contains the source shape. A `rect` obstacle maps to its own extent; an
+  `oval` blocks as its bounding box while staying an oval pad so its attachment core stays
+  inscribed; an obstacle naming a layer the declared stack does not contain blocks the *whole*
+  stack rather than being dropped; the board outline alone rounds inward, because outline is
+  routing room and growing it would hand the router area the document never granted. Millimetres
+  are read as literal JSON tokens — never as floats — and converted through `decimal.Decimal` at
+  1,000,000 nm/mm, identically to `board_ir.mm_to_nm` for any token with at most six fractional
+  digits. The 527 sub-nanometre tokens in the corpus (`2.9000000000000004` and friends, IEEE-754
+  residue from the JavaScript pipeline that wrote them) are resolved by direction rather than by
+  rounding to nearest, so the largest movement any edge makes is one nanometre and the harness
+  records the observed maximum instead of asserting it. Anything unrepresentable — an unknown
+  obstacle type, a non-finite number, a connection point no obstacle anchors, an obstacle two nets
+  both claim — refuses the whole document with a typed code; no element is ever silently dropped.
+  (#96)
+- **A versioned benchmark harness that reports its refusals as the result.**
+  `scripts/benchmark_simple_route_json_corpus.py` routes every imported net of a licensed corpus
+  and records boards imported, nets attempted and routed, the outcome breakdown by exact
+  `RouteFailureCode`, wire length against a *provable* lower bound, vias, bends, and wall time,
+  into a self-digesting artifact under `benchmarks/results/routing/`. Every attempted net is
+  accounted for by exactly one outcome and a test asserts the breakdown sums to the denominator, so
+  a success rate can never be computed over a quietly shortened sample — the failure mode the
+  upstream tscircuit harness shipped by default. On the committed 20-board subset: 70 of 117 nets
+  routed, 1.1711× the lower bound, 0 vias, and **every two-pin net refused**, because the reference
+  A* two-pin path requires the pad-centre delta to divide by the lattice step and external
+  coordinates do not oblige. Running the corpus a second time under a per-net divisor-aligned grid
+  step converts those `off_grid` refusals into `grid_budget_exceeded` ones and routes no additional
+  net, which localises the constraint to the lattice-node budget rather than to grid alignment —
+  a finding that either configuration alone would have hidden. FreeRouting is not installed in the
+  recording environment and no bridge to it exists, so the baseline comparison is recorded as
+  `not_run` rather than estimated; the cross-router comparison remains unmeasured. (#65)
+- **The first externally licensed corpus in the tree, with the licence checked before the bytes.**
+  20 of the 36 MIT-licensed SimpleRouteJson boards from `dwiel/tscircuit-benchmark` ship under
+  `benchmarks/corpora/`, with the upstream `LICENSE`, an attribution file, and SHA-256 recorded for
+  all 36 so a fetched remainder verifies against the same manifest; `scripts/fetch_simple_route_json_corpus.py`
+  retrieves the rest from the pinned commit. The committed subset is the first 20 filenames in
+  upstream lexical order — a rule fixed before the run, not a selection on results — and it is the
+  easier half of an already-narrow corpus. `tscircuit/autorouting` has no licence of any kind and
+  is archived, so nothing from it is redistributed and only its format specification is cited;
+  PCBWorld's real-board split retains heterogeneous upstream licences and has no public host yet.
+  The boards themselves are LLM-generated and were routed with FreeRouting during their
+  construction, so they are neither human-designed hardware nor a neutral yardstick for
+  FreeRouting, and the attribution file says so next to the data. (#65, #96)
 - **The bounded ordered-layer router can use freshness-verified zone fill instead of writing off a
   whole layer.** `LayeredRouteRequest` gained an optional `verified_fill` tuple carrying the same
   `VerifiedFill` value the single-layer core has accepted since ADR-0039, so one caller-side

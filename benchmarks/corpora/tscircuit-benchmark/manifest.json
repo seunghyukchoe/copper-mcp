@@ -1,0 +1,239 @@
+{
+  "attribution_required": true,
+  "commercial_use_allowed": true,
+  "committed_subset_rule": "the first 20 sample filenames in upstream lexical order",
+  "committed_subset_size": 20,
+  "copyright_holder": "Zach Dwiel",
+  "corpus_id": "tscircuit-benchmark",
+  "files": [
+    {
+      "bytes": 3359,
+      "committed": true,
+      "name": "ts01_led.json",
+      "sha256": "82de1250c881da992b4df7356b38a51afe7962f8ef7c45afc9deb0de9c712db1"
+    },
+    {
+      "bytes": 5122,
+      "committed": true,
+      "name": "ts02_voltage_divider.json",
+      "sha256": "fed0121c186d732ce20bfd0065a17be35f5a9a7d82042d57f022a147f018fe22"
+    },
+    {
+      "bytes": 5122,
+      "committed": true,
+      "name": "ts03_rc_filter.json",
+      "sha256": "f5597407c8b506a3bbb1dd53e7908995373c6f76ce7e9828b59867a02f1d79c9"
+    },
+    {
+      "bytes": 8298,
+      "committed": true,
+      "name": "ts04_dual_led.json",
+      "sha256": "777bccf69ee7d16d0b3da1c90841cf4589d7904e2d5ef38e0e82c139c6d6016d"
+    },
+    {
+      "bytes": 7334,
+      "committed": true,
+      "name": "ts05_npn_switch.json",
+      "sha256": "fe84c51a53238d12654a649f50bcad91da38962be439cdab90bf14429d25ad4e"
+    },
+    {
+      "bytes": 13425,
+      "committed": true,
+      "name": "ts06_push_pull.json",
+      "sha256": "1cd6bfc5227e0fff4166305b463215deb447d332b43644443391c60fc59d116d"
+    },
+    {
+      "bytes": 16699,
+      "committed": true,
+      "name": "ts07_differential_pair.json",
+      "sha256": "59df862d485b8857e101cfc5ee6ffb57b4b1d773a91d20e2917d13dba4438c04"
+    },
+    {
+      "bytes": 18573,
+      "committed": true,
+      "name": "ts08_inverting_amp.json",
+      "sha256": "203cbc6c93620a84a9211250653eefe3fc6fdf730a1b385d199b454d8524e1a4"
+    },
+    {
+      "bytes": 21683,
+      "committed": true,
+      "name": "ts09_active_filter.json",
+      "sha256": "98bd691ef17f4d9938b770842af9f689d9f61e737de66aac23a73e3c6ed98a93"
+    },
+    {
+      "bytes": 11339,
+      "committed": true,
+      "name": "ts10_wheatstone_bridge.json",
+      "sha256": "ec66069bcc93e7f23912c2ef484f78f34e300922c952011422d8a4c422bdf9c8"
+    },
+    {
+      "bytes": 62705,
+      "committed": true,
+      "name": "ts11_generated.json",
+      "sha256": "cf3a4d551e9407809163c4c68645ddd0c262e6e2dc06a36a73e35292e5bd12d3"
+    },
+    {
+      "bytes": 27863,
+      "committed": true,
+      "name": "ts12_generated.json",
+      "sha256": "463a0fa657d898b651e5bbd60c5e75dcbc3919b292ea4be270960d003f22b7c6"
+    },
+    {
+      "bytes": 22822,
+      "committed": true,
+      "name": "ts13_555_blinker.json",
+      "sha256": "db32b0e87b1cd2c81d85bc8c2e9a0e8cf4a80adc57c630d79bb03e2e268e4313"
+    },
+    {
+      "bytes": 58598,
+      "committed": true,
+      "name": "ts14_usb_power.json",
+      "sha256": "f0238a8e5ad50a9e8ac445f7d8453e344f3900853c4e26b679a7415a22233fbe"
+    },
+    {
+      "bytes": 25181,
+      "committed": true,
+      "name": "ts15_i2c_sensor.json",
+      "sha256": "c0f1281931e18798dcd938a03d56444385619ddc7a7931fd382b140ca765bdd6"
+    },
+    {
+      "bytes": 20287,
+      "committed": true,
+      "name": "ts16_h_bridge.json",
+      "sha256": "16354c08f72034b552ef3c432922c98c909571fb1ba13c675867025fb904b45d"
+    },
+    {
+      "bytes": 22880,
+      "committed": true,
+      "name": "ts17_attiny_minimal.json",
+      "sha256": "397d16aea8572fd81cc6e0d969f7aed882835823532182e0d4b51b02fe3c2f35"
+    },
+    {
+      "bytes": 61703,
+      "committed": true,
+      "name": "ts18_dual_reg.json",
+      "sha256": "b21648856f604934592c3e42d3adc274780f57eb7ac9e7e2118f491751a6b2e9"
+    },
+    {
+      "bytes": 35269,
+      "committed": true,
+      "name": "ts19_adc_breakout.json",
+      "sha256": "16b73b6de39a4662ddd348fa8cc7d5b56820582fc85387b2adf14ae57bb87600"
+    },
+    {
+      "bytes": 126494,
+      "committed": true,
+      "name": "ts20_esp32_wifi.json",
+      "sha256": "94d1251ee0e7f4812ab2b58b46f5e6bf81a90b49aa0b225aff0ce84b0bac2fe0"
+    },
+    {
+      "bytes": 19830,
+      "committed": false,
+      "name": "ts21_current_sensor.json",
+      "sha256": "51d3d1d82ef4f1f6b45810581b6b96ae92c33d83c937600a88b1f489624af221"
+    },
+    {
+      "bytes": 16267,
+      "committed": false,
+      "name": "ts22_rs485.json",
+      "sha256": "b12f1c1fc46c328f4d987646088eeb6caf81f8277b9cee58e0af7e877cfe2d02"
+    },
+    {
+      "bytes": 31300,
+      "committed": false,
+      "name": "ts23_lipo_charger.json",
+      "sha256": "c007f55f573d4f90d30bd90e9c75fd59f427c298fc6b7960b760077c0e165615"
+    },
+    {
+      "bytes": 28242,
+      "committed": false,
+      "name": "ts24_dac_output.json",
+      "sha256": "e300d9a56bb659e9dcc3f5cf6085494f5a7f6aa6b774d3f48d7476ac3bef5092"
+    },
+    {
+      "bytes": 54852,
+      "committed": false,
+      "name": "ts25_level_shifter.json",
+      "sha256": "c6f36c79e6ac695fe89c7ce133691c898e80acc9ad4076d6a45f6dfd5201bd29"
+    },
+    {
+      "bytes": 26840,
+      "committed": false,
+      "name": "ts26_eeprom.json",
+      "sha256": "33733ca8c72e98ed377a806769c2754efd7367b1d05e7d102ae02d0bb39e372e"
+    },
+    {
+      "bytes": 23895,
+      "committed": false,
+      "name": "ts27_rtc.json",
+      "sha256": "d398a98cadd59fb61b8583e26e1ca82f608ee83aa748a663b905163e61366123"
+    },
+    {
+      "bytes": 28734,
+      "committed": false,
+      "name": "ts28_boost.json",
+      "sha256": "4a7117514e4b15b57535708f62176645dd1d29d3eaf7c1e2bbe49f9067ad4267"
+    },
+    {
+      "bytes": 6074,
+      "committed": false,
+      "name": "ts29_comparator.json",
+      "sha256": "cbd4abff94cd804ffd89293ca4410fd12d21a045a40438360ee17615feca4d9b"
+    },
+    {
+      "bytes": 17783,
+      "committed": false,
+      "name": "ts30_can.json",
+      "sha256": "116eb0455a204306deb23355ed7432ad8ea7ee1efe3a971db53d1c41a3f69925"
+    },
+    {
+      "bytes": 68022,
+      "committed": false,
+      "name": "ts31_motor_driver.json",
+      "sha256": "a399c80940e5dcd9455e9b82be7329989a2f3b96276453415c7d5738a060b41e"
+    },
+    {
+      "bytes": 104487,
+      "committed": false,
+      "name": "ts32_usb_pd_trigger.json",
+      "sha256": "f3c4c47718d249a67059e1b27692b6ade97b244db045f7653d333d92cdd9c1ba"
+    },
+    {
+      "bytes": 144397,
+      "committed": false,
+      "name": "ts33_risc_v_dev.json",
+      "sha256": "9af26e83f46610db3c12cd7361946f9dc8de4f42d40631a296e1e8a5f9f68407"
+    },
+    {
+      "bytes": 219168,
+      "committed": false,
+      "name": "ts34_usb_can.json",
+      "sha256": "a6be1ce30ff6c6c387778c9e2583aef4df57baa9eb6bc27cd98adaf110df4fe3"
+    },
+    {
+      "bytes": 27449,
+      "committed": false,
+      "name": "ts35_thermocouple.json",
+      "sha256": "47d562beff03f6e117280665d0ac679f175cdbcd80e9d60d904412d233421fb2"
+    },
+    {
+      "bytes": 107660,
+      "committed": false,
+      "name": "ts36_esc.json",
+      "sha256": "11e5eed93960753b31b3431eee94a864f50e22c77f635e94ef46f34ce3dbb622"
+    }
+  ],
+  "format": "tscircuit-simple-route-json",
+  "license_file": "LICENSE",
+  "license_sha256": "5e1e61463320a61ebac4a326a3c6ea5608280c75e5b95c6931497e3a14ebb632",
+  "license_spdx": "MIT",
+  "license_url": "https://github.com/dwiel/tscircuit-benchmark/blob/master/LICENSE",
+  "redistribution_allowed": true,
+  "reviewed_on": "2026-08-06",
+  "schema": "copper-mcp/benchmark-corpus/v1",
+  "upstream_commit": "be36518b5bf51755dae92c230061ab3cf4e3e063",
+  "upstream_default_branch": "master",
+  "upstream_path": "samples",
+  "upstream_repository": "https://github.com/dwiel/tscircuit-benchmark",
+  "upstream_sample_count": 36
+}

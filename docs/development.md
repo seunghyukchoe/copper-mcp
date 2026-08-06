@@ -142,6 +142,35 @@ It does not invoke KiCad, perform authoritative DRC, establish production throug
 CopperMCP with another router. Generate recorded evidence to a path outside the repository so the
 embedded Git dirty-state check remains meaningful, then append the reviewed result and ledger entry.
 
+Run the external-corpus routing benchmark from the repository root:
+
+```bash
+make PYTHON=.venv/bin/python benchmark-external-corpus
+```
+
+This imports the committed MIT-licensed SimpleRouteJson corpus through the benchmark-only seam in
+`copper_mcp.benchmarks` and routes every imported net with the existing single-layer router. It is
+offline: it reads only files already in the tree and verifies each against
+`benchmarks/corpora/tscircuit-benchmark/manifest.json` before importing it. The report records the
+outcome of *every* attempted net under its exact `RouteFailureCode`, so the refusal breakdown is
+part of the result rather than an error path, and a baseline that is not installed is recorded as
+`not_run` rather than estimated. It does not invoke KiCad, apply copper, or compare CopperMCP with
+another router. See [B-087](ledgers/benchmark-ledger.md) and the
+[research note](research/open-baseline-benchmarks-v1.md) for the licensing determination and the
+limits on what a number from this corpus can claim.
+
+### Adding an external corpus
+
+1. **Check the licence first**, before any file is committed, and record the determination with the
+   URLs it came from in a dated research note.
+2. If redistribution is permitted, commit the upstream `LICENSE`, an `ATTRIBUTION.md`, a
+   `manifest.json` with a SHA-256 for every upstream file, and a subset chosen by a rule fixed in
+   advance. If it is not, commit the manifest and a fetch script and nothing else.
+3. Record the corpus's provenance limits — whether the boards are human-designed, and whether any
+   router was in the loop when they were built — next to the data.
+4. Route it through Board IR and the existing typed refusals. An import path that special-cases the
+   corpus is measuring the harness, not the router.
+
 ## Adding a public contract
 
 1. Open an RFC issue.

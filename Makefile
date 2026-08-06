@@ -1,7 +1,8 @@
 PYTHON ?= python3
 
 .PHONY: install install-dev test lint format typecheck security build check \
-	check-audio-benchmarks check-circuit-intents benchmark-audio benchmark-routing clean
+	check-audio-benchmarks check-circuit-intents benchmark-audio benchmark-routing \
+	benchmark-external-corpus clean
 
 install:
 	$(PYTHON) -m pip install -e .
@@ -39,6 +40,11 @@ check: lint typecheck test security build
 
 benchmark-routing:
 	PYTHONPATH=src $(PYTHON) scripts/benchmark_routing.py --iterations 7 --warmups 2
+
+# Routes the committed MIT-licensed SimpleRouteJson corpus. Offline: it reads only files already
+# in the tree and verifies each against the digest manifest before routing.
+benchmark-external-corpus:
+	PYTHONPATH=src $(PYTHON) scripts/benchmark_simple_route_json_corpus.py --repetitions 2
 
 check-audio-benchmarks:
 	$(PYTHON) scripts/check_audio_benchmarks.py
