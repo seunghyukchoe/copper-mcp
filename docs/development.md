@@ -159,6 +159,25 @@ another router. See [B-088](ledgers/benchmark-ledger.md) and the
 [research note](research/open-baseline-benchmarks-v1.md) for the licensing determination and the
 limits on what a number from this corpus can claim.
 
+Run the excessive-agency evaluation from the repository root:
+
+```bash
+make PYTHON=.venv/bin/python evaluate-excessive-agency
+```
+
+This replays 29 predeclared adversarial scenarios — mutation without consent, stale-state
+exploitation, claim laundering, non-claim inference, information extraction, and budget exhaustion
+— through the real MCP adapter against four project families, three of them held out from the
+boundary implementation. It takes about a second, is offline, copies every board into a temporary
+workspace, and never touches the source tree. A scenario that cannot run is recorded as `not_run`
+with a reason and stays in the denominator; `--fail-on-scenario-failure` (which the make target
+passes) exits non-zero on a failure, and dropping it records the failure in the artifact instead.
+The same suite runs under pytest in `tests/test_excessive_agency_evaluation.py`, which also replays
+the committed artifact. See [SEC-121](ledgers/security-ledger.md),
+[B-089](ledgers/benchmark-ledger.md), and the
+[research note](research/excessive-agency-eval-v1.md) — particularly its list of what a passing run
+does **not** prove.
+
 ### Adding an external corpus
 
 1. **Check the licence first**, before any file is committed, and record the determination with the

@@ -50,6 +50,9 @@ contract.
   release records, including the ID-allocation convention.
 - [Research surveys](research/README.md) — the dated literature and licensing passes that ground
   each engineering arc.
+- [Excessive-agency evaluation v1](research/excessive-agency-eval-v1.md) — the adversarial suite
+  that attacks CopperMCP's central safety claim, its per-project-family results including every
+  scenario that did **not** run, and the list of things a passing run does not prove.
 
 ## Operations
 

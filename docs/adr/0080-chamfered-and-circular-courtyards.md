@@ -1,4 +1,4 @@
-# ADR-0077: Bracket chamfered and circular courtyards instead of widening them
+# ADR-0080: Bracket chamfered and circular courtyards instead of widening them
 
 - Status: Accepted
 - Date: 2026-08-06
