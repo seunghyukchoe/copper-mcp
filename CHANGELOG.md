@@ -8,6 +8,36 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **Live editor mutation now has a consent model, a capability, and every precondition it needs —
+  and still refuses to mutate.** `apply_live_candidate` checks, in order, the operator opt-in, a
+  live-scoped single-use token, the KiCad session, the board serialization, the converted Board IR
+  snapshot, and the candidate's own identity and geometry replayed against the board the editor is
+  holding right now — then answers `capability_not_implemented` from the exact point at which
+  `begin_commit` would be called. Every other refusal is reachable and typed, and
+  `preconditions_verified` names only the checks that actually ran, so an absent name is never
+  readable as a passing one. The mutation is deferred to a slice that has been through adversarial
+  review; a tool that sometimes changes a board and cannot say whether it did is not shippable.
+
+  Enabling it requires **both** `COPPER_MCP_ALLOW_LIVE_APPLY=1` and `COPPER_MCP_ALLOW_LIVE_IPC=1`,
+  read with the same exact `{"0", "1"}` membership rule as the existing flags. It is deliberately a
+  third flag rather than the conjunction of the two you already have: ADR-0069 recorded that the
+  live opt-in "enables observation only", so reading `ALLOW_APPLY ∧ ALLOW_LIVE_IPC` as consent to
+  mutate a running editor would retroactively widen two grants that were made for other things.
+  `COPPER_MCP_ALLOW_APPLY` is equally deliberately **not** required — demanding it would force an
+  operator who wants live mutation and no file mutation to enable file mutation to get it.
+
+  `preview_live_layered_route` gains `include_apply_token`; the layered preview response gains an
+  `apply_token` field that is `null` on every refusal and on the file-backed surface. A live
+  capability binds the candidate, the board revision, the converted snapshot **and** the editor
+  session under a separate HMAC domain from file apply, so a file token can never authorize the
+  live surface and a token cannot survive a KiCad restart.
+
+  The [research](docs/research/ipc-apply-v1.md) behind this is the reason the mutation waits.
+  KiCad's IPC API has no revision, dirty flag, or conditional write, so a live compare-and-swap
+  narrows the window between check and write without closing it; `kipy` discards the per-item
+  status the wire protocol returns, so a push that returns is no evidence its items landed; and a
+  user undo during an open commit, a concurrent API client, and a commit orphaned by a client crash
+  are undetectable. Those are recorded as a risk, not mitigated away. (#68)
 - **An agent-facing usage contract, maintained as a tested document.** `docs/agents.md` states what
   the usage guide and the MCP API contract deliberately do not: given what a tool just returned,
   what an agent should *do next*. It carries a tool-by-tool table of all 26 registered MCP tools

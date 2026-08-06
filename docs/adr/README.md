@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0073**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0074**.
 1. Copy [`template.md`](template.md) and assign the next unused number — currently **0071**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
@@ -120,6 +120,7 @@ never silently widens it.
 | [0070](0070-layered-fill-aware-obstacles.md) | Shrink a layered zone envelope only against proved fill | Accepted |
 | [0071](0071-authoritative-schematic-erc.md) | Authoritative KiCad schematic ERC and generated-schematic round trip | Accepted |
 | [0072](0072-conservative-arc-track-envelopes.md) | Model foreign arc tracks as conservative integer envelopes rather than refusing the board | Accepted |
+| [0073](0073-live-ipc-one-undo-commit-apply.md) | Gate live editor mutation on its own consent, and ship its preconditions before it | Accepted |
 
 Seventy-two numbers, seventy-one records, no duplicates — and `scripts/check_adr_numbers.py` now
 proves that last clause on every run rather than asserting it. Only 0027 is unused; see
@@ -195,3 +196,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0070: Shrink a layered zone envelope only against proved fill](0070-layered-fill-aware-obstacles.md)
 - [ADR-0071: Authoritative KiCad schematic ERC and generated-schematic round trip](0071-authoritative-schematic-erc.md)
 - [ADR-0072: Conservative integer envelopes for foreign arc tracks](0072-conservative-arc-track-envelopes.md)
+- [ADR-0073: Gate live editor mutation on its own consent, and ship its preconditions before it](0073-live-ipc-one-undo-commit-apply.md)

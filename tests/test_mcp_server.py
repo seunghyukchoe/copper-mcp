@@ -88,6 +88,7 @@ class McpServerTests(unittest.TestCase):
             {tool.name for tool in tools},
             {
                 "apply_candidate",
+                "apply_live_candidate",
                 "apply_placement_candidate",
                 "compare_candidates",
                 "inspect_board",

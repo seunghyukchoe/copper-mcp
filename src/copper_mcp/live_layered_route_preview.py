@@ -20,6 +20,7 @@ from dataclasses import replace
 from typing import Any
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
+from copper_mcp.apply.tokens import ApplyTokenAuthority, LiveApplyBinding
 from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
 from copper_mcp.kicad_ipc import _is_session_revision, capture_live_board
@@ -55,6 +56,9 @@ def parse_live_layered_route_preview_request(payload: Any) -> LayeredRoutePrevie
         raise LayeredRoutePreviewError("live layered preview requests must set board to 'live'")
     normalized = dict(fields)
     session_revision = normalized.pop("expect_session_revision", None)
+    include_apply_token = normalized.pop("include_apply_token", False)
+    if not isinstance(include_apply_token, bool):
+        raise LayeredRoutePreviewError("include_apply_token must be a boolean")
     if normalized.get("include_drc", False) is True:
         raise LayeredRoutePreviewError(
             "live layered route proposals cannot request authoritative DRC"
@@ -67,12 +71,17 @@ def parse_live_layered_route_preview_request(payload: Any) -> LayeredRoutePrevie
         raise LayeredRoutePreviewError(
             "expect_session_revision must be a pbkdf2-hmac-sha256 session revision"
         )
-    return replace(request, expect_session_revision=session_revision)
+    return replace(
+        request,
+        expect_session_revision=session_revision,
+        include_apply_token=include_apply_token,
+    )
 
 
 def preview_live_layered_route(
     payload: Any,
     settings: Settings,
+    token_authority: ApplyTokenAuthority | None = None,
     *,
     client_factory: Any = None,
 ) -> dict[str, object]:
@@ -82,6 +91,13 @@ def preview_live_layered_route(
     rejected before conversion; a stale converted snapshot is rejected before routing.  The
     only successful output is a detached candidate document suitable for inspection or a later
     explicitly-authorized operation by another API surface.
+
+    ``include_apply_token`` mints one live-scoped, single-use capability for exactly this
+    candidate, board revision, converted snapshot, and editor session -- and only for a
+    ``routed`` result, only when the operator opted in to live apply, and only when an authority
+    was supplied.  Minting a capability for a proposal the apply surface would refuse is how an
+    unreachable destructive path got exercised once before (ADR-0025), so the three conditions
+    are checked together and the field stays ``null`` if any of them fails.
     """
 
     if not isinstance(settings, Settings):
@@ -237,13 +253,29 @@ def preview_live_layered_route(
         cancelled=lambda: time.monotonic() >= deadline,
     )
     if result.candidate is not None:
+        candidate_document = _candidate_document(result.candidate)
+        apply_token: str | None = None
+        if (
+            request.include_apply_token
+            and settings.allow_live_apply
+            and token_authority is not None
+        ):
+            apply_token = token_authority.issue(
+                LiveApplyBinding(
+                    candidate_id=result.candidate.candidate_id,
+                    base_revision=snapshot.snapshot_digest,
+                    board_revision=board_revision,
+                    session_revision=expected_session_revision,
+                )
+            )
         return _empty_result(
             "routed",
             request,
             "live",
             board_revision,
             snapshot_digest=snapshot.snapshot_digest,
-            candidate=_candidate_document(result.candidate),
+            candidate=candidate_document,
+            apply_token=apply_token,
         )
 
     assert result.diagnostic is not None

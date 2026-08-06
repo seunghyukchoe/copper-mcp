@@ -37,6 +37,7 @@ from copper_mcp.kicad_cli import run_board_drc as run_kicad_board_drc
 from copper_mcp.kicad_file import inspect_kicad_board
 from copper_mcp.kicad_ipc import inspect_live_board as inspect_live_kicad_board
 from copper_mcp.layered_route_preview import preview_layered_route as preview_layered_route_service
+from copper_mcp.live_apply import apply_live_candidate as apply_live_candidate_service
 from copper_mcp.live_editor_context import (
     LiveEditorContext,
 )
@@ -238,6 +239,7 @@ def preview_layered_route(
 def preview_live_layered_route_raw(
     payload: dict[str, Any],
     settings: Settings | None = None,
+    token_authority: Any = None,
     *,
     client_factory: Any = None,
 ) -> dict[str, object]:
@@ -247,16 +249,19 @@ def preview_live_layered_route_raw(
     return preview_live_layered_route_service(
         payload,
         active_settings,
+        token_authority,
         client_factory=client_factory,
     )
 
 
 def preview_live_layered_route(
-    payload: dict[str, Any], settings: Settings | None = None
+    payload: dict[str, Any],
+    settings: Settings | None = None,
+    token_authority: Any = None,
 ) -> dict[str, object]:
     """Return a detached read-only live layered route proposal."""
 
-    return preview_live_layered_route_raw(payload, settings)
+    return preview_live_layered_route_raw(payload, settings, token_authority)
 
 
 def observe_board_scene_raw(
@@ -354,6 +359,24 @@ def apply_candidate(
 
     active_settings = settings or Settings.from_env()
     return apply_candidate_service(payload, active_settings, token_authority).to_dict()
+
+
+def apply_live_candidate(
+    payload: dict[str, Any],
+    settings: Settings | None = None,
+    token_authority: Any = None,
+    *,
+    client_factory: Any = None,
+) -> dict[str, object]:
+    """Verify every live one-undo-commit apply precondition, then refuse to mutate."""
+
+    active_settings = settings or Settings.from_env()
+    return apply_live_candidate_service(
+        payload,
+        active_settings,
+        token_authority,
+        client_factory=client_factory,
+    )
 
 
 def apply_placement_candidate(

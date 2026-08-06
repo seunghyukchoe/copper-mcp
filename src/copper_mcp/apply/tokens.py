@@ -37,6 +37,11 @@ from dataclasses import dataclass
 #: Domain separation, so a MAC minted here can never be confused with one from another
 #: derivation in this project. Bump the suffix if the payload layout ever changes.
 _DOMAIN = b"copper-mcp/apply-token/v1"
+#: A *separate* domain for capabilities that target a running editor rather than a file. Domain
+#: separation, not a field value, is what stops a file-apply token from ever verifying against
+#: the live surface: the two payloads are prefixed differently, so no arrangement of field
+#: values can make one hash to the other even if every field it shares were identical.
+_LIVE_DOMAIN = b"copper-mcp/live-apply-token/v1"
 _NONCE_BYTES = 16
 _MAC_BYTES = 32
 APPLY_TOKEN_TTL_SECONDS = 15 * 60
@@ -99,6 +104,52 @@ class ApplyBinding:
         return _DOMAIN + joined
 
 
+@dataclass(frozen=True, slots=True)
+class LiveApplyBinding:
+    """What a live-editor capability authorizes. Every field participates in the MAC.
+
+    The file binding names a workspace-relative path, because a file is identified by where it
+    is. An open document is not: KiCad's IPC API exposes no filesystem path for the board it has
+    in memory, so the only identity available is *which editor process* and *which serialization
+    of its document*. This binding therefore replaces ``relative_path`` with the opaque
+    process-local session revision, and a token minted against one editor instance can never
+    verify after that editor restarts — the session revision is unreproducible across processes
+    by construction (see ``kicad_ipc._session_revision``).
+
+    ``base_revision`` is the converted Board IR snapshot digest the candidate was routed
+    against; ``board_revision`` is the digest of the exact serialization the editor returned.
+    Both are bound, because they are two independent claims that can go stale separately.
+    """
+
+    candidate_id: str
+    base_revision: str
+    board_revision: str
+    session_revision: str
+    operation: str = "live_route"
+
+    def __post_init__(self) -> None:
+        if self.operation not in {"live_route"}:
+            raise ApplyTokenError("invalid_token", "live apply operation is unsupported")
+
+    def payload(self, expires_at: int) -> bytes:
+        parts = (
+            self.candidate_id.encode("utf-8"),
+            self.base_revision.encode("utf-8"),
+            self.board_revision.encode("utf-8"),
+            self.session_revision.encode("utf-8"),
+            self.operation.encode("ascii"),
+            str(expires_at).encode("ascii"),
+        )
+        joined = b"".join(len(part).to_bytes(4, "big") + part for part in parts)
+        return _LIVE_DOMAIN + joined
+
+
+#: Every binding this authority will sign. Kept as an explicit union rather than a structural
+#: protocol so a new destructive surface cannot obtain signatures by merely growing a
+#: ``payload`` method: adding one here is a visible, reviewable edit.
+Binding = ApplyBinding | LiveApplyBinding
+
+
 class ApplyTokenAuthority:
     """Issues and verifies apply tokens against a key held only in this process."""
 
@@ -146,10 +197,10 @@ class ApplyTokenAuthority:
             if now >= expires_at:
                 del self._consumed[nonce]
 
-    def issue(self, binding: ApplyBinding) -> str:
+    def issue(self, binding: Binding) -> str:
         """Mint one token for exactly this binding."""
 
-        if not isinstance(binding, ApplyBinding):
+        if not isinstance(binding, ApplyBinding | LiveApplyBinding):
             raise ApplyTokenError("invalid_token", "apply binding is malformed")
         nonce = secrets.token_bytes(_NONCE_BYTES)
         expires_at = self._now() + self._ttl
@@ -157,7 +208,7 @@ class ApplyTokenAuthority:
         raw = nonce + expires_at.to_bytes(8, "big") + mac
         return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
-    def verify(self, token: str, binding: ApplyBinding) -> VerifiedToken:
+    def verify(self, token: str, binding: Binding) -> VerifiedToken:
         """Verify a token against its binding and return it unconsumed, or raise.
 
         Verification does not consume. Consumption happens only once the apply has actually
@@ -216,5 +267,7 @@ __all__ = [
     "ApplyBinding",
     "ApplyTokenAuthority",
     "ApplyTokenError",
+    "Binding",
+    "LiveApplyBinding",
     "VerifiedToken",
 ]

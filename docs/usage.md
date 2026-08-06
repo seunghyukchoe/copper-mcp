@@ -347,6 +347,40 @@ The IPC observer and the KiCad PCB-editor plugin report only a live board digest
 compatibility, and bounded object counts; they never mutate KiCad or expose board text, net names,
 UUIDs, or geometry.
 
+## Live apply: what is gated, and what is not implemented
+
+`apply_live_candidate` is the surface that will one day push a candidate into the running editor as
+one undo step. **The mutation is not implemented.** The tool verifies every precondition — the
+operator opt-in, a live-scoped single-use capability, the editor session, the board serialization,
+the converted Board IR snapshot, and the candidate's own identity and geometry replayed against the
+board the editor is holding — and then refuses with `capability_not_implemented`. The response's
+`preconditions_verified` lists exactly the checks that ran, so reaching that code tells you your
+capability and all three revisions were good.
+
+It needs **two** opt-ins, both exact `0`/`1` and both default off:
+
+```bash
+export COPPER_MCP_ALLOW_LIVE_IPC=1
+export COPPER_MCP_ALLOW_LIVE_APPLY=1
+```
+
+`COPPER_MCP_ALLOW_APPLY` is neither sufficient nor required. It authorises replacing a file on
+disk, which is a different capability: enabling it does not enable live mutation, and you do not
+have to enable it to get live mutation. Requiring it would mean anyone who wants to touch only the
+editor must also grant permission to overwrite their boards.
+
+Get a capability from `preview_live_layered_route` with `include_apply_token: true`. It is minted
+only for a `routed` proposal and only when live apply is enabled; otherwise `apply_token` is
+`null`. The capability is bound to the candidate, the board revision, the converted snapshot **and**
+the editor session, so it cannot survive a KiCad restart and cannot be replayed against the
+file-backed `apply_candidate`.
+
+When the mutation lands it will change the in-memory document only — one entry in KiCad's own undo
+stack, no file written until you save — and it will re-observe the result rather than assume it.
+See [ADR-0073](adr/0073-live-ipc-one-undo-commit-apply.md) and the
+[IPC apply research](research/ipc-apply-v1.md) for why the protocol makes that re-observation
+mandatory rather than optional.
+
 ## Related documents
 
 - [MCP API contract](architecture/mcp-api.md) — the tool surface in contract terms.

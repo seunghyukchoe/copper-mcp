@@ -43,6 +43,7 @@ from copper_mcp.apply.tokens import (
     ApplyBinding,
     ApplyTokenAuthority,
     ApplyTokenError,
+    LiveApplyBinding,
     VerifiedToken,
 )
 
@@ -61,6 +62,7 @@ __all__ = [
     "ApplyTokenAuthority",
     "ApplyTokenError",
     "ApplyVerification",
+    "LiveApplyBinding",
     "PlacementApplyRequest",
     "PlacementApplyResult",
     "VerifiedToken",
