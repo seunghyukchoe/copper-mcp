@@ -8,6 +8,47 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **The negotiated coordinator stops rebuilding what it just decided to keep, and gets a rip-up
+  window that is actually bounded.** ADR-0073 recorded its own gap honestly: every retained
+  candidate was re-added to the congestion ledger from scratch each pass, re-deriving its unit
+  lattice resources from geometry, so reconstruction was linear in the *retained* set. ADR-0075
+  closes it. A new `IncrementalSpatialIndex` is a uniform grid whose cell size is fixed at
+  construction — that one choice makes an entry's cells a pure function of its bounds, so "mutate
+  in place" and "rebuild from the survivors" are the same computation, and incremental-equals-
+  rebuilt is a property of the design rather than a hope. An R-tree, which is what TritonRoute's
+  detailed router uses, was rejected on determinism: two R-trees built from the same set in two
+  insertion orders have different node boundaries. Every query returns a **superset** of the true
+  overlaps, never a subset, so both bounded-work fallbacks — an oversize entry every query
+  returns, and an over-wide query that degrades to a full scan — add candidates and can never drop
+  one. `CongestionLedger` now caches each net's exact resource set and retains by costing
+  `min(ripped-up units, retained units)`, with a bare clear when nothing is retained. That third
+  branch exists because measurement said so: always subtracting was **60–130% slower** than the
+  path it replaced at zero retention, and the regression is recorded in B-089 rather than designed
+  around quietly. Wherever any net is retained, the new path is 17% to 99.9% faster on the same
+  fixtures. (#64)
+- **`conflict-window-v1`, a fourth declared rip-up literal.** It re-routes every conflicted net
+  plus every retained net whose copper lies within a fixed number of lattice cells of one. The
+  window is a *constant*, following TritonRoute's own search-and-repair schedule, which holds its
+  worker box at 7 gcells for all 65 iterations and varies only the offset and the effort inside —
+  a window that widened per pass would eventually be full rip-up again and stop being a bound. The
+  spatial index narrows the candidate nets and an exact integer rectangle predicate decides, so
+  the selected set depends on the stored envelopes alone and never on the index's cell size,
+  capacity, or fallbacks. On the congested fixture it converges in five iterations at the same
+  56,000,000 nm of copper as the default while making **22 router calls instead of 30**, where
+  `conflicted-only-v1` does not converge at all. It is not the default: `all-nets-v1` stays, and
+  one synthetic fixture is not a criterion. (#64)
+
+#### Migration
+
+None. No published content address moves. `RipUpSlot.as_json()` emits the new window weight only
+for the rule that reads it, so all three pre-existing rip-up literals keep the exact canonical
+bytes they published before — `RipUpSlot()` is still
+`sha256:871de3d64827d267ed64443a705431c7a4a32fa35a5815b137d9abb23f73c71a` and `NegotiationPlan()`
+is still `sha256:b3d090edeeb861f0c215dd18420bdd5624a7f178f1034af25526457538d3eac0`, both pinned by
+test. A stored plan digest, rip-up slot digest, or plan-bound candidate identity still verifies.
+The no-plan coordinator path is byte-for-byte unchanged, and the committed B-087 artifact still
+reproduces from its harness.
+
 - **CopperMCP now has a routing benchmark on boards it did not author, and the first honest number
   from it is 59.83%.** A benchmark-only import seam converts tscircuit SimpleRouteJson problems
   into ordinary verified Board IR snapshots and ordinary route requests, so an external corpus
