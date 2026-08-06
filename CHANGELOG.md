@@ -35,6 +35,23 @@ serialization whose root is not `kicad_pcb` reports the new `unsupported.documen
 instead of `syntax.invalid`; and a digest taken over rendered board or schematic bytes is
 reproducible only by the version that recorded it.
 
+- **A board carrying arc-shaped copper on another net can now be routed instead of refused.** KiCad
+  writes an `(arc …)` track whenever a corner is rounded, and the Board IR has always parsed it, but
+  the single-layer router refused *any* arc on the requested layer — so one rounded corner made the
+  whole board unroutable. A foreign-net arc spanning at most half a turn is now a conservative
+  polygon envelope obstacle, and the route detours around it. Every point of such an arc lies within
+  the sagitta of its own chord, so the envelope is the chord swept with an axis-aligned square of
+  the half width plus the sagitta — the same construction diagonal tracks already use, with a larger
+  radius, so every vertex stays an exact integer and the envelope is a provable superset rather than
+  a close approximation. The half-turn test is one integer dot product, and the sagitta bound is the
+  smallest integer satisfying a sufficient integer condition, so neither introduces a rounding rule.
+  Two cases stay typed refusals with distinct diagnostics: an arc past half a turn, whose copper
+  leaves the chord's span so no chord-based envelope would be honest, and an arc on the *routed*
+  net, because attachment copper must be under-approximated and an arc has no exact integer inner
+  core yet. **No Board IR field, schema, digest, diagnostic code, or `ROUTER_VERSION` changes** — no
+  board that already routed changes geometry or identity. The layered route proposal surface keeps
+  its stricter blanket arc refusal, because its obstacle model is rectangles only. (#67)
+
 ### Security
 
 - **Live KiCad IPC observation now requires an explicit operator opt-in and is off by default.**

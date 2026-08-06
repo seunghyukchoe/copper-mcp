@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import replace
 from itertools import pairwise
@@ -7,6 +8,7 @@ from itertools import pairwise
 import pytest
 
 from copper_mcp.board_ir import (
+    Arc,
     BoardIRSnapshot,
     ConstraintSet,
     Footprint,
@@ -46,6 +48,9 @@ from copper_mcp.routing import (
     verify_candidate_id,
 )
 from copper_mcp.routing.astar import (
+    _arc_envelope,
+    _arc_sagitta_bound_nm,
+    _arc_spans_at_most_half_turn,
     _diagonal_segment_cores,
     _pad_cores,
     _point_segment_distance_lt,
@@ -54,6 +59,7 @@ from copper_mcp.routing.astar import (
     _ray_crosses_right,
     _rectangles_touch,
     _segment_envelope,
+    _swept_square_envelope,
     _via_cores,
     _WorkBudget,
 )
@@ -64,6 +70,9 @@ OTHER_REVISION = f"sha256:{'b' * 64}"
 LAYER_ID = "layer:F.Cu"
 OTHER_NET_ID = "net:power"
 NET_ID = "net:audio"
+
+# One track arc, as the (start, mid, end) control points KiCad itself stores.
+_ArcPoints = tuple[tuple[int, int], tuple[int, int], tuple[int, int]]
 
 
 def _ring(coordinates: tuple[tuple[int, int], ...]) -> Ring:
@@ -128,6 +137,10 @@ def _snapshot(
     start_pad_rotation_udeg: int = 0,
     layer_kind: str = "signal",
     length_rule: bool = False,
+    foreign_arc: _ArcPoints | None = None,
+    own_arc: _ArcPoints | None = None,
+    arc_layer_id: str = LAYER_ID,
+    arc_width_nm: int = 200,
 ) -> BoardIRSnapshot:
     layer = Layer(id=LAYER_ID, name="F.Cu", index=0, kind=layer_kind)
     # Vias span two layers, so the back layer only exists when a fixture needs one.
@@ -138,6 +151,7 @@ def _snapshot(
         or foreign_zone_layer_id != LAYER_ID
         or own_segment_layer_id != LAYER_ID
         or keepout_layer_id != LAYER_ID
+        or arc_layer_id != LAYER_ID
     ):
         copper_layers += (Layer(id="layer:B.Cu", name="B.Cu", index=1, kind="signal"),)
     net = Net(id=NET_ID, name="AUDIO")
@@ -276,6 +290,22 @@ def _snapshot(
         pads=tuple(pads),
         segments=segments,
         vias=vias,
+        arcs=tuple(
+            Arc(
+                id=f"arc:{name}",
+                net_id=net_id,
+                layer_id=arc_layer_id,
+                start=PointNM(*points[0]),
+                mid=PointNM(*points[1]),
+                end=PointNM(*points[2]),
+                width_nm=arc_width_nm,
+            )
+            for name, net_id, points in (
+                ("foreign", OTHER_NET_ID, foreign_arc),
+                ("own", NET_ID, own_arc),
+            )
+            if points is not None
+        ),
         zones=tuple(
             Zone(
                 id=f"zone:foreign:{index:02d}",
@@ -1825,6 +1855,372 @@ def _point_in_polygon(point: PointNM, polygon: tuple[PointNM, ...]) -> bool:
         if _ray_crosses_right(point, edge_start, edge_end):
             inside = not inside
     return inside
+
+
+def _scaled_circumcircle(start: PointNM, mid: PointNM, end: PointNM) -> tuple[int, int, int, int]:
+    """Return (centre_x, centre_y, denominator, radius_squared) in exact scaled integers.
+
+    The circumcentre of three integer points is rational, so the test keeps it as a scaled
+    integer pair rather than dividing. Every predicate below is then a comparison between
+    integers, exactly as the router's own geometry is.
+    """
+
+    ax, ay = start.x, start.y
+    mx, my = mid.x, mid.y
+    bx, by = end.x, end.y
+    a_sq, m_sq, b_sq = ax * ax + ay * ay, mx * mx + my * my, bx * bx + by * by
+    denominator = 2 * (ax * (my - by) + mx * (by - ay) + bx * (ay - my))
+    centre_x = a_sq * (my - by) + m_sq * (by - ay) + b_sq * (ay - my)
+    centre_y = a_sq * (bx - mx) + m_sq * (ax - bx) + b_sq * (mx - ax)
+    if denominator < 0:
+        centre_x, centre_y, denominator = -centre_x, -centre_y, -denominator
+    radius_squared = (ax * denominator - centre_x) ** 2 + (ay * denominator - centre_y) ** 2
+    return centre_x, centre_y, denominator, radius_squared
+
+
+def _on_arc_track(
+    point: PointNM,
+    start: PointNM,
+    mid: PointNM,
+    end: PointNM,
+    half_width_nm: int,
+) -> bool:
+    """Exactly decide whether a lattice point is real copper of the arc track.
+
+    A track arc is its circular centreline swept with a disc of the half width, plus the
+    round caps at both ends. Membership therefore needs an annulus test and an angular
+    span test. The annulus test avoids square roots by rearranging
+    ``|sqrt(u) - sqrt(r)| <= h`` into ``(u + r - h^2)^2 <= 4*u*r`` once the left side is
+    known non-negative, which is an exact integer comparison.
+    """
+
+    centre_x, centre_y, denominator, radius_squared = _scaled_circumcircle(start, mid, end)
+
+    def vector(item: PointNM) -> tuple[int, int]:
+        return item.x * denominator - centre_x, item.y * denominator - centre_y
+
+    def cross(left: tuple[int, int], right: tuple[int, int]) -> int:
+        return left[0] * right[1] - left[1] * right[0]
+
+    for cap in (start, end):
+        if (point.x - cap.x) ** 2 + (point.y - cap.y) ** 2 <= half_width_nm**2:
+            return True
+
+    to_point = vector(point)
+    distance_squared = to_point[0] ** 2 + to_point[1] ** 2
+    scaled_half_width = half_width_nm * denominator
+    slack = distance_squared + radius_squared - scaled_half_width**2
+    if slack > 0 and slack**2 > 4 * distance_squared * radius_squared:
+        return False
+
+    # The arc is minor here, so its span is the side of the start radius that ``mid`` is on.
+    side = cross(vector(start), vector(mid))
+    forward = cross(vector(start), to_point)
+    backward = cross(to_point, vector(end))
+    if side < 0:
+        return forward <= 0 and backward <= 0
+    return forward >= 0 and backward >= 0
+
+
+ARC_CONTROL_POINTS: tuple[_ArcPoints, ...] = (
+    # A semicircle: the inclusive boundary of the supported span, and the largest sagitta
+    # any admitted arc can have.
+    ((3_000, 5_000), (4_000, 4_000), (5_000, 5_000)),
+    ((5_000, 5_000), (4_000, 6_000), (3_000, 5_000)),
+    # Shallower arcs, where the sagitta term is small and the envelope is nearly the
+    # straight-track hexagon.
+    ((3_000, 5_000), (3_300, 4_400), (4_000, 4_000)),
+    ((4_000, 4_000), (5_000, 4_200), (6_000, 5_000)),
+    ((3_000, 3_000), (5_000, 2_000), (7_000, 3_000)),
+    ((6_000, 6_000), (5_000, 5_100), (4_000, 6_000)),
+    # An arc whose chord is axis-aligned, which takes the rectangle branch of the sweep.
+    ((4_000, 3_000), (5_000, 4_000), (6_000, 3_000)),
+)
+
+
+@pytest.mark.parametrize("points", ARC_CONTROL_POINTS)
+def test_arc_envelope_contains_the_exact_arc_track(points: _ArcPoints) -> None:
+    """Exhaustively check the integer envelope is a superset of the real arc track."""
+
+    width_nm = 200
+    arc = Arc(
+        id="arc:probe",
+        net_id=OTHER_NET_ID,
+        layer_id=LAYER_ID,
+        start=PointNM(*points[0]),
+        mid=PointNM(*points[1]),
+        end=PointNM(*points[2]),
+        width_nm=width_nm,
+    )
+    envelope = _arc_envelope(arc)
+    assert envelope is not None
+    # A simple, non-degenerate polygon, so the ray-crossing containment test is well defined.
+    assert Ring(envelope).points == envelope
+
+    half_width_nm = (width_nm + 1) // 2
+    # Sampling only the envelope's own bounding box would make the test blind to exactly the
+    # failure it exists to catch — copper that escapes the envelope entirely. The window is
+    # therefore widened around the control points by the sagitta and the half width, which
+    # bounds the arc independently of how the envelope was built. That bound comes from
+    # ``_arc_sagitta_bound_nm``, so the companion test below pins that helper against the
+    # true sagitta exactly; together the two leave no gap.
+    slack = _arc_sagitta_bound_nm(arc.start, arc.mid, arc.end) + half_width_nm + 2
+    control = (arc.start, arc.mid, arc.end)
+    minimum_x = min(min(point.x for point in control) - slack, *(p.x for p in envelope))
+    maximum_x = max(max(point.x for point in control) + slack, *(p.x for p in envelope))
+    minimum_y = min(min(point.y for point in control) - slack, *(p.y for p in envelope))
+    maximum_y = max(max(point.y for point in control) + slack, *(p.y for p in envelope))
+
+    checked = 0
+    for x in range(minimum_x, maximum_x + 1, 5):
+        for y in range(minimum_y, maximum_y + 1, 5):
+            probe = PointNM(x, y)
+            if not _on_arc_track(probe, arc.start, arc.mid, arc.end, half_width_nm):
+                continue
+            checked += 1
+            assert _point_in_polygon(probe, envelope), (x, y)
+    # The sampling has to actually find copper, or the assertion above proves nothing.
+    assert checked > 100
+
+
+def test_arc_envelope_refuses_an_arc_past_half_a_turn() -> None:
+    """A major arc leaves its chord's span, so no chord-based envelope is honest."""
+
+    # Centre (5,000, 5,000), radius 2,000: endpoints near the east side, mid due west.
+    arc = Arc(
+        id="arc:major",
+        net_id=OTHER_NET_ID,
+        layer_id=LAYER_ID,
+        start=PointNM(6_732, 6_000),
+        mid=PointNM(3_000, 5_000),
+        end=PointNM(6_732, 4_000),
+        width_nm=200,
+    )
+    assert _arc_spans_at_most_half_turn(arc.start, arc.mid, arc.end) is False
+    assert _arc_envelope(arc) is None
+    # The chord model would have missed the bulge entirely: the arc reaches x=3,000 while
+    # the chord sits at x=6,732, and the sagitta of the *minor* companion arc is far smaller
+    # than the real excursion.
+    assert arc.mid.x < min(arc.start.x, arc.end.x)
+
+
+def test_arc_spans_at_most_half_turn_admits_the_exact_semicircle() -> None:
+    """The inclusive boundary is deliberate: containment still holds at half a turn."""
+
+    start, mid, end = PointNM(3_000, 5_000), PointNM(4_000, 4_000), PointNM(5_000, 5_000)
+    # The inscribed angle at ``mid`` is exactly a right angle, so the dot product is zero.
+    assert (start.x - mid.x) * (end.x - mid.x) + (start.y - mid.y) * (end.y - mid.y) == 0
+    assert _arc_spans_at_most_half_turn(start, mid, end) is True
+    # A semicircle's sagitta is its radius, which is 1,000 here.
+    assert _arc_sagitta_bound_nm(start, mid, end) >= 1_000
+
+
+def test_arc_sagitta_bound_never_understates_the_true_sagitta() -> None:
+    """Randomised check that the integer bound is an upper bound, never an approximation."""
+
+    generator = random.Random(20_260_806)  # noqa: S311 - deterministic fixture generation
+    checked = 0
+    for _ in range(400):
+        centre_x = generator.randrange(-20_000, 20_000)
+        centre_y = generator.randrange(-20_000, 20_000)
+        radius = generator.randrange(100, 8_000)
+        base = generator.uniform(0.0, 6.283)
+        span = generator.uniform(0.01, 3.14)
+        points = []
+        for fraction in (0.0, 0.5, 1.0):
+            angle = base + span * fraction
+            points.append(
+                PointNM(
+                    round(centre_x + radius * math.cos(angle)),
+                    round(centre_y + radius * math.sin(angle)),
+                )
+            )
+        start, mid, end = points
+        if len({start, mid, end}) != 3:
+            continue
+        if (mid.x - start.x) * (end.y - start.y) == (mid.y - start.y) * (end.x - start.x):
+            continue
+        if not _arc_spans_at_most_half_turn(start, mid, end):
+            continue
+        checked += 1
+        bound = _arc_sagitta_bound_nm(start, mid, end)
+        assert _bound_covers_true_sagitta(bound, start, mid, end), (start, mid, end, bound)
+    assert checked > 100
+
+
+def _bound_covers_true_sagitta(bound: int, start: PointNM, mid: PointNM, end: PointNM) -> bool:
+    """Exactly decide ``bound >= r - h``, the true sagitta of the minor arc.
+
+    ``r`` and ``h`` are both square roots of rationals, so the comparison hides a nested
+    radical. Isolating one root at a time and squaring twice removes it, and each squaring
+    is guarded by the sign of the side being squared, so the result is an exact integer
+    decision rather than a tolerance. This is deliberately a different derivation from the
+    one the implementation uses, so the two cannot fail in the same direction together.
+    """
+
+    centre_x, centre_y, denominator, radius_squared = _scaled_circumcircle(start, mid, end)
+    chord_squared = (end.x - start.x) ** 2 + (end.y - start.y) ** 2
+    # ``height`` is the scaled numerator of h: h = height / (denominator * sqrt(chord)).
+    height = abs(
+        (end.x - start.x) * (start.y * denominator - centre_y)
+        - (end.y - start.y) * (start.x * denominator - centre_x)
+    )
+    # Want: bound * denominator * sqrt(chord) + height >= sqrt(radius_squared * chord).
+    scaled_bound = bound * denominator
+    first = radius_squared * chord_squared  # (sqrt of this) on the right
+    # Step 1: scaled_bound * sqrt(chord) >= sqrt(first) - height.
+    if height * height >= first:
+        return True
+    # Step 2: square once -> 2 * height * sqrt(first) >= first + height^2 - scaled_bound^2 * chord.
+    remainder = first + height * height - scaled_bound * scaled_bound * chord_squared
+    if remainder <= 0:
+        return True
+    # Step 3: square again; both sides are now non-negative integers.
+    return 4 * height * height * first >= remainder * remainder
+
+
+def test_swept_square_envelope_reproduces_the_diagonal_segment_construction() -> None:
+    """The shared sweep must not have changed the committed diagonal-track envelope."""
+
+    for bounds in ((4_000, 4_000, 6_000, 6_000), (6_000, 4_000, 4_000, 6_000)):
+        segment = Segment(
+            id="segment:probe",
+            net_id=OTHER_NET_ID,
+            layer_id=LAYER_ID,
+            start=PointNM(bounds[0], bounds[1]),
+            end=PointNM(bounds[2], bounds[3]),
+            width_nm=200,
+        )
+        envelope = _segment_envelope(segment)
+        assert envelope is not None
+        assert envelope == _swept_square_envelope(segment.start, segment.end, 100)
+    # An orthogonal track keeps its exact rectangle fast path and never becomes a polygon.
+    orthogonal = Segment(
+        id="segment:orthogonal",
+        net_id=OTHER_NET_ID,
+        layer_id=LAYER_ID,
+        start=PointNM(4_000, 5_000),
+        end=PointNM(6_000, 5_000),
+        width_nm=200,
+    )
+    assert _segment_envelope(orthogonal) is None
+    assert len(_swept_square_envelope(orthogonal.start, orthogonal.end, 100)) == 4
+
+
+def test_collinear_control_points_bulge_nowhere() -> None:
+    """The helper's degenerate guard: Board IR rejects such an arc, callers may not."""
+
+    assert _arc_sagitta_bound_nm(PointNM(0, 0), PointNM(1_000, 1_000), PointNM(2_000, 2_000)) == 0
+
+
+# A shallow foreign arc bowing across the straight corridor at x=5,000. Its chord is the
+# vertical segment (5,000, 3,000) to (5,000, 7,000) and its sagitta is 100 nm, so the
+# envelope is meaningfully wider than the chord without swallowing the whole board.
+BLOCKING_ARC: _ArcPoints = ((5_000, 3_000), (5_100, 5_000), (5_000, 7_000))
+
+
+def test_foreign_arc_blocks_its_corridor_and_matches_the_oracle() -> None:
+    """A board that used to be refused outright now routes, detouring around the arc."""
+
+    baseline = _candidate(AStarRouter().propose(_snapshot(), _request(_snapshot())))
+    assert baseline.cost.bend_count == 0
+
+    snapshot = _snapshot(foreign_arc=BLOCKING_ARC)
+    request = _request(snapshot)
+    router = AStarRouter()
+
+    first = _candidate(router.propose(snapshot, request))
+    second = _candidate(router.propose(snapshot, request))
+    oracle = run_dijkstra_oracle(snapshot, request)
+
+    assert first == second
+    assert canonical_candidate_bytes(first) == canonical_candidate_bytes(second)
+    # The straight corridor is gone, so the route has to bend around the arc envelope.
+    assert first.cost.bend_count > 0
+    assert first.metrics.hard_internal_violations == 0
+    # No vertex may sit inside the arc envelope inflated by the route half width plus the
+    # stricter of the two class clearances, which is 100 + 100 here.
+    assert all(
+        not (4_599 < vertex.x < 5_401 and 2_599 < vertex.y < 7_401)
+        for vertex in first.patch.paths[0].vertices
+    )
+    assert isinstance(oracle, DijkstraResult)
+    assert oracle.total_cost_nm == first.cost.total_cost_nm
+    assert oracle.bend_count == first.cost.bend_count
+
+
+def test_foreign_arc_envelope_is_wider_than_its_bare_chord() -> None:
+    """The sagitta term is load-bearing: the bulge is what closes the straight corridor."""
+
+    snapshot = _snapshot(foreign_arc=BLOCKING_ARC)
+    problem = _problem_of(snapshot, _request(snapshot))
+    envelopes = [item for item in problem.polygon_obstacles if item.source_id.startswith("arc:")]
+
+    assert len(envelopes) == 1
+    minimum_x = min(point.x for point in envelopes[0].points)
+    maximum_x = max(point.x for point in envelopes[0].points)
+    # The chord is the line x=5,000 and the half width is 100, so a chord-only envelope
+    # would stop at 4,900/5,100. The arc bows 100 nm further, and the envelope must show it.
+    assert minimum_x < 4_900
+    assert maximum_x > 5_100
+
+
+def test_selected_net_arc_is_refused_rather_than_enveloped() -> None:
+    """Obstacles may over-approximate; attachment copper may not, so this stays a refusal."""
+
+    snapshot = _snapshot(own_arc=BLOCKING_ARC)
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert "attachment copper" in result.diagnostic.message
+
+
+def test_selected_net_arc_is_refused_on_every_copper_layer() -> None:
+    """Connectivity is a multilayer question, so an off-layer arc is refused as well."""
+
+    snapshot = _snapshot(own_arc=BLOCKING_ARC, arc_layer_id="layer:B.Cu")
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+
+
+def test_foreign_arc_on_another_layer_leaves_the_corridor_clear() -> None:
+    """A single-layer route cannot reach foreign copper it never shares a layer with."""
+
+    snapshot = _snapshot(foreign_arc=BLOCKING_ARC, arc_layer_id="layer:B.Cu")
+    candidate = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    assert candidate.cost.bend_count == 0
+
+
+def test_major_foreign_arc_on_the_selected_layer_is_refused() -> None:
+    """Past half a turn the chord containment argument fails, so there is no honest model."""
+
+    snapshot = _snapshot(foreign_arc=((6_732, 6_000), (3_000, 5_000), (6_732, 4_000)))
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert "half a turn" in result.diagnostic.message
+
+
+def test_arc_envelope_is_charged_against_the_obstacle_budget() -> None:
+    """An arc envelope counts against max_obstacles exactly as a zone or keepout does."""
+
+    # One keepout takes the single permitted slot, so the arc envelope is the object that
+    # runs the budget out — it is charged, not exempt.
+    snapshot = _snapshot(foreign_arc=BLOCKING_ARC, keepouts=((1_500, 1_500, 2_000, 2_000),))
+    result = AStarRouter().propose(
+        snapshot, _request(snapshot, settings=_settings(max_obstacles=1))
+    )
+
+    _assert_failure(result, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+
+    # Without the arc the same board and budget are fine, so the budget failure is the
+    # arc's doing rather than the keepout's.
+    clear = _snapshot(keepouts=((1_500, 1_500, 2_000, 2_000),))
+    assert AStarRouter().propose(clear, _request(clear, settings=_settings(max_obstacles=1))).ok
 
 
 def test_foreign_diagonal_segment_detours_deterministically_and_matches_the_oracle() -> None:

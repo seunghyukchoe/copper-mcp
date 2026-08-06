@@ -31,9 +31,9 @@ Authoritative DRC remains required before routing through vias can be marked com
 | Connectivity | Exactly two pads belonging to the net; both accessible on the selected layer |
 | Constraints | One net-class width/clearance assignment; no selected-net length or differential-pair rule |
 | Board | One hole-free, axis-aligned rectangular outline |
-| Obstacles | Track keepouts of any simple polygon outline; foreign-net pads, segments at any angle, and through vias; conservative foreign-net solid-zone polygon envelopes |
+| Obstacles | Track keepouts of any simple polygon outline; foreign-net pads, segments at any angle, and through vias; conservative foreign-net solid-zone polygon envelopes; conservative foreign-net envelopes for arcs spanning at most half a turn |
 | Attachment | Same-net selected-layer segments at any angle, as connectable copper rather than obstacles |
-| Existing geometry | No selected-layer arcs or off-axis pads; no same-net vias or zones |
+| Existing geometry | No off-axis pads; no same-net vias, zones, or arcs; no arc of any net spanning more than half a turn on the selected layer |
 | Search | Four-neighbour orthogonal grid; east, north, west, south expansion order; multi-source and multi-target when same-net copper is present |
 | Nets | Any pad count; two pads route as one path, more as a spanning tree over components |
 | Output | Immutable orthogonal `RoutePatch` of one or more paths tied to the unchanged snapshot digest, or a typed already-connected record |

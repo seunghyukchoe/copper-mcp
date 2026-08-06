@@ -85,6 +85,10 @@ When adding a document, add it to the list below in the same sentence form — *
 - [KiCad orthogonal courtyard topology](./kicad-orthogonal-courtyard-topology.md) grounds ADR-0065's
   exact decimal-to-nanometre courtyard chain reconstruction in the official S-expression
   specification, copying no external code.
+- [KiCad arc tracks as routing obstacles](./kicad-arc-track-obstacles-v1.md) grounds ADR-0070's
+  conservative arc envelope in the official S-expression arc grammar and the inscribed-angle
+  theorem, and states plainly that the envelope is loose for a near-semicircular arc and claims
+  nothing about major arcs, arcs as attachment copper, or the layered proposal adapter.
 - [NE5532-class audio routing fixture](./ne5532-audio-routing-fixture.md) records the public
   datasheet pin roles and bypass guidance behind the CopperMCP-original Apache-2.0 fixture, which
   reproduces abstract roles rather than any third-party schematic, artwork, or values.

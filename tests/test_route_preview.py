@@ -346,6 +346,43 @@ def test_preview_routes_around_a_foreign_diagonal_segment(tmp_path: Path) -> Non
     assert _entries(tmp_path) == before
 
 
+def test_preview_routes_around_a_foreign_arc(tmp_path: Path) -> None:
+    settings = _copy_fixture(tmp_path, "arc-blocker.kicad_pcb")
+    before = _entries(tmp_path)
+
+    first = preview_route(_request(board="arc-blocker.kicad_pcb"), settings)
+    second = preview_route(_request(board="arc-blocker.kicad_pcb"), settings)
+
+    assert first.status is RoutePreviewStatus.ROUTED
+    assert first.candidate is not None
+    # The POWER arc is the semicircle (18, 11) -> (14, 15) -> (18, 19), which bulges across
+    # the straight corridor at y=15 mm, so the previously refused board now detours.
+    assert first.candidate.cost.bend_count > 0
+    # The arc's chord runs x=18 mm, y=11..19 mm and its sagitta is 4 mm, so the envelope
+    # spans x=13.875..22.125 mm and y=6.875..23.125 mm. Its 0.375 mm centreline margin is
+    # the route half width plus the stricter of the two class clearances.
+    assert all(
+        not (13_500_000 < point.x < 22_500_000 and 6_500_000 < point.y < 23_500_000)
+        for point in first.candidate.patch.paths[0].vertices
+    )
+    assert first.to_dict() == second.to_dict()
+    assert _entries(tmp_path) == before
+
+
+def test_preview_refuses_to_route_the_net_that_carries_the_arc(tmp_path: Path) -> None:
+    """The same board, routed the other way round, is still a typed refusal."""
+
+    settings = _copy_fixture(tmp_path, "arc-blocker.kicad_pcb")
+
+    preview = preview_route(_request(board="arc-blocker.kicad_pcb", net="POWER"), settings)
+
+    assert preview.status is RoutePreviewStatus.NOT_ROUTED
+    assert preview.candidate is None
+    assert preview.diagnostic is not None
+    assert preview.diagnostic.code is RouteFailureCode.UNSUPPORTED_GEOMETRY
+    assert "attachment copper" in preview.diagnostic.message
+
+
 def test_preview_completes_a_partial_route_from_existing_copper(tmp_path: Path) -> None:
     settings = _copy_fixture(tmp_path, "partial-route.kicad_pcb")
     before = _entries(tmp_path)
@@ -1075,6 +1112,83 @@ def test_real_kicad_confirms_a_route_detoured_around_a_foreign_diagonal(
     assert preview.drc_evidence.summary.unconnected_count == 0
     assert preview.drc_evidence.summary.passed is True
     assert _entries(tmp_path) == before
+
+
+@pytest.mark.skipif(
+    not REAL_KICAD_CLI.is_file(),
+    reason="requires a locally installed KiCad CLI",
+)
+def test_real_kicad_confirms_a_route_detoured_around_a_foreign_arc(
+    tmp_path: Path,
+) -> None:
+    settings = replace(
+        _copy_fixture(tmp_path, "arc-blocker.kicad_pcb"),
+        kicad_cli=REAL_KICAD_CLI,
+        max_drc_report_bytes=8 * 1024 * 1024,
+    )
+    before = _entries(tmp_path)
+
+    preview = preview_route(
+        _request(board="arc-blocker.kicad_pcb", include_drc=True),
+        settings,
+    )
+
+    assert preview.status is RoutePreviewStatus.ROUTED
+    assert preview.candidate is not None
+    assert preview.candidate.cost.bend_count > 0
+    # The companion test below proves a straight route across this board makes KiCad report
+    # `shorting_items` as an error, so a clean report here is evidence the conservative
+    # envelope really did divert the route rather than the fixture being undemanding.
+    assert preview.drc_evidence is not None
+    assert preview.drc_evidence.summary.error_count == 0
+    assert preview.drc_evidence.summary.warning_count == 0
+    assert preview.drc_evidence.summary.unconnected_count == 0
+    assert preview.drc_evidence.summary.passed is True
+    assert _entries(tmp_path) == before
+
+
+@pytest.mark.skipif(
+    not REAL_KICAD_CLI.is_file(),
+    reason="requires a locally installed KiCad CLI",
+)
+def test_real_kicad_reports_a_short_when_the_arc_is_routed_straight_through(
+    tmp_path: Path,
+) -> None:
+    """Guard the guard: the arc fixture must be able to fail, or a clean DRC proves nothing."""
+
+    source = (FIXTURE.parent / "arc-blocker.kicad_pcb").read_text(encoding="utf-8")
+    straight = (
+        "  (segment\n    (start 10 15)\n    (end 30 15)\n    (width 0.25)\n"
+        '    (layer "F.Cu")\n    (net "AUDIO")\n'
+        '    (uuid "3a000000-0000-0000-0000-0000000000bb")\n  )\n'
+    )
+    board = tmp_path / "arc-shorted.kicad_pcb"
+    board.write_text(source.replace("  (gr_rect", straight + "  (gr_rect"), encoding="utf-8")
+    report = tmp_path / "drc.json"
+
+    completed = subprocess.run(  # noqa: S603 - fixed local argv, trusted discovered CLI
+        [
+            str(REAL_KICAD_CLI),
+            "pcb",
+            "drc",
+            "--format",
+            "json",
+            "--units",
+            "mm",
+            "--severity-all",
+            "--output",
+            str(report),
+            str(board),
+        ],
+        check=False,
+        capture_output=True,
+        timeout=120,
+    )
+
+    assert completed.returncode == 0
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    # Straight from pad to pad, the AUDIO track runs through the POWER arc's copper.
+    assert [violation["type"] for violation in payload["violations"]] == ["shorting_items"]
 
 
 @pytest.mark.skipif(
