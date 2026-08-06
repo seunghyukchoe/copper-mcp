@@ -7,7 +7,7 @@ import json
 from dataclasses import replace
 from typing import TypeAlias
 
-from copper_mcp.board_ir.limits import ParseLimits
+from copper_mcp.board_ir.limits import ParseBudget, ParseLimits
 from copper_mcp.board_ir.types import (
     BOARD_IR_SCHEMA,
     BOARD_IR_SCHEMA_VERSION,
@@ -492,7 +492,9 @@ def _enforce_default_budget(value: JsonValue, payload: bytes) -> None:
     limits = ParseLimits()
     if len(payload) > limits.max_input_bytes:
         raise BoardIRValidationError(
-            "budget.exceeded", "canonical snapshot exceeds the default byte budget", "snapshot"
+            ParseBudget.INPUT_BYTES.value,
+            "canonical snapshot exceeds the default byte budget",
+            "snapshot",
         )
     stack: list[tuple[JsonValue, int]] = [(value, 1)]
     nodes = 0
@@ -501,22 +503,26 @@ def _enforce_default_budget(value: JsonValue, payload: bytes) -> None:
         nodes += 1
         if nodes > limits.max_nodes:
             raise BoardIRValidationError(
-                "budget.exceeded", "canonical snapshot exceeds the default node budget", "snapshot"
+                ParseBudget.NODES.value,
+                "canonical snapshot exceeds the default node budget",
+                "snapshot",
             )
         if depth > limits.max_depth:
             raise BoardIRValidationError(
-                "budget.exceeded", "canonical snapshot exceeds the default depth budget", "snapshot"
+                ParseBudget.DEPTH.value,
+                "canonical snapshot exceeds the default depth budget",
+                "snapshot",
             )
         if isinstance(item, str) and len(item) > limits.max_atom_chars:
             raise BoardIRValidationError(
-                "budget.exceeded",
+                ParseBudget.ATOM_CHARS.value,
                 "canonical snapshot exceeds the default string budget",
                 "snapshot",
             )
         if isinstance(item, list):
             if len(item) > limits.max_children_per_list:
                 raise BoardIRValidationError(
-                    "budget.exceeded",
+                    ParseBudget.CHILDREN_PER_LIST.value,
                     "canonical snapshot exceeds the default array-child budget",
                     "snapshot",
                 )
@@ -524,14 +530,14 @@ def _enforce_default_budget(value: JsonValue, payload: bytes) -> None:
         elif isinstance(item, dict):
             if len(item) > limits.max_children_per_list:
                 raise BoardIRValidationError(
-                    "budget.exceeded",
+                    ParseBudget.CHILDREN_PER_LIST.value,
                     "canonical snapshot exceeds the default object-child budget",
                     "snapshot",
                 )
             for key in item:
                 if len(key) > limits.max_atom_chars:
                     raise BoardIRValidationError(
-                        "budget.exceeded",
+                        ParseBudget.ATOM_CHARS.value,
                         "canonical snapshot exceeds the default string budget",
                         "snapshot",
                     )

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, Never, TypeVar
 
 from copper_mcp.board_ir.canonical import normalize_content, verify_snapshot
-from copper_mcp.board_ir.limits import ParseLimits
+from copper_mcp.board_ir.limits import BUDGET_EXCEEDED_PREFIX, ParseBudget, ParseLimits
 from copper_mcp.board_ir.types import (
     BOARD_IR_SCHEMA,
     BOARD_IR_SCHEMA_VERSION,
@@ -99,7 +99,7 @@ def _json_tokens(text: str, limits: ParseLimits) -> Iterator[tuple[str, str | No
                 decoded_chars += 1
                 if decoded_chars > limits.max_atom_chars:
                     raise BoardIRValidationError(
-                        "budget.exceeded", "JSON string budget exceeded", "json"
+                        ParseBudget.ATOM_CHARS.value, "JSON string budget exceeded", "json"
                     )
             if index >= length:
                 raise ValueError("JSON string is unterminated")
@@ -148,10 +148,14 @@ def _preflight_json(text: str, limits: ParseLimits) -> None:
             raise ValueError("JSON value is malformed")
         depth = len(stack) + 1
         if depth > limits.max_depth:
-            raise BoardIRValidationError("budget.exceeded", "JSON depth budget exceeded", "json")
+            raise BoardIRValidationError(
+                ParseBudget.DEPTH.value, "JSON depth budget exceeded", "json"
+            )
         nodes += 1
         if nodes > limits.max_nodes:
-            raise BoardIRValidationError("budget.exceeded", "JSON node budget exceeded", "json")
+            raise BoardIRValidationError(
+                ParseBudget.NODES.value, "JSON node budget exceeded", "json"
+            )
         if kind == "{":
             stack.append(_JSONFrame("object", "key_or_end"))
         elif kind == "[":
@@ -176,7 +180,9 @@ def _preflight_json(text: str, limits: ParseLimits) -> None:
                 frame.children += 1
                 if frame.children > limits.max_children_per_list:
                     raise BoardIRValidationError(
-                        "budget.exceeded", "JSON object child budget exceeded", "json"
+                        ParseBudget.CHILDREN_PER_LIST.value,
+                        "JSON object child budget exceeded",
+                        "json",
                     )
                 if value in frame.keys:
                     raise ValueError("JSON object contains a duplicate property")
@@ -207,7 +213,9 @@ def _preflight_json(text: str, limits: ParseLimits) -> None:
             frame.children += 1
             if frame.children > limits.max_children_per_list:
                 raise BoardIRValidationError(
-                    "budget.exceeded", "JSON array child budget exceeded", "json"
+                    ParseBudget.CHILDREN_PER_LIST.value,
+                    "JSON array child budget exceeded",
+                    "json",
                 )
             frame.state = "comma_or_end"
             start_value(kind)
@@ -755,26 +763,32 @@ def _validate_structure(value: object, limits: ParseLimits) -> None:
         item, depth = stack.pop()
         nodes += 1
         if nodes > limits.max_nodes:
-            raise BoardIRValidationError("budget.exceeded", "JSON node budget exceeded", "json")
+            raise BoardIRValidationError(
+                ParseBudget.NODES.value, "JSON node budget exceeded", "json"
+            )
         if depth > limits.max_depth:
-            raise BoardIRValidationError("budget.exceeded", "JSON depth budget exceeded", "json")
+            raise BoardIRValidationError(
+                ParseBudget.DEPTH.value, "JSON depth budget exceeded", "json"
+            )
         if isinstance(item, str) and len(item) > limits.max_atom_chars:
-            raise BoardIRValidationError("budget.exceeded", "JSON string budget exceeded", "json")
+            raise BoardIRValidationError(
+                ParseBudget.ATOM_CHARS.value, "JSON string budget exceeded", "json"
+            )
         if isinstance(item, list):
             if len(item) > limits.max_children_per_list:
                 raise BoardIRValidationError(
-                    "budget.exceeded", "JSON array child budget exceeded", "json"
+                    ParseBudget.CHILDREN_PER_LIST.value, "JSON array child budget exceeded", "json"
                 )
             stack.extend((child, depth + 1) for child in item)
         elif isinstance(item, dict):
             if len(item) > limits.max_children_per_list:
                 raise BoardIRValidationError(
-                    "budget.exceeded", "JSON object child budget exceeded", "json"
+                    ParseBudget.CHILDREN_PER_LIST.value, "JSON object child budget exceeded", "json"
                 )
             for key in item:
                 if len(key) > limits.max_atom_chars:
                     raise BoardIRValidationError(
-                        "budget.exceeded", "JSON string budget exceeded", "json"
+                        ParseBudget.ATOM_CHARS.value, "JSON string budget exceeded", "json"
                     )
             stack.extend((child, depth + 1) for child in item.values())
 
@@ -785,7 +799,9 @@ def decode_snapshot_json(payload: bytes, limits: ParseLimits | None = None) -> B
     limits = limits or ParseLimits()
     validation_code = "validation.failed"
     if not isinstance(payload, bytes) or len(payload) > limits.max_input_bytes:
-        raise BoardIRValidationError("budget.exceeded", "JSON input byte budget exceeded", "json")
+        raise BoardIRValidationError(
+            ParseBudget.INPUT_BYTES.value, "JSON input byte budget exceeded", "json"
+        )
     try:
         text = payload.decode("utf-8", errors="strict")
         _preflight_json(text, limits)
@@ -823,13 +839,16 @@ def decode_snapshot_json(payload: bytes, limits: ParseLimits | None = None) -> B
         validation_code = error.code
     except RecursionError as error:
         raise BoardIRValidationError(
-            "budget.exceeded", "JSON nesting exceeds the decoder budget", "json"
+            ParseBudget.DEPTH.value, "JSON nesting exceeds the decoder budget", "json"
         ) from error
     except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as error:
         raise BoardIRValidationError(
             "schema.invalid", "JSON does not conform to Board IR v0.2", "json"
         ) from error
-    if validation_code == "budget.exceeded":
+    # Prefix, not equality: the re-raise has to carry whichever discriminated budget code the
+    # inner failure chose, and a future budget must not silently fall through to the semantic
+    # branch and be reported as failed validation.
+    if validation_code.startswith(BUDGET_EXCEEDED_PREFIX):
         raise BoardIRValidationError(
             validation_code, "Board IR input exceeded the decoder budget", "json"
         )

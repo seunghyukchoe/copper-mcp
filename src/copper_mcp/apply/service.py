@@ -53,8 +53,9 @@ from copper_mcp.apply.tokens import (
     ApplyTokenAuthority,
     ApplyTokenError,
 )
-from copper_mcp.board_ir import NetClass, ParseLimits
+from copper_mcp.board_ir import NetClass
 from copper_mcp.config import Settings
+from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.placement.contracts import (
     ORDERING_POLICY,
     PLACEMENT_VERSION,
@@ -427,7 +428,7 @@ def apply_candidate(
 
     constraints = NetClass(id=NET_CLASS_ID, name=NET_CLASS_NAME, **request.constraints_payload())
     profile = _profile(constraints)
-    limits = ParseLimits()
+    limits = parse_limits_for(settings)
 
     conversion = parse_kicad_bytes(board.content, profile, limits)
     if conversion.snapshot is None or conversion.diagnostics:
@@ -709,7 +710,7 @@ def apply_placement_candidate(
 
     constraints = NetClass(id=NET_CLASS_ID, name=NET_CLASS_NAME, **request.constraints_payload())
     profile = _profile(constraints)
-    limits = ParseLimits()
+    limits = parse_limits_for(settings)
     conversion = parse_kicad_bytes(board.content, profile, limits)
     if conversion.snapshot is None or conversion.diagnostics:
         return _placement_refuse(

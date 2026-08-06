@@ -10,7 +10,7 @@ from copper_mcp.board_ir.canonical import (
 )
 from copper_mcp.board_ir.codec import decode_snapshot_json
 from copper_mcp.board_ir.diagnostics import ConversionResult, Diagnostic, Severity
-from copper_mcp.board_ir.limits import ParseLimits
+from copper_mcp.board_ir.limits import BUDGET_EXCEEDED_PREFIX, ParseBudget, ParseLimits
 from copper_mcp.board_ir.types import (
     UDEG_PER_DEGREE,
     Arc,
@@ -47,6 +47,7 @@ from copper_mcp.board_ir.types import (
 from copper_mcp.board_ir.validation import BoardIRValidationError, validate_content
 
 __all__ = [
+    "BUDGET_EXCEEDED_PREFIX",
     "UDEG_PER_DEGREE",
     "Arc",
     "BoardIRContent",
@@ -68,6 +69,7 @@ __all__ = [
     "Pad",
     "PadKind",
     "PadShape",
+    "ParseBudget",
     "ParseLimits",
     "PointNM",
     "Ring",

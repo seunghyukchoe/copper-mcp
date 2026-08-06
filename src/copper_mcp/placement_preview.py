@@ -21,10 +21,10 @@ from copper_mcp.adapters.kicad_placement_patch import (
     render_kicad_placement_candidate_board,
 )
 from copper_mcp.apply.tokens import ApplyBinding, ApplyTokenAuthority
-from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import KiCadCliError
 from copper_mcp.kicad_ipc import capture_live_board
+from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.placement import build_placement_view, evaluate_placement
 from copper_mcp.placement.contracts import (
     PLACEMENT_VERSION,
@@ -106,11 +106,7 @@ def _preview_placement_source(
             ),
         )
 
-    default_limits = ParseLimits()
-    limits = replace(
-        default_limits,
-        max_input_bytes=min(default_limits.max_input_bytes, settings.max_board_bytes),
-    )
+    limits = parse_limits_for(settings)
     conversion = parse_kicad_bytes(source, intent.profile(), limits)
     if conversion.snapshot is None or conversion.diagnostics:
         counts = Counter(diagnostic.code for diagnostic in conversion.diagnostics)
