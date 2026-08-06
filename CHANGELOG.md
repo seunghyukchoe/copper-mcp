@@ -8,6 +8,34 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- **Three singleton real-board refusals, each a different kind of defect.** Found by running the
+  adapter against a working tree of twelve real KiCad boards, where each was the first refusal on
+  exactly one board and invisible behind more common causes.
+  - A footprint graphic on a copper layer now refuses under the name of what it is. The board that
+    found it carries a `NetTie-2_THT_Pad1.0mm` joining two ground nets, and KiCad defines
+    `net_tie_pad_groups` as meaning nets in a group "are allowed to short". The adapter already
+    refused net ties — correctly, because Board IR models nets as disjoint and this copper belongs
+    to two at once, which no envelope can express — but the preflight ran first and reported a
+    stray drawing on a copper layer, sending a user to look for a mistake that is not there. The
+    one message is now three: a net tie, an `Edge.Cuts` graphic (routing *room*, the opposite
+    direction of error), and unmodelled copper. All three still refuse; copper is never dropped.
+    (D-158)
+  - A pad with **no copper layer at all** is a KiCad *aperture* pad — a solder-paste stencil
+    opening, used to subdivide the paste over an exposed thermal tab — and is now omitted from
+    Board IR instead of refusing the board. One board carried eight of them on two `TO-252-2`
+    transistors. Omitting one removes no obstacle and discards no attachment point, and that claim
+    is conditional, so each condition refuses rather than drops when it fails: paste or mask layers
+    only, `smd` kind, no net, no pad number. The regression asserts *equality* of every
+    copper-bearing field with and without the aperture. (D-159, R-119)
+  - `placed`, KiCad's autoplacement status flag, is accepted as footprint metadata — it carries no
+    geometry, no layer and no constraint, unlike `locked`, which is a constraint and stays
+    modelled. One board carried `(placed yes)` on all 31 of its footprints. Both allowlists stay
+    closed, with an unknown footprint field and an unknown root field each pinned by its own
+    control. (D-160)
+
+  No diagnostic code, Board IR field, schema or digest changes, and no golden identity moves.
+  (#116)
+
 - Board metadata that KiCad writes into essentially every real board no longer refuses the whole
   document. `solder_mask_min_width` joins `pad_to_mask_clearance` as accepted setup metadata — it
   bounds mask slivers, not copper — and `descr` and `tags`, the library documentation strings
