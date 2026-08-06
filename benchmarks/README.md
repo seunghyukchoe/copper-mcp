@@ -16,6 +16,16 @@ DIY sites remain reference-only metadata and are never fetched by the runner. Us
 The companion original RC Circuit Intent fixture is checked with `make check-circuit-intents`, which
 verifies its schema, canonical digest, and byte-deterministic in-memory KiCad schematic derivative.
 
+The [external corpora](corpora/) directory holds third-party benchmark input whose licence was
+checked and recorded before any file was committed. A corpus that may not be redistributed gets a
+digest manifest and a fetch script instead of files. Route the committed MIT-licensed
+SimpleRouteJson corpus with `make benchmark-external-corpus`; the run is offline and verifies every
+sample against its recorded digest before importing it. That result measures the existing
+single-layer router on boards this project did not author and records the refusals alongside the
+successes — see [B-088](../docs/ledgers/benchmark-ledger.md) and the
+[research note](../docs/research/open-baseline-benchmarks-v1.md) for what it does and does not
+claim, including that the cross-router baseline comparison is recorded as `not_run`.
+
 Reproduce the current CopperTone conversion fixture from a clean checkout with:
 
 ```bash
