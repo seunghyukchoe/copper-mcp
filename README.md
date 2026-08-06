@@ -309,12 +309,17 @@ The most-used entry points:
 
 | | |
 |---|---|
+| [Agent contract](docs/agents.md) | How an AI agent should drive CopperMCP: every tool's digest bindings, every refusal code as an action, and the claims a model must not make |
 | [Usage guide](docs/usage.md) | Every CLI command and MCP tool |
 | [Architecture overview](docs/architecture/overview.md) | System boundaries |
 | [Security and threat model](docs/architecture/security-model.md) | Assets, adversaries, invariants |
 | [ADRs](docs/adr/README.md) | Durable decisions and their tradeoffs |
 | [Roadmap](docs/roadmap.md) | What comes next |
 | [Handoff](docs/handoff/README.md) | Current state, for a continuing maintainer or agent |
+
+[`llms.txt`](llms.txt) at the repository root follows the [llms.txt convention](https://llmstxt.org/):
+a short project summary plus links to the documents an LLM should read first, starting with the
+agent contract.
 
 ## Contributing
 
