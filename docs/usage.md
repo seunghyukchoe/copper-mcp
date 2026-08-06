@@ -254,6 +254,21 @@ The service records topology, digest, provenance, and deterministic-replay check
 not run KiCad on each build and reports KiCad parsing, ERC, and schematic-to-board parity as
 `not_run`; electrical validation is also `not_run`, and board readiness is false.
 
+To ask KiCad itself, use the separate ERC surface, which renders the same intent and checks it with
+the authoritative `kicad-cli sch erc`:
+
+```bash
+copper-mcp --workspace . schematic-erc intent/rc-low-pass.json
+```
+
+That result reports `passed` (KiCad found no error-severity violation) and `clean` (no findings and
+no ignored checks at all) as two independent signals, plus a round trip that re-reads the schematic
+through `kicad-cli sch export netlist` and compares the recovered components and nets against the
+source intent. The bounded passive fixture is `passed: true, clean: false` — it genuinely produces
+KiCad warnings, and those stay visible. Schematic-to-board parity, electrical validation, and board
+readiness remain explicit non-claims. Because the checked snapshot carries no `.kicad_pro`, KiCad
+applies its default severities, so the verdict is not necessarily what your own project reports.
+
 The CLI refuses traversal, symlinks, a suffix other than exact lowercase `.kicad_sch`, and any
 existing output rather than silently overwriting it. The input is captured from one held descriptor,
 and output creation stays anchored to a held workspace-directory descriptor.

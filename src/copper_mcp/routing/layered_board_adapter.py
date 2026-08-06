@@ -4,6 +4,12 @@ The adapter is intentionally conservative.  It accepts two through eight ordered
 rectangular hole-free board, two pads, and foreign orthogonal copper/rectangular keepout envelopes.
 It emits an immutable layered candidate but does not write KiCad bytes, call KiCad, or grant apply
 authority.
+
+The single exception to "conservative" is optional freshness-verified zone fill (ADR-0021,
+ADR-0070): islands a caller has already proved current for this board revision replace the foreign
+zone's outline envelope with their own bounding boxes, after the revision, backing-zone, and
+outline-containment gates all pass.  Unverified zones, failed gates, and absent evidence all keep
+the envelope, so every direction of error stays refusal-side.
 """
 
 from __future__ import annotations
@@ -25,6 +31,7 @@ from copper_mcp.board_ir import (
     verify_snapshot,
 )
 from copper_mcp.board_ir.types import Layer, NetClass
+from copper_mcp.routing.astar import VerifiedFill
 from copper_mcp.routing.layered_astar import (
     MAX_EXPLICIT_VIAS,
     MAX_LAYERS,
@@ -67,6 +74,7 @@ _MAX_EXPANSIONS = 1_000_000
 _MAX_NODES = 500_000
 _MAX_OBSTACLES = 4_096
 _MAX_OBSTACLE_CHECKS = 10_000_000
+_MAX_FILL_VERTICES = 4_096
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +96,14 @@ class LayeredRouteRequest:
     expected_revision: str | None = None
     grid_step_nm: int = 250_000
     settings: LayeredAStarSettings = field(default_factory=LayeredAStarSettings)
+    verified_fill: tuple[VerifiedFill, ...] = ()
+    """Poured copper a caller has already bound to freshness evidence (ADR-0021).
+
+    Supplying nothing keeps the conservative behaviour: every foreign zone contributes its whole
+    outline envelope.  Supplying islands is a claim that they are the *complete* filled copper for
+    their ``(net_id, layer_id)`` on this exact board revision, and preparation verifies the
+    revision, the backing zone, and outline containment before it will shrink an envelope.
+    """
 
 
 def _digest(value: object) -> bool:
@@ -176,6 +192,36 @@ def _invalid_request(request: object) -> str | None:
         or not 0 <= settings_obj.max_vias <= MAX_EXPLICIT_VIAS
     ):
         return "via budget must be a non-negative integer"
+    return _invalid_verified_fill(request.verified_fill)
+
+
+def _invalid_verified_fill(fill: object) -> str | None:
+    """Reject malformed fill evidence at the input boundary, before any snapshot work.
+
+    Every island is later scanned once for its bounding box, so both the island count and the
+    vertex count are hard input limits rather than post-hoc metrics: a caller cannot buy unbounded
+    preparation work by handing over one enormous ring.
+    """
+
+    if not isinstance(fill, tuple):
+        return "verified fill must be a tuple"
+    if len(fill) > _MAX_OBSTACLES:
+        return "verified fill island count exceeds the obstacle ceiling"
+    for island in fill:
+        if not isinstance(island, VerifiedFill):
+            return "verified fill entry must be a VerifiedFill value"
+        if not _typed(island.net_id, "net:") or not _typed(island.layer_id, "layer:"):
+            return "verified fill island identity is malformed"
+        if not _digest(island.source_revision):
+            return "verified fill source revision is malformed"
+        points: object = island.points
+        if not isinstance(points, tuple) or not 3 <= len(points) <= _MAX_FILL_VERTICES:
+            return "verified fill island is not a bounded polygon"
+        for point in points:
+            if not isinstance(point, PointNM):
+                return "verified fill island vertex is malformed"
+            if abs(point.x) > _MAX_SAFE_INT or abs(point.y) > _MAX_SAFE_INT:
+                return "verified fill island vertex is out of range"
     return None
 
 
@@ -243,6 +289,28 @@ def _segment_bounds(segment: Segment) -> _Rect | None:
         min(start.y, end.y) - half_width,
         max(start.x, end.x) + half_width,
         max(start.y, end.y) + half_width,
+    )
+
+
+def _points_bounds(points: tuple[PointNM, ...]) -> _Rect:
+    """Return the exact integer bounding box of a non-empty point ring."""
+
+    return (
+        min(point.x for point in points),
+        min(point.y for point in points),
+        max(point.x for point in points),
+        max(point.y for point in points),
+    )
+
+
+def _contains(outer: _Rect, inner: _Rect) -> bool:
+    """Exact integer closed containment of one axis-aligned rectangle in another."""
+
+    return (
+        outer[0] <= inner[0]
+        and outer[1] <= inner[1]
+        and inner[2] <= outer[2]
+        and inner[3] <= outer[3]
     )
 
 
@@ -734,16 +802,49 @@ class LayeredBoardRouter:
                         LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
                         "layered physical obstacle count exceeds the configured budget",
                     )
+        # Freshness-bound fill (ADR-0021) is the only evidence that may make an obstacle smaller,
+        # so it is checked before it is spent.  A zone family keeps its conservative outline
+        # envelope unless every gate below passes for its islands.
+        zone_bounds_by_key: dict[tuple[str, str], list[_Rect]] = {}
+        zone_clearance_by_key: dict[tuple[str, str], int] = {}
+        for zone in snapshot.content.zones:
+            key = (zone.net_id, zone.layer_id)
+            zone_bounds_by_key.setdefault(key, []).append(_points_bounds(zone.boundary.points))
+            zone_clearance_by_key[key] = max(zone_clearance_by_key.get(key, 0), zone.clearance_nm)
+        verified_fill_keys: set[tuple[str, str]] = set()
+        island_bounds: list[tuple[VerifiedFill, _Rect]] = []
+        for island in request.verified_fill:
+            if island.source_revision != snapshot.content.source.revision:
+                return _diagnostic(
+                    LayeredRouteFailureCode.STALE_REVISION,
+                    "verified zone fill was established against a different board revision",
+                )
+            key = (island.net_id, island.layer_id)
+            backing = zone_bounds_by_key.get(key)
+            if backing is None:
+                return _diagnostic(
+                    LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY,
+                    "verified zone fill is not backed by a matching Board IR zone",
+                )
+            bounds = _points_bounds(island.points)
+            # KiCad clips poured copper to the zone outline, so this holds for honest evidence.
+            # Checking it is what turns "the replacement only ever shrinks the obstacle" from an
+            # assumption about the filler into a verified precondition of the replacement.
+            if not any(_contains(outline, bounds) for outline in backing):
+                return _diagnostic(
+                    LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY,
+                    "verified zone fill escapes its backing Board IR zone outline",
+                )
+            verified_fill_keys.add(key)
+            island_bounds.append((island, bounds))
         for zone in snapshot.content.zones:
             if zone.net_id == request.net_id:
                 continue
-            points = zone.boundary.points
-            rectangle = (
-                min(point.x for point in points),
-                min(point.y for point in points),
-                max(point.x for point in points),
-                max(point.y for point in points),
-            )
+            if (zone.net_id, zone.layer_id) in verified_fill_keys:
+                # The verified islands below are this family's complete copper, so the outline
+                # envelope would only re-block the pour's own voids.
+                continue
+            rectangle = _points_bounds(zone.boundary.points)
             if zone.layer_id in layer_index:
                 zone_clearance = max(
                     net_class.clearance_nm,
@@ -764,14 +865,35 @@ class LayeredBoardRouter:
                         LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
                         "layered physical obstacle count exceeds the configured budget",
                     )
-        for keepout in snapshot.content.keepouts:
-            points = keepout.boundary.points
-            rectangle = (
-                min(point.x for point in points),
-                min(point.y for point in points),
-                max(point.x for point in points),
-                max(point.y for point in points),
+        for island, rectangle in island_bounds:
+            # The island is a polygon and this lattice model is rectangular, so it is carried as
+            # its bounding box.  That still over-approximates the real copper, and containment
+            # above bounds it by the zone box it replaced part of.  A same-net island is
+            # unreachable here: it would need a same-net zone to back it, and a selected-net zone
+            # is refused as unmodeled copper well before this point.
+            if island.layer_id not in layer_index:
+                continue
+            island_clearance = max(
+                net_class.clearance_nm,
+                zone_clearance_by_key.get((island.net_id, island.layer_id), 0),
+                clearance_by_net.get(island.net_id, widest_clearance),
             )
+            if not add_obstacle(
+                rectangle,
+                layer_index[island.layer_id],
+                half_width + island_clearance,
+            ) or not add_obstacle(
+                rectangle,
+                layer_index[island.layer_id],
+                via_half + island_clearance,
+                via=True,
+            ):
+                return _diagnostic(
+                    LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+                    "layered physical obstacle count exceeds the configured budget",
+                )
+        for keepout in snapshot.content.keepouts:
+            rectangle = _points_bounds(keepout.boundary.points)
             for layer_id in set(keepout.layer_ids) & set(layer_ids):
                 layer = layer_index[layer_id]
                 if keepout.prohibit_tracks:

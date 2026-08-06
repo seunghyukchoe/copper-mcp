@@ -33,6 +33,7 @@ from copper_mcp.routing import (
     LayeredBoardRouter,
     LayeredRouteFailureCode,
     LayeredRouteRequest,
+    VerifiedFill,
     canonical_layered_candidate_bytes,
     verify_layered_candidate_id,
 )
@@ -573,3 +574,306 @@ def test_tampering_with_a_candidate_breaks_its_content_digest() -> None:
 
     with pytest.raises(ValueError, match="candidate ID"):
         verify_layered_candidate_id(tampered)
+
+
+# --- Freshness-verified fill obstacles (ADR-0070) ---------------------------------------------
+
+FILL_NET_ID = "net:power"
+FILL_ZONE_BOUNDS = (3_000, 3_000, 7_000, 7_000)
+FIXTURE_REVISION = f"sha256:{'a' * 64}"
+# Track half-width (100 nm) plus the governing clearance (100 nm).  A candidate centreline must
+# clear every modelled island by at least this much, and the assertion below checks it exactly.
+FILL_CLEARANCE_NM = 200
+
+
+def _fill_snapshot() -> BoardIRSnapshot:
+    """A two-layer board whose only direct front route runs through a foreign pour.
+
+    The back layer carries a full-height track wall, so a via detour cannot substitute for the
+    corridor under test; the conservative answer has to be a front-layer detour around the whole
+    zone outline.
+    """
+
+    base = _two_layer_snapshot(
+        keepouts=(
+            _keepout(
+                "keepout:back-wall",
+                (BACK_LAYER_ID,),
+                (4_000, 0, 6_000, 10_000),
+                tracks=True,
+                vias=False,
+            ),
+        )
+    )
+    foreign_net = Net(id=FILL_NET_ID, name="POWER")
+    audio_class = base.content.constraints.net_classes[0]
+    return make_snapshot(
+        make_content(
+            source=base.content.source,
+            outline=base.content.outline,
+            copper_layers=base.content.copper_layers,
+            nets=(*base.content.nets, foreign_net),
+            constraints=replace(
+                base.content.constraints,
+                assignments=(
+                    *base.content.constraints.assignments,
+                    NetClassAssignment(net_id=foreign_net.id, net_class_id=audio_class.id),
+                ),
+            ),
+            footprints=base.content.footprints,
+            pads=base.content.pads,
+            zones=(
+                Zone(
+                    id="zone:power",
+                    net_id=foreign_net.id,
+                    layer_id=LAYER_ID,
+                    boundary=_rectangle(*FILL_ZONE_BOUNDS),
+                    clearance_nm=100,
+                    min_thickness_nm=100,
+                    thermal_gap_nm=100,
+                    thermal_bridge_width_nm=100,
+                ),
+            ),
+            keepouts=base.content.keepouts,
+        )
+    )
+
+
+def _island(
+    bounds: tuple[int, int, int, int],
+    *,
+    revision: str = FIXTURE_REVISION,
+    net_id: str = FILL_NET_ID,
+    layer_id: str = LAYER_ID,
+) -> VerifiedFill:
+    min_x, min_y, max_x, max_y = bounds
+    return VerifiedFill(
+        net_id=net_id,
+        layer_id=layer_id,
+        points=(
+            PointNM(min_x, min_y),
+            PointNM(max_x, min_y),
+            PointNM(max_x, max_y),
+            PointNM(min_x, max_y),
+        ),
+        source_revision=revision,
+    )
+
+
+def _clears_island(candidate: object, bounds: tuple[int, int, int, int]) -> bool:
+    """Exact integer check that no routed centreline comes within clearance of the island."""
+
+    min_x, min_y, max_x, max_y = bounds
+    for path in candidate.patch.paths:  # type: ignore[attr-defined]
+        if path.layer_id != LAYER_ID:
+            continue
+        for start, end in zip(path.vertices, path.vertices[1:], strict=False):
+            gap_x = max(0, min_x - max(start.x, end.x), min(start.x, end.x) - max_x)
+            gap_y = max(0, min_y - max(start.y, end.y), min(start.y, end.y) - max_y)
+            if gap_x * gap_x + gap_y * gap_y < FILL_CLEARANCE_NM * FILL_CLEARANCE_NM:
+                return False
+    return True
+
+
+def test_verified_fill_opens_a_layered_corridor_the_zone_envelope_forbids() -> None:
+    snapshot = _fill_snapshot()
+    router = LayeredBoardRouter()
+    bounds = (3_000, 6_000, 7_000, 7_000)
+    island = _island(bounds)
+
+    conservative = _candidate(router.propose(snapshot, _request(snapshot)))
+    fill_aware = _candidate(router.propose(snapshot, _request(snapshot, verified_fill=(island,))))
+
+    assert conservative.cost.wire_length_nm == 14_000
+    assert fill_aware.cost.wire_length_nm == 8_000
+    assert fill_aware.cost.via_count == 0
+    assert fill_aware.patch.paths[0].vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
+    # A tighter obstacle must not become an unsafe one: the straight corridor still clears the
+    # island copper by the full governing clearance.
+    assert _clears_island(fill_aware, bounds)
+    assert verify_layered_candidate_id(fill_aware)
+    # Fill evidence changes geometry, so it must change the content-addressed identity too.
+    assert fill_aware.candidate_id != conservative.candidate_id
+    replayed = router.propose(snapshot, _request(snapshot, verified_fill=(island,))).candidate
+    assert replayed == fill_aware
+
+
+def test_growing_a_verified_island_never_cheapens_the_layered_route() -> None:
+    """Metamorphic: nested islands inside one outline must be monotone in route cost.
+
+    This is the direction that matters.  Shrinking the evidence is allowed to open corridors —
+    that is the whole feature — but growing it must never do so, and no island may ever beat the
+    conservative envelope by more than the copper it proved absent.
+    """
+
+    snapshot = _fill_snapshot()
+    router = LayeredBoardRouter()
+    nested = (
+        (3_000, 6_000, 7_000, 7_000),
+        (3_000, 5_000, 7_000, 7_000),
+        (3_000, 4_000, 7_000, 7_000),
+        FILL_ZONE_BOUNDS,
+    )
+
+    costs: list[int] = []
+    for bounds in nested:
+        candidate = _candidate(
+            router.propose(snapshot, _request(snapshot, verified_fill=(_island(bounds),)))
+        )
+        assert _clears_island(candidate, bounds)
+        costs.append(candidate.cost.wire_length_nm)
+
+    conservative = _candidate(router.propose(snapshot, _request(snapshot)))
+    assert costs == sorted(costs)
+    # The largest island is the outline itself, so it can do no better than the envelope it
+    # replaced, and no verified island may ever cost more than routing conservatively.
+    assert costs[-1] == conservative.cost.wire_length_nm
+    assert all(cost <= conservative.cost.wire_length_nm for cost in costs)
+
+
+def test_verified_fill_from_another_board_revision_fails_closed() -> None:
+    snapshot = _fill_snapshot()
+    stale = _island((3_000, 6_000, 7_000, 7_000), revision=OTHER_REVISION)
+
+    result = LayeredBoardRouter().propose(snapshot, _request(snapshot, verified_fill=(stale,)))
+
+    assert result.candidate is None
+    assert result.diagnostic is not None
+    assert result.diagnostic.code is LayeredRouteFailureCode.STALE_REVISION
+    assert "different board revision" in result.diagnostic.message
+
+
+def test_verified_fill_without_a_matching_zone_fails_closed() -> None:
+    snapshot = _fill_snapshot()
+    orphan = _island((3_000, 6_000, 7_000, 7_000), layer_id=BACK_LAYER_ID)
+
+    result = LayeredBoardRouter().propose(snapshot, _request(snapshot, verified_fill=(orphan,)))
+
+    assert result.candidate is None
+    assert result.diagnostic is not None
+    assert result.diagnostic.code is LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY
+    assert "matching Board IR zone" in result.diagnostic.message
+
+
+def test_verified_fill_escaping_its_zone_outline_fails_closed() -> None:
+    """An island wider than the zone backing it is not clipped fill, so it is not evidence.
+
+    Without this gate the replacement could retire a genuinely blocking envelope in favour of a
+    box that does not cover it — the one way this feature could model less copper than exists.
+    """
+
+    snapshot = _fill_snapshot()
+    escaping = _island((3_000, 6_000, 7_500, 7_000))
+
+    result = LayeredBoardRouter().propose(snapshot, _request(snapshot, verified_fill=(escaping,)))
+
+    assert result.candidate is None
+    assert result.diagnostic is not None
+    assert result.diagnostic.code is LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY
+    assert "escapes its backing" in result.diagnostic.message
+
+
+@pytest.mark.parametrize(
+    ("fill", "expected"),
+    [
+        ([], "must be a tuple"),
+        (("island",), "must be a VerifiedFill"),
+        ((_island((3_000, 6_000, 7_000, 7_000), net_id="power"),), "identity is malformed"),
+        ((_island((3_000, 6_000, 7_000, 7_000), layer_id="F.Cu"),), "identity is malformed"),
+        (
+            (_island((3_000, 6_000, 7_000, 7_000), revision="sha256:zz"),),
+            "source revision is malformed",
+        ),
+        (
+            (
+                VerifiedFill(
+                    net_id=FILL_NET_ID,
+                    layer_id=LAYER_ID,
+                    points=(PointNM(0, 0), PointNM(1_000, 0)),
+                    source_revision=FIXTURE_REVISION,
+                ),
+            ),
+            "not a bounded polygon",
+        ),
+        (
+            (
+                VerifiedFill(
+                    net_id=FILL_NET_ID,
+                    layer_id=LAYER_ID,
+                    points=(PointNM(0, 0), PointNM(1_000, 0), (1_000, 1_000)),  # type: ignore[arg-type]
+                    source_revision=FIXTURE_REVISION,
+                ),
+            ),
+            "vertex is malformed",
+        ),
+    ],
+)
+def test_malformed_verified_fill_is_refused_at_the_request_boundary(
+    fill: object, expected: str
+) -> None:
+    snapshot = _fill_snapshot()
+
+    result = LayeredBoardRouter().propose(snapshot, _request(snapshot, verified_fill=fill))
+
+    assert result.candidate is None
+    assert result.diagnostic is not None
+    assert result.diagnostic.code is LayeredRouteFailureCode.INVALID_REQUEST
+    assert expected in result.diagnostic.message
+
+
+def test_unbounded_verified_fill_is_refused_before_any_bounding_box_work() -> None:
+    snapshot = _fill_snapshot()
+    huge = VerifiedFill(
+        net_id=FILL_NET_ID,
+        layer_id=LAYER_ID,
+        points=tuple(PointNM(index, 0) for index in range(4_097)),
+        source_revision=FIXTURE_REVISION,
+    )
+    island = _island((3_000, 6_000, 7_000, 7_000))
+
+    wide = LayeredBoardRouter().propose(snapshot, _request(snapshot, verified_fill=(huge,)))
+    many = LayeredBoardRouter().propose(
+        snapshot,
+        _request(snapshot, verified_fill=tuple(island for _ in range(4_097))),
+    )
+
+    for refusal, expected in ((wide, "not a bounded polygon"), (many, "exceeds the obstacle")):
+        assert refusal.candidate is None
+        assert refusal.diagnostic is not None
+        assert refusal.diagnostic.code is LayeredRouteFailureCode.INVALID_REQUEST
+        assert expected in refusal.diagnostic.message
+
+
+def test_verified_fill_envelopes_are_charged_against_the_obstacle_budget() -> None:
+    """Two islands cost more budget than the single envelope they replaced, and are billed.
+
+    The fixture's conservative model is four endpoint via envelopes, one zone pair, and one
+    keepout: seven envelopes.  Replacing that zone with two islands makes nine, so a budget of
+    eight is exactly the boundary that separates the two models.
+    """
+
+    snapshot = _fill_snapshot()
+    islands = (
+        _island((3_000, 6_000, 7_000, 7_000)),
+        _island((3_000, 3_000, 7_000, 3_200)),
+    )
+    budget = LayeredAStarSettings(via_cost=2, max_obstacles=8)
+
+    conservative = LayeredBoardRouter().propose(snapshot, _request(snapshot, settings=budget))
+    fill_aware = LayeredBoardRouter().propose(
+        snapshot, _request(snapshot, verified_fill=islands, settings=budget)
+    )
+    generous = LayeredBoardRouter().propose(
+        snapshot,
+        _request(
+            snapshot,
+            verified_fill=islands,
+            settings=LayeredAStarSettings(via_cost=2, max_obstacles=9),
+        ),
+    )
+
+    assert _candidate(conservative).cost.wire_length_nm == 14_000
+    assert fill_aware.candidate is None
+    assert fill_aware.diagnostic is not None
+    assert fill_aware.diagnostic.code is LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED
+    assert _candidate(generous).cost.wire_length_nm == 8_000

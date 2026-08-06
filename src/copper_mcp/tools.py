@@ -60,6 +60,10 @@ from copper_mcp.route_bundle import preview_route_bundle as preview_route_bundle
 from copper_mcp.route_preview import RoutePreview
 from copper_mcp.route_preview import preview_live_route as preview_live_route_candidate
 from copper_mcp.route_preview import preview_route as preview_route_candidate
+from copper_mcp.schematic_erc_service import (
+    CircuitSchematicErcResult,
+    verify_schematic_erc_from_content,
+)
 
 
 def server_info() -> dict[str, Any]:
@@ -86,6 +90,8 @@ def server_info() -> dict[str, Any]:
             "revision-bound atomic multi-net route-bundle preview (read-only)",
             "bounded Circuit Intent validation and deterministic KiCad schematic rendering",
             "explicit create-only CLI schematic export and ephemeral stdio MCP artifact delivery",
+            "authoritative read-only KiCad schematic ERC bound to the generated schematic digest",
+            "KiCad round-trip verification of generated schematics against the source intent",
             "operator-gated read-only live KiCad IPC board observation (optional kicad-python, "
             "COPPER_MCP_ALLOW_LIVE_IPC)",
             "revision-bound live KiCad IPC Circuit Scene observation (read-only)",
@@ -114,6 +120,16 @@ def render_circuit_schematic(content: Any) -> CircuitSchematicBuild:
     """Validate structured circuit content and return a private schematic build."""
 
     return build_schematic_from_content(content)
+
+
+def verify_circuit_schematic_erc(
+    content: Any,
+    settings: Settings | None = None,
+) -> CircuitSchematicErcResult:
+    """Render structured circuit content and check it with the authoritative KiCad ERC."""
+
+    active_settings = settings or Settings.from_env()
+    return verify_schematic_erc_from_content(content, active_settings)
 
 
 def inspect_board(path: str, settings: Settings | None = None) -> dict[str, Any]:

@@ -1,4 +1,4 @@
-# ADR-0070: Conservative integer envelopes for foreign arc tracks
+# ADR-0072: Conservative integer envelopes for foreign arc tracks
 
 - Status: Accepted
 - Date: 2026-08-06

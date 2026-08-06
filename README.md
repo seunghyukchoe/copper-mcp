@@ -213,6 +213,11 @@ modelled as a one-value literal (`not_run`, `not_modelled`, `inconclusive`) rath
 
 - Schematic builds report KiCad parsing, ERC, and schematic-to-board parity as `not_run`. Electrical
   validation is `not_run` and board readiness is false.
+- `verify_circuit_schematic_erc` runs the authoritative `kicad-cli sch erc` on a generated schematic
+  and round-trips it through KiCad's netlist export. It reports `passed` (no error-severity
+  violation) and `clean` (no findings or ignored checks at all) separately — the passive fixture is
+  `passed: true, clean: false`. **ERC-clean is not schematic-to-board parity**, which stays
+  `not_run`; KiCad models board parity as a board-side DRC result with no place in an ERC report.
 - Schematic-to-board conversion, footprint assignment, and placement remain manual.
 - **DRC-clean is not electrical, signal-integrity, manufacturability, or hardware review.**
 

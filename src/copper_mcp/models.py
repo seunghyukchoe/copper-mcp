@@ -181,6 +181,122 @@ class DrcSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class ErcSummary:
+    """Privacy-preserving evidence from an authoritative KiCad schematic ERC run.
+
+    This mirrors :class:`DrcSummary` deliberately: CopperMCP never decides what an electrical
+    rule violation is, it only transports KiCad's verdict.  ``passed`` is the hard gate and means
+    KiCad reported no active *error*-severity violation.  It permits warnings and exclusions
+    because KiCad treats those as non-blocking.  ``clean`` is the stricter presentation signal and
+    is true only when the report carries no findings and no ignored checks at all, so a
+    warning-only schematic can never be advertised as ERC-clean.
+
+    ``intent_digest`` and ``schematic_digest`` bind the verdict to the exact Circuit Intent
+    snapshot and the exact schematic bytes that were checked.  A summary that is not bound to both
+    is not evidence about anything.
+    """
+
+    intent_digest: str
+    schematic_digest: str
+    kicad_version: str
+    erc_schema: str
+    coordinate_units: str
+    error_count: int
+    warning_count: int
+    exclusion_count: int
+    ignored_check_count: int
+    sheet_count: int
+    violation_type_counts: Mapping[str, int]
+    passed: bool
+    schema_version: str = SCHEMA_VERSION
+
+    @property
+    def clean(self) -> bool:
+        """Whether the authoritative report contains no findings or ignored checks."""
+
+        return (
+            self.error_count == 0
+            and self.warning_count == 0
+            and self.exclusion_count == 0
+            and self.ignored_check_count == 0
+            and not self.violation_type_counts
+        )
+
+    def __post_init__(self) -> None:
+        for name, digest in (
+            ("intent_digest", self.intent_digest),
+            ("schematic_digest", self.schematic_digest),
+        ):
+            if not _SHA256_ID.fullmatch(digest):
+                raise ValueError(f"{name} must be content-addressed with sha256")
+        if not 1 <= len(self.kicad_version.strip()) <= 128:
+            raise ValueError("KiCad version is malformed")
+        if self.erc_schema != "https://schemas.kicad.org/erc.v1.json":
+            raise ValueError("ERC schema is unsupported")
+        if self.coordinate_units != "mm":
+            raise ValueError("ERC coordinates must use millimetres")
+        for name in (
+            "error_count",
+            "warning_count",
+            "exclusion_count",
+            "ignored_check_count",
+            "sheet_count",
+        ):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError(f"{name} must be an integer")
+            _non_negative(name, value)
+        if self.sheet_count < 1:
+            raise ValueError("an ERC report must cover at least one sheet")
+        if not isinstance(self.violation_type_counts, Mapping):
+            raise ValueError("ERC violation counts must be a mapping")
+        if len(self.violation_type_counts) > 1000:
+            raise ValueError("too many ERC violation types")
+        normalized_counts: dict[str, int] = {}
+        for violation_type, count in self.violation_type_counts.items():
+            if (
+                not isinstance(violation_type, str)
+                or not violation_type
+                or len(violation_type) > 128
+            ):
+                raise ValueError("ERC violation type is malformed")
+            if isinstance(count, bool) or not isinstance(count, int):
+                raise ValueError("ERC violation count must be an integer")
+            _non_negative(violation_type, count)
+            normalized_counts[violation_type] = count
+        aggregate_finding_count = self.error_count + self.warning_count + self.exclusion_count
+        if sum(normalized_counts.values()) != aggregate_finding_count:
+            raise ValueError("ERC violation-type counts must equal aggregate finding counts")
+        if self.passed is not (self.error_count == 0):
+            raise ValueError("passed must reflect the absence of active ERC errors")
+        if self.schema_version != SCHEMA_VERSION:
+            raise ValueError("ERC summary schema version is unsupported")
+        object.__setattr__(
+            self,
+            "violation_type_counts",
+            MappingProxyType(dict(sorted(normalized_counts.items()))),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "intent_digest": self.intent_digest,
+            "schematic_digest": self.schematic_digest,
+            "kicad_version": self.kicad_version,
+            "erc_schema": self.erc_schema,
+            "coordinate_units": self.coordinate_units,
+            "error_count": self.error_count,
+            "warning_count": self.warning_count,
+            "exclusion_count": self.exclusion_count,
+            "ignored_check_count": self.ignored_check_count,
+            "sheet_count": self.sheet_count,
+            "violation_type_counts": dict(self.violation_type_counts),
+            "passed": self.passed,
+            "clean": self.clean,
+            "schema_version": self.schema_version,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class CandidateMetrics:
     """Comparable metrics, ordered by correctness before optimization quality."""
 

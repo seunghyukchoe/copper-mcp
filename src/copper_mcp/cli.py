@@ -19,6 +19,7 @@ from copper_mcp.kicad_file import BoardFormatError, load_json_file
 from copper_mcp.models import candidate_from_dict, rank_candidates
 from copper_mcp.request_boundary import CONSTRAINT_FIELDS, RequestError
 from copper_mcp.routing import AStarSettings
+from copper_mcp.schematic_erc_service import verify_schematic_erc_from_snapshot_json
 from copper_mcp.security import (
     WorkspaceViolationError,
     create_workspace_file,
@@ -338,6 +339,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="New .kicad_sch path inside the workspace; existing files are never replaced",
     )
 
+    erc_parser = subparsers.add_parser(
+        "schematic-erc",
+        help="Run authoritative KiCad ERC and round-trip verification on a Circuit Intent",
+    )
+    erc_parser.add_argument("path", help="Circuit Intent snapshot JSON inside the workspace")
+
     serve_parser = subparsers.add_parser("serve", help="Run the MCP gateway")
     serve_parser.add_argument("--transport", choices=("stdio", "streamable-http"), default="stdio")
     return parser
@@ -454,6 +461,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 ).as_posix(),
             }
             _json_dump(response)
+            return 0
+        if args.command == "schematic-erc":
+            intent_snapshot = read_workspace_file(
+                settings.workspace,
+                args.path,
+                allowed_suffixes={".json"},
+                max_bytes=MAX_CIRCUIT_INPUT_BYTES,
+            )
+            _json_dump(
+                verify_schematic_erc_from_snapshot_json(intent_snapshot.content, settings).to_dict()
+            )
             return 0
         if args.command == "serve":
             os.environ["COPPER_MCP_TRANSPORT"] = args.transport

@@ -1,6 +1,6 @@
 # KiCad arc tracks as routing obstacles
 
-Research date: 2026-08-06.  This note supports [ADR-0070](../adr/0070-conservative-arc-track-envelopes.md).
+Research date: 2026-08-06.  This note supports [ADR-0072](../adr/0072-conservative-arc-track-envelopes.md).
 No external code is copied.
 
 ## Official source findings

@@ -33,6 +33,7 @@ from copper_mcp.mcp_contracts import (
     ApplyCandidateToolResponse,
     CircuitIntentToolContent,
     CircuitSceneToolResponse,
+    CircuitSchematicErcToolResponse,
     CircuitSchematicToolResponse,
     Digest,
     LayeredRoutePreviewToolRequest,
@@ -111,6 +112,7 @@ from copper_mcp.tools import render_circuit_schematic as render_circuit_schemati
 from copper_mcp.tools import run_board_drc as run_board_drc_service
 from copper_mcp.tools import server_info as server_info_service
 from copper_mcp.tools import validate_candidate as validate_candidate_service
+from copper_mcp.tools import verify_circuit_schematic_erc as verify_circuit_schematic_erc_service
 
 _SETTINGS = Settings.from_env()
 _SCHEMATIC_ARTIFACTS = SchematicArtifactStore()
@@ -193,6 +195,7 @@ class CopperMCPServer(MCPServer[None]):
                 "preview_layered_route",
                 "preview_live_layered_route",
                 "render_circuit_schematic",
+                "verify_circuit_schematic_erc",
                 "observe_live_board_scene",
                 "observe_post_placement",
                 "preview_live_placement",
@@ -217,6 +220,8 @@ class CopperMCPServer(MCPServer[None]):
 
         if name == "render_circuit_schematic" and set(arguments) != {"content"}:
             raise ToolError("schematic tool arguments are malformed")
+        if name == "verify_circuit_schematic_erc" and set(arguments) != {"content"}:
+            raise ToolError("schematic ERC tool arguments are malformed")
         if name == "preview_route" and set(arguments) != {"request"}:
             raise ToolError("route tool arguments are malformed")
         if name == "preview_route_bundle" and set(arguments) != {"request"}:
@@ -285,6 +290,36 @@ def run_board_drc(path: str) -> dict[str, Any]:
     """Run fixed-argument KiCad DRC and return a privacy-preserving summary."""
 
     return run_board_drc_service(path, _SETTINGS)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def verify_circuit_schematic_erc(
+    content: CircuitIntentToolContent,
+) -> CircuitSchematicErcToolResponse:
+    """Check Circuit Intent content with the authoritative KiCad ERC and round-trip it.
+
+    ``content`` takes the same Circuit Intent 0.1.0 object as ``render_circuit_schematic``. The
+    schematic is rendered deterministically, checked by ``kicad-cli sch erc``, and re-read through
+    ``kicad-cli sch export netlist`` so KiCad's own view of the components and nets is compared
+    against the source intent.
+
+    Only digests, counts, and KiCad's violation-type keys are returned — never schematic bytes,
+    net or component names, values, coordinates, UUIDs, or KiCad description text. A ``passed``
+    ERC means KiCad found no error-severity violation; it is not a claim of schematic-to-board
+    parity, electrical correctness, or board readiness, each of which is reported as an explicit
+    non-claim in ``verification``.
+    """
+
+    result = verify_circuit_schematic_erc_service(content, _SETTINGS)
+    return CircuitSchematicErcToolResponse.model_validate(result.to_dict())
 
 
 @mcp.tool(
