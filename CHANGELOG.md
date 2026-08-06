@@ -56,6 +56,25 @@ All notable changes are documented here. The format follows
   The boards themselves are LLM-generated and were routed with FreeRouting during their
   construction, so they are neither human-designed hardware nor a neutral yardstick for
   FreeRouting, and the attribution file says so next to the data. (#65, #96)
+- **An agent-facing usage contract, maintained as a tested document.** `docs/agents.md` states what
+  the usage guide and the MCP API contract deliberately do not: given what a tool just returned,
+  what an agent should *do next*. It carries a tool-by-tool table of all 26 registered MCP tools
+  with the digests each one consumes as compare-and-swap preconditions and returns for the next
+  call, and the flags that are off by default; all 30 typed refusal codes and all 25 Board IR
+  conversion diagnostic codes restated as actions rather than explanations (`stale_revision` means
+  re-observe and rebuild the candidate, never resend with the new digests pasted in;
+  `search_budget_exceeded` is not a proof of unroutability; `apply_disabled` is a question for the
+  operator, not an obstacle to route around); the digest discipline that keeps candidates from
+  being mixed across board revisions; realistic end-to-end call sequences for routing, placement,
+  schematic ERC, and the apply token lifecycle; and what the one-value literals `not_run`,
+  `not_modelled`, and `inconclusive` forbid a model from claiming. A root `llms.txt` follows the
+  [llms.txt convention](https://llmstxt.org/) and points an LLM at that document first.
+  `tests/test_agents_doc.py` keeps the document honest: every tool name it lists must still be
+  registered over MCP, every registered tool must appear in it, and every diagnostic code it names
+  must still exist in `src/copper_mcp/`, so a rename or a removed code fails CI instead of quietly
+  leaving a wrong instruction in front of an agent. Documentation and tests only — no runtime
+  contract, capability, schema, or public behavior changes. (#97)
+
 - **The bounded ordered-layer router can use freshness-verified zone fill instead of writing off a
   whole layer.** `LayeredRouteRequest` gained an optional `verified_fill` tuple carrying the same
   `VerifiedFill` value the single-layer core has accepted since ADR-0039, so one caller-side
