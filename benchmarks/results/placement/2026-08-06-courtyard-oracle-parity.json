@@ -1,0 +1,129 @@
+{
+  "date_utc": "2026-08-06",
+  "environment": {
+    "kicad_cli": "10.0.5",
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "fixtures": [
+    "tests/fixtures/board-ir-v0.2/courtyard-donut.kicad_pcb",
+    "tests/fixtures/board-ir-v0.2/courtyard-inset-below.kicad_pcb",
+    "tests/fixtures/board-ir-v0.2/courtyard-inset-at.kicad_pcb"
+  ],
+  "metrics": {
+    "case_count": 15,
+    "cases": [
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "proven_clear",
+        "name": "penetration_-1000000_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "proven_clear",
+        "name": "penetration_-1_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "proven_clear",
+        "name": "penetration_0_nm"
+      },
+      {
+        "agreement": "conceded",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "inconclusive",
+        "name": "penetration_1_nm"
+      },
+      {
+        "agreement": "conceded",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "inconclusive",
+        "name": "penetration_5000_nm"
+      },
+      {
+        "agreement": "conceded",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "inconclusive",
+        "name": "penetration_9998_nm"
+      },
+      {
+        "agreement": "conceded",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "inconclusive",
+        "name": "penetration_9999_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "violated",
+        "name": "penetration_10000_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "violated",
+        "name": "penetration_10001_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "violated",
+        "name": "penetration_20000_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "violated",
+        "name": "penetration_1000000_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "proven_clear",
+        "name": "donut_ring_nesting"
+      },
+      {
+        "agreement": "conceded",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "inconclusive",
+        "name": "inset_below"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "violated",
+        "name": "inset_at"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "proven_clear",
+        "name": "coppertone_buffer"
+      }
+    ],
+    "conceded_inconclusive": 5,
+    "contradictions": [],
+    "courtyard_cache_inset_nm": 5000,
+    "courtyard_collision_threshold_nm": 10000,
+    "exact_parity": 10,
+    "exact_parity_rate": "10/15",
+    "false_negative_clears": [],
+    "false_positive_violations": [],
+    "kicad_invoked": true,
+    "non_contradiction_rate": "15/15",
+    "workspace_mutations": 0
+  },
+  "not_claimed": [
+    "configurable nonzero courtyard clearance",
+    "arc, curved, or non-orthogonal courtyard geometry",
+    "same-footprint rings that touch or properly intersect",
+    "the tiny-shape band where a courtyard is thinner than the inset threshold",
+    "placement apply or full-board DRC"
+  ],
+  "run_id": "sha256:a1c1f09b397ab69633e4ad7424d53760c684dbe4beef02a9ad3b2acb495d733a",
+  "schema": "copper-mcp/benchmark/courtyard-oracle-parity/v1",
+  "source_commit": "892bcac03541c921eac062b966cf78449391f946"
+}

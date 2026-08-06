@@ -505,7 +505,7 @@ class CongestionLedger:
     net's contribution is exact subtraction rather than an approximation.  That is what lets
     :meth:`retain_only` replace the historic "clear everything, then re-add every retained
     candidate" reconstruction without moving a single published byte: the two paths reach the same
-    counters, and the counters are the only thing the router ever reads.  ADR-0075 records the
+    counters, and the counters are the only thing the router ever reads.  ADR-0078 records the
     argument; ``docs/research/incremental-spatial-index-v1.md`` §1.3 records why an integer
     lattice makes the exact answer and the indexed answer the same answer.
 
@@ -588,7 +588,7 @@ class CongestionLedger:
         """Remove exactly one net's occupancy, leaving every other net's counters untouched.
 
         The inverse of :meth:`add_candidate` down to the emptied keys: a resource whose count
-        reaches zero is deleted rather than left at zero.  B-089's mutation check established what
+        reaches zero is deleted rather than left at zero.  B-091's mutation check established what
         that guard is and is not for.  It is *not* an output guard — every reader of the present
         overlay filters on ``usage > 1`` or reads a ``Counter`` whose default is already zero, so
         a lingering zero changes nothing observable.  It is a **memory** guard: without it the
@@ -620,7 +620,7 @@ class CongestionLedger:
         """Rip up every held net outside ``net_ids``, keeping the rest in place.
 
         This replaces ``clear_present()`` followed by re-adding every retained candidate, and it
-        deliberately does **not** always subtract.  Measurement (B-089) showed that subtracting
+        deliberately does **not** always subtract.  Measurement (B-091) showed that subtracting
         the departures is cheaper only when there are fewer of them than there are survivors; a
         pass that rips up almost everything pays more to subtract than to re-count.  So the
         reconstruction costs ``min(ripped-up units, retained units)`` — never more unit work than
@@ -630,7 +630,7 @@ class CongestionLedger:
 
         One honest exception, measured rather than assumed: retaining *nothing* does no unit work
         either way, and the bookkeeping to decide that costs a few microseconds the bare
-        ``clear_present()`` did not.  B-089 records up to 22% slower there, on an operation whose
+        ``clear_present()`` did not.  B-091 records up to 22% slower there, on an operation whose
         absolute cost is single-digit microseconds.
 
         All three branches reach the same counters.  The choice is arithmetic, not semantics.
@@ -1422,7 +1422,7 @@ def negotiate_routes(
             # this run's boundary checks, and its occupancy is *already in the ledger* from the
             # pass that produced it.  Retaining it in place leaves exactly the same counters a
             # clear-and-re-add would rebuild, at the cost of the smaller of the two sides rather
-            # than always the retained one.  ADR-0075 and B-089 record the argument and the
+            # than always the retained one.  ADR-0078 and B-091 record the argument and the
             # measurement; `tests/test_routing_incremental_spatial_index.py` pins the equivalence.
             retained_now = frozenset(retained_candidates) - ripup_nets
             ledger.retain_only(retained_now)
@@ -1718,7 +1718,7 @@ def negotiate_routes(
             # The bounded rip-up window is read off the ledger *before* the next pass rips
             # anything up, so the index still holds every candidate this pass produced.  The
             # window is a declared constant, so the selection cannot widen from one iteration to
-            # the next.  A large enough declared window still selects every net — B-089 measures a
+            # the next.  A large enough declared window still selects every net — B-091 measures a
             # 16-cell window doing exactly that — which is a caller's choice, not a drift.
             window_nets: frozenset[str] = frozenset()
             if declared_plan.rip_up.rule is RipUpRule.CONFLICT_WINDOW:

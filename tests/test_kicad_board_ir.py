@@ -668,14 +668,37 @@ def test_v02_malformed_courtyard_line_fails_closed() -> None:
     assert "unsupported semantic field" in result.diagnostics[0].message
 
 
+TWO_LAYER_STACK = b'    (0 "F.Cu" signal)\n    (2 "B.Cu" signal)'
+
+
+def _with_copper_stack(stack: bytes) -> bytes:
+    """Replace the subset board's two-layer copper stack with ``stack``.
+
+    KiCad writes copper layers in physical stack order - ``F.Cu``, ``In1.Cu`` ... ``InN.Cu``,
+    ``B.Cu`` - while numbering them ``F.Cu=0``, ``B.Cu=2``, ``InN.Cu=2+2N``, so the declared
+    ordinals do not ascend.  See ``docs/research/kicad-copper-layer-numbering-v1.md``.
+    """
+
+    return _replace(SUBSET_BOARD.read_bytes(), TWO_LAYER_STACK, stack)
+
+
 def _four_layer_source() -> bytes:
-    return _replace(
-        SUBSET_BOARD.read_bytes(),
-        b'    (0 "F.Cu" signal)\n    (2 "B.Cu" signal)',
+    return _with_copper_stack(
         b'    (0 "F.Cu" signal)\n'
-        b'    (2 "In1.Cu" signal)\n'
-        b'    (4 "In2.Cu" signal)\n'
-        b'    (6 "B.Cu" signal)',
+        b'    (4 "In1.Cu" signal)\n'
+        b'    (6 "In2.Cu" signal)\n'
+        b'    (2 "B.Cu" signal)'
+    )
+
+
+def _six_layer_source() -> bytes:
+    return _with_copper_stack(
+        b'    (0 "F.Cu" signal)\n'
+        b'    (4 "In1.Cu" signal)\n'
+        b'    (6 "In2.Cu" power)\n'
+        b'    (8 "In3.Cu" power)\n'
+        b'    (10 "In4.Cu" signal)\n'
+        b'    (2 "B.Cu" signal)'
     )
 
 
@@ -919,6 +942,41 @@ def test_unmodeled_setup_routing_constraints_are_rejected() -> None:
     assert result.diagnostics[0].code == "unsupported.construct"
 
 
+def test_soldermask_minimum_width_is_accepted_as_setup_metadata() -> None:
+    """A mask-sliver bound constrains no copper, so carrying it must not refuse the board.
+
+    Real boards were refused outright for declaring `solder_mask_min_width`, which sits in the
+    same class as the already-accepted `pad_to_mask_clearance`: it bounds mask generation, not
+    the copper geometry CopperMCP models.
+    """
+
+    source = _replace(
+        SUBSET_BOARD.read_bytes(),
+        b'  (generator "pcbnew")',
+        b'  (generator "pcbnew")\n  (setup (solder_mask_min_width 0.25))',
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.diagnostics == ()
+    assert result.snapshot is not None
+
+
+def test_an_unknown_setup_field_is_still_refused() -> None:
+    """Accepting one mask field must not turn the setup block into an open allowlist."""
+
+    source = _replace(
+        SUBSET_BOARD.read_bytes(),
+        b'  (generator "pcbnew")',
+        b'  (generator "pcbnew")\n  (setup (some_future_routing_rule 5))',
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+
+
 def test_multiple_native_identity_fields_are_rejected() -> None:
     source = _replace(
         SUBSET_BOARD.read_bytes(),
@@ -1007,6 +1065,184 @@ def test_adapter_semantic_diagnostics_never_echo_attacker_controlled_ids() -> No
     ).casefold()
     assert diagnostic.code == "geometry.self_intersection"
     assert "secret_audio_design" not in rendered
+
+
+def test_four_layer_board_uses_kicads_real_copper_numbering() -> None:
+    """A four-layer stack as KiCad actually writes it converts to the physical stack order.
+
+    KiCad numbers copper ``F.Cu=0``, ``B.Cu=2``, ``InN.Cu=2+2N`` and declares it front-to-back,
+    so the ordinals in the file are ``0, 4, 6, 2`` - deliberately not ascending.  Board IR keeps
+    ``index`` as the *declaration position*, so the IR stack stays dense and front-to-back.
+    """
+
+    content = parse_success(_four_layer_source(), constraint_profile(assign_signal=True)).content
+
+    assert [(layer.id, layer.name, layer.index, layer.kind) for layer in content.copper_layers] == [
+        ("layer:F.Cu", "F.Cu", 0, "signal"),
+        ("layer:In1.Cu", "In1.Cu", 1, "signal"),
+        ("layer:In2.Cu", "In2.Cu", 2, "signal"),
+        ("layer:B.Cu", "B.Cu", 3, "signal"),
+    ]
+
+
+def test_six_layer_board_converts_with_inner_plane_layers() -> None:
+    content = parse_success(_six_layer_source(), constraint_profile(assign_signal=True)).content
+
+    assert [(layer.name, layer.index, layer.kind) for layer in content.copper_layers] == [
+        ("F.Cu", 0, "signal"),
+        ("In1.Cu", 1, "signal"),
+        ("In2.Cu", 2, "plane"),
+        ("In3.Cu", 3, "plane"),
+        ("In4.Cu", 4, "signal"),
+        ("B.Cu", 5, "signal"),
+    ]
+
+
+def test_single_inner_layer_board_converts() -> None:
+    source = _with_copper_stack(
+        b'    (0 "F.Cu" signal)\n    (4 "In1.Cu" signal)\n    (2 "B.Cu" signal)'
+    )
+
+    content = parse_success(source, constraint_profile(assign_signal=True)).content
+
+    assert [layer.name for layer in content.copper_layers] == ["F.Cu", "In1.Cu", "B.Cu"]
+
+
+@pytest.mark.parametrize(
+    ("label", "stack"),
+    [
+        # The rule CopperMCP used to enforce (issue #104): position * 2.  ``In1.Cu = 2`` is
+        # B.Cu's ordinal, so accepting it would silently misidentify the stack.
+        (
+            "coppermcp's old position-times-two numbering",
+            b'    (0 "F.Cu" signal)\n'
+            b'    (2 "In1.Cu" signal)\n'
+            b'    (4 "In2.Cu" signal)\n'
+            b'    (6 "B.Cu" signal)',
+        ),
+        # KiCad's own pre-V9 numbering: real, but not this format version's.  Ordinal 1 is
+        # F.Mask and 31 is a technical layer under the numbering 20260206 boards use.
+        (
+            "kicad's pre-v9 numbering",
+            b'    (0 "F.Cu" signal)\n'
+            b'    (1 "In1.Cu" signal)\n'
+            b'    (2 "In2.Cu" signal)\n'
+            b'    (31 "B.Cu" signal)',
+        ),
+        (
+            "numeric rather than physical declaration order",
+            b'    (0 "F.Cu" signal)\n'
+            b'    (2 "B.Cu" signal)\n'
+            b'    (4 "In1.Cu" signal)\n'
+            b'    (6 "In2.Cu" signal)',
+        ),
+        (
+            "duplicate ordinal",
+            b'    (0 "F.Cu" signal)\n'
+            b'    (4 "In1.Cu" signal)\n'
+            b'    (4 "In2.Cu" signal)\n'
+            b'    (2 "B.Cu" signal)',
+        ),
+        (
+            "duplicate front copper layer",
+            b'    (0 "F.Cu" signal)\n'
+            b'    (0 "F.Cu" signal)\n'
+            b'    (6 "In2.Cu" signal)\n'
+            b'    (2 "B.Cu" signal)',
+        ),
+        (
+            "gap in the inner layer sequence",
+            b'    (0 "F.Cu" signal)\n'
+            b'    (4 "In1.Cu" signal)\n'
+            b'    (8 "In3.Cu" signal)\n'
+            b'    (2 "B.Cu" signal)',
+        ),
+        (
+            "inner layer carrying an ordinal from another position",
+            b'    (0 "F.Cu" signal)\n'
+            b'    (6 "In1.Cu" signal)\n'
+            b'    (4 "In2.Cu" signal)\n'
+            b'    (2 "B.Cu" signal)',
+        ),
+        (
+            "back copper that is not B.Cu",
+            b'    (0 "F.Cu" signal)\n'
+            b'    (4 "In1.Cu" signal)\n'
+            b'    (6 "In2.Cu" signal)\n'
+            b'    (8 "In3.Cu" signal)',
+        ),
+        (
+            "front copper that is not F.Cu",
+            b'    (4 "In1.Cu" signal)\n    (6 "In2.Cu" signal)\n    (2 "B.Cu" signal)',
+        ),
+        (
+            "inner layer beyond KiCad's In30.Cu",
+            b'    (0 "F.Cu" signal)\n    (64 "In31.Cu" signal)\n    (2 "B.Cu" signal)',
+        ),
+        (
+            "front copper numbered as an inner layer",
+            b'    (4 "F.Cu" signal)\n    (2 "B.Cu" signal)',
+        ),
+        (
+            "back copper numbered under the old rule",
+            b'    (0 "F.Cu" signal)\n'
+            b'    (4 "In1.Cu" signal)\n'
+            b'    (6 "In2.Cu" signal)\n'
+            b'    (8 "B.Cu" signal)',
+        ),
+    ],
+)
+def test_malformed_copper_stacks_are_still_refused(label: str, stack: bytes) -> None:
+    """Widening the rule to KiCad's real numbering must not widen it into accepting garbage."""
+
+    result = parse_kicad_bytes(_with_copper_stack(stack), constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None, label
+    assert [diagnostic.code for diagnostic in result.diagnostics] == ["unsupported.construct"], (
+        label
+    )
+    assert result.diagnostics[0].object_kind == "layer", label
+
+
+def test_stack_deeper_than_kicads_thirty_inner_layers_is_refused() -> None:
+    """KiCad stops at ``In30.Cu``; a 33rd copper layer has no ID to check against.
+
+    The positional name for that slot is ``In31.Cu``, which is absent from KiCad's table, so the
+    entry is refused rather than extrapolated - even though `2+2N` would happily keep counting.
+    """
+
+    inner = b"".join(
+        b'    (%d "In%d.Cu" signal)\n' % (2 + 2 * index, index) for index in range(1, 32)
+    )
+    source = _with_copper_stack(b'    (0 "F.Cu" signal)\n' + inner + b'    (2 "B.Cu" signal)')
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].object_kind == "layer"
+
+
+def test_thirty_two_layer_stack_is_the_deepest_kicad_stack_and_converts() -> None:
+    inner = b"".join(
+        b'    (%d "In%d.Cu" signal)\n' % (2 + 2 * index, index) for index in range(1, 31)
+    )
+    source = _with_copper_stack(b'    (0 "F.Cu" signal)\n' + inner + b'    (2 "B.Cu" signal)')
+
+    content = parse_success(source, constraint_profile(assign_signal=True)).content
+
+    assert len(content.copper_layers) == 32
+    assert [layer.name for layer in content.copper_layers[-2:]] == ["In30.Cu", "B.Cu"]
+    assert [layer.index for layer in content.copper_layers] == list(range(32))
+
+
+def test_board_without_back_copper_is_refused() -> None:
+    result = parse_kicad_bytes(
+        _with_copper_stack(b'    (0 "F.Cu" signal)'), constraint_profile(assign_signal=True)
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unknown.layer"
 
 
 def test_f_and_b_wildcard_excludes_inner_layers() -> None:
@@ -1508,3 +1744,406 @@ def test_coppertone_has_one_residual_pad_bounding_box_overlap_and_it_is_a_roundi
 
     assert len(overlapping) == 1, overlapping
     assert set(overlapping[0]) == {PadShape.OVAL, PadShape.ROUNDRECT}
+
+
+# ---------------------------------------------------------------------------
+# Edge.Cuts outlines assembled from gr_line segments (issue #111)
+# ---------------------------------------------------------------------------
+
+EDGE_CUTS_RECTANGLE = (
+    b"  (gr_rect\n"
+    b"    (start 0 0)\n"
+    b"    (end 40 30)\n"
+    b"    (stroke (width 0.1) (type default))\n"
+    b"    (fill no)\n"
+    b'    (layer "Edge.Cuts")\n'
+    b'    (uuid "10000000-0000-0000-0000-000000000004")\n'
+    b"  )\n"
+)
+
+RECTANGLE_EDGES = (
+    ("0 0", "40 0"),
+    ("40 0", "40 30"),
+    ("40 30", "0 30"),
+    ("0 30", "0 0"),
+)
+
+L_SHAPED_EDGES = (
+    ("0 0", "40 0"),
+    ("40 0", "40 10"),
+    ("40 10", "15 10"),
+    ("15 10", "15 30"),
+    ("15 30", "0 30"),
+    ("0 30", "0 0"),
+)
+
+TRUE_RECTANGLE = (
+    PointNM(0, 0),
+    PointNM(40_000_000, 0),
+    PointNM(40_000_000, 30_000_000),
+    PointNM(0, 30_000_000),
+)
+
+TRUE_L_SHAPE = (
+    PointNM(0, 0),
+    PointNM(40_000_000, 0),
+    PointNM(40_000_000, 10_000_000),
+    PointNM(15_000_000, 10_000_000),
+    PointNM(15_000_000, 30_000_000),
+    PointNM(0, 30_000_000),
+)
+
+
+def _edge_cuts_lines(edges: tuple[tuple[str, str], ...], *, head: str = "gr_line") -> bytes:
+    """Render unordered ``Edge.Cuts`` segment graphics exactly as KiCad writes them."""
+
+    rendered = b""
+    for index, (start, end) in enumerate(edges):
+        rendered += (
+            f"  ({head}\n    (start {start})\n    (end {end})\n".encode()
+            + b"    (stroke (width 0.1) (type default))\n"
+            + b'    (layer "Edge.Cuts")\n'
+            + f'    (uuid "20000000-0000-0000-0000-{index:012d}")\n'.encode()
+            + b"  )\n"
+        )
+    return rendered
+
+
+def _segment_outline_source(edges: tuple[tuple[str, str], ...], *, extra: bytes = b"") -> bytes:
+    """Replace the subset board's single ``gr_rect`` outline with segment graphics."""
+
+    return _replace(SUBSET_BOARD.read_bytes(), EDGE_CUTS_RECTANGLE, _edge_cuts_lines(edges) + extra)
+
+
+def _double_area(points: tuple[PointNM, ...]) -> int:
+    total = 0
+    for index, start in enumerate(points):
+        end = points[(index + 1) % len(points)]
+        total += start.x * end.y - end.x * start.y
+    return abs(total)
+
+
+def _inside_or_on(polygon: tuple[tuple[int, int], ...], point: tuple[int, int]) -> bool:
+    """Exact integer point-in-polygon test; a boundary point counts as contained."""
+
+    x, y = point
+    inside = False
+    for index, (ax, ay) in enumerate(polygon):
+        bx, by = polygon[(index + 1) % len(polygon)]
+        if (bx - ax) * (y - ay) - (by - ay) * (x - ax) == 0 and (
+            min(ax, bx) <= x <= max(ax, bx) and min(ay, by) <= y <= max(ay, by)
+        ):
+            return True
+        if (ay > y) != (by > y):
+            side = (bx - ax) * (y - ay) - (x - ax) * (by - ay)
+            if (side > 0) == (by > ay):
+                inside = not inside
+    return inside
+
+
+def _properly_crosses(
+    a: tuple[int, int], b: tuple[int, int], c: tuple[int, int], d: tuple[int, int]
+) -> bool:
+    def turn(p: tuple[int, int], q: tuple[int, int], r: tuple[int, int]) -> int:
+        cross = (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+        return (cross > 0) - (cross < 0)
+
+    return turn(a, b, c) * turn(a, b, d) < 0 and turn(c, d, a) * turn(c, d, b) < 0
+
+
+def _is_contained(inner: tuple[PointNM, ...], outer: tuple[PointNM, ...]) -> bool:
+    """Exact integer containment test for two simple polygons, boundary included.
+
+    Coordinates are doubled so that edge midpoints stay exact integers: no float appears in
+    any predicate.  ``inner`` is contained in ``outer`` when no edge of one properly crosses
+    an edge of the other and every ``inner`` vertex *and* edge midpoint lies inside or on
+    ``outer``.  Sampling midpoints as well as vertices is what rules out an ``inner`` edge
+    that leaves ``outer`` between two shared vertices.
+    """
+
+    scaled_outer = tuple((point.x * 2, point.y * 2) for point in outer)
+    scaled_inner = tuple((point.x * 2, point.y * 2) for point in inner)
+    for index, start in enumerate(scaled_inner):
+        end = scaled_inner[(index + 1) % len(scaled_inner)]
+        for other, third in enumerate(scaled_outer):
+            fourth = scaled_outer[(other + 1) % len(scaled_outer)]
+            if _properly_crosses(start, end, third, fourth):
+                return False
+    probes: list[tuple[int, int]] = []
+    for index, first in enumerate(inner):
+        second = inner[(index + 1) % len(inner)]
+        probes.append((first.x * 2, first.y * 2))
+        probes.append((first.x + second.x, first.y + second.y))
+    return all(_inside_or_on(scaled_outer, probe) for probe in probes)
+
+
+def _canonical_ring(points: tuple[PointNM, ...]) -> tuple[PointNM, ...]:
+    """Normalize winding and start vertex so two orderings of one ring compare equal."""
+
+    total = 0
+    for index, start in enumerate(points):
+        end = points[(index + 1) % len(points)]
+        total += start.x * end.y - end.x * start.y
+    ordered = points if total > 0 else tuple(reversed(points))
+    least = min(range(len(ordered)), key=lambda index: ordered[index])
+    return ordered[least:] + ordered[:least]
+
+
+def test_edge_cuts_rectangle_drawn_as_four_lines_converts_and_is_inscribed() -> None:
+    """Four ``gr_line`` segments are how KiCad users actually draw a rectangular board.
+
+    Direction of error: the outline is routing *room*, not an obstacle, so the modelled
+    contour must be contained within the outline the board actually draws.  A modelled
+    outline one nanometre too large hands the router copper the fabricated board does not
+    have.  For straight segments that containment is exact - the assembled ring's vertices
+    are the drawn endpoints and nothing is synthesized - which is the strongest form of
+    "never larger", and the area equality below pins it.
+    """
+
+    snapshot = parse_success(_segment_outline_source(RECTANGLE_EDGES), constraint_profile())
+
+    assert len(snapshot.content.outline) == 1
+    modelled = snapshot.content.outline[0].outer.points
+    assert set(modelled) == set(TRUE_RECTANGLE)
+    assert _is_contained(modelled, TRUE_RECTANGLE)
+    assert _double_area(modelled) <= _double_area(TRUE_RECTANGLE)
+    assert _double_area(modelled) == _double_area(TRUE_RECTANGLE)
+    assert snapshot.content.outline[0].id.startswith("contour:")
+
+
+def test_edge_cuts_l_shaped_segment_outline_converts_inscribed() -> None:
+    """Most real boards are not rectangles.  An L-shape has to survive, still inscribed."""
+
+    snapshot = parse_success(_segment_outline_source(L_SHAPED_EDGES), constraint_profile())
+
+    modelled = snapshot.content.outline[0].outer.points
+    assert len(modelled) == 6
+    assert set(modelled) == set(TRUE_L_SHAPE)
+    assert _is_contained(modelled, TRUE_L_SHAPE)
+    assert _double_area(modelled) <= _double_area(TRUE_L_SHAPE)
+    assert not _is_contained(TRUE_RECTANGLE, modelled), (
+        "the L-shape must not be modelled as its bounding rectangle"
+    )
+
+
+def test_edge_cuts_segment_order_and_direction_do_not_move_the_outline() -> None:
+    """KiCad writes the segments in drawing order, in whichever direction they were drawn.
+
+    The real four-layer board that motivated this fix writes its four edges as
+    ``(0,0)->(159,0)``, ``(0,150)->(0,0)``, ``(159,0)->(159,150)``, ``(159,150)->(0,150)``:
+    neither contiguous nor consistently wound.  The assembled ring must therefore depend on
+    the segment *set*, not on file order and not on the direction each segment was drawn.
+    """
+
+    scrambled = (
+        ("40 30", "0 30"),
+        ("0 0", "40 0"),
+        ("0 0", "0 30"),
+        ("40 0", "40 30"),
+    )
+
+    ordered = parse_success(_segment_outline_source(L_SHAPED_EDGES), constraint_profile())
+    flipped = parse_success(
+        _segment_outline_source(tuple(reversed([(end, start) for start, end in L_SHAPED_EDGES]))),
+        constraint_profile(),
+    )
+    assert _canonical_ring(ordered.content.outline[0].outer.points) == _canonical_ring(
+        flipped.content.outline[0].outer.points
+    )
+
+    straightforward = parse_success(_segment_outline_source(RECTANGLE_EDGES), constraint_profile())
+    shuffled = parse_success(_segment_outline_source(scrambled), constraint_profile())
+    assert _canonical_ring(straightforward.content.outline[0].outer.points) == _canonical_ring(
+        shuffled.content.outline[0].outer.points
+    )
+
+
+OPEN_CONTOUR_EDGES = RECTANGLE_EDGES[:3]
+
+NEAR_MISS_EDGES = (
+    ("0 0", "40 0"),
+    ("40 0", "40 30"),
+    ("40 30", "0 30"),
+    ("0 30", "0 0.01"),
+)
+
+# A closed, non-branching, single-component chain whose fourth edge crosses its second.  The
+# crossing is not a vertex, so degree alone cannot see it: the ring's own simplicity contract is
+# what refuses it.  The quadrilateral is deliberately asymmetric, because a symmetric bowtie has
+# zero signed area and would be refused for that instead.
+SELF_INTERSECTING_EDGES = (
+    ("0 0", "40 0"),
+    ("40 0", "0 30"),
+    ("0 30", "30 20"),
+    ("30 20", "0 0"),
+)
+
+DISJOINT_LOOP_EDGES = (
+    *RECTANGLE_EDGES,
+    ("50 0", "60 0"),
+    ("60 0", "60 10"),
+    ("60 10", "50 10"),
+    ("50 10", "50 0"),
+)
+
+ZERO_LENGTH_EDGES = (*RECTANGLE_EDGES, ("20 0", "20 0"))
+
+DUPLICATE_EDGES = (*RECTANGLE_EDGES, ("40 0", "0 0"))
+
+BRANCHING_EDGES = (
+    ("0 0", "20 0"),
+    ("20 0", "40 0"),
+    ("40 0", "40 30"),
+    ("40 30", "0 30"),
+    ("0 30", "0 0"),
+    ("20 0", "20 15"),
+)
+
+
+@pytest.mark.parametrize(
+    ("edges", "expected_code", "expected_message"),
+    [
+        (OPEN_CONTOUR_EDGES, "geometry.invalid", "closed"),
+        (NEAR_MISS_EDGES, "geometry.invalid", "closed"),
+        (SELF_INTERSECTING_EDGES, "geometry.self_intersection", ""),
+        (DISJOINT_LOOP_EDGES, "unsupported.topology", "disjoint"),
+        (ZERO_LENGTH_EDGES, "geometry.invalid", "zero-length"),
+        (DUPLICATE_EDGES, "geometry.invalid", "duplicate"),
+        (BRANCHING_EDGES, "geometry.invalid", "closed"),
+    ],
+    ids=[
+        "open-contour",
+        "near-miss-gap",
+        "self-intersecting",
+        "two-disjoint-loops",
+        "zero-length-segment",
+        "duplicate-segment",
+        "branching-spur",
+    ],
+)
+def test_malformed_segment_outlines_are_refused_with_a_typed_code(
+    edges: tuple[tuple[str, str], ...], expected_code: str, expected_message: str
+) -> None:
+    """Refuse honestly instead of repairing.
+
+    Every one of these is a shape a human can draw by accident, and for each there is a
+    plausible "helpful" repair - snap the gap, drop the spur, keep the biggest loop.  Each
+    repair invents board area the drawn geometry does not enclose, which is the one direction
+    of error this contour may not take, so each is a typed refusal instead.  The near-miss gap
+    is 10 um: inside KiCad's own outline chaining epsilon, and refused here anyway, because
+    closing it would enlarge the modelled board.
+    """
+
+    result = parse_kicad_bytes(_segment_outline_source(edges), constraint_profile())
+
+    assert result.snapshot is None
+    assert len(result.diagnostics) == 1
+    assert result.diagnostics[0].code == expected_code
+    assert expected_message in result.diagnostics[0].message
+
+
+def test_edge_cuts_arc_outline_stays_refused_with_an_honest_diagnostic() -> None:
+    """Arcs are deliberately out of scope for this slice, and the refusal has to say so.
+
+    ADR-0072's sagitta bound over-approximates an arc, which is right for an obstacle and
+    exactly backwards for an outline: an outline arc needs an *inscribed* approximation, and
+    whether a chord is inscribed depends on which side of the ring the arc bulges toward.
+    Rather than guess, the adapter refuses - and names arcs, so a caller can tell this apart
+    from an unsupported layer or a malformed loop.
+    """
+
+    arc = (
+        b"  (gr_arc\n"
+        b"    (start 40 0)\n"
+        b"    (mid 41 15)\n"
+        b"    (end 40 30)\n"
+        b"    (stroke (width 0.1) (type default))\n"
+        b'    (layer "Edge.Cuts")\n'
+        b'    (uuid "30000000-0000-0000-0000-000000000001")\n'
+        b"  )\n"
+    )
+    source = _segment_outline_source(
+        (RECTANGLE_EDGES[0], RECTANGLE_EDGES[2], RECTANGLE_EDGES[3]), extra=arc
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile())
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert "arc" in result.diagnostics[0].message
+    assert result.diagnostics[0].object_kind == "outline"
+
+
+def test_mixed_rectangle_and_segment_outlines_are_refused() -> None:
+    """One board, one outline.  A rectangle plus a segment loop is two, so it refuses."""
+
+    source = _replace(
+        SUBSET_BOARD.read_bytes(),
+        EDGE_CUTS_RECTANGLE,
+        EDGE_CUTS_RECTANGLE
+        + _edge_cuts_lines(
+            (
+                ("50 0", "60 0"),
+                ("60 0", "60 10"),
+                ("60 10", "50 10"),
+                ("50 10", "50 0"),
+            )
+        ),
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile())
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].object_kind == "outline"
+
+
+def test_segment_outline_charges_a_segment_budget() -> None:
+    """Work is bounded by a declared budget rather than by the board being reasonable."""
+
+    split_bottom_edge = (
+        ("0 0", "20 0"),
+        ("20 0", "40 0"),
+        ("40 0", "40 30"),
+        ("40 30", "0 30"),
+        ("0 30", "0 0"),
+    )
+
+    result = parse_kicad_bytes(
+        _segment_outline_source(split_bottom_edge),
+        constraint_profile(),
+        ParseLimits(max_vertices_per_ring=4),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "budget.exceeded"
+    assert "Edge.Cuts outline segment budget" in result.diagnostics[0].message
+
+
+def test_pathological_segment_outline_hits_a_budget_instead_of_spinning() -> None:
+    """Two thousand collinear sub-segments still form a closed loop, and still bounded work.
+
+    The ring simplicity test is quadratic in its vertices, so a board that splits one edge
+    into thousands of pieces has to charge - and exhaust - the intersection-test budget
+    rather than run to completion.
+    """
+
+    steps = 2_000
+    edges = [("0 0", "40 0"), ("40 0", "40 30")]
+    edges += [
+        (
+            f"{40 - index * 40 / steps:.6f} 30",
+            f"{40 - (index + 1) * 40 / steps:.6f} 30",
+        )
+        for index in range(steps)
+    ]
+    edges.append(("0 30", "0 0"))
+
+    result = parse_kicad_bytes(
+        _segment_outline_source(tuple(edges)),
+        constraint_profile(),
+        ParseLimits(max_intersection_tests=10_000),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "budget.exceeded"

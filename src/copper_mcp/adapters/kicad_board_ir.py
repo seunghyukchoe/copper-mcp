@@ -60,6 +60,20 @@ KICAD_PCB_ROOT_HEAD = "kicad_pcb"
 # a truthful unsupported result. It used to be reported as a generic ``syntax.invalid``.
 FOREIGN_ROOT_DIAGNOSTIC_CODE = "unsupported.document"
 _COURTYARD_LAYERS = frozenset({"F.CrtYd", "B.CrtYd"})
+# KiCad's copper layer IDs as written into the board file, for the format versions above.
+# ``F.Cu=0``, ``B.Cu=2``, ``InN.Cu=2+2N`` for 1 <= N <= 30 - copper takes the even values and the
+# technical layers are interleaved on the odd ones.  This is *not* the numbering KiCad used before
+# version 9, which was consecutive with the back layer last (``F.Cu=0``, ``In1..In30 = 1..30``,
+# ``B.Cu=31``) and which KiCad itself converts via ``BoardLayerFromLegacyId``.  Only one numbering
+# can be correct at a time: under the current scheme, ID 1 is ``F.Mask``, so a validator that
+# accepted both would accept boards whose stack it had misread.  The choice is made for us by
+# ``_SUPPORTED_KICAD_PCB_VERSIONS`` above, which refuses pre-V9 documents with a typed
+# ``unsupported.version`` diagnostic before this table is ever consulted - so widening that set
+# past a V9 boundary is not a version-string edit, it needs a second numbering rule here.
+# Derivation and citations: docs/research/kicad-copper-layer-numbering-v1.md.
+_KICAD_COPPER_LAYER_IDS: dict[str, int] = {"F.Cu": 0, "B.Cu": 2} | {
+    f"In{inner}.Cu": 2 + 2 * inner for inner in range(1, 31)
+}
 _ROOT_METADATA_HEADS = frozenset(
     {
         "embedded_fonts",
@@ -75,6 +89,16 @@ _ROOT_METADATA_HEADS = frozenset(
     }
 )
 _ROOT_ROUTING_HEADS = frozenset({"arc", "footprint", "segment", "via", "zone"})
+# The only root graphics that may sit on ``Edge.Cuts``: one unfilled rectangle, or straight
+# segments that chain into exactly one closed simple loop.  Both carry the board outline as an
+# exact integer polygon whose vertices are drawn points, so neither can model more room than the
+# board has.  See docs/research/edge-cuts-outline-assembly-v1.md and ADR-0076.
+_EDGE_CUTS_OUTLINE_HEADS = frozenset({"gr_line", "gr_rect"})
+# Curved outline primitives, refused separately so the diagnostic names the curve rather than
+# reporting the same message as an unsupported layer.  An outline curve needs an *inscribed*
+# approximation, which is not ADR-0072's conservative arc envelope run backwards.
+_EDGE_CUTS_CURVE_HEADS = frozenset({"gr_arc", "gr_bezier", "gr_circle", "gr_curve"})
+_EDGE_CUTS_LINE_FIELDS = frozenset({"end", "layer", "locked", "start", "stroke", "tstamp", "uuid"})
 _SETUP_METADATA_HEADS = frozenset(
     {
         "allow_soldermask_bridges_in_footprints",
@@ -84,6 +108,12 @@ _SETUP_METADATA_HEADS = frozenset(
         "pad_to_mask_clearance",
         "pcbplotparams",
         "plugging",
+        # Soldermask sliver minimum. Like `pad_to_mask_clearance` above it constrains mask
+        # generation, not copper: it bounds how thin a mask web may get between apertures.
+        # CopperMCP models copper geometry and makes no soldermask claim, so accepting it as
+        # metadata ignores nothing it would otherwise have honoured. Found on real boards that
+        # were refused outright for carrying it.
+        "solder_mask_min_width",
         "tenting",
     }
 )
@@ -91,6 +121,11 @@ _FOOTPRINT_METADATA_HEADS = frozenset(
     {
         "at",
         "attr",
+        # Library documentation strings KiCad copies into every placed footprint: a human
+        # description and search tags. They carry no geometry, no layer, and no constraint, so
+        # refusing them refused essentially every real board -- they appeared 2,518 times each
+        # across the 23 boards this gap was found on.
+        "descr",
         "duplicate_pad_numbers_are_jumpers",
         "embedded_fonts",
         "layer",
@@ -100,6 +135,7 @@ _FOOTPRINT_METADATA_HEADS = frozenset(
         "pad",
         "path",
         "property",
+        "tags",
         "tstamp",
         "uuid",
     }
@@ -330,12 +366,21 @@ class _Converter:
                 continue
             if head.startswith("gr_"):
                 layer = self._graphic_layer(item, "kicad_pcb.graphic")
-                if self._is_routing_layer(layer) and not (
-                    head == "gr_rect" and layer == "Edge.Cuts"
-                ):
+                if layer == "Edge.Cuts" and head not in _EDGE_CUTS_OUTLINE_HEADS:
                     self.fail(
                         "unsupported.construct",
-                        "root graphic on copper or Edge.Cuts is unsupported",
+                        (
+                            "Edge.Cuts outline arcs, circles and curves are unsupported"
+                            if head in _EDGE_CUTS_CURVE_HEADS
+                            else "Edge.Cuts graphic is not a supported outline primitive"
+                        ),
+                        "kicad_pcb.graphic",
+                        object_kind="outline",
+                    )
+                if self._is_routing_layer(layer) and layer != "Edge.Cuts":
+                    self.fail(
+                        "unsupported.construct",
+                        "root graphic on copper is unsupported",
                         "kicad_pcb.graphic",
                         object_kind="graphic",
                     )
@@ -393,7 +438,12 @@ class _Converter:
                         f"{locator}.zone",
                         object_kind="zone",
                     )
-                if head.startswith("fp_") or head == "property":
+                # `point` is layer-bearing like the `fp_*` primitives -- it carries `at`, `size`
+                # and `layer` -- so it goes through the same layer-aware path rather than the
+                # metadata allowlist. That keeps the copper question decided by the layer, not by
+                # the head: a `point` on a routing layer is refused exactly as a stray `fp_line`
+                # is, and one on a documentation layer is ignored exactly as silkscreen is.
+                if head.startswith("fp_") or head in {"property", "point"}:
                     layer = self._graphic_layer(item, f"{locator}.graphic")
                     if layer in _COURTYARD_LAYERS:
                         if head not in {"fp_line", "fp_poly", "fp_rect"}:
@@ -546,6 +596,11 @@ class _Converter:
             )
         if identities:
             return f"{kind}:kicad:{identities[0][1].lower()}"
+        return self._derived_identity(kind, locator)
+
+    def _derived_identity(self, kind: str, locator: str) -> str:
+        """Name an object that carries no native KiCad identity of its own."""
+
         material = f"{self.source_revision}\0{kind}\0{locator}".encode()
         return f"{kind}:derived:{hashlib.sha256(material).hexdigest()[:32]}"
 
@@ -574,6 +629,12 @@ class _Converter:
             )
         result: list[Layer] = []
         for ordinal, (source_index, name, kind) in enumerate(copper_entries):
+            # Two independent invariants, and conflating them is what produced issue #104.
+            # ``ordinal`` is the *declaration position*: KiCad writes copper front-to-back, so the
+            # name a position must carry is positional.  The ID that name must carry is not - it
+            # comes from KiCad's own enumeration, in which copper takes the even values with the
+            # technical layers interleaved on the odd ones.  The declared IDs of a four-layer
+            # board are therefore 0, 4, 6, 2 and do not ascend.
             expected_name = (
                 "F.Cu"
                 if ordinal == 0
@@ -581,7 +642,11 @@ class _Converter:
                 if ordinal == len(copper_entries) - 1
                 else f"In{ordinal}.Cu"
             )
-            if source_index != ordinal * 2 or name != expected_name:
+            # A name KiCad's table does not carry (``In31.Cu`` and beyond) yields a sentinel no
+            # unsigned source index can equal, so a deeper stack is refused rather than
+            # extrapolated - even though ``2 + 2N`` would happily keep counting.
+            expected_index = _KICAD_COPPER_LAYER_IDS.get(expected_name, -1)
+            if name != expected_name or source_index != expected_index:
                 self.fail(
                     "unsupported.construct",
                     "copper layer IDs, names, or declaration order are unsupported",
@@ -1767,6 +1832,114 @@ class _Converter:
             )
         return tuple(zones), tuple(keepouts)
 
+    def _edge_cuts_line_segments(self) -> list[tuple[PointNM, PointNM, str]]:
+        """Read every root ``gr_line`` drawn on ``Edge.Cuts`` as an exact integer segment."""
+
+        segments: list[tuple[PointNM, PointNM, str]] = []
+        for index, expression in enumerate(children(self.root, "gr_line")):
+            locator = f"kicad_pcb.gr_line[{index}]"
+            layer_values = self._values(
+                expression,
+                "layer",
+                locator,
+                minimum=1,
+                maximum=1,
+                required=False,
+            )
+            if layer_values != ("Edge.Cuts",):
+                continue
+            self._reject_unknown_children(expression, _EDGE_CUTS_LINE_FIELDS, locator)
+            self._validate_direct_atoms(
+                expression,
+                positional_atoms=0,
+                allowed=frozenset({"locked"}),
+                locator=locator,
+            )
+            start = self._point(expression, "start", locator)
+            end = self._point(expression, "end", locator)
+            if start == end:
+                self.fail(
+                    "geometry.invalid",
+                    "Edge.Cuts outline carries a zero-length segment",
+                    locator,
+                    object_kind="outline",
+                )
+            segments.append((start, end, locator))
+        return segments
+
+    def _edge_cuts_segment_ring(self, segments: list[tuple[PointNM, PointNM, str]]) -> Ring:
+        """Assemble unordered ``Edge.Cuts`` segments into exactly one closed simple ring.
+
+        The board outline is routing *room*, not an obstacle, so the direction of error here is
+        the opposite of the one an obstacle envelope takes: the modelled contour must be
+        **contained within** the outline the board draws, never larger, or the router is handed
+        copper the fabricated board does not have.  Straight segments make that containment
+        exact - every ring vertex is a drawn endpoint and nothing is synthesized - and the only
+        way to break it is to *repair* the input, so this method never does.
+
+        Endpoints must coincide exactly.  KiCad chains its own outline with a non-zero epsilon
+        (``ConvertOutlineToPolygon``'s ``aChainingEpsilon``) and will close a sub-tolerance gap
+        for you; closing a gap adds area no drawn segment encloses, so a near-miss is refused
+        here instead.  Duplicate segments, a vertex of degree other than two, a second disjoint
+        loop, and anything past the ring budget are refusals for the same reason: each has more
+        than one plausible repair and every repair invents board.
+        """
+
+        if len(segments) > self.limits.max_vertices_per_ring:
+            self.fail(
+                "budget.exceeded",
+                "Edge.Cuts outline segment budget exceeded",
+                "kicad_pcb",
+                object_kind="outline",
+            )
+        adjacency: dict[PointNM, list[tuple[int, PointNM]]] = {}
+        seen: set[tuple[PointNM, PointNM]] = set()
+        for index, (start, end, locator) in enumerate(segments):
+            key = (start, end) if start < end else (end, start)
+            if key in seen:
+                self.fail(
+                    "geometry.invalid",
+                    "Edge.Cuts outline has a duplicate segment",
+                    locator,
+                    object_kind="outline",
+                )
+            seen.add(key)
+            adjacency.setdefault(start, []).append((index, end))
+            adjacency.setdefault(end, []).append((index, start))
+        for links in adjacency.values():
+            if len(links) != 2:
+                self.fail(
+                    "geometry.invalid",
+                    "Edge.Cuts outline must be one closed non-branching loop",
+                    "kicad_pcb",
+                    object_kind="outline",
+                )
+
+        origin = min(adjacency)
+        points: list[PointNM] = [origin]
+        current, previous_edge = origin, -1
+        while True:
+            choices = sorted(
+                (edge, other) for edge, other in adjacency[current] if edge != previous_edge
+            )
+            previous_edge, current = choices[0]
+            if current == origin:
+                break
+            points.append(current)
+        if len(points) != len(segments):
+            self.fail(
+                "unsupported.topology",
+                "multiple disjoint Edge.Cuts loops are unsupported",
+                "kicad_pcb",
+                object_kind="outline",
+            )
+        # Two segments cannot close a loop without repeating an edge, which the duplicate check
+        # above already refuses, so ``Ring`` sees at least three points here.  Its own contract -
+        # three distinct vertices, no repeated closing point, non-zero area - is what rejects a
+        # degenerate all-collinear cycle, and ``validate_content`` is what rejects a ring that
+        # crosses itself away from a shared vertex.
+        return Ring(tuple(points))
+
     def _outline(self) -> tuple[OutlineContour, ...]:
         contours: list[OutlineContour] = []
         for index, expression in enumerate(children(self.root, "gr_rect")):
@@ -1807,7 +1980,15 @@ class _Converter:
                     ),
                 )
             )
-        for head in ("gr_line", "gr_arc", "gr_circle", "gr_poly", "gr_curve"):
+        segments = self._edge_cuts_line_segments()
+        if segments:
+            contours.append(
+                OutlineContour(
+                    id=self._derived_identity("contour", "kicad_pcb.edge_cuts"),
+                    outer=self._edge_cuts_segment_ring(segments),
+                )
+            )
+        for head in ("gr_arc", "gr_circle", "gr_poly", "gr_curve"):
             for index, expression in enumerate(children(self.root, head)):
                 locator = f"kicad_pcb.{head}[{index}]"
                 layer_values = self._values(
@@ -1821,7 +2002,7 @@ class _Converter:
                 if layer_values == ("Edge.Cuts",):
                     self.fail(
                         "unsupported.construct",
-                        "Board IR adapter v0.1 accepts rectangular Edge.Cuts only",
+                        "Edge.Cuts outline arcs, circles, polygons and curves are unsupported",
                         locator,
                         object_kind="outline",
                     )
@@ -1830,7 +2011,7 @@ class _Converter:
         if len(contours) != 1:
             self.fail(
                 "unsupported.construct",
-                "Board IR adapter v0.1 requires exactly one rectangular Edge.Cuts contour",
+                "the board must carry exactly one Edge.Cuts outline contour",
                 "kicad_pcb",
                 object_kind="outline",
             )

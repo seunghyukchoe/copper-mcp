@@ -1,0 +1,41 @@
+{
+  "$schema": "https://go.kicad.org/pcm/schemas/v2",
+  "identifier": "com.github.seunghyukchoe.coppermcp-live-observer",
+  "name": "CopperMCP Live Observer",
+  "type": "plugin",
+  "description": "Read-only KiCad IPC observer for CopperMCP. Does nothing unless the CopperMCP server is separately opted in with COPPER_MCP_ALLOW_LIVE_IPC=1.",
+  "description_full": "Registers one PCB Editor action that asks CopperMCP for a redacted summary of the board KiCad is currently holding: a content digest, KiCad and binding version metadata, a byte count, and bounded counts of nets, footprints, pads, vias, segments, text, zones, and groups. Nothing else is printed. Net names, reference designators, coordinates, UUIDs, property strings, and board text never leave KiCad.\n\nTHIS PLUGIN IS THE OBSERVATION HALF OF A BOUNDARY WHOSE OTHER HALF IS OFF BY DEFAULT. Installing it grants nothing on its own. The action reads a board only when the CopperMCP Python package is installed in the interpreter KiCad is configured to use AND the environment KiCad was launched from sets COPPER_MCP_ALLOW_LIVE_IPC=1, a value that must be exactly 0 or 1. With the flag unset the action prints \"CopperMCP IPC observer unavailable: KicadIpcDisabledError\" and reads nothing at all; it does not fall back to discovering a socket. Clicking the button is your action, but the flag is what makes it one the host authorised, and it is the same switch that gates every live surface of the CopperMCP MCP server.\n\nThe plugin never mutates your document. It calls no begin_commit, push_commit, create_items, update_items, remove_items, or save. Editor mutation lives behind a second, separate opt-in on the server side and is not reachable from here.\n\nKICAD_API_TOKEN, which KiCad hands to every launched IPC plugin, stays inside the plugin process. It is never passed to the kicad-python binding, never written to the output, and never transmitted anywhere.\n\nRequires KiCad 9.0.1 or newer with the IPC API server enabled in Preferences, and the CopperMCP package installed separately: python -m pip install 'copper-mcp[kicad]'. Source, issue tracker, and the full security boundary are at https://github.com/seunghyukchoe/copper-mcp.",
+  "author": {
+    "name": "Seung Hyuk Choe",
+    "contact": {
+      "web": "https://github.com/seunghyukchoe"
+    }
+  },
+  "maintainer": {
+    "name": "Seung Hyuk Choe",
+    "contact": {
+      "web": "https://github.com/seunghyukchoe"
+    }
+  },
+  "license": "Apache-2.0",
+  "resources": {
+    "homepage": "https://github.com/seunghyukchoe/copper-mcp",
+    "documentation": "https://github.com/seunghyukchoe/copper-mcp/blob/main/hardware/kicad-ipc-plugin/README.md",
+    "issues": "https://github.com/seunghyukchoe/copper-mcp/issues"
+  },
+  "tags": [
+    "ipc",
+    "read-only",
+    "observer",
+    "automation",
+    "mcp"
+  ],
+  "versions": [
+    {
+      "version": "0.6.0",
+      "status": "testing",
+      "kicad_version": "9.0.1",
+      "runtime": "ipc"
+    }
+  ]
+}

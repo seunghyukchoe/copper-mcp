@@ -9,7 +9,7 @@ Two structures live here and they are deliberately different shapes:
 * :class:`ConservativeSpatialIndex` is **immutable and query-only**.  ADR-0051 built it for one
   A* search, where the obstacle set is fixed for the search's lifetime and mutating buckets
   mid-expansion would make candidate ordering depend on when a bucket moved.
-* :class:`IncrementalSpatialIndex` is **mutable between passes**.  ADR-0075 built it for the
+* :class:`IncrementalSpatialIndex` is **mutable between passes**.  ADR-0078 built it for the
   negotiated coordinator, where a rip-up/reroute pass changes only the nets it ripped up and
   rebuilding the whole structure discards the retention the rip-up rule just established.
 
