@@ -155,7 +155,7 @@ offline: it reads only files already in the tree and verifies each against
 outcome of *every* attempted net under its exact `RouteFailureCode`, so the refusal breakdown is
 part of the result rather than an error path, and a baseline that is not installed is recorded as
 `not_run` rather than estimated. It does not invoke KiCad, apply copper, or compare CopperMCP with
-another router. See [B-087](ledgers/benchmark-ledger.md) and the
+another router. See [B-088](ledgers/benchmark-ledger.md) and the
 [research note](research/open-baseline-benchmarks-v1.md) for the licensing determination and the
 limits on what a number from this corpus can claim.
 

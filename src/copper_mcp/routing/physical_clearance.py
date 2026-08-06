@@ -37,10 +37,18 @@ class PhysicalClearanceFailure(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class PhysicalClearanceVerificationResult:
-    """Redacted result of a bounded physical-clearance pass."""
+    """Redacted result of a bounded physical-clearance pass.
+
+    ``violating_nets`` names the first offending pair, and only for a clearance violation.  Net
+    IDs are already part of this coordinator's published `unrouted_nets`, so attribution discloses
+    nothing new; it exists so a caller can re-route the pair that failed rather than the whole
+    allocation.  It is deliberately not geometry: no coordinate, width, or clearance value leaves
+    this gate.
+    """
 
     pair_checks: int
     failure: PhysicalClearanceFailure | None = None
+    violating_nets: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if (
@@ -51,6 +59,18 @@ class PhysicalClearanceVerificationResult:
             raise ValueError("physical-clearance pair checks are outside the supported range")
         if self.failure is not None and not isinstance(self.failure, PhysicalClearanceFailure):
             raise ValueError("physical-clearance failure is malformed")
+        if not isinstance(self.violating_nets, tuple) or not all(
+            isinstance(item, str) for item in self.violating_nets
+        ):
+            raise ValueError("physical-clearance attribution is malformed")
+        if self.violating_nets and self.failure is not PhysicalClearanceFailure.CLEARANCE_VIOLATION:
+            raise ValueError("only a clearance violation attributes a net pair")
+        if self.violating_nets and (
+            len(self.violating_nets) != 2
+            or tuple(sorted(self.violating_nets)) != self.violating_nets
+            or len(set(self.violating_nets)) != 2
+        ):
+            raise ValueError("a clearance violation attributes exactly two sorted distinct nets")
 
     @property
     def accepted(self) -> bool:
@@ -218,7 +238,9 @@ def verify_negotiated_physical_clearance(
                 checks += 1
                 if _squared_centreline_distance(left_segment, right_segment) < required_squared:
                     return PhysicalClearanceVerificationResult(
-                        pair_checks=checks, failure=PhysicalClearanceFailure.CLEARANCE_VIOLATION
+                        pair_checks=checks,
+                        failure=PhysicalClearanceFailure.CLEARANCE_VIOLATION,
+                        violating_nets=tuple(sorted((left.patch.net_id, right.patch.net_id))),
                     )
     return PhysicalClearanceVerificationResult(pair_checks=checks)
 

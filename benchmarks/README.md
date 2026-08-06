@@ -22,7 +22,7 @@ digest manifest and a fetch script instead of files. Route the committed MIT-lic
 SimpleRouteJson corpus with `make benchmark-external-corpus`; the run is offline and verifies every
 sample against its recorded digest before importing it. That result measures the existing
 single-layer router on boards this project did not author and records the refusals alongside the
-successes — see [B-087](../docs/ledgers/benchmark-ledger.md) and the
+successes — see [B-088](../docs/ledgers/benchmark-ledger.md) and the
 [research note](../docs/research/open-baseline-benchmarks-v1.md) for what it does and does not
 claim, including that the cross-router baseline comparison is recorded as `not_run`.
 

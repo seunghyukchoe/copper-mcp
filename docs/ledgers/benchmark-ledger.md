@@ -353,6 +353,25 @@ result or a general performance comparison.
 | Artifact | [`2026-08-06-layered-fill-obstacles.json`](../../benchmarks/results/routing/2026-08-06-layered-fill-obstacles.json) |
 | Interpretation | This measures a route-quality improvement in the internal bounded ordered-layer proposal seam, and records the metamorphic monotonicity property and all three fail-closed gates as real invocations rather than metadata claims. The outline-sized island reproducing the conservative length is the bound on how much the replacement can ever open. It does not establish zone-refill behavior beyond ADR-0021, exact polygon layered collision, same-net poured attachment, a public layered fill-authority contract, whole-board completion, electrical correctness, DFM, fabrication readiness, or FreeRouting parity. |
 
+### B-087 — Declared negotiation policy-slot sweep
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:43d3409d2f9ee0330c55649386804cb3c90aa7c3704834a2fee8e0e0cab1c205` |
+| Date and commit | 2026-08-06 03:00 UTC; measured on `feat/negotiated-congestion` at implementation commit `b5227c977c6d447f4d90d3b728b793f5c07616e2`, which is the artifact's `evidence_harness_commit` |
+| Environment | Apple arm64 CPU; macOS 26.5.2; Python 3.12.13; KiCad was not invoked |
+| Dataset | Three CopperMCP-original synthetic Board IR fixtures, no external or proprietary design data: `crossing-neutral-control` reproduces the two-net ADR-0055/B-036 crossing topology; `congested-channel-negotiating` and `congested-channel-first-pass` are the same six nets — one 10-cell horizontal net crossed by three verticals plus two nets far enough apart never to conflict — under a penalty that respectively does and does not force multi-iteration negotiation |
+| Configuration | `copper-mcp/benchmark/negotiated-plan-slots/v1`; eleven declared plans (no-plan baseline, the legacy-equivalent plan, four net-order rules, three cost-update rules, two rip-up rules, one two-slot composition) × three fixtures; ten deterministic replays each; 1,000,000 nm grid; 8-iteration ceiling; single signal layer; CPU-only; script `sha256:14b31f8585cda65ddf45c8821966fa310ef92a5348927ddf1001175c34459e90` |
+| Determinism | 330 replays, zero divergence. Every plan's ten replays produced byte-identical candidate digests, geometry digest, iteration counts, router-call counts, and plan/slot digests. |
+| Metrics — neutral control | All eleven plans identical: completed, 1 iteration, 2 router calls, 26,000,000 nm, 0 overflow units, 0 vias. The slots are inert where the first pass already resolves the board. |
+| Metrics — congested, negotiating | Baseline (no plan): completed, 5 iterations, 30 router calls, 56,000,000 nm. `net-order/demand-ascending`: completed, **1** iteration, **6** router calls, **54,000,000 nm** — 80% fewer router calls and 3.6% less copper. `cost-update/present-growth-13-10`: completed, 3 iterations, 18 router calls, 60,000,000 nm — 40% fewer calls but 7% more copper. `cost-update/scaled-accumulation-4`: completed, 5 iterations, 30 calls, 70,000,000 nm — 25% more copper for no saving. **Negative results:** `rip-up/conflicted-only`, `rip-up/top-conflict-2`, `cost-update/saturating-decay-half`, `net-order/stable-identifier`, `net-order/demand-descending`, and `composed/conflicted-only+present-growth` each reached the 8-iteration ceiling with `no_path` where the default converged in five. |
+| Metrics — congested, first pass | All plans completed in 1 iteration with 6 router calls at 76,000,000 nm, except `net-order/demand-ascending` at 54,000,000 nm. |
+| Rip-up accounting | The baseline reports `0` rip-ups across five iterations while `legacy-equivalent` reports `16` for the same routing. This is not a behavior difference: the legacy counter adds `len(best_candidates)`, which stays empty while every intermediate pass is refused by the clearance gate. The plan-mode counter counts the nets actually selected for re-routing. The legacy number is preserved because changing it would move published bytes. |
+| Artifact | [`2026-08-06-negotiated-plan-slots.json`](../../benchmarks/results/routing/2026-08-06-negotiated-plan-slots.json); validated against its own self-digest by `tests/test_benchmark_negotiated_plan_slots.py`, which also re-runs the harness and requires the fresh cases to equal the committed ones |
+| Mutation sensitivity | Five load-bearing guards mutated one at a time. Caught: the rip-up rule always retrying a net with nothing retained; the plan digest composing from its own three slot digests; candidate identity binding the plan composite rather than the envelope; the no-inert-parameter rule. **Survived on first run:** an unattributed clearance refusal retaining nothing, because no test produced an unattributed refusal. A test was added and the mutant is now caught. |
+| Claim | **None.** The artifact classifies itself `exploratory sweep / no quality claim`. The sweep was not predeclared, the fixtures are small and synthetic, and there is no held-out corpus. Qu et al. measured 1.95% relative deviation in rule violations but 0.008% in wirelength across 300 random net orders on a real benchmark, so the 29% wirelength swing seen here from ordering alone is evidence about this fixture, not about routing. |
+| Interpretation | This measures that the three declared slots are separable, deterministic, digest-bound, and behaviorally real — including where they are worse than the default. It does not establish that any slot combination should become the default, and it makes no KiCad DRC, electrical, multilayer, via, fabrication, apply, whole-board, scaling, or FreeRouting-parity claim. Via counts are structurally zero because the negotiated coordinator is single-layer by contract. |
+
 ### B-024 — Public layered route-preview contract
 
 | Field | Recorded evidence |
@@ -1184,7 +1203,7 @@ These run the existing routers over third-party boards imported through the benc
 SimpleRouteJson seam. They are the first CopperMCP measurements taken on data this project did not
 author, and their refusal breakdowns are the result rather than an error path.
 
-### B-087 — SimpleRouteJson external-corpus routing and refusal breakdown
+### B-088 — SimpleRouteJson external-corpus routing and refusal breakdown
 
 | Field | Recorded evidence |
 |---|---|

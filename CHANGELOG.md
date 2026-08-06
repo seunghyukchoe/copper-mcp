@@ -75,6 +75,37 @@ All notable changes are documented here. The format follows
   leaving a wrong instruction in front of an agent. Documentation and tests only — no runtime
   contract, capability, schema, or public behavior changes. (#97)
 
+- **How the negotiated router negotiates is now three declared choices instead of one fused
+  strategy.** `negotiate_routes` accepts an optional `NegotiationPlan` composed of three separately
+  declared slots — net order, per-iteration cost update, and rip-up selection — each a closed
+  enumeration member plus bounded integer weights, each publishing its own content digest. The plan
+  digest is built from exactly those three slot digests, and the published evidence re-derives that
+  composition and refuses itself if it does not hold, so a plan digest can never name a slot
+  combination other than the one it reports. Change one slot and every candidate identity moves
+  while the envelope digest stays put, so two runs that negotiated differently can no longer look
+  identical. Nothing here touches the path search: a slot decides which nets go to the router, in
+  what order, how the integer congestion counters move between passes, and which nets are
+  re-routed, and the A* expansion, cost function, obstacle predicate, budgets, and emitted geometry
+  are untouched. Because a rule is an enumeration member, a future selector can pick among rules
+  and weights but cannot author one — there is nowhere to put a rule body. A weight the declared
+  rule does not read is rejected rather than ignored, so two plans differ in digest only when they
+  can differ in behavior. The default cost update is named `accumulated-overuse-v1` rather than
+  after PathFinder, because McMurchie and Ebeling publish no closed form for either non-base cost
+  term and the additive-overuse rule is in fact VPR's; the existing history and penalty ceilings
+  are kept on BoxRouter 2.0's published finding that unbounded history eventually makes a presently
+  congested edge look cheaper than a previously congested one. `verify_negotiated_physical_clearance`
+  now names the first violating net pair for a clearance violation — net IDs are already published
+  and no geometry leaves the gate — because a lattice overflow always fails that gate, so without
+  attribution a partial rip-up rule would have had nothing to retain; a refusal that blames no pair
+  in particular still blames the whole allocation. Absent a plan, the coordinator's code path,
+  ordering, accounting, result shape, and candidate identities are byte-for-byte what they were. A
+  plan and an ADR-0064 policy profile cannot be declared together, because composing them needs its
+  own evidence. The measured sweep records losses as well as wins and claims nothing: on the one
+  fixture where negotiation genuinely iterates, shortest-net-first finished in one pass instead of
+  five with 80% fewer router calls, while partial rip-up and history decay did not converge at all.
+  The incremental spatial index is deliberately not part of this, so retained candidates are
+  re-added to the congestion ledger from scratch each pass. (#62)
+
 - **The bounded ordered-layer router can use freshness-verified zone fill instead of writing off a
   whole layer.** `LayeredRouteRequest` gained an optional `verified_fill` tuple carrying the same
   `VerifiedFill` value the single-layer core has accepted since ADR-0039, so one caller-side

@@ -194,7 +194,7 @@ documentation, ledger updates, and benchmark evidence.
     cannot represent. 20 of the 36 MIT-licensed `dwiel/tscircuit-benchmark` boards ship under
     `benchmarks/corpora/` with attribution and digests for all 36; `tscircuit/autorouting` carries
     no licence at all and is cited but not redistributed, and PCBWorld is announced but unreleased.
-    B-087 records the first run on data this project did not author: 70 of 117 nets routed at
+    B-088 records the first run on data this project did not author: 70 of 117 nets routed at
     1.1711× a provable lower bound, with every two-pin net refused because the reference lattice
     requires the pad-centre delta to divide by the grid step. **The cross-router comparison this
     item asks for is still not measured** — FreeRouting is recorded as `not_run`, and a
