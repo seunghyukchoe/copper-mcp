@@ -1705,9 +1705,12 @@ class PlacementLegalityContract(_ClosedContract):
     pad_overlap: Literal["proven_clear", "inconclusive", "violated"]
     outline_containment: Literal["proven_inside", "violated"]
     keepout_respect: Literal["proven_clear", "violated"]
-    #: Exact for the rectangular Board IR v0.2 subset; front/back courtyards are compared only
-    #: on the same physical side and edge contact is not overlap.
-    courtyard_overlap: Literal["proven_clear", "violated"]
+    #: Three-valued for the same reason ``pad_overlap`` is. A footprint's rings are one even-odd
+    #: region, so a nested ring is a hole rather than a second solid, and each region is contracted
+    #: by KiCad 10.0.5's cached-courtyard inset before the collision test. ``inconclusive`` is the
+    #: penetration band where raw geometry and that contracted cache disagree. Courtyards are
+    #: compared only on the same physical side, and edge contact is not overlap.
+    courtyard_overlap: Literal["proven_clear", "inconclusive", "violated"]
 
 
 class FootprintPlacementContract(_ClosedContract):

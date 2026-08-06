@@ -82,6 +82,22 @@ def ring_bounds(ring: Ring) -> Rect:
     return (min(xs), min(ys), max(xs), max(ys))
 
 
+#: Nanometres KiCad 10.0.5 contracts each cached courtyard outline by.
+#:
+#: ``FOOTPRINT::BuildCourtyardCaches`` polygonises the courtyard at ``maxError = 0.005 mm``
+#: (``pcbnew/footprint.cpp:3701``) and then applies ``Inflate( -maxError, ... )`` to the cached
+#: front and back outlines (``:3712`` and ``:3741``).  The source comment at ``:3709`` states the
+#: intent: "Touching courtyards, or courtyards -at- the clearance distance are legal."  The
+#: contraction compensates for arc/circle polygonisation deviation; for the exactly orthogonal
+#: subset modelled here that deviation is zero, so the contraction is pure slack.
+COURTYARD_CACHE_INSET_NM = 5_000
+
+#: Both footprints' caches are contracted, so KiCad's zero-clearance courtyard collision needs
+#: this much nominal penetration.  Reproduced against real ``kicad-cli`` 10.0.5: 9,999 nm is
+#: clear and 10,000 nm collides, on both edge-on and corner-only overlap.
+COURTYARD_COLLISION_THRESHOLD_NM = 2 * COURTYARD_CACHE_INSET_NM
+
+
 def orthogonal_rings_overlap_open(
     first: Ring, second: Ring, *, charge: Callable[[], None] | None = None
 ) -> bool:
@@ -93,44 +109,149 @@ def orthogonal_rings_overlap_open(
     detects proper crossings and strict containment while deliberately treating an edge or corner
     touch as clear.  Board-IR validation admits only simple axis-aligned courtyard rings before
     this predicate is called.
+
+    This is raw ring-versus-ring geometry.  It is *not* KiCad's courtyard question: it treats every
+    ring as a solid and ignores the cached inset.  Courtyard legality goes through
+    :func:`orthogonal_courtyard_region_overlap` instead.
     """
 
-    if not rects_overlap(ring_bounds(first), ring_bounds(second)):
-        return False
-    ys = sorted({point.y for point in first.points} | {point.y for point in second.points})
+    return _region_overlap_witness((first,), (second,), charge=charge)[0]
+
+
+def orthogonal_courtyard_region_overlap(
+    first: tuple[Ring, ...],
+    second: tuple[Ring, ...],
+    *,
+    inset_nm: int = COURTYARD_CACHE_INSET_NM,
+    charge: Callable[[], None] | None = None,
+) -> str:
+    """Compare two footprints' whole courtyard regions the way KiCad 10.0.5 does.
+
+    Two things distinguish this from a ring-by-ring solid comparison, and both are KiCad's own
+    semantics rather than a modelling choice:
+
+    * **A footprint's rings form one region, filled even-odd.** KiCad builds the cache with
+      ``buildContourHierarchy`` (``pcbnew/convert_shape_list_to_polygon.cpp:373-400``), which counts
+      how many other contours contain a contour's first point; an even count makes it an outline
+      (``:411``) and an odd count makes it a hole in the parent with one fewer parents (``:446``).
+      A ring nested inside another is therefore a *hole*, not a second solid, so the centre of a
+      donut courtyard is legitimately occupiable.
+    * **Each region is contracted by** :data:`COURTYARD_CACHE_INSET_NM` **before the collision
+      test**, so collision needs :data:`COURTYARD_COLLISION_THRESHOLD_NM` of penetration.
+
+    The answer is three-valued, because contraction is only exactly modelled where a witness
+    rectangle can be produced:
+
+    ``proven_clear``
+        The raw regions do not share positive area.  Contraction only shrinks a region — the
+        outline moves inward and any hole grows — so a raw miss is a proof that the contracted
+        caches miss too, whatever the ring shapes are.
+    ``violated``
+        The shared area contains an axis-aligned rectangle at least
+        :data:`COURTYARD_COLLISION_THRESHOLD_NM` on both sides.  Contracting that rectangle by
+        ``inset_nm`` per side leaves a non-empty closed set inside both contracted regions, which
+        is exactly what KiCad's zero-clearance ``Collide`` reports.
+    ``inconclusive``
+        The regions share area, but no such witness was found — the penetration is inside the band
+        where CopperMCP's geometry and KiCad's contracted cache genuinely disagree, or the shared
+        area is a shape this scan does not certify.  Reporting ``violated`` here would assert a
+        collision KiCad does not make, and reporting ``proven_clear`` would assert a clearance the
+        geometry does not have, so neither claim is made.
+    """
+
+    if inset_nm < 0:
+        raise ValueError("courtyard inset must not be negative")
+    overlaps, witnessed = _region_overlap_witness(
+        first, second, threshold=2 * inset_nm, charge=charge
+    )
+    if witnessed:
+        return "violated"
+    return "inconclusive" if overlaps else "proven_clear"
+
+
+def _region_overlap_witness(
+    first: tuple[Ring, ...],
+    second: tuple[Ring, ...],
+    *,
+    threshold: int | None = None,
+    charge: Callable[[], None] | None = None,
+) -> tuple[bool, bool]:
+    """Scan two even-odd orthogonal regions for shared area and a ``threshold``-square witness.
+
+    Returns ``(shares_positive_area, found_witness)``.  Within an open horizontal strip between
+    consecutive vertex y-coordinates the region is constant in y, so each shared x-interval spans
+    the full strip: interval width by strip height is a rectangle genuinely inside both regions.
+    The witness search is therefore sound but not complete — a shared rectangle straddling several
+    strips is not assembled, which can only under-report ``violated`` as ``inconclusive``.
+    """
+
+    if not first or not second:
+        return False, False
+    if not rects_overlap(_region_bounds(first), _region_bounds(second)):
+        return False, False
+    ys = sorted(
+        {point.y for ring in first for point in ring.points}
+        | {point.y for ring in second for point in ring.points}
+    )
+    overlaps = False
     for lower, upper in pairwise(ys):
         sample_y_twice = lower + upper
         if charge is not None:
             charge()
         first_intervals = _orthogonal_scanline_intervals(first, sample_y_twice, charge=charge)
         second_intervals = _orthogonal_scanline_intervals(second, sample_y_twice, charge=charge)
+        height = upper - lower
         for first_left, first_right in first_intervals:
             for second_left, second_right in second_intervals:
                 if charge is not None:
                     charge()
-                if max(first_left, second_left) < min(first_right, second_right):
-                    return True
-    return False
+                left = max(first_left, second_left)
+                right = min(first_right, second_right)
+                if left >= right:
+                    continue
+                overlaps = True
+                if threshold is None:
+                    return True, False
+                # Crossings are doubled coordinates, so the difference is always even.
+                if (right - left) // 2 >= threshold and height >= threshold:
+                    return True, True
+    return overlaps, False
+
+
+def _region_bounds(rings: tuple[Ring, ...]) -> Rect:
+    boxes = [ring_bounds(ring) for ring in rings]
+    return (
+        min(box[0] for box in boxes),
+        min(box[1] for box in boxes),
+        max(box[2] for box in boxes),
+        max(box[3] for box in boxes),
+    )
 
 
 def _orthogonal_scanline_intervals(
-    ring: Ring, sample_y_twice: int, *, charge: Callable[[], None] | None
+    rings: tuple[Ring, ...], sample_y_twice: int, *, charge: Callable[[], None] | None
 ) -> tuple[tuple[int, int], ...]:
-    """Return doubled-x open interior intervals at an open horizontal-strip sample."""
+    """Return doubled-x open interior intervals of an even-odd region at a strip sample.
+
+    Crossings from every ring in the region are pooled before pairing, which is what makes a ring
+    nested inside another read as a hole rather than as a second solid.
+    """
 
     crossings: list[int] = []
-    for index, start in enumerate(ring.points):
-        if charge is not None:
-            charge()
-        end = ring.points[(index + 1) % len(ring.points)]
-        if start.x == end.x:
-            lower_y, upper_y = sorted((start.y * 2, end.y * 2))
-            if lower_y < sample_y_twice < upper_y:
-                crossings.append(start.x * 2)
+    for ring in rings:
+        for index, start in enumerate(ring.points):
+            if charge is not None:
+                charge()
+            end = ring.points[(index + 1) % len(ring.points)]
+            if start.x == end.x:
+                lower_y, upper_y = sorted((start.y * 2, end.y * 2))
+                if lower_y < sample_y_twice < upper_y:
+                    crossings.append(start.x * 2)
     crossings.sort()
-    # ``Ring`` is simple and the sample avoids every vertex, so an odd count is impossible.  A
-    # defensive empty answer nevertheless prevents a malformed externally-built ring from
-    # producing a positive verdict if this helper is ever called without Board-IR validation.
+    # Every ``Ring`` is simple and the sample avoids every vertex, so each ring contributes an even
+    # number of crossings and an odd total is impossible.  A defensive empty answer nevertheless
+    # prevents a malformed externally-built ring from producing a positive verdict if this helper
+    # is ever called without Board-IR validation.
     if len(crossings) % 2:
         return ()
     return tuple(zip(crossings[::2], crossings[1::2], strict=True))
@@ -329,10 +450,13 @@ def rotate_offset(offset: PointNM, orientation_udeg: int) -> PointNM:
 
 
 __all__ = [
+    "COURTYARD_CACHE_INSET_NM",
+    "COURTYARD_COLLISION_THRESHOLD_NM",
     "FULL_UDEG",
     "QUARTER_UDEG",
     "Rect",
     "ceil_sqrt",
+    "orthogonal_courtyard_region_overlap",
     "orthogonal_rings_overlap_open",
     "pad_bounds",
     "pad_core",

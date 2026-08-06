@@ -324,7 +324,8 @@ preview_placement({ "request": {
   "expect_board_revision": "sha256:aa..", "expect_snapshot_digest": "sha256:bb.." } })
 // -> status "previewed": candidate bound to base_revision AND view_revision.
 //    evidence.legality.pad_overlap is THREE-valued. inconclusive is not a failure.
-//    courtyard_overlap is two-valued and only for the same-side rectangular subset.
+//    courtyard_overlap is THREE-valued too: a nested courtyard ring is a hole, and
+//    inconclusive marks penetration below KiCad's 10,000 nm cache-inset threshold.
 // -> status "refused": diagnostic.code, plus diagnostic.legality when illegal_placement.
 
 // 3. After an apply (below), observe the exact new revision in one capture.

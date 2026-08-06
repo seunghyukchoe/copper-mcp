@@ -149,8 +149,8 @@ neither clearance nor collision could be proven rather than that something is wr
 `infeasible_constraints` is never conflated with `budget_exhausted`. Locked footprints reject
 movement proposals.
 
-`courtyard_overlap` **is evaluated** — it is two-valued, `proven_clear` or `violated`, and a
-violation makes the candidate illegal. Read it for exactly what it covers:
+`courtyard_overlap` **is evaluated** — it is three-valued, `proven_clear`, `inconclusive`, or
+`violated`, and only a violation makes the candidate illegal. Read it for exactly what it covers:
 
 - It compares rings between footprints **on the same physical side**. Front and back courtyards are
   independent physical layers, so cross-side contact is not a collision.
@@ -158,20 +158,31 @@ violation makes the candidate illegal. Read it for exactly what it covers:
   `fp_rect`, unfilled `fp_poly`, and degree-two closed `fp_line` chains. Curves, diagonals, fills,
   and open or branching chains are refused by the Board IR contract before a placement view exists,
   so an unsupported courtyard is a refusal rather than a silent pass.
-- Within that subset the integer strip predicate is exact for *positive-area* intersection,
-  including full containment. Edge and corner contact are legal, matching KiCad's zero-clearance
+- **All of one footprint's rings are one region, filled even-odd.** A ring nested inside another is
+  a *hole*, not a second solid, so the centre of a donut courtyard — an RF shield can, a socket — is
+  legitimately occupiable. This matches what KiCad computes when it builds its courtyard cache.
+- **The comparison models KiCad's cached-courtyard inset.** KiCad contracts each cached outline by
+  5,000 nm, so a zero-clearance collision needs 10,000 nm of penetration. Measured against real
+  `kicad-cli` 10.0.5: 9,999 nm is clear and 10,000 nm reports `courtyards_overlap`, on both edge-on
+  and corner-only overlap. Edge and corner contact are legal, matching KiCad's zero-clearance
   default.
 
-Two things are out of scope today, and neither is implied by a `proven_clear` result. There is no
-configurable courtyard clearance: the check answers overlap, not separation, so it cannot express a
-"keep 0.2 mm between parts" rule. And general courtyard topology is not modelled —
-[issue #74](https://github.com/seunghyukchoe/copper-mcp/issues/74) tracks same-footprint ring
-nesting, where a donut authored as an outer plus an inner ring is treated as two solid shapes, so a
-part legitimately sitting in the hole is refused. [Issue #72](https://github.com/seunghyukchoe/copper-mcp/issues/72)
-records the measured fidelity band against real KiCad: KiCad polygonizes courtyards and contracts
-its cached outlines by about 5,000 nm, so KiCad registers a collision only past roughly 10,000 nm of
-penetration while this predicate reports overlap from 1 nm. Both errors point the same way — toward
-refusing a placement KiCad would accept, not toward accepting one it would reject.
+Read the three values for exactly what each claims:
+
+| Value | What it claims |
+|---|---|
+| `proven_clear` | The regions share no area. Contraction only shrinks a region, so this is a proof for any supported ring shape. |
+| `violated` | The shared area is at least 10,000 nm across on both axes, so KiCad's contracted caches provably meet. Exact parity. |
+| `inconclusive` | The regions overlap by less than that. KiCad calls it clear and the raw geometry calls it a collision, so **neither is claimed**. Like an inconclusive `pad_overlap`, it is not a failure and a candidate is still produced. |
+
+If your workflow needs the stricter reading, treat `inconclusive` as a failure yourself — that is
+what the third value is for. It is never rewritten to `proven_clear`.
+
+One thing remains out of scope and is not implied by a `proven_clear` result: there is no
+configurable courtyard clearance. The check answers overlap, not separation, so it cannot express a
+"keep 0.2 mm between parts" rule. Also unmodelled, and reported as `inconclusive` rather than
+guessed: courtyards thinner than the 10,000 nm threshold, whose behaviour under KiCad's contraction
+was measured as orientation-dependent.
 
 **The preview never applies a placement and is not bound to KiCad DRC evidence.** A placement also
 invalidates any route candidate bound to the same board revision.
