@@ -71,7 +71,7 @@ The adapter instead resolves the residue **by geometry role, in exact decimal ar
 | `minTraceWidth` | ceiled | a wider trace is the harder problem |
 
 The largest movement any edge can make is one nanometre, and the harness records the observed
-maximum (`max_outward_rounding_nm`) per board rather than asserting it. Four of the twenty
+maximum (`max_outward_rounding_nm`) per board rather than asserting it. Three of the twenty
 committed boards need no rounding at all.
 
 ## 3. Licensing determination
