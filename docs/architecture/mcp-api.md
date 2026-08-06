@@ -217,8 +217,11 @@ carries evidence holding per-rule residuals and the legality record. `pad_overla
 **three-valued**: `proven_clear` when pad
 bounds are disjoint, `violated` when pad cores overlap, and `inconclusive` in between.
 `inconclusive` is not a failure and a candidate is still produced; it means neither clearance nor
-collision could be proven. `courtyard_overlap` is exact for Board IR 0.2's simple orthogonal
-courtyard subset: `proven_clear` or `violated`. Only footprints on the same physical side are
+collision could be proven. `courtyard_overlap` is **three-valued** for the same reason, over Board IR 0.2's simple orthogonal
+courtyard subset: `proven_clear` when the regions share no area, `violated` at exact parity with
+KiCad's contracted courtyard cache, and `inconclusive` in the penetration band below its 10,000 nm
+collision threshold, where raw geometry and KiCad disagree. A footprint's rings form one even-odd
+region, so a ring nested inside another is a hole. Only footprints on the same physical side are
 compared, and edge contact is not overlap. A Board IR conversion rejects unsupported courtyard
 topology before a placement view exists, so the result cannot silently claim fidelity outside that
 subset.

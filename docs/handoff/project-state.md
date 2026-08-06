@@ -47,9 +47,10 @@ These are not style preferences. Most of them were paid for with a bug. Preserve
    one-value literals rather than implied. A field that can only hold one value cannot be quietly
    upgraded — and when an evaluator does land, the literal is widened deliberately rather than
    reinterpreted. Courtyard legality is the worked example: it was a one-value non-claim until the
-   bounded same-side orthogonal evaluator existed, and `courtyard_overlap` is now two-valued.
-   Its scope is still stated rather than implied — same side only, simple orthogonal rings only,
-   overlap rather than clearance.
+   bounded same-side orthogonal evaluator existed, then two-valued, and is now three-valued —
+   widened again when measurement showed KiCad's contracted courtyard cache disagrees with raw
+   ring geometry below 10,000 nm of penetration (ADR-0075). Its scope is still stated rather than
+   implied — same side only, simple orthogonal rings only, overlap rather than clearance.
 3. **Direction of error is a design decision, stated everywhere.** Obstacles over-approximate;
    connectivity proofs under-approximate. A wrong answer must cost a redundant route, never a
    false connection. Legality verdicts are three-valued because `inconclusive` is honest and

@@ -40,7 +40,7 @@ from copper_mcp.placement.contracts import (
 from copper_mcp.placement.geometry import (
     QUARTER_UDEG,
     Rect,
-    orthogonal_rings_overlap_open,
+    orthogonal_courtyard_region_overlap,
     pad_bounds,
     pad_core,
     rect_gap,
@@ -442,14 +442,17 @@ def _keepout_respect(
 
 
 def _courtyard_overlap(placed: tuple[_PlacedFootprint, ...], budget: _Budget) -> str:
-    """Check exact orthogonal courtyards on the same physical side.
+    """Check orthogonal courtyards on the same physical side against KiCad 10.0.5's model.
 
-    Board IR v0.2 accepts simple closed horizontal/vertical courtyard rings.  The midpoint-strip
-    predicate proves positive-area intersection (including containment) with integer arithmetic;
-    edge or corner contact remains legal at KiCad's zero-clearance default.  Front and back
-    courtyards are independent physical layers, so cross-side contact is not a collision.
+    Board IR v0.2 accepts simple closed horizontal/vertical courtyard rings.  A footprint's rings
+    are one even-odd region rather than a set of independent solids, matching the contour hierarchy
+    KiCad builds, and the region is contracted by the cached-courtyard inset before the collision
+    test.  Front and back courtyards are independent physical layers, so cross-side contact is not
+    a collision.  See :func:`orthogonal_courtyard_region_overlap` for why the answer is
+    three-valued and which of the three each outcome is a claim about.
     """
 
+    verdict = "proven_clear"
     for first_index, first in enumerate(placed):
         if not first.courtyards:
             continue
@@ -457,12 +460,14 @@ def _courtyard_overlap(placed: tuple[_PlacedFootprint, ...], budget: _Budget) ->
             budget.charge()
             if first.side != second.side or not second.courtyards:
                 continue
-            for left in first.courtyards:
-                for right in second.courtyards:
-                    budget.charge()
-                    if orthogonal_rings_overlap_open(left, right, charge=budget.charge):
-                        return "violated"
-    return "proven_clear"
+            outcome = orthogonal_courtyard_region_overlap(
+                first.courtyards, second.courtyards, charge=budget.charge
+            )
+            if outcome == "violated":
+                return "violated"
+            if outcome == "inconclusive":
+                verdict = "inconclusive"
+    return verdict
 
 
 # --- rules ------------------------------------------------------------------------------
