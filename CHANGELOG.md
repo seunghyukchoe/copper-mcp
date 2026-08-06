@@ -24,8 +24,13 @@ All notable changes are documented here. The format follows
   `min(ripped-up units, retained units)`, with a bare clear when nothing is retained. That third
   branch exists because measurement said so: always subtracting was **60–130% slower** than the
   path it replaced at zero retention, and the regression is recorded in B-089 rather than designed
-  around quietly. Wherever any net is retained, the new path is 17% to 99.9% faster on the same
-  fixtures. (#64)
+  around quietly. Across 105 same-fixture A/B points — the congested synthetic channel, a
+  parallel-track sweep to 32 nets, and 16 real MIT-licensed corpus boards — every point leaves the
+  ledger byte-identical, the 78 with any retention are 11.8% to 99.94% faster (median 74.8%) at
+  equal or fewer exact operations, and the 27 with none are up to 22% slower on an operation that
+  costs single-digit microseconds. Proportion, stated plainly: the whole reconstruction is
+  microseconds against ~60 ms of routing, so this is a constant-factor win on a term that was
+  never the bottleneck — which is exactly what ADR-0073 predicted it would be. (#64)
 - **`conflict-window-v1`, a fourth declared rip-up literal.** It re-routes every conflicted net
   plus every retained net whose copper lies within a fixed number of lattice cells of one. The
   window is a *constant*, following TritonRoute's own search-and-repair schedule, which holds its
@@ -35,8 +40,10 @@ All notable changes are documented here. The format follows
   the selected set depends on the stored envelopes alone and never on the index's cell size,
   capacity, or fallbacks. On the congested fixture it converges in five iterations at the same
   56,000,000 nm of copper as the default while making **22 router calls instead of 30**, where
-  `conflicted-only-v1` does not converge at all. It is not the default: `all-nets-v1` stays, and
-  one synthetic fixture is not a criterion. (#64)
+  `conflicted-only-v1` does not converge at all. A 16-cell window makes 30 calls again, because a
+  wide enough window *is* full rip-up; B-089 records that rather than implying the rule improves
+  monotonically. It is not the default: `all-nets-v1` stays, and one synthetic fixture is not a
+  criterion. (#64)
 
 #### Migration
 

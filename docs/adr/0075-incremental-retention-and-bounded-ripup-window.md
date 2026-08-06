@@ -72,8 +72,10 @@ never during an A* expansion. The immutable index remains what a single search s
 `CongestionLedger` caches each added net's exact unit-resource set and gains `remove_net`,
 `retain_only`, and `nets_within_window`. Because occupancy is an additive per-net integer count
 over exact lattice keys, removing one net's contribution is exact subtraction, not an
-approximation. A resource whose count reaches zero is deleted rather than left at zero, because
-`update_history` and `overflow_resources` iterate the present mapping's *key set*.
+approximation. A resource whose count reaches zero is deleted rather than left at zero — a
+**memory** guard rather than an output guard, since every reader of the present overlay filters on
+`usage > 1` or reads a `Counter` whose default is already zero. B-089's mutation check is what
+established which of the two it is.
 
 `retain_only(S)` does **not** always subtract. B-089 measured that subtracting the departures is
 cheaper only when there are fewer of them than there are survivors, so the implementation costs
@@ -81,8 +83,10 @@ cheaper only when there are fewer of them than there are survivors, so the imple
 branches, one result: every branch reaches counters a rebuild would reach, and the tests assert
 byte equality of everything a router or a published response can read off a ledger.
 
-This is strictly better than the path it replaces, which always paid the retained units **and**
-re-derived every retained candidate's resources from its geometry.
+In unit work this never exceeds the path it replaces, which always paid the retained units **and**
+re-derived every retained candidate's resources from its geometry. In wall clock it is faster
+everywhere a net is retained and slightly *slower* where none is; the exception is measured, not
+waved away, and it is quantified below.
 
 ### 3. A fourth rip-up literal: `conflict-window-v1`
 
@@ -149,24 +153,35 @@ unchanged.
   `conflicted-only-v1`, and `conflict-window-v1` replays to identical canonical candidate bytes,
   status, iteration count, rip-up count, and plan evidence.
 
-**Mutation check.** Five load-bearing guards were mutated one at a time; results are in B-089 and
-reported there including the one that survived.
+**Mutation check.** Five load-bearing guards were mutated one at a time. Four were caught
+immediately: treating touching rectangles as disjoint, the recount branch leaving a stale spatial
+index entry, emitting the window weight in every rip-up slot's canonical bytes, and the
+conflict-window rule ignoring its window. The fifth — an emptied resource count left at zero
+instead of deleted — **survived**. It turned out to be output-inert but not memory-inert: every
+reader of the present overlay filters `usage > 1` or reads a `Counter` whose default is already
+zero, so nothing observable moved, while the overlay would have grown pass by pass without bound.
+A `live_resource_count` property and an assertion that an incrementally retained ledger tracks
+exactly as many resources as a rebuilt one were added, and the mutant is now caught.
 
 **Measured, with the regression stated.** B-089 replays both reconstructions against one recorded
 candidate set, in one process, on the same fixtures: the B-087 congested channel, a synthetic
-parallel-track sweep at 4/8/16/32 nets, and 17 real MIT-licensed SimpleRouteJson corpus boards.
-Wherever any net is retained, the new path is 17% to 99.9% faster and performs the same or fewer
-exact resource operations. Where **nothing** is retained the first implementation was 60–130%
-*slower* than the path it replaced, because walking held nets to drop them individually costs more
-than a dict clear; that measurement is why the bare-clear branch exists, and it is recorded rather
-than quietly designed around.
+parallel-track sweep at 4/8/16/32 nets, and 16 real MIT-licensed SimpleRouteJson corpus boards
+contributing 67 candidates and 13,194 unit resources. Across 105 A/B points every one left the
+ledger byte-identical. At the 78 points where any net is retained, the new path performs equal or
+fewer exact resource operations and is **11.8% to 99.94% faster, median 74.8%**. At the 27 points
+where **nothing** is retained it is up to **21.97% slower** — 4.8 µs against 4.3 µs on the
+smallest fixture — because a bare clear is hard to beat and the residual gap is the set
+construction that chooses the branch. The first implementation, which always subtracted, was
+60–130% slower there; that measurement is why the bare-clear branch exists, and both numbers are
+recorded rather than quietly designed around.
 
-The end-to-end honesty is more important than either number: on the congested fixture the whole
-ledger reconstruction is microseconds against ~55 ms of routing, so the incremental ledger is a
-**constant-factor improvement to a term that is not the bottleneck** — exactly what ADR-0073
+The proportion matters more than either number: on the congested fixture the whole ledger
+reconstruction is single-digit microseconds against 58–75 ms of routing, so the incremental ledger
+is a **constant-factor improvement to a term that is not the bottleneck** — exactly what ADR-0073
 predicted. What moves the end-to-end number is the window rule reducing router calls from 30 to 22
 (−27%) while converging in the same five iterations at the same 56,000,000 nm of copper, where
-`conflicted-only-v1` does not converge at all.
+`conflicted-only-v1` does not converge at all. A 16-cell window makes 30 calls again, because a
+wide enough window *is* full rip-up; B-089 records that too.
 
 Nothing here claims KiCad DRC, electrical, multilayer, fabrication, apply, whole-board, or general
 scaling validity. The corpus boards are real but small; no scaling result is claimed from them. No

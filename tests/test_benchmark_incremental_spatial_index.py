@@ -58,7 +58,10 @@ def test_the_committed_artifact_is_bound_to_its_own_script_and_run_identity() ->
 
 def test_the_harness_reproduces_every_portable_measurement() -> None:
     committed = _artifact()
-    fresh = benchmark.build_report(evidence_harness_commit=TEST_EVIDENCE_HARNESS_COMMIT)
+    fresh = benchmark.build_report(
+        replays=int(committed["replays"]),
+        evidence_harness_commit=TEST_EVIDENCE_HARNESS_COMMIT,
+    )
     suffix = str(committed["host_specific_field_suffix"])
 
     assert _without_host_specific(fresh, suffix) == _without_host_specific(committed, suffix)
