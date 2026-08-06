@@ -578,3 +578,25 @@ def test_undocumented_layer_alias_is_rejected() -> None:
                 "start_layer": "F.Cu",
             }
         )
+
+
+def test_the_file_backed_surface_mints_no_capability_even_with_live_apply_enabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only the live surface mints. The contract's comment says so; this pins it.
+
+    Both operator grants are set to the state that authorizes a live mint, because the property
+    worth pinning is that they do not reach this surface at all -- not that they happen to be
+    absent in the other tests.
+    """
+
+    monkeypatch.setenv("COPPER_MCP_ALLOW_LIVE_APPLY", "1")
+    monkeypatch.setenv("COPPER_MCP_ALLOW_LIVE_IPC", "1")
+    board, settings, start, end, snapshot_digest = _workspace(tmp_path)
+    board_revision = f"sha256:{hashlib.sha256(board.read_bytes()).hexdigest()}"
+    request = _request(board, start, end, board_revision, snapshot_digest)
+
+    result = preview_layered_route(request, settings)
+
+    assert result["status"] == "routed"
+    assert result["apply_token"] is None

@@ -57,6 +57,12 @@ class Settings:
     max_placement_seconds: int = 10
     allow_apply: bool = False
     allow_live_ipc: bool = False
+    #: Consent to mutate the *running editor's* in-memory document. Deliberately its own flag
+    #: rather than the conjunction of the two above: ADR-0069 recorded that the live opt-in
+    #: "enables observation only", and ADR-0025's flag is documented as replacing a file on
+    #: disk. Reading an already-granted pair as mutation consent would retroactively widen what
+    #: past operators agreed to. See ADR-0074.
+    allow_live_apply: bool = False
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -185,6 +191,12 @@ class Settings:
             # official binding defaults to is an outbound action against the operator's running
             # editor, so it must never be switched on by an ambiguous spelling either.
             raise ConfigurationError('COPPER_MCP_ALLOW_LIVE_IPC must be exactly "0" or "1"')
+        raw_allow_live_apply = os.environ.get("COPPER_MCP_ALLOW_LIVE_APPLY", "0")
+        if raw_allow_live_apply not in {"0", "1"}:
+            # Same exact-membership rule again, for the same reason: this flag is the only
+            # consent that authorizes mutating a document the operator has open in front of
+            # them, and no ambiguous spelling may switch it on.
+            raise ConfigurationError('COPPER_MCP_ALLOW_LIVE_APPLY must be exactly "0" or "1"')
         return cls(
             workspace=workspace,
             transport=transport,
@@ -209,4 +221,5 @@ class Settings:
             max_placement_seconds=max_placement_seconds,
             allow_apply=raw_allow_apply == "1",
             allow_live_ipc=raw_allow_live_ipc == "1",
+            allow_live_apply=raw_allow_live_apply == "1",
         )

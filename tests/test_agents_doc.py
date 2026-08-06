@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+from copper_mcp.live_apply import LiveApplyFailureCode
 from copper_mcp.mcp_server import mcp
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -130,6 +131,26 @@ def test_every_documented_diagnostic_code_exists_in_the_source() -> None:
     assert not missing, (
         f"docs/agents.md names diagnostic codes that no longer exist in src/copper_mcp: {missing}. "
         "A documented code that the server cannot emit is worse than an undocumented one."
+    )
+
+
+def test_every_live_apply_refusal_code_is_documented() -> None:
+    """The reverse direction, for one surface whose code set is closed and enumerable.
+
+    ``test_every_documented_diagnostic_code_exists_in_the_source`` only checks
+    *documented is a subset of source*, so a new emittable code passes the gate in silence. That
+    is the wrong direction for a destructive capability: an agent that receives an undocumented
+    refusal has no remediation to follow and will guess. ``LiveApplyFailureCode`` is a closed
+    enum, so *source is a subset of documented* is decidable here without grepping prose, and
+    adding a member to it now requires a row in the table.
+    """
+
+    documented = _first_column_names(_section(CODE_SECTION))
+    emittable = {member.value for member in LiveApplyFailureCode}
+    undocumented = sorted(emittable - documented)
+    assert not undocumented, (
+        "apply_live_candidate can emit refusal codes that docs/agents.md does not document: "
+        f"{undocumented}. An agent that receives one has no documented next action."
     )
 
 

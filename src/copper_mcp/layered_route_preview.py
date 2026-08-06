@@ -104,6 +104,9 @@ class LayeredRoutePreviewRequest:
     start_layer_id: str | None = None
     end_layer_id: str | None = None
     expect_session_revision: str | None = None
+    #: Live-only. The file-backed surface mints nothing, so it is pinned to ``False`` there by
+    #: the parser rather than merely defaulted, and never appears in a file-backed echo.
+    include_apply_token: bool = False
 
     def to_dict(self) -> dict[str, object]:
         """Return only validated, non-sensitive request fields for MCP clients."""
@@ -129,6 +132,7 @@ class LayeredRoutePreviewRequest:
         }
         if self.expect_session_revision is not None:
             document["expect_session_revision"] = self.expect_session_revision
+            document["include_apply_token"] = self.include_apply_token
         return document
 
 
@@ -318,6 +322,7 @@ def _empty_result(
     candidate: dict[str, object] | None = None,
     conversion_diagnostic_counts: dict[str, int] | None = None,
     drc_evidence: LayeredRouteCandidateDrcEvidence | None = None,
+    apply_token: str | None = None,
 ) -> dict[str, object]:
     return {
         "schema_version": "1.0",
@@ -327,6 +332,7 @@ def _empty_result(
         "snapshot_digest": snapshot_digest,
         "request": request.to_dict(),
         "candidate": candidate,
+        "apply_token": apply_token,
         "drc_evidence": None if drc_evidence is None else drc_evidence.to_dict(),
         "diagnostic": diagnostic,
         "conversion_diagnostic_counts": conversion_diagnostic_counts or {},

@@ -38,6 +38,8 @@ from copper_mcp.mcp_contracts import (
     Digest,
     LayeredRoutePreviewToolRequest,
     LayeredRoutePreviewToolResponse,
+    LiveApplyToolRequest,
+    LiveApplyToolResponse,
     LiveBoardObservationToolResponse,
     LiveCircuitSceneToolRequest,
     LiveEditorContextToolRequest,
@@ -88,6 +90,7 @@ from copper_mcp.schematic_artifacts import (
     SchematicArtifactUnavailableError,
 )
 from copper_mcp.tools import apply_candidate as apply_candidate_service
+from copper_mcp.tools import apply_live_candidate as apply_live_candidate_service
 from copper_mcp.tools import apply_placement_candidate as apply_placement_candidate_service
 from copper_mcp.tools import compare_candidates as compare_candidates_service
 from copper_mcp.tools import inspect_board as inspect_board_service
@@ -194,6 +197,7 @@ class CopperMCPServer(MCPServer[None]):
                 "preview_live_route",
                 "preview_layered_route",
                 "preview_live_layered_route",
+                "apply_live_candidate",
                 "render_circuit_schematic",
                 "verify_circuit_schematic_erc",
                 "observe_live_board_scene",
@@ -232,6 +236,12 @@ class CopperMCPServer(MCPServer[None]):
             raise ToolError("layered route tool arguments are malformed")
         if name == "preview_live_layered_route" and set(arguments) != {"request"}:
             raise ToolError("live layered route tool arguments are malformed")
+        if name == "apply_live_candidate" and set(arguments) != {"request"}:
+            # `LiveApplyToolRequest` is an `Annotated[Any, WithJsonSchema(...)]`, so the SDK
+            # validates nothing here and this guard is the only enforcement of the closed object
+            # the listing advertises. Silently dropping a misplaced `apply_token` would report a
+            # missing field the caller did in fact send.
+            raise ToolError("live apply tool arguments are malformed")
         if name == "observe_live_board_scene" and set(arguments) != {"request"}:
             raise ToolError("live scene tool arguments are malformed")
         if name == "observe_post_placement" and set(arguments) != {"request"}:
@@ -514,11 +524,53 @@ def preview_live_layered_route(
     The endpoint pads provide net identity only after the exact IPC serialization has been
     converted through Board IR. The request also carries the source, Board IR, and redacted
     KiCad-session CAS digests. The proposal is candidate-only: it does not run DRC, refill zones,
-    write the editor, or mint an apply token.
+    or write the editor.
+
+    With ``include_apply_token`` a routed proposal also returns one live-scoped, single-use
+    capability bound to this candidate, this board revision, this converted snapshot and this
+    editor session. It is minted only when the operator set ``COPPER_MCP_ALLOW_LIVE_APPLY=1``;
+    otherwise ``apply_token`` is ``null``, because minting a capability the apply surface would
+    refuse is not a courtesy.
     """
 
     return LayeredRoutePreviewToolResponse.model_validate(
-        preview_live_layered_route_service_raw(request, _SETTINGS)
+        preview_live_layered_route_service_raw(request, _SETTINGS, _APPLY_TOKENS)
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        # Truthful and advisory only, exactly as on the file-backed apply tool. This slice
+        # mutates nothing, but the annotation describes the capability the tool *is*, not the
+        # subset of it that is currently implemented -- a client must not have to re-read
+        # annotations when the mutation lands.
+        read_only_hint=False,
+        destructive_hint=True,
+        idempotent_hint=False,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def apply_live_candidate(request: LiveApplyToolRequest) -> LiveApplyToolResponse:
+    """Verify every precondition for a one-undo-commit apply into a running KiCad, then refuse.
+
+    **The mutation is not implemented.** This tool checks, in order, the operator opt-in, a
+    live-scoped single-use capability token, the editor session, the board serialization, the
+    converted Board IR snapshot, and the candidate's own identity and geometry replayed against
+    the board the editor is holding right now. It then answers `capability_not_implemented`
+    without touching the editor. `preconditions_verified` names exactly the checks that ran.
+
+    Enabling it requires **both** `COPPER_MCP_ALLOW_LIVE_APPLY=1` and
+    `COPPER_MCP_ALLOW_LIVE_IPC=1`; a model can set neither, and neither is implied by
+    `COPPER_MCP_ALLOW_APPLY`. The token comes from `preview_live_layered_route` with
+    `include_apply_token: true` and cannot survive a KiCad restart.
+
+    When the mutation lands it will be one `begin_commit`/`push_commit` pair: one entry in
+    KiCad's own undo stack, no file written, and the result re-observed rather than assumed.
+    """
+
+    return LiveApplyToolResponse.model_validate(
+        apply_live_candidate_service(request, _SETTINGS, _APPLY_TOKENS)
     )
 
 

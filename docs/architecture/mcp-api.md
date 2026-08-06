@@ -66,6 +66,14 @@ indistinguishable from an unimplemented one — and refuse with a message naming
 IPC endpoint is read from the environment and before any socket is opened. The refusal is a
 capability state, not an error about the editor: it says nothing about whether KiCad is running.
 
+`apply_live_candidate` additionally requires `COPPER_MCP_ALLOW_LIVE_APPLY=1`, under the same exact
+membership rule. It is a third flag rather than the conjunction of the existing two because
+ADR-0069 granted observation only, and it deliberately neither implies nor requires
+`COPPER_MCP_ALLOW_APPLY`, which authorises replacing a file on disk. **The mutation is not
+implemented:** the tool verifies consent, a live-scoped capability, and the session, board, and
+snapshot compare-and-swap values, replays the candidate against the live board, and then refuses
+with `capability_not_implemented`. See [ADR-0074](../adr/0074-live-ipc-one-undo-commit-apply.md).
+
 `inspect_live_board` is a separate, no-argument read-only probe for an already-running KiCad PCB
 Editor. It lazily loads the optional official `kicad-python` binding, accepts only KiCad's local
 IPC socket, checks the binding/API version, and returns a redacted `kicad-ipc-live` record with a

@@ -34,6 +34,12 @@ When adding a document, add it to the list below in the same sentence form — *
 - [Audio circuit benchmark intake](./audio-circuit-benchmarks.md) records why public DIY catalogs
   are reference-only and defines a licence-aware, original-fixture capability ladder for MCP-shared
   board inspection/routing tests plus MCP-independent Circuit Intent and schematic-rendering checks.
+- [Live IPC apply references](./ipc-apply-v1.md) records what KiCad's `begin_commit`/`push_commit`
+  transaction does and does not guarantee for a mutation pushed into a running editor, including
+  two load-bearing negatives — no revision, dirty flag, or conditional write anywhere in the
+  protocol, and no documented atomicity for a push — and maps each failure mode to a typed
+  refusal. It refuses to claim anything about SWIG-binding mutation, the schematic editor, or
+  KiCad 11.
 - [Unshipped KiCad ERC containment experiment](./kicad-schematic-erc-containment.md) records why
   a real local KiCad ERC probe did not become an MCP capability: legacy sandbox and aggregate-quota
   containment did not meet the required security boundary.

@@ -163,6 +163,16 @@ or geometry beyond the scene contract. Reaching a running editor is an outbound 
 by default behind the exact `COPPER_MCP_ALLOW_LIVE_IPC` flag; with it off the live tools stay listed
 and refuse, and no IPC socket is read from the environment or opened.
 
+**Live editor mutation: gated, designed, and not implemented.** `apply_live_candidate` verifies
+every precondition for a one-undo-step apply into a running KiCad — a third operator opt-in
+(`COPPER_MCP_ALLOW_LIVE_APPLY`, required alongside `COPPER_MCP_ALLOW_LIVE_IPC` and independent of
+`COPPER_MCP_ALLOW_APPLY` in both directions), a live-scoped single-use capability bound to the
+editor session as well as the board, and a compare-and-swap against the session, the board
+serialization, and the converted snapshot — then refuses with `capability_not_implemented`. The
+mutation waits for adversarial review, because KiCad's IPC API offers no revision or conditional
+write and `kipy` discards the per-item status that would prove a push landed. See
+[ADR-0074](docs/adr/0074-live-ipc-one-undo-commit-apply.md).
+
 Plus professional CI, CodeQL, dependency auditing, release automation, issue forms, and
 [project ledgers](docs/ledgers/README.md). See the [roadmap](docs/roadmap.md) for what comes next.
 

@@ -18,6 +18,10 @@ from copper_mcp.layered_route_preview import LayeredRoutePreviewError, preview_l
 
 FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "two-pad.kicad_pcb"
 SESSION_TOKEN = "copper-mcp-test-kicad-session"
+# The per-process identity KiCad's API server returns in every response envelope. The
+# session revision is derived from this, not from CopperMCP's own environment block.
+EDITOR_INSTANCE_TOKEN = "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
+RESTARTED_EDITOR_INSTANCE_TOKEN = "9c5b94b1-35ad-49bb-b118-8e8fc24abf80"
 
 
 @pytest.fixture(autouse=True)
@@ -40,9 +44,17 @@ class _FakeLiveBoard:
         return self._source
 
 
+class _FakeKipyClient:
+    """Mirror of ``kipy.client.KiCadClient``'s learned-instance-token attribute."""
+
+    def __init__(self, instance_token: str) -> None:
+        self._kicad_token = instance_token
+
+
 class _FakeLiveKiCad:
-    def __init__(self, source: str) -> None:
+    def __init__(self, source: str, instance_token: str = EDITOR_INSTANCE_TOKEN) -> None:
         self._board = _FakeLiveBoard(source)
+        self._client = _FakeKipyClient(instance_token)
 
     def get_version(self) -> _FakeVersion:
         return _FakeVersion()
@@ -95,7 +107,7 @@ def _request(
     snapshot_digest: str,
     **overrides: Any,
 ) -> dict[str, object]:
-    session_revision = kicad_ipc._session_revision()
+    session_revision = kicad_ipc._session_revision(EDITOR_INSTANCE_TOKEN)
     assert session_revision is not None
     request: dict[str, object] = {
         "board": "live",
@@ -117,11 +129,9 @@ def _request(
     return request
 
 
-def test_live_session_revision_is_pbkdf2_stable_and_token_distinct(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    first = kicad_ipc._session_revision()
-    second = kicad_ipc._session_revision()
+def test_live_session_revision_is_pbkdf2_stable_and_token_distinct() -> None:
+    first = kicad_ipc._session_revision(EDITOR_INSTANCE_TOKEN)
+    second = kicad_ipc._session_revision(EDITOR_INSTANCE_TOKEN)
     assert first is not None
     assert first == second
     assert first.startswith("pbkdf2-hmac-sha256:")
@@ -129,16 +139,18 @@ def test_live_session_revision_is_pbkdf2_stable_and_token_distinct(
     assert set(first.removeprefix("pbkdf2-hmac-sha256:")) <= set("0123456789abcdef")
     expected = hashlib.pbkdf2_hmac(
         "sha256",
-        SESSION_TOKEN.encode(),
+        EDITOR_INSTANCE_TOKEN.encode(),
         kicad_ipc._SESSION_REVISION_SALT_DOMAIN + kicad_ipc._SESSION_REVISION_SALT,
         kicad_ipc._SESSION_REVISION_ITERATIONS,
         dklen=kicad_ipc._SESSION_REVISION_DKLEN,
     ).hex()
     assert first == f"pbkdf2-hmac-sha256:{expected}"
-    assert first != "sha256:" + hashlib.sha256(SESSION_TOKEN.encode()).hexdigest()
+    assert first != "sha256:" + hashlib.sha256(EDITOR_INSTANCE_TOKEN.encode()).hexdigest()
 
-    monkeypatch.setenv("KICAD_API_TOKEN", "other-kicad-session")
-    assert kicad_ipc._session_revision() != first
+    # A different running editor derives a different revision, and no environment variable of
+    # ours participates in that derivation.
+    assert kicad_ipc._session_revision(RESTARTED_EDITOR_INSTANCE_TOKEN) != first
+    assert kicad_ipc._session_revision(None) is None
 
 
 def test_live_preview_refuses_a_session_revision_from_a_rotated_process_key(
@@ -146,7 +158,7 @@ def test_live_preview_refuses_a_session_revision_from_a_rotated_process_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, start, end, board_revision, snapshot_digest = _workspace(tmp_path)
-    previous = kicad_ipc._session_revision()
+    previous = kicad_ipc._session_revision(EDITOR_INSTANCE_TOKEN)
     assert previous is not None
     monkeypatch.setattr(kicad_ipc, "_SESSION_REVISION_SALT", b"\x43" * 32)
     request = _request(
@@ -217,7 +229,7 @@ def test_live_session_revision_pbkdf2_work_is_fixed_and_bounded() -> None:
     assert kicad_ipc._SESSION_REVISION_DKLEN == 32
 
     started = time.monotonic()
-    revision = kicad_ipc._session_revision()
+    revision = kicad_ipc._session_revision(EDITOR_INSTANCE_TOKEN)
     elapsed_seconds = time.monotonic() - started
 
     assert revision is not None
@@ -225,9 +237,9 @@ def test_live_session_revision_pbkdf2_work_is_fixed_and_bounded() -> None:
     assert elapsed_seconds < 5.0
 
 
-def _factory(source: bytes):
+def _factory(source: bytes, instance_token: str = EDITOR_INSTANCE_TOKEN):
     text = source.decode("utf-8")
-    return lambda **_: _FakeLiveKiCad(text)
+    return lambda **_: _FakeLiveKiCad(text, instance_token)
 
 
 def test_public_live_observation_scene_and_preview_outputs_compose(
@@ -290,6 +302,9 @@ def test_public_live_observation_scene_and_preview_outputs_compose(
     public_outputs = repr((observation, scene, result))
     assert result["status"] == "routed"
     assert SESSION_TOKEN not in public_outputs
+    # The editor's own instance identity is a credential too: the published revision is a
+    # PBKDF2 handle for it, never the value itself.
+    assert EDITOR_INSTANCE_TOKEN not in public_outputs
     assert salt_canary.hex() not in public_outputs
 
 
@@ -319,14 +334,18 @@ def test_public_session_revision_refuses_token_change_and_process_restart(
         "seed": 23,
     }
 
-    monkeypatch.setenv("KICAD_API_TOKEN", "restarted-kicad-session")
+    # A restarted editor reports a different instance identity. CopperMCP's environment is
+    # untouched, because a restarting KiCad cannot write to it.
     changed_token = live_preview.preview_live_layered_route(
-        request, settings, client_factory=_factory(source)
+        request,
+        settings,
+        client_factory=_factory(source, RESTARTED_EDITOR_INSTANCE_TOKEN),
     )
     assert changed_token["status"] == "not_routed"
     assert changed_token["diagnostic"]["code"] == "stale_revision"  # type: ignore[index]
 
-    monkeypatch.setenv("KICAD_API_TOKEN", SESSION_TOKEN)
+    # A restarted *CopperMCP* rotates the process salt, which is the second, independent
+    # staleness source stacked on the editor identity.
     monkeypatch.setattr(kicad_ipc, "_SESSION_REVISION_SALT", b"\x99" * 32)
     restarted_process = live_preview.preview_live_layered_route(
         request, settings, client_factory=_factory(source)

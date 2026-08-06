@@ -1296,6 +1296,10 @@ class LiveLayeredRoutePreviewRequestContract(LayeredRoutePreviewRequestContract)
     board: Literal["live"]
     expect_session_revision: SessionRevision
     include_drc: Literal[False] = False
+    #: Ask for a live-scoped, single-use apply capability alongside a routed candidate. Setting
+    #: it is a request, never a guarantee: the token is minted only for a routed result and only
+    #: when the operator opted in to live apply, and the response field is otherwise ``null``.
+    include_apply_token: bool = False
 
 
 LiveLayeredRoutePreviewToolRequest = Annotated[
@@ -1415,6 +1419,9 @@ class _LayeredRoutePreviewResponseCommonContract(_ClosedContract):
     snapshot_digest: Digest | None
     request: LiveLayeredRoutePreviewRequestContract | LayeredRoutePreviewRequestContract
     conversion_diagnostic_counts: dict[str, NonNegativeInteger]
+    #: Present and non-null only on a live routed proposal that asked for one while live apply
+    #: is enabled. The file-backed surface mints nothing and always reports ``null``.
+    apply_token: Annotated[str, Field(min_length=1, max_length=512)] | None = None
 
 
 _EmptyLayeredDiagnosticCounts = Annotated[
@@ -1442,6 +1449,7 @@ class NotRoutedLayeredRoutePreviewContract(_LayeredRoutePreviewResponseCommonCon
     candidate: None
     diagnostic: LayeredRouteDiagnosticContract
     drc_evidence: None
+    apply_token: None = None
     conversion_diagnostic_counts: _EmptyLayeredDiagnosticCounts
 
 
@@ -1451,6 +1459,7 @@ class StaleLayeredRoutePreviewContract(_LayeredRoutePreviewResponseCommonContrac
     candidate: None
     diagnostic: LayeredRouteDiagnosticContract
     drc_evidence: None
+    apply_token: None = None
     conversion_diagnostic_counts: _EmptyLayeredDiagnosticCounts
 
 
@@ -1459,6 +1468,7 @@ class UnsupportedLayeredRoutePreviewContract(_LayeredRoutePreviewResponseCommonC
     candidate: None
     diagnostic: LayeredRouteDiagnosticContract | None
     drc_evidence: None
+    apply_token: None = None
     conversion_diagnostic_counts: _LayeredDiagnosticCounts
 
 
@@ -1975,6 +1985,109 @@ class ApplyCandidateToolResponse(_ClosedContract):
     conversion_diagnostic_counts: dict[str, int]
 
 
+class LiveApplyRequestContract(_ClosedContract):
+    """Closed, triply-revision-bound request for the live one-undo-commit apply surface.
+
+    Every compare-and-swap value is required and none has a default. A live mutation has three
+    independent ways to be stale — the editor process, the document the editor holds, and the
+    converted Board IR view of it — and a caller that has not stated all three has not stated
+    what it previewed.
+    """
+
+    board: Literal["live"]
+    candidate: LayeredRouteCandidateContract
+    constraints: RouteConstraintsContract
+    apply_token: Annotated[str, Field(min_length=1, max_length=512)]
+    expect_board_revision: Digest
+    expect_snapshot_digest: Digest
+    expect_session_revision: SessionRevision
+
+
+LiveApplyToolRequest = Annotated[
+    Any,
+    WithJsonSchema(_inline_json_schema(LiveApplyRequestContract)),
+]
+
+
+class LiveApplyRequestEchoContract(_ClosedContract):
+    """The validated request. The capability token is deliberately never echoed back."""
+
+    board: Literal["live"]
+    candidate_id: Digest
+    expect_board_revision: Digest
+    expect_snapshot_digest: Digest
+    expect_session_revision: SessionRevision
+    constraints: dict[str, NonNegativeInteger]
+
+
+class LiveApplyDiagnosticContract(_ClosedContract):
+    """Why the live apply surface refused. ``capability_not_implemented`` is the only code
+    reachable with every precondition satisfied."""
+
+    code: Literal[
+        "invalid_request",
+        "live_apply_disabled",
+        "live_ipc_disabled",
+        "invalid_token",
+        "token_expired",
+        "token_already_used",
+        "binding_unavailable",
+        "invalid_endpoint",
+        "unsupported_kicad_version",
+        "live_editor_unavailable",
+        "deadline_expired",
+        "live_board_over_budget",
+        "stale_session",
+        "stale_board_revision",
+        "stale_snapshot_digest",
+        "unsupported_board",
+        "candidate_verification_failed",
+        "capability_not_implemented",
+    ]
+    message: Annotated[str, Field(max_length=1024)]
+
+
+LiveApplyPreconditionName = Literal[
+    "operator_opt_in",
+    "capability_token",
+    "live_session_bound",
+    "live_board_revision_bound",
+    "board_ir_snapshot_bound",
+    "candidate_identity_replayed",
+]
+
+
+class LiveApplyToolResponse(_ClosedContract):
+    """Strict structured output for ``apply_live_candidate``.
+
+    ``status`` is a one-value literal because this surface has exactly one outcome today.
+    ``applied`` and ``applied_but_unverified`` are reserved for the mutation slice and are
+    deliberately absent rather than declared-and-unreachable: a caller must not be able to write
+    a branch for a value the server cannot produce.
+
+    ``preconditions_verified`` lists only the checks that actually ran, so an absent name is
+    never readable as a passing check. ``mutation_attempted``, ``undo_steps_pushed`` and
+    ``post_apply_observation`` are one-value literals for the same reason the file-backed
+    surface pins ``kicad_opened_board``: this code path cannot make them anything else.
+    """
+
+    status: Literal["refused"]
+    schema_version: Literal["0.1.0"]
+    live_apply_version: Literal["0.1.0"]
+    board: Literal["live"]
+    board_revision_before: Digest | None
+    board_revision_after: None
+    snapshot_digest_before: Digest | None
+    candidate_id: Digest | None
+    request: LiveApplyRequestEchoContract | None
+    preconditions_verified: Annotated[list[LiveApplyPreconditionName], Field(max_length=6)]
+    mutation_attempted: Literal[False]
+    undo_steps_pushed: Literal[0]
+    post_apply_observation: Literal["not_run"]
+    diagnostic: LiveApplyDiagnosticContract
+    conversion_diagnostic_counts: dict[str, NonNegativeInteger]
+
+
 class PlacementApplyRequestEchoContract(_ClosedContract):
     """The validated placement apply request; its capability token is never echoed."""
 
@@ -2013,6 +2126,8 @@ __all__ = [
     "CircuitSchematicToolResponse",
     "LayeredRoutePreviewToolRequest",
     "LayeredRoutePreviewToolResponse",
+    "LiveApplyToolRequest",
+    "LiveApplyToolResponse",
     "LiveEditorContextToolRequest",
     "LiveEditorContextToolResponse",
     "LivePlacementToolRequest",
