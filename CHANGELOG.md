@@ -158,6 +158,33 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- **A board outline drawn with the line tool is now a board outline.** The adapter accepted exactly
+  one `Edge.Cuts` primitive — a single unfilled `gr_rect` — and refused everything else with
+  `unsupported.construct`. `gr_rect` is what KiCad writes for the *rectangle tool*; draw the same
+  outline with the line tool, or draw any shape that is not a rectangle, and you get `gr_line`
+  segments, which was most real boards and every non-rectangular one. Segments on `Edge.Cuts` now
+  chain into the single imported contour, verified against a real four-layer board whose four
+  segments assemble into its exact 159 × 150 mm rectangle. (#111)
+
+  **The direction of error inverts here, and that is the whole decision.** Every obstacle in this
+  project is *over*-approximated, because a larger obstacle only makes the router refuse more. The
+  board outline is routing **room**, so it may only be *under*-approximated: a modelled outline one
+  nanometre larger than the drawn one hands the router copper the fabricated board does not have.
+  Assembled from straight segments joined at *exactly* coincident endpoints, the ring's vertices are
+  the drawn endpoints and nothing is synthesized, so containment holds with equality.
+
+  Nothing is repaired. KiCad chains its own outline with a non-zero tolerance and will close a small
+  gap for you; a 10 µm near-miss — inside KiCad's own epsilon — is refused here instead, because
+  closing a gap adds board area no drawn segment encloses. A zero-length segment, a duplicate
+  segment, an open contour, a branching spur, two disjoint loops, and a self-intersection each refuse
+  with a typed code and are never guessed at, since every plausible repair invents board. Arcs,
+  circles, polygons and curves on `Edge.Cuts` stay refused with a diagnostic that now names the
+  curve: ADR-0072's conservative sagitta bound is an *upper* bound on an arc, which is right for an
+  obstacle and backwards for an outline, and a chord is inscribed only when the arc bulges away from
+  the board interior. Work stays bounded — the segment count and the quadratic simplicity test each
+  charge a declared budget. No schema, digest, or diagnostic code changes, and no golden identity
+  moves. ([ADR-0076](docs/adr/0076-segment-assembled-edge-cuts-outline.md), D-154, R-117)
+
 - **A courtyard drawn as a ring is a ring, not a solid disc.** A footprint whose courtyard is an
   outer boundary plus an inner ring — a donut — was compared ring-by-ring as two independent solids,
   so a part legitimately placed in the hole was reported as a courtyard collision and the candidate
