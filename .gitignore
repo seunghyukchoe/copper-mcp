@@ -65,3 +65,7 @@ Thumbs.db
 *.temp
 *.bak
 *.orig
+
+# Personal application and funding-program drafts stay out of the repository.
+docs/handoff/oss-program-drafts.md
+**/oss-program-drafts.md
