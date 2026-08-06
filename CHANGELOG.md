@@ -200,6 +200,33 @@ All notable changes are documented here. The format follows
   and the golden placement candidate identity is unchanged. The tiny-shape band, arcs, custom
   courtyard clearance, and same-footprint rings that touch or properly intersect remain declared
   non-claims. (ADR-0075, D-152, B-089, R-115, #72)
+- **Boards with more than two copper layers convert again — every real 4-, 6-, or 8-layer KiCad
+  board was being refused.** The Board IR adapter validated the copper stack by requiring each
+  layer's declared ID to equal `declaration_position * 2`, i.e. `F.Cu=0, In1.Cu=2, In2.Cu=4,
+  B.Cu=6`. KiCad has never numbered layers that way: copper takes the *even* values with the
+  technical layers interleaved on the odd ones, so it is `F.Cu=0`, `B.Cu=2`, and `In{N}.Cu=2+2N`,
+  and because KiCad writes the stack front-to-back a four-layer board declares `0, 4, 6, 2` —
+  deliberately not ascending. A two-layer board satisfies both rules coincidentally, and two-layer
+  boards were every fixture in the repository, so the whole suite stayed green while every real
+  multilayer board was refused with `unsupported.construct` "copper layer IDs, names, or
+  declaration order are unsupported". The adapter now checks the two invariants separately: the
+  declaration position fixes the *name*, and the name fixes the *ID* through KiCad's own table.
+  This unblocks multilayer inspection, scene observation, placement preview, DRC binding, and the
+  2–8 signal layer ordered router (ADR-0068) on real boards — all verified end to end on four- and
+  six-layer boards, with no downstream surface found to have a separate blocker.
+  The rule stays fail-closed and is *not* loosened into accepting anything: a duplicate ID, a gap
+  in the inner sequence, a misnamed position, a back layer that is not `B.Cu`, a missing front or
+  back copper layer, an inner index past KiCad's `In30.Cu`, KiCad's own pre-version-9 numbering
+  (`F.Cu=0, In1..In30 = 1..30, B.Cu=31` — a real numbering, but not this format version's), and
+  the superseded `position * 2` numbering all still refuse with the same typed diagnostic.
+  Nothing published moves: `Layer.index` remains the declaration position, so the Board IR copper
+  stack is still dense and front-to-back, and every two-layer content address is byte-identical.
+  The one identity that changed is this repository's own four-layer *test fixture*, which had been
+  written in the invented numbering and is now correct; its pinned route-candidate ID is re-pinned
+  in place, with the router and `LAYERED_ROUTER_VERSION` untouched. See
+  [KiCad copper layer numbering](docs/research/kicad-copper-layer-numbering-v1.md) for the
+  derivation and citations, D-153, and R-116 for the class of defect — a validation rule no fixture
+  ever contradicted. (#104)
 
 ## [0.6.0] - 2026-08-06
 
