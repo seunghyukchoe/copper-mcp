@@ -140,6 +140,28 @@ REPLAY_SUB_ENTRIES: dict[tuple[str, str], str] = {
         "B-090 replayed after ADR-0084 added one declared non-claim field to the contract "
         "module, which the non_claim_inference scenario counts"
     ),
+    # ADR-0087 re-derived the router's obstacle budget, split it in three, and scoped the
+    # obstacle model to a routing region. Five committed artifacts echo `AStarSettings` or a
+    # candidate identity that records it, so each was regenerated rather than edited. Three of
+    # them replay a `###` parent and are listed here; the other two regenerate artifacts that
+    # are themselves `####` sub-entries, which cannot be replayed under their own number, so
+    # they took B-097 and B-098. Only the B-088 replay carries a behavioural delta: the routed
+    # count is unchanged and 9 of 11 `no_path` refusals are reclassified `no_path_in_region`.
+    (
+        "docs/ledgers/benchmark-ledger.md",
+        "#### B-087 — region-scoped obstacle model replay",
+    ): "B-087 replayed after the router's default budgets and obstacle model changed",
+    (
+        "docs/ledgers/benchmark-ledger.md",
+        "#### B-095 — region-scoped obstacle model replay",
+    ): "B-095 replayed after the router's default budgets and obstacle model changed",
+    (
+        "docs/ledgers/benchmark-ledger.md",
+        "#### B-088 — region-scoped obstacle model replay",
+    ): (
+        "B-088 replayed under the region-scoped obstacle model: the routed count is unchanged "
+        "and 9 of 11 no_path refusals are reclassified no_path_in_region"
+    ),
 }
 
 # Historical double-allocations that predate this checker. Ledgers are

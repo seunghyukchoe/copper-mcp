@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import heapq
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from itertools import pairwise
 from math import isqrt
@@ -46,10 +47,15 @@ from copper_mcp.routing.contracts import (
 from copper_mcp.routing.spatial_index import ConservativeSpatialIndex, SpatialIndexEntry
 from copper_mcp.routing.steiner_ordering import batched_one_steiner_order
 
-ROUTER_VERSION = "astar-grid/0.6.0"
+ROUTER_VERSION = "astar-grid/0.7.0"
 ROUTING_POLICY = "orthogonal-a-star-spatial-index-v1"
 _PRE_BATCHED_ROUTER_VERSION = "astar-grid/0.4.0"
 _PRE_SPATIAL_INDEX_ROUTER_VERSION = "astar-grid/0.5.0"
+#: The last version whose obstacle model covered the whole board and whose object ceiling was a
+#: single `max_obstacles` shared by same-net copper. Candidates recorded under it replay with
+#: the same search behaviour, but their recorded settings predate `region_margin_nm`, so on a
+#: board larger than the region they do not reproduce byte-for-byte. See ADR-0087.
+_PRE_REGION_SCOPED_ROUTER_VERSION = "astar-grid/0.6.0"
 _PRE_SPATIAL_INDEX_POLICY = "orthogonal-a-star-v1"
 _EMPTY_DIGEST = f"sha256:{'0' * 64}"
 _SPATIAL_INDEX_MIN_ENTRIES = 8
@@ -83,6 +89,11 @@ class _RouterIdentity:
 _CURRENT_ROUTER_IDENTITY = _RouterIdentity(ROUTER_VERSION, ROUTING_POLICY, True)
 _REPLAY_IDENTITIES = {
     (ROUTER_VERSION, ROUTING_POLICY): _CURRENT_ROUTER_IDENTITY,
+    (_PRE_REGION_SCOPED_ROUTER_VERSION, ROUTING_POLICY): _RouterIdentity(
+        _PRE_REGION_SCOPED_ROUTER_VERSION,
+        ROUTING_POLICY,
+        True,
+    ),
     (_PRE_SPATIAL_INDEX_ROUTER_VERSION, _PRE_SPATIAL_INDEX_POLICY): _RouterIdentity(
         _PRE_SPATIAL_INDEX_ROUTER_VERSION,
         _PRE_SPATIAL_INDEX_POLICY,
@@ -146,6 +157,10 @@ class _Problem:
     target_max_ix: int
     target_min_iy: int
     target_max_iy: int
+    #: True when the routing region is a proper subset of the safe board, so the obstacle
+    #: model covers the region rather than the whole board. An exhausted search is then a
+    #: statement about the region, not about the board, and refuses under its own code.
+    region_scoped: bool = False
     congestion_penalty: CongestionPenalty | None = None
 
 
@@ -195,8 +210,9 @@ class _WorkBudget:
     def obstacle_check(self) -> None:
         if self.obstacle_checks >= self.settings.max_obstacle_checks:
             raise _fail(
-                RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
-                "the routing search reached its obstacle-check budget",
+                RouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED,
+                "the routing search reached its obstacle-check budget "
+                f"(max_obstacle_checks={self.settings.max_obstacle_checks})",
                 expanded_states=self.expanded_states,
                 obstacle_checks=self.obstacle_checks,
             )
@@ -228,6 +244,42 @@ def _result_failure(failure: _ExpectedFailureError) -> RouteResult:
 
 def _ceil_div(numerator: int, denominator: int) -> int:
     return -((-numerator) // denominator)
+
+
+def _routing_region(
+    pads: tuple[Pad, ...],
+    attachment_segments: Sequence[Segment],
+    safe_board: _Rect,
+    margin_nm: int,
+) -> _Rect:
+    """Return the corridor the lattice may occupy, clipped to the safe board.
+
+    The corridor is the axis-aligned envelope of everything the route must join — the routed
+    net's pad centres and its selected-layer attachment copper — widened by ``margin_nm`` on
+    every side. Widening rather than hugging is the point: the margin is the detour room the
+    search is allowed, and it is a setting because how much room a board needs is a property of
+    the board, not of this module.
+
+    Clipping to ``safe_board`` means a board smaller than the margin yields the whole board and
+    the region stops existing as a distinct concept, which is why every small fixture routes
+    byte-identically to before this became region-scoped.
+    """
+
+    min_x = min(pad.center.x for pad in pads)
+    min_y = min(pad.center.y for pad in pads)
+    max_x = max(pad.center.x for pad in pads)
+    max_y = max(pad.center.y for pad in pads)
+    for segment in attachment_segments:
+        min_x = min(min_x, segment.start.x, segment.end.x)
+        min_y = min(min_y, segment.start.y, segment.end.y)
+        max_x = max(max_x, segment.start.x, segment.end.x)
+        max_y = max(max_y, segment.start.y, segment.end.y)
+    return (
+        max(safe_board[0], min_x - margin_nm),
+        max(safe_board[1], min_y - margin_nm),
+        min(safe_board[2], max_x + margin_nm),
+        min(safe_board[3], max_y + margin_nm),
+    )
 
 
 def _rectangle(ring: Ring) -> _Rect | None:
@@ -1048,12 +1100,20 @@ def _multilayer_via_count(
     pad_indices: list[int] = []
 
     def admit(copper: _CopperObject) -> None:
-        """Count every modeled object against the same ceiling the obstacle model uses."""
+        """Charge one same-net object against the net-object budget.
 
-        if len(objects) >= request.settings.max_obstacles:
+        This population is the routed net's own copper, not the copper it has to avoid, and
+        its cost is quadratic: the component merge below compares every admitted pair. It
+        therefore has its own budget and its own refusal code rather than sharing the
+        obstacle model's, which is what made a finished board's connectivity look like an
+        obstacle problem (issue #128).
+        """
+
+        if len(objects) >= request.settings.max_net_objects:
             raise _fail(
-                RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
-                "the same-net connectivity model exceeds the configured obstacle budget",
+                RouteFailureCode.NET_OBJECT_BUDGET_EXCEEDED,
+                "the same-net connectivity model exceeds the configured net-object budget "
+                f"(max_net_objects={request.settings.max_net_objects})",
             )
         objects.append(copper)
 
@@ -1361,10 +1421,11 @@ def _prepare(
     # the router already accepted on its original path. A wider net always needs it, because
     # its components are what routing merges.
     if attachment_segments or not two_pin:
-        if len(attachment_segments) > request.settings.max_obstacles:
+        if len(attachment_segments) > request.settings.max_net_objects:
             raise _fail(
-                RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
-                "the same-net attachment copper exceeds the configured obstacle budget",
+                RouteFailureCode.NET_OBJECT_BUDGET_EXCEEDED,
+                "the same-net attachment copper exceeds the configured net-object budget "
+                f"(max_net_objects={request.settings.max_net_objects})",
             )
         pad_cores: list[_Rect] = []
         pad_core_offsets: list[int] = []
@@ -1468,25 +1529,76 @@ def _prepare(
     if safe_board[0] > safe_board[2] or safe_board[1] > safe_board[3]:
         raise _fail(RouteFailureCode.NO_PATH, "the routed width does not fit inside the board")
 
+    step = request.settings.grid_step_nm
+    # The routing region is the corridor the lattice is allowed to occupy: the routed net's own
+    # copper, widened by the configured margin, clipped to the safe board. Every lattice index
+    # below is derived from it, so the search cannot leave it, and an obstacle that cannot reach
+    # it cannot change any answer this request computes. Modelling the whole board instead made
+    # the obstacle budget track board size rather than work (issue #128).
+    region = _routing_region(
+        pads, attachment_segments, safe_board, request.settings.region_margin_nm
+    )
+    region_scoped = region != safe_board
+    region_min_x, region_min_y, region_max_x, region_max_y = region
+
+    def reaches_region(bounds: _Rect, margin_nm: int) -> bool:
+        """Return True when an obstacle inflated by ``margin_nm`` can reach the region.
+
+        The obstacle model over-approximates, so this test decides only what may be *dropped*,
+        and it drops nothing a query could return. Every lattice node lies inside ``region``,
+        every lattice edge joins two such nodes, and the widest envelope any predicate queries
+        with is one lattice step (proximity scoring) around a point on such an edge. An
+        obstacle whose ``margin_nm``-inflated bounds stay more than one step clear of the
+        region is therefore outside the reach of every predicate, exactly, and not merely
+        probably. This is the same envelope the spatial index is built with below.
+        """
+
+        reach_nm = margin_nm + step
+        return not (
+            bounds[2] + reach_nm < region_min_x
+            or bounds[0] - reach_nm > region_max_x
+            or bounds[3] + reach_nm < region_min_y
+            or bounds[1] - reach_nm > region_max_y
+        )
+
     rect_obstacles: list[_Rect] = []
     polygon_obstacles: list[_PolygonObstacle] = []
 
     def ensure_obstacle_capacity() -> None:
-        # Same-net attachment copper is a modeled selected-layer object too, so it shares the
-        # object ceiling with every obstacle rather than escaping it.
-        modeled = len(attachment_segments) + len(rect_obstacles) + len(polygon_obstacles)
+        # Only foreign selected-layer copper is charged here. The routed net's own copper is a
+        # different population with a different cost, and it is charged to `max_net_objects`.
+        modeled = len(rect_obstacles) + len(polygon_obstacles)
         if modeled >= request.settings.max_obstacles:
             raise _fail(
                 RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
-                "the selected-layer obstacle count exceeds the configured obstacle budget",
+                "the region-scoped selected-layer obstacle model exceeds the configured "
+                f"obstacle budget (max_obstacles={request.settings.max_obstacles})",
             )
 
     def add_rect_obstacle(rectangle: _Rect, clearance_nm: int) -> None:
         """Inflate one exact rectangle by the route half-width plus the governing clearance."""
 
-        ensure_obstacle_capacity()
         margin_nm = half_width_nm + clearance_nm
+        if not reaches_region(rectangle, margin_nm):
+            return
+        ensure_obstacle_capacity()
         rect_obstacles.append(_inflate_rectangle(rectangle, margin_nm))
+
+    def add_polygon_obstacle(source_id: str, points: tuple[PointNM, ...], margin_nm: int) -> None:
+        """Record one conservative polygon envelope, unless it cannot reach the region."""
+
+        bounds = _polygon_bounds(points, work)
+        if not reaches_region(bounds, margin_nm):
+            return
+        ensure_obstacle_capacity()
+        polygon_obstacles.append(
+            _PolygonObstacle(
+                source_id=source_id,
+                points=points,
+                bounds=bounds,
+                margin_nm=margin_nm,
+            )
+        )
 
     # Resolving a clearance per obstacle rescans the assignment and class tuples every time,
     # which is quadratic in board size and metered only for cancellation. The mapping is fixed
@@ -1538,15 +1650,10 @@ def _prepare(
             continue
         # A keepout carries no net, so there is no second class clearance to be stricter than:
         # the routed net's own class clearance is the only rule that applies.
-        ensure_obstacle_capacity()
-        keepout_points = keepout.boundary.points
-        polygon_obstacles.append(
-            _PolygonObstacle(
-                source_id=keepout.id,
-                points=keepout_points,
-                bounds=_polygon_bounds(keepout_points, work),
-                margin_nm=half_width_nm + net_class.clearance_nm,
-            )
+        add_polygon_obstacle(
+            keepout.id,
+            keepout.boundary.points,
+            half_width_nm + net_class.clearance_nm,
         )
 
     for index, pad in enumerate(blocking_pads):
@@ -1591,14 +1698,8 @@ def _prepare(
                 RouteFailureCode.UNSUPPORTED_GEOMETRY,
                 "a selected-layer segment is not modeled exactly",
             )
-        ensure_obstacle_capacity()
-        polygon_obstacles.append(
-            _PolygonObstacle(
-                source_id=segment.id,
-                points=envelope,
-                bounds=_polygon_bounds(envelope, work),
-                margin_nm=half_width_nm + governing_clearance_nm(segment.net_id),
-            )
+        add_polygon_obstacle(
+            segment.id, envelope, half_width_nm + governing_clearance_nm(segment.net_id)
         )
 
     for index, arc in enumerate(content.arcs):
@@ -1616,15 +1717,7 @@ def _prepare(
                 RouteFailureCode.UNSUPPORTED_GEOMETRY,
                 "a selected-layer arc spans more than half a turn and is not modeled exactly",
             )
-        ensure_obstacle_capacity()
-        polygon_obstacles.append(
-            _PolygonObstacle(
-                source_id=arc.id,
-                points=envelope,
-                bounds=_polygon_bounds(envelope, work),
-                margin_nm=half_width_nm + governing_clearance_nm(arc.net_id),
-            )
-        )
+        add_polygon_obstacle(arc.id, envelope, half_width_nm + governing_clearance_nm(arc.net_id))
 
     for index, via in enumerate(content.vias):
         if index % 64 == 0:
@@ -1644,22 +1737,12 @@ def _prepare(
     for index, zone in enumerate(blocking_zones):
         if index % 64 == 0:
             work.checkpoint()
-        ensure_obstacle_capacity()
-        points = zone.boundary.points
         clearance_nm = max(governing_clearance_nm(zone.net_id), zone.clearance_nm)
-        polygon_obstacles.append(
-            _PolygonObstacle(
-                source_id=zone.id,
-                points=points,
-                bounds=_polygon_bounds(points, work),
-                margin_nm=half_width_nm + clearance_nm,
-            )
-        )
+        add_polygon_obstacle(zone.id, zone.boundary.points, half_width_nm + clearance_nm)
 
     for index, island in enumerate(verified_fill):
         if island.layer_id != request.layer_id or island.net_id == request.net_id:
             continue
-        ensure_obstacle_capacity()
         # The fill polygon is exact, but the route still has to respect both net-class
         # clearance and the governing zone's own clearance.  Candidate half-width is retained
         # here so the resulting obstacle is a conservative track-center exclusion envelope.
@@ -1667,16 +1750,12 @@ def _prepare(
             governing_clearance_nm(island.net_id),
             zone_clearance_by_net_layer.get((island.net_id, island.layer_id), 0),
         )
-        polygon_obstacles.append(
-            _PolygonObstacle(
-                source_id=f"fill:{island.net_id}:{island.layer_id}:{index}",
-                points=island.points,
-                bounds=_polygon_bounds(island.points, work),
-                margin_nm=half_width_nm + clearance_nm,
-            )
+        add_polygon_obstacle(
+            f"fill:{island.net_id}:{island.layer_id}:{index}",
+            island.points,
+            half_width_nm + clearance_nm,
         )
 
-    step = request.settings.grid_step_nm
     delta_x = end_pad.center.x - start_pad.center.x
     delta_y = end_pad.center.y - start_pad.center.y
     # A two-pin route joins pad centres, so both must sit on the lattice anchored at the first.
@@ -1688,10 +1767,14 @@ def _prepare(
             RouteFailureCode.OFF_GRID,
             "the pad-center delta is not divisible by the requested grid step",
         )
-    min_ix = _ceil_div(safe_board[0] - start_pad.center.x, step)
-    max_ix = (safe_board[2] - start_pad.center.x) // step
-    min_iy = _ceil_div(safe_board[1] - start_pad.center.y, step)
-    max_iy = (safe_board[3] - start_pad.center.y) // step
+    # The lattice spans the routing region, never the whole safe board. This is what makes the
+    # region-scoped obstacle model sound rather than merely cheaper: a node the search can
+    # reach is a node inside the region, so the copper omitted above is copper no candidate
+    # can be routed through.
+    min_ix = _ceil_div(region[0] - start_pad.center.x, step)
+    max_ix = (region[2] - start_pad.center.x) // step
+    min_iy = _ceil_div(region[1] - start_pad.center.y, step)
+    max_iy = (region[3] - start_pad.center.y) // step
     goal_ix = delta_x // step
     goal_iy = delta_y // step
     if not (min_ix <= 0 <= max_ix and min_iy <= 0 <= max_iy):
@@ -1789,6 +1872,7 @@ def _prepare(
         target_max_ix=max(node[0] for node in target_nodes),
         target_min_iy=min(node[1] for node in target_nodes),
         target_max_iy=max(node[1] for node in target_nodes),
+        region_scoped=region_scoped,
         congestion_penalty=congestion_penalty,
     )
     for obstacle in problem.rect_obstacles:
@@ -2178,6 +2262,18 @@ def _search(problem: _Problem, work: _WorkBudget) -> _Leg:
             )
         peak_frontier_states = max(peak_frontier_states, len(frontier))
 
+    # An exhausted search says nothing about copper the request never modelled. When the
+    # lattice was clipped to a routing region, the honest claim is about that region, and the
+    # caller's recourse — a wider `region_margin_nm` — is different from the recourse for a
+    # genuinely blocked board. Two codes, because a message a caller never sees is not one.
+    if problem.region_scoped:
+        raise _fail(
+            RouteFailureCode.NO_PATH_IN_REGION,
+            "no legal orthogonal path exists inside the bounded routing region "
+            f"(region_margin_nm={problem.request.settings.region_margin_nm})",
+            expanded_states=expanded_states,
+            obstacle_checks=work.obstacle_checks,
+        )
     raise _fail(
         RouteFailureCode.NO_PATH,
         "no legal orthogonal path exists on the bounded grid",
@@ -2339,7 +2435,9 @@ def _route_tree(problem: _Problem, work: _WorkBudget, identity: _RouterIdentity)
         target_nodes = _nodes_for_cores(problem, target_cores, work)
         if not source_nodes or not target_nodes:
             raise _fail(
-                RouteFailureCode.NO_PATH,
+                RouteFailureCode.NO_PATH_IN_REGION
+                if problem.region_scoped
+                else RouteFailureCode.NO_PATH,
                 "a pad cannot be reached from the bounded routing lattice",
                 expanded_states=work.expanded_states,
                 obstacle_checks=work.obstacle_checks,
