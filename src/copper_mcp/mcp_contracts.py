@@ -575,8 +575,9 @@ class PadGeometryContract(_ClosedContract):
     rotation_udeg: int
     shape: Literal["circle", "rect", "oval", "roundrect"]
     kind: Literal["smd", "through_hole", "np_through_hole"]
-    # A pad with no net is legal and common (mounting holes, NPTH); every other copper
-    # object on a supported board carries one, so only this field is nullable.
+    # A pad with no net is legal and common (mounting holes, NPTH). Tracks, arcs and vias
+    # may also be netless — KiCad's net 0 covers stitching vias and orphaned copper — so
+    # their net_id fields are nullable too. Zones are the exception: a zone must name a net.
     net_id: NetRefId | None
     roundrect_radius_nm: PositiveNanometres | None
     drill_nm: Annotated[list[PositiveNanometres], Field(min_length=2, max_length=2)] | None
@@ -633,7 +634,7 @@ class SegmentGeometryContract(_ClosedContract):
     start_nm: PointArray
     end_nm: PointArray
     width_nm: PositiveNanometres
-    net_id: NetRefId
+    net_id: NetRefId | None
 
 
 class SceneSegmentContract(_SceneObjectContract):
@@ -646,7 +647,7 @@ class ArcGeometryContract(_ClosedContract):
     mid_nm: PointArray
     end_nm: PointArray
     width_nm: PositiveNanometres
-    net_id: NetRefId
+    net_id: NetRefId | None
 
 
 class SceneArcContract(_SceneObjectContract):
@@ -658,7 +659,7 @@ class ViaGeometryContract(_ClosedContract):
     center_nm: PointArray
     diameter_nm: PositiveNanometres
     drill_nm: PositiveNanometres
-    net_id: NetRefId
+    net_id: NetRefId | None
 
 
 class SceneViaContract(_SceneObjectContract):

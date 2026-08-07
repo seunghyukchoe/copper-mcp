@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections import Counter
 from dataclasses import dataclass
 from math import isqrt
 from typing import Never
@@ -211,11 +212,17 @@ class _Converter:
         root: SExpr,
         profile: KiCadConstraintProfile,
         limits: ParseLimits,
+        ambiguous_native_identities: frozenset[tuple[str, str]] = frozenset(),
     ) -> None:
         self.payload = payload
         self.root = root
         self.profile = profile
         self.limits = limits
+        # Native KiCad identities this file reuses across two or more objects of one kind, keyed
+        # as ``(kind, value)``.  Empty on the first pass; ``convert`` re-runs with the measured
+        # set so that a reused identity is never projected as a Board IR identity.
+        self.ambiguous_native_identities = ambiguous_native_identities
+        self.native_identity_uses: Counter[tuple[str, str]] = Counter()
         self.source_revision = f"sha256:{hashlib.sha256(payload).hexdigest()}"
         # Largest single roundrect radius rounding, in nanometres, measured rather than asserted.
         self.max_roundrect_rounding_nm = 0
@@ -605,11 +612,19 @@ class _Converter:
                 object_kind=kind,
             )
         if identities:
-            return f"{kind}:kicad:{identities[0][1].lower()}"
+            native = identities[0][1].lower()
+            self.native_identity_uses[(kind, native)] += 1
+            # A KiCad UUID "should be globally unique" but is not required to be, and real boards
+            # reuse one value across every instance of a footprint type.  Board IR identity is a
+            # per-object invariant, so a reused value is not an identity here: it degrades to the
+            # revision-derived name, which write-back already refuses.  See
+            # docs/research/kicad-uuid-uniqueness-v1.md.
+            if (kind, native) not in self.ambiguous_native_identities:
+                return f"{kind}:kicad:{native}"
         return self._derived_identity(kind, locator)
 
     def _derived_identity(self, kind: str, locator: str) -> str:
-        """Name an object that carries no native KiCad identity of its own."""
+        """Name an object that carries no usable native KiCad identity of its own."""
 
         material = f"{self.source_revision}\0{kind}\0{locator}".encode()
         return f"{kind}:derived:{hashlib.sha256(material).hexdigest()[:32]}"
@@ -729,8 +744,11 @@ class _Converter:
             if len(net_reference) > 16:
                 self.fail("integer.precision", "numeric net reference is malformed", locator)
             net_code = int(net_reference)
-            if net_code <= 0:
+            if net_code == 0:
+                # KiCad's net 0 is the "unconnected" net: real copper with no netlist claim.
                 return None
+            if net_code < 0:
+                self.fail("net.unknown", "numeric net reference is negative", locator)
             canonical_code = str(net_code)
             if canonical_code not in self.legacy_nets:
                 self.fail("net.unknown", "numeric net reference has no declaration", locator)
@@ -1557,16 +1575,17 @@ class _Converter:
                 allowed=frozenset({"locked"}),
                 locator=locator,
             )
+            # KiCad stores stitching and orphaned copper on net 0 ("no net"). That copper is
+            # physically present whatever its net, so it converts as an obstacle with no
+            # connectivity contribution (net_id None) instead of refusing the document.
             net_name = self._net_name(expression, locator)
-            if net_name is None:
-                self.fail("net.unknown", "segment has no routable net", locator)
             layer_ids = self._layer_ids(expression, locator)
             if len(layer_ids) != 1:
                 self.fail("unknown.layer", "segment must reference one copper layer", locator)
             result.append(
                 Segment(
                     id=self._identity("segment", expression, locator),
-                    net_id=net_id_for_name(net_name),
+                    net_id=net_id_for_name(net_name) if net_name is not None else None,
                     layer_id=layer_ids[0],
                     start=self._point(expression, "start", locator),
                     end=self._point(expression, "end", locator),
@@ -1596,16 +1615,15 @@ class _Converter:
                 allowed=frozenset({"locked"}),
                 locator=locator,
             )
+            # Net-0 arcs convert as netless obstacles for the same reason segments do.
             net_name = self._net_name(expression, locator)
-            if net_name is None:
-                self.fail("net.unknown", "track arc has no routable net", locator)
             layer_ids = self._layer_ids(expression, locator)
             if len(layer_ids) != 1:
                 self.fail("unknown.layer", "track arc must reference one copper layer", locator)
             result.append(
                 Arc(
                     id=self._identity("arc", expression, locator),
-                    net_id=net_id_for_name(net_name),
+                    net_id=net_id_for_name(net_name) if net_name is not None else None,
                     layer_id=layer_ids[0],
                     start=self._point(expression, "start", locator),
                     mid=self._point(expression, "mid", locator),
@@ -1681,9 +1699,10 @@ class _Converter:
                     object_kind="via",
                 )
             self._validate_neutral_via_treatment(expression, locator)
+            # A stitching via saved on KiCad's net 0 is real copper: barrel and annulus occupy
+            # space on every layer they cross. It converts as an obstacle with no connectivity
+            # contribution (net_id None); every geometric check below still applies to it.
             net_name = self._net_name(expression, locator)
-            if net_name is None:
-                self.fail("net.unknown", "via has no routable net", locator)
             layer_ids = self._layer_ids(expression, locator)
             if len(layer_ids) != 2:
                 self.fail("unknown.layer", "through via must reference two copper layers", locator)
@@ -1698,7 +1717,7 @@ class _Converter:
             result.append(
                 Via(
                     id=self._identity("via", expression, locator),
-                    net_id=net_id_for_name(net_name),
+                    net_id=net_id_for_name(net_name) if net_name is not None else None,
                     center=self._point(expression, "at", locator),
                     diameter_nm=self._mm(
                         self._values(expression, "size", locator, minimum=1, maximum=1)[0],
@@ -2224,22 +2243,42 @@ class _Converter:
         constraints = self._constraints(nets)
         zones, keepouts = self._zones_and_keepouts()
         footprints, pads = self._footprints_and_pads()
+        source_info = SourceInfo(
+            format="kicad_pcb",
+            revision=self.source_revision,
+            format_version=self.version,
+            generator=generator_values[0] if generator_values else None,
+        )
+        outline = self._outline()
+        vias = self._vias()
+        segments = self._segments()
+        arcs = self._arcs()
+        # Every identity is now assigned, so reuse is measurable rather than guessed.  Re-running
+        # the whole conversion with the measured set is what keeps the fallback symmetric: all the
+        # objects sharing a reused value degrade together, and none of them keeps a claim to it.
+        reused = (
+            frozenset(key for key, uses in self.native_identity_uses.items() if uses > 1)
+            - self.ambiguous_native_identities
+        )
+        if reused:
+            return _Converter(
+                self.payload,
+                self.root,
+                self.profile,
+                self.limits,
+                ambiguous_native_identities=self.ambiguous_native_identities | reused,
+            ).convert()
         content = make_content(
-            source=SourceInfo(
-                format="kicad_pcb",
-                revision=self.source_revision,
-                format_version=self.version,
-                generator=generator_values[0] if generator_values else None,
-            ),
-            outline=self._outline(),
+            source=source_info,
+            outline=outline,
             copper_layers=self.layers,
             nets=nets,
             constraints=constraints,
             footprints=footprints,
             pads=pads,
-            vias=self._vias(),
-            segments=self._segments(),
-            arcs=self._arcs(),
+            vias=vias,
+            segments=segments,
+            arcs=arcs,
             zones=zones,
             keepouts=keepouts,
         )
@@ -2290,13 +2329,19 @@ def parse_kicad_bytes(
             ),
         )
     except BoardIRValidationError as error:
+        # Name the invariant, never the board.  Every message raised by Board IR validation is a
+        # fixed string chosen by `copper_mcp.board_ir`; anything derived from the source travels
+        # in the error's locator, which this refusal deliberately does not echo.
         return ConversionResult(
             snapshot=None,
             diagnostics=(
                 Diagnostic(
                     code=error.code,
                     severity=Severity.ERROR,
-                    message="converted Board IR content failed semantic validation",
+                    message=(
+                        "converted Board IR content failed semantic validation: "
+                        f"{error.message[:256]}"
+                    ),
                     source_locator="kicad_pcb",
                 ),
             ),
