@@ -128,6 +128,11 @@ All notable changes are documented here. The format follows
   [D-170](docs/ledgers/decision-ledger.md), [SEC-127](docs/ledgers/security-ledger.md),
   [R-127](docs/ledgers/risk-register.md),
   [source-to-board parity research](docs/research/source-to-board-parity-v1.md), #66)
+  The excessive-agency evaluation artifact is re-measured as a
+  [B-090 replay](docs/ledgers/benchmark-ledger.md): the new verification contract declares an eighth
+  single-value non-claim field, and the `non_claim_inference` scenario counts those by introspecting
+  the live contract module rather than from a constant — which is exactly the property that makes
+  that check non-vacuous. All 116 cases, 77 passes and 0 failures are unchanged.
 - **Chamfered and circular courtyards convert, and their legality claims stay honest.** The
   #116 survey's two courtyard causes — `courtyard edges must be non-zero and axis-aligned`
   (measured to be exact 45-degree electrolytic-capacitor chamfers, not the hypothesised rotated

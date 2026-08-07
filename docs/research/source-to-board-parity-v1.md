@@ -219,6 +219,12 @@ correct board, the mismatched board, the board missing a footprint, and the boar
 footprint alike. When the netlist is not fetched, or `--severity-error` suppresses the findings, or
 the projection is accidentally the board-excluded delivered schematic, the sum is **0**.
 
+The sharpest case is the emptiest one. **Measured**, against a board with *every* footprint deleted:
+the delivered schematic yields `[]` — the sum is `0` and the run is refused — while the projection
+yields `missing_footprint` ×2, a sum of exactly 2, and two connectivity findings. A board with
+nothing on it is the one a naive implementation is most eager to call clean, and it is the one where
+the invariant and the verdict agree most loudly.
+
 This is an arithmetic cross-check in the same spirit as #94's ERC exit-code cross-check: the report
 must predict its own preconditions, and a disagreement is refused rather than reconciled. It fails
 closed — a board footprint with an empty library identifier would break the invariant and be
