@@ -950,6 +950,59 @@ def test_bare_negative_routing_net_code_is_not_treated_as_a_name(item_head: str)
     assert result.diagnostics[0].code == "net.unknown"
 
 
+@pytest.mark.parametrize("no_net_form", ['(net "")', "(net 0)", '(net 0 "")'])
+def test_net0_stitching_copper_converts_as_netless_obstacles(no_net_form: str) -> None:
+    """KiCad's net 0 — every saved spelling of it — is copper, not a document defect.
+
+    Real boards carry stitching vias and orphaned tracks on net 0 (KiCad 10 writes it as
+    ``(net "")``). They convert with ``net_id None``: present in the copper model, absent
+    from every net.
+    """
+
+    source = SUBSET_BOARD.read_bytes().replace(
+        '    (net "SIG_µ")\n'.encode(), f"    {no_net_form}\n".encode()
+    )
+
+    content = parse_success(source, constraint_profile()).content
+
+    assert content.vias[0].net_id is None
+    assert content.segments[0].net_id is None
+    assert content.arcs[0].net_id is None
+    # The empty name never becomes a net: netless copper contributes nothing to the net set.
+    assert {net.name for net in content.nets} == {"GND"}
+
+
+def test_a_netless_via_still_fails_closed_on_malformed_geometry() -> None:
+    source = SUBSET_BOARD.read_bytes()
+    netless = _replace_after(source, b"  (via\n", b'    (net "SIG_\xc2\xb5")', b'    (net "")')
+
+    # No layer span at all: the netless via is still held to every geometric rule.
+    missing_layers = _replace_after(netless, b"  (via\n", b'    (layers "F.Cu" "B.Cu")\n', b"")
+    result = parse_kicad_bytes(missing_layers, constraint_profile())
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "syntax.missing_field"
+
+    # An impossible drill (wider than the via itself) is refused, netless or not.
+    impossible_drill = _replace_after(netless, b"  (via\n", b"(drill 0.4)", b"(drill 0.9)")
+    result = parse_kicad_bytes(impossible_drill, constraint_profile())
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "geometry.invalid"
+
+
+def test_netless_copper_round_trips_through_the_codec() -> None:
+    source = SUBSET_BOARD.read_bytes().replace('    (net "SIG_µ")\n'.encode(), b'    (net "")\n')
+    snapshot = parse_success(source, constraint_profile())
+
+    from copper_mcp.board_ir import decode_snapshot_json
+
+    decoded = decode_snapshot_json(encode_snapshot(snapshot))
+
+    assert decoded.content.vias[0].net_id is None
+    assert decoded.content.segments[0].net_id is None
+    assert decoded.content.arcs[0].net_id is None
+    assert decoded.snapshot_digest == snapshot.snapshot_digest
+
+
 def test_two_field_pad_net_code_uses_canonical_numeric_identity() -> None:
     source = _replace(
         SUBSET_BOARD.read_bytes(),

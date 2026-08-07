@@ -328,6 +328,27 @@ class BudgetTests(unittest.TestCase):
         self.assertEqual(first, second)
 
 
+class NetlessCopperTests(unittest.TestCase):
+    def test_netless_copper_is_observable_and_satisfies_the_scene_contract(self) -> None:
+        """A stitching via on KiCad's net 0 reaches the scene with a null net, not a refusal."""
+
+        import tempfile
+
+        source = (FIXTURES / "scene-region.kicad_pcb").read_text(encoding="utf-8")
+        netless = source.replace(
+            '(net "EAST")\n    (uuid "40000000-0000-0000-0000-000000000007")',
+            '(net "")\n    (uuid "40000000-0000-0000-0000-000000000007")',
+        )
+        self.assertNotEqual(netless, source)
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "netless.kicad_pcb").write_text(netless, encoding="utf-8")
+            document = _observe("netless.kicad_pcb", workspace=workspace)
+        vias = document["mutable"]["vias"]
+        self.assertEqual(len(vias), 1)
+        self.assertIsNone(vias[0]["geometry"]["net_id"])
+
+
 class UnsupportedBoardTests(unittest.TestCase):
     def test_a_board_outside_the_workspace_is_refused(self) -> None:
         """The region is a view onto one board, never a way to reach a second one."""
