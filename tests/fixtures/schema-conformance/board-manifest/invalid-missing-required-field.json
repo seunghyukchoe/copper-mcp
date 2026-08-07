@@ -1,0 +1,10 @@
+{
+  "board_id": "board:0123456789abcdef",
+  "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "relative_path": "boards/example.kicad_pcb",
+  "format": "kicad_pcb",
+  "size_bytes": 12345,
+  "source_version": "8.0.0",
+  "source_generator": "pcbnew",
+  "schema_version": "1.0"
+}

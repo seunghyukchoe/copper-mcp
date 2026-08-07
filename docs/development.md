@@ -171,6 +171,46 @@ limits on what a number from this corpus can claim.
 4. Route it through Board IR and the existing typed refusals. An import path that special-cases the
    corpus is measuring the harness, not the router.
 
+## Adding a schema conformance fixture
+
+`schemas/` holds the published JSON Schema files for CopperMCP's wire-visible payloads. A schema
+file can drift from the Python model that is supposed to satisfy it — a field renamed on one side,
+not the other — without any test noticing, because the model's own boundary tests validate against
+its own runtime rules, not against the schema file a third party would actually load. Direct schema
+conformance tests close that gap by loading the schema itself and checking fixtures against it.
+
+`tests/test_schema_conformance.py` covers the board manifest, candidate, and DRC summary schemas
+this way; `test_board_ir_schema.py`, `test_circuit_ir.py`, `test_circuit_intent_service.py`, and
+`test_audio_benchmarks.py` cover the rest. Each schema's coverage is recorded in the
+`_KNOWN_SCHEMAS` mapping in `tests/test_schema_conformance.py`, and a completeness test there fails
+if a new file appears under `schemas/` without a matching entry — so a new schema cannot ship
+without either a fixture or a recorded reason it does not need one.
+
+To add a fixture for a schema (new or existing):
+
+1. Put fixtures under `tests/fixtures/schema-conformance/<schema-name>/`, one `valid.json` and one
+   `invalid-<condition>.json` per malformed condition you are covering. Name the invalid fixture
+   after the condition it demonstrates (`invalid-missing-required-field.json`,
+   `invalid-malformed-sha256-<field>.json`, `invalid-negative-count.json`,
+   `invalid-unexpected-additional-property.json`, `invalid-wrong-schema-version.json`) so a reader
+   never has to open the file to know what it is testing. Keep fixtures minimal; do not paste a
+   real board, job, or candidate wholesale.
+2. Where the schema has a Python model with a `to_dict()` method, build the valid fixture from a
+   real instance (round-tripped through `json.dumps`/`json.loads`, since a dataclass may use a
+   `tuple` where the wire format uses a JSON array) and assert the fixture equals that payload —
+   this proves the fixture is the schema's real published shape, not merely *a* shape the schema
+   happens to accept.
+3. Load the schema with `jsonschema.Draft202012Validator`, call `Draft202012Validator.check_schema`
+   on it once, and assert the valid fixture produces no errors and each invalid fixture produces at
+   least one.
+4. If a fixture reveals that the real payload disagrees with the schema, do not change either side
+   to make the test pass. Record the mismatch as its own pinned regression test explaining what was
+   found, note it in the changelog, and open a separate, minimal-reproduction bug — a schema is a
+   public contract change and must go through the same review as one (see "Adding a public
+   contract" below).
+5. Add the new schema's relative path to `_KNOWN_SCHEMAS` in `tests/test_schema_conformance.py`
+   naming the test module that covers it, even when that module is a different file.
+
 ## Adding a public contract
 
 1. Open an RFC issue.

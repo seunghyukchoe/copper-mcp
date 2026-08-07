@@ -8,6 +8,22 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **Direct JSON Schema conformance tests for the board manifest, DRC summary, and candidate
+  schemas.** `tests/test_schema_conformance.py` loads `schemas/board-manifest.schema.json`,
+  `schemas/candidate.schema.json`, and `schemas/drc-summary.schema.json` from disk and validates
+  committed fixtures against them with the existing `jsonschema` dev dependency — no new
+  dependency added. Each schema gets one minimal valid fixture (for board-manifest and candidate,
+  proven byte-equal to what `BoardManifest.to_dict()` / `CandidateSummary.to_dict()` actually
+  publish) plus five focused invalid fixtures covering a missing required field, an unexpected
+  additional property, a negative count, a malformed SHA-256 identifier, and a wrong schema
+  version. A completeness guard fails if a future file under `schemas/` has no recorded coverage.
+  Board IR, Circuit Intent, Circuit Schematic Build, and the audio benchmark catalog schemas
+  already had this kind of direct fixture-based test elsewhere and are not duplicated. Closes #11.
+  While writing the DRC summary fixtures, `DrcSummary.to_dict()` was found to always include a
+  `clean` field that `schemas/drc-summary.schema.json` does not declare and its
+  `additionalProperties: false` therefore rejects; this is recorded as a pinned regression test
+  and reported as a follow-up rather than fixed here, since closing it changes public schema
+  semantics.
 - **CopperMCP now has a routing benchmark on boards it did not author, and the first honest number
   from it is 59.83%.** A benchmark-only import seam converts tscircuit SimpleRouteJson problems
   into ordinary verified Board IR snapshots and ordinary route requests, so an external corpus
