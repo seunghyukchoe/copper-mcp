@@ -5,7 +5,8 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0081**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0082**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0082**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -129,6 +130,10 @@ never silently widens it.
 | [0080](0080-chamfered-and-circular-courtyards.md) | Bracket chamfered and circular courtyards instead of widening them | Accepted |
 
 Seventy-seven numbers, seventy-six records, no duplicates — and `scripts/check_adr_numbers.py` now
+Seventy-six numbers, seventy-five records, no duplicates — and `scripts/check_adr_numbers.py` now
+| [0081](0081-incremental-retention-and-bounded-ripup-window.md) | Reconstruct the congestion ledger incrementally and bound rip-up by a spatial window | Accepted |
+
+Seventy-five numbers, seventy-four records, no duplicates — and `scripts/check_adr_numbers.py` now
 proves that last clause on every run rather than asserting it. Only 0027 is unused; see
 **Known gap** above.
 
@@ -140,6 +145,8 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
   0066, 0070, 0073.
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060, 0075.
+  0066, 0070, 0073, 0075.
+- **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060.
 - **Circuit Intent and schematic verification** — 0014, 0015, 0056, 0070.
 - **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065, 0075.
 - **Circuit Scene and rendering** — 0010, 0022, 0023, 0028, 0056.
@@ -210,3 +217,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0078: Net-0 copper is an obstacle with no connectivity contribution](0078-netless-copper-as-obstacle.md)
 - [ADR-0079: Make the structural parse budgets operator-settable, and name the one that refused](0079-discriminated-configurable-parse-budgets.md)
 - [ADR-0080: Bracket chamfered and circular courtyards instead of widening them](0080-chamfered-and-circular-courtyards.md)
+- [ADR-0081: Reconstruct the congestion ledger incrementally and bound rip-up by a spatial window](0081-incremental-retention-and-bounded-ripup-window.md)
