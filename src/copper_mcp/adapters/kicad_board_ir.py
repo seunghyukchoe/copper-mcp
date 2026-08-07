@@ -1796,10 +1796,12 @@ class _Converter:
 
         - **Obstacle: over-approximate.** The copper is real for every net, including the two
           it ties, so it becomes a full-width `Segment` along the rectangle's long midline.
-          The modelled stadium contains the drawn rectangle exactly — the router's
-          ceil-rounded half width covers an odd short side, and the end caps extend past the
-          short edges — so the over-approximation is the caps plus at most one nanometre of
-          centring slack, and it can only refuse a route, never permit one through the tie.
+          Both routers model an orthogonal segment as its endpoint bounding box grown by
+          ``(width_nm + 1) // 2`` on all four sides, and that contains the drawn rectangle:
+          the ceil-rounded half width absorbs an odd short side, the floor-rounded midline
+          costs at most one nanometre of slack on one edge, and the square caps extend past
+          the short edges. So the model can only refuse a route, never permit one through
+          the tie.
         - **Connectivity: no claim.** ``net_id`` is ``None``, the same contract net-0 copper
           has (ADR-0078): the tied nets are deliberately *under*-approximated as unconnected
           through the tie, because a joined-nets claim could not be test-bound without

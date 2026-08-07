@@ -48,11 +48,11 @@ The rules:
    not fill a gap to tidy the sequence.
 
    `D-177`, `D-178`, `R-134`, and `R-135` are the live form of the same rule rather than settled
-   history. Two branches were open and had each already claimed `D-177`/`R-134` when `D-179`/`R-136`
-   landed, so `D-179`/`R-136` took numbers above both rather than colliding with them, which is
-   rule 1 applied. If those branches land they fill their own numbers and this paragraph
-   shrinks; if they do not, the numbers are spent like every other gap. Either way nothing later
-   recycles them.
+   history. Two branches were open when `D-179`/`R-136` landed — one holding `D-177`/`R-134`, the
+   other `D-178`/`R-135` — so `D-179`/`R-136` took numbers above both rather than colliding with
+   them, which is rule 1 applied. If those branches land they fill their own numbers and this
+   paragraph shrinks; if they do not, the numbers are spent like every other gap. Either way
+   nothing later recycles them.
 3. **A correction gets a new ID.** Because rows are append-only, a superseding or clarifying entry
    is a new entry that names what it corrects — never an edit to the original. `B-075`
    ("held-out audio evidence-source provenance correction") is the model: it states what it

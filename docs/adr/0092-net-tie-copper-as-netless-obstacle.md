@@ -33,11 +33,14 @@ The copper asks two questions whose safe directions point apart:
 connectivity claim of any kind is made through it.**
 
 - **Obstacle, over-approximated.** The segment's width is the rectangle's short side and its
-  endpoints are the long side's extremes, so the router's ceil-rounded half width plus the
-  stadium's end caps make the modelled copper a strict superset of the drawn rectangle (the caps,
-  plus at most one nanometre of midline centring slack). `None` never equals a request net, so
-  the copper is an obstacle for third nets *and* for the tied nets — over-refusal is the accepted
-  direction, and it extends to the tie pads themselves, which the obstacle envelope may cover.
+  endpoints are the long side's extremes. Both routers model an orthogonal segment as its
+  endpoint bounding box grown by `(width_nm + 1) // 2` on all four sides (`_segment_extent`,
+  `_segment_bounds`), so the modelled copper is a strict superset of the drawn rectangle: on the
+  short axis the ceil-rounded half width absorbs an odd side and the floor-rounded midline leaves
+  at most one nanometre of slack on one edge, and on the long axis the square caps extend a half
+  width past each short edge. `None` never equals a request net, so the copper is an obstacle for
+  third nets *and* for the tied nets — over-refusal is the accepted direction, and it extends to
+  the tie pads themselves, which the obstacle envelope may cover.
 - **Connectivity, under-approximated to silence.** The tied nets remain two disjoint `Net`
   objects and report unconnected through the tie, exactly as netless stitching copper behaves
   under ADR-0078. The alternative — an explicit connectivity edge between the pad groups — is

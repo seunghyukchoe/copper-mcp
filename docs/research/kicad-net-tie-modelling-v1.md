@@ -53,10 +53,12 @@ direction-of-error rules (obstacles over-approximate; connectivity under-approxi
 them separately:
 
 - **Obstacle.** For every net — third nets and the tied nets alike — the polygon is real copper.
-  A netless full-width `Segment` along the rectangle's long midline over-approximates it: the
-  router's ceil-rounded half width covers an odd-nanometre short side, and the stadium's end caps
-  extend past the short edges, so the modelled copper is a strict superset of the drawn
-  rectangle. Over-approximation can only refuse a route through the tie, never permit one.
+  A netless full-width `Segment` along the rectangle's long midline over-approximates it: both
+  routers grow an orthogonal segment's endpoint bounding box by `(width_nm + 1) // 2` on every
+  side, so the ceil-rounded half width covers an odd-nanometre short side (the floor-rounded
+  midline costs at most one nanometre of slack on one edge) and the square caps extend past the
+  short edges. The modelled copper is a strict superset of the drawn rectangle, so it can only
+  refuse a route through the tie, never permit one.
 - **Connectivity.** A joined-nets claim would have to be test-bound: the polygon demonstrably
   bridges copper of both pad groups, under a transform-aware exact-overlap proof that no current
   Board IR surface performs. Until such a proof exists, the only claim consistent with the
