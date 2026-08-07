@@ -66,9 +66,9 @@ without net ties produce byte-identical content — the committed golden digests
 - The net-tie refusal is gone as a survey cause. The board that carried it exposes the next
   queued constructs (per-pad `zone_connect` overrides and `connect`-kind pads), which are
   separate contract decisions and remain typed refusals.
-- The connectivity under-claim is permanent until a bridge proof exists: a caller asking "are
-  PGND and AGND connected?" is told less than the board knows. That asymmetry, and the fact that
-  a router may consequently propose joining the tied nets with new copper elsewhere (which
+- The connectivity under-claim is permanent until a bridge proof exists: a caller asking whether
+  the two tied nets are connected is told less than the board knows. That asymmetry, and the
+  fact that a router may consequently propose joining the tied nets with new copper elsewhere (which
   authoritative KiCad DRC would then flag), is recorded as [R-136](../ledgers/risk-register.md).
 - The tie obstacle envelope can cover the tie pads entirely, making them unroutable at their own
   nets' clearances. Over-refusal is the accepted direction; the tied nets on real boards reach
