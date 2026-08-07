@@ -135,7 +135,7 @@ none of that kind and nothing else. A kind that does not fit is replaced, in its
 kinds. Kinds are offered the budget in ascending object count with the fixed declaration order
 breaking ties, which is deterministic for a board revision and request and puts the outline and the
 rules - what a caller needs in order to bound a follow-up request - ahead of the numerous kinds.
-See [ADR-0087](../adr/0087-complete-or-withheld-scene-kinds.md).
+See [ADR-0088](../adr/0088-complete-or-withheld-scene-kinds.md).
 
 Object bounds over-approximate on purpose. An arc is bounded including the bulge between its
 sample points, and a pad rotated off the quarter turns is bounded by its circumscribed circle, both

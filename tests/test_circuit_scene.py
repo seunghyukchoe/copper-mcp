@@ -271,6 +271,22 @@ class ReferenceStabilityTests(unittest.TestCase):
                         self.assertEqual(item["ref_stability"], "native")
                         self.assertIn(":kicad:", item["ref_id"])
 
+    def test_an_assembled_outline_reference_reports_native_durability(self) -> None:
+        """The ADR-0087 composite contour identity is durable the way a uuid is.
+
+        It is anchored in the member segments' own uuids, so it survives every edit that
+        leaves the outline's member set alone — unlike a ``:derived:`` reference, which moves
+        with the source revision and must be re-read after any edit at all.  The scene must
+        therefore report it as ``native``, keeping ``all_board_refs_native`` aligned with what
+        the apply gates would actually accept.
+        """
+
+        from copper_mcp.circuit_scene import _ref_stability
+
+        self.assertEqual(_ref_stability("contour:assembled:" + "0" * 32), "native")
+        self.assertEqual(_ref_stability("contour:derived:" + "0" * 32), "content_derived")
+        self.assertEqual(_ref_stability("contour:kicad:abc"), "native")
+
     def test_request_scoped_rules_do_not_pollute_the_board_durability_signal(self) -> None:
         document = _observe("scene-region.kicad_pcb")
         rules = document["static"]["rules"]

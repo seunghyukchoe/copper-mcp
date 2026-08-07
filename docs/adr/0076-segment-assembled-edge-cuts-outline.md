@@ -1,11 +1,13 @@
 # ADR-0076: Assemble the board outline from Edge.Cuts segments, and never repair it
 
-- Status: Accepted
+- Status: Accepted (identity clause superseded by [ADR-0087](0087-composite-native-identity-for-assembled-outlines.md))
 - Date: 2026-08-06
 - Owners: CopperMCP maintainers
 - Related: [ADR-0065](0065-orthogonal-courtyard-chains.md); [ADR-0072](0072-conservative-arc-track-envelopes.md);
   [ADR-0017](0017-diagonal-segment-envelopes.md);
-  [Edge.Cuts outline assembly research](../research/edge-cuts-outline-assembly-v1.md); issue #111
+  [Edge.Cuts outline assembly research](../research/edge-cuts-outline-assembly-v1.md); issue #111;
+  [ADR-0087](0087-composite-native-identity-for-assembled-outlines.md) supersedes the derived-identity
+  clause only — the assembled contour now takes a composite identity from its members' own uuids
 
 ## Context
 

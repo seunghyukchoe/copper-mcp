@@ -769,7 +769,7 @@ class SceneWithheldKindContract(_ClosedContract):
     layers, or this. An empty array therefore says exactly one thing: the region holds none of
     that kind. Reading the ``truncation`` record is not required to know that, which is the
     whole point — the caller who most needed the warning was the one reading the array
-    ([ADR-0087](../../docs/adr/0087-complete-or-withheld-scene-kinds.md)).
+    ([ADR-0088](../../docs/adr/0088-complete-or-withheld-scene-kinds.md)).
     """
 
     observation: Literal["withheld_by_ceiling"]

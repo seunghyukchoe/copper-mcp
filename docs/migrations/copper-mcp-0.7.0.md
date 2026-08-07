@@ -133,7 +133,7 @@ replaced — in its own slot under `static` or `mutable` — by an object:
 
 `observation` has exactly one permitted value. There is no spelling of this object that means
 "observed and empty", which is the point: after this change `vias: []` says one thing only — the
-region holds no vias. [ADR-0087](../adr/0087-complete-or-withheld-scene-kinds.md) carries the
+region holds no vias. [ADR-0088](../adr/0088-complete-or-withheld-scene-kinds.md) carries the
 argument, including why a per-kind *count* beside the array was rejected.
 
 **What breaks:** a client with a closed schema that types `static.pads` and the other eight kinds

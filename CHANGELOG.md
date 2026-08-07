@@ -8,6 +8,25 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- **A board outline assembled from `Edge.Cuts` `gr_line` segments no longer makes the whole board
+  permanently unappliable.** Issue #126 measured that both apply gates refused every real board
+  that converts, and that on three of them the assembled outline was the *only* derived identity —
+  every footprint, pad and copper object was native. The contour now takes a composite native
+  identity, `contour:assembled:` plus a hash of the sorted set of its member segments' own uuids,
+  produced only when every member carries exactly one native identity and no value repeats within
+  the member set; any unresolvable member set still degrades to the revision-derived name every
+  source-preserving patch path refuses. Neither apply gate changed by a byte: a reused footprint
+  or pad UUID (D-158) still refuses write-back, a `gr_rect` outline still yields its own native
+  uuid identity byte-for-byte unchanged, and the preserved invariant — no patch can ever name an
+  object whose identity cannot be resolved back to the source file — is mutation-checked from both
+  directions. Measured read-only on the twelve-board real corpus: 0 of 11 converting boards passed
+  either gate before, 3 of 11 pass both after, and the remaining 8 refuse on UUID reuse exactly as
+  intended. Two committed fixtures now draw their outlines with `gr_line` segments so the fixture
+  set cannot drift back to the `gr_rect`-only assumption that hid this for 1,900 tests.
+  ([ADR-0087](docs/adr/0087-composite-native-identity-for-assembled-outlines.md),
+  [D-174](docs/ledgers/decision-ledger.md), [SEC-131](docs/ledgers/security-ledger.md),
+  [R-131](docs/ledgers/risk-register.md),
+  [Assembled-outline identity](docs/research/assembled-outline-identity-v1.md), #126)
 - **A truncated Circuit Scene no longer empties whole object kinds in silence.** A whole-board
   `observe_board_scene` returned `vias: []`, `zones: []` and `rules: []` on real boards holding up
   to 1,003 vias, 5 zones and a net class; eight of the eleven mixer boards that convert hit
@@ -26,8 +45,8 @@ All notable changes are documented here. The format follows
   all eight truncating boards now withhold `segments` alone and return every via, zone, pad,
   footprint and net class they hold; 11 of 11 bounded regions are unchanged at `objects_omitted: 0`.
   `max_scene_objects` keeps its provisional 2,000 default — the defect was never the ceiling's
-  height. ([ADR-0087](docs/adr/0087-complete-or-withheld-scene-kinds.md),
-  [D-173](docs/ledgers/decision-ledger.md), [R-130](docs/ledgers/risk-register.md),
+  height. ([ADR-0088](docs/adr/0088-complete-or-withheld-scene-kinds.md),
+  [D-175](docs/ledgers/decision-ledger.md), [R-132](docs/ledgers/risk-register.md),
   [migration](docs/migrations/copper-mcp-0.7.0.md), #127)
 - **A KiCad UUID that a board reuses is no longer treated as a Board IR identity.** Issue #116's
   one undiagnosed `converted Board IR content failed semantic validation` refusal turned out to be

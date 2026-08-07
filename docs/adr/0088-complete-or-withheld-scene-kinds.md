@@ -1,10 +1,10 @@
-# ADR-0087: A truncated scene withholds whole kinds instead of emptying them
+# ADR-0088: A truncated scene withholds whole kinds instead of emptying them
 
 - Status: Accepted
 - Date: 2026-08-08
 - Owners: `@seunghyukchoe`
-- Related: ADR-0022, ADR-0023, #127, [D-173](../ledgers/decision-ledger.md),
-  [R-130](../ledgers/risk-register.md)
+- Related: ADR-0022, ADR-0023, #127, [D-175](../ledgers/decision-ledger.md),
+  [R-132](../ledgers/risk-register.md)
 
 ## Context
 
@@ -68,7 +68,7 @@ withheld kinds, and `ceiling_hit` names the ceiling of the first kind withheld.
 
 The scene contract goes to `0.3.0`, because a strict client with a closed schema for
 `static.pads: list` stops validating a truncated response. See
-[the migration note](../migrations/copper-mcp-0.8.0.md).
+[the migration note](../migrations/copper-mcp-0.7.0.md).
 
 ## Consequences
 
@@ -93,7 +93,7 @@ The scene contract goes to `0.3.0`, because a strict client with a closed schema
 - Peak memory is bounded by the object ceiling rather than by the board: kinds are counted before
   they are built, and nothing is constructed for a kind that will be withheld.
 - `max_scene_objects` keeps its provisional default of 2,000. This ADR deliberately does not raise
-  it, because the defect was never the ceiling's height ([R-130](../ledgers/risk-register.md)).
+  it, because the defect was never the ceiling's height ([R-132](../ledgers/risk-register.md)).
 
 ## Alternatives considered
 
