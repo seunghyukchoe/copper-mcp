@@ -275,3 +275,108 @@ def test_render_preserves_padless_footprint_when_candidate_covers_placeable_set(
     padless_end = source.index(b"  (gr_rect", padless_start)
     padless_block = source[padless_start:padless_end]
     assert first.count(padless_block) == 1
+
+
+SEGMENT_OUTLINE_FIXTURE = (
+    Path(__file__).parent
+    / "fixtures"
+    / "board-ir-v0.2"
+    / "footprint-pose-courtyard-segment-outline.kicad_pcb"
+)
+
+
+def test_render_applies_on_a_board_whose_outline_is_assembled_from_gr_lines() -> None:
+    """The issue #126 unblocking case, proven at the byte level.
+
+    Every one of the real boards that converted drew its ``Edge.Cuts`` outline with
+    ``gr_line`` segments, and the assembled contour's revision-derived identity refused the
+    whole board even when every footprint, pad, segment, via and zone was native.  With the
+    composite identity of ADR-0087 the outline is native too, so the placement patch renders
+    -- and every byte outside the spliced footprint pose stays identical, including all four
+    ``gr_line`` expressions and their uuids.
+    """
+
+    source, snapshot, profile, candidate, subject = _candidate(SEGMENT_OUTLINE_FIXTURE.read_bytes())
+    assert snapshot.content.outline[0].id.startswith("contour:assembled:")
+
+    rendered = render_kicad_placement_candidate_board(source, snapshot, candidate, profile)
+
+    assert rendered != source
+    target_start = source.index(
+        b'  (footprint "CopperMCP_PoseProbe"',
+        source.index(b'  (footprint "CopperMCP_PoseProbe"') + 1,
+    )
+    next_footprint = source.index(b'  (footprint "CopperMCP_PoseProbe"', target_start + 1)
+    assert rendered.startswith(source[:target_start])
+    assert rendered.endswith(source[next_footprint:])
+    assert rendered.count(b"gr_line") == source.count(b"gr_line")
+
+    patched = parse_kicad_bytes(rendered, profile)
+    assert patched.diagnostics == ()
+    assert patched.snapshot is not None
+    assert patched.snapshot.content.outline[0].id == snapshot.content.outline[0].id
+    moved = next(item for item in patched.snapshot.content.footprints if item.id == subject)
+    assert (moved.origin.x, moved.origin.y) != (45_000_000, 15_000_000)
+
+
+def test_render_still_refuses_the_assembled_outline_board_with_a_reused_footprint_uuid() -> None:
+    """Regression evidence from issue #126: one duplicated footprint uuid still refuses.
+
+    The assembled-outline identity must not weaken D-158: a footprint uuid claimed twice is an
+    identity of neither claimant, both degrade to the revision-derived name, and the apply gate
+    keeps refusing the board even though its outline is now native.
+    """
+
+    source = SEGMENT_OUTLINE_FIXTURE.read_bytes().replace(
+        b'(uuid "92000000-0000-0000-0000-000000000011")',
+        b'(uuid "92000000-0000-0000-0000-000000000001")',
+    )
+    profile = _profile()
+    conversion = parse_kicad_bytes(source, profile)
+    assert conversion.snapshot is not None
+    assert ":derived:" not in conversion.snapshot.content.outline[0].id
+    view = build_placement_view(source, conversion.snapshot)
+    refs = sorted(view.footprints)
+    intent = parse_placement_intent(
+        {"board": "reused.kicad_pcb", "constraints": CONSTRAINTS, "subjects": refs}
+    )
+    result = evaluate_placement(intent, conversion.snapshot, view)
+    assert result.candidate is not None
+    with pytest.raises(KiCadPlacementPatchError, match="revision-derived"):
+        render_kicad_placement_candidate_board(
+            source, conversion.snapshot, result.candidate, profile
+        )
+
+
+def test_render_still_refuses_when_an_outline_member_has_no_native_identity() -> None:
+    """Mutation check on the ADR-0087 fallback: an unnameable member set stays unappliable.
+
+    Dropping one ``gr_line`` uuid makes the member set unresolvable, the contour degrades to
+    the revision-derived name, and the gate must refuse.  If the degrade-to-derived fallback in
+    ``_assembled_contour_identity`` were removed, this board would render and this test is the
+    one that fails.
+    """
+
+    source = (
+        b"\n".join(
+            line
+            for line in SEGMENT_OUTLINE_FIXTURE.read_bytes().splitlines()
+            if b'uuid "92000000-0000-0000-0000-0000000000a3"' not in line
+        )
+        + b"\n"
+    )
+    profile = _profile()
+    conversion = parse_kicad_bytes(source, profile)
+    assert conversion.snapshot is not None
+    assert ":derived:" in conversion.snapshot.content.outline[0].id
+    view = build_placement_view(source, conversion.snapshot)
+    refs = sorted(view.footprints)
+    intent = parse_placement_intent(
+        {"board": "member-missing.kicad_pcb", "constraints": CONSTRAINTS, "subjects": refs}
+    )
+    result = evaluate_placement(intent, conversion.snapshot, view)
+    assert result.candidate is not None
+    with pytest.raises(KiCadPlacementPatchError, match="revision-derived"):
+        render_kicad_placement_candidate_board(
+            source, conversion.snapshot, result.candidate, profile
+        )

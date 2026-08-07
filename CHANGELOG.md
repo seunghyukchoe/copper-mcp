@@ -8,6 +8,26 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- **A board outline assembled from `Edge.Cuts` `gr_line` segments no longer makes the whole board
+  permanently unappliable.** Issue #126 measured that both apply gates refused every real board
+  that converts, and that on three of them the assembled outline was the *only* derived identity —
+  every footprint, pad and copper object was native. The contour now takes a composite native
+  identity, `contour:assembled:` plus a hash of the sorted set of its member segments' own uuids,
+  produced only when every member carries exactly one native identity and no value repeats within
+  the member set; any unresolvable member set still degrades to the revision-derived name every
+  source-preserving patch path refuses. Neither apply gate changed by a byte: a reused footprint
+  or pad UUID (D-158) still refuses write-back, a `gr_rect` outline still yields its own native
+  uuid identity byte-for-byte unchanged, and the preserved invariant — no patch can ever name an
+  object whose identity cannot be resolved back to the source file — is mutation-checked from both
+  directions. Measured read-only on the twelve-board real corpus: 0 of 11 converting boards passed
+  either gate before, 3 of 11 pass both after, and the remaining 8 refuse on UUID reuse exactly as
+  intended. Two committed fixtures now draw their outlines with `gr_line` segments so the fixture
+  set cannot drift back to the `gr_rect`-only assumption that hid this for 1,900 tests.
+  ([ADR-0087](docs/adr/0087-composite-native-identity-for-assembled-outlines.md),
+  [D-174](docs/ledgers/decision-ledger.md), [SEC-131](docs/ledgers/security-ledger.md),
+  [R-131](docs/ledgers/risk-register.md),
+  [Assembled-outline identity](docs/research/assembled-outline-identity-v1.md), #126)
+
 - **A KiCad UUID that a board reuses is no longer treated as a Board IR identity.** Issue #116's
   one undiagnosed `converted Board IR content failed semantic validation` refusal turned out to be
   `identity.duplicate` on `geometry ID`, and 9 of the 12 real boards surveyed carry the same
