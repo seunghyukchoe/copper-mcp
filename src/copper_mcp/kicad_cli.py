@@ -1584,7 +1584,7 @@ class SourceToBoardParityEvidence:
     crosses this boundary — only how many of each KiCad type occurred.
 
     ``passed`` means KiCad reported no connectivity-class parity finding. It is only meaningful
-    alongside ``oracle_live``, which records that the liveness invariant of ADR-0076 held: an empty
+    alongside ``oracle_live``, which records that the liveness invariant of ADR-0084 held: an empty
     ``schematic_parity`` array is otherwise indistinguishable from a parity check that never ran.
     """
 
@@ -1734,7 +1734,7 @@ def _parse_parity_report(
             raise KiCadCliError("KiCad parity findings cannot be excluded in a private snapshot")
         parity_type_counts[finding_type] += 1
 
-    # ADR-0076's liveness invariant. Under a board-eligible, footprint-less projection every
+    # ADR-0084's liveness invariant. Under a board-eligible, footprint-less projection every
     # component must appear exactly once as either missing_footprint (absent from the board) or
     # footprint_symbol_mismatch (present, but the symbol carries no footprint identifier). A sum
     # of zero is what an unfetched netlist, a suppressed severity, or a board-excluded projection

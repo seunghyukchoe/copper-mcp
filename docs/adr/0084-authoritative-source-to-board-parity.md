@@ -1,14 +1,14 @@
-# ADR-0076: Authoritative source-to-board parity via a board-eligible intent projection
+# ADR-0084: Authoritative source-to-board parity via a board-eligible intent projection
 
 - Status: Accepted
-- Date: 2026-08-06
+- Date: 2026-08-07
 - Owners: CopperMCP maintainers
 - Related: [Issue #66](https://github.com/seunghyukchoe/copper-mcp/issues/66),
   [ADR-0004](0004-authoritative-kicad-drc.md), [ADR-0015](0015-bounded-circuit-schematic-delivery.md),
   [ADR-0056](0056-kicad-schematic-parity.md), [ADR-0071](0071-authoritative-schematic-erc.md),
   [research note](../research/source-to-board-parity-v1.md),
-  [SEC-121](../ledgers/security-ledger.md), [D-154](../ledgers/decision-ledger.md),
-  [R-117](../ledgers/risk-register.md)
+  [SEC-127](../ledgers/security-ledger.md), [D-170](../ledgers/decision-ledger.md),
+  [R-127](../ledgers/risk-register.md)
 
 ## Context
 
@@ -94,7 +94,7 @@ read-only snapshot under a fixed basename. The argument vector is fixed: no `--d
 caller-supplied flags, no `--exit-code-violations`, no `--save-board` or `--refill-zones`. The child
 runs under the `RLIMIT_FSIZE` wrapper with private `HOME`/`TMPDIR`/config, `stdout`/`stderr`
 discarded, and the snapshot tree is revalidated afterwards so a side effect or mutated input is
-refused rather than reported. Reviewed as [SEC-121](../ledgers/security-ledger.md).
+refused rather than reported. Reviewed as [SEC-127](../ledgers/security-ledger.md).
 
 **Redaction is unchanged.** Parity finding descriptions embed net names verbatim — measured:
 `"Pad net (GND) doesn't match net given by schematic (AUDIO_OUT)"` — and affected items carry UUIDs

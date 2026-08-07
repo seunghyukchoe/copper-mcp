@@ -11,6 +11,16 @@ Every claim here was either read out of KiCad's own source or executed against
 `/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli` reporting `10.0.5`. Observed output is
 labelled **measured**; source claims carry a URL.
 
+**Reproduction, 2026-08-07.** Every **measured** claim in §1–§6 was re-executed independently
+against the same binary before the implementation was accepted, outside the test suite, and every
+one reproduced: the no-project run, the silently-degraded run, the exit-code-5-without-a-schematic
+run, the `--severity-error` emptying, the delivered-schematic tables, and the §6 sum across all
+four board fixtures. Every source URL was re-fetched and the quoted text located in it. One claim
+did **not** survive that re-check and is corrected in §4 — the report's `schematic_parity` array is
+filled from `m_fpWarningsProvider`, not from a "`MARKER_PARITY` provider", which is a marker type
+and not a report provider at all. The correction narrows what this note claims rather than what the
+implementation does, which already refuses an unreviewed finding type.
+
 ## 1. `pcb drc --schematic-parity` exists and needs no project
 
 `kicad-cli pcb drc` in 10.0.5 accepts `--schematic-parity`, documented as
@@ -98,11 +108,26 @@ the report.
 
 ## 4. Which findings are parity findings
 
-`PCB_MARKER`'s constructor routes exactly seven DRCE codes to `MARKER_PARITY`
-([`pcb_marker.cpp`](https://gitlab.com/kicad/code/kicad/-/raw/10.0/pcbnew/pcb_marker.cpp)), and
-`DRC_REPORT::WriteJsonReport` writes the `MARKER_PARITY` provider into `schematic_parity`
+Two separate mechanisms are easy to conflate here, and only one of them decides the report.
+
+`DRC_REPORT::WriteJsonReport` fills `schematic_parity` from **`m_fpWarningsProvider`** — one of
+three providers it drains, alongside `m_markersProvider` into `violations` and `m_ratsnestProvider`
+into `unconnected_items`
 ([`drc_report.cpp`](https://gitlab.com/kicad/code/kicad/-/raw/10.0/pcbnew/drc/drc_report.cpp)).
-The JSON `type` strings come from the settings keys in
+The array's membership is therefore a property of that provider, not of any marker type.
+
+Separately, `PCB_MARKER`'s constructor routes exactly seven DRCE codes to the `MARKER_PARITY`
+*marker type*, which is a GUI classification
+([`pcb_marker.cpp`](https://gitlab.com/kicad/code/kicad/-/raw/10.0/pcbnew/pcb_marker.cpp)):
+`DRCE_MISSING_FOOTPRINT`, `DRCE_DUPLICATE_FOOTPRINT`, `DRCE_EXTRA_FOOTPRINT`, `DRCE_NET_CONFLICT`,
+`DRCE_SCHEMATIC_PARITY`, `DRCE_SCHEMATIC_FIELDS_PARITY`, `DRCE_FOOTPRINT_FILTERS`. Every other code
+falls to the `default:` arm and becomes `MARKER_DRC`.
+
+The two sets coincide in everything measured, and the table below is the seven marker-type codes'
+settings keys — but the coincidence is *read off* the two files, not guaranteed by either, so this
+note does not claim the report can only ever contain these seven. The implementation refuses an
+unreviewed `type` instead of assuming the list is closed, which is why the distinction is safe to
+record rather than resolve. The JSON `type` strings come from the settings keys in
 [`drc_item.cpp`](https://gitlab.com/kicad/code/kicad/-/raw/10.0/pcbnew/drc/drc_item.cpp):
 
 | JSON `type` | Meaning |

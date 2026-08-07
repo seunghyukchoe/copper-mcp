@@ -23,9 +23,9 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-165` | `D-166` |
-| [Risk register](risk-register.md) | `R-` | `R-122` | `R-123` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-123` | `SEC-124` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-170` | `D-171` |
+| [Risk register](risk-register.md) | `R-` | `R-127` | `R-128` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-127` | `SEC-128` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-094` | `B-095` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 

@@ -109,10 +109,25 @@ Authoritative ERC is a *separate* surface, not part of a build. `verify_circuit_
 then re-read them through `kicad-cli sch export netlist` and drive the parity oracle above. That
 result reports `erc: completed` with `passed` and `clean` as two separate signals, and upgrades
 `kicad_cli_parse` to `passed` because KiCad cannot check a schematic it failed to load.
-Schematic-to-board parity, electrical validation, and board readiness stay non-claims there too.
+Electrical validation and board readiness stay non-claims there too.
 Keeping ERC out of the build path is deliberate: rendering must remain usable with no KiCad
 install, and a render is not the place to spend a subprocess budget the caller did not ask for.
 See [ADR-0071](../adr/0071-authoritative-schematic-erc.md).
+
+Source-to-board parity is a *third* surface, and the only one that takes a board.
+`verify_source_to_board_parity` and `copper-mcp source-to-board-parity` hand
+`kicad-cli pcb drc --schematic-parity` one workspace `.kicad_pcb` and ask whether it implements the
+intent's connectivity. What KiCad compares it against is **not** the delivered schematic: that
+artifact marks every symbol `on_board no`, which is correct for a delivery artifact with no
+footprint assignments and fatal for parity, because such a symbol never enters KiCad's board-side
+netlist — measured, the delivered bytes produce identical findings for a correct board and a
+deliberately wrong one. The board is therefore compared against a **board-eligible projection** of
+the same intent, differing in that flag alone and disclosed under its own digest. Every verdict is
+gated on a liveness invariant that proves KiCad actually loaded the netlist, because an empty parity
+result is also what a check that never ran produces; a disagreement is a typed refusal. Evidence
+binds the intent digest, the delivered schematic digest, the projection digest, and the board
+revision together. ERC, footprint correctness, electrical validation, and board readiness stay
+non-claims. See [ADR-0084](../adr/0084-authoritative-source-to-board-parity.md).
 
 ## Deliberate non-claims
 

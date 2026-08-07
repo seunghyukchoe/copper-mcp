@@ -8,7 +8,7 @@ and, it recorded, because a board-side verdict "requires a project, not standalo
 The project requirement turned out not to exist for the CLI: ``JobExportDrc`` derives the schematic
 by swapping the board filename's extension, and the project load beneath it is guarded by an
 existence check. What does exist are four ways to get a *silent* false pass, documented in
-[ADR-0076](../../docs/adr/0076-authoritative-source-to-board-parity.md) and its
+[ADR-0084](../../docs/adr/0084-authoritative-source-to-board-parity.md) and its
 [research note](../../docs/research/source-to-board-parity-v1.md). Three are KiCad's — an unfetched
 netlist degrades to an empty array with exit 0, exit codes OR three providers together, and parity
 findings are warning-severity so a narrowed severity set empties the array. The fourth is ours:

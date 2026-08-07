@@ -127,7 +127,7 @@ def _on_board(board_eligible: bool) -> str:
 
     The delivered schematic is ``no``: ADR-0015 scoped a schematic-delivery artifact for a subset
     with no footprint assignments, and ADR-0056's verifier asserts the resulting
-    ``exclude_from_board`` netlist property. The board-eligible projection ADR-0076 introduces is
+    ``exclude_from_board`` netlist property. The board-eligible projection ADR-0084 introduces is
     ``yes``, because an ``on_board no`` symbol never enters the netlist ``pcb drc
     --schematic-parity`` compares against, which makes a correct board and a wrong one produce
     identical output.
@@ -353,7 +353,7 @@ def render_kicad_schematic(
 ) -> KiCadSchematicArtifact:
     """Render one verified logical topology into deterministic in-memory KiCad bytes.
 
-    ``board_eligible`` selects between the two derivatives ADR-0076 distinguishes. The default
+    ``board_eligible`` selects between the two derivatives ADR-0084 distinguishes. The default
     ``False`` is the *delivered* schematic and its bytes are frozen — every ADR-0056 round-trip
     digest and golden identity depends on them. ``True`` is the *parity projection*: the same
     intent, the same connectivity, differing only in the ``on_board`` flag, which is what lets

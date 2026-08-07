@@ -33,6 +33,7 @@ from copper_mcp.kicad_cli import (
     run_source_to_board_parity,
 )
 from copper_mcp.mcp_contracts import SourceToBoardParityToolResponse
+from copper_mcp.security import WorkspaceViolationError
 from copper_mcp.source_to_board_parity_service import (
     SourceToBoardParityResult,
     verify_source_to_board_parity_from_content,
@@ -128,9 +129,9 @@ class ParityProjectionRenderTest(unittest.TestCase):
 
     def test_projection_differs_only_in_board_eligibility(self) -> None:
         delivered = render_kicad_schematic(self.snapshot).content.decode("utf-8")
-        projection = render_kicad_schematic(
-            self.snapshot, board_eligible=True
-        ).content.decode("utf-8")
+        projection = render_kicad_schematic(self.snapshot, board_eligible=True).content.decode(
+            "utf-8"
+        )
         self.assertEqual(
             delivered.replace("(on_board no)", "(on_board yes)"),
             projection,
@@ -160,7 +161,7 @@ class ParityProjectionRenderTest(unittest.TestCase):
 
 
 class ParityLivenessTest(unittest.TestCase):
-    """ADR-0076's invariant: the report must prove the check it reports on actually ran."""
+    """ADR-0084's invariant: the report must prove the check it reports on actually ran."""
 
     def test_matching_board_passes(self) -> None:
         evidence = parse(parity_report())
@@ -292,11 +293,7 @@ class ParityReportRefusalTest(unittest.TestCase):
         """KiCad emits each severity once; a padded list is not the shape we reviewed."""
 
         with self.assertRaises(KiCadCliError):
-            parse(
-                parity_report(
-                    included_severities=["error", "warning", "exclusion", "exclusion"]
-                )
-            )
+            parse(parity_report(included_severities=["error", "warning", "exclusion", "exclusion"]))
 
     def test_non_zero_exit_code_is_refused(self) -> None:
         with self.assertRaises(KiCadCliError):
@@ -452,11 +449,13 @@ class ParityInputRefusalTest(unittest.TestCase):
             self.call(intent_digest="nope")
 
     def test_non_board_suffix_is_refused(self) -> None:
-        with self.assertRaises(Exception):
+        # The bounded workspace reader owns this refusal, so the type asserted here is its own.
+        # A blind `Exception` would also pass on an import error or a typo in this very test.
+        with self.assertRaises(WorkspaceViolationError):
             self.call(requested_path="README.md")
 
     def test_escaping_path_is_refused(self) -> None:
-        with self.assertRaises(Exception):
+        with self.assertRaises(WorkspaceViolationError):
             self.call(requested_path="../../etc/passwd.kicad_pcb")
 
 
@@ -527,9 +526,7 @@ class ParityServiceBindingTest(unittest.TestCase):
     def test_failed_verdict_serializes_as_failed(self) -> None:
         import dataclasses
 
-        failed = dataclasses.replace(
-            self.evidence, connectivity_finding_count=1, passed=False
-        )
+        failed = dataclasses.replace(self.evidence, connectivity_finding_count=1, passed=False)
         payload = SourceToBoardParityResult(
             artifact=self.artifact, projection=self.projection, parity=failed
         ).to_dict()
@@ -605,7 +602,7 @@ class RealKiCadParityTest(unittest.TestCase):
     def test_board_excluded_schematic_is_refused_not_passed(self) -> None:
         """Handing KiCad the *delivered* schematic must refuse, never report a clean pass.
 
-        This is the failure ADR-0076 exists to prevent: an ``on_board no`` symbol never enters
+        This is the failure ADR-0084 exists to prevent: an ``on_board no`` symbol never enters
         the board-side netlist, so a correct board and a wrong one both come back empty.
         """
 
