@@ -16,9 +16,11 @@
       "grid_step_nm": 1000000,
       "max_expansions": 5000,
       "max_grid_nodes": 256,
+      "max_net_objects": 1024,
       "max_obstacle_checks": 100000,
       "max_obstacles": 64,
-      "proximity_penalty_nm": 0
+      "proximity_penalty_nm": 0,
+      "region_margin_nm": 10000000
     }
   },
   "dataset": {
@@ -237,7 +239,7 @@
       "unrouted_nets": []
     }
   ],
-  "run_id": "sha256:318c98afa5cfc2fecf5f61d711d439d651393778c820201353a2c39434ff8c68",
+  "run_id": "sha256:ad0bb8ac7960c09289436b3aa4e2dfbcfc6f3302c9810be12f2f49067e8294c7",
   "schema": "copper-mcp/benchmark/exact-local-repair-gate/v2",
   "script": "scripts/benchmark_exact_local_repair_integration_gate.py",
   "script_sha256": "af123076672bf90ed149aac9c29170db96aeb5062e2c4e6610c8cf720cc1a244",

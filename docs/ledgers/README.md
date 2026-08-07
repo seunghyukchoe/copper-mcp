@@ -23,10 +23,10 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-175` | `D-176` |
-| [Risk register](risk-register.md) | `R-` | `R-132` | `R-133` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-131` | `SEC-132` |
-| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-095` | `B-096` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-176` | `D-177` |
+| [Risk register](risk-register.md) | `R-` | `R-133` | `R-134` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-132` | `SEC-133` |
+| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-098` | `B-099` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
 The rules:

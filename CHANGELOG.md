@@ -6,6 +6,56 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Route candidate identities move, and stored ones stop verifying.** `ROUTER_VERSION` advances to
+  `astar-grid/0.7.0` because the router's default budgets and obstacle model changed. **No path
+  geometry changed anywhere** — the two-pad golden fixture, the NE5532 fixture, and all twenty
+  SimpleRouteJson corpus boards replay with identical vertices, wire length and bend counts. The
+  addresses move because a candidate records the settings it was computed under and the work its
+  search performed, and both moved. A caller holding a `candidate_id`, a `bundle_id`, or an exported
+  candidate from an earlier version must re-run the preview; the value will not reproduce, and the
+  version bump is what says so. Candidates recorded under `astar-grid/0.4.0` through `0.6.0` still
+  select their historical search behaviour for replay, but their recorded settings predate
+  `region_margin_nm`, so on a board larger than the routing region they do not reproduce
+  byte-for-byte. ([ADR-0089](docs/adr/0089-region-scoped-obstacle-model.md), #128)
+
+### Fixed
+
+- **Route preview routed 0 of 385 nets on real boards, and the budget that refused them was
+  counting three different things.** Measured read-only against a live audio-project tree, 93 of
+  385 previews refused `obstacle_budget_exceeded` at default settings against boards carrying up to
+  31,389 segments. Splitting those refusals by the message each raised shows 61 of them were the
+  routed net's **own** copper — the model that decides whether a net is *already connected* —
+  charged against a budget named for the copper it has to avoid. On a finished board the true answer
+  for those nets is `already_connected`, and it was being reported as a work failure. `max_obstacles`
+  now meters only foreign selected-layer copper (default 256 → 4,096, maximum 4,096 → 32,768); a new
+  `max_net_objects` (1,024, maximum 4,096) meters same-net connectivity and attachment copper, with
+  its ceiling set where the pairwise merge's quadratic cost meets the obstacle-check budget rather
+  than where boards happen to sit; and the work meter gets its own `obstacle_check_budget_exceeded`
+  code instead of borrowing the object budget's. Every one of these refusals now names the budget
+  and its configured value — and deliberately not the observed count, which would disclose board
+  density. Result on the same corpus, byte-identical sources: `routed` 0 → 14, `already_connected`
+  263 → 318, `obstacle_budget_exceeded` 93 → 3, with nothing regressed.
+  ([D-176](docs/ledgers/decision-ledger.md), [SEC-132](docs/ledgers/security-ledger.md),
+  [B-096](docs/ledgers/benchmark-ledger.md),
+  [obstacle-budget calibration](docs/research/route-obstacle-budget-calibration-v1.md), #128)
+
+### Added
+
+- **A routing region, so the obstacle budget bounds work instead of board size.** A two-pin route
+  only interacts with copper near the corridor between its pads, but the router was modelling the
+  whole board — 22,244 objects on the densest board measured, for one route. The obstacle model is
+  now scoped to the envelope of the routed net's own copper widened by a new `region_margin_nm`
+  setting (10 mm by default, 1 nm – 1 m), clipped to the board, and **the search is confined to the
+  same region**, which is what makes the scoping sound rather than merely cheaper: a node the search
+  can reach is a node inside the region, so copper outside it cannot affect any answer. Measured,
+  this is worth a factor of four in the ceiling for equal coverage. A board smaller than twice the
+  margin yields a region equal to the board, so small fixtures are unaffected. A search that
+  exhausts inside a proper-subset region refuses under a new `no_path_in_region` code rather than
+  claiming `no_path` about a board it never modelled. ([ADR-0089](docs/adr/0089-region-scoped-obstacle-model.md),
+  [R-133](docs/ledgers/risk-register.md), #128)
+
 ### Fixed
 
 - **A board outline assembled from `Edge.Cuts` `gr_line` segments no longer makes the whole board

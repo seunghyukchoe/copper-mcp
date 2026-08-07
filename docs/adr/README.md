@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0089**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0090**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -33,6 +33,8 @@ block rather than colliding with them. Every unlanded number is deliberately lef
 than recycled, so that an external reference resolves to nothing rather than to an unrelated
 decision. If a later branch lands its own record in one of these blocks, this note is what it
 **Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086. ADR-0027 was
+**Known gaps:** there is no ADR-0027, no ADR-0081, ADR-0082, or ADR-0083, and no ADR-0085 or
+ADR-0086. ADR-0027 was
 allocated on a branch whose ADR never landed. The 0081–0083 block was allocated by concurrent
 branches that were still open when ADR-0084 landed: that branch took a number above all of them
 rather than the next one, which is the rule the collision that produced 0066–0068 exists to enforce.
@@ -42,6 +44,10 @@ took a number above both rather than the next one. Every unused number is delibe
 rather than recycled, so that an external reference resolves to nothing rather than to an unrelated
 decision. If a later branch lands its own record in one of these gaps, this note is what it
 corrects.
+
+ADR-0085 and ADR-0086 repeat the 0081–0083 story exactly: they were allocated by branches for
+issues #126 and #127 that were still open when ADR-0087 landed, so ADR-0087 took a number above
+both rather than the next one. If either lands, it corrects this sentence.
 
 **How 0066 through 0068 came to be three records:** three concurrent branches each created an
 `ADR-0066` — the atomic route bundle preview, ordered-layer routing, and route-aware placement
@@ -148,13 +154,11 @@ never silently widens it.
 | — | *0082, 0083, 0085 and 0086 are deliberately unused; see **Known gaps** above.* | — |
 | [0084](0084-authoritative-source-to-board-parity.md) | Authoritative source-to-board parity via a board-eligible intent projection | Accepted |
 | [0087](0087-composite-native-identity-for-assembled-outlines.md) | Name an assembled Edge.Cuts outline by the sorted set of its members' own uuids | Accepted |
-
-Eighty-seven numbers, eighty-two records, no duplicates — and `scripts/check_adr_numbers.py` now
-proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and 0086
-are unused; see **Known gaps** above.
+| — | *0085 and 0086 are deliberately unused; see **Known gaps** above.* | — |
 | [0088](0088-complete-or-withheld-scene-kinds.md) | A truncated scene withholds whole kinds instead of emptying them | Accepted |
+| [0089](0089-region-scoped-obstacle-model.md) | Scope the obstacle model to a routing region, and split the budget that was counting three things | Accepted |
 
-Eighty-seven numbers, eighty-two records, no duplicates — and `scripts/check_adr_numbers.py` now
+Eighty-eight numbers, eighty-three records, no duplicates — and `scripts/check_adr_numbers.py` now
 proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and 0086 are
 unused; see **Known gaps** above. The three stray summary sentences that stood here until
 ADR-0088 landed were merge residue from the concurrent branches described above: Git accepted
@@ -244,3 +248,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0084: Authoritative source-to-board parity via a board-eligible intent projection](0084-authoritative-source-to-board-parity.md)
 - [ADR-0087: Name an assembled Edge.Cuts outline by the sorted set of its members' own uuids](0087-composite-native-identity-for-assembled-outlines.md)
 - [ADR-0088: A truncated scene withholds whole kinds instead of emptying them](0088-complete-or-withheld-scene-kinds.md)
+- [ADR-0089: Scope the obstacle model to a routing region, and split the budget that was counting three things](0089-region-scoped-obstacle-model.md)

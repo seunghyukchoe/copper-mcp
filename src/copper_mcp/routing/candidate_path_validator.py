@@ -157,6 +157,8 @@ def _canonical_settings(value: object) -> AStarSettings | None:
             max_grid_nodes=value.max_grid_nodes,
             max_expansions=value.max_expansions,
             max_obstacles=value.max_obstacles,
+            max_net_objects=value.max_net_objects,
+            region_margin_nm=value.region_margin_nm,
             max_obstacle_checks=value.max_obstacle_checks,
         )
     except Exception:
@@ -275,6 +277,8 @@ def _preflight_candidate(
             value.settings.max_grid_nodes,
             value.settings.max_expansions,
             value.settings.max_obstacles,
+            value.settings.max_net_objects,
+            value.settings.region_margin_nm,
             value.settings.max_obstacle_checks,
         )
         if not all(_raw_integer(item) for item in scalars):
