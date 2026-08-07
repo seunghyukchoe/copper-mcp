@@ -200,14 +200,17 @@ class _Budget:
 def _ref_stability(ref_id: str) -> str:
     """Report how durable one reference is, so a caller knows what it is holding.
 
-    ``native`` is the object's own KiCad UUID and survives unrelated edits. ``content_derived``
-    is a hash of the object's geometry, so it moves whenever that object changes and must be
-    re-read before reuse. ``request_scoped`` belongs to the request rather than to the board —
-    the net class echoed back under ``rules`` is the only such id today — and naming it
-    separately keeps it from polluting the board-reference durability signal.
+    ``native`` is anchored in the source file's own KiCad identities and survives unrelated
+    edits: either the object's own KiCad UUID, or — for the one contour assembled from
+    ``Edge.Cuts`` segments — the hash of its member segments' UUIDs (ADR-0087), which moves only
+    when the member set itself changes. ``content_derived`` is a hash of the source revision, so
+    it moves whenever *anything* in the file changes and must be re-read before reuse.
+    ``request_scoped`` belongs to the request rather than to the board — the net class echoed
+    back under ``rules`` is the only such id today — and naming it separately keeps it from
+    polluting the board-reference durability signal.
     """
 
-    if ":kicad:" in ref_id:
+    if ":kicad:" in ref_id or ":assembled:" in ref_id:
         return "native"
     return "content_derived" if ":derived:" in ref_id else "request_scoped"
 

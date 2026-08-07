@@ -2174,10 +2174,10 @@ class _Converter:
             )
         return tuple(zones), tuple(keepouts)
 
-    def _edge_cuts_line_segments(self) -> list[tuple[PointNM, PointNM, str]]:
+    def _edge_cuts_line_segments(self) -> list[tuple[PointNM, PointNM, str, SExpr]]:
         """Read every root ``gr_line`` drawn on ``Edge.Cuts`` as an exact integer segment."""
 
-        segments: list[tuple[PointNM, PointNM, str]] = []
+        segments: list[tuple[PointNM, PointNM, str, SExpr]] = []
         for index, expression in enumerate(children(self.root, "gr_line")):
             locator = f"kicad_pcb.gr_line[{index}]"
             layer_values = self._values(
@@ -2206,10 +2206,48 @@ class _Converter:
                     locator,
                     object_kind="outline",
                 )
-            segments.append((start, end, locator))
+            segments.append((start, end, locator, expression))
         return segments
 
-    def _edge_cuts_segment_ring(self, segments: list[tuple[PointNM, PointNM, str]]) -> Ring:
+    def _assembled_contour_identity(self, members: list[SExpr], locator: str) -> str:
+        """Name a contour assembled from many segments by its members' own native identities.
+
+        A contour chained from ``gr_line`` segments has no single native KiCad identity, but its
+        members each carry one, and those uuids are the file's own durable names for exactly the
+        source expressions the contour was assembled from.  Hashing the *sorted set* of member
+        identities therefore names the member set — not any one segment, which is the mistake
+        ADR-0076 refused — and the result survives every edit that leaves the member set alone,
+        including the pose splices and segment appends the apply paths perform.  Resolution runs
+        the derivation backwards: collect the root ``Edge.Cuts`` ``gr_line`` identities from the
+        source file and recompute the hash.  See ADR-0087.
+
+        The fallback is load-bearing: any member without exactly one usable native identity, or a
+        value repeated inside the member set, degrades the whole contour to the revision-derived
+        name that every source-preserving patch path refuses (ADR-0026).  Degrading — never
+        guessing a member's name — is what keeps the apply gates' invariant intact: an identity
+        that cannot be resolved back to specific source objects never stops looking derived.
+        """
+
+        values: list[str] = []
+        for expression in members:
+            identities: list[str] = []
+            for head in ("uuid", "tstamp"):
+                fields = children(expression, head)
+                if len(fields) != 1:
+                    continue
+                atoms_found = atoms(fields[0])
+                if len(atoms_found) != 1:
+                    continue
+                identities.append(atoms_found[0].lower())
+            if len(identities) != 1:
+                return self._derived_identity("contour", locator)
+            values.append(identities[0])
+        if len(values) != len(set(values)):
+            return self._derived_identity("contour", locator)
+        material = "\0".join(["contour", "assembled", *sorted(values)]).encode()
+        return f"contour:assembled:{hashlib.sha256(material).hexdigest()[:32]}"
+
+    def _edge_cuts_segment_ring(self, segments: list[tuple[PointNM, PointNM, str, SExpr]]) -> Ring:
         """Assemble unordered ``Edge.Cuts`` segments into exactly one closed simple ring.
 
         The board outline is routing *room*, not an obstacle, so the direction of error here is
@@ -2240,7 +2278,7 @@ class _Converter:
             )
         adjacency: dict[PointNM, list[tuple[int, PointNM]]] = {}
         seen: set[tuple[PointNM, PointNM]] = set()
-        for index, (start, end, locator) in enumerate(segments):
+        for index, (start, end, locator, _expression) in enumerate(segments):
             key = (start, end) if start < end else (end, start)
             if key in seen:
                 self.fail(
@@ -2330,7 +2368,10 @@ class _Converter:
         if segments:
             contours.append(
                 OutlineContour(
-                    id=self._derived_identity("contour", "kicad_pcb.edge_cuts"),
+                    id=self._assembled_contour_identity(
+                        [expression for _start, _end, _locator, expression in segments],
+                        "kicad_pcb.edge_cuts",
+                    ),
                     outer=self._edge_cuts_segment_ring(segments),
                 )
             )
