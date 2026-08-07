@@ -150,6 +150,11 @@ def test_original_unrouted_ne5532_fixture_has_pinned_public_route_evidence() -> 
     assert metrics["source_unchanged"] is True
     assert metrics["candidate_applied"] is False
     assert metrics["authoritative_drc"]["status"] == "not_run"
+    # These eight candidate IDs moved once, deliberately, under ADR-0087 (issue #128):
+    # `ROUTER_VERSION` advanced to `astar-grid/0.7.0` and the recorded settings changed.
+    # Every other column below is unchanged -- same pad counts, same path counts, same wire
+    # lengths to the nanometre, same zero vias -- which is the evidence that the geometry did
+    # not move and only the address did. The migration note is in CHANGELOG.md.
     assert [
         (
             route["net"],
@@ -163,7 +168,7 @@ def test_original_unrouted_ne5532_fixture_has_pinned_public_route_evidence() -> 
     ] == [
         (
             "L_IN",
-            "sha256:c7dccb5a913b36ced1f157f5054d78d7bcb78d830a32ba361de3c14643a22b57",
+            "sha256:4434e033163685b19402d0a698a6b347201253eed702797b86b045a106b41410",
             2,
             1,
             12_000_000,
@@ -171,7 +176,7 @@ def test_original_unrouted_ne5532_fixture_has_pinned_public_route_evidence() -> 
         ),
         (
             "R_IN",
-            "sha256:cb3448a60d70541df5461016ccf9e3605a52b5069a9619b722ccb28b1034974d",
+            "sha256:a68ae6100d6c93b1c059686f4b916c41234dff7d4d2f6d5f906ee6d566e782b2",
             2,
             1,
             12_000_000,
@@ -179,7 +184,7 @@ def test_original_unrouted_ne5532_fixture_has_pinned_public_route_evidence() -> 
         ),
         (
             "L_SUM",
-            "sha256:0dc0e8e4b8429c11afe756e7900dbce557d8dbfbd70c7afb0f05d3c887355043",
+            "sha256:b93092b407d0664bdf51f1fffef25bfc0f7d1a927cd4aa1b154b3864267febe7",
             3,
             2,
             37_250_000,
@@ -187,7 +192,7 @@ def test_original_unrouted_ne5532_fixture_has_pinned_public_route_evidence() -> 
         ),
         (
             "R_SUM",
-            "sha256:c79975c6b32e7f2a06cc4eb0c438c45dfda24735f21cf36ebd5ff8c39dd28883",
+            "sha256:2bb6e905555af967c02709c7f3a95403422976ba187d08dca4d1b1efd7018ad4",
             3,
             2,
             34_750_000,
@@ -195,7 +200,7 @@ def test_original_unrouted_ne5532_fixture_has_pinned_public_route_evidence() -> 
         ),
         (
             "L_OUT",
-            "sha256:1ab41c2dab8293a99f7bc72fc757897fcf759885b3d0d6011f8d3130bb812555",
+            "sha256:7d9ed7776c0934ca913eb0429a9d4ac5ecd19b1f3eca8af5effbb72a09af26ee",
             2,
             1,
             45_500_000,
@@ -203,7 +208,7 @@ def test_original_unrouted_ne5532_fixture_has_pinned_public_route_evidence() -> 
         ),
         (
             "R_OUT",
-            "sha256:37773b6c823180314bdefea9c2af3bbda78ba1237bc68cebaee15e120232956e",
+            "sha256:75bbe2fa3b76e204e2b8d39f36727af43cb58fd123dc4c84dbb45994b7a9c1f7",
             2,
             1,
             48_000_000,
@@ -211,7 +216,7 @@ def test_original_unrouted_ne5532_fixture_has_pinned_public_route_evidence() -> 
         ),
         (
             "VPOS",
-            "sha256:28d59543d41ac83756b5d9a8f23eb6cf82c581f5971611ddc82f938ef1ef7d5a",
+            "sha256:9d44a484d713101d4af24471dceb0d228bcabf1a10306b2bd938b8e4ae463822",
             4,
             3,
             55_500_000,
@@ -219,7 +224,7 @@ def test_original_unrouted_ne5532_fixture_has_pinned_public_route_evidence() -> 
         ),
         (
             "VNEG",
-            "sha256:e602da5551f899a2202bcca07ac86ea2f5e02f3a82eab8ea08b83db1c2296044",
+            "sha256:d69d774699327e6ce2ad8370660f1f7171c5e01f5e9e79f56a7f6933fdc65e19",
             4,
             3,
             50_750_000,
