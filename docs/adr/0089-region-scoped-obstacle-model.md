@@ -1,10 +1,10 @@
-# ADR-0087: Scope the obstacle model to a routing region, and split the budget that was counting three things
+# ADR-0089: Scope the obstacle model to a routing region, and split the budget that was counting three things
 
 - Status: Accepted
 - Date: 2026-08-08
 - Owners: `@seunghyukchoe`
-- Related: ADR-0011, ADR-0012, ADR-0016, ADR-0051, ADR-0078, ADR-0079, D-173, B-088, B-098, R-130,
-  SEC-130, issue #128, issue #112
+- Related: ADR-0011, ADR-0012, ADR-0016, ADR-0051, ADR-0078, ADR-0079, D-176, B-088, B-096, R-133,
+  SEC-132, issue #128, issue #112
 
 ## Context
 

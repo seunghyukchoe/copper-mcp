@@ -164,8 +164,13 @@ contains a bounded machine-readable diagnostic and no snapshot.
 
 The source revision is the SHA-256 digest of the exact input bytes. One native UUID or legacy tstamp
 is used for item identity when available; simultaneous identity fields are ambiguous and rejected.
-Otherwise identity is derived deterministically from the source revision and source locator. Net IDs
-are deterministic from net names.
+An outline contour assembled from `Edge.Cuts` `gr_line` segments takes a composite native identity,
+`contour:assembled:` plus a hash of the sorted set of its member segments' own UUIDs, provided every
+member carries exactly one native identity and no value repeats within the member set — see
+[ADR-0087](../adr/0087-composite-native-identity-for-assembled-outlines.md). Otherwise identity is
+derived deterministically from the source revision and source locator, and every source-preserving
+patch path refuses a snapshot containing such a `:derived:` identity. Net IDs are deterministic from
+net names.
 
 The converter performs a version-specific semantic preflight. Root and footprint graphics on any
 copper layer are rejected. Footprint graphics on `Edge.Cuts` are also rejected, and the only accepted

@@ -145,7 +145,7 @@ REPLAY_SUB_ENTRIES: dict[tuple[str, str], str] = {
     # candidate identity that records it, so each was regenerated rather than edited. Three of
     # them replay a `###` parent and are listed here; the other two regenerate artifacts that
     # are themselves `####` sub-entries, which cannot be replayed under their own number, so
-    # they took B-099 and B-100. Only the B-088 replay carries a behavioural delta: the routed
+    # they took B-097 and B-098. Only the B-088 replay carries a behavioural delta: the routed
     # count is unchanged and 9 of 11 `no_path` refusals are reclassified `no_path_in_region`.
     (
         "docs/ledgers/benchmark-ledger.md",

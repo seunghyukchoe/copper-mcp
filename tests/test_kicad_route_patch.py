@@ -472,3 +472,81 @@ def test_real_kicad_drc_accepts_disposable_candidate_without_source_mutation(
     assert board.stat().st_mtime_ns == board_mtime
     assert FIXTURE.read_bytes() == source
     assert FIXTURE.stat().st_mtime_ns == source_mtime
+
+
+SEGMENT_OUTLINE_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "route-candidate" / "two-pad-segment-outline.kicad_pcb"
+)
+
+
+def test_candidate_board_renders_on_an_assembled_gr_line_outline() -> None:
+    """Issue #126 on the route side: an assembled outline no longer refuses the render.
+
+    This fixture is ``two-pad.kicad_pcb`` with its one ``gr_rect`` outline drawn the way every
+    surveyed real board draws it -- four ``gr_line`` segments -- each carrying its own uuid, so
+    the contour takes the ADR-0087 composite identity.  The render must succeed, leave every
+    outline byte untouched, and round-trip: the appended segment is the only geometry change
+    and the contour's name does not move, which is exactly what the revision-derived name
+    could not do.
+    """
+
+    source = SEGMENT_OUTLINE_FIXTURE.read_bytes()
+    profile = _profile()
+    conversion = parse_kicad_bytes(source, profile)
+    assert conversion.diagnostics == ()
+    assert conversion.snapshot is not None
+    snapshot = conversion.snapshot
+    assert snapshot.content.outline[0].id.startswith("contour:assembled:")
+    result = AStarRouter().propose(
+        snapshot,
+        RouteRequest(
+            board_revision=snapshot.snapshot_digest,
+            net_id=net_id_for_name("AUDIO"),
+            layer_id="layer:F.Cu",
+            seed=23,
+        ),
+    )
+    assert result.candidate is not None
+
+    rendered = render_kicad_candidate_board(source, snapshot, result.candidate, profile)
+
+    assert rendered != source
+    assert rendered.count(b"gr_line") == source.count(b"gr_line")
+    patched = parse_kicad_bytes(rendered, profile)
+    assert patched.diagnostics == ()
+    assert patched.snapshot is not None
+    assert len(patched.snapshot.content.segments) == 1
+    assert patched.snapshot.content.outline[0].id == snapshot.content.outline[0].id
+    assert SEGMENT_OUTLINE_FIXTURE.read_bytes() == source
+
+
+def test_assembled_outline_render_still_refuses_a_missing_member_identity() -> None:
+    """Mutation check: remove one member uuid and the whole board must stay unappliable."""
+
+    source = (
+        b"\n".join(
+            line
+            for line in SEGMENT_OUTLINE_FIXTURE.read_bytes().splitlines()
+            if b'uuid "20000000-0000-0000-0000-000000000013"' not in line
+        )
+        + b"\n"
+    )
+    profile = _profile()
+    conversion = parse_kicad_bytes(source, profile)
+    assert conversion.diagnostics == ()
+    assert conversion.snapshot is not None
+    snapshot = conversion.snapshot
+    assert ":derived:" in snapshot.content.outline[0].id
+    result = AStarRouter().propose(
+        snapshot,
+        RouteRequest(
+            board_revision=snapshot.snapshot_digest,
+            net_id=net_id_for_name("AUDIO"),
+            layer_id="layer:F.Cu",
+            seed=23,
+        ),
+    )
+    assert result.candidate is not None
+
+    with pytest.raises(KiCadRoutePatchError, match="native uuid or tstamp"):
+        render_kicad_candidate_board(source, snapshot, result.candidate, profile)
