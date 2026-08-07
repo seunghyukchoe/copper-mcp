@@ -1172,7 +1172,11 @@ class _Converter:
             elif item.head == "fp_circle":
                 if len(result) + len(circles) >= 64:
                     self.fail(
-                        "budget.exceeded",
+                        # The same fixed 64-courtyard schema ceiling the ring path above
+                        # refuses under, and the Board IR decoder enforces. It is not an
+                        # operator budget -- no `ParseLimits` field moves it -- so it keeps
+                        # `schema.limit` rather than a `budget.exceeded.*` code.
+                        "schema.limit",
                         "footprint courtyard limit exceeded",
                         locator,
                         object_kind="footprint",
