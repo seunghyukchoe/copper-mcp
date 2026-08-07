@@ -38,6 +38,8 @@ RIP_UP_SLOT_SCHEMA = "copper-mcp.negotiation-slot.rip-up.v1"
 MAX_NEGOTIATED_NETS = 32
 MAX_SLOT_WEIGHT = 1024
 NEUTRAL_WEIGHT = 1
+MAX_RIPUP_WINDOW_CELLS = 64
+NEUTRAL_WINDOW_CELLS = 0
 
 
 class NetOrderRule(StrEnum):
@@ -71,11 +73,18 @@ class RipUpRule(StrEnum):
     is the enhancement PathFinder's own section 3.5 proposes and what VPR ships.
     `TOP_CONFLICT_ONLY` is CopperMCP-original: no published router selects a bounded top-k by
     conflict score, so it is offered as a work-bounding knob and claims no literature pedigree.
+
+    `CONFLICT_WINDOW` is the bounded rip-up window of issue #64.  It re-routes every conflicted
+    net plus every retained net whose copper lies within a fixed number of lattice cells of one,
+    which is the shape TritonRoute's search-and-repair uses: a *constant* worker box that is
+    re-offset each pass, never a window that widens until it is full rip-up again.  See
+    `docs/research/incremental-spatial-index-v1.md` §1.2 for the schedule that argument reads.
     """
 
     ALL_NETS = "all-nets-v1"
     CONFLICTED_ONLY = "conflicted-only-v1"
     TOP_CONFLICT_ONLY = "top-conflict-only-v1"
+    CONFLICT_WINDOW = "conflict-window-v1"
 
 
 def _bounded(name: str, value: object, *, minimum: int, maximum: int) -> int:
@@ -223,6 +232,7 @@ class RipUpSlot:
 
     rule: RipUpRule = RipUpRule.ALL_NETS
     max_ripup_nets: int = MAX_NEGOTIATED_NETS
+    ripup_window_cells: int = NEUTRAL_WINDOW_CELLS
     schema: str = RIP_UP_SLOT_SCHEMA
 
     def __post_init__(self) -> None:
@@ -231,19 +241,43 @@ class RipUpSlot:
         if self.schema != RIP_UP_SLOT_SCHEMA:
             raise ValueError("rip-up slot schema is unsupported")
         _bounded("rip-up ceiling", self.max_ripup_nets, minimum=1, maximum=MAX_NEGOTIATED_NETS)
+        _bounded(
+            "rip-up window",
+            self.ripup_window_cells,
+            minimum=NEUTRAL_WINDOW_CELLS,
+            maximum=MAX_RIPUP_WINDOW_CELLS,
+        )
         if self.rule is not RipUpRule.TOP_CONFLICT_ONLY and self.max_ripup_nets != (
             MAX_NEGOTIATED_NETS
         ):
             raise ValueError("only the top-conflict rule reads a rip-up ceiling")
+        if self.rule is not RipUpRule.CONFLICT_WINDOW and self.ripup_window_cells != (
+            NEUTRAL_WINDOW_CELLS
+        ):
+            raise ValueError("only the conflict-window rule reads a rip-up window")
+        if self.rule is RipUpRule.CONFLICT_WINDOW and self.ripup_window_cells < 1:
+            raise ValueError("the conflict-window rule requires a positive rip-up window")
 
     def as_json(self) -> dict[str, object]:
-        """Return the canonical serializable view of this slot."""
+        """Return the canonical serializable view of this slot.
 
-        return {
+        The window is present **only** for the rule that reads it.  Every other literal keeps the
+        exact canonical bytes it published before the window existed, so no already-issued rip-up
+        slot digest, plan digest, or plan-bound candidate identity moves because a fourth literal
+        was added.  A caller who stored `all-nets-v1`'s digest can still re-derive it.  This is
+        the narrow reading of ADR-0073's no-inert-parameter rule: a weight a rule does not read
+        may not vary the digest, and the cheapest way to guarantee that for a *new* weight is for
+        it not to appear at all.
+        """
+
+        payload: dict[str, object] = {
             "max_ripup_nets": self.max_ripup_nets,
             "rule": self.rule.value,
             "schema": self.schema,
         }
+        if self.rule is RipUpRule.CONFLICT_WINDOW:
+            payload["ripup_window_cells"] = self.ripup_window_cells
+        return payload
 
     @property
     def slot_digest(self) -> str:
@@ -369,12 +403,20 @@ def ripup_net_ids(
     nets: tuple[tuple[str, int], ...],
     conflict_scores: Mapping[str, int],
     retained: frozenset[str],
+    window_nets: frozenset[str] = frozenset(),
 ) -> frozenset[str]:
     """Return the deterministic set of nets to re-route on the next iteration.
 
     ``retained`` names the nets that currently hold a usable candidate or connection.  Every net
     outside it is always ripped up: a net with nothing to keep must be retried under every rule,
     or the coordinator would silently stop trying to route it.
+
+    ``window_nets`` names the nets the coordinator found inside the declared rip-up window of a
+    conflicted net.  It is supplied rather than computed here because computing it needs board
+    geometry, and this module is deliberately geometry-free — a slot decides *which* nets, never
+    *where* they are.  Only :data:`RipUpRule.CONFLICT_WINDOW` reads it; supplying a non-empty
+    window to any other rule is refused rather than ignored, so a caller cannot believe a window
+    took effect when it did not.
     """
 
     seeds = dict(nets)
@@ -382,6 +424,10 @@ def ripup_net_ids(
         raise ValueError("negotiated rip-up selection requires distinct nets")
     if not retained <= seeds.keys():
         raise ValueError("a retained net is not part of this negotiated run")
+    if not window_nets <= seeds.keys():
+        raise ValueError("a windowed net is not part of this negotiated run")
+    if window_nets and slot.rule is not RipUpRule.CONFLICT_WINDOW:
+        raise ValueError("only the conflict-window rule reads a rip-up window")
     missing = frozenset(seeds) - retained
     if slot.rule is RipUpRule.ALL_NETS:
         return frozenset(seeds)
@@ -395,17 +441,25 @@ def ripup_net_ids(
     )
     if slot.rule is RipUpRule.TOP_CONFLICT_ONLY:
         conflicted = conflicted[: slot.max_ripup_nets]
-    return missing | frozenset(net_id for net_id, _seed in conflicted)
+    selected = missing | frozenset(net_id for net_id, _seed in conflicted)
+    if slot.rule is RipUpRule.CONFLICT_WINDOW:
+        # A windowed net is only worth ripping up if there is something to rip up; a net with no
+        # candidate is already in `missing`.  Intersecting with `retained` keeps the returned set
+        # a subset of the run's nets under every input.
+        selected |= window_nets & retained
+    return selected
 
 
 __all__ = [
     "COST_UPDATE_SLOT_SCHEMA",
     "LEGACY_EQUIVALENT_PLAN",
     "MAX_NEGOTIATED_NETS",
+    "MAX_RIPUP_WINDOW_CELLS",
     "MAX_SLOT_WEIGHT",
     "NEGOTIATION_PLAN_SCHEMA",
     "NET_ORDER_SLOT_SCHEMA",
     "NEUTRAL_WEIGHT",
+    "NEUTRAL_WINDOW_CELLS",
     "RIP_UP_SLOT_SCHEMA",
     "CostUpdateRule",
     "CostUpdateSlot",

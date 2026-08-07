@@ -1,0 +1,1618 @@
+{
+  "apply": "not_invoked",
+  "claim": {
+    "classification": "same-fixture before/after with an exact operation count",
+    "quality_claim": false,
+    "rule": "the operation counts are exact and host-independent and are the claim. The wall-clock medians are host-specific context and are not a claim on their own. No routing-quality, convergence, or general-board improvement is asserted: the coordinator table records what each rip-up rule did on one synthetic congested fixture, including where a rule is no better than the default."
+  },
+  "coordinator_runs": [
+    {
+      "candidate_digest": "sha256:c97039b07f9366d32a9c8e2d67db45ba9d491ed994c1b474654e6ea0f5a29520",
+      "completed": true,
+      "iterations": 5,
+      "median_wall_ns": 62415979,
+      "plan": "no-plan-baseline",
+      "rationale": "the ADR-0055 coordinator with no declared plan",
+      "replay_deterministic": true,
+      "ripups": 0,
+      "router_calls": 30,
+      "status": "completed",
+      "total_wire_length_nm": 56000000,
+      "unrouted_nets": 0
+    },
+    {
+      "candidate_digest": "sha256:62171754ef35921d96fb3b45a4b23b92b03a5cdff56ed3ca4ca3a564f09a2ab3",
+      "completed": true,
+      "iterations": 5,
+      "median_wall_ns": 74856333,
+      "plan": "legacy-equivalent",
+      "rationale": "the default plan; rips up every net on every pass",
+      "replay_deterministic": true,
+      "ripups": 16,
+      "router_calls": 30,
+      "status": "completed",
+      "total_wire_length_nm": 56000000,
+      "unrouted_nets": 0
+    },
+    {
+      "candidate_digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "completed": false,
+      "iterations": 8,
+      "median_wall_ns": 73325937,
+      "plan": "rip-up/conflicted-only",
+      "rationale": "retain every net holding no conflict; B-087 recorded that this does not converge here",
+      "replay_deterministic": true,
+      "ripups": 2,
+      "router_calls": 22,
+      "status": "no_path",
+      "total_wire_length_nm": 0,
+      "unrouted_nets": 6
+    },
+    {
+      "candidate_digest": "sha256:4cf753f6f157d3b780eeaa31c6f731a035f835d9fe860f42a9651a2f64ec1b1c",
+      "completed": true,
+      "iterations": 5,
+      "median_wall_ns": 62097854,
+      "plan": "rip-up/conflict-window-1",
+      "rationale": "conflicted nets plus every retained net within one lattice cell of one",
+      "replay_deterministic": true,
+      "ripups": 8,
+      "router_calls": 22,
+      "status": "completed",
+      "total_wire_length_nm": 56000000,
+      "unrouted_nets": 0
+    },
+    {
+      "candidate_digest": "sha256:f1c210a98307e640703712ac2694ecd92c7448aa3fc36f5cdb6d9a661803d265",
+      "completed": true,
+      "iterations": 5,
+      "median_wall_ns": 58907604,
+      "plan": "rip-up/conflict-window-2",
+      "rationale": "the same rule at a two-cell window",
+      "replay_deterministic": true,
+      "ripups": 8,
+      "router_calls": 22,
+      "status": "completed",
+      "total_wire_length_nm": 56000000,
+      "unrouted_nets": 0
+    },
+    {
+      "candidate_digest": "sha256:3331baa3d71ab66382c0b5e852b007a12ef8fe05c9bc680a02f801971745f956",
+      "completed": true,
+      "iterations": 5,
+      "median_wall_ns": 58369187,
+      "plan": "rip-up/conflict-window-4",
+      "rationale": "a four-cell window, wide enough to reach across the congested channel",
+      "replay_deterministic": true,
+      "ripups": 16,
+      "router_calls": 30,
+      "status": "completed",
+      "total_wire_length_nm": 56000000,
+      "unrouted_nets": 0
+    },
+    {
+      "candidate_digest": "sha256:418e755da571a868bf58e00cab15ff0665e2b311f08139f214f6c9af325055d9",
+      "completed": true,
+      "iterations": 5,
+      "median_wall_ns": 57598458,
+      "plan": "rip-up/conflict-window-16",
+      "rationale": "a window wide enough to be a proxy for full rip-up on this fixture",
+      "replay_deterministic": true,
+      "ripups": 16,
+      "router_calls": 30,
+      "status": "completed",
+      "total_wire_length_nm": 56000000,
+      "unrouted_nets": 0
+    }
+  ],
+  "evidence_harness_command": "PYTHONPATH=src python3 scripts/benchmark_incremental_spatial_index.py --replays 16 --evidence-harness-commit 9e56fc858737b5f8c25f6b800a1f5c48650152aa --output benchmarks/results/routing/2026-08-06-incremental-spatial-index.json",
+  "evidence_harness_commit": "9e56fc858737b5f8c25f6b800a1f5c48650152aa",
+  "host_specific_field_suffix": "_ns",
+  "index_cases": [
+    {
+      "answers_identical": true,
+      "cell_size_nm": 64,
+      "churn": 8,
+      "entries": 64,
+      "incremental_median_ns": 7500,
+      "incremental_mutate_operations": 8,
+      "query_superset_of_brute_force": true,
+      "rebuild_insert_operations": 56,
+      "rebuild_median_ns": 56417
+    },
+    {
+      "answers_identical": true,
+      "cell_size_nm": 64,
+      "churn": 32,
+      "entries": 256,
+      "incremental_median_ns": 18375,
+      "incremental_mutate_operations": 32,
+      "query_superset_of_brute_force": true,
+      "rebuild_insert_operations": 224,
+      "rebuild_median_ns": 209687
+    },
+    {
+      "answers_identical": true,
+      "cell_size_nm": 64,
+      "churn": 128,
+      "entries": 1024,
+      "incremental_median_ns": 58354,
+      "incremental_mutate_operations": 128,
+      "query_superset_of_brute_force": true,
+      "rebuild_insert_operations": 896,
+      "rebuild_median_ns": 952500
+    }
+  ],
+  "invariants": {
+    "every_coordinator_replay_deterministic": true,
+    "every_index_answer_identical": true,
+    "every_index_query_conservative": true,
+    "every_retention_state_identical": true
+  },
+  "kicad_drc": "not_run",
+  "ledger_cases": [
+    {
+      "candidate_nets": 6,
+      "fixture": "synthetic/congested-channel",
+      "grid_step_nm": 1000000,
+      "origin": "the B-087 congested-channel fixture, routed once per net",
+      "retention": [
+        {
+          "after_median_ns": 6478,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 5312,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 6,
+          "speedup_percent": -21.95,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 29458,
+          "after_resource_operations": 21,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 43500,
+          "before_resource_operations": 21,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 1,
+          "ripped_up_nets": 5,
+          "speedup_percent": 32.28,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 42979,
+          "after_resource_operations": 39,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 106104,
+          "before_resource_operations": 55,
+          "operation_ratio_percent": 70.909,
+          "retained_nets": 3,
+          "ripped_up_nets": 3,
+          "speedup_percent": 59.49,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 27542,
+          "after_resource_operations": 22,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 144917,
+          "before_resource_operations": 72,
+          "operation_ratio_percent": 30.556,
+          "retained_nets": 4,
+          "ripped_up_nets": 2,
+          "speedup_percent": 80.99,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 1020,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 185708,
+          "before_resource_operations": 94,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 6,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.45,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 94
+    },
+    {
+      "candidate_nets": 4,
+      "fixture": "synthetic/parallel-4",
+      "grid_step_nm": 1000000,
+      "origin": "synthetic parallel tracks; isolates net count from geometry",
+      "retention": [
+        {
+          "after_median_ns": 4834,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 4333,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 4,
+          "speedup_percent": -11.56,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 27146,
+          "after_resource_operations": 21,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 43145,
+          "before_resource_operations": 21,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 1,
+          "ripped_up_nets": 3,
+          "speedup_percent": 37.08,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 43375,
+          "after_resource_operations": 42,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 84458,
+          "before_resource_operations": 42,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 2,
+          "ripped_up_nets": 2,
+          "speedup_percent": 48.64,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 22646,
+          "after_resource_operations": 21,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 118625,
+          "before_resource_operations": 63,
+          "operation_ratio_percent": 33.333,
+          "retained_nets": 3,
+          "ripped_up_nets": 1,
+          "speedup_percent": 80.91,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 604,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 154666,
+          "before_resource_operations": 84,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 4,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.61,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 84
+    },
+    {
+      "candidate_nets": 8,
+      "fixture": "synthetic/parallel-8",
+      "grid_step_nm": 1000000,
+      "origin": "synthetic parallel tracks; isolates net count from geometry",
+      "retention": [
+        {
+          "after_median_ns": 11104,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 9104,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 8,
+          "speedup_percent": -21.97,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 55166,
+          "after_resource_operations": 42,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 89895,
+          "before_resource_operations": 42,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 2,
+          "ripped_up_nets": 6,
+          "speedup_percent": 38.63,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 88896,
+          "after_resource_operations": 84,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 166646,
+          "before_resource_operations": 84,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 4,
+          "ripped_up_nets": 4,
+          "speedup_percent": 46.66,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 47124,
+          "after_resource_operations": 42,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 237271,
+          "before_resource_operations": 126,
+          "operation_ratio_percent": 33.333,
+          "retained_nets": 6,
+          "ripped_up_nets": 2,
+          "speedup_percent": 80.14,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 1166,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 318541,
+          "before_resource_operations": 168,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 8,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.63,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 168
+    },
+    {
+      "candidate_nets": 16,
+      "fixture": "synthetic/parallel-16",
+      "grid_step_nm": 1000000,
+      "origin": "synthetic parallel tracks; isolates net count from geometry",
+      "retention": [
+        {
+          "after_median_ns": 25167,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 21271,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 16,
+          "speedup_percent": -18.32,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 112541,
+          "after_resource_operations": 84,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 182854,
+          "before_resource_operations": 84,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 4,
+          "ripped_up_nets": 12,
+          "speedup_percent": 38.45,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 184812,
+          "after_resource_operations": 168,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 334813,
+          "before_resource_operations": 168,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 8,
+          "ripped_up_nets": 8,
+          "speedup_percent": 44.8,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 95708,
+          "after_resource_operations": 84,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 513500,
+          "before_resource_operations": 252,
+          "operation_ratio_percent": 33.333,
+          "retained_nets": 12,
+          "ripped_up_nets": 4,
+          "speedup_percent": 81.36,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 1833,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 643770,
+          "before_resource_operations": 336,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 16,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.72,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 336
+    },
+    {
+      "candidate_nets": 32,
+      "fixture": "synthetic/parallel-32",
+      "grid_step_nm": 1000000,
+      "origin": "synthetic parallel tracks; isolates net count from geometry",
+      "retention": [
+        {
+          "after_median_ns": 49166,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 44270,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 32,
+          "speedup_percent": -11.06,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 223916,
+          "after_resource_operations": 168,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 368958,
+          "before_resource_operations": 168,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 8,
+          "ripped_up_nets": 24,
+          "speedup_percent": 39.31,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 356291,
+          "after_resource_operations": 336,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 694500,
+          "before_resource_operations": 336,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 16,
+          "ripped_up_nets": 16,
+          "speedup_percent": 48.7,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 194562,
+          "after_resource_operations": 168,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 1107916,
+          "before_resource_operations": 504,
+          "operation_ratio_percent": 33.333,
+          "retained_nets": 24,
+          "ripped_up_nets": 8,
+          "speedup_percent": 82.44,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 2937,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 1380458,
+          "before_resource_operations": 672,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 32,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.79,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 672
+    },
+    {
+      "candidate_nets": 2,
+      "fixture": "corpus/ts04_dual_led",
+      "grid_step_nm": 250000,
+      "origin": "external MIT-licensed SimpleRouteJson corpus board, routed net by net",
+      "retention": [
+        {
+          "after_median_ns": 15708,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 15666,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 2,
+          "speedup_percent": -0.27,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 17645,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 15708,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 2,
+          "speedup_percent": -12.33,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 122312,
+          "after_resource_operations": 109,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 207458,
+          "before_resource_operations": 109,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 1,
+          "ripped_up_nets": 1,
+          "speedup_percent": 41.04,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 120646,
+          "after_resource_operations": 109,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 205520,
+          "before_resource_operations": 109,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 1,
+          "ripped_up_nets": 1,
+          "speedup_percent": 41.3,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 896,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 473375,
+          "before_resource_operations": 254,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 2,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.81,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 254
+    },
+    {
+      "candidate_nets": 3,
+      "fixture": "corpus/ts06_push_pull",
+      "grid_step_nm": 250000,
+      "origin": "external MIT-licensed SimpleRouteJson corpus board, routed net by net",
+      "retention": [
+        {
+          "after_median_ns": 43124,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 41520,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 3,
+          "speedup_percent": -3.86,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 40187,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 39146,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 3,
+          "speedup_percent": -2.66,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 190416,
+          "after_resource_operations": 117,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 257104,
+          "before_resource_operations": 117,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 1,
+          "ripped_up_nets": 2,
+          "speedup_percent": 25.94,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 277146,
+          "after_resource_operations": 226,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 451250,
+          "before_resource_operations": 226,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 2,
+          "ripped_up_nets": 1,
+          "speedup_percent": 38.58,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 1625,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 1082729,
+          "before_resource_operations": 524,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 3,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.85,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 524
+    },
+    {
+      "candidate_nets": 4,
+      "fixture": "corpus/ts07_differential_pair",
+      "grid_step_nm": 250000,
+      "origin": "external MIT-licensed SimpleRouteJson corpus board, routed net by net",
+      "retention": [
+        {
+          "after_median_ns": 37083,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 36437,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 4,
+          "speedup_percent": -1.77,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 170687,
+          "after_resource_operations": 124,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 257896,
+          "before_resource_operations": 124,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 1,
+          "ripped_up_nets": 3,
+          "speedup_percent": 33.82,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 253479,
+          "after_resource_operations": 248,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 591167,
+          "before_resource_operations": 285,
+          "operation_ratio_percent": 87.018,
+          "retained_nets": 2,
+          "ripped_up_nets": 2,
+          "speedup_percent": 57.12,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 120229,
+          "after_resource_operations": 113,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 834229,
+          "before_resource_operations": 420,
+          "operation_ratio_percent": 26.905,
+          "retained_nets": 3,
+          "ripped_up_nets": 1,
+          "speedup_percent": 85.59,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 1604,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 1085146,
+          "before_resource_operations": 533,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 4,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.85,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 533
+    },
+    {
+      "candidate_nets": 3,
+      "fixture": "corpus/ts08_inverting_amp",
+      "grid_step_nm": 250000,
+      "origin": "external MIT-licensed SimpleRouteJson corpus board, routed net by net",
+      "retention": [
+        {
+          "after_median_ns": 34312,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 33479,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 3,
+          "speedup_percent": -2.49,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 32749,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 31833,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 3,
+          "speedup_percent": -2.88,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 209416,
+          "after_resource_operations": 175,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 347562,
+          "before_resource_operations": 175,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 1,
+          "ripped_up_nets": 2,
+          "speedup_percent": 39.75,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 108354,
+          "after_resource_operations": 104,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 816208,
+          "before_resource_operations": 411,
+          "operation_ratio_percent": 25.304,
+          "retained_nets": 2,
+          "ripped_up_nets": 1,
+          "speedup_percent": 86.72,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 1167,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 1009395,
+          "before_resource_operations": 515,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 3,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.88,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 515
+    },
+    {
+      "candidate_nets": 5,
+      "fixture": "corpus/ts09_active_filter",
+      "grid_step_nm": 250000,
+      "origin": "external MIT-licensed SimpleRouteJson corpus board, routed net by net",
+      "retention": [
+        {
+          "after_median_ns": 76729,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 73625,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 5,
+          "speedup_percent": -4.22,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 374291,
+          "after_resource_operations": 273,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 613708,
+          "before_resource_operations": 273,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 1,
+          "ripped_up_nets": 4,
+          "speedup_percent": 39.01,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 484375,
+          "after_resource_operations": 480,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 1198375,
+          "before_resource_operations": 572,
+          "operation_ratio_percent": 83.916,
+          "retained_nets": 2,
+          "ripped_up_nets": 3,
+          "speedup_percent": 59.58,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 350416,
+          "after_resource_operations": 341,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 1481854,
+          "before_resource_operations": 711,
+          "operation_ratio_percent": 47.961,
+          "retained_nets": 3,
+          "ripped_up_nets": 2,
+          "speedup_percent": 76.35,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 2312,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 2320146,
+          "before_resource_operations": 1052,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 5,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.9,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 1052
+    },
+    {
+      "candidate_nets": 4,
+      "fixture": "corpus/ts10_wheatstone_bridge",
+      "grid_step_nm": 250000,
+      "origin": "external MIT-licensed SimpleRouteJson corpus board, routed net by net",
+      "retention": [
+        {
+          "after_median_ns": 51542,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 45020,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 4,
+          "speedup_percent": -14.49,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 207854,
+          "after_resource_operations": 150,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 321708,
+          "before_resource_operations": 150,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 1,
+          "ripped_up_nets": 3,
+          "speedup_percent": 35.39,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 322666,
+          "after_resource_operations": 291,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 634250,
+          "before_resource_operations": 291,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 2,
+          "ripped_up_nets": 2,
+          "speedup_percent": 49.13,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 163854,
+          "after_resource_operations": 155,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 970437,
+          "before_resource_operations": 468,
+          "operation_ratio_percent": 33.12,
+          "retained_nets": 3,
+          "ripped_up_nets": 1,
+          "speedup_percent": 83.12,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 1604,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 1273374,
+          "before_resource_operations": 623,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 4,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.87,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 623
+    },
+    {
+      "candidate_nets": 9,
+      "fixture": "corpus/ts11_generated",
+      "grid_step_nm": 250000,
+      "origin": "external MIT-licensed SimpleRouteJson corpus board, routed net by net",
+      "retention": [
+        {
+          "after_median_ns": 173791,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 165396,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 9,
+          "speedup_percent": -5.08,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 999875,
+          "after_resource_operations": 934,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 2227292,
+          "before_resource_operations": 1035,
+          "operation_ratio_percent": 90.242,
+          "retained_nets": 2,
+          "ripped_up_nets": 7,
+          "speedup_percent": 55.11,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 753687,
+          "after_resource_operations": 695,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 2818375,
+          "before_resource_operations": 1274,
+          "operation_ratio_percent": 54.553,
+          "retained_nets": 4,
+          "ripped_up_nets": 5,
+          "speedup_percent": 73.26,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 479000,
+          "after_resource_operations": 446,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 3246208,
+          "before_resource_operations": 1523,
+          "operation_ratio_percent": 29.284,
+          "retained_nets": 6,
+          "ripped_up_nets": 3,
+          "speedup_percent": 85.24,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 3666,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 4266146,
+          "before_resource_operations": 1969,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 9,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.91,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 1969
+    },
+    {
+      "candidate_nets": 5,
+      "fixture": "corpus/ts12_generated",
+      "grid_step_nm": 250000,
+      "origin": "external MIT-licensed SimpleRouteJson corpus board, routed net by net",
+      "retention": [
+        {
+          "after_median_ns": 78166,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 70417,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 5,
+          "speedup_percent": -11.0,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 305916,
+          "after_resource_operations": 150,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 346833,
+          "before_resource_operations": 150,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 1,
+          "ripped_up_nets": 4,
+          "speedup_percent": 11.8,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 447895,
+          "after_resource_operations": 427,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 1083167,
+          "before_resource_operations": 508,
+          "operation_ratio_percent": 84.055,
+          "retained_nets": 2,
+          "ripped_up_nets": 3,
+          "speedup_percent": 58.65,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 242583,
+          "after_resource_operations": 224,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 1477270,
+          "before_resource_operations": 711,
+          "operation_ratio_percent": 31.505,
+          "retained_nets": 3,
+          "ripped_up_nets": 2,
+          "speedup_percent": 83.58,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 1792,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 1971146,
+          "before_resource_operations": 935,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 5,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.91,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 935
+    },
+    {
+      "candidate_nets": 4,
+      "fixture": "corpus/ts13_555_blinker",
+      "grid_step_nm": 250000,
+      "origin": "external MIT-licensed SimpleRouteJson corpus board, routed net by net",
+      "retention": [
+        {
+          "after_median_ns": 39416,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 37291,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 4,
+          "speedup_percent": -5.7,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 215229,
+          "after_resource_operations": 180,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 367292,
+          "before_resource_operations": 180,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 1,
+          "ripped_up_nets": 3,
+          "speedup_percent": 41.4,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 111541,
+          "after_resource_operations": 104,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 882792,
+          "before_resource_operations": 427,
+          "operation_ratio_percent": 24.356,
+          "retained_nets": 2,
+          "ripped_up_nets": 2,
+          "speedup_percent": 87.36,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 90604,
+          "after_resource_operations": 82,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 1000437,
+          "before_resource_operations": 449,
+          "operation_ratio_percent": 18.263,
+          "retained_nets": 3,
+          "ripped_up_nets": 1,
+          "speedup_percent": 90.94,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 1896,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 1140708,
+          "before_resource_operations": 531,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 4,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.83,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 531
+    },
+    {
+      "candidate_nets": 2,
+      "fixture": "corpus/ts14_usb_power",
+      "grid_step_nm": 250000,
+      "origin": "external MIT-licensed SimpleRouteJson corpus board, routed net by net",
+      "retention": [
+        {
+          "after_median_ns": 18875,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 16958,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 2,
+          "speedup_percent": -11.3,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 17208,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 16145,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 2,
+          "speedup_percent": -6.58,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 135124,
+          "after_resource_operations": 131,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 267042,
+          "before_resource_operations": 135,
+          "operation_ratio_percent": 97.037,
+          "retained_nets": 1,
+          "ripped_up_nets": 1,
+          "speedup_percent": 49.4,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 134333,
+          "after_resource_operations": 131,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 257458,
+          "before_resource_operations": 135,
+          "operation_ratio_percent": 97.037,
+          "retained_nets": 1,
+          "ripped_up_nets": 1,
+          "speedup_percent": 47.82,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 1000,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 503083,
+          "before_resource_operations": 266,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 2,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.8,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 266
+    },
+    {
+      "candidate_nets": 4,
+      "fixture": "corpus/ts15_i2c_sensor",
+      "grid_step_nm": 250000,
+      "origin": "external MIT-licensed SimpleRouteJson corpus board, routed net by net",
+      "retention": [
+        {
+          "after_median_ns": 30646,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 28833,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 4,
+          "speedup_percent": -6.29,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 165750,
+          "after_resource_operations": 136,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 280187,
+          "before_resource_operations": 136,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 1,
+          "ripped_up_nets": 3,
+          "speedup_percent": 40.84,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 206208,
+          "after_resource_operations": 194,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 459520,
+          "before_resource_operations": 234,
+          "operation_ratio_percent": 82.906,
+          "retained_nets": 2,
+          "ripped_up_nets": 2,
+          "speedup_percent": 55.13,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 91500,
+          "after_resource_operations": 82,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 738646,
+          "before_resource_operations": 346,
+          "operation_ratio_percent": 23.699,
+          "retained_nets": 3,
+          "ripped_up_nets": 1,
+          "speedup_percent": 87.61,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 1542,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 876333,
+          "before_resource_operations": 428,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 4,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.82,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 428
+    },
+    {
+      "candidate_nets": 2,
+      "fixture": "corpus/ts16_h_bridge",
+      "grid_step_nm": 250000,
+      "origin": "external MIT-licensed SimpleRouteJson corpus board, routed net by net",
+      "retention": [
+        {
+          "after_median_ns": 27083,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 26666,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 2,
+          "speedup_percent": -1.56,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 27458,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 24729,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 2,
+          "speedup_percent": -11.04,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 152916,
+          "after_resource_operations": 149,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 416417,
+          "before_resource_operations": 205,
+          "operation_ratio_percent": 72.683,
+          "retained_nets": 1,
+          "ripped_up_nets": 1,
+          "speedup_percent": 63.28,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 155604,
+          "after_resource_operations": 149,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 406958,
+          "before_resource_operations": 205,
+          "operation_ratio_percent": 72.683,
+          "retained_nets": 1,
+          "ripped_up_nets": 1,
+          "speedup_percent": 61.76,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 1437,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 709958,
+          "before_resource_operations": 354,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 2,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.8,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 354
+    },
+    {
+      "candidate_nets": 2,
+      "fixture": "corpus/ts17_attiny_minimal",
+      "grid_step_nm": 250000,
+      "origin": "external MIT-licensed SimpleRouteJson corpus board, routed net by net",
+      "retention": [
+        {
+          "after_median_ns": 34354,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 31333,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 2,
+          "speedup_percent": -9.64,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 32041,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 31708,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 2,
+          "speedup_percent": -1.05,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 201604,
+          "after_resource_operations": 186,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 597021,
+          "before_resource_operations": 283,
+          "operation_ratio_percent": 65.724,
+          "retained_nets": 1,
+          "ripped_up_nets": 1,
+          "speedup_percent": 66.23,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 195062,
+          "after_resource_operations": 186,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 623166,
+          "before_resource_operations": 283,
+          "operation_ratio_percent": 65.724,
+          "retained_nets": 1,
+          "ripped_up_nets": 1,
+          "speedup_percent": 68.7,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 1771,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 963104,
+          "before_resource_operations": 469,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 2,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.82,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 469
+    },
+    {
+      "candidate_nets": 6,
+      "fixture": "corpus/ts18_dual_reg",
+      "grid_step_nm": 250000,
+      "origin": "external MIT-licensed SimpleRouteJson corpus board, routed net by net",
+      "retention": [
+        {
+          "after_median_ns": 135959,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 141646,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 6,
+          "speedup_percent": 4.01,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 474646,
+          "after_resource_operations": 225,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 577687,
+          "before_resource_operations": 225,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 1,
+          "ripped_up_nets": 5,
+          "speedup_percent": 17.84,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 835104,
+          "after_resource_operations": 784,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 1986395,
+          "before_resource_operations": 799,
+          "operation_ratio_percent": 98.123,
+          "retained_nets": 3,
+          "ripped_up_nets": 3,
+          "speedup_percent": 57.96,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 427458,
+          "after_resource_operations": 415,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 2573645,
+          "before_resource_operations": 1168,
+          "operation_ratio_percent": 35.531,
+          "retained_nets": 4,
+          "ripped_up_nets": 2,
+          "speedup_percent": 83.39,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 2167,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 3456250,
+          "before_resource_operations": 1583,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 6,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.94,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 1583
+    },
+    {
+      "candidate_nets": 5,
+      "fixture": "corpus/ts19_adc_breakout",
+      "grid_step_nm": 250000,
+      "origin": "external MIT-licensed SimpleRouteJson corpus board, routed net by net",
+      "retention": [
+        {
+          "after_median_ns": 82646,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 75750,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 5,
+          "speedup_percent": -9.1,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 345270,
+          "after_resource_operations": 252,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 567292,
+          "before_resource_operations": 252,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 1,
+          "ripped_up_nets": 4,
+          "speedup_percent": 39.14,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 547416,
+          "after_resource_operations": 526,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 1117333,
+          "before_resource_operations": 533,
+          "operation_ratio_percent": 98.687,
+          "retained_nets": 2,
+          "ripped_up_nets": 3,
+          "speedup_percent": 51.01,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 352292,
+          "after_resource_operations": 331,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 1526708,
+          "before_resource_operations": 728,
+          "operation_ratio_percent": 45.467,
+          "retained_nets": 3,
+          "ripped_up_nets": 2,
+          "speedup_percent": 76.92,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 2083,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 2174250,
+          "before_resource_operations": 1059,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 5,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.9,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 1059
+    },
+    {
+      "candidate_nets": 7,
+      "fixture": "corpus/ts20_esp32_wifi",
+      "grid_step_nm": 250000,
+      "origin": "external MIT-licensed SimpleRouteJson corpus board, routed net by net",
+      "retention": [
+        {
+          "after_median_ns": 207500,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 206083,
+          "before_resource_operations": 0,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 0,
+          "ripped_up_nets": 7,
+          "speedup_percent": -0.69,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 1116624,
+          "after_resource_operations": 894,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 2046416,
+          "before_resource_operations": 894,
+          "operation_ratio_percent": 100.0,
+          "retained_nets": 1,
+          "ripped_up_nets": 6,
+          "speedup_percent": 45.44,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 716041,
+          "after_resource_operations": 660,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 3079333,
+          "before_resource_operations": 1439,
+          "operation_ratio_percent": 45.865,
+          "retained_nets": 3,
+          "ripped_up_nets": 4,
+          "speedup_percent": 76.75,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 519896,
+          "after_resource_operations": 470,
+          "after_strategy": "subtract-departures",
+          "before_median_ns": 3663166,
+          "before_resource_operations": 1629,
+          "operation_ratio_percent": 28.852,
+          "retained_nets": 5,
+          "ripped_up_nets": 2,
+          "speedup_percent": 85.81,
+          "states_identical": true
+        },
+        {
+          "after_median_ns": 3188,
+          "after_resource_operations": 0,
+          "after_strategy": "recount-survivors",
+          "before_median_ns": 4602541,
+          "before_resource_operations": 2099,
+          "operation_ratio_percent": 0.0,
+          "retained_nets": 7,
+          "ripped_up_nets": 0,
+          "speedup_percent": 99.93,
+          "states_identical": true
+        }
+      ],
+      "total_unit_resources": 2099
+    }
+  ],
+  "non_claims": [
+    "candidate geometry is not applied to a board",
+    "no model output or model-generated copper is used",
+    "no manufacturing, fabrication, or board-mutation claim",
+    "the corpus boards are real but small; no scaling result is claimed from them",
+    "the synthetic parallel-track sweep is not a board and claims nothing about routing",
+    "wall-clock medians are host-specific and are not portable numbers",
+    "no FreeRouting, KiCad DRC, electrical, or multilayer comparison"
+  ],
+  "replays": 16,
+  "run_id": "sha256:33ea307b777db9a85cbcc283fadeaeff0ed251541e51107eae0bfed87739c506",
+  "schema": "copper-mcp/benchmark/incremental-spatial-index/v1",
+  "script": "scripts/benchmark_incremental_spatial_index.py",
+  "script_sha256": "1f1419ab98659d88d14923fdb4dbaedd65493f8d52453c7359e7dfc3c43f4169"
+}

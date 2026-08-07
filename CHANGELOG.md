@@ -24,8 +24,8 @@ All notable changes are documented here. The format follows
   assert precisely the identity the file cannot support. Write-back stays refused, since every
   source-preserving patch path already rejects a snapshot containing a derived identity — a board
   that names 45 resistors alike cannot be patched by that name without risking the wrong one — so
-  this unblocks inspection and leaves mutation closed. ([D-158](docs/ledgers/decision-ledger.md),
-  [R-119](docs/ledgers/risk-register.md),
+  this unblocks inspection and leaves mutation closed. ([D-166](docs/ledgers/decision-ledger.md),
+  [R-123](docs/ledgers/risk-register.md),
   [KiCad UUID uniqueness](docs/research/kicad-uuid-uniqueness-v1.md), #116)
 - A semantic-validation refusal now names the invariant it failed instead of only saying that one
   failed. `converted Board IR content failed semantic validation` was a wrapper that identified no
@@ -33,7 +33,7 @@ All notable changes are documented here. The format follows
   carries the validator's own message. Naming the rule is not echoing the board: every Board IR
   validation message is a fixed string chosen by `copper_mcp.board_ir`, and the two that were built
   from an object ID are rebuilt so the board-derived text travels in the locator the refusal drops.
-  ([D-158](docs/ledgers/decision-ledger.md), #116)
+  ([D-166](docs/ledgers/decision-ledger.md), #116)
 - Copper saved on KiCad's net 0 — stitching vias and orphaned tracks, which KiCad 10 writes as
   `(net "")` — no longer refuses the whole document with `via has no routable net`, the largest
   single cause in the issue #116 real-board survey (queued on 7 of 12 boards, which carry 115
@@ -45,7 +45,7 @@ All notable changes are documented here. The format follows
   (`(net "")`, `(net 0)`, `(net 0 "")`) resolve identically; a negative ordinal is now an
   explicit typed `net.unknown` refusal, and a netless via is still held to every geometric rule.
   Board IR, codec, JSON schema 0.2.0, and scene contracts widen `net_id` to nullable in place —
-  strictly additive, with every existing content address byte-identical (ADR-0078, D-159,
+  strictly additive, with every existing content address byte-identical (ADR-0081, D-159,
   R-120, #119).
 - **Three singleton real-board refusals, each a different kind of defect.** Found by running the
   adapter against a working tree of twelve real KiCad boards, where each was the first refusal on
@@ -148,7 +148,7 @@ All notable changes are documented here. The format follows
   canonical encoder emits `courtyard_circles` only when present, so every existing snapshot
   digest, scene revision, and golden identity is byte-stable. Measured against real
   `kicad-cli` 10.0.5 over 23 cases: 12 exact parity, 11 conceded, 0 contradictions; on the
-  #116 tree, courtyard-stage refusals drop from 13 boards to zero. (#116, ADR-0080, D-165,
+  #116 tree, courtyard-stage refusals drop from 13 boards to zero. (#116, ADR-0080, D-166,
   R-120, B-093)
 
 - **The KiCad plugin is now a Plugin and Content Manager package, and installing it still grants
@@ -211,6 +211,55 @@ All notable changes are documented here. The format follows
   caller can construct anything, and a passing catalog is coverage rather than absence. Four
   discriminator tests deliberately break a boundary and require the harness to record a failure,
   because a suite that cannot fail is not evidence. (D-156, SEC-122, B-090, #69)
+  because a suite that cannot fail is not evidence. (D-152, SEC-121, B-089, #69)
+- **The negotiated coordinator stops rebuilding what it just decided to keep, and gets a rip-up
+  window that is actually bounded.** ADR-0073 recorded its own gap honestly: every retained
+  candidate was re-added to the congestion ledger from scratch each pass, re-deriving its unit
+  lattice resources from geometry, so reconstruction was linear in the *retained* set. ADR-0081
+  closes it. A new `IncrementalSpatialIndex` is a uniform grid whose cell size is fixed at
+  construction — that one choice makes an entry's cells a pure function of its bounds, so "mutate
+  in place" and "rebuild from the survivors" are the same computation, and incremental-equals-
+  rebuilt is a property of the design rather than a hope. An R-tree, which is what TritonRoute's
+  detailed router uses, was rejected on determinism: two R-trees built from the same set in two
+  insertion orders have different node boundaries. Every query returns a **superset** of the true
+  overlaps, never a subset, so both bounded-work fallbacks — an oversize entry every query
+  returns, and an over-wide query that degrades to a full scan — add candidates and can never drop
+  one. `CongestionLedger` now caches each net's exact resource set and retains by costing
+  `min(ripped-up units, retained units)`, with a bare clear when nothing is retained. That third
+  branch exists because measurement said so: always subtracting was **60–130% slower** than the
+  path it replaced at zero retention, and the regression is recorded in B-095 rather than designed
+  around quietly. Across 105 same-fixture A/B points — the congested synthetic channel, a
+  parallel-track sweep to 32 nets, and 16 real MIT-licensed corpus boards — every point leaves the
+  ledger byte-identical, the 78 with any retention are 11.8% to 99.94% faster (median 74.8%) at
+  equal or fewer exact operations, and the 27 with none are up to 22% slower on an operation that
+  costs single-digit microseconds. Proportion, stated plainly: the whole reconstruction is
+  microseconds against ~60 ms of routing, so this is a constant-factor win on a term that was
+  never the bottleneck — which is exactly what ADR-0073 predicted it would be. (#64)
+- **`conflict-window-v1`, a fourth declared rip-up literal.** It re-routes every conflicted net
+  plus every retained net whose copper lies within a fixed number of lattice cells of one. The
+  window is a *constant*, following TritonRoute's own search-and-repair schedule, which holds its
+  worker box at 7 gcells for all 65 iterations and varies only the offset and the effort inside —
+  a window that widened per pass would eventually be full rip-up again and stop being a bound. The
+  spatial index narrows the candidate nets and an exact integer rectangle predicate decides, so
+  the selected set depends on the stored envelopes alone and never on the index's cell size,
+  capacity, or fallbacks. On the congested fixture it converges in five iterations at the same
+  56,000,000 nm of copper as the default while making **22 router calls instead of 30**, where
+  `conflicted-only-v1` does not converge at all. A 16-cell window makes 30 calls again, because a
+  wide enough window *is* full rip-up; B-095 records that rather than implying the rule improves
+  monotonically. It is not the default: `all-nets-v1` stays, and one synthetic fixture is not a
+  criterion. (#64)
+
+#### Migration
+
+None. No published content address moves. `RipUpSlot.as_json()` emits the new window weight only
+for the rule that reads it, so all three pre-existing rip-up literals keep the exact canonical
+bytes they published before — `RipUpSlot()` is still
+`sha256:871de3d64827d267ed64443a705431c7a4a32fa35a5815b137d9abb23f73c71a` and `NegotiationPlan()`
+is still `sha256:b3d090edeeb861f0c215dd18420bdd5624a7f178f1034af25526457538d3eac0`, both pinned by
+test. A stored plan digest, rip-up slot digest, or plan-bound candidate identity still verifies.
+The no-plan coordinator path is byte-for-byte unchanged, and the committed B-087 artifact still
+reproduces from its harness.
+
 - **CopperMCP now has a routing benchmark on boards it did not author, and the first honest number
   from it is 59.83%.** A benchmark-only import seam converts tscircuit SimpleRouteJson problems
   into ordinary verified Board IR snapshots and ordinary route requests, so an external corpus

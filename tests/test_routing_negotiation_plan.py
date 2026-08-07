@@ -355,6 +355,7 @@ def test_declared_slot_rules_are_closed_enumerations() -> None:
         RipUpRule.ALL_NETS,
         RipUpRule.CONFLICTED_ONLY,
         RipUpRule.TOP_CONFLICT_ONLY,
+        RipUpRule.CONFLICT_WINDOW,
     }
 
 
