@@ -92,6 +92,50 @@ _ROOT_METADATA_HEADS = frozenset(
     }
 )
 _ROOT_ROUTING_HEADS = frozenset({"arc", "footprint", "segment", "via", "zone"})
+# KiCad's board-level grouping construct, and one of the root sections the board file format
+# enumerates ("Header, General, Layers, Setup, Properties, Nets, Footprints, Graphic Items, Images,
+# Tracks, Zones, Groups").  A group is organisation, not geometry: KiCad's own class comment reads
+# "A set of BOARD_ITEMs ... The group is transparent container - e.g., its position is derived from
+# the position of its members", `PCB_GROUP::SetLayer` is a no-op, and `IsOnCopperLayer` returns
+# false because "a group might have members on a copper layer, but isn't itself on any layer".
+# Every member is named by UUID and is a board object this adapter already converts on its own, so
+# an *unlocked* group adds no copper, no outline, no net and no constraint.  Ignoring one therefore
+# cannot shrink an obstacle or grow the routing room: both directions of error are untouched
+# because nothing geometric is read from it in the first place.  See
+# docs/research/kicad-board-groups-v1.md and ADR-0090.
+#
+# A *locked* group is a different construct and is refused.  `BOARD_ITEM::IsLocked()`
+# (pcbnew/board_item.cpp) begins `if( EDA_GROUP* group = GetParentGroup() ) { if(
+# group->AsEdaItem()->IsLocked() ) return true; }` -- so a locked group makes every member locked in
+# KiCad's own model, transitively through nested groups, without any member's own s-expression
+# saying so.  Lock is a hard authorization gate here, not a hint, and a member read as unlocked
+# would authorize a move KiCad forbids.  This is the one asymmetric direction in the construct, and
+# it is exactly the direction that must fail closed.  See `_check_root_group`.
+_ROOT_GROUP_HEAD = "group"
+# The child heads `PCB_IO_KICAD_SEXPR::format( const PCB_GROUP* )` can emit, after the quoted group
+# name: the group's own uuid, an optional `locked` flag, an optional design-block `lib_id`, and the
+# member list.  This is a *depth-one head* allowlist, not a full grammar -- it constrains which
+# children may appear, not what nests inside them.  That is sufficient here because no child of a
+# group carries geometry, connectivity or a constraint that Board IR models, with `locked` the one
+# exception, which is read and refused rather than allowlisted through.  A group carrying any other
+# head is a construct this adapter has not read, and is refused rather than assumed inert.
+_ROOT_GROUP_HEADS = frozenset({"lib_id", "locked", "members", "uuid"})
+# The only `locked` value a group may carry and still be read past.  KiCad writes the flag only
+# when the group *is* locked (`FormatBool`), so this is a defensive accept rather than an observed
+# form; every other value, `yes` included, refuses.
+_UNLOCKED_GROUP_VALUES = ("no",)
+# Root sections the KiCad board file format defines and Board IR v0.2 does not model, mapped to
+# the refusal each one earns.  The message is a *value from this table*, selected by an equality
+# test against the source token and never built from it, so a refusal can name the construct
+# without echoing one byte of the board -- the board's own text is untrusted data and a head is
+# board bytes like any other.  A head absent from this table is not a documented root section at
+# all; it is refused without being named, and the indexed locator still says where it sits.  The
+# table is deliberately partial: an entry is added when the construct is cited, not guessed.
+_UNMODELLED_ROOT_HEADS: dict[str, str] = {
+    "dimension": "root dimension objects are unsupported",
+    "image": "root embedded images are unsupported",
+    "property": "root board properties are unsupported",
+}
 # The only root graphics that may sit on ``Edge.Cuts``: one unfilled rectangle, or straight
 # segments that chain into exactly one closed simple loop.  Both carry the board outline as an
 # exact integer polygon whose vertices are drawn points, so neither can model more room than the
@@ -239,6 +283,9 @@ class _Converter:
         self.source_revision = f"sha256:{hashlib.sha256(payload).hexdigest()}"
         # Largest single roundrect radius rounding, in nanometres, measured rather than asserted.
         self.max_roundrect_rounding_nm = 0
+        # Root ``(group ...)`` expressions accepted as editor organisation and not modelled.
+        # Measured in the preflight and reported rather than dropped in silence.
+        self.root_group_count = 0
         if self.root.head != KICAD_PCB_ROOT_HEAD:
             self.fail(
                 FOREIGN_ROOT_DIAGNOSTIC_CODE,
@@ -377,16 +424,85 @@ class _Converter:
             )
         return values[0]
 
+    def _check_root_group(self, expression: SExpr, locator: str) -> None:
+        """Accept one *unlocked* root ``(group ...)`` as editor organisation, on a closed shape.
+
+        The acceptance argument is about what a group *is*, and it is conditional, so each
+        condition is checked and refuses rather than being assumed:
+
+        - **It is not locked.** This is the condition the first version of this change missed, and
+          it is the only one that carries a safety consequence. ``BOARD_ITEM::IsLocked()`` opens
+          with ``if( EDA_GROUP* group = GetParentGroup() ) { if( group->AsEdaItem()->IsLocked() )
+          return true; }``, so a locked group makes every member locked in KiCad's own model --
+          transitively, and without any member's own s-expression saying so. Lock is a hard
+          authorization gate in this project, not a hint: ``placement/solver.py`` will not select a
+          locked footprint as a subject, ``placement/legalizer.py`` raises "moving a locked
+          footprint is not authorized", and ``kicad_placement_patch.py`` refuses "locked footprint
+          movement is unsupported". Reading a locked group past would present its members at
+          ``locked=False`` and authorize a move KiCad forbids. That is the unsafe direction, so it
+          fails closed.
+        - **It carries no geometry of its own.** KiCad models a group as a "transparent container"
+          whose position "is derived from the position of its members", with a no-op ``SetLayer``
+          and an ``IsOnCopperLayer`` that is false by construction. Every member is named by UUID
+          and is itself a root object this adapter converts on its own terms. So the copper this
+          board contains, the outline it contains and the nets it contains are exactly the same
+          set with an unlocked group read as with it ignored. There is no quantity to round the
+          wrong way -- which is exactly why *lock* had to be found by reading KiCad's model rather
+          than by comparing two conversions, since a constraint that lives in a runtime derivation
+          is invisible to any equality between two outputs of the same reader.
+        - **Its children are only the heads KiCad's writer emits.** A group carrying an unknown
+          child is a construct that has not been read, and it refuses. Widening the root allowlist
+          by one head does not open it. This is a depth-one head check, not a full grammar: it
+          constrains which children may appear, not what nests inside them, which is sufficient
+          because no group child carries geometry or connectivity Board IR models, and the one
+          child that carries a constraint is read rather than allowlisted through.
+        - **It has the writer's leading name atom and no other positional semantics.** A bare
+          ``(group)`` or a group with stray trailing atoms is malformed for this adapter and
+          refuses rather than being waved through as inert.
+
+        What is *not* claimed is that the grouping survives an edit. A caller that moves one member
+        of a group the designer meant to keep together breaks the designer's intent, and Board IR
+        has no field in which to hold that intent. That is a modelling gap, so it is recorded --
+        ``ConversionResult.unmodelled_group_count`` -- rather than being silently dropped or
+        allowed to masquerade as a modelled constraint. See R-134 and ADR-0090.
+        """
+
+        self._reject_unknown_children(expression, _ROOT_GROUP_HEADS, locator)
+        self._validate_direct_atoms(
+            expression,
+            positional_atoms=1,
+            allowed=frozenset(),
+            locator=locator,
+        )
+        locked = self._values(expression, "locked", locator, minimum=1, maximum=1, required=False)
+        if locked and locked != _UNLOCKED_GROUP_VALUES:
+            self.fail(
+                "unsupported.construct",
+                "a locked group locks its members and is unsupported",
+                locator,
+                object_kind="group",
+            )
+
     def _semantic_preflight(self) -> None:
         """Reject physical semantics that the v0.2 model cannot preserve."""
 
-        for item in self.root.items[1:]:
+        groups = 0
+        for index, item in enumerate(self.root.items[1:]):
+            # The index is computed here, not read from the board, so it names the position of the
+            # offending child without echoing anything the board author controls.  Before this,
+            # every root refusal reported the constant ``kicad_pcb.unsupported`` and an operator
+            # could not locate the construct without a debugger.
+            root_locator = f"kicad_pcb.child[{index}]"
             if not isinstance(item, SExpr) or item.head is None:
                 self.fail(
-                    "syntax.invalid", "root expression contains a malformed item", "kicad_pcb"
+                    "syntax.invalid", "root expression contains a malformed item", root_locator
                 )
             head = item.head
             if head in _ROOT_METADATA_HEADS or head in _ROOT_ROUTING_HEADS:
+                continue
+            if head == _ROOT_GROUP_HEAD:
+                self._check_root_group(item, root_locator)
+                groups += 1
                 continue
             if head.startswith("gr_"):
                 layer = self._graphic_layer(item, "kicad_pcb.graphic")
@@ -411,9 +527,12 @@ class _Converter:
                 continue
             self.fail(
                 "unsupported.construct",
-                "root expression contains an unsupported semantic construct",
-                "kicad_pcb.unsupported",
+                _UNMODELLED_ROOT_HEADS.get(
+                    head, "root expression contains an unsupported semantic construct"
+                ),
+                root_locator,
             )
+        self.root_group_count = groups
 
         general = self._one(self.root, "general", "kicad_pcb", required=False)
         if general is not None:
@@ -2460,6 +2579,7 @@ class _Converter:
         return ConversionResult(
             snapshot=make_snapshot(content),
             max_roundrect_rounding_nm=self.max_roundrect_rounding_nm,
+            unmodelled_group_count=self.root_group_count,
         )
 
 

@@ -88,6 +88,16 @@ board. The schema is the field-level reference.
   The largest such round-up on a board is reported as `ConversionResult.max_roundrect_rounding_nm`.
   A ratio outside `(0, 0.5]`, or one whose rounded-up radius would exceed half the short side, is
   refused rather than clamped. See [ADR-0077](../adr/0077-roundrect-corner-radius-rounding.md).
+- An **unlocked** root `(group ...)` is editor organisation and is read past rather than refused.
+  KiCad models it as a "transparent container" whose position is derived from its members', with no
+  layer and no net, and every member is a root object converted on its own terms — so the copper,
+  outline and nets a document holds are the same set with the group read as without it. The
+  grouping is not modelled: Board IR has no membership relation, so the number of accepted and
+  unmodelled groups is reported as `ConversionResult.unmodelled_group_count`. A **locked** group is
+  refused, because `BOARD_ITEM::IsLocked()` derives every member's lock from it and Board IR would
+  otherwise convert those members as unlocked; lock is an authorization gate, not a hint. A group
+  carrying any child head outside KiCad's own writer vocabulary is refused rather than assumed
+  inert. See [ADR-0090](../adr/0090-root-level-board-groups.md).
 - IDs use type prefixes such as `layer:`, `net:`, `class:`, `footprint:`, `pad:`, `via:`,
   `segment:`, `arc:`, `zone:`, `keepout:`, `contour:`, and `rule:`. IDs and display names have
   different roles.

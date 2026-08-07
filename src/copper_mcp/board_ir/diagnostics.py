@@ -51,11 +51,23 @@ class ConversionResult:
     would refuse the board it exists to admit.  It is the same measured-rather-than-asserted
     quantity the SimpleRouteJson importer reports as ``max_outward_rounding_nm``: a caller that
     needs bit-exact pad geometry can read it and decline, instead of being told nothing.
+
+    ``unmodelled_group_count`` counts the root ``(group ...)`` expressions the KiCad adapter
+    accepted and did not model.  An *unlocked* group is editor organisation with no geometry, no
+    layer and no net, so it is read past rather than refused -- but Board IR has no field for
+    "these objects belong together", so a caller that moves one member breaks a grouping nothing
+    told it about.  It is a count for the same reason the rounding above is: a diagnostic would
+    refuse the board.  A *locked* group is refused instead, because KiCad derives every member's
+    lock from it, so this count never includes one.  Zero on every currently-saved board in the
+    surveyed corpus: the only groups found there today are in two ``pcbnew`` backup files, though
+    B-096 measured the same tree a day earlier when one board's live save still carried three.
+    See ADR-0090 and R-134.
     """
 
     snapshot: BoardIRSnapshot | None
     diagnostics: tuple[Diagnostic, ...] = ()
     max_roundrect_rounding_nm: int = 0
+    unmodelled_group_count: int = 0
 
     def __post_init__(self) -> None:
         if self.snapshot is not None and not isinstance(self.snapshot, BoardIRSnapshot):
@@ -70,6 +82,12 @@ class ConversionResult:
             or self.max_roundrect_rounding_nm < 0
         ):
             raise ValueError("conversion rounding must be a non-negative integer nanometre count")
+        if (
+            isinstance(self.unmodelled_group_count, bool)
+            or not isinstance(self.unmodelled_group_count, int)
+            or self.unmodelled_group_count < 0
+        ):
+            raise ValueError("conversion group count must be a non-negative integer")
         has_error = any(item.severity is Severity.ERROR for item in self.diagnostics)
         if has_error and self.snapshot is not None:
             raise ValueError("conversion errors cannot accompany a snapshot")
@@ -77,3 +95,5 @@ class ConversionResult:
             raise ValueError("a failed conversion must include an error diagnostic")
         if self.snapshot is None and self.max_roundrect_rounding_nm:
             raise ValueError("a failed conversion cannot report a rounding")
+        if self.snapshot is None and self.unmodelled_group_count:
+            raise ValueError("a failed conversion cannot report a group count")

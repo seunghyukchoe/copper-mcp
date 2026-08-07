@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0090**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0091**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -157,8 +157,9 @@ never silently widens it.
 | — | *0085 and 0086 are deliberately unused; see **Known gaps** above.* | — |
 | [0088](0088-complete-or-withheld-scene-kinds.md) | A truncated scene withholds whole kinds instead of emptying them | Accepted |
 | [0089](0089-region-scoped-obstacle-model.md) | Scope the obstacle model to a routing region, and split the budget that was counting three things | Accepted |
+| [0090](0090-root-level-board-groups.md) | A root board group is organisation, accepted and counted rather than modelled | Accepted |
 
-Eighty-eight numbers, eighty-three records, no duplicates — and `scripts/check_adr_numbers.py` now
+Ninety numbers, eighty-five records, no duplicates — and `scripts/check_adr_numbers.py` now
 proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and 0086 are
 unused; see **Known gaps** above. The three stray summary sentences that stood here until
 ADR-0088 landed were merge residue from the concurrent branches described above: Git accepted
