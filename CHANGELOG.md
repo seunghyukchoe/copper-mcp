@@ -8,6 +8,45 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- **A KiCad UUID that a board reuses is no longer treated as a Board IR identity.** Issue #116's
+  one undiagnosed `converted Board IR content failed semantic validation` refusal turned out to be
+  `identity.duplicate` on `geometry ID`, and 9 of the 12 real boards surveyed carry the same
+  reuse — always footprints and their pads, never segments, arcs, vias or zones. On one board 113
+  footprints share just 11 UUIDs, 45 distinct resistors among them: the value names a footprint
+  *type*, not an instance. The uniqueness rule was right and is untouched — Board IR footprints own
+  pads by ID and every patch names its target by ID — so the fix is in the converter, which was
+  asserting an identity the format never promised. KiCad's specification says a UUID *should be*
+  globally unique, which is an expectation of the writer and grants a reader no key, and KiCad's
+  own copy-paste and re-link workflows are tracked as producing duplicates. A UUID used once still
+  becomes that object's ID exactly as before, so no content address moves. A UUID used by two or
+  more objects of one kind is an identity of none of them: they all fall back together to the
+  existing revision-derived name, because letting the first claimant keep the native one would
+  assert precisely the identity the file cannot support. Write-back stays refused, since every
+  source-preserving patch path already rejects a snapshot containing a derived identity — a board
+  that names 45 resistors alike cannot be patched by that name without risking the wrong one — so
+  this unblocks inspection and leaves mutation closed. ([D-165](docs/ledgers/decision-ledger.md),
+  [R-123](docs/ledgers/risk-register.md),
+  [KiCad UUID uniqueness](docs/research/kicad-uuid-uniqueness-v1.md), #116)
+- A semantic-validation refusal now names the invariant it failed instead of only saying that one
+  failed. `converted Board IR content failed semantic validation` was a wrapper that identified no
+  rule and no construct, which is what left #116's survey with an entry nobody could act on; it now
+  carries the validator's own message. Naming the rule is not echoing the board: every Board IR
+  validation message is a fixed string chosen by `copper_mcp.board_ir`, and the two that were built
+  from an object ID are rebuilt so the board-derived text travels in the locator the refusal drops.
+  ([D-165](docs/ledgers/decision-ledger.md), #116)
+- Copper saved on KiCad's net 0 — stitching vias and orphaned tracks, which KiCad 10 writes as
+  `(net "")` — no longer refuses the whole document with `via has no routable net`, the largest
+  single cause in the issue #116 real-board survey (queued on 7 of 12 boards, which carry 115
+  netless vias and 2,687 netless track segments between them). Such copper converts as an
+  obstacle with no connectivity contribution: `net_id` is `None` on the `Via`, `Segment`, or
+  `Arc`, the item never matches any request net, its clearance is the widest class on the board,
+  and no already-connected claim can pass through it — pinned by mutation-checked router tests
+  in both the via-join and segment-attachment directions. All three saved spellings of "no net"
+  (`(net "")`, `(net 0)`, `(net 0 "")`) resolve identically; a negative ordinal is now an
+  explicit typed `net.unknown` refusal, and a netless via is still held to every geometric rule.
+  Board IR, codec, JSON schema 0.2.0, and scene contracts widen `net_id` to nullable in place —
+  strictly additive, with every existing content address byte-identical (ADR-0081, D-159,
+  R-120, #119).
 - Board metadata that KiCad writes into essentially every real board no longer refuses the whole
   document. `solder_mask_min_width` joins `pad_to_mask_clearance` as accepted setup metadata — it
   bounds mask slivers, not copper — and `descr` and `tags`, the library documentation strings
@@ -85,7 +124,7 @@ All notable changes are documented here. The format follows
 - **The negotiated coordinator stops rebuilding what it just decided to keep, and gets a rip-up
   window that is actually bounded.** ADR-0073 recorded its own gap honestly: every retained
   candidate was re-added to the congestion ledger from scratch each pass, re-deriving its unit
-  lattice resources from geometry, so reconstruction was linear in the *retained* set. ADR-0078
+  lattice resources from geometry, so reconstruction was linear in the *retained* set. ADR-0081
   closes it. A new `IncrementalSpatialIndex` is a uniform grid whose cell size is fixed at
   construction — that one choice makes an entry's cells a pure function of its bounds, so "mutate
   in place" and "rebuild from the survivors" are the same computation, and incremental-equals-
@@ -97,7 +136,7 @@ All notable changes are documented here. The format follows
   one. `CongestionLedger` now caches each net's exact resource set and retains by costing
   `min(ripped-up units, retained units)`, with a bare clear when nothing is retained. That third
   branch exists because measurement said so: always subtracting was **60–130% slower** than the
-  path it replaced at zero retention, and the regression is recorded in B-091 rather than designed
+  path it replaced at zero retention, and the regression is recorded in B-094 rather than designed
   around quietly. Across 105 same-fixture A/B points — the congested synthetic channel, a
   parallel-track sweep to 32 nets, and 16 real MIT-licensed corpus boards — every point leaves the
   ledger byte-identical, the 78 with any retention are 11.8% to 99.94% faster (median 74.8%) at
@@ -115,7 +154,7 @@ All notable changes are documented here. The format follows
   capacity, or fallbacks. On the congested fixture it converges in five iterations at the same
   56,000,000 nm of copper as the default while making **22 router calls instead of 30**, where
   `conflicted-only-v1` does not converge at all. A 16-cell window makes 30 calls again, because a
-  wide enough window *is* full rip-up; B-091 records that rather than implying the rule improves
+  wide enough window *is* full rip-up; B-094 records that rather than implying the rule improves
   monotonically. It is not the default: `all-nets-v1` stays, and one synthetic fixture is not a
   criterion. (#64)
 

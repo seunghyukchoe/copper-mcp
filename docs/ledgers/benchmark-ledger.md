@@ -372,7 +372,7 @@ result or a general performance comparison.
 | Claim | **None.** The artifact classifies itself `exploratory sweep / no quality claim`. The sweep was not predeclared, the fixtures are small and synthetic, and there is no held-out corpus. Qu et al. measured 1.95% relative deviation in rule violations but 0.008% in wirelength across 300 random net orders on a real benchmark, so the 29% wirelength swing seen here from ordering alone is evidence about this fixture, not about routing. |
 | Interpretation | This measures that the three declared slots are separable, deterministic, digest-bound, and behaviorally real — including where they are worse than the default. It does not establish that any slot combination should become the default, and it makes no KiCad DRC, electrical, multilayer, via, fabrication, apply, whole-board, scaling, or FreeRouting-parity claim. Via counts are structurally zero because the negotiated coordinator is single-layer by contract. |
 
-### B-091 — Incremental congestion-ledger retention and the bounded rip-up window
+### B-094 — Incremental congestion-ledger retention and the bounded rip-up window
 
 | Field | Recorded evidence |
 |---|---|
