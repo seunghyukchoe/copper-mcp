@@ -28,11 +28,12 @@ concurrent branches that were still open when ADR-0084 landed: that branch took 
 of them rather than the next one, which is the rule the collision that produced 0066–0068 exists to
 enforce. ADR-0081 has since landed from its own branch and is no longer a gap; 0082 and 0083 remain
 spent. 0085 and 0086 went the same way — two branches were open alongside ADR-0088 when it landed, so
-it took a number above both rather than the next one. 0090 is the same again: it was claimed by a
-branch still open when ADR-0091 (issue #124) landed, so that record took the number above it. Every
-unused number is deliberately left unused rather than recycled, so that an external reference
-resolves to nothing rather than to an unrelated decision. If a later branch lands its own record in
-one of these gaps, this note is what it corrects — as the branch holding 0090 is expected to.
+it took a number above both rather than the next one. 0090 was claimed the same way by a branch
+still open when ADR-0091 (issue #124) landed, so that record took the number above it — but
+ADR-0090 has since landed from its own branch and is no longer a gap. Every unused number is
+deliberately left unused rather than recycled, so that an external reference resolves to nothing
+rather than to an unrelated decision. If a later branch lands its own record in one of these gaps,
+this note is what it corrects, exactly as it just did for 0090.
 
 Three overlapping copies of this paragraph stood here until ADR-0091 landed, the first truncated
 mid-sentence and one of them contradicting the next line about ADR-0081. They were merge residue
@@ -151,10 +152,11 @@ never silently widens it.
 | — | *0085 and 0086 are deliberately unused; see **Known gaps** above.* | — |
 | [0088](0088-complete-or-withheld-scene-kinds.md) | A truncated scene withholds whole kinds instead of emptying them | Accepted |
 | [0089](0089-region-scoped-obstacle-model.md) | Scope the obstacle model to a routing region, and split the budget that was counting three things | Accepted |
+| [0090](0090-root-level-board-groups.md) | A root board group is organisation, accepted and counted rather than modelled | Accepted |
 | [0091](0091-attaching-pad-zone-connect-overrides.md) | Accept the pad zone-connection overrides that attach, refuse the one that detaches | Accepted |
 
-Ninety-one numbers, eighty-five records, no duplicates — and `scripts/check_adr_numbers.py` now
-proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085, 0086 and 0090
+Ninety-one numbers, eighty-six records, no duplicates — and `scripts/check_adr_numbers.py` now
+proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and 0086
 are unused; see **Known gaps** above. The three stray summary sentences that stood here until
 ADR-0088 landed were merge residue from the concurrent branches described above: Git accepted
 three different rewrites of one paragraph because they did not overlap textually.
@@ -243,4 +245,5 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0087: Name an assembled Edge.Cuts outline by the sorted set of its members' own uuids](0087-composite-native-identity-for-assembled-outlines.md)
 - [ADR-0088: A truncated scene withholds whole kinds instead of emptying them](0088-complete-or-withheld-scene-kinds.md)
 - [ADR-0089: Scope the obstacle model to a routing region, and split the budget that was counting three things](0089-region-scoped-obstacle-model.md)
+- [ADR-0090: A root board group is organisation, accepted and counted rather than modelled](0090-root-level-board-groups.md)
 - [ADR-0091: Accept the pad zone-connection overrides that attach, refuse the one that detaches](0091-attaching-pad-zone-connect-overrides.md)

@@ -17,6 +17,8 @@ from copper_mcp.board_ir import (
     BoardIRContent,
     BoardIRValidationError,
     ConstraintSet,
+    ConversionResult,
+    Diagnostic,
     DifferentialPairRule,
     Footprint,
     FootprintSide,
@@ -34,6 +36,7 @@ from copper_mcp.board_ir import (
     PointNM,
     Ring,
     Segment,
+    Severity,
     SourceInfo,
     Via,
     Zone,
@@ -881,3 +884,37 @@ def test_board_ir_v0_2_accepts_orthogonal_courtyards_at_every_quarter_turn() -> 
             )
         )
         assert decode_snapshot_json(encode_snapshot(snapshot)) == snapshot
+
+
+def test_a_conversion_group_count_must_be_a_non_negative_integer() -> None:
+    """The unmodelled-group count is a count, and a bool is not one.
+
+    ``isinstance(True, int)`` is true in Python, so a validator that only tested ``int`` would
+    accept ``True`` as "one group" and ``False`` as "no groups". The same trap the rounding
+    beside it avoids.
+    """
+
+    snapshot = make_snapshot(sample_content())
+
+    assert ConversionResult(snapshot=snapshot, unmodelled_group_count=0).unmodelled_group_count == 0
+    assert ConversionResult(snapshot=snapshot, unmodelled_group_count=3).unmodelled_group_count == 3
+    for bad in (True, False, -1, 1.0, "1", None):
+        with pytest.raises(ValueError, match="group count"):
+            ConversionResult(snapshot=snapshot, unmodelled_group_count=bad)  # type: ignore[arg-type]
+
+
+def test_a_refused_conversion_cannot_report_a_group_count() -> None:
+    """A refusal converted nothing, so it accepted no group and must not claim one."""
+
+    refusal = (
+        Diagnostic(
+            code="unsupported.construct",
+            severity=Severity.ERROR,
+            message="root expression contains an unsupported semantic construct",
+            source_locator="kicad_pcb.child[3]",
+        ),
+    )
+
+    assert ConversionResult(snapshot=None, diagnostics=refusal).unmodelled_group_count == 0
+    with pytest.raises(ValueError, match="cannot report a group count"):
+        ConversionResult(snapshot=None, diagnostics=refusal, unmodelled_group_count=1)
