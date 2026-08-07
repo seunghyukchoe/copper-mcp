@@ -485,6 +485,16 @@ class _Converter:
                             )
                         continue
                     if self._is_routing_layer(layer):
+                        if (
+                            layer != "Edge.Cuts"
+                            and head == "fp_poly"
+                            and children(footprint, "net_tie_pad_groups")
+                        ):
+                            # Declared net-tie copper: the polygon *is* the deliberate short
+                            # between the tied pad groups, and it converts -- fully validated
+                            # -- in `_footprints_and_pads` rather than being refused here as a
+                            # stray drawing. See `_net_tie_copper_segments` and ADR-0082.
+                            continue
                         self._refuse_footprint_routing_graphic(footprint, layer, locator)
                     continue
                 if head not in _FOOTPRINT_METADATA_HEADS:
@@ -504,14 +514,14 @@ class _Converter:
         it is an obstacle, and the one outcome forbidden here is dropping it. What differs is the
         reason, and the three reasons ask for different fixes:
 
-        - **A net tie.** `net_tie_pad_groups` declares that "nets attached to pads within a single
-          pad-group are allowed to short" (KiCad S-expression format), and the copper polygon on
-          `F.Cu`/`B.Cu` is the short. The obstacle is not the difficulty: Board IR models nets as
-          disjoint, and this copper belongs to two at once, so no envelope -- conservative or exact
-          -- expresses it. Modelling it as an obstacle for both nets would forbid the very
-          connection the part exists to make. The adapter already refuses net ties in
-          `_footprints_and_pads`, but the preflight runs first, so without this the refusal named a
-          drawing on the wrong layer instead of a deliberate short between two nets.
+        - **A net-tie primitive that is not a filled polygon.** `net_tie_pad_groups` declares that
+          "nets attached to pads within a single pad-group are allowed to short" (KiCad
+          S-expression format), and the copper on `F.Cu`/`B.Cu` is the short. A net-tie `fp_poly`
+          no longer reaches this method: the preflight passes it through and
+          `_net_tie_copper_segments` converts it as a netless obstacle with no connectivity
+          contribution (ADR-0082, the same contract net-0 copper has under ADR-0078). Every other
+          primitive a net-tie footprint could draw its short with -- `fp_line`, `fp_arc`,
+          `fp_rect`, `fp_circle` -- is unobserved on real boards and refuses here by name.
         - **`Edge.Cuts`.** A footprint graphic contributing to the board outline is the opposite
           direction of error from copper: the outline is routing *room* and may only be
           under-approximated (ADR-0076), so it is a separate question from an obstacle and is
@@ -532,7 +542,7 @@ class _Converter:
         if children(footprint, "net_tie_pad_groups"):
             self.fail(
                 "unsupported.construct",
-                "net-tie footprint copper is unsupported in Board IR adapter v0.2",
+                "net-tie copper must be a filled polygon; other primitives are unsupported",
                 f"{locator}.graphic",
                 object_kind="footprint",
             )
@@ -1464,18 +1474,67 @@ class _Converter:
                         object_kind="footprint",
                     )
 
-    def _footprints_and_pads(self) -> tuple[tuple[Footprint, ...], tuple[Pad, ...]]:
+    def _net_tie_pad_group(self, footprint: SExpr, locator: str) -> tuple[str, str] | None:
+        """Return the single two-pad net-tie group, or None when the footprint declares none.
+
+        KiCad's format defines ``net_tie_pad_groups`` as "a space-separated list of quoted
+        strings, each containing a comma-separated list of pad names. Nets attached to pads
+        within a single pad-group are allowed to short." The one real construct measured (the
+        issue #116 survey's `NetTie-2_THT_Pad1.0mm`) declares exactly one group of exactly two
+        pads, written ``"1, 2"`` — with a space after the comma, which KiCad's own reader
+        tolerates, so names are stripped of surrounding whitespace here. Every wider shape —
+        several groups, a group of one or of three or more pads — is unobserved and refuses
+        typed rather than being modelled on a guess. See
+        docs/research/kicad-net-tie-modelling-v1.md and ADR-0082.
+        """
+
+        declarations = children(footprint, "net_tie_pad_groups")
+        if not declarations:
+            return None
+        if len(declarations) > 1:
+            self.fail(
+                "syntax.duplicate_field",
+                "footprint declares net_tie_pad_groups more than once",
+                locator,
+                object_kind="footprint",
+            )
+        try:
+            values = atoms(declarations[0])
+        except SExprError as error:
+            self.fail(error.code, error.message, f"byte:{error.offset}")
+        if len(values) != 1:
+            self.fail(
+                "unsupported.construct",
+                "net-tie footprints with more than one pad group are unsupported",
+                locator,
+                object_kind="footprint",
+            )
+        names = tuple(name.strip() for name in values[0].split(","))
+        if len(names) != 2:
+            self.fail(
+                "unsupported.construct",
+                "net-tie pad groups of other than two pads are unsupported",
+                locator,
+                object_kind="footprint",
+            )
+        if "" in names or names[0] == names[1]:
+            self.fail(
+                "syntax.invalid",
+                "net-tie pad group is malformed",
+                locator,
+                object_kind="footprint",
+            )
+        return (names[0], names[1])
+
+    def _footprints_and_pads(
+        self,
+    ) -> tuple[tuple[Footprint, ...], tuple[Pad, ...], tuple[Segment, ...]]:
         footprints: list[Footprint] = []
         pads: list[Pad] = []
+        tie_segments: list[Segment] = []
         for footprint_index, footprint in enumerate(children(self.root, "footprint")):
             footprint_locator = f"kicad_pcb.footprint[{footprint_index}]"
-            if children(footprint, "net_tie_pad_groups"):
-                self.fail(
-                    "unsupported.construct",
-                    "net-tie footprints are unsupported in Board IR adapter v0.2",
-                    footprint_locator,
-                    object_kind="footprint",
-                )
+            tie_group = self._net_tie_pad_group(footprint, footprint_locator)
             jumper_values = self._values(
                 footprint,
                 "duplicate_pad_numbers_are_jumpers",
@@ -1505,6 +1564,9 @@ class _Converter:
             footprint_locked = self._locked(footprint, positional_atoms=1)
             footprint_id = self._identity("footprint", footprint, footprint_locator)
             owned_pad_ids: list[str] = []
+            # Copper layers per pad number, intersected across duplicates, so a net-tie pad
+            # group resolves against the layers *every* pad of that number actually occupies.
+            pad_layers_by_number: dict[str, frozenset[str]] = {}
             for pad_index, pad in enumerate(children(footprint, "pad")):
                 locator = f"{footprint_locator}.pad[{pad_index}]"
                 self._reject_unknown_children(
@@ -1669,6 +1731,33 @@ class _Converter:
                 )
                 pads.append(pad_item)
                 owned_pad_ids.append(pad_item.id)
+                if number:
+                    layer_set = frozenset(pad_item.layer_ids)
+                    previous = pad_layers_by_number.get(number)
+                    pad_layers_by_number[number] = (
+                        layer_set if previous is None else previous & layer_set
+                    )
+            if tie_group is not None:
+                missing = [name for name in tie_group if name not in pad_layers_by_number]
+                if missing:
+                    self.fail(
+                        "syntax.invalid",
+                        "net-tie pad group references a pad the footprint does not carry",
+                        footprint_locator,
+                        object_kind="footprint",
+                    )
+                tie_segments.extend(
+                    self._net_tie_copper_segments(
+                        footprint,
+                        footprint_locator,
+                        origin=origin,
+                        turn=turn,
+                        footprint_locked=footprint_locked,
+                        shared_layer_ids=(
+                            pad_layers_by_number[tie_group[0]] & pad_layers_by_number[tie_group[1]]
+                        ),
+                    )
+                )
             courtyards, courtyard_circles = self._courtyards(
                 footprint,
                 footprint_locator=footprint_locator,
@@ -1688,7 +1777,184 @@ class _Converter:
                     locked=footprint_locked,
                 )
             )
-        return tuple(footprints), tuple(pads)
+        return tuple(footprints), tuple(pads), tuple(tie_segments)
+
+    def _net_tie_copper_segments(
+        self,
+        footprint: SExpr,
+        footprint_locator: str,
+        *,
+        origin: PointNM,
+        turn: int,
+        footprint_locked: bool,
+        shared_layer_ids: frozenset[str],
+    ) -> tuple[Segment, ...]:
+        """Convert a net tie's copper polygons into netless obstacle segments.
+
+        The polygon is the deliberate short `net_tie_pad_groups` declares, and it plays two
+        roles that the direction-of-error rules resolve separately (ADR-0082):
+
+        - **Obstacle: over-approximate.** The copper is real for every net, including the two
+          it ties, so it becomes a full-width `Segment` along the rectangle's long midline.
+          The modelled stadium contains the drawn rectangle exactly — the router's
+          ceil-rounded half width covers an odd short side, and the end caps extend past the
+          short edges — so the over-approximation is the caps plus at most one nanometre of
+          centring slack, and it can only refuse a route, never permit one through the tie.
+        - **Connectivity: no claim.** ``net_id`` is ``None``, the same contract net-0 copper
+          has (ADR-0078): the tied nets are deliberately *under*-approximated as unconnected
+          through the tie, because a joined-nets claim could not be test-bound without
+          verifying the polygon actually bridges both pad groups. The identity is
+          revision-derived on purpose — an `fp_poly` is not a KiCad track, so its UUID names
+          no `Segment` — and every source-preserving patch path already refuses a snapshot
+          containing a derived identity, which is what keeps the short unbreakable by
+          write-back (ADR-0026).
+
+        Each polygon must be filled, unstroked, on one declared copper layer that every pad
+        of the tied group occupies, and an axis-aligned rectangle after the footprint
+        transform. Only the *corner set* is checked: the four distinct corners of a rectangle
+        admit reorderings whose even-odd fill is a subset of the rectangle, and a subset is
+        covered by the same over-approximating obstacle.
+        """
+
+        segments: list[Segment] = []
+        copper_index = 0
+        for item in footprint.items[1:]:
+            if not isinstance(item, SExpr) or item.head != "fp_poly":
+                continue
+            probe_locator = f"{footprint_locator}.net_tie_copper[{copper_index}]"
+            layer_name = self._graphic_layer(item, probe_locator)
+            if not self._is_routing_layer(layer_name) or layer_name == "Edge.Cuts":
+                continue
+            locator = probe_locator
+            copper_index += 1
+            layer = self.layer_by_name.get(layer_name)
+            if layer is None:
+                self.fail(
+                    "unknown.layer",
+                    "net-tie copper must name one declared copper layer",
+                    locator,
+                    object_kind="footprint",
+                )
+            if layer.id not in shared_layer_ids:
+                self.fail(
+                    "unsupported.construct",
+                    "net-tie copper lies on a copper layer its tied pads do not occupy",
+                    locator,
+                    object_kind="footprint",
+                )
+            self._reject_unknown_children(
+                item,
+                frozenset({"fill", "layer", "locked", "pts", "stroke", "tstamp", "uuid"}),
+                locator,
+            )
+            self._validate_direct_atoms(
+                item, positional_atoms=0, allowed=frozenset({"locked"}), locator=locator
+            )
+            fill = self._values(item, "fill", locator, minimum=1, maximum=1)
+            if fill != ("yes",):
+                self.fail(
+                    "unsupported.construct",
+                    "net-tie copper polygon must be filled",
+                    locator,
+                    object_kind="footprint",
+                )
+            stroke = self._one(item, "stroke", locator, required=False)
+            if stroke is not None:
+                self._reject_unknown_children(
+                    stroke, frozenset({"type", "width"}), f"{locator}.stroke"
+                )
+                stroke_width = self._values(
+                    stroke, "width", f"{locator}.stroke", minimum=1, maximum=1
+                )
+                if self._mm(stroke_width[0], f"{locator}.stroke.width") != 0:
+                    self.fail(
+                        "unsupported.construct",
+                        "net-tie copper polygon with a stroked outline is unsupported",
+                        locator,
+                        object_kind="footprint",
+                    )
+            points_expression = self._one(item, "pts", locator)
+            assert points_expression is not None
+            self._reject_unknown_children(points_expression, frozenset({"xy"}), f"{locator}.pts")
+            self._validate_direct_atoms(
+                points_expression,
+                positional_atoms=0,
+                allowed=frozenset(),
+                locator=f"{locator}.pts",
+            )
+            point_expressions = children(points_expression, "xy")
+            if len(point_expressions) > 5:
+                self.fail(
+                    "unsupported.construct",
+                    "net-tie copper polygon must be an axis-aligned rectangle",
+                    locator,
+                    object_kind="footprint",
+                )
+            local_points: list[PointNM] = []
+            for index, point in enumerate(point_expressions):
+                values = atoms(point)
+                if len(values) != 2:
+                    self.fail(
+                        "syntax.invalid",
+                        "net-tie copper polygon point is malformed",
+                        f"{locator}.point[{index}]",
+                    )
+                local_points.append(
+                    PointNM(
+                        self._mm(values[0], f"{locator}.point[{index}].x"),
+                        self._mm(values[1], f"{locator}.point[{index}].y"),
+                    )
+                )
+            if len(local_points) == 5 and local_points[0] == local_points[-1]:
+                local_points.pop()
+            board_points = tuple(
+                self._transform(point, origin, turn, locator) for point in local_points
+            )
+            corner_xs = {point.x for point in board_points}
+            corner_ys = {point.y for point in board_points}
+            if (
+                len(local_points) != 4
+                or len(set(board_points)) != 4
+                or len(corner_xs) != 2
+                or len(corner_ys) != 2
+            ):
+                self.fail(
+                    "unsupported.construct",
+                    "net-tie copper polygon must be an axis-aligned rectangle",
+                    locator,
+                    object_kind="footprint",
+                )
+            x_min, x_max = min(corner_xs), max(corner_xs)
+            y_min, y_max = min(corner_ys), max(corner_ys)
+            if x_max - x_min >= y_max - y_min:
+                width_nm = y_max - y_min
+                midline = (y_min + y_max) // 2
+                start = PointNM(x_min, midline)
+                end = PointNM(x_max, midline)
+            else:
+                width_nm = x_max - x_min
+                midline = (x_min + x_max) // 2
+                start = PointNM(midline, y_min)
+                end = PointNM(midline, y_max)
+            segments.append(
+                Segment(
+                    id=self._derived_identity("segment", locator),
+                    net_id=None,
+                    layer_id=layer.id,
+                    start=start,
+                    end=end,
+                    width_nm=width_nm,
+                    locked=footprint_locked or self._locked(item),
+                )
+            )
+        if not segments:
+            self.fail(
+                "unsupported.construct",
+                "net-tie footprint carries no supported tie copper",
+                footprint_locator,
+                object_kind="footprint",
+            )
+        return tuple(segments)
 
     def _segments(self) -> tuple[Segment, ...]:
         result: list[Segment] = []
@@ -2376,7 +2642,7 @@ class _Converter:
         nets = self._nets()
         constraints = self._constraints(nets)
         zones, keepouts = self._zones_and_keepouts()
-        footprints, pads = self._footprints_and_pads()
+        footprints, pads, tie_segments = self._footprints_and_pads()
         source_info = SourceInfo(
             format="kicad_pcb",
             revision=self.source_revision,
@@ -2385,7 +2651,10 @@ class _Converter:
         )
         outline = self._outline()
         vias = self._vias()
-        segments = self._segments()
+        # Net-tie copper joins the segment collection here rather than in `_segments`, which
+        # reads only root `segment` expressions; canonicalization orders by ID, so placement
+        # in this tuple carries no meaning.
+        segments = self._segments() + tie_segments
         arcs = self._arcs()
         # Every identity is now assigned, so reuse is measurable rather than guessed.  Re-running
         # the whole conversion with the measured set is what keeps the fallback symmetric: all the

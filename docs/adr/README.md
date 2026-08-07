@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0081**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0083**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -127,10 +127,11 @@ never silently widens it.
 | [0078](0078-netless-copper-as-obstacle.md) | Net-0 copper is an obstacle with no connectivity contribution | Accepted |
 | [0079](0079-discriminated-configurable-parse-budgets.md) | Make the structural parse budgets operator-settable, and name the one that refused | Accepted |
 | [0080](0080-chamfered-and-circular-courtyards.md) | Bracket chamfered and circular courtyards instead of widening them | Accepted |
+| [0082](0082-net-tie-copper-as-netless-obstacle.md) | Net-tie copper is a netless obstacle, and the tie is never a connectivity claim | Accepted |
 
-Seventy-seven numbers, seventy-six records, no duplicates — and `scripts/check_adr_numbers.py` now
-proves that last clause on every run rather than asserting it. Only 0027 is unused; see
-**Known gap** above.
+`scripts/check_adr_numbers.py` proves the no-duplicates clause on every run rather than asserting
+it. 0027 is permanently unused (see **Known gap** above), and 0081 is reserved by the open PR
+#108 so that both branches can land in either order.
 
 ## Reading order
 
@@ -210,3 +211,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0078: Net-0 copper is an obstacle with no connectivity contribution](0078-netless-copper-as-obstacle.md)
 - [ADR-0079: Make the structural parse budgets operator-settable, and name the one that refused](0079-discriminated-configurable-parse-budgets.md)
 - [ADR-0080: Bracket chamfered and circular courtyards instead of widening them](0080-chamfered-and-circular-courtyards.md)
+- [ADR-0082: Net-tie copper is a netless obstacle, and the tie is never a connectivity claim](0082-net-tie-copper-as-netless-obstacle.md)

@@ -2542,27 +2542,40 @@ def _with_footprint_graphic(layer: bytes, *, net_tie: bool = False) -> bytes:
     return _insert_before(SUBSET_BOARD.read_bytes(), b'    (pad "1" smd roundrect', addition)
 
 
-def test_net_tie_copper_refuses_as_a_net_tie_rather_than_as_a_stray_graphic() -> None:
-    """The refusal must name the deliberate short, not the layer the copper happens to sit on.
+def test_net_tie_copper_converts_as_a_netless_obstacle_segment() -> None:
+    """A declared net tie now converts; its copper is an obstacle that claims no connection.
 
-    A `NetTie-2_THT_Pad1.0mm` joining two ground nets was the first refusal on a real board, and
-    it reported `footprint graphic on copper or Edge.Cuts is unsupported` - which reads as a
-    stray drawing left on a copper layer, a thing the user would go looking for and not find.
-    The adapter already refuses net ties, correctly and for a reason no envelope can fix: KiCad
-    declares that "nets attached to pads within a single pad-group are allowed to short", and
-    Board IR models nets as disjoint, so this copper belongs to two nets at once. The preflight
-    simply ran first and answered with the less specific fact.
+    D-162 recorded why this used to refuse and left the modelling open; ADR-0082 answers it.
+    KiCad declares that "nets attached to pads within a single pad-group are allowed to short",
+    and Board IR models nets as disjoint, so the shorting polygon belongs to two nets at once.
+    The two roles the copper plays resolve separately under the direction-of-error rules: as an
+    obstacle it over-approximates (a netless full-width segment whose stadium contains the drawn
+    rectangle), and as connectivity it under-approximates (``net_id None`` — the tied nets are
+    never claimed connected through it). The identity is revision-derived on purpose, which is
+    what keeps every write-back path refused (ADR-0026): a patch cannot break the short.
     """
 
-    result = parse_kicad_bytes(
+    snapshot = parse_success(
         _with_footprint_graphic(b"F.Cu", net_tie=True), constraint_profile(assign_signal=True)
     )
+    content = snapshot.content
 
-    assert result.snapshot is None
-    diagnostic = result.diagnostics[0]
-    assert diagnostic.code == "unsupported.construct"
-    assert diagnostic.message == "net-tie footprint copper is unsupported in Board IR adapter v0.2"
-    assert diagnostic.object_kind == "footprint"
+    tie = [segment for segment in content.segments if ":derived:" in segment.id]
+    assert len(tie) == 1
+    # The footprint sits at (10, 10) turned 90 degrees, so the local (0, -0.65)..(2.6, 0.65)
+    # rectangle lands at (9.35, 7.4)..(10.65, 10): a vertical 1.3 mm-wide bar. The modelled
+    # segment is its long midline at full width — the drawn rectangle is contained in the
+    # segment's stadium, over-approximated only by the end caps.
+    assert tie[0].net_id is None
+    assert tie[0].layer_id == "layer:F.Cu"
+    assert tie[0].start == PointNM(10_000_000, 7_400_000)
+    assert tie[0].end == PointNM(10_000_000, 10_000_000)
+    assert tie[0].width_nm == 1_300_000
+    # The tied nets stay disjoint: no net merging, no adopted net, no connectivity claim.
+    assert {net.name for net in content.nets} == {"GND", "SIG_µ"}
+    # And the board stays write-back refused: the derived identity is load-bearing.
+    with pytest.raises(KiCadPlacementPatchError):
+        _require_native_geometry_identities(snapshot)
 
 
 @pytest.mark.parametrize("layer", [b"F.Cu", b"B.Cu", b"*.Cu"])

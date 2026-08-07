@@ -88,6 +88,28 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **Net-tie footprints convert: the declared short's copper is a netless obstacle, and the tie
+  is never a connectivity claim.** KiCad's `net_tie_pad_groups` declares that "nets attached to
+  pads within a single pad-group are allowed to short", and the footprint's filled copper
+  polygon is that short — copper belonging to two disjoint nets at once, which D-162 recorded as
+  the one refusal no envelope could lift because its two roles point in opposite safe
+  directions. ADR-0082 resolves the roles separately: as an **obstacle** each tie rectangle
+  becomes a full-width `Segment` with `net_id None` along its long midline — a strict superset
+  of the drawn copper, so a third net can never route through the tie and even the tied nets are
+  kept out of it (over-refusal is the accepted direction) — and as **connectivity** nothing is
+  claimed, because a joined-nets edge cannot be test-bound from the file alone, so the tied nets
+  deliberately report unconnected through the tie exactly as net-0 stitching copper behaves
+  (ADR-0078). The identities are revision-derived on purpose — an `fp_poly` is not a track, so
+  its UUID names no segment — and that keeps every write-back path refused (ADR-0026): no patch
+  can separate the tie copper from the pads it shorts. The accepted subset is exactly the
+  surveyed construct (one group of two existing distinct pad names; filled, unstroked,
+  axis-aligned rectangular polygons on copper layers the tied pads occupy); ten malformed-tie
+  variants each keep their own typed refusal, and the third-net guard is pinned with a
+  no-tie mutation control. No schema or digest change — boards without net ties are
+  byte-identical, and the committed golden digests pin that.
+  ([ADR-0082](docs/adr/0082-net-tie-copper-as-netless-obstacle.md),
+  [D-167](docs/ledgers/decision-ledger.md), [R-124](docs/ledgers/risk-register.md),
+  [KiCad net-tie modelling](docs/research/kicad-net-tie-modelling-v1.md), #116)
 - **Chamfered and circular courtyards convert, and their legality claims stay honest.** The
   #116 survey's two courtyard causes — `courtyard edges must be non-zero and axis-aligned`
   (measured to be exact 45-degree electrolytic-capacitor chamfers, not the hypothesised rotated
