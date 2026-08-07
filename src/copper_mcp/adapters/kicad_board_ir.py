@@ -137,12 +137,25 @@ _FOOTPRINT_METADATA_HEADS = frozenset(
         "net_tie_pad_groups",
         "pad",
         "path",
+        # KiCad's placement status flag: "the optional `placed` token defines a flag to indicate
+        # that the footprint has not been placed" (KiCad S-expression format, footprint). It is
+        # editor bookkeeping for the autoplacer -- no geometry, no layer, no constraint -- and it
+        # is emphatically *not* `locked`, which is a real constraint and is modelled separately.
+        # Accepting it therefore ignores nothing CopperMCP would otherwise have honoured. Found on
+        # a real board that carried `(placed yes)` on all 31 of its footprints and was refused
+        # outright for it. See docs/research/kicad-aperture-pads-and-net-ties-v1.md.
+        "placed",
         "property",
         "tags",
         "tstamp",
         "uuid",
     }
 )
+# The non-copper technical layers a KiCad *aperture* pad may occupy. KiCad defines an aperture pad
+# as one with no copper layer assigned: a solder-paste stencil opening or mask opening that is not
+# an electrical connection point and cannot even carry a pad number. See
+# docs/research/kicad-aperture-pads-and-net-ties-v1.md.
+_APERTURE_PAD_LAYERS = frozenset({"B.Mask", "B.Paste", "F.Mask", "F.Paste"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -472,12 +485,7 @@ class _Converter:
                             )
                         continue
                     if self._is_routing_layer(layer):
-                        self.fail(
-                            "unsupported.construct",
-                            "footprint graphic on copper or Edge.Cuts is unsupported",
-                            f"{locator}.graphic",
-                            object_kind="graphic",
-                        )
+                        self._refuse_footprint_routing_graphic(footprint, layer, locator)
                     continue
                 if head not in _FOOTPRINT_METADATA_HEADS:
                     self.fail(
@@ -486,6 +494,54 @@ class _Converter:
                         f"{locator}.unsupported",
                         object_kind="footprint",
                     )
+
+    def _refuse_footprint_routing_graphic(
+        self, footprint: SExpr, layer: str, locator: str
+    ) -> Never:
+        """Refuse a footprint graphic on a routing layer, naming what it actually is.
+
+        All three cases refuse, and that is the point: a graphic on a copper layer *is copper*, so
+        it is an obstacle, and the one outcome forbidden here is dropping it. What differs is the
+        reason, and the three reasons ask for different fixes:
+
+        - **A net tie.** `net_tie_pad_groups` declares that "nets attached to pads within a single
+          pad-group are allowed to short" (KiCad S-expression format), and the copper polygon on
+          `F.Cu`/`B.Cu` is the short. The obstacle is not the difficulty: Board IR models nets as
+          disjoint, and this copper belongs to two at once, so no envelope -- conservative or exact
+          -- expresses it. Modelling it as an obstacle for both nets would forbid the very
+          connection the part exists to make. The adapter already refuses net ties in
+          `_footprints_and_pads`, but the preflight runs first, so without this the refusal named a
+          drawing on the wrong layer instead of a deliberate short between two nets.
+        - **`Edge.Cuts`.** A footprint graphic contributing to the board outline is the opposite
+          direction of error from copper: the outline is routing *room* and may only be
+          under-approximated (ADR-0076), so it is a separate question from an obstacle and is
+          named separately rather than sharing copper's message.
+        - **Any other copper layer.** Copper the adapter does not model. Refused, never ignored: a
+          conservative envelope would be admissible here (ADR-0072's direction), but no real board
+          surveyed carries one, so inventing the envelope would be modelling a case that has not
+          been observed.
+        """
+
+        if layer == "Edge.Cuts":
+            self.fail(
+                "unsupported.construct",
+                "footprint graphic on Edge.Cuts is unsupported",
+                f"{locator}.graphic",
+                object_kind="outline",
+            )
+        if children(footprint, "net_tie_pad_groups"):
+            self.fail(
+                "unsupported.construct",
+                "net-tie footprint copper is unsupported in Board IR adapter v0.2",
+                f"{locator}.graphic",
+                object_kind="footprint",
+            )
+        self.fail(
+            "unsupported.construct",
+            "footprint graphic on a copper layer is unmodelled copper",
+            f"{locator}.graphic",
+            object_kind="graphic",
+        )
 
     def _validate_neutral_via_treatment(self, expression: SExpr, locator: str) -> None:
         """Reject board-level or per-via fabrication treatment that Board IR omits."""
@@ -798,7 +854,9 @@ class _Converter:
             length_rules=self.profile.length_rules,
         )
 
-    def _layer_ids(self, expression: SExpr, locator: str) -> tuple[str, ...]:
+    def _layer_names(self, expression: SExpr, locator: str) -> tuple[str, ...]:
+        """Return an item's declared layer names, from either the `layer` or `layers` field."""
+
         layer_values = self._values(
             expression,
             "layer",
@@ -820,6 +878,10 @@ class _Converter:
         values = layer_values or layers_values
         if not values:
             self.fail("syntax.missing_field", "item has no layer reference", locator)
+        return values
+
+    def _layer_ids(self, expression: SExpr, locator: str) -> tuple[str, ...]:
+        values = self._layer_names(expression, locator)
         result: list[str] = []
         for name in values:
             if name == "*.Cu":
@@ -835,6 +897,56 @@ class _Converter:
         if not result:
             self.fail("unknown.layer", "item has no copper-layer reference", locator)
         return tuple(dict.fromkeys(result))
+
+    def _is_aperture_pad(self, pad: SExpr, number: str, kind: PadKind, locator: str) -> bool:
+        """Report whether a `pad` expression is a KiCad *aperture* pad, and refuse if it is not.
+
+        KiCad defines an aperture pad as a pad **with no copper layer assigned**: a solder-paste
+        stencil opening, most often used to subdivide the paste over an exposed thermal tab. It is
+        not an electrical connection point, and KiCad will not even let it carry a pad number
+        (`PAD::CanHaveNumber` is false for one). The real board that found this gap carries eight
+        of them -- four each on two `TO-252-2` transistors, `(pad "" smd roundrect …
+        (layers "F.Paste"))` -- alongside the ordinary copper pad they sit on top of.
+
+        The adapter's expectation was the wrong half of the pair: it required every `pad` to
+        resolve to at least one copper layer, and refused the whole board when one did not. The
+        item is not wrong -- KiCad wrote exactly what it meant.
+
+        Dropping one is safe in the one direction that matters. Attachment copper may only be
+        *under*-approximated and obstacle copper only over-approximated, and an aperture pad is
+        neither: it has no copper at all, so it removes no obstacle and no attachment point. The
+        copper the paste actually sits on is a *separate* pad in the same footprint and is
+        converted normally. The conditions below are what make that claim true rather than assumed,
+        and each one that fails is a refusal rather than a silent drop:
+
+        - no declared layer is copper, so there is nothing to lose;
+        - every declared layer is a paste or mask layer, so this is a stencil or mask opening and
+          not, say, a stray pad on a courtyard layer whose meaning we have not established;
+        - the pad kind is `smd`, since a drilled pad is a hole through copper whatever its layers
+          claim;
+        - it declares no net, so no routable attachment is being discarded; and
+        - it carries no pad number, matching KiCad's own rule for an aperture.
+
+        See docs/research/kicad-aperture-pads-and-net-ties-v1.md.
+        """
+
+        names = self._layer_names(pad, locator)
+        if any(name.endswith(".Cu") or name in {"*.Cu", "F&B.Cu"} for name in names):
+            return False
+        if (
+            kind is PadKind.SMD
+            and not number
+            and all(name in _APERTURE_PAD_LAYERS for name in names)
+            and not children(pad, "net")
+            and not children(pad, "drill")
+        ):
+            return True
+        self.fail(
+            "unknown.layer",
+            "pad references no copper layer and is not a paste or mask aperture",
+            locator,
+            object_kind="pad",
+        )
 
     def _quarter_turn(self, rotation_udeg: int, locator: str) -> int:
         quarter = 90_000_000
@@ -1415,7 +1527,7 @@ class _Converter:
                     self.fail(
                         "syntax.invalid", "pad header is malformed", locator, object_kind="pad"
                     )
-                _, raw_kind, raw_shape = header
+                number, raw_kind, raw_shape = header
                 try:
                     kind = {
                         "smd": PadKind.SMD,
@@ -1430,6 +1542,12 @@ class _Converter:
                         locator,
                         object_kind="pad",
                     )
+                # A pad with no copper is a stencil aperture, not copper the router may attach to
+                # or must avoid. It is skipped only once every condition in `_is_aperture_pad`
+                # holds; anything else with no copper layer refuses there. The skip sits after the
+                # structural checks above, so a malformed aperture is still a typed refusal.
+                if self._is_aperture_pad(pad, number, kind, locator):
+                    continue
                 pad_at = self._values(pad, "at", locator, minimum=2, maximum=3)
                 local = PointNM(
                     self._mm(pad_at[0], f"{locator}.at.x"),

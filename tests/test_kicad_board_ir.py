@@ -2504,3 +2504,247 @@ def test_rounding_the_radius_never_shrinks_the_pad_obstacle() -> None:
         generous_pad.center.x + generous_pad.size_x_nm // 2,
         generous_pad.center.y + generous_pad.size_y_nm // 2,
     )
+
+
+# --- Three singleton gaps found by running the adapter against a tree of real boards (#116) ---
+#
+# Each was a *single* board's first refusal, invisible behind more common causes, and each is a
+# different kind of defect: a true refusal reported with the wrong reason, an expectation the
+# format does not share, and a metadata field. The fixtures below are authored here from KiCad's
+# published format rather than copied from the private designs the gaps were measured on.
+
+_NET_TIE_PAD_GROUPS = b'    (net_tie_pad_groups "1, 2")\n'
+
+
+def _footprint_graphic(layer: bytes) -> bytes:
+    """One filled footprint polygon on `layer`, as KiCad writes a net tie's shorting copper."""
+
+    return (
+        b"    (fp_poly\n"
+        b"      (pts (xy 0 -0.65) (xy 2.6 -0.65) (xy 2.6 0.65) (xy 0 0.65))\n"
+        b"      (stroke (width 0) (type solid))\n"
+        b"      (fill yes)\n"
+        b'      (layer "' + layer + b'")\n'
+        b'      (uuid "10000000-0000-0000-0000-0000000000a1")\n'
+        b"    )\n"
+    )
+
+
+def _with_footprint_graphic(layer: bytes, *, net_tie: bool = False) -> bytes:
+    """Return the subset fixture with one footprint graphic on `layer`."""
+
+    addition = (_NET_TIE_PAD_GROUPS if net_tie else b"") + _footprint_graphic(layer)
+    return _insert_before(SUBSET_BOARD.read_bytes(), b'    (pad "1" smd roundrect', addition)
+
+
+def test_net_tie_copper_refuses_as_a_net_tie_rather_than_as_a_stray_graphic() -> None:
+    """The refusal must name the deliberate short, not the layer the copper happens to sit on.
+
+    A `NetTie-2_THT_Pad1.0mm` joining two ground nets was the first refusal on a real board, and
+    it reported `footprint graphic on copper or Edge.Cuts is unsupported` - which reads as a
+    stray drawing left on a copper layer, a thing the user would go looking for and not find.
+    The adapter already refuses net ties, correctly and for a reason no envelope can fix: KiCad
+    declares that "nets attached to pads within a single pad-group are allowed to short", and
+    Board IR models nets as disjoint, so this copper belongs to two nets at once. The preflight
+    simply ran first and answered with the less specific fact.
+    """
+
+    result = parse_kicad_bytes(
+        _with_footprint_graphic(b"F.Cu", net_tie=True), constraint_profile(assign_signal=True)
+    )
+
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.code == "unsupported.construct"
+    assert diagnostic.message == "net-tie footprint copper is unsupported in Board IR adapter v0.2"
+    assert diagnostic.object_kind == "footprint"
+
+
+@pytest.mark.parametrize("layer", [b"F.Cu", b"B.Cu", b"*.Cu"])
+def test_a_footprint_graphic_on_copper_is_still_refused_and_never_ignored(layer: bytes) -> None:
+    """The control on the direction of error: copper is an obstacle, so it may not be dropped.
+
+    Without a net-tie declaration the same polygon is simply copper the adapter does not model.
+    A conservative envelope would be admissible - over-approximating an obstacle is always safe -
+    but no board surveyed carries one, so the refusal stands rather than modelling an unobserved
+    case. What must never happen is the third option: converting the board as though the copper
+    were not there.
+    """
+
+    result = parse_kicad_bytes(
+        _with_footprint_graphic(layer), constraint_profile(assign_signal=True)
+    )
+
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.code == "unsupported.construct"
+    assert diagnostic.message == "footprint graphic on a copper layer is unmodelled copper"
+    assert diagnostic.object_kind == "graphic"
+
+
+def test_a_footprint_graphic_on_edge_cuts_is_named_as_an_outline_not_as_copper() -> None:
+    """The two share a refusal but not a direction: an outline is routing room, copper is not."""
+
+    result = parse_kicad_bytes(
+        _with_footprint_graphic(b"Edge.Cuts"), constraint_profile(assign_signal=True)
+    )
+
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.code == "unsupported.construct"
+    assert diagnostic.message == "footprint graphic on Edge.Cuts is unsupported"
+    assert diagnostic.object_kind == "outline"
+
+
+def test_a_footprint_graphic_on_a_documentation_layer_still_converts() -> None:
+    """The layer decides, not the head: silkscreen is not copper and must stay ignored."""
+
+    parse_success(_with_footprint_graphic(b"F.SilkS"), constraint_profile(assign_signal=True))
+
+
+def _aperture_pad(
+    *, number: bytes = b'""', layers: bytes = b'"F.Paste"', extra: bytes = b""
+) -> bytes:
+    """One KiCad aperture pad: a stencil opening with no copper layer assigned."""
+
+    return (
+        b"    (pad " + number + b" smd roundrect\n"
+        b"      (at 0 0)\n"
+        b"      (size 3.05 2.75)\n"
+        b"      (layers " + layers + b")\n"
+        b"      (roundrect_rratio 0.25)\n"
+        + extra
+        + b'      (uuid "10000000-0000-0000-0000-0000000000b1")\n'
+        b"    )\n"
+    )
+
+
+def _with_pad(pad: bytes) -> bytes:
+    return _insert_before(SUBSET_BOARD.read_bytes(), b'    (pad "1" smd roundrect', pad)
+
+
+def test_a_paste_aperture_pad_is_not_copper_and_contributes_nothing() -> None:
+    """A pad with no copper layer is a stencil opening, and the board must convert around it.
+
+    KiCad defines an aperture pad as one with no copper layer assigned - it cannot even carry a
+    pad number - and footprints use them to subdivide the paste over an exposed thermal tab. A
+    real board carried eight of them on two `TO-252-2` transistors and was refused outright,
+    because the adapter required every `pad` to resolve to at least one copper layer. That
+    expectation, not the board, was the error.
+
+    The assertion is stronger than "it converts": every copper-bearing field must be *identical*
+    to the same board without the aperture. Dropping it is safe precisely because it neither
+    removes an obstacle nor discards an attachment point, and an equality is what says so.
+    """
+
+    baseline = parse_success(SUBSET_BOARD.read_bytes(), constraint_profile(assign_signal=True))
+    with_aperture = parse_success(
+        _with_pad(_aperture_pad()), constraint_profile(assign_signal=True)
+    )
+
+    assert with_aperture.content.pads == baseline.content.pads
+    assert with_aperture.content.footprints == baseline.content.footprints
+    assert with_aperture.content.nets == baseline.content.nets
+    # And the copper pads really are still there - an equality between two empty tuples would
+    # satisfy the assertions above just as well.
+    assert len(baseline.content.pads) == 2
+
+
+@pytest.mark.parametrize(
+    ("description", "pad"),
+    [
+        # KiCad's own rule: an aperture cannot have a pad number. A numbered pad claims to be a
+        # connection point, so a numbered pad with no copper is a contradiction, not an aperture.
+        ("a numbered pad", _aperture_pad(number=b'"3"')),
+        # A net is an attachment claim, and attachment copper may only be under-approximated by
+        # something that exists. Dropping a netted pad would discard the claim entirely.
+        ("a netted pad", _aperture_pad(extra=b'      (net "GND")\n')),
+        # A drill is a hole through copper whatever the layer list says.
+        ("a drilled pad", _aperture_pad(extra=b"      (drill 1)\n")),
+        # Paste and mask are the layers whose meaning is established. A pad somewhere else with
+        # no copper is a construct this project has not read the format for.
+        ("a pad on another technical layer", _aperture_pad(layers=b'"F.SilkS"')),
+    ],
+)
+def test_a_pad_with_no_copper_that_is_not_an_aperture_is_still_refused(
+    description: str, pad: bytes
+) -> None:
+    """The control: "no copper layer" is not on its own a licence to drop a pad."""
+
+    result = parse_kicad_bytes(_with_pad(pad), constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None, description
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.code == "unknown.layer"
+    assert (
+        diagnostic.message == "pad references no copper layer and is not a paste or mask aperture"
+    )
+
+
+def test_a_malformed_aperture_pad_is_still_refused_before_it_can_be_skipped() -> None:
+    """Skipping a pad must not become a way to smuggle unvalidated syntax past the allowlist."""
+
+    result = parse_kicad_bytes(
+        _with_pad(_aperture_pad(extra=b"      (primitives (gr_poly))\n")),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+
+
+def test_the_footprint_placement_status_flag_is_accepted_as_metadata() -> None:
+    """`placed` is autoplacement bookkeeping: no geometry, no layer, no constraint.
+
+    KiCad's format defines it as "a flag to indicate that the footprint has not been placed". A
+    real board carried `(placed yes)` on all 31 of its footprints and was refused for it. As with
+    `descr` and `tags`, accepting it ignores nothing CopperMCP would otherwise have honoured -
+    and the equality below is what makes that a measurement rather than a claim. It is
+    emphatically not `locked`, which is a real constraint and is modelled separately.
+    """
+
+    baseline = parse_success(SUBSET_BOARD.read_bytes(), constraint_profile(assign_signal=True))
+    with_flag = parse_success(
+        _replace(
+            SUBSET_BOARD.read_bytes(),
+            b'    (layer "F.Cu")',
+            b'    (layer "F.Cu")\n    (placed yes)',
+        ),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert with_flag.content.footprints == baseline.content.footprints
+    assert with_flag.content.pads == baseline.content.pads
+
+
+def test_an_unknown_footprint_field_is_still_refused() -> None:
+    """Accepting one status flag must not turn the footprint allowlist into an open one."""
+
+    result = parse_kicad_bytes(
+        _replace(
+            SUBSET_BOARD.read_bytes(),
+            b'    (layer "F.Cu")',
+            b'    (layer "F.Cu")\n    (some_future_footprint_rule yes)',
+        ),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].message == "footprint contains an unsupported semantic field"
+
+
+def test_an_unknown_root_field_is_still_refused() -> None:
+    """And neither does it widen the root allowlist, which stays closed."""
+
+    result = parse_kicad_bytes(
+        _insert_root(SUBSET_BOARD.read_bytes(), b"(some_future_board_rule yes)"),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert (
+        result.diagnostics[0].message
+        == "root expression contains an unsupported semantic construct"
+    )
