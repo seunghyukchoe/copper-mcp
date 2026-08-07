@@ -142,6 +142,39 @@ class Ring:
 
 
 @dataclass(frozen=True, slots=True)
+class CourtyardCircle:
+    """One exact circular courtyard keep-out: an integer centre and an integer radius.
+
+    KiCad footprints draw round part envelopes (radial capacitors, test points, mounting
+    holes) as an unfilled ``fp_circle`` on a courtyard layer.  The circle itself is kept
+    exact rather than being replaced by a polygon at import time: any polygon stored here
+    would either overstate or understate the keep-out, and the placement evidence surface
+    (ADR-0075) must derive both an outer and an inner bound from the true shape to say
+    which of its three verdicts it is entitled to.  Only circles whose radius is an exact
+    integer nanometre are representable; the adapter refuses the rest.
+    """
+
+    center: PointNM
+    radius_nm: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.center, PointNM):
+            raise ValueError("courtyard circle centre must be a PointNM")
+        _positive("courtyard circle radius", self.radius_nm)
+        for coordinate in (self.center.x, self.center.y):
+            _integer(
+                "courtyard circle extent",
+                coordinate + self.radius_nm,
+                minimum=-JSON_SAFE_INTEGER,
+            )
+            _integer(
+                "courtyard circle extent",
+                coordinate - self.radius_nm,
+                minimum=-JSON_SAFE_INTEGER,
+            )
+
+
+@dataclass(frozen=True, slots=True)
 class UnitSystem:
     """Closed unit declaration for Board IR."""
 
@@ -323,6 +356,7 @@ class Footprint:
     side: FootprintSide
     pad_ids: tuple[str, ...]
     courtyards: tuple[Ring, ...] = ()
+    courtyard_circles: tuple[CourtyardCircle, ...] = ()
     locked: bool = False
 
     def __post_init__(self) -> None:
@@ -341,6 +375,7 @@ class Footprint:
         for pad_id in self.pad_ids:
             _typed_id("footprint pad ID", pad_id, "pad:")
         _tuple_of("footprint courtyards", self.courtyards, Ring)
+        _tuple_of("footprint courtyard circles", self.courtyard_circles, CourtyardCircle)
         if not isinstance(self.locked, bool):
             raise ValueError("footprint locked flag must be boolean")
 

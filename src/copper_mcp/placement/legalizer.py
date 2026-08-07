@@ -14,7 +14,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
-from copper_mcp.board_ir import BoardIRSnapshot, Keepout, Pad, PointNM, Ring
+from copper_mcp.board_ir import BoardIRSnapshot, CourtyardCircle, Keepout, Pad, PointNM, Ring
 from copper_mcp.placement.contracts import (
     EMPTY_DIGEST,
     AlignmentRule,
@@ -40,7 +40,7 @@ from copper_mcp.placement.contracts import (
 from copper_mcp.placement.geometry import (
     QUARTER_UDEG,
     Rect,
-    orthogonal_courtyard_region_overlap,
+    courtyard_region_overlap,
     pad_bounds,
     pad_core,
     rect_gap,
@@ -160,6 +160,7 @@ class _PlacedFootprint:
     pads: tuple[_PlacedPad, ...]
     hull: Rect
     courtyards: tuple[Ring, ...]
+    courtyard_circles: tuple[CourtyardCircle, ...]
 
 
 def snap(value: int, grid_nm: int) -> int:
@@ -194,6 +195,26 @@ def _place_ring(
         turned = rotate_offset(saved_local, new_orientation_udeg)
         points.append(PointNM(new_origin.x + turned.x, new_origin.y + turned.y))
     return Ring(tuple(points))
+
+
+def _place_circle(
+    circle: CourtyardCircle,
+    original_origin: PointNM,
+    original_orientation_udeg: int,
+    new_origin: PointNM,
+    new_orientation_udeg: int,
+) -> CourtyardCircle:
+    """Move one circular courtyard between orthogonal poses; the radius is invariant."""
+
+    saved_local = _inverse_rotate(
+        PointNM(circle.center.x - original_origin.x, circle.center.y - original_origin.y),
+        original_orientation_udeg,
+    )
+    turned = rotate_offset(saved_local, new_orientation_udeg)
+    return CourtyardCircle(
+        center=PointNM(new_origin.x + turned.x, new_origin.y + turned.y),
+        radius_nm=circle.radius_nm,
+    )
 
 
 def _place(
@@ -309,6 +330,16 @@ def _place(
             )
             for ring in footprint.courtyards
         )
+        courtyard_circles = tuple(
+            _place_circle(
+                circle,
+                footprint.origin,
+                footprint.orientation_udeg,
+                origin,
+                orientation,
+            )
+            for circle in footprint.courtyard_circles
+        )
         placed.append(
             _PlacedFootprint(
                 ref_id=ref_id,
@@ -319,6 +350,7 @@ def _place(
                 pads=tuple(pads),
                 hull=hull,
                 courtyards=courtyards,
+                courtyard_circles=courtyard_circles,
             )
         )
     # Graphics-only footprints cannot be moved or used as rule references, but a rectangular
@@ -331,6 +363,14 @@ def _place(
         for ring in stationary_footprint.courtyards:
             bounds = ring_bounds(ring)
             stationary_hull = bounds if stationary_hull is None else union(stationary_hull, bounds)
+        for circle in stationary_footprint.courtyard_circles:
+            bounds = (
+                circle.center.x - circle.radius_nm,
+                circle.center.y - circle.radius_nm,
+                circle.center.x + circle.radius_nm,
+                circle.center.y + circle.radius_nm,
+            )
+            stationary_hull = bounds if stationary_hull is None else union(stationary_hull, bounds)
         assert stationary_hull is not None
         placed.append(
             _PlacedFootprint(
@@ -342,6 +382,7 @@ def _place(
                 pads=(),
                 hull=stationary_hull,
                 courtyards=stationary_footprint.courtyards,
+                courtyard_circles=stationary_footprint.courtyard_circles,
             )
         )
     return tuple(placed)
@@ -442,26 +483,33 @@ def _keepout_respect(
 
 
 def _courtyard_overlap(placed: tuple[_PlacedFootprint, ...], budget: _Budget) -> str:
-    """Check orthogonal courtyards on the same physical side against KiCad 10.0.5's model.
+    """Check same-side courtyards - rings, chamfers, and circles - against KiCad 10.0.5's model.
 
-    Board IR v0.2 accepts simple closed horizontal/vertical courtyard rings.  A footprint's rings
-    are one even-odd region rather than a set of independent solids, matching the contour hierarchy
-    KiCad builds, and the region is contracted by the cached-courtyard inset before the collision
-    test.  Front and back courtyards are independent physical layers, so cross-side contact is not
-    a collision.  See :func:`orthogonal_courtyard_region_overlap` for why the answer is
-    three-valued and which of the three each outcome is a claim about.
+    Board IR v0.2 accepts simple closed octilinear courtyard rings and exact circular
+    courtyards.  A footprint's contours are one even-odd region rather than a set of
+    independent solids, matching the contour hierarchy KiCad builds, and the region is
+    contracted by the cached-courtyard inset before the collision test.  Front and back
+    courtyards are independent physical layers, so cross-side contact is not a collision.
+    See :func:`courtyard_region_overlap` for why the answer is three-valued, which bound is
+    allowed to prove which claim, and why anything else is ``inconclusive``.
     """
 
     verdict = "proven_clear"
     for first_index, first in enumerate(placed):
-        if not first.courtyards:
+        if not first.courtyards and not first.courtyard_circles:
             continue
         for second in placed[first_index + 1 :]:
             budget.charge()
-            if first.side != second.side or not second.courtyards:
+            if first.side != second.side or (
+                not second.courtyards and not second.courtyard_circles
+            ):
                 continue
-            outcome = orthogonal_courtyard_region_overlap(
-                first.courtyards, second.courtyards, charge=budget.charge
+            outcome = courtyard_region_overlap(
+                first.courtyards,
+                second.courtyards,
+                first_circles=first.courtyard_circles,
+                second_circles=second.courtyard_circles,
+                charge=budget.charge,
             )
             if outcome == "violated":
                 return "violated"
