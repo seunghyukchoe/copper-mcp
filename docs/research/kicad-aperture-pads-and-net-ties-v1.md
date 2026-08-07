@@ -3,8 +3,8 @@
 Research date: 2026-08-07. This note supports three singleton refusals measured against a working
 tree of real KiCad boards and recorded in
 [issue #116](https://github.com/seunghyukchoe/copper-mcp/issues/116): decisions
-[D-158](../ledgers/decision-ledger.md), [D-159](../ledgers/decision-ledger.md) and
-[D-160](../ledgers/decision-ledger.md), and risk [R-119](../ledgers/risk-register.md). No external
+[D-162](../ledgers/decision-ledger.md), [D-163](../ledgers/decision-ledger.md) and
+[D-164](../ledgers/decision-ledger.md), and risk [R-122](../ledgers/risk-register.md). No external
 code is copied, and no board content from the surveyed tree is reproduced here — the constructs are
 described by their format definitions, and the fixtures in `tests/test_kicad_board_ir.py` are
 authored from those definitions rather than extracted from a design.

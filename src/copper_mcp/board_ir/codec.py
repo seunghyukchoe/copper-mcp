@@ -587,7 +587,7 @@ def _decode_content(value: object) -> BoardIRContent:
     vias = tuple(
         Via(
             id=_string(entry["id"], f"{entry_path}.id"),
-            net_id=_string(entry["net_id"], f"{entry_path}.net_id"),
+            net_id=_optional_string(entry["net_id"], f"{entry_path}.net_id"),
             center=_point(entry["center"], f"{entry_path}.center"),
             diameter_nm=_integer(entry["diameter_nm"], f"{entry_path}.diameter_nm"),
             drill_nm=_integer(entry["drill_nm"], f"{entry_path}.drill_nm"),
@@ -629,7 +629,7 @@ def _decode_content(value: object) -> BoardIRContent:
             entry = _object(raw, required=required, path=entry_path)
             arguments: dict[str, Any] = {
                 "id": _string(entry["id"], f"{entry_path}.id"),
-                "net_id": _string(entry["net_id"], f"{entry_path}.net_id"),
+                "net_id": _optional_string(entry["net_id"], f"{entry_path}.net_id"),
                 "layer_id": _string(entry["layer_id"], f"{entry_path}.layer_id"),
                 "start": _point(entry["start"], f"{entry_path}.start"),
                 "end": _point(entry["end"], f"{entry_path}.end"),

@@ -8,6 +8,45 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- **A KiCad UUID that a board reuses is no longer treated as a Board IR identity.** Issue #116's
+  one undiagnosed `converted Board IR content failed semantic validation` refusal turned out to be
+  `identity.duplicate` on `geometry ID`, and 9 of the 12 real boards surveyed carry the same
+  reuse — always footprints and their pads, never segments, arcs, vias or zones. On one board 113
+  footprints share just 11 UUIDs, 45 distinct resistors among them: the value names a footprint
+  *type*, not an instance. The uniqueness rule was right and is untouched — Board IR footprints own
+  pads by ID and every patch names its target by ID — so the fix is in the converter, which was
+  asserting an identity the format never promised. KiCad's specification says a UUID *should be*
+  globally unique, which is an expectation of the writer and grants a reader no key, and KiCad's
+  own copy-paste and re-link workflows are tracked as producing duplicates. A UUID used once still
+  becomes that object's ID exactly as before, so no content address moves. A UUID used by two or
+  more objects of one kind is an identity of none of them: they all fall back together to the
+  existing revision-derived name, because letting the first claimant keep the native one would
+  assert precisely the identity the file cannot support. Write-back stays refused, since every
+  source-preserving patch path already rejects a snapshot containing a derived identity — a board
+  that names 45 resistors alike cannot be patched by that name without risking the wrong one — so
+  this unblocks inspection and leaves mutation closed. ([D-158](docs/ledgers/decision-ledger.md),
+  [R-119](docs/ledgers/risk-register.md),
+  [KiCad UUID uniqueness](docs/research/kicad-uuid-uniqueness-v1.md), #116)
+- A semantic-validation refusal now names the invariant it failed instead of only saying that one
+  failed. `converted Board IR content failed semantic validation` was a wrapper that identified no
+  rule and no construct, which is what left #116's survey with an entry nobody could act on; it now
+  carries the validator's own message. Naming the rule is not echoing the board: every Board IR
+  validation message is a fixed string chosen by `copper_mcp.board_ir`, and the two that were built
+  from an object ID are rebuilt so the board-derived text travels in the locator the refusal drops.
+  ([D-158](docs/ledgers/decision-ledger.md), #116)
+- Copper saved on KiCad's net 0 — stitching vias and orphaned tracks, which KiCad 10 writes as
+  `(net "")` — no longer refuses the whole document with `via has no routable net`, the largest
+  single cause in the issue #116 real-board survey (queued on 7 of 12 boards, which carry 115
+  netless vias and 2,687 netless track segments between them). Such copper converts as an
+  obstacle with no connectivity contribution: `net_id` is `None` on the `Via`, `Segment`, or
+  `Arc`, the item never matches any request net, its clearance is the widest class on the board,
+  and no already-connected claim can pass through it — pinned by mutation-checked router tests
+  in both the via-join and segment-attachment directions. All three saved spellings of "no net"
+  (`(net "")`, `(net 0)`, `(net 0 "")`) resolve identically; a negative ordinal is now an
+  explicit typed `net.unknown` refusal, and a netless via is still held to every geometric rule.
+  Board IR, codec, JSON schema 0.2.0, and scene contracts widen `net_id` to nullable in place —
+  strictly additive, with every existing content address byte-identical (ADR-0078, D-159,
+  R-120, #119).
 - **Three singleton real-board refusals, each a different kind of defect.** Found by running the
   adapter against a working tree of twelve real KiCad boards, where each was the first refusal on
   exactly one board and invisible behind more common causes.
@@ -19,19 +58,19 @@ All notable changes are documented here. The format follows
     stray drawing on a copper layer, sending a user to look for a mistake that is not there. The
     one message is now three: a net tie, an `Edge.Cuts` graphic (routing *room*, the opposite
     direction of error), and unmodelled copper. All three still refuse; copper is never dropped.
-    (D-158)
+    (D-162)
   - A pad with **no copper layer at all** is a KiCad *aperture* pad — a solder-paste stencil
     opening, used to subdivide the paste over an exposed thermal tab — and is now omitted from
     Board IR instead of refusing the board. One board carried eight of them on two `TO-252-2`
     transistors. Omitting one removes no obstacle and discards no attachment point, and that claim
     is conditional, so each condition refuses rather than drops when it fails: paste or mask layers
     only, `smd` kind, no net, no pad number. The regression asserts *equality* of every
-    copper-bearing field with and without the aperture. (D-159, R-119)
+    copper-bearing field with and without the aperture. (D-163, R-122)
   - `placed`, KiCad's autoplacement status flag, is accepted as footprint metadata — it carries no
     geometry, no layer and no constraint, unlike `locked`, which is a constraint and stays
     modelled. One board carried `(placed yes)` on all 31 of its footprints. Both allowlists stay
     closed, with an unknown footprint field and an unknown root field each pinned by its own
-    control. (D-160)
+    control. (D-164)
 
   No diagnostic code, Board IR field, schema or digest changes, and no golden identity moves.
   (#116)

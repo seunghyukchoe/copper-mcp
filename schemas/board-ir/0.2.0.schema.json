@@ -593,7 +593,10 @@
           "pattern": "^via:[A-Za-z0-9_.:-]{1,160}$"
         },
         "net_id": {
-          "type": "string",
+          "type": [
+            "string",
+            "null"
+          ],
           "pattern": "^net:[A-Za-z0-9_.:-]{1,160}$"
         },
         "center": {
@@ -639,7 +642,10 @@
           "pattern": "^segment:[A-Za-z0-9_.:-]{1,160}$"
         },
         "net_id": {
-          "type": "string",
+          "type": [
+            "string",
+            "null"
+          ],
           "pattern": "^net:[A-Za-z0-9_.:-]{1,160}$"
         },
         "layer_id": {
@@ -679,7 +685,10 @@
           "pattern": "^arc:[A-Za-z0-9_.:-]{1,160}$"
         },
         "net_id": {
-          "type": "string",
+          "type": [
+            "string",
+            "null"
+          ],
           "pattern": "^net:[A-Za-z0-9_.:-]{1,160}$"
         },
         "layer_id": {
