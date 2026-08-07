@@ -1,4 +1,4 @@
-"""Circuit Scene IR v0.2: footprint-aware scoping, ceilings, references, and quarantine.
+"""Circuit Scene IR v0.3: footprint-aware scoping, ceilings, references, and quarantine.
 
 The quarantine test is the load-bearing one. It does not check that the hostile strings are
 labelled correctly in the place we chose to put them — it greps the entire serialized response
@@ -20,6 +20,7 @@ from copper_mcp.circuit_scene import (
     SCENE_VERSION,
     CircuitSceneError,
     SceneAnnotation,
+    WithheldKind,
     observe_board_scene,
     parse_circuit_scene_request,
 )
@@ -324,7 +325,11 @@ class BudgetTests(unittest.TestCase):
         self.assertGreater(document["truncation"]["objects_omitted"], 0)
         self.assertEqual(
             document["static"]["footprints"],
-            [],
+            {
+                "observation": "withheld_by_ceiling",
+                "ceiling_hit": "max_scene_vertices",
+                "objects_omitted": 2,
+            },
             "footprint pad relationships must consume the detail budget",
         )
 
@@ -342,6 +347,179 @@ class BudgetTests(unittest.TestCase):
         first = observe_board_scene(_request("scene-region.kicad_pcb"), settings).to_dict()
         second = observe_board_scene(_request("scene-region.kicad_pcb"), settings).to_dict()
         self.assertEqual(first, second)
+
+
+#: Twenty-four segments, three vias, one zone. The segments outnumber every other kind and are
+#: emitted before the vias and the zone, which is the exact shape that emptied whole kinds on
+#: eight of ten real boards in issue #127.
+DENSE = "scene-dense.kicad_pcb"
+
+#: Ceilings chosen so the fixture reproduces #127's two interesting cases: at 12 objects only
+#: the segments cannot fit, and at 5 the vias cannot either.
+_SEGMENTS_ONLY_CEILING = 12
+_VIAS_TOO_CEILING = 5
+
+
+def _dense(**overrides: Any) -> dict[str, Any]:
+    settings = _settings(FIXTURES, **overrides)
+    document = observe_board_scene(_request(DENSE), settings).to_dict()
+    CircuitSceneToolResponse.model_validate(document)
+    return document
+
+
+_STATIC = ("outline", "footprints", "pads", "keepouts", "rules")
+
+
+def _kind(document: dict[str, Any], name: str) -> Any:
+    return document["static" if name in _STATIC else "mutable"][name]
+
+
+class WithheldKindTests(unittest.TestCase):
+    """Issue #127: an empty array must mean one thing, and it must mean it by itself.
+
+    The old scene spent one budget in declaration order, so the numerous kind ate it and every
+    kind behind it came back ``[]``. It set ``ceiling_hit`` and an omitted count, but a caller
+    reading ``vias`` rather than ``truncation`` was told a board with 1,003 vias had none.
+    """
+
+    def test_a_kind_the_ceiling_cannot_carry_is_not_an_empty_array(self) -> None:
+        vias = _kind(_dense(max_scene_objects=_VIAS_TOO_CEILING), "vias")
+        self.assertNotIsInstance(vias, list)
+        self.assertEqual(
+            vias,
+            {
+                "observation": "withheld_by_ceiling",
+                "ceiling_hit": "max_scene_objects",
+                "objects_omitted": 3,
+            },
+        )
+
+    def test_no_naive_read_of_a_withheld_kind_reports_absence(self) -> None:
+        """The property, not the field. Every way a caller asks "is it empty?" must say no."""
+
+        document = _dense(max_scene_objects=_VIAS_TOO_CEILING)
+        for name in ("segments", "vias", "pads"):
+            withheld = _kind(document, name)
+            with self.subTest(kind=name):
+                # ``if not vias`` — the single most likely test, and the one that used to lie.
+                self.assertTrue(withheld, "a withheld kind must never be falsy")
+                # ``len(vias) == 0`` — a count, still not zero.
+                self.assertNotEqual(len(withheld), 0)
+                # ``vias == []`` — direct comparison against the absent case.
+                self.assertNotEqual(withheld, [])
+                # ``for via in vias: via["ref_id"]`` — iterating yields strings, not objects,
+                # so a consumer that walks the collection raises instead of finding nothing.
+                for element in withheld:
+                    with self.assertRaises(TypeError):
+                        element["ref_id"]  # type: ignore[index]
+
+    def test_a_board_that_genuinely_has_none_is_still_distinguishable(self) -> None:
+        """The other half of the invariant: absence must stay readable as absence."""
+
+        complete = _dense(max_scene_objects=10_000)
+        self.assertEqual(_kind(complete, "keepouts"), [], "the fixture carries no keepout")
+        self.assertEqual(len(_kind(complete, "vias")), 3)
+        withheld = _kind(_dense(max_scene_objects=_VIAS_TOO_CEILING), "vias")
+        self.assertNotEqual(_kind(complete, "keepouts"), withheld)
+        self.assertFalse(_kind(complete, "keepouts"))
+        self.assertTrue(withheld)
+
+    def test_every_array_a_truncated_scene_returns_is_complete(self) -> None:
+        """The invariant that makes an empty array unambiguous: no array is ever partial."""
+
+        complete = _dense(max_scene_objects=10_000)
+        for ceiling in (_SEGMENTS_ONLY_CEILING, _VIAS_TOO_CEILING, 2, 1, 0):
+            document = _dense(max_scene_objects=ceiling)
+            with self.subTest(ceiling=ceiling):
+                self.assertGreater(document["truncation"]["objects_omitted"], 0)
+                for partition in ("static", "mutable"):
+                    for name, value in document[partition].items():
+                        if isinstance(value, list):
+                            self.assertEqual(
+                                len(value),
+                                len(_kind(complete, name)),
+                                f"{name} came back partly filled",
+                            )
+
+    def test_the_omitted_total_is_exactly_the_sum_of_the_withheld_kinds(self) -> None:
+        document = _dense(max_scene_objects=_VIAS_TOO_CEILING)
+        withheld = [
+            value
+            for partition in ("static", "mutable")
+            for value in document[partition].values()
+            if not isinstance(value, list)
+        ]
+        self.assertEqual(
+            document["truncation"]["objects_omitted"],
+            sum(item["objects_omitted"] for item in withheld),
+        )
+        self.assertEqual(document["truncation"]["ceiling_hit"], "max_scene_objects")
+
+    def test_a_bounded_region_on_the_dense_board_withholds_nothing(self) -> None:
+        """The path that already worked stays whole: no ceiling, no withheld kind, at defaults."""
+
+        window = observe_board_scene(
+            _request(
+                DENSE,
+                region={
+                    "min_x_nm": 0,
+                    "min_y_nm": 33_000_000,
+                    "max_x_nm": 40_000_000,
+                    "max_y_nm": 40_000_000,
+                },
+            ),
+            _settings(FIXTURES),
+        ).to_dict()
+        CircuitSceneToolResponse.model_validate(window)
+        self.assertIsNone(window["truncation"]["ceiling_hit"])
+        self.assertEqual(window["truncation"]["objects_omitted"], 0)
+        for partition in ("static", "mutable"):
+            for name, value in window[partition].items():
+                with self.subTest(kind=name):
+                    self.assertIsInstance(value, list)
+        self.assertEqual(len(window["mutable"]["vias"]), 2)
+        self.assertEqual(window["mutable"]["segments"], [])
+
+    def test_a_truncated_dense_scene_is_deterministic_across_runs(self) -> None:
+        first = _dense(max_scene_objects=_VIAS_TOO_CEILING)
+        second = _dense(max_scene_objects=_VIAS_TOO_CEILING)
+        self.assertEqual(first, second)
+        self.assertEqual(json.dumps(first), json.dumps(second))
+
+    def test_there_is_no_vocabulary_for_an_observed_withheld_kind(self) -> None:
+        for kwargs in (
+            {"observation": "observed", "ceiling_hit": "max_scene_objects", "objects_omitted": 1},
+            {"ceiling_hit": "max_scene_annotations", "objects_omitted": 1},
+            {"ceiling_hit": "max_scene_objects", "objects_omitted": 0},
+        ):
+            with self.subTest(**kwargs), self.assertRaises(CircuitSceneError):
+                WithheldKind(**kwargs)  # type: ignore[arg-type]
+
+    def test_a_supported_scene_cannot_leave_a_kind_undecided(self) -> None:
+        """The empty-array default is the defect's other door. It is closed, not defaulted."""
+
+        scene = observe_board_scene(_request(DENSE), _settings(FIXTURES))
+        undecided = replace(
+            scene,
+            mutable_objects={
+                name: items for name, items in scene.mutable_objects.items() if name != "vias"
+            },
+        )
+        with self.assertRaises(CircuitSceneError):
+            undecided.to_dict()
+        # The same omission on an unsupported board is not a missing decision: nothing was
+        # observed at all, and ``supported: false`` is what the caller reads.
+        unsupported = replace(scene, supported=False, mutable_objects={}, static_objects={})
+        self.assertEqual(unsupported.to_dict()["mutable"]["vias"], [])
+
+    def test_the_contract_refuses_a_withheld_kind_that_claims_nothing_was_omitted(self) -> None:
+        """Mutation check: an ``objects_omitted`` of 0 would read as an empty kind again."""
+
+        document = _dense(max_scene_objects=_VIAS_TOO_CEILING)
+        document["mutable"]["vias"]["objects_omitted"] = 0
+        with self.assertRaises(Exception) as caught:
+            CircuitSceneToolResponse.model_validate(document)
+        self.assertNotIsInstance(caught.exception, AssertionError)
 
 
 class NetlessCopperTests(unittest.TestCase):

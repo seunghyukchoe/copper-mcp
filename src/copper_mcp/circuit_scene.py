@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from math import isqrt
 from typing import Any
@@ -58,11 +58,18 @@ from copper_mcp.request_boundary import (
 from copper_mcp.scene_render import SceneRenderEvidence
 from copper_mcp.security import read_workspace_file
 
-SCENE_VERSION = "0.2.0"
+SCENE_VERSION = "0.3.0"
 
 #: Objects the router treats as given, versus objects a proposal could add or change.
 _STATIC_KINDS = ("outline", "footprints", "pads", "keepouts", "rules")
 _MUTABLE_KINDS = ("segments", "arcs", "vias", "zones")
+
+#: The single permitted value of a withheld kind's ``observation`` field.
+#:
+#: A one-value literal, for the same reason ``untrusted_board_author`` is one: there is no
+#: spelling here that could mean "observed and empty". A kind is either a list — complete for
+#: the region and layer filter — or this object. See ADR-0088.
+WITHHELD_BY_CEILING = "withheld_by_ceiling"
 
 _REQUIRED_FIELDS = ("board", "constraints", "region")
 _OPTIONAL_FIELDS = ("layers", "include_annotations", "include_render")
@@ -169,32 +176,35 @@ class SceneObject:
         }
 
 
-@dataclass(slots=True)
-class _Budget:
-    """Object and vertex ceilings, charged as the scene is built."""
+@dataclass(frozen=True, slots=True)
+class WithheldKind:
+    """One whole object kind the ceilings could not carry, stated instead of emptied.
 
-    max_objects: int
-    max_vertices: int
-    objects: int = 0
-    vertices: int = 0
-    omitted: int = 0
-    ceiling_hit: str | None = None
+    This replaces the kind's array rather than sitting beside it. That is the entire point:
+    a separate truncation record next to ``vias: []`` is only read by a caller who already
+    suspects truncation, and the caller who most needs the warning is the one who reads the
+    list and believes it. A value of a different JSON type cannot be mistaken for an empty
+    one — every naive read of it either raises or reports that objects exist.
+    """
 
-    def admit(self, vertex_count: int) -> bool:
-        if self.ceiling_hit is not None:
-            self.omitted += 1
-            return False
-        if self.objects >= self.max_objects:
-            self.ceiling_hit = "max_scene_objects"
-            self.omitted += 1
-            return False
-        if self.vertices + vertex_count > self.max_vertices:
-            self.ceiling_hit = "max_scene_vertices"
-            self.omitted += 1
-            return False
-        self.objects += 1
-        self.vertices += vertex_count
-        return True
+    ceiling_hit: str
+    objects_omitted: int
+    observation: str = WITHHELD_BY_CEILING
+
+    def __post_init__(self) -> None:
+        if self.observation != WITHHELD_BY_CEILING:
+            raise CircuitSceneError("a withheld scene kind carries exactly one observation value")
+        if self.ceiling_hit not in ("max_scene_objects", "max_scene_vertices"):
+            raise CircuitSceneError("a withheld scene kind names an object or vertex ceiling")
+        if self.objects_omitted < 1:
+            raise CircuitSceneError("a withheld scene kind withholds at least one object")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "observation": self.observation,
+            "ceiling_hit": self.ceiling_hit,
+            "objects_omitted": self.objects_omitted,
+        }
 
 
 def _ref_stability(ref_id: str) -> str:
@@ -202,7 +212,7 @@ def _ref_stability(ref_id: str) -> str:
 
     ``native`` is anchored in the source file's own KiCad identities and survives unrelated
     edits: either the object's own KiCad UUID, or — for the one contour assembled from
-    ``Edge.Cuts`` segments — the hash of its member segments' UUIDs (ADR-0087), which moves only
+    ``Edge.Cuts`` segments — the hash of its member segments' UUIDs (ADR-0088), which moves only
     when the member set itself changes. ``content_derived`` is a hash of the source revision, so
     it moves whenever *anything* in the file changes and must be re-read before reuse.
     ``request_scoped`` belongs to the request rather than to the board — the net class echoed
@@ -714,6 +724,224 @@ def _keepout_object(keepout: Keepout) -> SceneObject:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _KindSpec:
+    """One object kind: how to filter it, what it costs, and how to build it.
+
+    Filtering and costing are separated from building so the ceilings can be spent over kinds
+    that are counted but not yet materialised. Nothing is constructed for a kind that will be
+    withheld, which keeps peak memory at the object ceiling rather than at the board's size.
+    """
+
+    name: str
+    static: bool
+    items: tuple[Any, ...]
+    layer_ids: Callable[[Any], tuple[str, ...]]
+    vertices: Callable[[Any], int]
+    build: Callable[[Any], SceneObject]
+    #: Rules are board-wide rather than positional, so no region can exclude them.
+    positional: bool = True
+
+
+def _eligible(
+    spec: _KindSpec,
+    bounds: Mapping[str, tuple[int, int, int, int]],
+    region: SceneRegion,
+    layers: tuple[str, ...],
+) -> Iterator[Any]:
+    """Yield the kind's items that meet the region and the layer filter, in board order."""
+
+    for item in spec.items:
+        if spec.positional:
+            box = bounds.get(item.id)
+            if box is None or not region.overlaps(*box):
+                continue
+        if not _selected(spec.layer_ids(item), layers):
+            continue
+        yield item
+
+
+def _allocate_kinds(
+    demand: tuple[tuple[int, int], ...],
+    max_objects: int,
+    max_vertices: int,
+) -> tuple[frozenset[int], dict[int, WithheldKind], str | None]:
+    """Decide which kinds are observed whole. A kind never comes back partly filled.
+
+    Kinds are offered the budget in ascending object count, ties broken by the fixed
+    declaration order, which is deterministic for a given board revision and request. Smallest
+    first is the greedy order that maximises how many kinds are observed completely, and it
+    also happens to put the two kinds a caller needs to bound a follow-up request — the outline
+    and the rules — ahead of the tens of thousands of segments that used to consume everything.
+
+    A kind that does not fit is skipped rather than ending the allocation, so one enormous kind
+    cannot withhold the small ones behind it.
+    """
+
+    objects = 0
+    vertices = 0
+    admitted: set[int] = set()
+    withheld: dict[int, WithheldKind] = {}
+    first_ceiling: str | None = None
+    for index in sorted(range(len(demand)), key=lambda index: (demand[index][0], index)):
+        count, cost = demand[index]
+        if count == 0:
+            # An empty kind costs nothing and is admitted, so an empty array in the response
+            # always means the region genuinely holds none of that kind.
+            admitted.add(index)
+            continue
+        if objects + count > max_objects:
+            withheld[index] = WithheldKind(ceiling_hit="max_scene_objects", objects_omitted=count)
+        elif vertices + cost > max_vertices:
+            withheld[index] = WithheldKind(ceiling_hit="max_scene_vertices", objects_omitted=count)
+        else:
+            objects += count
+            vertices += cost
+            admitted.add(index)
+            continue
+        if first_ceiling is None:
+            first_ceiling = withheld[index].ceiling_hit
+    return frozenset(admitted), withheld, first_ceiling
+
+
+def _demand(
+    spec: _KindSpec,
+    bounds: Mapping[str, tuple[int, int, int, int]],
+    region: SceneRegion,
+    layers: tuple[str, ...],
+) -> tuple[int, int]:
+    """How many objects and vertices this kind would cost if it were observed completely."""
+
+    count = 0
+    vertices = 0
+    for item in _eligible(spec, bounds, region, layers):
+        count += 1
+        vertices += spec.vertices(item)
+    return count, vertices
+
+
+def _outline_object(contour: Any) -> SceneObject:
+    return SceneObject(
+        ref_id=contour.id,
+        kind="outline",
+        layer_ids=(),
+        geometry={"outer_nm": _points(contour.outer)},
+        ref_stability=_ref_stability(contour.id),
+    )
+
+
+def _net_class_object(net_class: NetClass) -> SceneObject:
+    return SceneObject(
+        ref_id=net_class.id,
+        kind="net_class",
+        layer_ids=(),
+        geometry={
+            "clearance_nm": net_class.clearance_nm,
+            "track_width_nm": net_class.track_width_nm,
+            "via_diameter_nm": net_class.via_diameter_nm,
+            "via_drill_nm": net_class.via_drill_nm,
+        },
+        ref_stability=_ref_stability(net_class.id),
+    )
+
+
+def _footprint_detail_units(footprint: Footprint) -> int:
+    """Footprint origin, pad relationships and courtyard vertices all cost vertex budget."""
+
+    return (
+        1
+        + len(footprint.pad_ids)
+        + sum(len(ring.points) for ring in footprint.courtyards)
+        + len(footprint.courtyard_circles)
+    )
+
+
+def _kind_specs(content: Any, every_layer: tuple[str, ...]) -> tuple[_KindSpec, ...]:
+    """The nine object kinds, in the fixed declaration order the response reports them in.
+
+    The order is what breaks ties in ``_allocate_kinds``; it is not a priority. Nothing here
+    depends on the board, so two observations of one revision produce the same specs.
+    """
+
+    return (
+        _KindSpec(
+            name="outline",
+            static=True,
+            items=tuple(content.outline),
+            layer_ids=lambda _: every_layer,
+            vertices=lambda contour: len(contour.outer.points),
+            build=_outline_object,
+        ),
+        _KindSpec(
+            name="footprints",
+            static=True,
+            items=tuple(content.footprints),
+            layer_ids=lambda footprint: (
+                ("layer:F.Cu",) if footprint.side.value == "front" else ("layer:B.Cu",)
+            ),
+            vertices=_footprint_detail_units,
+            build=_footprint_object,
+        ),
+        _KindSpec(
+            name="pads",
+            static=True,
+            items=tuple(content.pads),
+            layer_ids=lambda pad: tuple(pad.layer_ids),
+            vertices=lambda _: 4,
+            build=_pad_object,
+        ),
+        _KindSpec(
+            name="keepouts",
+            static=True,
+            items=tuple(content.keepouts),
+            layer_ids=lambda keepout: tuple(keepout.layer_ids),
+            vertices=lambda keepout: len(keepout.boundary.points),
+            build=_keepout_object,
+        ),
+        _KindSpec(
+            name="rules",
+            static=True,
+            items=tuple(content.constraints.net_classes),
+            layer_ids=lambda _: every_layer,
+            vertices=lambda _: 1,
+            build=_net_class_object,
+            positional=False,
+        ),
+        _KindSpec(
+            name="segments",
+            static=False,
+            items=tuple(content.segments),
+            layer_ids=lambda segment: (segment.layer_id,),
+            vertices=lambda _: 2,
+            build=_segment_object,
+        ),
+        _KindSpec(
+            name="arcs",
+            static=False,
+            items=tuple(content.arcs),
+            layer_ids=lambda arc: (arc.layer_id,),
+            vertices=lambda _: 3,
+            build=_arc_object,
+        ),
+        _KindSpec(
+            name="vias",
+            static=False,
+            items=tuple(content.vias),
+            layer_ids=lambda _: every_layer,
+            vertices=lambda _: 4,
+            build=lambda via: _via_object(via, every_layer),
+        ),
+        _KindSpec(
+            name="zones",
+            static=False,
+            items=tuple(content.zones),
+            layer_ids=lambda zone: (zone.layer_id,),
+            vertices=lambda zone: len(zone.boundary.points),
+            build=_zone_object,
+        ),
+    )
+
+
 def _read_annotations(
     source: bytes, limits: ParseLimits, ceiling: int
 ) -> tuple[tuple[SceneAnnotation, ...], int]:
@@ -804,8 +1032,12 @@ class CircuitScene:
     supported: bool
     snapshot_digest: str | None = None
     region: SceneRegion | None = None
+    #: Only kinds that were observed **completely**. A kind absent from these mappings is
+    #: present in ``withheld_kinds`` instead, so an in-process reader that indexes a kind
+    #: raises rather than receiving an empty tuple that reads as "none on this board".
     static_objects: Mapping[str, tuple[SceneObject, ...]] = field(default_factory=dict)
     mutable_objects: Mapping[str, tuple[SceneObject, ...]] = field(default_factory=dict)
+    withheld_kinds: Mapping[str, WithheldKind] = field(default_factory=dict)
     annotations: tuple[SceneAnnotation, ...] = ()
     render: SceneRenderEvidence | None = None
     render_bytes: bytes | None = None
@@ -817,6 +1049,27 @@ class CircuitScene:
     conversion_diagnostic_counts: Mapping[str, int] = field(default_factory=dict)
     scene_version: str = SCENE_VERSION
     schema_version: str = SCHEMA_VERSION
+
+    def _kind(
+        self, name: str, observed: Mapping[str, tuple[SceneObject, ...]]
+    ) -> list[dict[str, Any]] | dict[str, Any]:
+        """Render one kind: a complete array, or the object that says why there is none.
+
+        The two are different JSON types on purpose. A caller that iterates a withheld kind,
+        indexes it, or asks whether it is empty gets an error or a truthy answer — never the
+        silent "this board has no vias" that an empty array used to give it.
+
+        On a supported board a kind that reached neither collection was never decided, and the
+        one thing this method must not do is fall back to ``[]`` — that is the defect, arriving
+        through a default argument instead of through a budget. It raises instead.
+        """
+
+        withheld = self.withheld_kinds.get(name)
+        if withheld is not None:
+            return withheld.to_dict()
+        if self.supported and name not in observed:
+            raise CircuitSceneError("a supported scene must decide every object kind")
+        return [item.to_dict() for item in observed.get(name, ())]
 
     def to_dict(self) -> dict[str, Any]:
         """Return a detached plain dictionary; mutating it cannot alter this scene."""
@@ -833,14 +1086,8 @@ class CircuitScene:
             "supported": self.supported,
             "request": self.request.to_dict(),
             "region": None if self.region is None else self.region.to_dict(),
-            "static": {
-                name: [item.to_dict() for item in self.static_objects.get(name, ())]
-                for name in _STATIC_KINDS
-            },
-            "mutable": {
-                name: [item.to_dict() for item in self.mutable_objects.get(name, ())]
-                for name in _MUTABLE_KINDS
-            },
+            "static": {name: self._kind(name, self.static_objects) for name in _STATIC_KINDS},
+            "mutable": {name: self._kind(name, self.mutable_objects) for name in _MUTABLE_KINDS},
             "annotations": [item.to_dict() for item in self.annotations],
             # Evidence only. The bytes themselves are delivered as a capability by the MCP
             # gateway or written to an explicit path by the CLI, never inlined here.
@@ -853,6 +1100,10 @@ class CircuitScene:
                 # Names the first ceiling reached. The two ``*_omitted`` counts are the
                 # authoritative signal, because objects and annotations are charged against
                 # separate budgets and both can truncate in one response.
+                #
+                # This record is a summary, never the only place truncation is stated:
+                # ``objects_omitted`` is exactly the sum of the withheld kinds, and each of
+                # those says so in its own slot under ``static`` or ``mutable``.
                 "ceiling_hit": self.ceiling_hit,
             },
             "ref_stability": {
@@ -922,99 +1173,25 @@ def _observe_board_scene(
     content = snapshot.content
     bounds = _object_bounds(snapshot)
     region = _resolve_region(request, bounds)
-    budget = _Budget(
+    every_layer = tuple(layer.id for layer in content.copper_layers)
+
+    specs = _kind_specs(content, every_layer)
+    demand = tuple(_demand(spec, bounds, region, request.layers) for spec in specs)
+    admitted, withheld_by_index, ceiling_hit = _allocate_kinds(
+        demand,
         max_objects=settings.max_scene_objects,
         max_vertices=settings.max_scene_vertices,
     )
-    every_layer = tuple(layer.id for layer in content.copper_layers)
 
-    static: dict[str, list[SceneObject]] = {name: [] for name in _STATIC_KINDS}
-    mutable: dict[str, list[SceneObject]] = {name: [] for name in _MUTABLE_KINDS}
-
-    def consider(
-        candidate: SceneObject,
-        layer_ids: tuple[str, ...],
-        vertex_count: int,
-        bucket: list[SceneObject],
-    ) -> None:
-        """Admit one object if it meets the region, the layer filter and the ceilings."""
-
-        box = bounds.get(candidate.ref_id)
-        if box is None or not region.overlaps(*box):
-            return
-        if not _selected(layer_ids, request.layers):
-            return
-        if not budget.admit(vertex_count):
-            return
-        bucket.append(candidate)
-
-    for contour in content.outline:
-        consider(
-            SceneObject(
-                ref_id=contour.id,
-                kind="outline",
-                layer_ids=(),
-                geometry={"outer_nm": _points(contour.outer)},
-                ref_stability=_ref_stability(contour.id),
-            ),
-            every_layer,
-            len(contour.outer.points),
-            static["outline"],
-        )
-    for footprint in content.footprints:
-        layer_ids = ("layer:F.Cu",) if footprint.side.value == "front" else ("layer:B.Cu",)
-        detail_units = (
-            1
-            + len(footprint.pad_ids)
-            + sum(len(ring.points) for ring in footprint.courtyards)
-            + len(footprint.courtyard_circles)
-        )
-        consider(
-            _footprint_object(footprint),
-            layer_ids,
-            detail_units,
-            static["footprints"],
-        )
-    for pad in content.pads:
-        consider(_pad_object(pad), tuple(pad.layer_ids), 4, static["pads"])
-    for keepout in content.keepouts:
-        consider(
-            _keepout_object(keepout),
-            tuple(keepout.layer_ids),
-            len(keepout.boundary.points),
-            static["keepouts"],
-        )
-    for segment in content.segments:
-        consider(_segment_object(segment), (segment.layer_id,), 2, mutable["segments"])
-    for arc in content.arcs:
-        consider(_arc_object(arc), (arc.layer_id,), 3, mutable["arcs"])
-    for via in content.vias:
-        consider(_via_object(via, every_layer), every_layer, 4, mutable["vias"])
-    for zone in content.zones:
-        consider(
-            _zone_object(zone),
-            (zone.layer_id,),
-            len(zone.boundary.points),
-            mutable["zones"],
-        )
-
-    # Rules are board-wide rather than positional, so they are reported whole.
-    for net_class in content.constraints.net_classes:
-        if budget.admit(1):
-            static["rules"].append(
-                SceneObject(
-                    ref_id=net_class.id,
-                    kind="net_class",
-                    layer_ids=(),
-                    geometry={
-                        "clearance_nm": net_class.clearance_nm,
-                        "track_width_nm": net_class.track_width_nm,
-                        "via_diameter_nm": net_class.via_diameter_nm,
-                        "via_drill_nm": net_class.via_drill_nm,
-                    },
-                    ref_stability=_ref_stability(net_class.id),
-                )
-            )
+    static: dict[str, tuple[SceneObject, ...]] = {}
+    mutable: dict[str, tuple[SceneObject, ...]] = {}
+    withheld: dict[str, WithheldKind] = {}
+    for index, spec in enumerate(specs):
+        if index not in admitted:
+            withheld[spec.name] = withheld_by_index[index]
+            continue
+        built = tuple(spec.build(item) for item in _eligible(spec, bounds, region, request.layers))
+        (static if spec.static else mutable)[spec.name] = built
 
     annotations: tuple[SceneAnnotation, ...] = ()
     annotations_omitted = 0
@@ -1048,13 +1225,13 @@ def _observe_board_scene(
         supported=True,
         snapshot_digest=snapshot.snapshot_digest,
         region=region,
-        static_objects={name: tuple(items) for name, items in static.items()},
-        mutable_objects={name: tuple(items) for name, items in mutable.items()},
+        static_objects=static,
+        mutable_objects=mutable,
+        withheld_kinds=withheld,
         annotations=annotations,
-        objects_omitted=budget.omitted,
+        objects_omitted=sum(item.objects_omitted for item in withheld.values()),
         annotations_omitted=annotations_omitted,
-        ceiling_hit=budget.ceiling_hit
-        or ("max_scene_annotations" if annotations_omitted else None),
+        ceiling_hit=ceiling_hit or ("max_scene_annotations" if annotations_omitted else None),
         render=render_evidence,
         render_bytes=render_bytes,
         content_derived_ref_count=content_derived,

@@ -335,7 +335,7 @@ class McpServerTests(unittest.TestCase):
                     )
                 )
         self.assertFalse(result.is_error)
-        self.assertEqual(result.structured_content["scene_version"], "0.2.0")
+        self.assertEqual(result.structured_content["scene_version"], "0.3.0")
 
     def test_live_route_advertises_a_closed_read_only_revision_bound_request(self) -> None:
         tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
@@ -1015,7 +1015,7 @@ class SceneToolSurfaceTests(unittest.TestCase):
         self.assertFalse(result.is_error)
         structured = result.structured_content
         assert isinstance(structured, dict)
-        self.assertEqual(structured["scene_version"], "0.2.0")
+        self.assertEqual(structured["scene_version"], "0.3.0")
         self.assertTrue(structured["static"]["footprints"])
         self.assertEqual(structured["region"]["source"], "explicit")
         self.assertEqual(len(structured["static"]["pads"]), 1)

@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0088**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0089**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -32,6 +32,15 @@ branches (issues #127 and #128) were open, so it took a number above the adverti
 block rather than colliding with them. Every unlanded number is deliberately left unused rather
 than recycled, so that an external reference resolves to nothing rather than to an unrelated
 decision. If a later branch lands its own record in one of these blocks, this note is what it
+**Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086. ADR-0027 was
+allocated on a branch whose ADR never landed. The 0081–0083 block was allocated by concurrent
+branches that were still open when ADR-0084 landed: that branch took a number above all of them
+rather than the next one, which is the rule the collision that produced 0066–0068 exists to enforce.
+ADR-0081 has since landed from its own branch and is no longer a gap; 0082 and 0083 remain spent.
+0085 and 0086 went the same way — two branches were open alongside ADR-0088 when it landed, so it
+took a number above both rather than the next one. Every unused number is deliberately left unused
+rather than recycled, so that an external reference resolves to nothing rather than to an unrelated
+decision. If a later branch lands its own record in one of these gaps, this note is what it
 corrects.
 
 **How 0066 through 0068 came to be three records:** three concurrent branches each created an
@@ -143,6 +152,13 @@ never silently widens it.
 Eighty-seven numbers, eighty-two records, no duplicates — and `scripts/check_adr_numbers.py` now
 proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and 0086
 are unused; see **Known gaps** above.
+| [0088](0088-complete-or-withheld-scene-kinds.md) | A truncated scene withholds whole kinds instead of emptying them | Accepted |
+
+Eighty-seven numbers, eighty-two records, no duplicates — and `scripts/check_adr_numbers.py` now
+proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and 0086 are
+unused; see **Known gaps** above. The three stray summary sentences that stood here until
+ADR-0088 landed were merge residue from the concurrent branches described above: Git accepted
+three different rewrites of one paragraph because they did not overlap textually.
 
 ## Reading order
 
@@ -227,3 +243,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0081: Reconstruct the congestion ledger incrementally and bound rip-up by a spatial window](0081-incremental-retention-and-bounded-ripup-window.md)
 - [ADR-0084: Authoritative source-to-board parity via a board-eligible intent projection](0084-authoritative-source-to-board-parity.md)
 - [ADR-0087: Name an assembled Edge.Cuts outline by the sorted set of its members' own uuids](0087-composite-native-identity-for-assembled-outlines.md)
+- [ADR-0088: A truncated scene withholds whole kinds instead of emptying them](0088-complete-or-withheld-scene-kinds.md)
