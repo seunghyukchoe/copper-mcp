@@ -302,6 +302,85 @@ class CircuitSchematicErcToolResponse(_ClosedContract):
     verification: SchematicErcVerificationContract
 
 
+class ParityProjectionContract(_ClosedContract):
+    """The board-eligible derivative KiCad actually compared the board against.
+
+    Disclosed rather than hidden. It is not a delivered artifact: it exists only because an
+    ``on_board no`` symbol never enters KiCad's board-side netlist, which would make a correct
+    board and a wrong one produce identical output.
+    """
+
+    kind: Literal["kicad_schematic_board_projection"]
+    artifact_digest: Digest
+    intent_digest: Digest
+    size_bytes: Annotated[int, Field(ge=1, le=1024 * 1024)]
+    differs_from_schematic_by: Literal["board_eligibility"]
+
+
+class ParityBoardContract(_ClosedContract):
+    """Identity of the workspace board the verdict is bound to."""
+
+    board_revision: Digest
+
+
+class ParityCountsContract(_ClosedContract):
+    """Redacted counts behind one parity verdict."""
+
+    components: Annotated[int, Field(ge=1, le=64)]
+    connectivity_findings: Annotated[int, Field(ge=0, le=100_000)]
+    projection_findings: Annotated[int, Field(ge=0, le=100_000)]
+
+
+class ParityEvidenceContract(_ClosedContract):
+    """Transported ``kicad-cli pcb drc --schematic-parity`` verdict.
+
+    ``oracle_live`` is load-bearing, not decorative: an empty parity array is indistinguishable
+    from a check that never ran, so ``passed`` means nothing without it.
+    """
+
+    authority: Literal["kicad-cli-pcb-drc-schematic-parity"]
+    kicad_version: Annotated[str, Field(min_length=1, max_length=128)]
+    drc_schema: Literal["https://schemas.kicad.org/drc.v1.json"]
+    coordinate_units: Literal["mm"]
+    counts: ParityCountsContract
+    parity_type_counts: dict[
+        Annotated[str, Field(min_length=1, max_length=128)],
+        Annotated[int, Field(ge=0, le=100_000)],
+    ]
+    oracle_live: Literal["passed"]
+    passed: bool
+
+
+class SourceToBoardParityVerificationContract(_ClosedContract):
+    """Exact performed and explicitly unperformed verification stages."""
+
+    intent_topology: Literal["passed"]
+    artifact_digest: Literal["passed"]
+    provenance_binding: Literal["passed"]
+    deterministic_replay: Literal["passed"]
+    kicad_cli_parse: Literal["passed"]
+    parity_oracle_live: Literal["passed"]
+    schematic_board_parity: Literal["passed", "failed"]
+    erc: Literal["not_run"]
+    footprint_correctness: Literal["not_run"]
+    electrical_validation: Literal["not_run"]
+    board_ready: Literal[False]
+
+
+class SourceToBoardParityToolResponse(_ClosedContract):
+    """Strict structured output contract for the authoritative source-to-board parity tool."""
+
+    schema_: Literal["copper.source-to-board-parity"] = Field(alias="schema")
+    schema_version: Literal["0.1.0"]
+    status: Literal["checked"]
+    intent: CircuitIntentSummaryContract
+    schematic: SchematicSummaryContract
+    parity_projection: ParityProjectionContract
+    board: ParityBoardContract
+    parity: ParityEvidenceContract
+    verification: SourceToBoardParityVerificationContract
+
+
 class LiveBoardObservationToolResponse(_ClosedContract):
     """Redacted, read-only summary returned by the optional KiCad IPC observer."""
 
@@ -682,23 +761,39 @@ class SceneZoneContract(_SceneObjectContract):
 _Objects = Field(max_length=200_000)
 
 
+class SceneWithheldKindContract(_ClosedContract):
+    """One object kind the scene ceilings could not carry, standing where its array would be.
+
+    ``observation`` is a one-value literal. There is no spelling of this object that means
+    "observed and empty", so a kind is either a **complete** array for the requested region and
+    layers, or this. An empty array therefore says exactly one thing: the region holds none of
+    that kind. Reading the ``truncation`` record is not required to know that, which is the
+    whole point — the caller who most needed the warning was the one reading the array
+    ([ADR-0088](../../docs/adr/0088-complete-or-withheld-scene-kinds.md)).
+    """
+
+    observation: Literal["withheld_by_ceiling"]
+    ceiling_hit: Literal["max_scene_objects", "max_scene_vertices"]
+    objects_omitted: Annotated[int, Field(ge=1)]
+
+
 class SceneStaticContract(_ClosedContract):
     """Objects a route proposal may not change."""
 
-    outline: Annotated[list[SceneOutlineContract], _Objects]
-    footprints: Annotated[list[SceneFootprintContract], _Objects]
-    pads: Annotated[list[ScenePadContract], _Objects]
-    keepouts: Annotated[list[SceneKeepoutContract], _Objects]
-    rules: Annotated[list[SceneNetClassContract], _Objects]
+    outline: Annotated[list[SceneOutlineContract], _Objects] | SceneWithheldKindContract
+    footprints: Annotated[list[SceneFootprintContract], _Objects] | SceneWithheldKindContract
+    pads: Annotated[list[ScenePadContract], _Objects] | SceneWithheldKindContract
+    keepouts: Annotated[list[SceneKeepoutContract], _Objects] | SceneWithheldKindContract
+    rules: Annotated[list[SceneNetClassContract], _Objects] | SceneWithheldKindContract
 
 
 class SceneMutableContract(_ClosedContract):
     """Objects a route proposal may add, move, or remove."""
 
-    segments: Annotated[list[SceneSegmentContract], _Objects]
-    arcs: Annotated[list[SceneArcContract], _Objects]
-    vias: Annotated[list[SceneViaContract], _Objects]
-    zones: Annotated[list[SceneZoneContract], _Objects]
+    segments: Annotated[list[SceneSegmentContract], _Objects] | SceneWithheldKindContract
+    arcs: Annotated[list[SceneArcContract], _Objects] | SceneWithheldKindContract
+    vias: Annotated[list[SceneViaContract], _Objects] | SceneWithheldKindContract
+    zones: Annotated[list[SceneZoneContract], _Objects] | SceneWithheldKindContract
 
 
 class SceneAnnotationContract(_ClosedContract):
@@ -735,6 +830,10 @@ class SceneTruncationContract(_ClosedContract):
     reached; the two ``*_omitted`` counts are authoritative, because objects and annotations
     are charged against separate budgets and both can truncate in a single response. A caller
     never has to infer completeness from a count it cannot independently check.
+
+    This record is a summary and never the only statement of object truncation.
+    ``objects_omitted`` is exactly the sum over the kinds replaced by a
+    ``SceneWithheldKindContract``, each of which says so where its array would have been.
     """
 
     objects_returned: Annotated[int, Field(ge=0)]
@@ -792,7 +891,7 @@ class CircuitSceneToolResponse(_ClosedContract):
     """Strict structured output contract for ``observe_board_scene``."""
 
     schema_version: str
-    scene_version: Literal["0.2.0"]
+    scene_version: Literal["0.3.0"]
     board_path: str
     board_revision: Digest
     snapshot_digest: Digest | None
@@ -2163,4 +2262,5 @@ __all__ = [
     "RoutingJobStartToolRequestContract",
     "RoutingJobToolResponse",
     "SceneRenderContract",
+    "SourceToBoardParityToolResponse",
 ]

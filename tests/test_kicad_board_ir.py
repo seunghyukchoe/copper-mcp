@@ -18,6 +18,12 @@ from copper_mcp.adapters.kicad_placement_patch import (
     KiCadPlacementPatchError,
     _require_native_geometry_identities,
 )
+from copper_mcp.adapters.kicad_route_patch import (
+    KiCadRoutePatchError,
+)
+from copper_mcp.adapters.kicad_route_patch import (
+    _require_native_geometry_identities as _route_require_native_geometry_identities,
+)
 from copper_mcp.adapters.sexpr import SExprError, parse_sexpr
 from copper_mcp.board_ir import (
     BoardIRSnapshot,
@@ -2107,6 +2113,286 @@ def test_edge_cuts_segment_order_and_direction_do_not_move_the_outline() -> None
     assert _canonical_ring(straightforward.content.outline[0].outer.points) == _canonical_ring(
         shuffled.content.outline[0].outer.points
     )
+
+
+def _identified_edge_cuts_lines(edges: tuple[tuple[str, str, str], ...]) -> bytes:
+    """Render ``Edge.Cuts`` segments whose native identities travel with their geometry."""
+
+    rendered = b""
+    for start, end, identity in edges:
+        rendered += (
+            f"  (gr_line\n    (start {start})\n    (end {end})\n".encode()
+            + b"    (stroke (width 0.1) (type default))\n"
+            + b'    (layer "Edge.Cuts")\n'
+            + f'    (uuid "{identity}")\n'.encode()
+            + b"  )\n"
+        )
+    return rendered
+
+
+IDENTIFIED_RECTANGLE_EDGES = tuple(
+    (start, end, f"20000000-0000-0000-0000-{index:012d}")
+    for index, (start, end) in enumerate(RECTANGLE_EDGES)
+)
+
+
+def _identified_outline_source(edges: tuple[tuple[str, str, str], ...]) -> bytes:
+    return _replace(
+        SUBSET_BOARD.read_bytes(), EDGE_CUTS_RECTANGLE, _identified_edge_cuts_lines(edges)
+    )
+
+
+def _expected_assembled_identity(member_uuids: tuple[str, ...]) -> str:
+    """Recompute the composite identity exactly as ADR-0087 defines its resolution.
+
+    This is the resolvability proof in executable form: an independent reader holding only the
+    source file and the published derivation collects the root ``Edge.Cuts`` ``gr_line``
+    identities, sorts them, and reproduces the contour's name without consulting the adapter.
+    """
+
+    material = "\0".join(["contour", "assembled", *sorted(value.lower() for value in member_uuids)])
+    return f"contour:assembled:{hashlib.sha256(material.encode()).hexdigest()[:32]}"
+
+
+def test_assembled_outline_identity_is_a_composite_of_its_member_uuids() -> None:
+    """A ``gr_line`` outline takes a native identity assembled from its members' own uuids.
+
+    ADR-0076 gave the assembled contour a revision-derived name because it refused to let one
+    segment's uuid claim to name the whole contour.  That reasoning stands - and hashing the
+    *sorted set* of every member's uuid does not trip over it: the identity names the member
+    set, each member of which the file names durably itself.  Unlike the revision-derived name
+    it replaces, this one is resolvable back to specific source expressions, which is the
+    property the apply gates exist to protect (issue #126, ADR-0087).
+    """
+
+    snapshot = parse_success(
+        _identified_outline_source(IDENTIFIED_RECTANGLE_EDGES), constraint_profile()
+    )
+
+    contour = snapshot.content.outline[0]
+    assert contour.id.startswith("contour:assembled:")
+    assert ":derived:" not in contour.id
+    assert contour.id == _expected_assembled_identity(
+        tuple(identity for _start, _end, identity in IDENTIFIED_RECTANGLE_EDGES)
+    )
+
+
+def test_assembled_outline_identity_survives_an_unrelated_edit() -> None:
+    """The composite name must hold still while the rest of the board changes around it.
+
+    This is exactly the property the revision-derived name lacked: any edit anywhere in the
+    file moved the source revision and with it the contour's name, so a placement splice or a
+    route append could never round-trip.  The member uuids do not move when a footprint does,
+    so the assembled identity must not either.
+    """
+
+    source = _identified_outline_source(IDENTIFIED_RECTANGLE_EDGES)
+    edited = _replace(source, b"(at 10 10 90)", b"(at 11 10 90)")
+    assert edited != source
+
+    before = parse_success(source, constraint_profile())
+    after = parse_success(edited, constraint_profile())
+
+    assert before.content.source.revision != after.content.source.revision
+    assert before.content.outline[0].id == after.content.outline[0].id
+
+
+def test_assembled_outline_identity_ignores_member_order_and_direction() -> None:
+    """File order and drawing direction are not inputs to the ring, nor to its name."""
+
+    reordered = (
+        IDENTIFIED_RECTANGLE_EDGES[2],
+        IDENTIFIED_RECTANGLE_EDGES[0],
+        IDENTIFIED_RECTANGLE_EDGES[3],
+        IDENTIFIED_RECTANGLE_EDGES[1],
+    )
+    flipped = tuple((end, start, identity) for start, end, identity in IDENTIFIED_RECTANGLE_EDGES)
+
+    baseline = parse_success(
+        _identified_outline_source(IDENTIFIED_RECTANGLE_EDGES), constraint_profile()
+    )
+    scrambled = parse_success(_identified_outline_source(reordered), constraint_profile())
+    reversed_ = parse_success(_identified_outline_source(flipped), constraint_profile())
+
+    assert baseline.content.outline[0].id == scrambled.content.outline[0].id
+    assert baseline.content.outline[0].id == reversed_.content.outline[0].id
+
+
+def test_assembled_outline_identity_moves_when_a_member_uuid_moves() -> None:
+    """The name is bound to the member set: replace one member's uuid and the name changes."""
+
+    changed = (
+        *IDENTIFIED_RECTANGLE_EDGES[:3],
+        (
+            IDENTIFIED_RECTANGLE_EDGES[3][0],
+            IDENTIFIED_RECTANGLE_EDGES[3][1],
+            "20000000-0000-0000-0000-00000000ffff",
+        ),
+    )
+
+    baseline = parse_success(
+        _identified_outline_source(IDENTIFIED_RECTANGLE_EDGES), constraint_profile()
+    )
+    moved = parse_success(_identified_outline_source(changed), constraint_profile())
+
+    assert baseline.content.outline[0].id != moved.content.outline[0].id
+
+
+@pytest.mark.parametrize(
+    ("mutate", "reason"),
+    [
+        (
+            lambda edges: (*edges[:3], (edges[3][0], edges[3][1], None)),
+            "a member without any native identity",
+        ),
+        (
+            lambda edges: (*edges[:3], (edges[3][0], edges[3][1], edges[0][2])),
+            "a member uuid repeated inside the member set",
+        ),
+    ],
+    ids=["member-missing-uuid", "member-uuid-repeated"],
+)
+def test_unresolvable_member_sets_degrade_to_the_derived_identity(
+    mutate: Callable[[tuple[tuple[str, str, str], ...]], tuple[tuple[str, str, object], ...]],
+    reason: str,
+) -> None:
+    """The fallback is the invariant guard: an unnameable member set stays unappliable.
+
+    If any member lacks exactly one usable native identity, or repeats one, the composite
+    cannot be resolved back to specific source expressions - so the contour must degrade to
+    the revision-derived name that every source-preserving patch path refuses (ADR-0026).
+    Deleting this fallback would hand an apply gate an identity it cannot resolve, and this
+    test is the mutation check that fails first.
+    """
+
+    edges = mutate(IDENTIFIED_RECTANGLE_EDGES)
+    rendered = b""
+    for start, end, identity in edges:
+        rendered += (
+            f"  (gr_line\n    (start {start})\n    (end {end})\n".encode()
+            + b"    (stroke (width 0.1) (type default))\n"
+            + b'    (layer "Edge.Cuts")\n'
+            + (f'    (uuid "{identity}")\n'.encode() if identity is not None else b"")
+            + b"  )\n"
+        )
+    source = _replace(SUBSET_BOARD.read_bytes(), EDGE_CUTS_RECTANGLE, rendered)
+
+    snapshot = parse_success(source, constraint_profile())
+
+    contour = snapshot.content.outline[0]
+    assert ":derived:" in contour.id, reason
+    with pytest.raises(KiCadPlacementPatchError):
+        _require_native_geometry_identities(snapshot)
+    with pytest.raises(KiCadRoutePatchError):
+        _route_require_native_geometry_identities(snapshot)
+
+
+def test_assembled_member_with_both_uuid_and_tstamp_degrades_without_refusing() -> None:
+    """An ambiguous member cannot anchor the composite, but the board still converts.
+
+    Objects the adapter models refuse outright on simultaneous identity fields; outline
+    members are material for one composite name rather than modeled objects, so the honest
+    response is the derived fallback - the board stays inspectable and stays unappliable.
+    """
+
+    ambiguous = (
+        b"  (gr_line\n    (start 0 30)\n    (end 0 0)\n"
+        b"    (stroke (width 0.1) (type default))\n"
+        b'    (layer "Edge.Cuts")\n'
+        b'    (uuid "20000000-0000-0000-0000-000000000003")\n'
+        b'    (tstamp "20000000-0000-0000-0000-000000000003")\n'
+        b"  )\n"
+    )
+    rendered = _identified_edge_cuts_lines(IDENTIFIED_RECTANGLE_EDGES[:3]) + ambiguous
+    source = _replace(SUBSET_BOARD.read_bytes(), EDGE_CUTS_RECTANGLE, rendered)
+
+    snapshot = parse_success(source, constraint_profile())
+
+    assert ":derived:" in snapshot.content.outline[0].id
+
+
+def test_assembled_outline_board_with_native_geometry_passes_both_apply_gates() -> None:
+    """The measured issue #126 failure: an assembled outline must not block apply by itself."""
+
+    snapshot = parse_success(
+        _identified_outline_source(IDENTIFIED_RECTANGLE_EDGES), constraint_profile()
+    )
+
+    _require_native_geometry_identities(snapshot)
+    _route_require_native_geometry_identities(snapshot)
+
+
+def test_assembled_outline_does_not_unblock_a_reused_footprint_uuid_board() -> None:
+    """Direction of error: the outline fix must not weaken any other derived refusal.
+
+    A board that names 45 resistors alike still cannot be patched by that name (D-158), so a
+    reused pad uuid keeps both apply gates refusing even now that the outline no longer
+    contributes a derived identity of its own.
+    """
+
+    source = _identified_outline_source(IDENTIFIED_RECTANGLE_EDGES)
+    reused = _replace(
+        source,
+        b'(uuid "10000000-0000-0000-0000-000000000003")',
+        b'(uuid "10000000-0000-0000-0000-000000000002")',
+    )
+    assert reused != source
+
+    snapshot = parse_success(reused, constraint_profile())
+
+    assert ":derived:" not in snapshot.content.outline[0].id
+    assert any(":derived:" in pad.id for pad in snapshot.content.pads)
+    with pytest.raises(KiCadPlacementPatchError):
+        _require_native_geometry_identities(snapshot)
+    with pytest.raises(KiCadRoutePatchError):
+        _route_require_native_geometry_identities(snapshot)
+
+
+def test_a_committed_fixture_draws_its_outline_with_gr_line_segments() -> None:
+    """The fixture set must not drift back to sharing the code's old assumption.
+
+    Issues #104, #116 and #126 each found a shape every committed fixture avoided and every
+    real board carried.  For #126 that shape is an ``Edge.Cuts`` outline drawn with
+    ``gr_line`` segments; this test pins at least one committed board fixture that draws it,
+    converts with fully native identities, and passes both apply gates.
+    """
+
+    fixture = TEST_ROOT / "fixtures" / "route-candidate" / "two-pad-segment-outline.kicad_pcb"
+    text = fixture.read_text(encoding="utf-8")
+    assert text.count("gr_line") >= 4
+    assert "gr_rect" not in text
+
+    profile = KiCadConstraintProfile(
+        net_classes=(
+            NetClass(
+                id="class:default",
+                name="Default",
+                clearance_nm=250_000,
+                track_width_nm=250_000,
+                via_diameter_nm=800_000,
+                via_drill_nm=400_000,
+            ),
+        ),
+        default_net_class_id="class:default",
+    )
+    conversion = parse_kicad_bytes(fixture.read_bytes(), profile)
+    assert conversion.diagnostics == ()
+    assert conversion.snapshot is not None
+    snapshot = conversion.snapshot
+    assert snapshot.content.outline[0].id.startswith("contour:assembled:")
+    groups = (
+        snapshot.content.outline,
+        snapshot.content.footprints,
+        snapshot.content.pads,
+        snapshot.content.vias,
+        snapshot.content.segments,
+        snapshot.content.arcs,
+        snapshot.content.zones,
+        snapshot.content.keepouts,
+    )
+    assert not any(":derived:" in item.id for group in groups for item in group)
+    _require_native_geometry_identities(snapshot)
+    _route_require_native_geometry_identities(snapshot)
 
 
 OPEN_CONTOUR_EDGES = RECTANGLE_EDGES[:3]

@@ -113,6 +113,14 @@ When adding a document, add it to the list below in the same sentence form — *
   `kicad-cli`, and restates ADR-0072's outward-envelope direction for a keep-out on an
   evidence-publishing surface: outer bounds may only prove clearance, inner bounds may only prove
   violation, and everything between is a declared concession.
+- [Source-to-board parity with `kicad-cli` 10.0.5](./source-to-board-parity-v1.md) corrects the
+  recorded assumption that a board-side parity verdict needs a project context — it does not, for
+  the CLI — and then documents the four distinct ways the resulting check yields a *silent* false
+  pass, three of them KiCad's and one of them ours. Its central finding is that CopperMCP's own
+  delivered schematic is board-excluded by construction and produces identical output for a correct
+  board and a deliberately wrong one, which is what forces a board-eligible projection and the
+  arithmetic liveness invariant that gates every verdict. It carries a dated reproduction of every
+  measurement and one correction to its own §4.
 - [KiCad arc tracks as routing obstacles](./kicad-arc-track-obstacles-v1.md) grounds ADR-0070's
   conservative arc envelope in the official S-expression arc grammar and the inscribed-angle
   theorem, and states plainly that the envelope is loose for a near-semicircular arc and claims

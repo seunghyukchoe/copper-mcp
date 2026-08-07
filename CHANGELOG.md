@@ -20,11 +20,51 @@ All notable changes are documented here. The format follows
   `max_obstacles = 256`; B-088's `off_grid` wall does not appear once here, which localises this
   corpus's constraint somewhere else entirely. No board was written, copied, or opened in a live
   editor, and no apply or live-IPC flag was set.
-  ([B-096](docs/ledgers/benchmark-ledger.md),
+  ([B-099](docs/ledgers/benchmark-ledger.md),
   [Tier-2 real-board capability survey](docs/research/tier2-real-board-capability-v1.md), #116)
 
 ### Fixed
 
+- **A board outline assembled from `Edge.Cuts` `gr_line` segments no longer makes the whole board
+  permanently unappliable.** Issue #126 measured that both apply gates refused every real board
+  that converts, and that on three of them the assembled outline was the *only* derived identity —
+  every footprint, pad and copper object was native. The contour now takes a composite native
+  identity, `contour:assembled:` plus a hash of the sorted set of its member segments' own uuids,
+  produced only when every member carries exactly one native identity and no value repeats within
+  the member set; any unresolvable member set still degrades to the revision-derived name every
+  source-preserving patch path refuses. Neither apply gate changed by a byte: a reused footprint
+  or pad UUID (D-158) still refuses write-back, a `gr_rect` outline still yields its own native
+  uuid identity byte-for-byte unchanged, and the preserved invariant — no patch can ever name an
+  object whose identity cannot be resolved back to the source file — is mutation-checked from both
+  directions. Measured read-only on the twelve-board real corpus: 0 of 11 converting boards passed
+  either gate before, 3 of 11 pass both after, and the remaining 8 refuse on UUID reuse exactly as
+  intended. Two committed fixtures now draw their outlines with `gr_line` segments so the fixture
+  set cannot drift back to the `gr_rect`-only assumption that hid this for 1,900 tests.
+  ([ADR-0087](docs/adr/0087-composite-native-identity-for-assembled-outlines.md),
+  [D-174](docs/ledgers/decision-ledger.md), [SEC-131](docs/ledgers/security-ledger.md),
+  [R-131](docs/ledgers/risk-register.md),
+  [Assembled-outline identity](docs/research/assembled-outline-identity-v1.md), #126)
+- **A truncated Circuit Scene no longer empties whole object kinds in silence.** A whole-board
+  `observe_board_scene` returned `vias: []`, `zones: []` and `rules: []` on real boards holding up
+  to 1,003 vias, 5 zones and a net class; eight of the eleven mixer boards that convert hit
+  `max_scene_objects`. The scene spent one object budget in one fixed emission order, and segments —
+  two orders of magnitude more numerous than any other kind on a real board, and fifth in that
+  order — consumed everything, so every kind behind them came back empty. `ceiling_hit` and
+  `objects_omitted` were both correct and both in the wrong place: an empty array from a truncated
+  scene was byte-identical to one from a board that genuinely has none, and the caller who most
+  needed the warning was the one reading the array. The ceilings are now offered to **whole kinds**,
+  smallest first with the fixed declaration order breaking ties, so a kind is admitted only if all
+  of it fits — every array a scene returns is complete for its region and layer filter, and an empty
+  one means the region holds none of that kind. A kind that does not fit is replaced, in its own
+  slot, by `{"observation": "withheld_by_ceiling", "ceiling_hit", "objects_omitted"}`: a value of a
+  different JSON type carrying a one-value literal, so `if not vias` is false, `len(vias) == 0` is
+  false, `vias == []` is false, and iterating it raises. Re-measured read-only over the same corpus,
+  all eight truncating boards now withhold `segments` alone and return every via, zone, pad,
+  footprint and net class they hold; 11 of 11 bounded regions are unchanged at `objects_omitted: 0`.
+  `max_scene_objects` keeps its provisional 2,000 default — the defect was never the ceiling's
+  height. ([ADR-0088](docs/adr/0088-complete-or-withheld-scene-kinds.md),
+  [D-175](docs/ledgers/decision-ledger.md), [R-132](docs/ledgers/risk-register.md),
+  [migration](docs/migrations/copper-mcp-0.7.0.md), #127)
 - **A KiCad UUID that a board reuses is no longer treated as a Board IR identity.** Issue #116's
   one undiagnosed `converted Board IR content failed semantic validation` refusal turned out to be
   `identity.duplicate` on `geometry ID`, and 9 of the 12 real boards surveyed carry the same
@@ -105,6 +145,51 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **Source-to-board connectivity parity is now an authoritative, test-bound claim**, closing
+  issue #66's last leg. `verify_source_to_board_parity` (MCP, both transports) and
+  `copper-mcp source-to-board-parity` ask KiCad's own `pcb drc --schematic-parity` whether a
+  workspace board implements a Circuit Intent's connectivity. The prior slice left this a
+  `not_run` non-claim on a recorded assumption that a board-side verdict needs a project rather
+  than a standalone file. That assumption is wrong for the CLI: `JobExportDrc` derives the
+  schematic from the board filename by swapping the extension and the project load beneath it is
+  guarded by an existence check, so a directory holding only a `.kicad_pcb` and a `.kicad_sch` —
+  no `.kicad_pro`, no library tables — produces a populated `schematic_parity` array. The GUI's
+  parity checkbox is the thing with no effect in standalone mode. Removing that blocker exposed
+  four ways to get a *silent* false pass, and all four are refused rather than reported. An
+  unfetched netlist degrades to `"schematic_parity": []` at exit 0, with the only signal being
+  English on stderr that the containment discards. `--exit-code-violations` ORs three providers
+  into one code 5 that a board with no schematic at all still returns, so it is not passed and the
+  report is parsed instead. Every parity finding is `warning` severity, so `--severity-error`
+  empties the array for a genuinely mismatched board — `--severity-all` is fixed in the argument
+  vector. And the fourth was ours: the delivered schematic marks every symbol `(on_board no)`,
+  correct for the delivery artifact ADR-0015 scoped and fatal here, because such a symbol never
+  enters KiCad's board-side netlist — measured, it yields `extra_footprint` ×2 against a *correct*
+  board and the identical output against a deliberately wrong one. The board is therefore compared
+  against a **board-eligible projection** of the same intent, a second derivative differing only in
+  that flag and reported under its own digest; the delivered artifact's bytes are untouched, so
+  every existing round-trip digest and golden identity is unmoved. No footprint assignment is
+  invented — board-eligibility alone is measured sufficient. Every verdict is gated on a liveness
+  invariant, `count(missing_footprint) + count(footprint_symbol_mismatch) == component_count`,
+  which is a positive proof KiCad loaded the netlist and is `0` in all four false-pass modes; a
+  disagreement is a typed refusal, never a reconciliation. The four connectivity finding types
+  decide the verdict, while the three footprint-identity types are the unavoidable signature of a
+  footprint-less intent and are disclosed as counts rather than claimed as parity failures; an
+  unreviewed type is refused. Evidence binds the intent digest, the delivered schematic digest, the
+  projection digest, and the board revision together, and only digests, counts, and fixed literals
+  cross the boundary — parity descriptions embed net names verbatim and never leave. A real-KiCad
+  control proves a genuinely mismatched board *is* detected. This claims nothing about the
+  delivered schematic file matching the board, about footprints, libraries, or manufacturability;
+  `erc`, `footprint_correctness`, `electrical_validation` and `board_ready` remain explicit
+  non-claims, and only KiCad 10.0.5 was executed.
+  ([ADR-0084](docs/adr/0084-authoritative-source-to-board-parity.md),
+  [D-170](docs/ledgers/decision-ledger.md), [SEC-127](docs/ledgers/security-ledger.md),
+  [R-127](docs/ledgers/risk-register.md),
+  [source-to-board parity research](docs/research/source-to-board-parity-v1.md), #66)
+  The excessive-agency evaluation artifact is re-measured as a
+  [B-090 replay](docs/ledgers/benchmark-ledger.md): the new verification contract declares an eighth
+  single-value non-claim field, and the `non_claim_inference` scenario counts those by introspecting
+  the live contract module rather than from a constant — which is exactly the property that makes
+  that check non-vacuous. All 116 cases, 77 passes and 0 failures are unchanged.
 - **Chamfered and circular courtyards convert, and their legality claims stay honest.** The
   #116 survey's two courtyard causes — `courtyard edges must be non-zero and axis-aligned`
   (measured to be exact 45-degree electrolytic-capacitor chamfers, not the hypothesised rotated
@@ -461,6 +546,12 @@ reproduces from its harness.
 
 ### Changed
 
+- **Circuit Scene is `0.3.0`.** Each of the nine kinds under `static` and `mutable` is now an array
+  *or* a `withheld_by_ceiling` object, so a client with a closed schema that types them as arrays
+  stops validating a truncated response. Nothing else in the scene moved, and no content address
+  did: `board_revision` hashes the board bytes and `snapshot_digest` is the Board IR snapshot's, and
+  neither depends on how the response is shaped. See §4 of
+  [the 0.7.0 migration note](docs/migrations/copper-mcp-0.7.0.md). (#127)
 - **Courtyard legality is now three-valued, and ADR-0058's "exact" claim is corrected rather than
   restated.** KiCad's courtyard DRC never looks at footprint graphics; it collides a cached
   `SHAPE_POLY_SET` that `FOOTPRINT::BuildCourtyardCaches` contracts by
