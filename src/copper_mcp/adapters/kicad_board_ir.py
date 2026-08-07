@@ -157,6 +157,28 @@ _FOOTPRINT_METADATA_HEADS = frozenset(
 # docs/research/kicad-aperture-pads-and-net-ties-v1.md.
 _APERTURE_PAD_LAYERS = frozenset({"B.Mask", "B.Paste", "F.Mask", "F.Paste"})
 
+# Pad fields that change the pad's own copper, its clearance, or its thermal-relief geometry.
+# Each one would make Board IR describe copper it cannot derive, so each refuses by name.
+# `zone_connect` deliberately is *not* in this tuple; see ADR-0091 and
+# `_require_attaching_pad_zone_connection`.
+_UNSUPPORTED_PAD_FIELDS = (
+    "clearance",
+    "offset",
+    "options",
+    "primitives",
+    "thermal_bridge_angle",
+    "thermal_bridge_width",
+    "thermal_gap",
+)
+
+# KiCad's `ZONE_CONNECTION` enum as a pad writes it: 0 NONE, 1 THERMAL, 2 FULL, 3 THT_THERMAL.
+# `INHERITED` (-1) is never written -- an absent token *is* inheritance. 1, 2 and 3 all attach the
+# pad to a same-net pour (3 resolves to 1 on a plated through-hole pad and to 2 otherwise), so
+# discarding them can only under-state attachment. 0 detaches, which is the one direction Board IR
+# may not lose. See ADR-0091 and docs/research/kicad-pad-zone-connect-v1.md.
+_ATTACHING_PAD_ZONE_CONNECTIONS = frozenset({"1", "2", "3"})
+_DETACHING_PAD_ZONE_CONNECTION = "0"
+
 
 @dataclass(frozen=True, slots=True)
 class KiCadConstraintProfile:
@@ -948,6 +970,81 @@ class _Converter:
             object_kind="pad",
         )
 
+    def _require_attaching_pad_zone_connection(self, pad: SExpr, locator: str) -> None:
+        """Accept a pad `zone_connect` override only when it *attaches* the pad to its pour.
+
+        `zone_connect` is an input to KiCad's own zone filler, and the filler is the only thing
+        that turns it into copper. (Two other places *read* it -- the starved-thermal DRC test and
+        the UI inspection tool -- and neither produces geometry.) It does not move the pad, change
+        the pad's shape, change any clearance the router honours, or change the zone outline.
+        In `ZONE_FILLER::knockoutThermalReliefs` the resolved value selects one
+        of three treatments -- `THERMAL` knocks out a thermal-gap annulus and adds spokes back,
+        `NONE` knocks the pad out with clearance, `FULL` knocks nothing out -- and the finished
+        fill is intersected with the zone's own extents, so poured copper stays a subset of the
+        zone boundary for *every* value. That is what keeps the boundary obstacle of ADR-0013 an
+        over-approximation here, and the exact-fill obstacle of ADR-0039/ADR-0070 is KiCad's own
+        recomputed polygon, which already has the value applied.
+
+        So the field cannot break the obstacle direction. What it can break is the connectivity
+        direction, and only in one of its values. Board IR already publishes a pad-to-pour
+        attachment statement -- `Zone.pad_connection`, parsed from the zone's `connect_pads`,
+        carried into every snapshot digest but not into Circuit Scene -- and a pad's
+        `zone_connect` overrides that statement for one pad:
+
+        - `1` (thermal relief), `2` (solid fill) and `3` (through-hole thermal, which KiCad's
+          `DRC_ENGINE::EvalZoneConnection` resolves to `1` on a plated through-hole pad and to `2`
+          on any other) all *attach*. Discarding one never turns `Zone.pad_connection` into a claim
+          of attachment where there is none. It can leave the published *mode* wrong in either
+          direction -- a zone saying `solid` over a pad overridden to `1` overstates the copper, a
+          zone saying `no` over a pad overridden to `2` understates it -- but both readings still
+          answer "attached", so no connection the board lacks is ever claimed.
+        - `0` *detaches*. Discarding it can leave Board IR publishing `solid` or `thermal`
+          attachment for a pad its designer deliberately isolated -- a claimed connection the
+          board does not have, which is the one direction this project forbids. It is also the
+          only value whose information no other Board IR field records, so it is refused even
+          where the zone itself already says `no` and the loss would be provably harmless.
+
+        Nothing here models the value. Board IR carries no pad-level zone-connection field, and a
+        board carrying `1`, `2` or `3` converts to content equal to the same board without it in
+        every field but `source.revision`, which is the digest of the file bytes and must move
+        because they did. That equality measures a no-op and schema stability; it is *not* a
+        soundness argument, because the converter propagates nothing and the equality would hold
+        just as well if `0` were admitted. Soundness rests on the KiCad semantics above plus
+        ADR-0021's rule that pad-to-pour attachment comes only from verified fill. If a future
+        surface ever infers it from anything else, this acceptance becomes unsound and must be
+        revisited -- see R-135.
+
+        See ADR-0091 and docs/research/kicad-pad-zone-connect-v1.md.
+        """
+
+        values = self._values(
+            pad,
+            "zone_connect",
+            locator,
+            minimum=1,
+            maximum=1,
+            required=False,
+        )
+        if not values:
+            return
+        value = values[0]
+        if is_quoted_atom(value) or (
+            value != _DETACHING_PAD_ZONE_CONNECTION and value not in _ATTACHING_PAD_ZONE_CONNECTIONS
+        ):
+            self.fail(
+                "unsupported.construct",
+                "pad zone connection mode is unsupported",
+                locator,
+                object_kind="pad",
+            )
+        if value == _DETACHING_PAD_ZONE_CONNECTION:
+            self.fail(
+                "unsupported.construct",
+                "pad zone_connect 0 detaches the pad from its pour and is unsupported",
+                locator,
+                object_kind="pad",
+            )
+
     def _quarter_turn(self, rotation_udeg: int, locator: str) -> int:
         quarter = 90_000_000
         if rotation_udeg % quarter:
@@ -1507,6 +1604,18 @@ class _Converter:
             owned_pad_ids: list[str] = []
             for pad_index, pad in enumerate(children(footprint, "pad")):
                 locator = f"{footprint_locator}.pad[{pad_index}]"
+                # The named refusals run *before* the closed allowlist below, not after it.
+                # Placed after, every one of them was unreachable: the allowlist rejected the
+                # same heads first with a message that named no field, so a board carrying an
+                # overridden pad clearance was told only that some field was unsupported.
+                for unsupported_head in _UNSUPPORTED_PAD_FIELDS:
+                    if children(pad, unsupported_head):
+                        self.fail(
+                            "unsupported.construct",
+                            f"pad field {unsupported_head!r} is unsupported",
+                            locator,
+                            object_kind="pad",
+                        )
                 self._reject_unknown_children(
                     pad,
                     frozenset(
@@ -1524,6 +1633,7 @@ class _Converter:
                             "size",
                             "tstamp",
                             "uuid",
+                            "zone_connect",
                         }
                     ),
                     locator,
@@ -1554,6 +1664,11 @@ class _Converter:
                         locator,
                         object_kind="pad",
                     )
+                # Validated before the aperture skip below, not after it: `zone_connect` is on the
+                # pad allowlist now, so a skipped pad would otherwise carry it past every check.
+                # The value is inert on an aperture, which has no copper for a pour to reach --
+                # but skipping a pad must not become a way to smuggle an unvalidated token in.
+                self._require_attaching_pad_zone_connection(pad, locator)
                 # A pad with no copper is a stencil aperture, not copper the router may attach to
                 # or must avoid. It is skipped only once every condition in `_is_aperture_pad`
                 # holds; anything else with no copper layer refuses there. The skip sits after the
@@ -1614,23 +1729,6 @@ class _Converter:
                         locator,
                         object_kind="pad",
                     )
-                for unsupported_head in (
-                    "clearance",
-                    "offset",
-                    "options",
-                    "primitives",
-                    "thermal_bridge_angle",
-                    "thermal_bridge_width",
-                    "thermal_gap",
-                    "zone_connect",
-                ):
-                    if children(pad, unsupported_head):
-                        self.fail(
-                            "unsupported.construct",
-                            f"pad field {unsupported_head!r} is unsupported",
-                            locator,
-                            object_kind="pad",
-                        )
                 drill_values = self._values(
                     pad,
                     "drill",

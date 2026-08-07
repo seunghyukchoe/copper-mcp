@@ -74,6 +74,34 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- **A pad that asks a copper pour to attach to it no longer refuses the board.** A pad's
+  `(zone_connect N)` was refused outright, grouped with `clearance`, `offset` and `primitives`.
+  That grouping was wrong about what the field is: those three change the pad's own copper or the
+  clearance the router honours, while `zone_connect` derives nothing — it is an input to KiCad's
+  own zone filler; nothing else turns it into copper. Read from KiCad 10's filler, the finished
+  fill is clipped to the zone's own extents, so poured copper is a subset of the zone boundary for
+  *every* value of the field, and the conservative zone obstacle stays conservative regardless.
+  Values `1` (thermal relief), `2` (solid fill) and `3` (through-hole thermal, which KiCad resolves
+  to `1` or `2` by pad type) all **attach** the pad, so discarding one never turns Board IR's
+  `Zone.pad_connection` into a claim of attachment where there is none — the published *mode* can
+  end up wrong in either direction, but both readings still answer "attached" — and they are now
+  accepted. Value `0` **detaches**, so discarding it could leave Board IR publishing
+  `Zone.pad_connection` as `thermal` or `solid` over a pad its designer deliberately isolated; it
+  keeps refusing, and so does every value outside KiCad's enum. Acceptance changes nothing that is
+  modelled, and a test measures that rather than asserting it: a board carrying `1`, `2` or `3`
+  converts to content equal to the same board without it in every field but the source digest, so
+  no pinned identity moves and the Board IR schema version does not bump. That equality is a
+  no-op and schema-stability measurement, not a safety argument — it would hold for any accepted
+  value, `0` included; soundness rests on KiCad's own semantics plus ADR-0021's rule that
+  pad-to-pour attachment comes only from verified fill. Separately, the seven other named pad
+  refusals —
+  `clearance`, `offset`, `options`, `primitives`, `thermal_bridge_angle`, `thermal_bridge_width`,
+  `thermal_gap` — were **unreachable**: the pad allowlist refused the same fields first with a
+  message naming no field, so the issue that found this quotes a sentence the adapter could not
+  emit. Each now says which field it refused, without opening the allowlist by one head.
+  ([ADR-0091](docs/adr/0091-attaching-pad-zone-connect-overrides.md),
+  [D-178](docs/ledgers/decision-ledger.md), [R-135](docs/ledgers/risk-register.md),
+  [KiCad pad zone_connect](docs/research/kicad-pad-zone-connect-v1.md), #124)
 - **A board outline assembled from `Edge.Cuts` `gr_line` segments no longer makes the whole board
   permanently unappliable.** Issue #126 measured that both apply gates refused every real board
   that converts, and that on three of them the assembled outline was the *only* derived identity —

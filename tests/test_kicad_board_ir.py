@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tracemalloc
 from collections.abc import Callable
+from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
 
@@ -14,6 +15,10 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from copper_mcp.adapters import KiCadConstraintProfile, net_id_for_name, parse_kicad_bytes
+from copper_mcp.adapters.kicad_board_ir import (
+    _ATTACHING_PAD_ZONE_CONNECTIONS,
+    _DETACHING_PAD_ZONE_CONNECTION,
+)
 from copper_mcp.adapters.kicad_placement_patch import (
     KiCadPlacementPatchError,
     _require_native_geometry_identities,
@@ -3006,6 +3011,202 @@ def test_the_footprint_placement_status_flag_is_accepted_as_metadata() -> None:
 
     assert with_flag.content.footprints == baseline.content.footprints
     assert with_flag.content.pads == baseline.content.pads
+
+
+def test_the_pad_zone_connect_constants_partition_kicads_enum() -> None:
+    """The accepted and refused values must partition KiCad's `ZONE_CONNECTION`, exactly.
+
+    The two constants are the whole of ADR-0091's decision, and the behavioural tests below
+    cannot see one of the ways they could go wrong: adding `0` to the accepted set changes
+    nothing observable, because the detaching value is refused by its own named branch either
+    way. Stating the partition here makes that mutation visible - a value may not be both
+    accepted and refused, and no value KiCad can write may be unaccounted for.
+    """
+
+    kicad_zone_connection_tokens = frozenset({"0", "1", "2", "3"})
+
+    assert _DETACHING_PAD_ZONE_CONNECTION not in _ATTACHING_PAD_ZONE_CONNECTIONS
+    assert (
+        _ATTACHING_PAD_ZONE_CONNECTIONS | {_DETACHING_PAD_ZONE_CONNECTION}
+        == kicad_zone_connection_tokens
+    )
+
+
+def _with_pad_zone_connect(value: bytes) -> bytes:
+    """Put one `zone_connect` override on the fixture's GND through-hole pad.
+
+    That pad sits inside the fixture's GND pour on `B.Cu`, so the override is the situation the
+    field actually describes rather than an inert token on an unpoured net.
+    """
+
+    return _insert_before(SUBSET_BOARD.read_bytes(), b"      (drill 1)", b"      " + value + b"\n")
+
+
+@pytest.mark.parametrize(
+    ("value", "meaning"),
+    [
+        (b"(zone_connect 1)", "thermal relief"),
+        (b"(zone_connect 2)", "solid fill"),
+        (b"(zone_connect 3)", "through-hole thermal, solid elsewhere"),
+    ],
+)
+def test_a_pad_zone_connect_that_attaches_converts_to_an_identical_board(
+    value: bytes, meaning: str
+) -> None:
+    """An attaching `zone_connect` override is accepted, and it is accepted as a proven no-op.
+
+    KiCad's `ZONE_CONNECTION` values 1, 2 and 3 all join the pad to a same-net pour - 3 resolves
+    to 1 on a plated through-hole pad and to 2 on any other, in `DRC_ENGINE::EvalZoneConnection`.
+    Board IR already publishes the zone-level statement these override (`Zone.pad_connection`),
+    and losing an *attaching* override never turns it into a claim of attachment where there is
+    none - the published mode can end up wrong in either direction, but both readings still
+    answer "attached".
+
+    The equality below measures a no-op and schema stability. It is not a soundness argument: the
+    converter propagates nothing, so it would hold just as well if `0` were admitted, which is
+    exactly what the surviving mutant showed and what the constants test above exists to catch.
+
+    The assertion is therefore an equality over the whole converted content, not just over pads:
+    the only field permitted to differ is `source.revision`, which is the digest of the file
+    bytes and must differ because the bytes did. Nothing else may move - and in particular no
+    pinned identity in `tests/test_golden_identities.py` can move, because the committed fixture
+    that feeds them is unchanged. See ADR-0091.
+    """
+
+    baseline = parse_success(SUBSET_BOARD.read_bytes(), constraint_profile(assign_signal=True))
+    accepted = parse_success(_with_pad_zone_connect(value), constraint_profile(assign_signal=True))
+
+    assert accepted.content.source.revision != baseline.content.source.revision, meaning
+    assert replace(accepted.content, source=baseline.content.source) == baseline.content
+    # And the pad really is still converted - two empty tuples would satisfy an equality too.
+    assert len(accepted.content.pads) == 2
+
+
+def test_a_pad_zone_connect_that_detaches_is_still_refused() -> None:
+    """`zone_connect 0` is the one value that removes a connection, so it keeps refusing.
+
+    Accepting it would leave Board IR publishing `Zone.pad_connection` - `thermal`, `solid` or
+    `thru_hole_only` - over a pad whose designer deliberately isolated it from the pour. That is
+    a claimed connection the board does not have, which is the direction of error this project
+    forbids, and no other Board IR field records it. It is refused even when the zone itself says
+    `no` and the loss would be provably harmless, because a value-and-context-dependent rule is
+    not worth the surface.
+    """
+
+    result = parse_kicad_bytes(
+        _with_pad_zone_connect(b"(zone_connect 0)"), constraint_profile(assign_signal=True)
+    )
+
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.code == "unsupported.construct"
+    assert diagnostic.message == (
+        "pad zone_connect 0 detaches the pad from its pour and is unsupported"
+    )
+    assert diagnostic.object_kind == "pad"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        # Outside KiCad's `ZONE_CONNECTION` enum entirely.
+        b"(zone_connect 4)",
+        # `INHERITED`. KiCad never writes it - an absent token *is* inheritance - so a file
+        # carrying it was not written by KiCad and its meaning is not established here.
+        b"(zone_connect -1)",
+        # A quoted atom is a different token from a bare one, and `QuotedAtom` subclasses `str`,
+        # so an equality against "2" would accept it unless the quoting is checked.
+        b'(zone_connect "2")',
+        # Exact token matching, not integer parsing: KiCad formats with "%d".
+        b"(zone_connect 01)",
+        b"(zone_connect yes)",
+        # Arity is part of the token's meaning.
+        b"(zone_connect 1 2)",
+        b"(zone_connect)",
+    ],
+)
+def test_a_pad_zone_connect_outside_kicads_enum_is_refused(value: bytes) -> None:
+    """Accepting three values must not turn `zone_connect` into an unvalidated passthrough.
+
+    KiCad's own parser casts the token with an unchecked `(ZONE_CONNECTION) parseInt(...)`, so a
+    hand-edited or generated file can carry anything at all here. Whatever it means, it is not
+    one of the three attaching values whose loss was argued safe.
+    """
+
+    result = parse_kicad_bytes(
+        _with_pad_zone_connect(value), constraint_profile(assign_signal=True)
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code in {"unsupported.construct", "syntax.invalid"}
+
+
+@pytest.mark.parametrize(
+    ("field", "head"),
+    [
+        # The three the issue named as controls: each changes copper geometry or the clearance
+        # the router honours, so none of them may follow `zone_connect` out of the refusal.
+        (b"(clearance 0.2)", "clearance"),
+        (b"(offset 0 0.1)", "offset"),
+        (b"(primitives (gr_poly (pts (xy 0 0))))", "primitives"),
+        (b"(options (clearance outline))", "options"),
+        (b"(thermal_bridge_angle 45)", "thermal_bridge_angle"),
+        (b"(thermal_bridge_width 0.4)", "thermal_bridge_width"),
+        (b"(thermal_gap 0.3)", "thermal_gap"),
+    ],
+)
+def test_the_other_overriding_pad_fields_still_refuse_and_name_themselves(
+    field: bytes, head: str
+) -> None:
+    """The control, and a diagnostic repair.
+
+    These seven refusals were unreachable: the pad allowlist rejected the same heads first, with
+    a message that named no field, so issue #124's own report quotes a sentence the adapter could
+    not emit. Running the named check before the allowlist makes each refusal say which field it
+    refused, without opening the allowlist by one head.
+    """
+
+    result = parse_kicad_bytes(
+        _with_pad_zone_connect(field), constraint_profile(assign_signal=True)
+    )
+
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.code == "unsupported.construct"
+    assert diagnostic.message == f"pad field {head!r} is unsupported"
+    assert diagnostic.object_kind == "pad"
+
+
+def test_a_skipped_aperture_pad_cannot_smuggle_an_unvalidated_zone_connect() -> None:
+    """`zone_connect` joins the pad allowlist, so the aperture skip must not run before it.
+
+    An aperture pad has no copper for a pour to reach, so the value is inert on one - but the
+    same was true of `(primitives …)`, and skipping a pad is not a licence to stop validating
+    what it carries. The check runs before `_is_aperture_pad` for exactly that reason.
+    """
+
+    result = parse_kicad_bytes(
+        _with_pad(_aperture_pad(extra=b"      (zone_connect 0)\n")),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].message == (
+        "pad zone_connect 0 detaches the pad from its pour and is unsupported"
+    )
+
+
+def test_an_unknown_pad_field_is_still_refused() -> None:
+    """Accepting one pad override must not turn the pad allowlist into an open one."""
+
+    result = parse_kicad_bytes(
+        _with_pad_zone_connect(b"(some_future_pad_rule yes)"),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].message == "expression contains an unsupported semantic field"
 
 
 def test_an_unknown_footprint_field_is_still_refused() -> None:
