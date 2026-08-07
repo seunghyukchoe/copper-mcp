@@ -1,4 +1,4 @@
-"""Net-tie footprints: netless obstacle copper, no connectivity claim (ADR-0082).
+"""Net-tie footprints: netless obstacle copper, no connectivity claim (ADR-0092).
 
 KiCad's ``net_tie_pad_groups`` declares that "nets attached to pads within a single
 pad-group are allowed to short", and the footprint's filled copper polygon *is* that

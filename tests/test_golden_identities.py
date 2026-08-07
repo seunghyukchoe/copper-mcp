@@ -207,9 +207,15 @@ def test_net_reference_ids_are_content_addressed_over_the_net_name() -> None:
 
 # A RouteCandidate ID is the address a caller stores, hands to `apply_candidate`, and exports
 # under ADR-0048.  Changing it requires bumping ROUTER_VERSION and a migration note.
-ROUTE_CANDIDATE_ID = "sha256:5cc17902c14ff741d822f4d4f470ebec7606a9d6d533f814b012d74fea0e56e9"
-ROUTE_CANDIDATE_PAYLOAD_BYTES = 1_042
-ROUTE_CANDIDATE_ROUTER_VERSION = "astar-grid/0.6.0"
+#
+# Moved once, deliberately, by ADR-0087 (issue #128): `max_obstacles` was re-derived from
+# 256 to 4,096 and `ROUTER_VERSION` advanced to `astar-grid/0.7.0`.  The *geometry* did not
+# move — this fixture's path is the same two vertices, the same length, and the same bend
+# count as before — so the payload grew by exactly the one character that separates "256"
+# from "4096".  The migration note is in CHANGELOG.md under 0.6.1.
+ROUTE_CANDIDATE_ID = "sha256:7dbbc4b034238d61c9f002163a3af9a91022942785bf97eee8db37c6bf564784"
+ROUTE_CANDIDATE_PAYLOAD_BYTES = 1_043
+ROUTE_CANDIDATE_ROUTER_VERSION = "astar-grid/0.7.0"
 ROUTE_CANDIDATE_BOARD_REVISION = (
     "sha256:5f88ebcf52cf8f1548990bdbdc1c52ac7a30f39c013366f79b161ec15e1caae2"
 )
@@ -300,7 +306,8 @@ def test_placement_candidate_identity_matches_its_committed_golden_value() -> No
 # A bundle is all-or-nothing: its ID binds the member candidate IDs *and* the coordinator policy
 # envelope digest, so a caller replaying a stored bundle_id is asserting both.  Changing it is a
 # route-bundle schema bump plus a migration note.
-ROUTE_BUNDLE_ID = "sha256:6b54fa782ec45fe3ac919736799fc6dd51506f71b78acc7db15fe2a57f59bd75"
+# Moved by ADR-0087 with every member candidate ID below; see the note on ROUTE_CANDIDATE_ID.
+ROUTE_BUNDLE_ID = "sha256:38941a989de4725fa4e5be81e163caffa80ad40401e46f06973befce263a9095"
 ROUTE_BUNDLE_BASE_REVISION = (
     "sha256:2f82b6a51792ef5e93b9834419c18639d6c13ebe974176447be037644e531c70"
 )

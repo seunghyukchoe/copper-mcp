@@ -86,7 +86,11 @@ the same metadata plus one opaque, expiring resource capability. Neither deliver
 per-build KiCad parse, ERC, electrical validation, or schematic-to-board parity check; a separate
 `verify_circuit_schematic_erc` surface runs authoritative `kicad-cli sch erc` on the rendered bytes
 and drives the passive-subset verifier with a real KiCad netlist export, reporting `passed` and
-`clean` independently and leaving schematic-to-board parity a non-claim. Capability
+`clean` independently. Schematic-to-board parity is a third surface again:
+`verify_source_to_board_parity` runs authoritative `kicad-cli pcb drc --schematic-parity` over one
+workspace board and a board-eligible projection of the same intent, since the delivered schematic is
+board-excluded and cannot participate; it reports both digests and refuses a verdict the oracle
+cannot be shown to have produced. Capability
 access expires after 15 minutes, but expired bytes are reclaimed lazily on later store activity or
 process exit; no secure memory-erasure claim is made. See the
 [Circuit Intent and schematic contract](circuit-intent.md) and

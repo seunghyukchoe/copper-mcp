@@ -414,7 +414,7 @@
           "routed_nets": 0,
           "router_call_count": 21,
           "router_expansions": 1983,
-          "router_obstacle_checks": 7663,
+          "router_obstacle_checks": 11206,
           "status": "no_path",
           "total_vias": 0,
           "total_wire_length_nm": 0,
@@ -430,11 +430,11 @@
         "cost-update/present-growth-13-10": {
           "candidate_digests": [
             "sha256:8734303dac836d965a9056a413fc4216c03618e26ba9d55922e66c56c5bde2f0",
-            "sha256:a966ff6c1524381b8163b7a7e85cc338b0f905918a03cd74e99f8b00d8be1ae8",
-            "sha256:bf8fbf64b3dc784f4f7c585f18deb530a9a634269eb32d7a018159cb6251feb7",
-            "sha256:f65a1ba053a2c5b28bc2892953ed5bdc7075ce58f51f2bcbdbcfbcd075d033a2",
-            "sha256:8ef6e5f16bdf8421196954ab88c015c8d75ea00f150ac9335a35df0a87155ca2",
-            "sha256:91bdcceb7b37dbc92f8f7974d6b5a1f2651a36d948943d84843c04b4cb7105e6"
+            "sha256:eaf9058e62abb344ac0a270269cd7ecea5d996bc7a0490a7946dc96a7a9b3d78",
+            "sha256:66220c89e4e24a92d775e9840010cac4b6ad4fc0bff184272ab4308d72b307bc",
+            "sha256:66bd58618b9df779a2f04b6695eb78f242736c7441d95168ee9599bcfdc5a3df",
+            "sha256:40b776f90cf35fce54d388f8fd1db956b344ff80bdb7f4c9f14092fedfd2674f",
+            "sha256:96834e3919851f2ef7f4f1741ed0ec384a3c2d8006cde7da2fad1893b1173cd6"
           ],
           "completion": true,
           "cost_update_slot_digest": "sha256:b46c0724101de0dd6301d47c0a1c7dbd374336bc35becedde27784016513dfbb",
@@ -476,7 +476,7 @@
           "routed_nets": 6,
           "router_call_count": 18,
           "router_expansions": 1031,
-          "router_obstacle_checks": 3731,
+          "router_obstacle_checks": 16069,
           "status": "completed",
           "total_vias": 0,
           "total_wire_length_nm": 60000000,
@@ -564,7 +564,7 @@
           "routed_nets": 0,
           "router_call_count": 48,
           "router_expansions": 2710,
-          "router_obstacle_checks": 9319,
+          "router_obstacle_checks": 31712,
           "status": "no_path",
           "total_vias": 0,
           "total_wire_length_nm": 0,
@@ -580,11 +580,11 @@
         "cost-update/scaled-accumulation-4": {
           "candidate_digests": [
             "sha256:d48e6570d15c8f4673be0782e5a40b1a683c805d68556904257d9f74ac1063bf",
-            "sha256:deb1604b08c9f1f1ab89af5433847936b99228967fff2839af9ce38f9ab23033",
-            "sha256:31e386fe9ad2fbec3f967bce634348df32e2f9df53f34fe57b08b59b9f470825",
-            "sha256:09da422c1bca35f324637e22c95f1c50e59d3f31dfab8d2a3419ca67aa1aaefb",
-            "sha256:39b17200f2cd7f98a87e419affe45b6cb30ff7a9927b92c37008414c07138351",
-            "sha256:ab20290673cfb47490b5509bb7cb39803d9a832c980aa5e99ea981768b3de1c5"
+            "sha256:c74812867e1c388acee811b90b125ae303bf49c70e53834ea8d50a601bf00c4a",
+            "sha256:ab6dc2a905ecb4ea8b2e66d710b409ffa4514156a64a5aa0be748cf1230341e7",
+            "sha256:de372e961401722ae4b672cbd3beff91bee5176ac8e8862ad25332778ba889f4",
+            "sha256:6852d7fd68b1580ebf17d41a20cbbe29745d0a217b61f34f700522cba89b9348",
+            "sha256:4320ff6ce936405f75b81bf8afbe588051860735aa2ec83d2dc9c2a4d71d1ee6"
           ],
           "completion": true,
           "cost_update_slot_digest": "sha256:7dd3d93b70c374e6b31833e6989eba34a4c643eb51c7b607c4ea7abd57e2994b",
@@ -642,7 +642,7 @@
           "routed_nets": 6,
           "router_call_count": 30,
           "router_expansions": 1766,
-          "router_obstacle_checks": 6392,
+          "router_obstacle_checks": 21979,
           "status": "completed",
           "total_vias": 0,
           "total_wire_length_nm": 70000000,
@@ -651,11 +651,11 @@
         "legacy-equivalent": {
           "candidate_digests": [
             "sha256:b74cdb1428298b38600d11f79d57c7e7c4a69c92eb163c5e49f7c2ad80966f6f",
-            "sha256:e54a6d201e1fa84f3ec64059dd63716ef249fefc19e8012b94cdb6026638bedd",
-            "sha256:5ea42c48edfcf36213e741114b08d28af1a4625ed2264c2ba68ce1875be9dcab",
-            "sha256:e3f9141e3821f4fedd76ffdef2a6e85c4f6757c5b27e4495fde365c20157bcef",
-            "sha256:1d0f6a5c786daec55aec268e9b4493e50a8671abc1c30dd09c41447b21f72020",
-            "sha256:acaf581af4fa33f0de65aa704295aa566d872b3c9a0a4dd93b1fd97194b6ed6b"
+            "sha256:c27dfce6f5a5fb3ff1345d9a4d0887904e6e90d726258d469d94e4ba3ce77655",
+            "sha256:db7bc5d6edc02fc6937fe02fa49da38e5b675ec839de3b0d40115c7c70a4c1c8",
+            "sha256:58f4d2146973de0ef213be2b5e4071e8c812c4aa8369fa87b3760fbbc830a267",
+            "sha256:d9b0436714c54bbbd5959a2d09f027dc1582443034448cab4588a6daacc7332a",
+            "sha256:060e221110333ef5abff2c17812aa946d16786ce8cdf4e7d28e5703fd0a715bf"
           ],
           "completion": true,
           "cost_update_slot_digest": "sha256:881adeb3b6b79fb7f558a3b950c713471eb57045eb77a1caa5da8655f4a80d59",
@@ -713,7 +713,7 @@
           "routed_nets": 6,
           "router_call_count": 30,
           "router_expansions": 1850,
-          "router_obstacle_checks": 6350,
+          "router_obstacle_checks": 23309,
           "status": "completed",
           "total_vias": 0,
           "total_wire_length_nm": 56000000,
@@ -722,11 +722,11 @@
         "net-order/demand-ascending": {
           "candidate_digests": [
             "sha256:65db82e432bca6700580b7aa5fcfba6f8e5793399e41d3a919a3ce539708f921",
-            "sha256:cb50385bbfc0575a3c68a597ed8f700fed93ade0ba9756e7a9474b70746fd119",
-            "sha256:42d46ac6b740b1008cb82451c709b7674a56ee1a136780853ae51283207f2d3b",
-            "sha256:81b3da76499d77675032d35de3ad415c3ab1b8fe3c3c402f69c9066a96f46897",
-            "sha256:ab14fe4854455b380c77a1aefb8e62260cf00db172c52066edfc487fd3f5ce23",
-            "sha256:57f67fa38f3eec88f50dd04a81ae457346b078d02cb3bd9abbb2489a4d621251"
+            "sha256:b2d5febb0b3f270d5d3c4c0cd2cb2a85fb6ee32c361d5ac46110dec407f0adbf",
+            "sha256:dd1646b84b354f9aadd6af74c146dcce3fcb2a2240f4ce939fc3b1bbcf1b1772",
+            "sha256:2bd0e733cbdb1634c6a6c85c701c636b57635a41ca92739180c661934310ca6d",
+            "sha256:6f295e1a233fd324986492dc1500a0f6ad720b24685ff6449d52ccf9ea1f1f93",
+            "sha256:747629a7d29bd02b43a2480bd4d952f9ff4f75b87b7280204d655dedd9f2f49e"
           ],
           "completion": true,
           "cost_update_slot_digest": "sha256:881adeb3b6b79fb7f558a3b950c713471eb57045eb77a1caa5da8655f4a80d59",
@@ -752,7 +752,7 @@
           "routed_nets": 6,
           "router_call_count": 6,
           "router_expansions": 172,
-          "router_obstacle_checks": 486,
+          "router_obstacle_checks": 1316,
           "status": "completed",
           "total_vias": 0,
           "total_wire_length_nm": 54000000,
@@ -840,7 +840,7 @@
           "routed_nets": 0,
           "router_call_count": 48,
           "router_expansions": 3164,
-          "router_obstacle_checks": 11044,
+          "router_obstacle_checks": 34250,
           "status": "no_path",
           "total_vias": 0,
           "total_wire_length_nm": 0,
@@ -935,7 +935,7 @@
           "routed_nets": 0,
           "router_call_count": 48,
           "router_expansions": 3164,
-          "router_obstacle_checks": 11044,
+          "router_obstacle_checks": 34250,
           "status": "no_path",
           "total_vias": 0,
           "total_wire_length_nm": 0,
@@ -951,11 +951,11 @@
         "no-plan-baseline": {
           "candidate_digests": [
             "sha256:05b9877002be92efb6cce00a113deec74080a32d107d5e0b0369bfe05b6f7907",
-            "sha256:5e7838fd4aaba56567add5d87c34fa0932f4bcf0c5f3b1c895436661d545655b",
-            "sha256:b4447b6762822e07b0cf3bc1efa52d899c24362fbbe71091d86c25d0b07ca4b0",
-            "sha256:688238949c84dc765481a44a1cebe36e4a94e726ce363aa027981a1a70659549",
-            "sha256:4b492a7aa928e6a56660142af399561118b425e08646e83b589513d37e362211",
-            "sha256:e6918e49bb21ce758ac533eae179c9ccdecaf7a85c07f52bc8a925ed6b4fd5cc"
+            "sha256:a76822865a82a26fdc4c2161eb64b9d59b9988961ca09dce77f70f0b2059c3f8",
+            "sha256:53cfccacd6f98dc8f4fe232f1efdffb36c0b4ef5499ded75a1fe338dee1b4b7e",
+            "sha256:9732131e443f9a75fd31059ebf148c8b15f676184aadf71e15f2c716e221495d",
+            "sha256:6fd0e08596bfb0985ef2c042a4d7045d866d83608c1b7368c39c4b579a9ab56e",
+            "sha256:d27b3b763b035a797431dcab08a7e9ef422c8e25d1b751a9f762db2a6757b269"
           ],
           "completion": true,
           "cost_update_slot_digest": null,
@@ -1013,7 +1013,7 @@
           "routed_nets": 6,
           "router_call_count": 30,
           "router_expansions": 1850,
-          "router_obstacle_checks": 6350,
+          "router_obstacle_checks": 23309,
           "status": "completed",
           "total_vias": 0,
           "total_wire_length_nm": 56000000,
@@ -1075,7 +1075,7 @@
           "routed_nets": 0,
           "router_call_count": 22,
           "router_expansions": 1966,
-          "router_obstacle_checks": 7555,
+          "router_obstacle_checks": 11096,
           "status": "no_path",
           "total_vias": 0,
           "total_wire_length_nm": 0,
@@ -1144,7 +1144,7 @@
           "routed_nets": 0,
           "router_call_count": 22,
           "router_expansions": 1966,
-          "router_obstacle_checks": 7555,
+          "router_obstacle_checks": 11096,
           "status": "no_path",
           "total_vias": 0,
           "total_wire_length_nm": 0,
@@ -1170,11 +1170,11 @@
         "composed/conflicted-only+present-growth": {
           "candidate_digests": [
             "sha256:7920fba893b0cd6ecf0fa25bb96b0b490f6f024c7829490b97814c2e6928d079",
-            "sha256:a4e771eb28031d34284d40eafbbb1431d2fba89692587d0360eeb4372d0f43ea",
-            "sha256:6f25ac2f7db41035adb0da4380bc8d90b0bd7b52e7e0b192f25db66e855066a4",
-            "sha256:f533ec6164b7aa06adef8bea0037fe397fc8a03d0162beda0280a10bc27bad62",
-            "sha256:90df834fd1326af100061b6876652734063be4a798c5a3f90ad7cb043b7c075a",
-            "sha256:97f37586d4f383b083f5f381893c248008901bbfacd6b905d03484ff2c7b560e"
+            "sha256:233b954df95264c9be984c7e982c59130c95dd07d08a8fee9b2f7c3e05b478d6",
+            "sha256:f199ab8aa344f580ec98dbdec7405a85c06e63b912481963866511c35578807f",
+            "sha256:25d5bfc007811196fc61498eb6d2f87e3a4b94b92f16ebf42581781fcfb216a3",
+            "sha256:fa53c480cb65d82db1362100c28f26f1c36d8c8183e45faba922466dc0fd086e",
+            "sha256:b3f83b33eab4508c55a4cb60b8239bc223c7dddcc5f2da3c496ecbc8346c2cea"
           ],
           "completion": true,
           "cost_update_slot_digest": "sha256:b46c0724101de0dd6301d47c0a1c7dbd374336bc35becedde27784016513dfbb",
@@ -1200,7 +1200,7 @@
           "routed_nets": 6,
           "router_call_count": 6,
           "router_expansions": 362,
-          "router_obstacle_checks": 1408,
+          "router_obstacle_checks": 4967,
           "status": "completed",
           "total_vias": 0,
           "total_wire_length_nm": 76000000,
@@ -1209,11 +1209,11 @@
         "cost-update/present-growth-13-10": {
           "candidate_digests": [
             "sha256:c939d106c87008dd72cbd36e1d47e518dc8cfa4919f5c8c970b5b148e946257d",
-            "sha256:fd145bf8fe0262613549d96bff58346d2a86e7c486855a0762d5533cd53b7f2f",
-            "sha256:b125d970ca539ac441a89fa52a351fe7ae7aaa362b83be4e748441f9aeacd10b",
-            "sha256:34a26b20e32d1d42fc1e5ded92af396929a2973139b4ae7e33feb73b6c371407",
-            "sha256:f3f4bae23e46f24ce66460de7ff9bcd2714dfff5565807d0019332806d3c6cea",
-            "sha256:4ae26c7943bc7ec46d059a515e3a9ebee1d38a6dc15ba2245bd2e0f89ffca1b0"
+            "sha256:739e81dd440a78f260631e5d637613e10be6646da42758ac6199268fa0f006d0",
+            "sha256:7f99184de47c8d8754339857c21cc053857ccd333f3681b6af61bb72f6e8f4ad",
+            "sha256:78ce12469a4a1e8f8674afd00f95f712f086ef674621c6439895bab4430b692f",
+            "sha256:45697d2829f6d6c9484192f9cf1aa5f6b7c91c12f658ea4a9c4dec43f45090d9",
+            "sha256:84da7de3e7e01a191dbba4252dd0b958fe074e1e44b4bf11e949cb02b480d885"
           ],
           "completion": true,
           "cost_update_slot_digest": "sha256:b46c0724101de0dd6301d47c0a1c7dbd374336bc35becedde27784016513dfbb",
@@ -1239,7 +1239,7 @@
           "routed_nets": 6,
           "router_call_count": 6,
           "router_expansions": 362,
-          "router_obstacle_checks": 1408,
+          "router_obstacle_checks": 4967,
           "status": "completed",
           "total_vias": 0,
           "total_wire_length_nm": 76000000,
@@ -1248,11 +1248,11 @@
         "cost-update/saturating-decay-half": {
           "candidate_digests": [
             "sha256:4fbffff619a12c284b23e82884e082708901fff1641b2f93e4b61bac51b25208",
-            "sha256:c0bd41c41a29e10dd759c66fd00a95dc9218b5c421aea8cedad68412accbb551",
-            "sha256:98db9e483f41ecbd4e2156dc6a496c76353ac5f00ebd52cf7718cad3ba2abf32",
-            "sha256:b534fdbbca841d3807dce04c42ff75fb57f88ae2fb1c9724b3e56c91f5df6cab",
-            "sha256:1d4d7df9f34213f7da27f212128463260136ff178ee72ebd1af872049be66d00",
-            "sha256:8c2ec42c75dabf526825b0fd14369cc32fb06691a4cdfbbd4b3a9bb35514a800"
+            "sha256:0e47d2f29b5e9725c1e60c5089f2444710fa9a32c48b0b77bdca4dbf30c8a15f",
+            "sha256:f8e7e0d03ce5f62149b1024cf71742c8b83133ebd4f1107ae6ff076476abf8f5",
+            "sha256:022380de1b71876392ef2b4f3339fee900ce5d4e1422f519bf02e80b18a70cfc",
+            "sha256:0c7b31ada45fca72ff99d760d13a0b4b8c24e4e060168eb6bf5a402c1c40da36",
+            "sha256:9f12fcb0edd5bf4ba9071bf933df9e99280dc2c7ddeafcfa7f0649977e8f293b"
           ],
           "completion": true,
           "cost_update_slot_digest": "sha256:44df8c235116e439d85226131da13854da0bb866007870592b37fd957d2d03c3",
@@ -1278,7 +1278,7 @@
           "routed_nets": 6,
           "router_call_count": 6,
           "router_expansions": 362,
-          "router_obstacle_checks": 1408,
+          "router_obstacle_checks": 4967,
           "status": "completed",
           "total_vias": 0,
           "total_wire_length_nm": 76000000,
@@ -1287,11 +1287,11 @@
         "cost-update/scaled-accumulation-4": {
           "candidate_digests": [
             "sha256:6574d95c90f85d4a0ea34fe6dc941c60844990f0d1205335512bb1b8adb631ca",
-            "sha256:db77a1a36c1ca1912211df63e383b3270e469641b5cda2bb12f18c584c5b5907",
-            "sha256:166306d99d1165e8cb3e7d79fa3ea7f31d629a2a1f92c0d4e9f14079b95a4ad3",
-            "sha256:1f75b434c813a3d77f7173e7b0e10db7be3477f5bd0e7c86fc3f2b19316e8cf2",
-            "sha256:97f346f34362bd1f53e3d68d63c58c2cdd1de32696a9d4f2c34bd7eb1a9ca148",
-            "sha256:c9e3c4629c1536d19b45a70698b52d2de6d87a677ec53471a400502f5962ac53"
+            "sha256:1e5539de9782a42d438ca47cad78b8f795ea9e86e3bd1e3773cfd2fac5bf262d",
+            "sha256:57e5d6925c53642d603bfb435a7e82b7bb6a54d2164fbc18797e3b1fb4c9ef6e",
+            "sha256:82dfe2bc2e062116a5c5c039baed981ab4d7205830cb3026a10d8324ad9639d4",
+            "sha256:8fcfd325a0228174f498853966aa3aeae64c556e2e2f09ff3b48c8245a69eb45",
+            "sha256:ce3e01dea12897dc0a4ad6d681740489a128aa0ee7103f51b2ed680176047aa0"
           ],
           "completion": true,
           "cost_update_slot_digest": "sha256:7dd3d93b70c374e6b31833e6989eba34a4c643eb51c7b607c4ea7abd57e2994b",
@@ -1317,7 +1317,7 @@
           "routed_nets": 6,
           "router_call_count": 6,
           "router_expansions": 362,
-          "router_obstacle_checks": 1408,
+          "router_obstacle_checks": 4967,
           "status": "completed",
           "total_vias": 0,
           "total_wire_length_nm": 76000000,
@@ -1326,11 +1326,11 @@
         "legacy-equivalent": {
           "candidate_digests": [
             "sha256:c582b611b35951ba969d984f02003f73669a8e4d649f167dcd27dc19742ab4dc",
-            "sha256:bc88918b441b0d29a5e8929df399689c754371dd0b357bd868fa8e6d933d60b9",
-            "sha256:065e521a1e064fa88508db2eaf4d8f9009bcbe6d719d28e13ff77d717ead396e",
-            "sha256:c90afe65eaedcc2a70b36bc1d655a3df2eb6a0c034a9207debb870953ebef836",
-            "sha256:8e255bf2a4f84863a0c505f139b5dba1acc0c2d85c2e922c528da0f8b8e7749d",
-            "sha256:0bbb1de50ed904dc87bbd92f1c5eb154f4aa0f8ddeb6717f45af55f0e5d89241"
+            "sha256:6ee0f6fd9e6005c3c7f6aced2f801d78e69beb37ec061903197c00059f29c46f",
+            "sha256:12600a9b870f6c4c3137d15f3c33c7a0ee9f5b9e6e0065c7f361ea638d65f728",
+            "sha256:26e9b37b27dd507a66f57a61b0007d3bf445df7d9e8ea939875ca286a50fb979",
+            "sha256:a6b5db7a2c59eeedd210e3c53b213090295615774bb2aec31d08d27959e71108",
+            "sha256:092697d41f4d3382fd6e458aeaca5e650dc0719729df10b9eced9d4707cbe2c7"
           ],
           "completion": true,
           "cost_update_slot_digest": "sha256:881adeb3b6b79fb7f558a3b950c713471eb57045eb77a1caa5da8655f4a80d59",
@@ -1356,7 +1356,7 @@
           "routed_nets": 6,
           "router_call_count": 6,
           "router_expansions": 362,
-          "router_obstacle_checks": 1408,
+          "router_obstacle_checks": 4967,
           "status": "completed",
           "total_vias": 0,
           "total_wire_length_nm": 76000000,
@@ -1365,11 +1365,11 @@
         "net-order/demand-ascending": {
           "candidate_digests": [
             "sha256:5e0c588db3b1f9e1090b2df724b5b1b0d30681b5013db799eb1f2f65cda93655",
-            "sha256:dbe2206e796d311763cf32f4c586de13e6c50ebc5e2aee39443b4074368b023c",
-            "sha256:3288099d1935c3e7d455320940e66d1ec8aa658c235775a89d0dd131f63eb991",
-            "sha256:62266dc2569e792e76dbdc9eb9eb06f7b5a9a662f6d3d156af72b25c20a06eeb",
-            "sha256:f9c7d3f772a94372e8800bd39521de95d0b719ff4fa26ef19d07ff8c8865288d",
-            "sha256:ebc9e858a8f8f756582b42ee5f9290255dac7be138b7521df2f9d6d4b7b84980"
+            "sha256:79c26a7c27b995befdf4925907b8b1819cf725400f05ede959ea3ab6be4f3f85",
+            "sha256:0d97e04c262efc92c2d0037dbc8de3b66c4fd6726ebe8e997105468938441b7f",
+            "sha256:97dfc9f0ff92152456e397c4eb6fc3165957fe1f606e3feffba7b94ef0c9ff55",
+            "sha256:8bd22b5e9ab1f721e1e99e845165a8011382f7b8b6e44754b2268b8d8997b86a",
+            "sha256:0f696ebd81a62b934d52aa562c9862cbdabe8220f04fe5eb16f18c36ed42eb82"
           ],
           "completion": true,
           "cost_update_slot_digest": "sha256:881adeb3b6b79fb7f558a3b950c713471eb57045eb77a1caa5da8655f4a80d59",
@@ -1395,7 +1395,7 @@
           "routed_nets": 6,
           "router_call_count": 6,
           "router_expansions": 162,
-          "router_obstacle_checks": 474,
+          "router_obstacle_checks": 1304,
           "status": "completed",
           "total_vias": 0,
           "total_wire_length_nm": 54000000,
@@ -1404,11 +1404,11 @@
         "net-order/demand-descending": {
           "candidate_digests": [
             "sha256:559e959b9bc66d005bf9c27cca3e3be26918f0c2ec286c4377875fef720dec8e",
-            "sha256:4df8f44c7f9ea71252a49b14a990519d0133999615b4a1b80f255a1e2125bea3",
-            "sha256:64eebb487bfdf5bb3016cc4200b061d935bde717977554897ae3a8d6dea65a30",
-            "sha256:d8222bdc4f41ec5afd9167a07f8db373359cea6a5f73d53325c0599eda0d9df3",
-            "sha256:1589bd3e735b97bae084efa37bf2949fa514738b9d2d48797277b2bae6eede10",
-            "sha256:e7cb4a9dd3c6a3d31f88fdf4ed34307c406c8782b1c4ca17162c60897756c90a"
+            "sha256:e987e0e21c698b99ce0b0e271ea87fb34ec3b1b52780059573302e11dfc4ccd0",
+            "sha256:37e2530be9a2f4dfb3d00fbbfd18451a245a263dca7c84dc547b72048a402551",
+            "sha256:abaf618cb9c4be46cd446e946735e620b7aafc8a08a567f90e3f1f8529738bdf",
+            "sha256:b6c675feebd2da4fc0108e8d509913fd4a29137896bd5d4e1b5418422076c169",
+            "sha256:587241c169af86443a745f02f74f26b6c1018402c99bdff1027e275274ab5d33"
           ],
           "completion": true,
           "cost_update_slot_digest": "sha256:881adeb3b6b79fb7f558a3b950c713471eb57045eb77a1caa5da8655f4a80d59",
@@ -1434,7 +1434,7 @@
           "routed_nets": 6,
           "router_call_count": 6,
           "router_expansions": 362,
-          "router_obstacle_checks": 1408,
+          "router_obstacle_checks": 4967,
           "status": "completed",
           "total_vias": 0,
           "total_wire_length_nm": 76000000,
@@ -1443,11 +1443,11 @@
         "net-order/stable-identifier": {
           "candidate_digests": [
             "sha256:1d753e293c47bd598cbb407dcb4a18d2622160f79d124e05b13af689beb540e8",
-            "sha256:bfb562f9ed4a9ff58e550f97dda331f92f69d4b8a8138db1b37ec90e45977da5",
-            "sha256:174452cdab4b71639e9fc33c4a4a55c8eed5dd4a3b63caf548f7642844800507",
-            "sha256:8bf0a5bcb47ca74479c6cc519ed046c4786654a87ca8e63be67cbfcc392e239a",
-            "sha256:e3cfb30638e6496aa6974028147b79d604a11a09b60c073dbb72224bc0ec2028",
-            "sha256:5672724807dcbae5a9ab451df1fe9f6c8a5379cdfe13ec0624cfa0957afc177d"
+            "sha256:0a9b7eb9009f31c1069686d8864b0638d7fa513ed14c29b11542754b42097e5e",
+            "sha256:fe88d77040bd05d75d7fb256d921d93ebf786a3eb748bf5b1b112689eab9b806",
+            "sha256:e64c1f5f605221260c670e85746b34af4db41a5b4755da4a77003c89b7cd91c5",
+            "sha256:e27dd69f0200632ddf84586755839aa389aef762eba134f035029a68945d6ca8",
+            "sha256:30ddbde38ce687c87704716276c1ba59832f6d0a084d9d0998ebe6bca062ecf3"
           ],
           "completion": true,
           "cost_update_slot_digest": "sha256:881adeb3b6b79fb7f558a3b950c713471eb57045eb77a1caa5da8655f4a80d59",
@@ -1473,7 +1473,7 @@
           "routed_nets": 6,
           "router_call_count": 6,
           "router_expansions": 362,
-          "router_obstacle_checks": 1408,
+          "router_obstacle_checks": 4967,
           "status": "completed",
           "total_vias": 0,
           "total_wire_length_nm": 76000000,
@@ -1482,11 +1482,11 @@
         "no-plan-baseline": {
           "candidate_digests": [
             "sha256:a052d84cfaafda93e09594164890d89635833c11bc18a4652334f18aeb8513ff",
-            "sha256:dbe6e7e74042bf4f83039786d672fb2bf4892176c9c6511518699e474eda3318",
-            "sha256:0710904b667b9dfd6201aed45f9ec608da57d00246e0b1eee6323f111e83332e",
-            "sha256:418c76f17cac4642f52fac738311a29d9567bbeb387a81764d26d033983f1651",
-            "sha256:8564b58ddadb540f33139c9ad00200b7fe5da30871b30107ac67be40849af06b",
-            "sha256:1626ba96b9527eaca732ba05e5d13783ef9e33ff1240b6d4ffd658725c1133fd"
+            "sha256:a2e6aabd440a9cb5ab51af7a3f91759c2fcec7333057ca4dbb4e78fbc494f6a6",
+            "sha256:2c752dfc0a32ef6bb67947d9506d99ffb6216b5f35f945c473c25c3e8210bbee",
+            "sha256:aa91ab0fef1e1d67e952f97e07c5754288d7e5364957e8b06c74d86aa3fdbdfa",
+            "sha256:6ead6a3c658d8ca657efb6ad61b8decad1cb6204d642acd018b47cb7386ce2a6",
+            "sha256:2c701d495f59d59938aea6a24d97912d564485a3f9a819d5ce99efb8d8daa747"
           ],
           "completion": true,
           "cost_update_slot_digest": null,
@@ -1512,7 +1512,7 @@
           "routed_nets": 6,
           "router_call_count": 6,
           "router_expansions": 362,
-          "router_obstacle_checks": 1408,
+          "router_obstacle_checks": 4967,
           "status": "completed",
           "total_vias": 0,
           "total_wire_length_nm": 76000000,
@@ -1521,11 +1521,11 @@
         "rip-up/conflicted-only": {
           "candidate_digests": [
             "sha256:0ee5e78abf414210f08ffe14a25a87104317b6b563c50946c2ec35a1accd9bab",
-            "sha256:88371f592a6da3fe807661dee14f126a2fd488610e2bb35fd5a7ce5940a2da78",
-            "sha256:49b47ea31454926006e144285e0c7387c6e05c0e0238e1a4de8fccbf2386234c",
-            "sha256:03b45b6c2d3d7e86a63b59efd4476f13460e9651c9010152d96c6d01fbc191ec",
-            "sha256:0cf24809dbc4d83913915985713c9a47e964cf4aeafd19c02b64b639eb0994e1",
-            "sha256:7d8784beec9ef50a9e0033c6017847eb15108edd4d16516d2e79ecade9e1285b"
+            "sha256:319524cf56b36d21784500ef99943460f570abee7e243463c47c8c48353debf0",
+            "sha256:e9541109b114d8e7969b7d34cafb89bf3627670d1536f0e647c663fcd0fdee51",
+            "sha256:8a6a218ac9c6693e3d6181c242ee2992d1ad25aaea81c9df18d873d5b9912603",
+            "sha256:2047bdbf5e9d595216b82eea45a3ac184bf532f5692d4a22668dc4bc7941e360",
+            "sha256:2031ede3385ccf91bcb736dad116fad005c815016d63da02ddd079351cd55129"
           ],
           "completion": true,
           "cost_update_slot_digest": "sha256:881adeb3b6b79fb7f558a3b950c713471eb57045eb77a1caa5da8655f4a80d59",
@@ -1551,7 +1551,7 @@
           "routed_nets": 6,
           "router_call_count": 6,
           "router_expansions": 362,
-          "router_obstacle_checks": 1408,
+          "router_obstacle_checks": 4967,
           "status": "completed",
           "total_vias": 0,
           "total_wire_length_nm": 76000000,
@@ -1560,11 +1560,11 @@
         "rip-up/top-conflict-2": {
           "candidate_digests": [
             "sha256:94408a84653f265f49313755b35fd641cdd3a58cd6b919f693ef006ba20eacba",
-            "sha256:7f60f1f98d6fc951b3eca30108ce326c3b7d6e084c2a3fb6516a6a9296d72be7",
-            "sha256:d22b4bf8739641e4a5ebb82bdd8f3fef5ef2846092c27e044b23ece99507a143",
-            "sha256:72f12cb283a509cc541b0af2c78694ec790caec339a31739857f1691bbece32c",
-            "sha256:fe28b1cddc8d155487d1501f71135317bb44d8af7c3a2448a33fbcc7e80bcd1f",
-            "sha256:84af7bd2fac17ac707648dfeb5b5b68b3ba1ddbd3d7fd132b12dd0c0095ba33c"
+            "sha256:bb5cb6409c3c1d0e0c625abb6397733b65a3e0809e44b6c3577358a42817720e",
+            "sha256:585033ac51deb7c5d5263c319c6625a29042e5dd876d6fdf1a1ca4918d5b27dd",
+            "sha256:67261c4e568f0664446cb8553ec48b36ee2183a3f03d9b5b73ad9a8e7498e71b",
+            "sha256:b15322f903c73b13a8295b793421f24a90b74715a93e57b9bc949745571f60b1",
+            "sha256:51c9bf7f00331cff5b63d3ed1a6fefe30b348120376750fef94e33eed008e768"
           ],
           "completion": true,
           "cost_update_slot_digest": "sha256:881adeb3b6b79fb7f558a3b950c713471eb57045eb77a1caa5da8655f4a80d59",
@@ -1590,7 +1590,7 @@
           "routed_nets": 6,
           "router_call_count": 6,
           "router_expansions": 362,
-          "router_obstacle_checks": 1408,
+          "router_obstacle_checks": 4967,
           "status": "completed",
           "total_vias": 0,
           "total_wire_length_nm": 76000000,
@@ -1651,8 +1651,8 @@
       "rationale": "two slots moved at once, to show the composition is not additive"
     }
   ],
-  "evidence_harness_command": "PYTHONPATH=src python3 scripts/benchmark_negotiated_plan_slots.py --replays 10 --evidence-harness-commit b5227c977c6d447f4d90d3b728b793f5c07616e2 --output benchmarks/results/routing/2026-08-06-negotiated-plan-slots.json",
-  "evidence_harness_commit": "b5227c977c6d447f4d90d3b728b793f5c07616e2",
+  "evidence_harness_command": "PYTHONPATH=src python3 scripts/benchmark_negotiated_plan_slots.py --replays 10 --evidence-harness-commit 7a868623d4f88e51bda3621c3acf0594d41f813e --output benchmarks/results/routing/2026-08-06-negotiated-plan-slots.json",
+  "evidence_harness_commit": "7a868623d4f88e51bda3621c3acf0594d41f813e",
   "kicad_drc": "not_run",
   "non_claims": [
     "candidate geometry is not applied to a board",
@@ -1935,7 +1935,7 @@
     }
   ],
   "replay_minimum": 10,
-  "run_id": "sha256:43d3409d2f9ee0330c55649386804cb3c90aa7c3704834a2fee8e0e0cab1c205",
+  "run_id": "sha256:28f2a2d2dcfd4f3eecb2fa1744edd7e936a238dc9fd9be8692df27fa209d11b0",
   "schema": "copper-mcp/benchmark/negotiated-plan-slots/v1",
   "script": "scripts/benchmark_negotiated_plan_slots.py",
   "script_sha256": "14b31f8585cda65ddf45c8821966fa310ef92a5348927ddf1001175c34459e90"

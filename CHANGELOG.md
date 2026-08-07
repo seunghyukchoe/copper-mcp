@@ -6,8 +6,114 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Route candidate identities move, and stored ones stop verifying.** `ROUTER_VERSION` advances to
+  `astar-grid/0.7.0` because the router's default budgets and obstacle model changed. **No path
+  geometry changed anywhere** — the two-pad golden fixture, the NE5532 fixture, and all twenty
+  SimpleRouteJson corpus boards replay with identical vertices, wire length and bend counts. The
+  addresses move because a candidate records the settings it was computed under and the work its
+  search performed, and both moved. A caller holding a `candidate_id`, a `bundle_id`, or an exported
+  candidate from an earlier version must re-run the preview; the value will not reproduce, and the
+  version bump is what says so. Candidates recorded under `astar-grid/0.4.0` through `0.6.0` still
+  select their historical search behaviour for replay, but their recorded settings predate
+  `region_margin_nm`, so on a board larger than the routing region they do not reproduce
+  byte-for-byte. ([ADR-0089](docs/adr/0089-region-scoped-obstacle-model.md), #128)
+
 ### Fixed
 
+- **Route preview routed 0 of 385 nets on real boards, and the budget that refused them was
+  counting three different things.** Measured read-only against a live audio-project tree, 93 of
+  385 previews refused `obstacle_budget_exceeded` at default settings against boards carrying up to
+  31,389 segments. Splitting those refusals by the message each raised shows 61 of them were the
+  routed net's **own** copper — the model that decides whether a net is *already connected* —
+  charged against a budget named for the copper it has to avoid. On a finished board the true answer
+  for those nets is `already_connected`, and it was being reported as a work failure. `max_obstacles`
+  now meters only foreign selected-layer copper (default 256 → 4,096, maximum 4,096 → 32,768); a new
+  `max_net_objects` (1,024, maximum 4,096) meters same-net connectivity and attachment copper, with
+  its ceiling set where the pairwise merge's quadratic cost meets the obstacle-check budget rather
+  than where boards happen to sit; and the work meter gets its own `obstacle_check_budget_exceeded`
+  code instead of borrowing the object budget's. Every one of these refusals now names the budget
+  and its configured value — and deliberately not the observed count, which would disclose board
+  density. Result on the same corpus, byte-identical sources: `routed` 0 → 14, `already_connected`
+  263 → 318, `obstacle_budget_exceeded` 93 → 3, with nothing regressed.
+  ([D-176](docs/ledgers/decision-ledger.md), [SEC-132](docs/ledgers/security-ledger.md),
+  [B-096](docs/ledgers/benchmark-ledger.md),
+  [obstacle-budget calibration](docs/research/route-obstacle-budget-calibration-v1.md), #128)
+
+### Added
+
+- **A routing region, so the obstacle budget bounds work instead of board size.** A two-pin route
+  only interacts with copper near the corridor between its pads, but the router was modelling the
+  whole board — 22,244 objects on the densest board measured, for one route. The obstacle model is
+  now scoped to the envelope of the routed net's own copper widened by a new `region_margin_nm`
+  setting (10 mm by default, 1 nm – 1 m), clipped to the board, and **the search is confined to the
+  same region**, which is what makes the scoping sound rather than merely cheaper: a node the search
+  can reach is a node inside the region, so copper outside it cannot affect any answer. Measured,
+  this is worth a factor of four in the ceiling for equal coverage. A board smaller than twice the
+  margin yields a region equal to the board, so small fixtures are unaffected. A search that
+  exhausts inside a proper-subset region refuses under a new `no_path_in_region` code rather than
+  claiming `no_path` about a board it never modelled. ([ADR-0089](docs/adr/0089-region-scoped-obstacle-model.md),
+  [R-133](docs/ledgers/risk-register.md), #128)
+### Added
+
+- A measured survey of what CopperMCP's downstream surfaces do on real boards, now that real boards
+  convert. Issue #116 moved conversion from 1 of 23 to 10 of 12; this measures step two across five
+  read-only surfaces at default settings, per board, with wall clock on every call. Authoritative
+  KiCad DRC is the one surface that works everywhere — 12 of 12 reported, including both boards
+  Board IR still refuses. A region-scoped Circuit Scene works on 10 of 10, while 8 of 10
+  whole-board requests hit `max_scene_objects` and return empty `vias`, `zones` and `rules` lists
+  for boards holding up to 1,003 vias. Placement preview accepts 991 of 991 footprints with no
+  refusal of any code — and 10 of 10 boards refuse the source-preserving render, so none of it can
+  ever be applied. Route preview routed 0 of 345 nets, 71 of them refused at the default
+  `max_obstacles = 256`; B-088's `off_grid` wall does not appear once here, which localises this
+  corpus's constraint somewhere else entirely. No board was written, copied, or opened in a live
+  editor, and no apply or live-IPC flag was set.
+  ([B-099](docs/ledgers/benchmark-ledger.md),
+  [Tier-2 real-board capability survey](docs/research/tier2-real-board-capability-v1.md), #116)
+
+### Fixed
+
+- **A board outline assembled from `Edge.Cuts` `gr_line` segments no longer makes the whole board
+  permanently unappliable.** Issue #126 measured that both apply gates refused every real board
+  that converts, and that on three of them the assembled outline was the *only* derived identity —
+  every footprint, pad and copper object was native. The contour now takes a composite native
+  identity, `contour:assembled:` plus a hash of the sorted set of its member segments' own uuids,
+  produced only when every member carries exactly one native identity and no value repeats within
+  the member set; any unresolvable member set still degrades to the revision-derived name every
+  source-preserving patch path refuses. Neither apply gate changed by a byte: a reused footprint
+  or pad UUID (D-158) still refuses write-back, a `gr_rect` outline still yields its own native
+  uuid identity byte-for-byte unchanged, and the preserved invariant — no patch can ever name an
+  object whose identity cannot be resolved back to the source file — is mutation-checked from both
+  directions. Measured read-only on the twelve-board real corpus: 0 of 11 converting boards passed
+  either gate before, 3 of 11 pass both after, and the remaining 8 refuse on UUID reuse exactly as
+  intended. Two committed fixtures now draw their outlines with `gr_line` segments so the fixture
+  set cannot drift back to the `gr_rect`-only assumption that hid this for 1,900 tests.
+  ([ADR-0087](docs/adr/0087-composite-native-identity-for-assembled-outlines.md),
+  [D-174](docs/ledgers/decision-ledger.md), [SEC-131](docs/ledgers/security-ledger.md),
+  [R-131](docs/ledgers/risk-register.md),
+  [Assembled-outline identity](docs/research/assembled-outline-identity-v1.md), #126)
+- **A truncated Circuit Scene no longer empties whole object kinds in silence.** A whole-board
+  `observe_board_scene` returned `vias: []`, `zones: []` and `rules: []` on real boards holding up
+  to 1,003 vias, 5 zones and a net class; eight of the eleven mixer boards that convert hit
+  `max_scene_objects`. The scene spent one object budget in one fixed emission order, and segments —
+  two orders of magnitude more numerous than any other kind on a real board, and fifth in that
+  order — consumed everything, so every kind behind them came back empty. `ceiling_hit` and
+  `objects_omitted` were both correct and both in the wrong place: an empty array from a truncated
+  scene was byte-identical to one from a board that genuinely has none, and the caller who most
+  needed the warning was the one reading the array. The ceilings are now offered to **whole kinds**,
+  smallest first with the fixed declaration order breaking ties, so a kind is admitted only if all
+  of it fits — every array a scene returns is complete for its region and layer filter, and an empty
+  one means the region holds none of that kind. A kind that does not fit is replaced, in its own
+  slot, by `{"observation": "withheld_by_ceiling", "ceiling_hit", "objects_omitted"}`: a value of a
+  different JSON type carrying a one-value literal, so `if not vias` is false, `len(vias) == 0` is
+  false, `vias == []` is false, and iterating it raises. Re-measured read-only over the same corpus,
+  all eight truncating boards now withhold `segments` alone and return every via, zone, pad,
+  footprint and net class they hold; 11 of 11 bounded regions are unchanged at `objects_omitted: 0`.
+  `max_scene_objects` keeps its provisional 2,000 default — the defect was never the ceiling's
+  height. ([ADR-0088](docs/adr/0088-complete-or-withheld-scene-kinds.md),
+  [D-175](docs/ledgers/decision-ledger.md), [R-132](docs/ledgers/risk-register.md),
+  [migration](docs/migrations/copper-mcp-0.7.0.md), #127)
 - **A KiCad UUID that a board reuses is no longer treated as a Board IR identity.** Issue #116's
   one undiagnosed `converted Board IR content failed semantic validation` refusal turned out to be
   `identity.duplicate` on `geometry ID`, and 9 of the 12 real boards surveyed carry the same
@@ -24,8 +130,8 @@ All notable changes are documented here. The format follows
   assert precisely the identity the file cannot support. Write-back stays refused, since every
   source-preserving patch path already rejects a snapshot containing a derived identity — a board
   that names 45 resistors alike cannot be patched by that name without risking the wrong one — so
-  this unblocks inspection and leaves mutation closed. ([D-158](docs/ledgers/decision-ledger.md),
-  [R-119](docs/ledgers/risk-register.md),
+  this unblocks inspection and leaves mutation closed. ([D-166](docs/ledgers/decision-ledger.md),
+  [R-123](docs/ledgers/risk-register.md),
   [KiCad UUID uniqueness](docs/research/kicad-uuid-uniqueness-v1.md), #116)
 - A semantic-validation refusal now names the invariant it failed instead of only saying that one
   failed. `converted Board IR content failed semantic validation` was a wrapper that identified no
@@ -33,7 +139,7 @@ All notable changes are documented here. The format follows
   carries the validator's own message. Naming the rule is not echoing the board: every Board IR
   validation message is a fixed string chosen by `copper_mcp.board_ir`, and the two that were built
   from an object ID are rebuilt so the board-derived text travels in the locator the refusal drops.
-  ([D-158](docs/ledgers/decision-ledger.md), #116)
+  ([D-166](docs/ledgers/decision-ledger.md), #116)
 - Copper saved on KiCad's net 0 — stitching vias and orphaned tracks, which KiCad 10 writes as
   `(net "")` — no longer refuses the whole document with `via has no routable net`, the largest
   single cause in the issue #116 real-board survey (queued on 7 of 12 boards, which carry 115
@@ -45,7 +151,7 @@ All notable changes are documented here. The format follows
   (`(net "")`, `(net 0)`, `(net 0 "")`) resolve identically; a negative ordinal is now an
   explicit typed `net.unknown` refusal, and a netless via is still held to every geometric rule.
   Board IR, codec, JSON schema 0.2.0, and scene contracts widen `net_id` to nullable in place —
-  strictly additive, with every existing content address byte-identical (ADR-0078, D-159,
+  strictly additive, with every existing content address byte-identical (ADR-0081, D-159,
   R-120, #119).
 - **Three singleton real-board refusals, each a different kind of defect.** Found by running the
   adapter against a working tree of twelve real KiCad boards, where each was the first refusal on
@@ -88,12 +194,57 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **Source-to-board connectivity parity is now an authoritative, test-bound claim**, closing
+  issue #66's last leg. `verify_source_to_board_parity` (MCP, both transports) and
+  `copper-mcp source-to-board-parity` ask KiCad's own `pcb drc --schematic-parity` whether a
+  workspace board implements a Circuit Intent's connectivity. The prior slice left this a
+  `not_run` non-claim on a recorded assumption that a board-side verdict needs a project rather
+  than a standalone file. That assumption is wrong for the CLI: `JobExportDrc` derives the
+  schematic from the board filename by swapping the extension and the project load beneath it is
+  guarded by an existence check, so a directory holding only a `.kicad_pcb` and a `.kicad_sch` —
+  no `.kicad_pro`, no library tables — produces a populated `schematic_parity` array. The GUI's
+  parity checkbox is the thing with no effect in standalone mode. Removing that blocker exposed
+  four ways to get a *silent* false pass, and all four are refused rather than reported. An
+  unfetched netlist degrades to `"schematic_parity": []` at exit 0, with the only signal being
+  English on stderr that the containment discards. `--exit-code-violations` ORs three providers
+  into one code 5 that a board with no schematic at all still returns, so it is not passed and the
+  report is parsed instead. Every parity finding is `warning` severity, so `--severity-error`
+  empties the array for a genuinely mismatched board — `--severity-all` is fixed in the argument
+  vector. And the fourth was ours: the delivered schematic marks every symbol `(on_board no)`,
+  correct for the delivery artifact ADR-0015 scoped and fatal here, because such a symbol never
+  enters KiCad's board-side netlist — measured, it yields `extra_footprint` ×2 against a *correct*
+  board and the identical output against a deliberately wrong one. The board is therefore compared
+  against a **board-eligible projection** of the same intent, a second derivative differing only in
+  that flag and reported under its own digest; the delivered artifact's bytes are untouched, so
+  every existing round-trip digest and golden identity is unmoved. No footprint assignment is
+  invented — board-eligibility alone is measured sufficient. Every verdict is gated on a liveness
+  invariant, `count(missing_footprint) + count(footprint_symbol_mismatch) == component_count`,
+  which is a positive proof KiCad loaded the netlist and is `0` in all four false-pass modes; a
+  disagreement is a typed refusal, never a reconciliation. The four connectivity finding types
+  decide the verdict, while the three footprint-identity types are the unavoidable signature of a
+  footprint-less intent and are disclosed as counts rather than claimed as parity failures; an
+  unreviewed type is refused. Evidence binds the intent digest, the delivered schematic digest, the
+  projection digest, and the board revision together, and only digests, counts, and fixed literals
+  cross the boundary — parity descriptions embed net names verbatim and never leave. A real-KiCad
+  control proves a genuinely mismatched board *is* detected. This claims nothing about the
+  delivered schematic file matching the board, about footprints, libraries, or manufacturability;
+  `erc`, `footprint_correctness`, `electrical_validation` and `board_ready` remain explicit
+  non-claims, and only KiCad 10.0.5 was executed.
+  ([ADR-0084](docs/adr/0084-authoritative-source-to-board-parity.md),
+  [D-170](docs/ledgers/decision-ledger.md), [SEC-127](docs/ledgers/security-ledger.md),
+  [R-127](docs/ledgers/risk-register.md),
+  [source-to-board parity research](docs/research/source-to-board-parity-v1.md), #66)
+  The excessive-agency evaluation artifact is re-measured as a
+  [B-090 replay](docs/ledgers/benchmark-ledger.md): the new verification contract declares an eighth
+  single-value non-claim field, and the `non_claim_inference` scenario counts those by introspecting
+  the live contract module rather than from a constant — which is exactly the property that makes
+  that check non-vacuous. All 116 cases, 77 passes and 0 failures are unchanged.
 - **Net-tie footprints convert: the declared short's copper is a netless obstacle, and the tie
   is never a connectivity claim.** KiCad's `net_tie_pad_groups` declares that "nets attached to
   pads within a single pad-group are allowed to short", and the footprint's filled copper
   polygon is that short — copper belonging to two disjoint nets at once, which D-162 recorded as
   the one refusal no envelope could lift because its two roles point in opposite safe
-  directions. ADR-0082 resolves the roles separately: as an **obstacle** each tie rectangle
+  directions. ADR-0092 resolves the roles separately: as an **obstacle** each tie rectangle
   becomes a full-width `Segment` with `net_id None` along its long midline — a strict superset
   of the drawn copper, so a third net can never route through the tie and even the tied nets are
   kept out of it (over-refusal is the accepted direction) — and as **connectivity** nothing is
@@ -107,8 +258,8 @@ All notable changes are documented here. The format follows
   variants each keep their own typed refusal, and the third-net guard is pinned with a
   no-tie mutation control. No schema or digest change — boards without net ties are
   byte-identical, and the committed golden digests pin that.
-  ([ADR-0082](docs/adr/0082-net-tie-copper-as-netless-obstacle.md),
-  [D-167](docs/ledgers/decision-ledger.md), [R-124](docs/ledgers/risk-register.md),
+  ([ADR-0092](docs/adr/0092-net-tie-copper-as-netless-obstacle.md),
+  [D-179](docs/ledgers/decision-ledger.md), [R-136](docs/ledgers/risk-register.md),
   [KiCad net-tie modelling](docs/research/kicad-net-tie-modelling-v1.md), #116)
 - **Chamfered and circular courtyards convert, and their legality claims stay honest.** The
   #116 survey's two courtyard causes — `courtyard edges must be non-zero and axis-aligned`
@@ -125,7 +276,7 @@ All notable changes are documented here. The format follows
   canonical encoder emits `courtyard_circles` only when present, so every existing snapshot
   digest, scene revision, and golden identity is byte-stable. Measured against real
   `kicad-cli` 10.0.5 over 23 cases: 12 exact parity, 11 conceded, 0 contradictions; on the
-  #116 tree, courtyard-stage refusals drop from 13 boards to zero. (#116, ADR-0080, D-165,
+  #116 tree, courtyard-stage refusals drop from 13 boards to zero. (#116, ADR-0080, D-166,
   R-120, B-093)
 
 - **The KiCad plugin is now a Plugin and Content Manager package, and installing it still grants
@@ -188,6 +339,55 @@ All notable changes are documented here. The format follows
   caller can construct anything, and a passing catalog is coverage rather than absence. Four
   discriminator tests deliberately break a boundary and require the harness to record a failure,
   because a suite that cannot fail is not evidence. (D-156, SEC-122, B-090, #69)
+  because a suite that cannot fail is not evidence. (D-152, SEC-121, B-089, #69)
+- **The negotiated coordinator stops rebuilding what it just decided to keep, and gets a rip-up
+  window that is actually bounded.** ADR-0073 recorded its own gap honestly: every retained
+  candidate was re-added to the congestion ledger from scratch each pass, re-deriving its unit
+  lattice resources from geometry, so reconstruction was linear in the *retained* set. ADR-0081
+  closes it. A new `IncrementalSpatialIndex` is a uniform grid whose cell size is fixed at
+  construction — that one choice makes an entry's cells a pure function of its bounds, so "mutate
+  in place" and "rebuild from the survivors" are the same computation, and incremental-equals-
+  rebuilt is a property of the design rather than a hope. An R-tree, which is what TritonRoute's
+  detailed router uses, was rejected on determinism: two R-trees built from the same set in two
+  insertion orders have different node boundaries. Every query returns a **superset** of the true
+  overlaps, never a subset, so both bounded-work fallbacks — an oversize entry every query
+  returns, and an over-wide query that degrades to a full scan — add candidates and can never drop
+  one. `CongestionLedger` now caches each net's exact resource set and retains by costing
+  `min(ripped-up units, retained units)`, with a bare clear when nothing is retained. That third
+  branch exists because measurement said so: always subtracting was **60–130% slower** than the
+  path it replaced at zero retention, and the regression is recorded in B-095 rather than designed
+  around quietly. Across 105 same-fixture A/B points — the congested synthetic channel, a
+  parallel-track sweep to 32 nets, and 16 real MIT-licensed corpus boards — every point leaves the
+  ledger byte-identical, the 78 with any retention are 11.8% to 99.94% faster (median 74.8%) at
+  equal or fewer exact operations, and the 27 with none are up to 22% slower on an operation that
+  costs single-digit microseconds. Proportion, stated plainly: the whole reconstruction is
+  microseconds against ~60 ms of routing, so this is a constant-factor win on a term that was
+  never the bottleneck — which is exactly what ADR-0073 predicted it would be. (#64)
+- **`conflict-window-v1`, a fourth declared rip-up literal.** It re-routes every conflicted net
+  plus every retained net whose copper lies within a fixed number of lattice cells of one. The
+  window is a *constant*, following TritonRoute's own search-and-repair schedule, which holds its
+  worker box at 7 gcells for all 65 iterations and varies only the offset and the effort inside —
+  a window that widened per pass would eventually be full rip-up again and stop being a bound. The
+  spatial index narrows the candidate nets and an exact integer rectangle predicate decides, so
+  the selected set depends on the stored envelopes alone and never on the index's cell size,
+  capacity, or fallbacks. On the congested fixture it converges in five iterations at the same
+  56,000,000 nm of copper as the default while making **22 router calls instead of 30**, where
+  `conflicted-only-v1` does not converge at all. A 16-cell window makes 30 calls again, because a
+  wide enough window *is* full rip-up; B-095 records that rather than implying the rule improves
+  monotonically. It is not the default: `all-nets-v1` stays, and one synthetic fixture is not a
+  criterion. (#64)
+
+#### Migration
+
+None. No published content address moves. `RipUpSlot.as_json()` emits the new window weight only
+for the rule that reads it, so all three pre-existing rip-up literals keep the exact canonical
+bytes they published before — `RipUpSlot()` is still
+`sha256:871de3d64827d267ed64443a705431c7a4a32fa35a5815b137d9abb23f73c71a` and `NegotiationPlan()`
+is still `sha256:b3d090edeeb861f0c215dd18420bdd5624a7f178f1034af25526457538d3eac0`, both pinned by
+test. A stored plan digest, rip-up slot digest, or plan-bound candidate identity still verifies.
+The no-plan coordinator path is byte-for-byte unchanged, and the committed B-087 artifact still
+reproduces from its harness.
+
 - **CopperMCP now has a routing benchmark on boards it did not author, and the first honest number
   from it is 59.83%.** A benchmark-only import seam converts tscircuit SimpleRouteJson problems
   into ordinary verified Board IR snapshots and ordinary route requests, so an external corpus
@@ -417,6 +617,12 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- **Circuit Scene is `0.3.0`.** Each of the nine kinds under `static` and `mutable` is now an array
+  *or* a `withheld_by_ceiling` object, so a client with a closed schema that types them as arrays
+  stops validating a truncated response. Nothing else in the scene moved, and no content address
+  did: `board_revision` hashes the board bytes and `snapshot_digest` is the Board IR snapshot's, and
+  neither depends on how the response is shaped. See §4 of
+  [the 0.7.0 migration note](docs/migrations/copper-mcp-0.7.0.md). (#127)
 - **Courtyard legality is now three-valued, and ADR-0058's "exact" claim is corrected rather than
   restated.** KiCad's courtyard DRC never looks at footprint graphics; it collides a cached
   `SHAPE_POLY_SET` that `FOOTPRINT::BuildCourtyardCaches` contracts by

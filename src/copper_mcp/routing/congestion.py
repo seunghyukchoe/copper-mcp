@@ -43,6 +43,7 @@ from copper_mcp.routing.negotiation_plan import (
     NEGOTIATION_PLAN_SCHEMA,
     CostUpdateSlot,
     NegotiationPlan,
+    RipUpRule,
     next_history_value,
     next_present_penalty,
     ordered_net_ids,
@@ -65,6 +66,11 @@ from copper_mcp.routing.policy import (
     policy_input_digest,
 )
 from copper_mcp.routing.policy_worker import evaluate_reference_policy_in_worker
+from copper_mcp.routing.spatial_index import (
+    IncrementalSpatialIndex,
+    bounds_intersect,
+    inflate_bounds,
+)
 
 _EMPTY_DIGEST = f"sha256:{'0' * 64}"
 _MAX_NETS = MAX_NEGOTIATED_NETS
@@ -73,6 +79,10 @@ _MAX_PENALTY_NM = 1_000_000_000
 _MAX_HISTORY = 1_000_000
 _MAX_DIAGNOSTIC = 256
 _MAX_UNIT_RESOURCES = 2_000_000
+# How many lattice steps one incremental-index cell spans.  Larger cells mean fewer buckets and
+# more candidates per bucket; the exact predicate decides either way, so this trades work for
+# memory and can never change which nets a window names.
+_LEDGER_INDEX_CELL_STEPS = 4
 _MAX_TOTAL_EXPANSIONS = 10_000_000
 _MAX_TOTAL_OBSTACLE_CHECKS = 50_000_000
 _MAX_TOTAL_PHYSICAL_CHECKS = 10_000_000
@@ -489,7 +499,20 @@ def _published_result(
 
 
 class CongestionLedger:
-    """Mutable per-replay occupancy overlay with bounded integer penalties."""
+    """Mutable per-replay occupancy overlay with bounded integer penalties.
+
+    Occupancy is an *additive per-net integer count* over exact lattice resources, so removing one
+    net's contribution is exact subtraction rather than an approximation.  That is what lets
+    :meth:`retain_only` replace the historic "clear everything, then re-add every retained
+    candidate" reconstruction without moving a single published byte: the two paths reach the same
+    counters, and the counters are the only thing the router ever reads.  ADR-0081 records the
+    argument; ``docs/research/incremental-spatial-index-v1.md`` §1.3 records why an integer
+    lattice makes the exact answer and the indexed answer the same answer.
+
+    A conservative :class:`IncrementalSpatialIndex` over each added candidate's copper envelope is
+    maintained alongside the counters.  It exists for the bounded rip-up window and for nothing
+    else: it never decides a penalty, an overflow, or a conflict score.
+    """
 
     def __init__(
         self,
@@ -507,14 +530,43 @@ class CongestionLedger:
         self._present: Counter[ResourceKey] = Counter()
         self._history: Counter[ResourceKey] = Counter()
         self._nets: dict[ResourceKey, Counter[str]] = defaultdict(Counter)
-        self._added_nets: set[str] = set()
+        self._resources: dict[str, frozenset[ResourceKey]] = {}
+        self._index: IncrementalSpatialIndex = IncrementalSpatialIndex(
+            cell_size_nm=grid_step_nm * _LEDGER_INDEX_CELL_STEPS,
+            max_entries=_MAX_NETS,
+        )
+        # Monotonic counters for differential benchmarks.  Nothing in the routing result, the
+        # candidate identity, or any published response reads them.
+        self.resource_insertions = 0
+        self.resource_removals = 0
+        self.reconstruction_operations = 0
+
+    @property
+    def added_nets(self) -> frozenset[str]:
+        """Return the nets whose candidates currently occupy the ledger."""
+
+        return frozenset(self._resources)
+
+    @property
+    def live_resource_count(self) -> int:
+        """Return how many distinct resources the present overlay currently tracks.
+
+        This exists so bounded memory is testable.  A subtractive reconstruction that left a
+        resource behind at a count of zero would be invisible in every published output — every
+        reader of the present overlay filters on ``usage > 1`` or reads a ``Counter`` whose default
+        is already zero — while the overlay grew without bound across passes.  An incrementally
+        retained ledger must track exactly as many resources as a rebuilt one.
+        """
+
+        return len(self._present)
 
     def clear_present(self) -> None:
         """Rip up the current iteration while retaining historical overflow pressure."""
 
         self._present.clear()
         self._nets.clear()
-        self._added_nets.clear()
+        self._resources.clear()
+        self._index.clear()
 
     def add_candidate(self, candidate: RouteCandidate) -> None:
         """Add one candidate's distinct unit resources to present occupancy."""
@@ -523,12 +575,112 @@ class CongestionLedger:
         if len(keys) > _MAX_UNIT_RESOURCES:
             raise ValueError("candidate resource expansion exceeds the bounded ledger budget")
         net_id = candidate.patch.net_id
-        if net_id in self._added_nets:
+        if net_id in self._resources:
             raise ValueError("the congestion ledger accepts one candidate per net per iteration")
-        self._added_nets.add(net_id)
+        self._resources[net_id] = frozenset(keys)
         for key in keys:
             self._present[key] += 1
             self._nets[key][net_id] += 1
+        self.resource_insertions += len(keys)
+        self._index.insert(net_id, _candidate_bounds(candidate))
+
+    def remove_net(self, net_id: str) -> None:
+        """Remove exactly one net's occupancy, leaving every other net's counters untouched.
+
+        The inverse of :meth:`add_candidate` down to the emptied keys: a resource whose count
+        reaches zero is deleted rather than left at zero.  B-095's mutation check established what
+        that guard is and is not for.  It is *not* an output guard — every reader of the present
+        overlay filters on ``usage > 1`` or reads a ``Counter`` whose default is already zero, so
+        a lingering zero changes nothing observable.  It is a **memory** guard: without it the
+        overlay accumulates dead keys pass after pass and a long negotiation grows without bound.
+        :attr:`live_resource_count` is what makes that testable.
+        """
+
+        if net_id not in self._resources:
+            raise ValueError("the congestion ledger cannot remove a net it does not hold")
+        keys = self._resources.pop(net_id)
+        for key in keys:
+            remaining = self._present[key] - 1
+            if remaining:
+                self._present[key] = remaining
+            else:
+                del self._present[key]
+            occupants = self._nets[key]
+            net_remaining = occupants[net_id] - 1
+            if net_remaining:
+                occupants[net_id] = net_remaining
+            else:
+                del occupants[net_id]
+            if not occupants:
+                del self._nets[key]
+        self.resource_removals += len(keys)
+        self._index.remove(net_id)
+
+    def retain_only(self, net_ids: frozenset[str]) -> None:
+        """Rip up every held net outside ``net_ids``, keeping the rest in place.
+
+        This replaces ``clear_present()`` followed by re-adding every retained candidate, and it
+        deliberately does **not** always subtract.  Measurement (B-095) showed that subtracting
+        the departures is cheaper only when there are fewer of them than there are survivors; a
+        pass that rips up almost everything pays more to subtract than to re-count.  So the
+        reconstruction costs ``min(ripped-up units, retained units)`` — never more unit work than
+        either single strategy, and never more than the path it replaces, which always paid the
+        retained units *and* re-derived each retained candidate's resources from geometry because
+        the coordinator handed back candidates rather than cached resource sets.
+
+        One honest exception, measured rather than assumed: retaining *nothing* does no unit work
+        either way, and the bookkeeping to decide that costs a few microseconds the bare
+        ``clear_present()`` did not.  B-095 records up to 22% slower there, on an operation whose
+        absolute cost is single-digit microseconds.
+
+        All three branches reach the same counters.  The choice is arithmetic, not semantics.
+        """
+
+        held = frozenset(self._resources)
+        dropped = sorted(held - net_ids)
+        if not dropped:
+            return
+        kept = sorted(held & net_ids)
+        if not kept:
+            # Retaining nothing is a full rip-up, and a bare clear is already the cheapest correct
+            # reconstruction for it.  Measured, not assumed: without this branch, walking the held
+            # nets to drop them individually was 60-130% *slower* than the path it replaces.
+            self.clear_present()
+            return
+        dropped_units = sum(len(self._resources[net_id]) for net_id in dropped)
+        kept_units = sum(len(self._resources[net_id]) for net_id in kept)
+        self.reconstruction_operations += min(dropped_units, kept_units)
+        if dropped_units <= kept_units:
+            for net_id in dropped:
+                self.remove_net(net_id)
+            return
+        for net_id in dropped:
+            del self._resources[net_id]
+            self._index.remove(net_id)
+        self._present.clear()
+        self._nets.clear()
+        for net_id in kept:
+            for key in self._resources[net_id]:
+                self._present[key] += 1
+                self._nets[key][net_id] += 1
+
+    def nets_within_window(self, seeds: frozenset[str], *, window_nm: int) -> frozenset[str]:
+        """Return every held net other than a seed whose copper lies within ``window_nm`` of one.
+
+        The index narrows the candidates; the exact integer rectangle predicate decides
+        membership.  That ordering is deliberate — it makes the returned set a function of the
+        stored envelopes alone, so changing the index's cell size, its capacity, or its oversize
+        fallback can change how fast this runs and can never change which nets it names.
+        """
+
+        _integer("rip-up window", window_nm, minimum=0)
+        selected: set[str] = set()
+        for seed in sorted(seeds & frozenset(self._resources)):
+            window = inflate_bounds(self._index.bounds_of(seed), window_nm)
+            for net_id in self._index.query(window):
+                if net_id != seed and bounds_intersect(self._index.bounds_of(net_id), window):
+                    selected.add(net_id)
+        return frozenset(selected) - seeds
 
     def penalty(self, start: PointNM, end: PointNM) -> int:
         """Return a bounded non-negative search-ordering penalty for one proposed lattice edge."""
@@ -589,11 +741,17 @@ class CongestionLedger:
         """Return deterministic per-net conflict scores for the next rip-up order."""
 
         scores: Counter[str] = Counter()
-        for key, usage in self._present.items():
+        # Sorted rather than in mapping order: an incrementally maintained ledger and a rebuilt
+        # one hold the same keys in different insertion orders, and this is the one accumulation
+        # whose result is a mapping rather than a sorted sequence.  Sorting makes the returned
+        # dict's own order identical too, so the equivalence holds byte for byte and not merely
+        # under `==`.
+        for key in sorted(self._present):
+            usage = self._present[key]
             if usage <= 1:
                 continue
-            for net_id, net_usage in self._nets[key].items():
-                scores[net_id] += (usage - 1) * net_usage
+            for net_id in sorted(self._nets[key]):
+                scores[net_id] += (usage - 1) * self._nets[key][net_id]
         return dict(scores)
 
 
@@ -637,6 +795,26 @@ def _candidate_resources(candidate: RouteCandidate, grid_step_nm: int) -> set[Re
     for path in candidate.patch.paths:
         resources.update(_path_resources(path.vertices, grid_step_nm))
     return resources
+
+
+def _candidate_bounds(candidate: RouteCandidate) -> tuple[int, int, int, int]:
+    """Return the exact integer copper envelope of one candidate's whole patch.
+
+    Track centre lines are inflated by the rounded-up half width, so the rectangle covers the
+    copper rather than the centre line.  Rounding *up* keeps the envelope an over-approximation,
+    which is the direction every obstacle bound in this repository is required to round.
+    """
+
+    vertices = [point for path in candidate.patch.paths for point in path.vertices]
+    if not vertices:
+        raise ValueError("a route candidate patch carries no path vertices")
+    half_width_nm = (candidate.patch.width_nm + 1) // 2
+    return (
+        min(point.x for point in vertices) - half_width_nm,
+        min(point.y for point in vertices) - half_width_nm,
+        max(point.x for point in vertices) + half_width_nm,
+        max(point.y for point in vertices) + half_width_nm,
+    )
 
 
 def _invalid_result(
@@ -1229,20 +1407,27 @@ def negotiate_routes(
             )
         if declared_plan is None and iteration > 1:
             ripups += len(best_candidates)
-        ledger.clear_present()
         working: dict[str, RouteCandidate] = {}
         connections: dict[str, RouteConnection] = {}
         unrouted: set[str] = set()
         failure_message: str | None = None
         cancelled_during_iteration = False
         iteration_order = current_order
-        if declared_plan is not None:
+        if declared_plan is None:
+            # The no-plan path rips up every net on every pass, so there is nothing to retain and
+            # clearing is already the cheapest correct reconstruction.
+            ledger.clear_present()
+        else:
             # A retained candidate is immutable, already identity-bound, and already accepted by
-            # this run's boundary checks.  Re-adding it to the cleared ledger reinstates its exact
-            # occupancy so the ripped-up nets negotiate against it, with no second router call.
-            for net_id in sorted(frozenset(retained_candidates) - ripup_nets):
+            # this run's boundary checks, and its occupancy is *already in the ledger* from the
+            # pass that produced it.  Retaining it in place leaves exactly the same counters a
+            # clear-and-re-add would rebuild, at the cost of the smaller of the two sides rather
+            # than always the retained one.  ADR-0081 and B-095 record the argument and the
+            # measurement; `tests/test_routing_incremental_spatial_index.py` pins the equivalence.
+            retained_now = frozenset(retained_candidates) - ripup_nets
+            ledger.retain_only(retained_now)
+            for net_id in sorted(retained_now):
                 working[net_id] = retained_candidates[net_id]
-                ledger.add_candidate(working[net_id])
             for net_id in sorted(frozenset(retained_connections) - ripup_nets):
                 connections[net_id] = retained_connections[net_id]
             iteration_order = tuple(item for item in current_order if item.net_id in ripup_nets)
@@ -1530,11 +1715,31 @@ def negotiate_routes(
             retained_candidates = iteration_candidates
             retained_connections = iteration_connections
             held = (frozenset(retained_candidates) | frozenset(retained_connections)) - forced_ripup
+            # The bounded rip-up window is read off the ledger *before* the next pass rips
+            # anything up, so the index still holds every candidate this pass produced.  The
+            # window is a declared constant, so the selection cannot widen from one iteration to
+            # the next.  A large enough declared window still selects every net — B-095 measures a
+            # 16-cell window doing exactly that — which is a caller's choice, not a drift.
+            window_nets: frozenset[str] = frozenset()
+            if declared_plan.rip_up.rule is RipUpRule.CONFLICT_WINDOW:
+                conflicted_seeds = (
+                    frozenset(
+                        net_id for net_id, score in scores.items() if score > 0 and net_id in held
+                    )
+                    | forced_ripup
+                )
+                window_nets = ledger.nets_within_window(
+                    conflicted_seeds,
+                    window_nm=(
+                        declared_plan.rip_up.ripup_window_cells * checked_envelope.grid_step_nm
+                    ),
+                )
             ripup_nets = ripup_net_ids(
                 declared_plan.rip_up,
                 nets=net_seeds,
                 conflict_scores=scores,
                 retained=held,
+                window_nets=window_nets,
             )
             # A pass that would re-route nothing cannot make progress, and looping to the
             # iteration ceiling would burn the caller's budget to reach the same allocation.

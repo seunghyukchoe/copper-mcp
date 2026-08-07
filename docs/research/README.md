@@ -113,6 +113,14 @@ When adding a document, add it to the list below in the same sentence form — *
   `kicad-cli`, and restates ADR-0072's outward-envelope direction for a keep-out on an
   evidence-publishing surface: outer bounds may only prove clearance, inner bounds may only prove
   violation, and everything between is a declared concession.
+- [Source-to-board parity with `kicad-cli` 10.0.5](./source-to-board-parity-v1.md) corrects the
+  recorded assumption that a board-side parity verdict needs a project context — it does not, for
+  the CLI — and then documents the four distinct ways the resulting check yields a *silent* false
+  pass, three of them KiCad's and one of them ours. Its central finding is that CopperMCP's own
+  delivered schematic is board-excluded by construction and produces identical output for a correct
+  board and a deliberately wrong one, which is what forces a board-eligible projection and the
+  arithmetic liveness invariant that gates every verdict. It carries a dated reproduction of every
+  measurement and one correction to its own §4.
 - [KiCad arc tracks as routing obstacles](./kicad-arc-track-obstacles-v1.md) grounds ADR-0070's
   conservative arc envelope in the official S-expression arc grammar and the inscribed-angle
   theorem, and states plainly that the envelope is loose for a near-semicircular arc and claims
@@ -170,6 +178,15 @@ When adding a document, add it to the list below in the same sentence form — *
   because a larger radius means a smaller pad. It claims nothing about chamfered pads, per-layer
   padstacks, board format versions other than `20260206`, or that the 23-board tree is
   representative of KiCad boards generally.
+- [Tier-2 real-board capability survey](./tier2-real-board-capability-v1.md) measures what five
+  read-only surfaces return on 12 real boards at default settings, now that 10 of them convert:
+  authoritative KiCad DRC works on all 12 including the two Board IR refuses; a region-scoped
+  Circuit Scene works on 10 of 10 while 8 of 10 whole-board requests silently return empty `vias`,
+  `zones` and `rules` lists; placement preview accepts 991 of 991 footprints and 10 of 10 boards
+  refuse the source-preserving render; route preview routed 0 of 345 nets. It claims nothing
+  electrical, thermal or manufacturable, does not claim an apply would have succeeded had the gate
+  passed, is not a whole-board routing completion result, and does not treat one designer's
+  project family as a sample of KiCad boards generally.
 
 ## Terms used in this review
 

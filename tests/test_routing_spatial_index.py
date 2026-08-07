@@ -284,5 +284,5 @@ def test_indexed_router_enforces_obstacle_check_ceiling(monkeypatch: pytest.Monk
     )
     assert exhausted.candidate is None
     assert exhausted.diagnostic is not None
-    assert exhausted.diagnostic.code is RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED
+    assert exhausted.diagnostic.code is RouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED
     assert exhausted.diagnostic.obstacle_checks == 200

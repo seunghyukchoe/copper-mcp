@@ -1,7 +1,7 @@
 # Modelling KiCad net ties: the declared short, and what may be claimed about it
 
-Research date: 2026-08-07. This note supports ADR-0082 and decision
-[D-167](../ledgers/decision-ledger.md): converting a `net_tie_pad_groups` footprint's shorting
+Research date: 2026-08-07. This note supports ADR-0092 and decision
+[D-179](../ledgers/decision-ledger.md): converting a `net_tie_pad_groups` footprint's shorting
 copper as a netless obstacle segment with no connectivity claim. It continues the finding recorded
 in [D-162](../ledgers/decision-ledger.md) and
 [KiCad aperture pads and net ties](kicad-aperture-pads-and-net-ties-v1.md), which established
@@ -62,7 +62,7 @@ them separately:
   Board IR surface performs. Until such a proof exists, the only claim consistent with the
   under-approximation rule is *no claim*: `net_id None`, the exact contract net-0 copper already
   has (ADR-0078). The tied nets therefore report unconnected through the tie — a permanent,
-  deliberate under-claim, recorded as risk [R-124](../ledgers/risk-register.md).
+  deliberate under-claim, recorded as risk [R-136](../ledgers/risk-register.md).
 
 The rejected alternative — an explicit connectivity edge between the pad groups — is not wrong in
 principle; it is unimplementable *soundly* at this slice's evidence level, because emitting the

@@ -1,4 +1,4 @@
-# ADR-0082: Net-tie copper is a netless obstacle, and the tie is never a connectivity claim
+# ADR-0092: Net-tie copper is a netless obstacle, and the tie is never a connectivity claim
 
 - Status: Accepted
 - Date: 2026-08-07
@@ -69,7 +69,7 @@ without net ties produce byte-identical content — the committed golden digests
 - The connectivity under-claim is permanent until a bridge proof exists: a caller asking "are
   PGND and AGND connected?" is told less than the board knows. That asymmetry, and the fact that
   a router may consequently propose joining the tied nets with new copper elsewhere (which
-  authoritative KiCad DRC would then flag), is recorded as [R-124](../ledgers/risk-register.md).
+  authoritative KiCad DRC would then flag), is recorded as [R-136](../ledgers/risk-register.md).
 - The tie obstacle envelope can cover the tie pads entirely, making them unroutable at their own
   nets' clearances. Over-refusal is the accepted direction; the tied nets on real boards reach
   those pads through zones and existing tracks, not through new grid routes.
