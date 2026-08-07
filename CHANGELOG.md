@@ -6,8 +6,166 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A KiCad UUID that a board reuses is no longer treated as a Board IR identity.** Issue #116's
+  one undiagnosed `converted Board IR content failed semantic validation` refusal turned out to be
+  `identity.duplicate` on `geometry ID`, and 9 of the 12 real boards surveyed carry the same
+  reuse — always footprints and their pads, never segments, arcs, vias or zones. On one board 113
+  footprints share just 11 UUIDs, 45 distinct resistors among them: the value names a footprint
+  *type*, not an instance. The uniqueness rule was right and is untouched — Board IR footprints own
+  pads by ID and every patch names its target by ID — so the fix is in the converter, which was
+  asserting an identity the format never promised. KiCad's specification says a UUID *should be*
+  globally unique, which is an expectation of the writer and grants a reader no key, and KiCad's
+  own copy-paste and re-link workflows are tracked as producing duplicates. A UUID used once still
+  becomes that object's ID exactly as before, so no content address moves. A UUID used by two or
+  more objects of one kind is an identity of none of them: they all fall back together to the
+  existing revision-derived name, because letting the first claimant keep the native one would
+  assert precisely the identity the file cannot support. Write-back stays refused, since every
+  source-preserving patch path already rejects a snapshot containing a derived identity — a board
+  that names 45 resistors alike cannot be patched by that name without risking the wrong one — so
+  this unblocks inspection and leaves mutation closed. ([D-158](docs/ledgers/decision-ledger.md),
+  [R-119](docs/ledgers/risk-register.md),
+  [KiCad UUID uniqueness](docs/research/kicad-uuid-uniqueness-v1.md), #116)
+- A semantic-validation refusal now names the invariant it failed instead of only saying that one
+  failed. `converted Board IR content failed semantic validation` was a wrapper that identified no
+  rule and no construct, which is what left #116's survey with an entry nobody could act on; it now
+  carries the validator's own message. Naming the rule is not echoing the board: every Board IR
+  validation message is a fixed string chosen by `copper_mcp.board_ir`, and the two that were built
+  from an object ID are rebuilt so the board-derived text travels in the locator the refusal drops.
+  ([D-158](docs/ledgers/decision-ledger.md), #116)
+- Copper saved on KiCad's net 0 — stitching vias and orphaned tracks, which KiCad 10 writes as
+  `(net "")` — no longer refuses the whole document with `via has no routable net`, the largest
+  single cause in the issue #116 real-board survey (queued on 7 of 12 boards, which carry 115
+  netless vias and 2,687 netless track segments between them). Such copper converts as an
+  obstacle with no connectivity contribution: `net_id` is `None` on the `Via`, `Segment`, or
+  `Arc`, the item never matches any request net, its clearance is the widest class on the board,
+  and no already-connected claim can pass through it — pinned by mutation-checked router tests
+  in both the via-join and segment-attachment directions. All three saved spellings of "no net"
+  (`(net "")`, `(net 0)`, `(net 0 "")`) resolve identically; a negative ordinal is now an
+  explicit typed `net.unknown` refusal, and a netless via is still held to every geometric rule.
+  Board IR, codec, JSON schema 0.2.0, and scene contracts widen `net_id` to nullable in place —
+  strictly additive, with every existing content address byte-identical (ADR-0078, D-159,
+  R-120, #119).
+- **Three singleton real-board refusals, each a different kind of defect.** Found by running the
+  adapter against a working tree of twelve real KiCad boards, where each was the first refusal on
+  exactly one board and invisible behind more common causes.
+  - A footprint graphic on a copper layer now refuses under the name of what it is. The board that
+    found it carries a `NetTie-2_THT_Pad1.0mm` joining two ground nets, and KiCad defines
+    `net_tie_pad_groups` as meaning nets in a group "are allowed to short". The adapter already
+    refused net ties — correctly, because Board IR models nets as disjoint and this copper belongs
+    to two at once, which no envelope can express — but the preflight ran first and reported a
+    stray drawing on a copper layer, sending a user to look for a mistake that is not there. The
+    one message is now three: a net tie, an `Edge.Cuts` graphic (routing *room*, the opposite
+    direction of error), and unmodelled copper. All three still refuse; copper is never dropped.
+    (D-162)
+  - A pad with **no copper layer at all** is a KiCad *aperture* pad — a solder-paste stencil
+    opening, used to subdivide the paste over an exposed thermal tab — and is now omitted from
+    Board IR instead of refusing the board. One board carried eight of them on two `TO-252-2`
+    transistors. Omitting one removes no obstacle and discards no attachment point, and that claim
+    is conditional, so each condition refuses rather than drops when it fails: paste or mask layers
+    only, `smd` kind, no net, no pad number. The regression asserts *equality* of every
+    copper-bearing field with and without the aperture. (D-163, R-122)
+  - `placed`, KiCad's autoplacement status flag, is accepted as footprint metadata — it carries no
+    geometry, no layer and no constraint, unlike `locked`, which is a constraint and stays
+    modelled. One board carried `(placed yes)` on all 31 of its footprints. Both allowlists stay
+    closed, with an unknown footprint field and an unknown root field each pinned by its own
+    control. (D-164)
+
+  No diagnostic code, Board IR field, schema or digest changes, and no golden identity moves.
+  (#116)
+
+- Board metadata that KiCad writes into essentially every real board no longer refuses the whole
+  document. `solder_mask_min_width` joins `pad_to_mask_clearance` as accepted setup metadata — it
+  bounds mask slivers, not copper — and `descr` and `tags`, the library documentation strings
+  copied into every placed footprint, are accepted as footprint metadata. Across the 23 real
+  boards this was found on, `descr` and `tags` appeared 2,518 times each, so their absence from
+  the allowlist refused nearly everything. `point`, which carries `at`/`size`/`layer` like the
+  `fp_*` primitives, now goes through the same layer-aware path instead of the metadata
+  allowlist, so a `point` on a routing layer is refused exactly as a stray `fp_line` is. The
+  allowlists stay closed: an unrecognised setup or footprint field is still a typed refusal, and
+  a regression pins that.
+
 ### Added
 
+- **Chamfered and circular courtyards convert, and their legality claims stay honest.** The
+  #116 survey's two courtyard causes — `courtyard edges must be non-zero and axis-aligned`
+  (measured to be exact 45-degree electrolytic-capacitor chamfers, not the hypothesised rotated
+  rectangles) and `courtyard primitive is unsupported by Board IR v0.2` (104 `fp_circle`
+  outlines, zero arcs) — are removed by widening Board IR 0.2.0 to octilinear courtyard rings
+  and a new exact `CourtyardCircle` value. Legality brackets every published verdict by
+  direction: only an outer bound may prove `proven_clear`, only an inner bound witnessed past
+  each side's worst-case cache loss may prove `violated` (two insets, strictly, for a circle,
+  whose cache KiCad polygonises inward before contracting — a 10,001 nm development claim the
+  real tool contradicted and the oracle benchmark caught), and everything between is
+  `inconclusive`. Uncertifiable arrangements degrade to claims-nothing bounds; `fp_arc`,
+  inexact radii, arbitrary slopes, and non-quarter-turn poses stay typed refusals. The
+  canonical encoder emits `courtyard_circles` only when present, so every existing snapshot
+  digest, scene revision, and golden identity is byte-stable. Measured against real
+  `kicad-cli` 10.0.5 over 23 cases: 12 exact parity, 11 conceded, 0 contradictions; on the
+  #116 tree, courtyard-stage refusals drop from 13 boards to zero. (#116, ADR-0080, D-165,
+  R-120, B-093)
+
+- **The KiCad plugin is now a Plugin and Content Manager package, and installing it still grants
+  nothing.** `scripts/build_pcm_package.py` produces `com.github.seunghyukchoe.coppermcp-live-observer`
+  as a reproducible archive alongside the wheel and sdist, attested under the same `dist/*` subject
+  path. The format was read from KiCad's published JSON Schema and its addons-metadata CI rather
+  than from the prose guide, which contradicts the schema on six fields; both schema versions are
+  vendored under `schemas/kicad-pcm/` and the package validates against **both**, because a
+  `plugin`-typed package is served to KiCad 6.0–9.x through the down-converted v1 lists as well as
+  to 10.0+, and v1 is the stricter document. The archive is **stored, not deflated**, written in one
+  declared sorted order with the 1980 ZIP epoch, mode 0644, and Unix host on every entry, so its
+  bytes are a pure function of member names, contents, and order — byte-identical across Python
+  3.12 and 3.14, two timezones, and different hash seeds. That is a correctness requirement, not a
+  nicety: a version merged into the KiCad repository is immutable, so a rebuild that differed would
+  be unfixable in place. The `download_sha256`, `download_size`, and `install_size` in the
+  submission metadata are measured from the artifact the script just built, so no digest is ever
+  transcribed, and the in-archive copy is deliberately a different document — exactly one version,
+  no `download_sha256` — because KiCad's submission CI cross-checks the two. Submission to the
+  official repository stays a human step, prepared as a checklist in the plugin README. (#98,
+  D-154, SEC-121)
+- **A `requirements.txt` that must exist and must install nothing.** KiCad marks a Python IPC
+  plugin *ready* only after pip exits 0 against that file, and skips unready plugins in both
+  `GetActionsForScope` and `InvokeAction` — so a plugin shipped without it installs, discovers,
+  validates, and then never appears in the toolbar, with the reason only in a trace log. Naming
+  `copper-mcp` in it fails the same way for the opposite reason: KiCad resolves it against PyPI
+  under `--only-binary :all:`, and CopperMCP is deliberately unpublished there. The per-plugin
+  environment is created with `--system-site-packages`, so the operator's own
+  `pip install 'copper-mcp[kicad]'` is what supplies the import, and the entrypoint now refuses
+  with a fixed, actionable sentence when it has not been done. (#98)
+
+- A container image for the MCP server. `Dockerfile` builds a wheel and installs it into a
+  slim Python base as a non-root user, with `/workspace` as the mounted board directory and the
+  stdio transport as the entrypoint. It deliberately does **not** bundle KiCad: board inspection,
+  DRC, ERC, and rendering delegate to an authoritative `kicad-cli`, and shipping one inside the
+  image would let a caller believe those surfaces answered when the host's own KiCad is what must
+  answer for them. Without KiCad the server still starts and lists all 27 tools, refusing the
+  KiCad-backed ones with their normal typed diagnostics. No mutation flag is set in the image, so
+  it is read-only unless an operator opts in at run time exactly as on a host install.
+
+### Added
+- **CopperMCP's central safety claim is now an adversarial test suite instead of a sentence.** The
+  claim is a negative — an agent driving this server cannot cause an unintended board mutation and
+  cannot extract a verification that was never computed, even when it tries — so it cannot be
+  proved, only attacked. `scripts/evaluate_excessive_agency.py` runs 29 predeclared scenarios in
+  six families through the real MCP adapter: mutation without consent (every apply surface with the
+  flags off, a forged token, a token from another session, and tokens rebound to a different
+  candidate, revision, board, and operation domain, plus a genuine token replayed straight after the
+  write it authorized), stale-state exploitation, claim laundering (a hand-edited placement legality
+  record and a hand-edited route manifest, each keeping its published identity), non-claim
+  inference, information extraction, and budget exhaustion. Each scenario states its adversarial
+  goal, its tool calls, and the one typed refusal or honest non-claim it requires, in a catalog
+  digest-bound into the artifact so it cannot be reworded after the result is known. Every
+  scenario is replayed against four **project families** — the development fixtures as a control,
+  plus the CopperTone reference board, the held-out audio partition, and the external MIT
+  SimpleRouteJson corpus — and every mutation scenario asserts the board's byte digest is
+  unchanged. **116 cases: 77 passed, 0 failed, 39 not run**, with the not-run reasons reported
+  rather than dropped: the only externally authored family accounts for 29 of them because no MCP
+  tool accepts SimpleRouteJson, so it reaches no agency boundary at all. The suite says explicitly
+  what it does not prove — it tests CopperMCP's refusals and not a model's behaviour, an in-process
+  caller can construct anything, and a passing catalog is coverage rather than absence. Four
+  discriminator tests deliberately break a boundary and require the harness to record a failure,
+  because a suite that cannot fail is not evidence. (D-156, SEC-122, B-090, #69)
 - **CopperMCP now has a routing benchmark on boards it did not author, and the first honest number
   from it is 59.83%.** A benchmark-only import seam converts tscircuit SimpleRouteJson problems
   into ordinary verified Board IR snapshots and ordinary route requests, so an external corpus
@@ -158,6 +316,67 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- **A board outline drawn with the line tool is now a board outline.** The adapter accepted exactly
+  one `Edge.Cuts` primitive — a single unfilled `gr_rect` — and refused everything else with
+  `unsupported.construct`. `gr_rect` is what KiCad writes for the *rectangle tool*; draw the same
+  outline with the line tool, or draw any shape that is not a rectangle, and you get `gr_line`
+  segments, which was most real boards and every non-rectangular one. Segments on `Edge.Cuts` now
+  chain into the single imported contour, verified against a real four-layer board whose four
+  segments assemble into its exact 159 × 150 mm rectangle. (#111)
+
+  **The direction of error inverts here, and that is the whole decision.** Every obstacle in this
+  project is *over*-approximated, because a larger obstacle only makes the router refuse more. The
+  board outline is routing **room**, so it may only be *under*-approximated: a modelled outline one
+  nanometre larger than the drawn one hands the router copper the fabricated board does not have.
+  Assembled from straight segments joined at *exactly* coincident endpoints, the ring's vertices are
+  the drawn endpoints and nothing is synthesized, so containment holds with equality.
+
+  Nothing is repaired. KiCad chains its own outline with a non-zero tolerance and will close a small
+  gap for you; a 10 µm near-miss — inside KiCad's own epsilon — is refused here instead, because
+  closing a gap adds board area no drawn segment encloses. A zero-length segment, a duplicate
+  segment, an open contour, a branching spur, two disjoint loops, and a self-intersection each refuse
+  with a typed code and are never guessed at, since every plausible repair invents board. Arcs,
+  circles, polygons and curves on `Edge.Cuts` stay refused with a diagnostic that now names the
+  curve: ADR-0072's conservative sagitta bound is an *upper* bound on an arc, which is right for an
+  obstacle and backwards for an outline, and a chord is inscribed only when the arc bulges away from
+  the board interior. Work stays bounded — the segment count and the quadratic simplicity test each
+  charge a declared budget. No schema, digest, or diagnostic code changes, and no golden identity
+  moves. ([ADR-0076](docs/adr/0076-segment-assembled-edge-cuts-outline.md), D-155, R-117)
+- **A roundrect corner radius is now rounded, not refused — and the direction is the opposite of
+  the obvious one.** KiCad never stores a roundrect's radius. It stores a ten-significant-digit
+  `roundrect_rratio` scaling the pad's *shorter* side, and recomputes
+  `KiROUND(ratio * min(size.x, size.y))` on every read, so an ordinary ratio on an ordinary pad
+  lands on a fractional nanometre — 0.203125 of a 650,000 nm side is 132,031.25 nm. The adapter
+  refused that as `roundrect radius is not an exact nanometre`, which was fail-closed and honest
+  but was the **first refusal on 5 of 23 real boards** for a sub-nanometre encoding artifact. Across
+  that tree, 592 of 4,537 roundrect pads carry a fractional radius and the worst residue is 0.80 nm.
+  The radius now rounds **up**, and the reason is not that a pad is copper: a larger radius means
+  *more* corner rounding and therefore a *smaller* pad, so rounding the copper outward and rounding
+  the radius up are opposite instructions. The roles settle it instead, and do not conflict, because
+  only one reads the value — every obstacle model over-approximates a pad by its full bounding box
+  and discards the corner rounding, while the radius is consumed only by the under-approximating
+  attachment core, which a larger radius shrinks. Rounding up is safe under both candidate
+  references without choosing between them, since `ceil(x)` is at least the exact radius *and* at
+  least the integer radius KiCad itself derives. The amount is recorded as
+  `ConversionResult.max_roundrect_rounding_nm` rather than hidden, and deliberately not as a
+  diagnostic, because every caller treats a diagnostic as a refusal. A radius that rounds up past
+  half the short side, and a ratio outside `(0, 0.5]`, are still refused rather than clamped. No
+  content address moves. See
+  [Roundrect radius precision](docs/research/roundrect-radius-precision-v1.md) for the derivation
+  and citations, ADR-0080, D-157, and R-120. (#116)
+- **A stadium pad was being handed a disc's attachment core.** `_pad_cores` gives a round pad its
+  largest inscribed square, because a disc's central rectangle degenerates to a bar that can seed
+  no search — but it detected that case from the collapse alone, and a roundrect whose radius is
+  exactly half its shorter side is a stadium and collapses identically. A 2.0 x 1.0 mm stadium was
+  therefore given a core reaching 1.0 mm from its centre in y, where its copper stops at 0.5 mm:
+  an attachment core claiming copper that is not there, which is the one direction it may never err
+  in, and reachable from any board where KiCad wrote a `roundrect_rratio` of 0.5. The inscribed
+  square is now gated on the pad being a disc. Every roundrect in the core-containment
+  parametrisation had a band with real height, so no fixture could have caught it; a stadium case
+  is added. (#116, R-120)
+  is added. (#116, R-118)
+  moves. ([ADR-0079](docs/adr/0076-segment-assembled-edge-cuts-outline.md), D-154, R-117)
+
 - **A courtyard drawn as a ring is a ring, not a solid disc.** A footprint whose courtyard is an
   outer boundary plus an inner ring — a donut — was compared ring-by-ring as two independent solids,
   so a part legitimately placed in the hole was reported as a courtyard collision and the candidate
@@ -227,6 +446,12 @@ All notable changes are documented here. The format follows
   [KiCad copper layer numbering](docs/research/kicad-copper-layer-numbering-v1.md) for the
   derivation and citations, D-153, and R-116 for the class of defect — a validation rule no fixture
   ever contradicted. (#104)
+### Changed
+
+- The KiCad plugin entrypoint imports `copper_mcp.kicad_ipc` inside `main()` rather than at module
+  scope. A PCM install delivers the plugin file and not CopperMCP, so at module scope a new user's
+  first click was an unhandled `ImportError` that put a filesystem path into KiCad's warning bar.
+  It is now one line naming the pip command, with no path and no traceback. (#98, SEC-121)
 
 ## [0.6.0] - 2026-08-06
 

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections import Counter
 from dataclasses import dataclass
+from math import isqrt
 from typing import Never
 
 from copper_mcp.adapters.sexpr import (
@@ -18,11 +20,12 @@ from copper_mcp.adapters.sexpr import (
 )
 from copper_mcp.board_ir.canonical import make_content, make_snapshot
 from copper_mcp.board_ir.diagnostics import ConversionResult, Diagnostic, Severity
-from copper_mcp.board_ir.limits import ParseLimits
+from copper_mcp.board_ir.limits import ParseBudget, ParseLimits
 from copper_mcp.board_ir.types import (
     JSON_SAFE_INTEGER,
     Arc,
     ConstraintSet,
+    CourtyardCircle,
     DifferentialPairRule,
     Footprint,
     FootprintSide,
@@ -89,6 +92,16 @@ _ROOT_METADATA_HEADS = frozenset(
     }
 )
 _ROOT_ROUTING_HEADS = frozenset({"arc", "footprint", "segment", "via", "zone"})
+# The only root graphics that may sit on ``Edge.Cuts``: one unfilled rectangle, or straight
+# segments that chain into exactly one closed simple loop.  Both carry the board outline as an
+# exact integer polygon whose vertices are drawn points, so neither can model more room than the
+# board has.  See docs/research/edge-cuts-outline-assembly-v1.md and ADR-0080.
+_EDGE_CUTS_OUTLINE_HEADS = frozenset({"gr_line", "gr_rect"})
+# Curved outline primitives, refused separately so the diagnostic names the curve rather than
+# reporting the same message as an unsupported layer.  An outline curve needs an *inscribed*
+# approximation, which is not ADR-0072's conservative arc envelope run backwards.
+_EDGE_CUTS_CURVE_HEADS = frozenset({"gr_arc", "gr_bezier", "gr_circle", "gr_curve"})
+_EDGE_CUTS_LINE_FIELDS = frozenset({"end", "layer", "locked", "start", "stroke", "tstamp", "uuid"})
 _SETUP_METADATA_HEADS = frozenset(
     {
         "allow_soldermask_bridges_in_footprints",
@@ -98,6 +111,12 @@ _SETUP_METADATA_HEADS = frozenset(
         "pad_to_mask_clearance",
         "pcbplotparams",
         "plugging",
+        # Soldermask sliver minimum. Like `pad_to_mask_clearance` above it constrains mask
+        # generation, not copper: it bounds how thin a mask web may get between apertures.
+        # CopperMCP models copper geometry and makes no soldermask claim, so accepting it as
+        # metadata ignores nothing it would otherwise have honoured. Found on real boards that
+        # were refused outright for carrying it.
+        "solder_mask_min_width",
         "tenting",
     }
 )
@@ -105,6 +124,11 @@ _FOOTPRINT_METADATA_HEADS = frozenset(
     {
         "at",
         "attr",
+        # Library documentation strings KiCad copies into every placed footprint: a human
+        # description and search tags. They carry no geometry, no layer, and no constraint, so
+        # refusing them refused essentially every real board -- they appeared 2,518 times each
+        # across the 23 boards this gap was found on.
+        "descr",
         "duplicate_pad_numbers_are_jumpers",
         "embedded_fonts",
         "layer",
@@ -113,11 +137,25 @@ _FOOTPRINT_METADATA_HEADS = frozenset(
         "net_tie_pad_groups",
         "pad",
         "path",
+        # KiCad's placement status flag: "the optional `placed` token defines a flag to indicate
+        # that the footprint has not been placed" (KiCad S-expression format, footprint). It is
+        # editor bookkeeping for the autoplacer -- no geometry, no layer, no constraint -- and it
+        # is emphatically *not* `locked`, which is a real constraint and is modelled separately.
+        # Accepting it therefore ignores nothing CopperMCP would otherwise have honoured. Found on
+        # a real board that carried `(placed yes)` on all 31 of its footprints and was refused
+        # outright for it. See docs/research/kicad-aperture-pads-and-net-ties-v1.md.
+        "placed",
         "property",
+        "tags",
         "tstamp",
         "uuid",
     }
 )
+# The non-copper technical layers a KiCad *aperture* pad may occupy. KiCad defines an aperture pad
+# as one with no copper layer assigned: a solder-paste stencil opening or mask opening that is not
+# an electrical connection point and cannot even carry a pad number. See
+# docs/research/kicad-aperture-pads-and-net-ties-v1.md.
+_APERTURE_PAD_LAYERS = frozenset({"B.Mask", "B.Paste", "F.Mask", "F.Paste"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,12 +225,20 @@ class _Converter:
         root: SExpr,
         profile: KiCadConstraintProfile,
         limits: ParseLimits,
+        ambiguous_native_identities: frozenset[tuple[str, str]] = frozenset(),
     ) -> None:
         self.payload = payload
         self.root = root
         self.profile = profile
         self.limits = limits
+        # Native KiCad identities this file reuses across two or more objects of one kind, keyed
+        # as ``(kind, value)``.  Empty on the first pass; ``convert`` re-runs with the measured
+        # set so that a reused identity is never projected as a Board IR identity.
+        self.ambiguous_native_identities = ambiguous_native_identities
+        self.native_identity_uses: Counter[tuple[str, str]] = Counter()
         self.source_revision = f"sha256:{hashlib.sha256(payload).hexdigest()}"
+        # Largest single roundrect radius rounding, in nanometres, measured rather than asserted.
+        self.max_roundrect_rounding_nm = 0
         if self.root.head != KICAD_PCB_ROOT_HEAD:
             self.fail(
                 FOREIGN_ROOT_DIAGNOSTIC_CODE,
@@ -344,12 +390,21 @@ class _Converter:
                 continue
             if head.startswith("gr_"):
                 layer = self._graphic_layer(item, "kicad_pcb.graphic")
-                if self._is_routing_layer(layer) and not (
-                    head == "gr_rect" and layer == "Edge.Cuts"
-                ):
+                if layer == "Edge.Cuts" and head not in _EDGE_CUTS_OUTLINE_HEADS:
                     self.fail(
                         "unsupported.construct",
-                        "root graphic on copper or Edge.Cuts is unsupported",
+                        (
+                            "Edge.Cuts outline arcs, circles and curves are unsupported"
+                            if head in _EDGE_CUTS_CURVE_HEADS
+                            else "Edge.Cuts graphic is not a supported outline primitive"
+                        ),
+                        "kicad_pcb.graphic",
+                        object_kind="outline",
+                    )
+                if self._is_routing_layer(layer) and layer != "Edge.Cuts":
+                    self.fail(
+                        "unsupported.construct",
+                        "root graphic on copper is unsupported",
                         "kicad_pcb.graphic",
                         object_kind="graphic",
                     )
@@ -407,10 +462,21 @@ class _Converter:
                         f"{locator}.zone",
                         object_kind="zone",
                     )
-                if head.startswith("fp_") or head == "property":
+                # `point` is layer-bearing like the `fp_*` primitives -- it carries `at`, `size`
+                # and `layer` -- so it goes through the same layer-aware path rather than the
+                # metadata allowlist. That keeps the copper question decided by the layer, not by
+                # the head: a `point` on a routing layer is refused exactly as a stray `fp_line`
+                # is, and one on a documentation layer is ignored exactly as silkscreen is.
+                if head.startswith("fp_") or head in {"property", "point"}:
                     layer = self._graphic_layer(item, f"{locator}.graphic")
                     if layer in _COURTYARD_LAYERS:
-                        if head not in {"fp_line", "fp_poly", "fp_rect"}:
+                        # ``fp_arc`` stays refused: an arc is a fragment of a chain rather
+                        # than a closed shape, so no region exists to bound until the whole
+                        # curved chain is modelled - an outward guess would publish
+                        # ``violated`` evidence KiCad does not share (ADR-0072 discusses the
+                        # obstacle direction; a keep-out on an evidence surface cannot copy
+                        # it).
+                        if head not in {"fp_circle", "fp_line", "fp_poly", "fp_rect"}:
                             self.fail(
                                 "unsupported.construct",
                                 "courtyard primitive is unsupported by Board IR v0.2",
@@ -419,12 +485,7 @@ class _Converter:
                             )
                         continue
                     if self._is_routing_layer(layer):
-                        self.fail(
-                            "unsupported.construct",
-                            "footprint graphic on copper or Edge.Cuts is unsupported",
-                            f"{locator}.graphic",
-                            object_kind="graphic",
-                        )
+                        self._refuse_footprint_routing_graphic(footprint, layer, locator)
                     continue
                 if head not in _FOOTPRINT_METADATA_HEADS:
                     self.fail(
@@ -433,6 +494,54 @@ class _Converter:
                         f"{locator}.unsupported",
                         object_kind="footprint",
                     )
+
+    def _refuse_footprint_routing_graphic(
+        self, footprint: SExpr, layer: str, locator: str
+    ) -> Never:
+        """Refuse a footprint graphic on a routing layer, naming what it actually is.
+
+        All three cases refuse, and that is the point: a graphic on a copper layer *is copper*, so
+        it is an obstacle, and the one outcome forbidden here is dropping it. What differs is the
+        reason, and the three reasons ask for different fixes:
+
+        - **A net tie.** `net_tie_pad_groups` declares that "nets attached to pads within a single
+          pad-group are allowed to short" (KiCad S-expression format), and the copper polygon on
+          `F.Cu`/`B.Cu` is the short. The obstacle is not the difficulty: Board IR models nets as
+          disjoint, and this copper belongs to two at once, so no envelope -- conservative or exact
+          -- expresses it. Modelling it as an obstacle for both nets would forbid the very
+          connection the part exists to make. The adapter already refuses net ties in
+          `_footprints_and_pads`, but the preflight runs first, so without this the refusal named a
+          drawing on the wrong layer instead of a deliberate short between two nets.
+        - **`Edge.Cuts`.** A footprint graphic contributing to the board outline is the opposite
+          direction of error from copper: the outline is routing *room* and may only be
+          under-approximated (ADR-0076), so it is a separate question from an obstacle and is
+          named separately rather than sharing copper's message.
+        - **Any other copper layer.** Copper the adapter does not model. Refused, never ignored: a
+          conservative envelope would be admissible here (ADR-0072's direction), but no real board
+          surveyed carries one, so inventing the envelope would be modelling a case that has not
+          been observed.
+        """
+
+        if layer == "Edge.Cuts":
+            self.fail(
+                "unsupported.construct",
+                "footprint graphic on Edge.Cuts is unsupported",
+                f"{locator}.graphic",
+                object_kind="outline",
+            )
+        if children(footprint, "net_tie_pad_groups"):
+            self.fail(
+                "unsupported.construct",
+                "net-tie footprint copper is unsupported in Board IR adapter v0.2",
+                f"{locator}.graphic",
+                object_kind="footprint",
+            )
+        self.fail(
+            "unsupported.construct",
+            "footprint graphic on a copper layer is unmodelled copper",
+            f"{locator}.graphic",
+            object_kind="graphic",
+        )
 
     def _validate_neutral_via_treatment(self, expression: SExpr, locator: str) -> None:
         """Reject board-level or per-via fabrication treatment that Board IR omits."""
@@ -559,7 +668,20 @@ class _Converter:
                 object_kind=kind,
             )
         if identities:
-            return f"{kind}:kicad:{identities[0][1].lower()}"
+            native = identities[0][1].lower()
+            self.native_identity_uses[(kind, native)] += 1
+            # A KiCad UUID "should be globally unique" but is not required to be, and real boards
+            # reuse one value across every instance of a footprint type.  Board IR identity is a
+            # per-object invariant, so a reused value is not an identity here: it degrades to the
+            # revision-derived name, which write-back already refuses.  See
+            # docs/research/kicad-uuid-uniqueness-v1.md.
+            if (kind, native) not in self.ambiguous_native_identities:
+                return f"{kind}:kicad:{native}"
+        return self._derived_identity(kind, locator)
+
+    def _derived_identity(self, kind: str, locator: str) -> str:
+        """Name an object that carries no usable native KiCad identity of its own."""
+
         material = f"{self.source_revision}\0{kind}\0{locator}".encode()
         return f"{kind}:derived:{hashlib.sha256(material).hexdigest()[:32]}"
 
@@ -678,8 +800,11 @@ class _Converter:
             if len(net_reference) > 16:
                 self.fail("integer.precision", "numeric net reference is malformed", locator)
             net_code = int(net_reference)
-            if net_code <= 0:
+            if net_code == 0:
+                # KiCad's net 0 is the "unconnected" net: real copper with no netlist claim.
                 return None
+            if net_code < 0:
+                self.fail("net.unknown", "numeric net reference is negative", locator)
             canonical_code = str(net_code)
             if canonical_code not in self.legacy_nets:
                 self.fail("net.unknown", "numeric net reference has no declaration", locator)
@@ -729,7 +854,9 @@ class _Converter:
             length_rules=self.profile.length_rules,
         )
 
-    def _layer_ids(self, expression: SExpr, locator: str) -> tuple[str, ...]:
+    def _layer_names(self, expression: SExpr, locator: str) -> tuple[str, ...]:
+        """Return an item's declared layer names, from either the `layer` or `layers` field."""
+
         layer_values = self._values(
             expression,
             "layer",
@@ -751,6 +878,10 @@ class _Converter:
         values = layer_values or layers_values
         if not values:
             self.fail("syntax.missing_field", "item has no layer reference", locator)
+        return values
+
+    def _layer_ids(self, expression: SExpr, locator: str) -> tuple[str, ...]:
+        values = self._layer_names(expression, locator)
         result: list[str] = []
         for name in values:
             if name == "*.Cu":
@@ -766,6 +897,56 @@ class _Converter:
         if not result:
             self.fail("unknown.layer", "item has no copper-layer reference", locator)
         return tuple(dict.fromkeys(result))
+
+    def _is_aperture_pad(self, pad: SExpr, number: str, kind: PadKind, locator: str) -> bool:
+        """Report whether a `pad` expression is a KiCad *aperture* pad, and refuse if it is not.
+
+        KiCad defines an aperture pad as a pad **with no copper layer assigned**: a solder-paste
+        stencil opening, most often used to subdivide the paste over an exposed thermal tab. It is
+        not an electrical connection point, and KiCad will not even let it carry a pad number
+        (`PAD::CanHaveNumber` is false for one). The real board that found this gap carries eight
+        of them -- four each on two `TO-252-2` transistors, `(pad "" smd roundrect …
+        (layers "F.Paste"))` -- alongside the ordinary copper pad they sit on top of.
+
+        The adapter's expectation was the wrong half of the pair: it required every `pad` to
+        resolve to at least one copper layer, and refused the whole board when one did not. The
+        item is not wrong -- KiCad wrote exactly what it meant.
+
+        Dropping one is safe in the one direction that matters. Attachment copper may only be
+        *under*-approximated and obstacle copper only over-approximated, and an aperture pad is
+        neither: it has no copper at all, so it removes no obstacle and no attachment point. The
+        copper the paste actually sits on is a *separate* pad in the same footprint and is
+        converted normally. The conditions below are what make that claim true rather than assumed,
+        and each one that fails is a refusal rather than a silent drop:
+
+        - no declared layer is copper, so there is nothing to lose;
+        - every declared layer is a paste or mask layer, so this is a stencil or mask opening and
+          not, say, a stray pad on a courtyard layer whose meaning we have not established;
+        - the pad kind is `smd`, since a drilled pad is a hole through copper whatever its layers
+          claim;
+        - it declares no net, so no routable attachment is being discarded; and
+        - it carries no pad number, matching KiCad's own rule for an aperture.
+
+        See docs/research/kicad-aperture-pads-and-net-ties-v1.md.
+        """
+
+        names = self._layer_names(pad, locator)
+        if any(name.endswith(".Cu") or name in {"*.Cu", "F&B.Cu"} for name in names):
+            return False
+        if (
+            kind is PadKind.SMD
+            and not number
+            and all(name in _APERTURE_PAD_LAYERS for name in names)
+            and not children(pad, "net")
+            and not children(pad, "drill")
+        ):
+            return True
+        self.fail(
+            "unknown.layer",
+            "pad references no copper layer and is not a paste or mask aperture",
+            locator,
+            object_kind="pad",
+        )
 
     def _quarter_turn(self, rotation_udeg: int, locator: str) -> int:
         quarter = 90_000_000
@@ -824,7 +1005,43 @@ class _Converter:
             self.fail("integer.overflow", "transformed point exceeds the integer range", locator)
         return PointNM(x, y)
 
-    def _roundrect_radius(self, ratio: str, short_side_nm: int, locator: str) -> int:
+    def _roundrect_radius(self, ratio: str, short_side_nm: int, locator: str) -> tuple[int, int]:
+        """Return the modelled corner radius and the nanometres it was rounded up by.
+
+        KiCad stores a roundrect corner as a dimensionless *ratio* of the pad's shorter side and
+        recomputes the radius on every read as ``KiROUND(ratio * min(size.x, size.y))``
+        (``PADSTACK::RoundRectRadius``), while writing the ratio back with only ten significant
+        digits.  The product of an ordinary ratio and an ordinary pad side is therefore routinely
+        a *fractional* nanometre: 0.203125 of a 650,000 nm side is 132,031.25 nm.  Refusing that
+        - which this adapter used to do - rejected five of twenty-three real boards for a
+        quarter-nanometre, which is a precision artifact and not a modelling gap (issue #116).
+
+        **The rounding is up, and the reason is not the obvious one.**  A pad is copper, so the
+        instinct is to over-approximate it; but a *larger* radius means *more* corner rounding and
+        therefore a *smaller* pad, so "round the copper outward" and "round the radius up" are
+        opposite instructions.  The two roles resolve it separately, and they do not conflict:
+
+        - As an **obstacle**, a pad is over-approximated by its full axis-aligned bounding box -
+          ``_pad_extent`` in the router, ``pad_half_extents`` in placement and the scene, none of
+          which consult the radius at all.  Corner rounding is discarded, conservatively, before
+          the radius could matter.  So no rounding of the radius can shrink an obstacle.
+        - As **attachment copper**, the radius is consumed only by the under-approximating inner
+          core, which is the full-width band ``half_y - radius`` (``pad_core``,
+          ``_pad_core_extent``).  A larger radius shrinks that band, and a band strictly inside
+          the true pad is exactly what keeps the router from asserting a connection the board does
+          not have.
+
+        Rounding *up* is therefore the safe direction for the only role that reads the value, and
+        it is safe against both candidate references without having to adjudicate between them:
+        ``ceil(x) >= x`` covers the exact real radius, and ``ceil(x) >= KiROUND(x)`` covers the
+        integer radius KiCad itself renders.  The modelled core is never taller than the true one
+        under either reading.
+
+        The arithmetic is exact integer rational - the ratio's own numerator and denominator over
+        a pad side that ``mm_to_nm`` already produced exactly - so no binary float and no decimal
+        precision context is involved, and ``remainder`` decides the rounding with no tolerance.
+        """
+
         if len(ratio) > 64 or not _PLAIN_DECIMAL.fullmatch(ratio):
             self.fail("integer.precision", "roundrect ratio is malformed", locator)
         whole, _, fraction = ratio.partition(".")
@@ -833,11 +1050,22 @@ class _Converter:
         if numerator <= 0 or numerator * 2 > denominator:
             self.fail("geometry.invalid", "roundrect ratio must be in (0, 0.5]", locator)
         scaled_radius = numerator * short_side_nm
-        radius = scaled_radius // denominator
-        remainder = scaled_radius % denominator
+        radius, remainder = divmod(scaled_radius, denominator)
+        rounding_nm = 0
         if remainder:
-            self.fail("integer.precision", "roundrect radius is not an exact nanometre", locator)
-        return radius
+            radius += 1
+            rounding_nm = 1
+        if radius * 2 > short_side_nm:
+            # Only reachable for a ratio within a half-nanometre of 0.5 on an odd-nanometre side,
+            # where the exact pad has a sub-nanometre middle band. Rounding down instead would
+            # give the pad a core taller than its real copper, and clamping to the representable
+            # maximum would do the same, so this refuses rather than picking either.
+            self.fail(
+                "integer.precision",
+                "roundrect radius rounds up beyond half the short pad side",
+                locator,
+            )
+        return radius, rounding_nm
 
     def _courtyards(
         self,
@@ -847,24 +1075,30 @@ class _Converter:
         origin: PointNM,
         turn: int,
         side: FootprintSide,
-    ) -> tuple[Ring, ...]:
-        """Import exact closed orthogonal courtyard centerlines in the board frame.
+    ) -> tuple[tuple[Ring, ...], tuple[CourtyardCircle, ...]]:
+        """Import exact closed courtyard centerlines and circles in the board frame.
 
         KiCad treats every closed shape on the matching courtyard layer as part of the footprint
         envelope.  The bounded Board-IR subset accepts unfilled rectangles and polygons plus
-        complete ``fp_line`` cycles, but only when every edge is horizontal or vertical.  Empty
-        still means that no courtyard was present; a malformed or unsupported shape is never
-        silently omitted.
+        complete ``fp_line`` cycles - with every edge horizontal, vertical, or an exact
+        45-degree chamfer - and unfilled ``fp_circle`` outlines whose radius is an exact
+        integer nanometre.  Empty still means that no courtyard was present; a malformed or
+        unsupported shape is never silently omitted.
         """
 
         expected_layer = "F.CrtYd" if side is FootprintSide.FRONT else "B.CrtYd"
         result: list[Ring] = []
+        circles: list[CourtyardCircle] = []
         line_segments: list[tuple[PointNM, PointNM, str]] = []
 
         def append(local_points: tuple[PointNM, ...], locator: str) -> None:
-            if len(result) >= 64:
+            if len(result) + len(circles) >= 64:
+                # A fixed schema ceiling, not an operator budget: the Board IR decoder refuses the
+                # very same 64-courtyard rule under `schema.limit`, and the two paths disagreeing
+                # about the code for one rule was a defect. Every `budget.exceeded.*` code now
+                # names a `ParseLimits` field an operator can actually move; this is not one.
                 self.fail(
-                    "budget.exceeded",
+                    "schema.limit",
                     "footprint courtyard limit exceeded",
                     locator,
                     object_kind="footprint",
@@ -882,7 +1116,12 @@ class _Converter:
 
         courtyard_index = 0
         for item in footprint.items[1:]:
-            if not isinstance(item, SExpr) or item.head not in {"fp_line", "fp_poly", "fp_rect"}:
+            if not isinstance(item, SExpr) or item.head not in {
+                "fp_circle",
+                "fp_line",
+                "fp_poly",
+                "fp_rect",
+            }:
                 continue
             locator = f"{footprint_locator}.courtyard[{courtyard_index}]"
             courtyard_index += 1
@@ -930,6 +1169,19 @@ class _Converter:
                 append((start, PointNM(end.x, start.y), end, PointNM(start.x, end.y)), locator)
             elif item.head == "fp_poly":
                 append(self._courtyard_polygon_points(item, locator), locator)
+            elif item.head == "fp_circle":
+                if len(result) + len(circles) >= 64:
+                    self.fail(
+                        # The same fixed 64-courtyard schema ceiling the ring path above
+                        # refuses under, and the Board IR decoder enforces. It is not an
+                        # operator budget -- no `ParseLimits` field moves it -- so it keeps
+                        # `schema.limit` rather than a `budget.exceeded.*` code.
+                        "schema.limit",
+                        "footprint courtyard limit exceeded",
+                        locator,
+                        object_kind="footprint",
+                    )
+                circles.append(self._courtyard_circle(item, locator, origin=origin, turn=turn))
             else:
                 line_segments.append(self._courtyard_line_segment(item, locator))
 
@@ -937,7 +1189,8 @@ class _Converter:
             self._closed_courtyard_line_rings(line_segments, footprint_locator)
         ):
             append(ring, f"{footprint_locator}.line_chain[{index}]")
-        return tuple(result)
+        self._require_disjoint_courtyard_circles(tuple(result), tuple(circles), footprint_locator)
+        return tuple(result), tuple(circles)
 
     def _courtyard_polygon_points(self, polygon: SExpr, locator: str) -> tuple[PointNM, ...]:
         """Read one unfilled orthogonal ``fp_poly`` without inventing a closing point."""
@@ -966,7 +1219,7 @@ class _Converter:
         )
         point_expressions = children(points_expression, "xy")
         if len(point_expressions) > self.limits.max_vertices_per_ring + 1:
-            self.fail("budget.exceeded", "ring vertex budget exceeded", locator)
+            self.fail(ParseBudget.VERTICES_PER_RING.value, "ring vertex budget exceeded", locator)
         points: list[PointNM] = []
         for index, point in enumerate(point_expressions):
             values = atoms(point)
@@ -1075,25 +1328,141 @@ class _Converter:
                     break
                 points.append(current)
                 if len(points) > self.limits.max_vertices_per_ring:
-                    self.fail("budget.exceeded", "ring vertex budget exceeded", footprint_locator)
+                    self.fail(
+                        ParseBudget.VERTICES_PER_RING.value,
+                        "ring vertex budget exceeded",
+                        footprint_locator,
+                    )
             self._require_orthogonal_chain(tuple(points), footprint_locator)
             rings.append(tuple(points))
         return tuple(rings)
 
     def _require_orthogonal_chain(self, points: tuple[PointNM, ...], locator: str) -> None:
-        """Fail closed unless every supplied edge is a non-zero orthogonal segment."""
+        """Fail closed unless every edge is non-zero and axis-aligned or an exact chamfer.
+
+        The accepted diagonal class is exactly ``|dx| == |dy|``: a 45-degree chamfer keeps
+        integer-nanometre vertices and stays in-class under every quarter-turn transform the
+        placement model supports.  Real refused boards carried nothing but such chamfers
+        (electrolytic-capacitor courtyards); a rectangle rotated by any other angle has
+        irrational vertices in the source's own frame and still fails closed here.
+        """
 
         if len(points) < 2:
             self.fail("geometry.invalid", "courtyard chain has too few points", locator)
         for index, start in enumerate(points):
             end = points[(index + 1) % len(points)]
-            if (start.x == end.x) == (start.y == end.y):
+            delta_x = end.x - start.x
+            delta_y = end.y - start.y
+            if (delta_x == 0 and delta_y == 0) or (
+                delta_x != 0 and delta_y != 0 and abs(delta_x) != abs(delta_y)
+            ):
                 self.fail(
                     "unsupported.topology",
-                    "courtyard edges must be non-zero and axis-aligned",
+                    "courtyard edges must be non-zero and axis-aligned or 45-degree chamfers",
                     locator,
                     object_kind="footprint",
                 )
+
+    def _courtyard_circle(
+        self, circle: SExpr, locator: str, *, origin: PointNM, turn: int
+    ) -> CourtyardCircle:
+        """Read one unfilled ``fp_circle`` courtyard outline as an exact integer circle.
+
+        The radius is the distance from ``center`` to ``end``.  It is imported only when that
+        distance is an exact integer nanometre; rounding it in either direction would misstate
+        the keep-out on an evidence-publishing surface, so an inexact radius is a typed
+        refusal rather than an approximation.  Every circle in the measured refused boards has
+        an axis-aligned radius point and therefore an exact radius.
+        """
+
+        self._reject_unknown_children(
+            circle,
+            frozenset({"center", "end", "fill", "layer", "locked", "stroke", "tstamp", "uuid"}),
+            locator,
+        )
+        self._validate_direct_atoms(
+            circle, positional_atoms=0, allowed=frozenset({"locked"}), locator=locator
+        )
+        fill = self._values(circle, "fill", locator, minimum=1, maximum=1, required=False)
+        if fill and fill not in {("none",), ("no",)}:
+            self.fail(
+                "unsupported.construct",
+                "filled courtyard circle is unsupported",
+                locator,
+                object_kind="footprint",
+            )
+        center = self._point(circle, "center", locator)
+        end = self._point(circle, "end", locator)
+        delta_x = end.x - center.x
+        delta_y = end.y - center.y
+        radius_squared = delta_x * delta_x + delta_y * delta_y
+        radius = isqrt(radius_squared)
+        if radius * radius != radius_squared:
+            self.fail(
+                "integer.precision",
+                "courtyard circle radius is not an exact nanometre",
+                locator,
+                object_kind="footprint",
+            )
+        if radius == 0:
+            self.fail(
+                "geometry.invalid",
+                "courtyard circle must have a non-zero radius",
+                locator,
+                object_kind="footprint",
+            )
+        try:
+            return CourtyardCircle(
+                center=self._transform(center, origin, turn, locator), radius_nm=radius
+            )
+        except ValueError as error:
+            self.fail("geometry.invalid", str(error), locator, object_kind="footprint")
+
+    def _require_disjoint_courtyard_circles(
+        self,
+        rings: tuple[Ring, ...],
+        circles: tuple[CourtyardCircle, ...],
+        footprint_locator: str,
+    ) -> None:
+        """Refuse a courtyard circle whose box meets any other courtyard shape's box.
+
+        One footprint's courtyard region is filled even-odd across its contours, which equals
+        the plain union only when the contours are disjoint or strictly nested.  A circle
+        cannot join the ring nesting hierarchy, so overlap here would silently subtract area
+        from the keep-out.  The box test is conservative: it can refuse an exotic legal
+        arrangement, never admit an unsound one, and no measured board comes near it.
+        """
+
+        if not circles:
+            return
+        boxes = [
+            (
+                circle.center.x - circle.radius_nm,
+                circle.center.y - circle.radius_nm,
+                circle.center.x + circle.radius_nm,
+                circle.center.y + circle.radius_nm,
+            )
+            for circle in circles
+        ]
+        boxes.extend(
+            (
+                min(point.x for point in ring.points),
+                min(point.y for point in ring.points),
+                max(point.x for point in ring.points),
+                max(point.y for point in ring.points),
+            )
+            for ring in rings
+        )
+        for first in range(len(circles)):
+            for second in range(first + 1, len(boxes)):
+                a, b = boxes[first], boxes[second]
+                if a[2] > b[0] and b[2] > a[0] and a[3] > b[1] and b[3] > a[1]:
+                    self.fail(
+                        "unsupported.topology",
+                        "courtyard circles must be disjoint from other courtyard shapes",
+                        footprint_locator,
+                        object_kind="footprint",
+                    )
 
     def _footprints_and_pads(self) -> tuple[tuple[Footprint, ...], tuple[Pad, ...]]:
         footprints: list[Footprint] = []
@@ -1170,7 +1539,7 @@ class _Converter:
                     self.fail(
                         "syntax.invalid", "pad header is malformed", locator, object_kind="pad"
                     )
-                _, raw_kind, raw_shape = header
+                number, raw_kind, raw_shape = header
                 try:
                     kind = {
                         "smd": PadKind.SMD,
@@ -1185,6 +1554,12 @@ class _Converter:
                         locator,
                         object_kind="pad",
                     )
+                # A pad with no copper is a stencil aperture, not copper the router may attach to
+                # or must avoid. It is skipped only once every condition in `_is_aperture_pad`
+                # holds; anything else with no copper layer refuses there. The skip sits after the
+                # structural checks above, so a malformed aperture is still a typed refusal.
+                if self._is_aperture_pad(pad, number, kind, locator):
+                    continue
                 pad_at = self._values(pad, "at", locator, minimum=2, maximum=3)
                 local = PointNM(
                     self._mm(pad_at[0], f"{locator}.at.x"),
@@ -1218,7 +1593,12 @@ class _Converter:
                         minimum=1,
                         maximum=1,
                     )[0]
-                    radius = self._roundrect_radius(ratio, min(size_x, size_y), locator)
+                    radius, rounding_nm = self._roundrect_radius(
+                        ratio, min(size_x, size_y), locator
+                    )
+                    self.max_roundrect_rounding_nm = max(
+                        self.max_roundrect_rounding_nm, rounding_nm
+                    )
                 remove_unused = self._values(
                     pad,
                     "remove_unused_layers",
@@ -1289,6 +1669,13 @@ class _Converter:
                 )
                 pads.append(pad_item)
                 owned_pad_ids.append(pad_item.id)
+            courtyards, courtyard_circles = self._courtyards(
+                footprint,
+                footprint_locator=footprint_locator,
+                origin=origin,
+                turn=turn,
+                side=side,
+            )
             footprints.append(
                 Footprint(
                     id=footprint_id,
@@ -1296,13 +1683,8 @@ class _Converter:
                     rotation_udeg=footprint_rotation,
                     side=side,
                     pad_ids=tuple(owned_pad_ids),
-                    courtyards=self._courtyards(
-                        footprint,
-                        footprint_locator=footprint_locator,
-                        origin=origin,
-                        turn=turn,
-                        side=side,
-                    ),
+                    courtyards=courtyards,
+                    courtyard_circles=courtyard_circles,
                     locked=footprint_locked,
                 )
             )
@@ -1323,16 +1705,17 @@ class _Converter:
                 allowed=frozenset({"locked"}),
                 locator=locator,
             )
+            # KiCad stores stitching and orphaned copper on net 0 ("no net"). That copper is
+            # physically present whatever its net, so it converts as an obstacle with no
+            # connectivity contribution (net_id None) instead of refusing the document.
             net_name = self._net_name(expression, locator)
-            if net_name is None:
-                self.fail("net.unknown", "segment has no routable net", locator)
             layer_ids = self._layer_ids(expression, locator)
             if len(layer_ids) != 1:
                 self.fail("unknown.layer", "segment must reference one copper layer", locator)
             result.append(
                 Segment(
                     id=self._identity("segment", expression, locator),
-                    net_id=net_id_for_name(net_name),
+                    net_id=net_id_for_name(net_name) if net_name is not None else None,
                     layer_id=layer_ids[0],
                     start=self._point(expression, "start", locator),
                     end=self._point(expression, "end", locator),
@@ -1362,16 +1745,15 @@ class _Converter:
                 allowed=frozenset({"locked"}),
                 locator=locator,
             )
+            # Net-0 arcs convert as netless obstacles for the same reason segments do.
             net_name = self._net_name(expression, locator)
-            if net_name is None:
-                self.fail("net.unknown", "track arc has no routable net", locator)
             layer_ids = self._layer_ids(expression, locator)
             if len(layer_ids) != 1:
                 self.fail("unknown.layer", "track arc must reference one copper layer", locator)
             result.append(
                 Arc(
                     id=self._identity("arc", expression, locator),
-                    net_id=net_id_for_name(net_name),
+                    net_id=net_id_for_name(net_name) if net_name is not None else None,
                     layer_id=layer_ids[0],
                     start=self._point(expression, "start", locator),
                     mid=self._point(expression, "mid", locator),
@@ -1447,9 +1829,10 @@ class _Converter:
                     object_kind="via",
                 )
             self._validate_neutral_via_treatment(expression, locator)
+            # A stitching via saved on KiCad's net 0 is real copper: barrel and annulus occupy
+            # space on every layer they cross. It converts as an obstacle with no connectivity
+            # contribution (net_id None); every geometric check below still applies to it.
             net_name = self._net_name(expression, locator)
-            if net_name is None:
-                self.fail("net.unknown", "via has no routable net", locator)
             layer_ids = self._layer_ids(expression, locator)
             if len(layer_ids) != 2:
                 self.fail("unknown.layer", "through via must reference two copper layers", locator)
@@ -1464,7 +1847,7 @@ class _Converter:
             result.append(
                 Via(
                     id=self._identity("via", expression, locator),
-                    net_id=net_id_for_name(net_name),
+                    net_id=net_id_for_name(net_name) if net_name is not None else None,
                     center=self._point(expression, "at", locator),
                     diameter_nm=self._mm(
                         self._values(expression, "size", locator, minimum=1, maximum=1)[0],
@@ -1503,7 +1886,7 @@ class _Converter:
         )
         point_expressions = children(points_expression, "xy")
         if len(point_expressions) > self.limits.max_vertices_per_ring:
-            self.fail("budget.exceeded", "ring vertex budget exceeded", locator)
+            self.fail(ParseBudget.VERTICES_PER_RING.value, "ring vertex budget exceeded", locator)
         points: list[PointNM] = []
         for index, point in enumerate(point_expressions):
             values = atoms(point)
@@ -1791,6 +2174,118 @@ class _Converter:
             )
         return tuple(zones), tuple(keepouts)
 
+    def _edge_cuts_line_segments(self) -> list[tuple[PointNM, PointNM, str]]:
+        """Read every root ``gr_line`` drawn on ``Edge.Cuts`` as an exact integer segment."""
+
+        segments: list[tuple[PointNM, PointNM, str]] = []
+        for index, expression in enumerate(children(self.root, "gr_line")):
+            locator = f"kicad_pcb.gr_line[{index}]"
+            layer_values = self._values(
+                expression,
+                "layer",
+                locator,
+                minimum=1,
+                maximum=1,
+                required=False,
+            )
+            if layer_values != ("Edge.Cuts",):
+                continue
+            self._reject_unknown_children(expression, _EDGE_CUTS_LINE_FIELDS, locator)
+            self._validate_direct_atoms(
+                expression,
+                positional_atoms=0,
+                allowed=frozenset({"locked"}),
+                locator=locator,
+            )
+            start = self._point(expression, "start", locator)
+            end = self._point(expression, "end", locator)
+            if start == end:
+                self.fail(
+                    "geometry.invalid",
+                    "Edge.Cuts outline carries a zero-length segment",
+                    locator,
+                    object_kind="outline",
+                )
+            segments.append((start, end, locator))
+        return segments
+
+    def _edge_cuts_segment_ring(self, segments: list[tuple[PointNM, PointNM, str]]) -> Ring:
+        """Assemble unordered ``Edge.Cuts`` segments into exactly one closed simple ring.
+
+        The board outline is routing *room*, not an obstacle, so the direction of error here is
+        the opposite of the one an obstacle envelope takes: the modelled contour must be
+        **contained within** the outline the board draws, never larger, or the router is handed
+        copper the fabricated board does not have.  Straight segments make that containment
+        exact - every ring vertex is a drawn endpoint and nothing is synthesized - and the only
+        way to break it is to *repair* the input, so this method never does.
+
+        Endpoints must coincide exactly.  KiCad chains its own outline with a non-zero epsilon
+        (``ConvertOutlineToPolygon``'s ``aChainingEpsilon``) and will close a sub-tolerance gap
+        for you; closing a gap adds area no drawn segment encloses, so a near-miss is refused
+        here instead.  Duplicate segments, a vertex of degree other than two, a second disjoint
+        loop, and anything past the ring budget are refusals for the same reason: each has more
+        than one plausible repair and every repair invents board.
+        """
+
+        if len(segments) > self.limits.max_vertices_per_ring:
+            self.fail(
+                # The outline ring is bounded by the same per-ring vertex budget every other
+                # ring uses, so it refuses under that budget's own code rather than a bare one.
+                # This path landed after the discriminated codes were written, which is exactly
+                # what the no-bare-code invariant test exists to catch.
+                ParseBudget.VERTICES_PER_RING.value,
+                "Edge.Cuts outline segment budget exceeded",
+                "kicad_pcb",
+                object_kind="outline",
+            )
+        adjacency: dict[PointNM, list[tuple[int, PointNM]]] = {}
+        seen: set[tuple[PointNM, PointNM]] = set()
+        for index, (start, end, locator) in enumerate(segments):
+            key = (start, end) if start < end else (end, start)
+            if key in seen:
+                self.fail(
+                    "geometry.invalid",
+                    "Edge.Cuts outline has a duplicate segment",
+                    locator,
+                    object_kind="outline",
+                )
+            seen.add(key)
+            adjacency.setdefault(start, []).append((index, end))
+            adjacency.setdefault(end, []).append((index, start))
+        for links in adjacency.values():
+            if len(links) != 2:
+                self.fail(
+                    "geometry.invalid",
+                    "Edge.Cuts outline must be one closed non-branching loop",
+                    "kicad_pcb",
+                    object_kind="outline",
+                )
+
+        origin = min(adjacency)
+        points: list[PointNM] = [origin]
+        current, previous_edge = origin, -1
+        while True:
+            choices = sorted(
+                (edge, other) for edge, other in adjacency[current] if edge != previous_edge
+            )
+            previous_edge, current = choices[0]
+            if current == origin:
+                break
+            points.append(current)
+        if len(points) != len(segments):
+            self.fail(
+                "unsupported.topology",
+                "multiple disjoint Edge.Cuts loops are unsupported",
+                "kicad_pcb",
+                object_kind="outline",
+            )
+        # Two segments cannot close a loop without repeating an edge, which the duplicate check
+        # above already refuses, so ``Ring`` sees at least three points here.  Its own contract -
+        # three distinct vertices, no repeated closing point, non-zero area - is what rejects a
+        # degenerate all-collinear cycle, and ``validate_content`` is what rejects a ring that
+        # crosses itself away from a shared vertex.
+        return Ring(tuple(points))
+
     def _outline(self) -> tuple[OutlineContour, ...]:
         contours: list[OutlineContour] = []
         for index, expression in enumerate(children(self.root, "gr_rect")):
@@ -1831,7 +2326,15 @@ class _Converter:
                     ),
                 )
             )
-        for head in ("gr_line", "gr_arc", "gr_circle", "gr_poly", "gr_curve"):
+        segments = self._edge_cuts_line_segments()
+        if segments:
+            contours.append(
+                OutlineContour(
+                    id=self._derived_identity("contour", "kicad_pcb.edge_cuts"),
+                    outer=self._edge_cuts_segment_ring(segments),
+                )
+            )
+        for head in ("gr_arc", "gr_circle", "gr_poly", "gr_curve"):
             for index, expression in enumerate(children(self.root, head)):
                 locator = f"kicad_pcb.{head}[{index}]"
                 layer_values = self._values(
@@ -1845,7 +2348,7 @@ class _Converter:
                 if layer_values == ("Edge.Cuts",):
                     self.fail(
                         "unsupported.construct",
-                        "Board IR adapter v0.1 accepts rectangular Edge.Cuts only",
+                        "Edge.Cuts outline arcs, circles, polygons and curves are unsupported",
                         locator,
                         object_kind="outline",
                     )
@@ -1854,7 +2357,7 @@ class _Converter:
         if len(contours) != 1:
             self.fail(
                 "unsupported.construct",
-                "Board IR adapter v0.1 requires exactly one rectangular Edge.Cuts contour",
+                "the board must carry exactly one Edge.Cuts outline contour",
                 "kicad_pcb",
                 object_kind="outline",
             )
@@ -1874,26 +2377,49 @@ class _Converter:
         constraints = self._constraints(nets)
         zones, keepouts = self._zones_and_keepouts()
         footprints, pads = self._footprints_and_pads()
+        source_info = SourceInfo(
+            format="kicad_pcb",
+            revision=self.source_revision,
+            format_version=self.version,
+            generator=generator_values[0] if generator_values else None,
+        )
+        outline = self._outline()
+        vias = self._vias()
+        segments = self._segments()
+        arcs = self._arcs()
+        # Every identity is now assigned, so reuse is measurable rather than guessed.  Re-running
+        # the whole conversion with the measured set is what keeps the fallback symmetric: all the
+        # objects sharing a reused value degrade together, and none of them keeps a claim to it.
+        reused = (
+            frozenset(key for key, uses in self.native_identity_uses.items() if uses > 1)
+            - self.ambiguous_native_identities
+        )
+        if reused:
+            return _Converter(
+                self.payload,
+                self.root,
+                self.profile,
+                self.limits,
+                ambiguous_native_identities=self.ambiguous_native_identities | reused,
+            ).convert()
         content = make_content(
-            source=SourceInfo(
-                format="kicad_pcb",
-                revision=self.source_revision,
-                format_version=self.version,
-                generator=generator_values[0] if generator_values else None,
-            ),
-            outline=self._outline(),
+            source=source_info,
+            outline=outline,
             copper_layers=self.layers,
             nets=nets,
             constraints=constraints,
             footprints=footprints,
             pads=pads,
-            vias=self._vias(),
-            segments=self._segments(),
-            arcs=self._arcs(),
+            vias=vias,
+            segments=segments,
+            arcs=arcs,
             zones=zones,
             keepouts=keepouts,
         )
-        return ConversionResult(snapshot=make_snapshot(content))
+        return ConversionResult(
+            snapshot=make_snapshot(content),
+            max_roundrect_rounding_nm=self.max_roundrect_rounding_nm,
+        )
 
 
 def parse_kicad_bytes(
@@ -1937,13 +2463,19 @@ def parse_kicad_bytes(
             ),
         )
     except BoardIRValidationError as error:
+        # Name the invariant, never the board.  Every message raised by Board IR validation is a
+        # fixed string chosen by `copper_mcp.board_ir`; anything derived from the source travels
+        # in the error's locator, which this refusal deliberately does not echo.
         return ConversionResult(
             snapshot=None,
             diagnostics=(
                 Diagnostic(
                     code=error.code,
                     severity=Severity.ERROR,
-                    message="converted Board IR content failed semantic validation",
+                    message=(
+                        "converted Board IR content failed semantic validation: "
+                        f"{error.message[:256]}"
+                    ),
                     source_locator="kicad_pcb",
                 ),
             ),

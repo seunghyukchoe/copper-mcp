@@ -433,6 +433,65 @@ def test_every_pad_has_exactly_one_first_class_footprint_owner() -> None:
         assert caught.value.code == expected_code
 
 
+def test_duplicate_geometry_ids_are_still_refused_after_the_uuid_reuse_fallback() -> None:
+    """The adapter stopped *creating* duplicate geometry IDs; the invariant that rejects them stays.
+
+    Issue #116's `identity.duplicate` refusal was fixed in the KiCad converter, which must not
+    project a reused KiCad UUID as an identity.  This control exists so that fix cannot be
+    mistaken for licence to relax the rule: content that genuinely names two objects the same is
+    still refused, with the invariant named and no board-derived text in the message.
+    """
+
+    content = sample_content()
+    duplicates = (
+        replace(content, segments=(content.segments[0], replace(content.segments[0]))),
+        replace(content, vias=(content.vias[0], replace(content.vias[0]))),
+        replace(content, arcs=(content.arcs[0], replace(content.arcs[0]))),
+        replace(content, zones=(content.zones[0], replace(content.zones[0]))),
+    )
+
+    for candidate in duplicates:
+        with pytest.raises(BoardIRValidationError) as caught:
+            validate_content(candidate)
+        assert caught.value.code == "identity.duplicate"
+        assert caught.value.message == "duplicate geometry ID"
+
+
+def test_validation_messages_name_invariants_without_echoing_board_content() -> None:
+    """Every refusal message the adapter surfaces has to be a fixed string this module chose.
+
+    The adapter now appends the validation message to its refusal, so a message built from an
+    object ID would leak board content into a diagnostic that deliberately drops the locator.
+    """
+
+    content = sample_content()
+    amplifier, mechanical = content.footprints
+    leaky = (
+        replace(
+            content,
+            footprints=(
+                replace(amplifier, pad_ids=(*amplifier.pad_ids, amplifier.pad_ids[0])),
+                mechanical,
+            ),
+        ),
+        replace(
+            content,
+            pads=(
+                replace(content.pads[0], layer_ids=(content.copper_layers[0].id,) * 2),
+                *content.pads[1:],
+            ),
+        ),
+    )
+    expected = ("duplicate pad ownership within one footprint", "duplicate layer reference")
+
+    for candidate, fragment in zip(leaky, expected, strict=True):
+        with pytest.raises(BoardIRValidationError) as caught:
+            validate_content(candidate)
+        assert caught.value.message.startswith(fragment)
+        assert ":" not in caught.value.message
+        assert caught.value.source_locator != caught.value.message
+
+
 def test_footprints_and_courtyards_are_charged_to_validation_budgets() -> None:
     content = sample_content()
     object_groups = (
@@ -456,7 +515,7 @@ def test_footprints_and_courtyards_are_charged_to_validation_budgets() -> None:
     validate_content(content, ParseLimits(max_objects=object_count))
     with pytest.raises(BoardIRValidationError) as object_error:
         validate_content(content, ParseLimits(max_objects=object_count - 1))
-    assert object_error.value.code == "budget.exceeded"
+    assert object_error.value.code == "budget.exceeded.objects"
 
     total_vertices = (
         sum(len(contour.outer.points) for contour in content.outline)
@@ -472,7 +531,7 @@ def test_footprints_and_courtyards_are_charged_to_validation_budgets() -> None:
     validate_content(content, ParseLimits(max_total_vertices=total_vertices))
     with pytest.raises(BoardIRValidationError) as vertex_error:
         validate_content(content, ParseLimits(max_total_vertices=total_vertices - 1))
-    assert vertex_error.value.code == "budget.exceeded"
+    assert vertex_error.value.code == "budget.exceeded.total_vertices"
 
 
 def test_one_footprint_may_have_at_most_64_courtyard_rings() -> None:
@@ -688,7 +747,7 @@ def test_decoder_applies_string_budget_to_property_names() -> None:
     with pytest.raises(BoardIRValidationError) as caught:
         decode_snapshot_json(b'{"ABCDE":0}', ParseLimits(max_atom_chars=4))
 
-    assert caught.value.code == "budget.exceeded"
+    assert caught.value.code == "budget.exceeded.atom_chars"
 
 
 def test_decoder_maps_excessive_json_nesting_to_a_bounded_domain_error() -> None:
@@ -697,7 +756,7 @@ def test_decoder_maps_excessive_json_nesting_to_a_bounded_domain_error() -> None
     with pytest.raises(BoardIRValidationError) as caught:
         decode_snapshot_json(deeply_nested)
 
-    assert caught.value.code == "budget.exceeded"
+    assert caught.value.code == "budget.exceeded.depth"
 
 
 def test_geometry_package_has_no_mcp_gui_filesystem_or_adapter_imports() -> None:
@@ -724,27 +783,29 @@ def test_geometry_package_has_no_mcp_gui_filesystem_or_adapter_imports() -> None
         ), f"forbidden Board IR import in {source_path}: {sorted(imports)}"
 
 
-def test_board_ir_v0_2_accepts_only_orthogonal_courtyard_rings() -> None:
+def test_board_ir_v0_2_accepts_only_octilinear_courtyard_rings() -> None:
     """Externally-produced Board IR must obey the adapter's exact courtyard subset.
 
-    The adapter can now import a simple closed line-chain or unfilled polygon, but only when it
-    is orthogonal.  Validation must accept the same bounded topology while continuing to refuse
-    diagonal geometry, otherwise a hand-written JSON snapshot could claim a collision region that
-    the deterministic legalizer does not model.
+    The adapter can import a simple closed line-chain or unfilled polygon whose edges are
+    horizontal, vertical, or exact 45-degree chamfers.  Validation must accept the same bounded
+    topology while continuing to refuse arbitrary-slope geometry, otherwise a hand-written JSON
+    snapshot could claim a collision region that the deterministic legalizer does not model.
     """
 
     content = sample_content()
     footprint = content.footprints[0]
 
+    # Every edge of this triangle is horizontal or an exact 45-degree diagonal, so it is inside
+    # the octilinear subset and must round-trip - it used to be refused when the subset was
+    # orthogonal-only.
     triangle = _ring(((1_000_000, 1_000_000), (7_000_000, 1_000_000), (4_000_000, 4_000_000)))
-    with pytest.raises(BoardIRValidationError) as triangle_error:
-        make_snapshot(
-            replace(
-                content,
-                footprints=(replace(footprint, courtyards=(triangle,)), *content.footprints[1:]),
-            )
+    chamfer_snapshot = make_snapshot(
+        replace(
+            content,
+            footprints=(replace(footprint, courtyards=(triangle,)), *content.footprints[1:]),
         )
-    assert triangle_error.value.code == "unsupported.topology"
+    )
+    assert decode_snapshot_json(encode_snapshot(chamfer_snapshot)) == chamfer_snapshot
 
     concave_orthogonal = _ring(
         (
@@ -769,7 +830,8 @@ def test_board_ir_v0_2_accepts_only_orthogonal_courtyard_rings() -> None:
     )
     assert decode_snapshot_json(encode_snapshot(snapshot)) == snapshot
 
-    # A four-vertex ring is not enough: the corners must form an axis-aligned rectangle.
+    # A four-vertex ring is not enough: an edge of arbitrary slope stays outside the subset,
+    # exactly as a rectangle rotated by a non-multiple of 45 degrees would.
     skewed = _ring(
         (
             (1_000_000, 1_000_000),
@@ -788,8 +850,7 @@ def test_board_ir_v0_2_accepts_only_orthogonal_courtyard_rings() -> None:
     assert skew_error.value.code == "unsupported.topology"
 
     # The refusal names the contract, never the caller's geometry.
-    for error in (triangle_error, skew_error):
-        assert "1000000" not in error.value.message
+    assert "1000000" not in skew_error.value.message
 
 
 def test_board_ir_v0_2_accepts_orthogonal_courtyards_at_every_quarter_turn() -> None:

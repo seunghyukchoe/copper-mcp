@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0076**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0081**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -122,8 +122,13 @@ never silently widens it.
 | [0073](0073-declared-negotiation-policy-slots.md) | Declare negotiation strategy as three separately digest-bound policy slots | Accepted |
 | [0074](0074-live-ipc-one-undo-commit-apply.md) | Gate live editor mutation on its own consent, and ship its preconditions before it | Accepted |
 | [0075](0075-courtyard-oracle-parity.md) | Model KiCad's courtyard cache, and make courtyard legality three-valued | Accepted |
+| [0076](0076-segment-assembled-edge-cuts-outline.md) | Assemble the board outline from Edge.Cuts segments, and never repair it | Accepted |
+| [0077](0077-roundrect-corner-radius-rounding.md) | Roundrect corner radii round up, by geometry role | Accepted |
+| [0078](0078-netless-copper-as-obstacle.md) | Net-0 copper is an obstacle with no connectivity contribution | Accepted |
+| [0079](0079-discriminated-configurable-parse-budgets.md) | Make the structural parse budgets operator-settable, and name the one that refused | Accepted |
+| [0080](0080-chamfered-and-circular-courtyards.md) | Bracket chamfered and circular courtyards instead of widening them | Accepted |
 
-Seventy-five numbers, seventy-four records, no duplicates — and `scripts/check_adr_numbers.py` now
+Seventy-seven numbers, seventy-six records, no duplicates — and `scripts/check_adr_numbers.py` now
 proves that last clause on every run rather than asserting it. Only 0027 is unused; see
 **Known gap** above.
 
@@ -131,7 +136,7 @@ proves that last clause on every run rather than asserting it. Only 0027 is unus
 
 The ADRs are chronological, not thematic. To follow one arc, read it in this order:
 
-- **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070.
+- **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070, 0076.
 - **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
   0066, 0070, 0073.
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060, 0075.
@@ -200,3 +205,8 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0073: Declare negotiation strategy as three separately digest-bound policy slots](0073-declared-negotiation-policy-slots.md)
 - [ADR-0074: Gate live editor mutation on its own consent, and ship its preconditions before it](0074-live-ipc-one-undo-commit-apply.md)
 - [ADR-0075: Model KiCad's courtyard cache, and make courtyard legality three-valued](0075-courtyard-oracle-parity.md)
+- [ADR-0076: Assemble the board outline from Edge.Cuts segments, and never repair it](0076-segment-assembled-edge-cuts-outline.md)
+- [ADR-0077: Roundrect corner radii round up, by geometry role](0077-roundrect-corner-radius-rounding.md)
+- [ADR-0078: Net-0 copper is an obstacle with no connectivity contribution](0078-netless-copper-as-obstacle.md)
+- [ADR-0079: Make the structural parse budgets operator-settable, and name the one that refused](0079-discriminated-configurable-parse-budgets.md)
+- [ADR-0080: Bracket chamfered and circular courtyards instead of widening them](0080-chamfered-and-circular-courtyards.md)

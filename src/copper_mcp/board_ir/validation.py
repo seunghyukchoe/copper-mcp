@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from copper_mcp.board_ir.limits import ParseLimits
-from copper_mcp.board_ir.types import BoardIRContent, PointNM, Ring
+from copper_mcp.board_ir.limits import ParseBudget, ParseLimits
+from copper_mcp.board_ir.types import BoardIRContent, Footprint, PointNM, Ring
 
 _SCHEMA_MAX_COPPER_LAYERS = 64
 _SCHEMA_MAX_NET_CLASSES = 10_000
@@ -16,28 +16,81 @@ _SCHEMA_MAX_RING_POINTS = 100_000
 _SCHEMA_MAX_COURTYARDS_PER_FOOTPRINT = 64
 
 
-def _require_orthogonal_courtyard(ring: Ring, locator: str) -> None:
+def _require_octilinear_courtyard(ring: Ring, locator: str) -> None:
     """Reject courtyard topology whose exact filled region we do not model.
 
     Board IR stores all courtyard contours as ordinary rings.  The accepted adapter subset is
-    deliberately smaller: a simple closed chain made only of horizontal and vertical segments.
-    That admits KiCad ``fp_rect``, unfilled orthogonal ``fp_poly``, and closed orthogonal
-    ``fp_line`` chains without pretending that an arc, a curve, a diagonal, or a partially open
-    construction has a trustworthy collision area.  General ring validation below still owns
-    non-zero-area and self-intersection checks.
+    deliberately smaller: a simple closed chain whose every edge is horizontal, vertical, or an
+    exact 45-degree diagonal (``|dx| == |dy|`` in integer nanometres).  That admits KiCad
+    ``fp_rect``, unfilled orthogonal ``fp_poly``, closed ``fp_line`` chains, and the chamfered
+    part envelopes real capacitor footprints carry, without pretending that an arc, a curve, an
+    arbitrary-slope edge, or a partially open construction has a trustworthy collision area.
+    The 45-degree class is closed under the quarter-turn transforms placement supports, and its
+    vertices stay exact integers.  General ring validation below still owns non-zero-area and
+    self-intersection checks.
     """
 
     points = ring.points
     for index, start in enumerate(points):
         end = points[(index + 1) % len(points)]
-        # Exactly one coordinate changes along an axis-aligned edge.  A diagonal edge, or a
-        # repeated corner, fails this before it can reach the exact orthogonal overlap test.
-        if (start.x == end.x) == (start.y == end.y):
+        delta_x = end.x - start.x
+        delta_y = end.y - start.y
+        if delta_x == 0 and delta_y == 0:
             raise BoardIRValidationError(
                 "unsupported.topology",
-                "Board IR v0.2 courtyard edges must be axis-aligned",
+                "Board IR v0.2 courtyard edges must be non-zero",
                 locator,
             )
+        # An axis-aligned edge changes exactly one coordinate; an exact chamfer changes both
+        # by the same magnitude.  Anything else - including a rectangle rotated by an angle
+        # that is not a multiple of 45 degrees - fails closed before the overlap test.
+        if delta_x != 0 and delta_y != 0 and abs(delta_x) != abs(delta_y):
+            raise BoardIRValidationError(
+                "unsupported.topology",
+                "Board IR v0.2 courtyard edges must be axis-aligned or exact 45-degree chamfers",
+                locator,
+            )
+
+
+def _require_disjoint_courtyard_circles(footprint: Footprint) -> None:
+    """Require every courtyard circle to keep clear of the footprint's other courtyard shapes.
+
+    A footprint's courtyard region is filled even-odd across all of its contours, which is
+    only the plain union when the contours are disjoint or strictly nested.  A circle cannot
+    participate in the nesting hierarchy the ring scanline models, so a circle whose bounding
+    box meets any other courtyard shape of the same footprint would silently flip parity and
+    delete area from the region.  Refusing it here keeps the even-odd pooling in the
+    placement geometry a sound union.  Boxes may touch; only interior overlap is refused.
+    The check is deliberately conservative (boxes, not exact shapes) - it can refuse a legal
+    but exotic arrangement, and it can never admit an unsound one.
+    """
+
+    if not footprint.courtyard_circles:
+        return
+    boxes: list[tuple[int, int, int, int]] = []
+    for circle in footprint.courtyard_circles:
+        boxes.append(
+            (
+                circle.center.x - circle.radius_nm,
+                circle.center.y - circle.radius_nm,
+                circle.center.x + circle.radius_nm,
+                circle.center.y + circle.radius_nm,
+            )
+        )
+    for ring in footprint.courtyards:
+        xs = [point.x for point in ring.points]
+        ys = [point.y for point in ring.points]
+        boxes.append((min(xs), min(ys), max(xs), max(ys)))
+    circle_count = len(footprint.courtyard_circles)
+    for first in range(circle_count):
+        for second in range(first + 1, len(boxes)):
+            a, b = boxes[first], boxes[second]
+            if a[2] > b[0] and b[2] > a[0] and a[3] > b[1] and b[3] > a[1]:
+                raise BoardIRValidationError(
+                    "unsupported.topology",
+                    "courtyard circles must be disjoint from the footprint's other courtyards",
+                    footprint.id,
+                )
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,11 +105,18 @@ class BoardIRValidationError(ValueError):
         return f"{self.code} at {self.source_locator}: {self.message}"
 
 
-def _require_unique(values: Iterable[str], *, kind: str) -> set[str]:
+def _require_unique(values: Iterable[str], *, kind: str, locator: str | None = None) -> set[str]:
+    """Require distinct values, naming the invariant without echoing any board content.
+
+    ``kind`` reaches the caller inside a refusal message, so it must stay a fixed string chosen by
+    this module.  Anything derived from the board — an object ID, a footprint name — belongs in
+    ``locator``, which the adapter deliberately does not echo.
+    """
+
     materialized = list(values)
     unique = set(materialized)
     if len(unique) != len(materialized):
-        raise BoardIRValidationError("identity.duplicate", f"duplicate {kind}", kind)
+        raise BoardIRValidationError("identity.duplicate", f"duplicate {kind}", locator or kind)
     return unique
 
 
@@ -93,7 +153,9 @@ def _validate_ring(
 ) -> None:
     size = len(ring.points)
     if size > min(limits.max_vertices_per_ring, _SCHEMA_MAX_RING_POINTS):
-        raise BoardIRValidationError("budget.exceeded", "ring vertex budget exceeded", locator)
+        raise BoardIRValidationError(
+            ParseBudget.VERTICES_PER_RING.value, "ring vertex budget exceeded", locator
+        )
     for first in range(size):
         a = ring.points[first]
         b = ring.points[(first + 1) % size]
@@ -105,7 +167,9 @@ def _validate_ring(
             intersection_budget[0] += 1
             if intersection_budget[0] > limits.max_intersection_tests:
                 raise BoardIRValidationError(
-                    "budget.exceeded", "polygon intersection-test budget exceeded", locator
+                    ParseBudget.INTERSECTION_TESTS.value,
+                    "polygon intersection-test budget exceeded",
+                    locator,
                 )
             c = ring.points[second]
             d = ring.points[(second + 1) % size]
@@ -159,7 +223,7 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
     )
     object_count = sum(len(group) for group in object_groups)
     if object_count > min(limits.max_objects, _SCHEMA_MAX_OBJECTS):
-        raise BoardIRValidationError("budget.exceeded", "object budget exceeded")
+        raise BoardIRValidationError(ParseBudget.OBJECTS.value, "object budget exceeded")
 
     layer_ids = _require_unique((layer.id for layer in content.copper_layers), kind="layer ID")
     _require_unique((layer.name for layer in content.copper_layers), kind="layer name")
@@ -224,13 +288,17 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
     pad_ids = {pad.id for pad in content.pads}
     owned_pad_ids: list[str] = []
     for footprint in content.footprints:
-        if len(footprint.courtyards) > _SCHEMA_MAX_COURTYARDS_PER_FOOTPRINT:
+        courtyard_count = len(footprint.courtyards) + len(footprint.courtyard_circles)
+        if courtyard_count > _SCHEMA_MAX_COURTYARDS_PER_FOOTPRINT:
             raise BoardIRValidationError(
                 "schema.limit",
                 "footprint courtyard limit exceeded",
                 footprint.id,
             )
-        _require_unique(footprint.pad_ids, kind=f"pad ownership in {footprint.id}")
+        _require_disjoint_courtyard_circles(footprint)
+        _require_unique(
+            footprint.pad_ids, kind="pad ownership within one footprint", locator=footprint.id
+        )
         if not set(footprint.pad_ids) <= pad_ids:
             raise BoardIRValidationError(
                 "reference.unknown",
@@ -253,7 +321,7 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
             )
 
     def require_layers(references: tuple[str, ...], locator: str) -> None:
-        _require_unique(references, kind=f"layer reference in {locator}")
+        _require_unique(references, kind="layer reference within one item", locator=locator)
         if not set(references) <= layer_ids:
             raise BoardIRValidationError(
                 "unknown.layer", "item references an unknown copper layer", locator
@@ -295,11 +363,13 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
     for footprint in content.footprints:
         for index, courtyard in enumerate(footprint.courtyards):
             locator = f"{footprint.id}.courtyards[{index}]"
-            _require_orthogonal_courtyard(courtyard, locator)
+            _require_octilinear_courtyard(courtyard, locator)
             rings.append((locator, courtyard))
     total_vertices = sum(len(ring.points) for _, ring in rings)
     if total_vertices > limits.max_total_vertices:
-        raise BoardIRValidationError("budget.exceeded", "total vertex budget exceeded")
+        raise BoardIRValidationError(
+            ParseBudget.TOTAL_VERTICES.value, "total vertex budget exceeded"
+        )
     intersection_budget = [0]
     for locator, ring in rings:
         _validate_ring(

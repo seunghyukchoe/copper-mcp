@@ -29,13 +29,13 @@ import hmac
 import time
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.apply.tokens import ApplyTokenAuthority, ApplyTokenError, LiveApplyBinding
-from copper_mcp.board_ir import NetClass, ParseLimits, PointNM
+from copper_mcp.board_ir import NetClass, PointNM
 from copper_mcp.config import Settings
 from copper_mcp.kicad_ipc import (
     KicadIpcConfigurationError,
@@ -50,6 +50,7 @@ from copper_mcp.kicad_ipc import (
     _is_session_revision,
     capture_live_board,
 )
+from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.request_boundary import (
     RequestError,
     known_fields,
@@ -616,11 +617,7 @@ def apply_live_candidate(
         net_classes=(request.constraints,),
         default_net_class_id=request.constraints.id,
     )
-    default_limits = ParseLimits()
-    limits = replace(
-        default_limits,
-        max_input_bytes=min(default_limits.max_input_bytes, settings.max_board_bytes),
-    )
+    limits = parse_limits_for(settings)
     conversion = parse_kicad_bytes(captured.source, profile, limits)
     if conversion.snapshot is None:
         return _refuse(

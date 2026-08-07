@@ -1,0 +1,12 @@
+.git
+.github
+.venv
+.claude
+benchmarks
+docs
+hardware
+tests
+schemas
+scripts
+*.md
+!README.md

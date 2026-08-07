@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tracemalloc
 from collections.abc import Callable
+from fractions import Fraction
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,10 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from copper_mcp.adapters import KiCadConstraintProfile, net_id_for_name, parse_kicad_bytes
+from copper_mcp.adapters.kicad_placement_patch import (
+    KiCadPlacementPatchError,
+    _require_native_geometry_identities,
+)
 from copper_mcp.adapters.sexpr import SExprError, parse_sexpr
 from copper_mcp.board_ir import (
     BoardIRSnapshot,
@@ -27,6 +32,7 @@ from copper_mcp.board_ir import (
     ZonePadConnection,
     encode_snapshot,
 )
+from copper_mcp.placement.geometry import pad_bounds, pad_core
 
 TEST_ROOT = Path(__file__).parent
 REPOSITORY_ROOT = TEST_ROOT.parent
@@ -41,6 +47,7 @@ FRONT_BACK_FOOTPRINT_V02_BOARD = (
 ORTHOGONAL_COURTYARD_BOARD = (
     TEST_ROOT / "fixtures" / "board-ir-v0.2" / "courtyard-orthogonal-chains.kicad_pcb"
 )
+REUSED_UUID_BOARD = TEST_ROOT / "fixtures" / "board-ir-v0.2" / "reused-footprint-uuid.kicad_pcb"
 MALFORMED_BOARD = TEST_ROOT / "fixtures" / "board-ir-v0.1" / "malformed-unbalanced.kicad_pcb"
 _DISCOVERED_KICAD_CLI = shutil.which("kicad-cli")
 REAL_KICAD_CLI = (
@@ -642,6 +649,62 @@ def test_v02_footprint_without_a_courtyard_has_an_explicit_empty_state() -> None
     assert all(len(footprint.courtyards) == 1 for footprint in snapshot.content.footprints[1:])
 
 
+def test_reused_kicad_uuid_converts_with_distinct_derived_identities() -> None:
+    """A KiCad UUID reused across footprint instances is not a Board IR identity.
+
+    KiCad's format says a UUID "should be globally unique" without requiring it, and 9 of the 12
+    real boards surveyed in issue #116 name one UUID per footprint *type* rather than per
+    instance.  Board IR identity is per object, so the converter must not project a reused value:
+    every object sharing it degrades to the revision-derived name, and the untouched neighbour
+    keeps its native one.  See docs/research/kicad-uuid-uniqueness-v1.md.
+    """
+
+    snapshot = parse_success(REUSED_UUID_BOARD.read_bytes(), constraint_profile())
+    content = snapshot.content
+
+    footprint_ids = [footprint.id for footprint in content.footprints]
+    pad_ids = [pad.id for pad in content.pads]
+    assert len(footprint_ids) == len(set(footprint_ids)) == 3
+    assert len(pad_ids) == len(set(pad_ids)) == 5
+
+    reused = "b1000000-0000-0000-0000-000000000001"
+    assert not any(reused in identity for identity in footprint_ids)
+    assert sum(":derived:" in identity for identity in footprint_ids) == 2
+    # The footprint whose UUID this board never reuses keeps its native identity, so the fallback
+    # is scoped to the ambiguity rather than applied to the whole board.
+    assert "footprint:kicad:b1000000-0000-0000-0000-000000000021" in footprint_ids
+    assert "pad:kicad:b1000000-0000-0000-0000-000000000023" in pad_ids
+    assert sum(":derived:" in identity for identity in pad_ids) == 4
+
+    owned = [identity for footprint in content.footprints for identity in footprint.pad_ids]
+    assert sorted(owned) == sorted(pad_ids)
+
+
+def test_reused_kicad_uuid_identities_are_stable_across_conversions() -> None:
+    """The fallback is a function of the file, not of iteration order or a fresh random name."""
+
+    source = REUSED_UUID_BOARD.read_bytes()
+
+    first = parse_success(source, constraint_profile())
+    second = parse_success(source, constraint_profile())
+
+    assert first.snapshot_digest == second.snapshot_digest
+
+
+def test_reused_kicad_uuid_board_is_refused_by_source_preserving_write_back() -> None:
+    """Unblocking inspection must not unblock a write-back that cannot name its target.
+
+    A board that reuses one UUID across 45 resistors cannot be patched by that UUID without
+    risking the wrong component, so the derived identities keep every source-preserving patch
+    path refusing, which is the conservative direction.
+    """
+
+    snapshot = parse_success(REUSED_UUID_BOARD.read_bytes(), constraint_profile())
+
+    with pytest.raises(KiCadPlacementPatchError):
+        _require_native_geometry_identities(snapshot)
+
+
 def test_v02_mismatched_courtyard_layer_fails_closed() -> None:
     source = _replace(
         FOOTPRINT_V02_BOARD.read_bytes(),
@@ -887,6 +950,59 @@ def test_bare_negative_routing_net_code_is_not_treated_as_a_name(item_head: str)
     assert result.diagnostics[0].code == "net.unknown"
 
 
+@pytest.mark.parametrize("no_net_form", ['(net "")', "(net 0)", '(net 0 "")'])
+def test_net0_stitching_copper_converts_as_netless_obstacles(no_net_form: str) -> None:
+    """KiCad's net 0 — every saved spelling of it — is copper, not a document defect.
+
+    Real boards carry stitching vias and orphaned tracks on net 0 (KiCad 10 writes it as
+    ``(net "")``). They convert with ``net_id None``: present in the copper model, absent
+    from every net.
+    """
+
+    source = SUBSET_BOARD.read_bytes().replace(
+        '    (net "SIG_µ")\n'.encode(), f"    {no_net_form}\n".encode()
+    )
+
+    content = parse_success(source, constraint_profile()).content
+
+    assert content.vias[0].net_id is None
+    assert content.segments[0].net_id is None
+    assert content.arcs[0].net_id is None
+    # The empty name never becomes a net: netless copper contributes nothing to the net set.
+    assert {net.name for net in content.nets} == {"GND"}
+
+
+def test_a_netless_via_still_fails_closed_on_malformed_geometry() -> None:
+    source = SUBSET_BOARD.read_bytes()
+    netless = _replace_after(source, b"  (via\n", b'    (net "SIG_\xc2\xb5")', b'    (net "")')
+
+    # No layer span at all: the netless via is still held to every geometric rule.
+    missing_layers = _replace_after(netless, b"  (via\n", b'    (layers "F.Cu" "B.Cu")\n', b"")
+    result = parse_kicad_bytes(missing_layers, constraint_profile())
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "syntax.missing_field"
+
+    # An impossible drill (wider than the via itself) is refused, netless or not.
+    impossible_drill = _replace_after(netless, b"  (via\n", b"(drill 0.4)", b"(drill 0.9)")
+    result = parse_kicad_bytes(impossible_drill, constraint_profile())
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "geometry.invalid"
+
+
+def test_netless_copper_round_trips_through_the_codec() -> None:
+    source = SUBSET_BOARD.read_bytes().replace('    (net "SIG_µ")\n'.encode(), b'    (net "")\n')
+    snapshot = parse_success(source, constraint_profile())
+
+    from copper_mcp.board_ir import decode_snapshot_json
+
+    decoded = decode_snapshot_json(encode_snapshot(snapshot))
+
+    assert decoded.content.vias[0].net_id is None
+    assert decoded.content.segments[0].net_id is None
+    assert decoded.content.arcs[0].net_id is None
+    assert decoded.snapshot_digest == snapshot.snapshot_digest
+
+
 def test_two_field_pad_net_code_uses_canonical_numeric_identity() -> None:
     source = _replace(
         SUBSET_BOARD.read_bytes(),
@@ -934,6 +1050,41 @@ def test_unmodeled_setup_routing_constraints_are_rejected() -> None:
         SUBSET_BOARD.read_bytes(),
         b'  (generator "pcbnew")',
         b'  (generator "pcbnew")\n  (setup (defaults (edge_clearance 5)))',
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+
+
+def test_soldermask_minimum_width_is_accepted_as_setup_metadata() -> None:
+    """A mask-sliver bound constrains no copper, so carrying it must not refuse the board.
+
+    Real boards were refused outright for declaring `solder_mask_min_width`, which sits in the
+    same class as the already-accepted `pad_to_mask_clearance`: it bounds mask generation, not
+    the copper geometry CopperMCP models.
+    """
+
+    source = _replace(
+        SUBSET_BOARD.read_bytes(),
+        b'  (generator "pcbnew")',
+        b'  (generator "pcbnew")\n  (setup (solder_mask_min_width 0.25))',
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.diagnostics == ()
+    assert result.snapshot is not None
+
+
+def test_an_unknown_setup_field_is_still_refused() -> None:
+    """Accepting one mask field must not turn the setup block into an open allowlist."""
+
+    source = _replace(
+        SUBSET_BOARD.read_bytes(),
+        b'  (generator "pcbnew")',
+        b'  (generator "pcbnew")\n  (setup (some_future_routing_rule 5))',
     )
 
     result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
@@ -1030,6 +1181,39 @@ def test_adapter_semantic_diagnostics_never_echo_attacker_controlled_ids() -> No
     ).casefold()
     assert diagnostic.code == "geometry.self_intersection"
     assert "secret_audio_design" not in rendered
+
+
+def test_semantic_refusal_names_the_failing_invariant_without_echoing_the_board() -> None:
+    """A semantic refusal has to be actionable, and naming an invariant is not echoing content.
+
+    Board IR validation messages are fixed strings chosen by ``copper_mcp.board_ir``; everything
+    board-derived travels in the error locator, which this refusal drops.  Before this test the
+    wrapper said only "failed semantic validation", which named no rule and left issue #116's
+    survey with an undiagnosable entry.
+    """
+
+    source = SUBSET_BOARD.read_bytes()
+    source = _replace(
+        source,
+        b'    (uuid "10000000-0000-0000-0000-000000000008")',
+        b'    (uuid "SECRET_AUDIO_DESIGN")',
+    )
+    source = _replace(
+        source,
+        b"      (pts (xy 1 1) (xy 39 1) (xy 39 29) (xy 1 29))",
+        b"      (pts (xy 0 0) (xy 4 0) (xy 0 4) (xy 3 3))",
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.code == "geometry.self_intersection"
+    assert diagnostic.message == (
+        "converted Board IR content failed semantic validation: ring must not self-intersect"
+    )
+    assert diagnostic.source_locator == "kicad_pcb"
+    assert "secret_audio_design" not in diagnostic.message.casefold()
 
 
 def test_four_layer_board_uses_kicads_real_copper_numbering() -> None:
@@ -1269,7 +1453,7 @@ def test_streaming_sexpr_reader_stops_before_tokenizing_large_rejected_tail() ->
     finally:
         tracemalloc.stop()
 
-    assert caught.value.code == "budget.exceeded"
+    assert caught.value.code == "budget.exceeded.children_per_list"
     assert peak < 12_000_000
 
 
@@ -1295,21 +1479,23 @@ def test_parser_deadline_checkpoints_while_scanning_a_large_quoted_atom() -> Non
 
 
 @pytest.mark.parametrize(
-    "limits",
+    ("limits", "expected_code"),
     [
-        ParseLimits(max_input_bytes=64),
-        ParseLimits(max_depth=4),
-        ParseLimits(max_tokens=8),
-        ParseLimits(max_nodes=8),
+        (ParseLimits(max_input_bytes=64), "budget.exceeded.input_bytes"),
+        (ParseLimits(max_depth=4), "budget.exceeded.depth"),
+        (ParseLimits(max_tokens=8), "budget.exceeded.tokens"),
+        (ParseLimits(max_nodes=8), "budget.exceeded.nodes"),
     ],
 )
-def test_parser_limits_fail_closed(limits: ParseLimits) -> None:
+def test_parser_limits_fail_closed(limits: ParseLimits, expected_code: str) -> None:
+    """Each budget fails closed *and* says which one it was: an operator has to know the knob."""
+
     source = SUBSET_BOARD.read_bytes()
     result = parse_kicad_bytes(source, constraint_profile(assign_signal=True), limits)
 
     assert result.snapshot is None
     assert len(result.diagnostics) == 1
-    assert result.diagnostics[0].code == "budget.exceeded"
+    assert result.diagnostics[0].code == expected_code
 
 
 # Random untrusted bytes exercise the public fail-closed boundary without timing assertions.
@@ -1709,3 +1895,861 @@ def test_coppertone_has_one_residual_pad_bounding_box_overlap_and_it_is_a_roundi
 
     assert len(overlapping) == 1, overlapping
     assert set(overlapping[0]) == {PadShape.OVAL, PadShape.ROUNDRECT}
+
+
+# ---------------------------------------------------------------------------
+# Edge.Cuts outlines assembled from gr_line segments (issue #111)
+# ---------------------------------------------------------------------------
+
+EDGE_CUTS_RECTANGLE = (
+    b"  (gr_rect\n"
+    b"    (start 0 0)\n"
+    b"    (end 40 30)\n"
+    b"    (stroke (width 0.1) (type default))\n"
+    b"    (fill no)\n"
+    b'    (layer "Edge.Cuts")\n'
+    b'    (uuid "10000000-0000-0000-0000-000000000004")\n'
+    b"  )\n"
+)
+
+RECTANGLE_EDGES = (
+    ("0 0", "40 0"),
+    ("40 0", "40 30"),
+    ("40 30", "0 30"),
+    ("0 30", "0 0"),
+)
+
+L_SHAPED_EDGES = (
+    ("0 0", "40 0"),
+    ("40 0", "40 10"),
+    ("40 10", "15 10"),
+    ("15 10", "15 30"),
+    ("15 30", "0 30"),
+    ("0 30", "0 0"),
+)
+
+TRUE_RECTANGLE = (
+    PointNM(0, 0),
+    PointNM(40_000_000, 0),
+    PointNM(40_000_000, 30_000_000),
+    PointNM(0, 30_000_000),
+)
+
+TRUE_L_SHAPE = (
+    PointNM(0, 0),
+    PointNM(40_000_000, 0),
+    PointNM(40_000_000, 10_000_000),
+    PointNM(15_000_000, 10_000_000),
+    PointNM(15_000_000, 30_000_000),
+    PointNM(0, 30_000_000),
+)
+
+
+def _edge_cuts_lines(edges: tuple[tuple[str, str], ...], *, head: str = "gr_line") -> bytes:
+    """Render unordered ``Edge.Cuts`` segment graphics exactly as KiCad writes them."""
+
+    rendered = b""
+    for index, (start, end) in enumerate(edges):
+        rendered += (
+            f"  ({head}\n    (start {start})\n    (end {end})\n".encode()
+            + b"    (stroke (width 0.1) (type default))\n"
+            + b'    (layer "Edge.Cuts")\n'
+            + f'    (uuid "20000000-0000-0000-0000-{index:012d}")\n'.encode()
+            + b"  )\n"
+        )
+    return rendered
+
+
+def _segment_outline_source(edges: tuple[tuple[str, str], ...], *, extra: bytes = b"") -> bytes:
+    """Replace the subset board's single ``gr_rect`` outline with segment graphics."""
+
+    return _replace(SUBSET_BOARD.read_bytes(), EDGE_CUTS_RECTANGLE, _edge_cuts_lines(edges) + extra)
+
+
+def _double_area(points: tuple[PointNM, ...]) -> int:
+    total = 0
+    for index, start in enumerate(points):
+        end = points[(index + 1) % len(points)]
+        total += start.x * end.y - end.x * start.y
+    return abs(total)
+
+
+def _inside_or_on(polygon: tuple[tuple[int, int], ...], point: tuple[int, int]) -> bool:
+    """Exact integer point-in-polygon test; a boundary point counts as contained."""
+
+    x, y = point
+    inside = False
+    for index, (ax, ay) in enumerate(polygon):
+        bx, by = polygon[(index + 1) % len(polygon)]
+        if (bx - ax) * (y - ay) - (by - ay) * (x - ax) == 0 and (
+            min(ax, bx) <= x <= max(ax, bx) and min(ay, by) <= y <= max(ay, by)
+        ):
+            return True
+        if (ay > y) != (by > y):
+            side = (bx - ax) * (y - ay) - (x - ax) * (by - ay)
+            if (side > 0) == (by > ay):
+                inside = not inside
+    return inside
+
+
+def _properly_crosses(
+    a: tuple[int, int], b: tuple[int, int], c: tuple[int, int], d: tuple[int, int]
+) -> bool:
+    def turn(p: tuple[int, int], q: tuple[int, int], r: tuple[int, int]) -> int:
+        cross = (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+        return (cross > 0) - (cross < 0)
+
+    return turn(a, b, c) * turn(a, b, d) < 0 and turn(c, d, a) * turn(c, d, b) < 0
+
+
+def _is_contained(inner: tuple[PointNM, ...], outer: tuple[PointNM, ...]) -> bool:
+    """Exact integer containment test for two simple polygons, boundary included.
+
+    Coordinates are doubled so that edge midpoints stay exact integers: no float appears in
+    any predicate.  ``inner`` is contained in ``outer`` when no edge of one properly crosses
+    an edge of the other and every ``inner`` vertex *and* edge midpoint lies inside or on
+    ``outer``.  Sampling midpoints as well as vertices is what rules out an ``inner`` edge
+    that leaves ``outer`` between two shared vertices.
+    """
+
+    scaled_outer = tuple((point.x * 2, point.y * 2) for point in outer)
+    scaled_inner = tuple((point.x * 2, point.y * 2) for point in inner)
+    for index, start in enumerate(scaled_inner):
+        end = scaled_inner[(index + 1) % len(scaled_inner)]
+        for other, third in enumerate(scaled_outer):
+            fourth = scaled_outer[(other + 1) % len(scaled_outer)]
+            if _properly_crosses(start, end, third, fourth):
+                return False
+    probes: list[tuple[int, int]] = []
+    for index, first in enumerate(inner):
+        second = inner[(index + 1) % len(inner)]
+        probes.append((first.x * 2, first.y * 2))
+        probes.append((first.x + second.x, first.y + second.y))
+    return all(_inside_or_on(scaled_outer, probe) for probe in probes)
+
+
+def _canonical_ring(points: tuple[PointNM, ...]) -> tuple[PointNM, ...]:
+    """Normalize winding and start vertex so two orderings of one ring compare equal."""
+
+    total = 0
+    for index, start in enumerate(points):
+        end = points[(index + 1) % len(points)]
+        total += start.x * end.y - end.x * start.y
+    ordered = points if total > 0 else tuple(reversed(points))
+    least = min(range(len(ordered)), key=lambda index: ordered[index])
+    return ordered[least:] + ordered[:least]
+
+
+def test_edge_cuts_rectangle_drawn_as_four_lines_converts_and_is_inscribed() -> None:
+    """Four ``gr_line`` segments are how KiCad users actually draw a rectangular board.
+
+    Direction of error: the outline is routing *room*, not an obstacle, so the modelled
+    contour must be contained within the outline the board actually draws.  A modelled
+    outline one nanometre too large hands the router copper the fabricated board does not
+    have.  For straight segments that containment is exact - the assembled ring's vertices
+    are the drawn endpoints and nothing is synthesized - which is the strongest form of
+    "never larger", and the area equality below pins it.
+    """
+
+    snapshot = parse_success(_segment_outline_source(RECTANGLE_EDGES), constraint_profile())
+
+    assert len(snapshot.content.outline) == 1
+    modelled = snapshot.content.outline[0].outer.points
+    assert set(modelled) == set(TRUE_RECTANGLE)
+    assert _is_contained(modelled, TRUE_RECTANGLE)
+    assert _double_area(modelled) <= _double_area(TRUE_RECTANGLE)
+    assert _double_area(modelled) == _double_area(TRUE_RECTANGLE)
+    assert snapshot.content.outline[0].id.startswith("contour:")
+
+
+def test_edge_cuts_l_shaped_segment_outline_converts_inscribed() -> None:
+    """Most real boards are not rectangles.  An L-shape has to survive, still inscribed."""
+
+    snapshot = parse_success(_segment_outline_source(L_SHAPED_EDGES), constraint_profile())
+
+    modelled = snapshot.content.outline[0].outer.points
+    assert len(modelled) == 6
+    assert set(modelled) == set(TRUE_L_SHAPE)
+    assert _is_contained(modelled, TRUE_L_SHAPE)
+    assert _double_area(modelled) <= _double_area(TRUE_L_SHAPE)
+    assert not _is_contained(TRUE_RECTANGLE, modelled), (
+        "the L-shape must not be modelled as its bounding rectangle"
+    )
+
+
+def test_edge_cuts_segment_order_and_direction_do_not_move_the_outline() -> None:
+    """KiCad writes the segments in drawing order, in whichever direction they were drawn.
+
+    The real four-layer board that motivated this fix writes its four edges as
+    ``(0,0)->(159,0)``, ``(0,150)->(0,0)``, ``(159,0)->(159,150)``, ``(159,150)->(0,150)``:
+    neither contiguous nor consistently wound.  The assembled ring must therefore depend on
+    the segment *set*, not on file order and not on the direction each segment was drawn.
+    """
+
+    scrambled = (
+        ("40 30", "0 30"),
+        ("0 0", "40 0"),
+        ("0 0", "0 30"),
+        ("40 0", "40 30"),
+    )
+
+    ordered = parse_success(_segment_outline_source(L_SHAPED_EDGES), constraint_profile())
+    flipped = parse_success(
+        _segment_outline_source(tuple(reversed([(end, start) for start, end in L_SHAPED_EDGES]))),
+        constraint_profile(),
+    )
+    assert _canonical_ring(ordered.content.outline[0].outer.points) == _canonical_ring(
+        flipped.content.outline[0].outer.points
+    )
+
+    straightforward = parse_success(_segment_outline_source(RECTANGLE_EDGES), constraint_profile())
+    shuffled = parse_success(_segment_outline_source(scrambled), constraint_profile())
+    assert _canonical_ring(straightforward.content.outline[0].outer.points) == _canonical_ring(
+        shuffled.content.outline[0].outer.points
+    )
+
+
+OPEN_CONTOUR_EDGES = RECTANGLE_EDGES[:3]
+
+NEAR_MISS_EDGES = (
+    ("0 0", "40 0"),
+    ("40 0", "40 30"),
+    ("40 30", "0 30"),
+    ("0 30", "0 0.01"),
+)
+
+# A closed, non-branching, single-component chain whose fourth edge crosses its second.  The
+# crossing is not a vertex, so degree alone cannot see it: the ring's own simplicity contract is
+# what refuses it.  The quadrilateral is deliberately asymmetric, because a symmetric bowtie has
+# zero signed area and would be refused for that instead.
+SELF_INTERSECTING_EDGES = (
+    ("0 0", "40 0"),
+    ("40 0", "0 30"),
+    ("0 30", "30 20"),
+    ("30 20", "0 0"),
+)
+
+DISJOINT_LOOP_EDGES = (
+    *RECTANGLE_EDGES,
+    ("50 0", "60 0"),
+    ("60 0", "60 10"),
+    ("60 10", "50 10"),
+    ("50 10", "50 0"),
+)
+
+ZERO_LENGTH_EDGES = (*RECTANGLE_EDGES, ("20 0", "20 0"))
+
+DUPLICATE_EDGES = (*RECTANGLE_EDGES, ("40 0", "0 0"))
+
+BRANCHING_EDGES = (
+    ("0 0", "20 0"),
+    ("20 0", "40 0"),
+    ("40 0", "40 30"),
+    ("40 30", "0 30"),
+    ("0 30", "0 0"),
+    ("20 0", "20 15"),
+)
+
+
+@pytest.mark.parametrize(
+    ("edges", "expected_code", "expected_message"),
+    [
+        (OPEN_CONTOUR_EDGES, "geometry.invalid", "closed"),
+        (NEAR_MISS_EDGES, "geometry.invalid", "closed"),
+        (SELF_INTERSECTING_EDGES, "geometry.self_intersection", ""),
+        (DISJOINT_LOOP_EDGES, "unsupported.topology", "disjoint"),
+        (ZERO_LENGTH_EDGES, "geometry.invalid", "zero-length"),
+        (DUPLICATE_EDGES, "geometry.invalid", "duplicate"),
+        (BRANCHING_EDGES, "geometry.invalid", "closed"),
+    ],
+    ids=[
+        "open-contour",
+        "near-miss-gap",
+        "self-intersecting",
+        "two-disjoint-loops",
+        "zero-length-segment",
+        "duplicate-segment",
+        "branching-spur",
+    ],
+)
+def test_malformed_segment_outlines_are_refused_with_a_typed_code(
+    edges: tuple[tuple[str, str], ...], expected_code: str, expected_message: str
+) -> None:
+    """Refuse honestly instead of repairing.
+
+    Every one of these is a shape a human can draw by accident, and for each there is a
+    plausible "helpful" repair - snap the gap, drop the spur, keep the biggest loop.  Each
+    repair invents board area the drawn geometry does not enclose, which is the one direction
+    of error this contour may not take, so each is a typed refusal instead.  The near-miss gap
+    is 10 um: inside KiCad's own outline chaining epsilon, and refused here anyway, because
+    closing it would enlarge the modelled board.
+    """
+
+    result = parse_kicad_bytes(_segment_outline_source(edges), constraint_profile())
+
+    assert result.snapshot is None
+    assert len(result.diagnostics) == 1
+    assert result.diagnostics[0].code == expected_code
+    assert expected_message in result.diagnostics[0].message
+
+
+def test_edge_cuts_arc_outline_stays_refused_with_an_honest_diagnostic() -> None:
+    """Arcs are deliberately out of scope for this slice, and the refusal has to say so.
+
+    ADR-0072's sagitta bound over-approximates an arc, which is right for an obstacle and
+    exactly backwards for an outline: an outline arc needs an *inscribed* approximation, and
+    whether a chord is inscribed depends on which side of the ring the arc bulges toward.
+    Rather than guess, the adapter refuses - and names arcs, so a caller can tell this apart
+    from an unsupported layer or a malformed loop.
+    """
+
+    arc = (
+        b"  (gr_arc\n"
+        b"    (start 40 0)\n"
+        b"    (mid 41 15)\n"
+        b"    (end 40 30)\n"
+        b"    (stroke (width 0.1) (type default))\n"
+        b'    (layer "Edge.Cuts")\n'
+        b'    (uuid "30000000-0000-0000-0000-000000000001")\n'
+        b"  )\n"
+    )
+    source = _segment_outline_source(
+        (RECTANGLE_EDGES[0], RECTANGLE_EDGES[2], RECTANGLE_EDGES[3]), extra=arc
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile())
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert "arc" in result.diagnostics[0].message
+    assert result.diagnostics[0].object_kind == "outline"
+
+
+def test_mixed_rectangle_and_segment_outlines_are_refused() -> None:
+    """One board, one outline.  A rectangle plus a segment loop is two, so it refuses."""
+
+    source = _replace(
+        SUBSET_BOARD.read_bytes(),
+        EDGE_CUTS_RECTANGLE,
+        EDGE_CUTS_RECTANGLE
+        + _edge_cuts_lines(
+            (
+                ("50 0", "60 0"),
+                ("60 0", "60 10"),
+                ("60 10", "50 10"),
+                ("50 10", "50 0"),
+            )
+        ),
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile())
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].object_kind == "outline"
+
+
+def test_segment_outline_charges_a_segment_budget() -> None:
+    """Work is bounded by a declared budget rather than by the board being reasonable."""
+
+    split_bottom_edge = (
+        ("0 0", "20 0"),
+        ("20 0", "40 0"),
+        ("40 0", "40 30"),
+        ("40 30", "0 30"),
+        ("0 30", "0 0"),
+    )
+
+    result = parse_kicad_bytes(
+        _segment_outline_source(split_bottom_edge),
+        constraint_profile(),
+        ParseLimits(max_vertices_per_ring=4),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "budget.exceeded.vertices_per_ring"
+    assert "Edge.Cuts outline segment budget" in result.diagnostics[0].message
+
+
+def test_pathological_segment_outline_hits_a_budget_instead_of_spinning() -> None:
+    """Two thousand collinear sub-segments still form a closed loop, and still bounded work.
+
+    The ring simplicity test is quadratic in its vertices, so a board that splits one edge
+    into thousands of pieces has to charge - and exhaust - the intersection-test budget
+    rather than run to completion.
+    """
+
+    steps = 2_000
+    edges = [("0 0", "40 0"), ("40 0", "40 30")]
+    edges += [
+        (
+            f"{40 - index * 40 / steps:.6f} 30",
+            f"{40 - (index + 1) * 40 / steps:.6f} 30",
+        )
+        for index in range(steps)
+    ]
+    edges.append(("0 30", "0 0"))
+
+    result = parse_kicad_bytes(
+        _segment_outline_source(tuple(edges)),
+        constraint_profile(),
+        ParseLimits(max_intersection_tests=10_000),
+    )
+
+    assert result.snapshot is None
+    # The test fixes ``max_intersection_tests``, so that budget is the one that binds;
+    # the property being pinned is that a pathological outline is bounded at all, not
+    # which ceiling happens to stop it first.
+    assert result.diagnostics[0].code.startswith("budget.exceeded.")
+
+
+# --- roundrect corner-radius precision (issue #116, ADR-0077) -----------------------------
+#
+# KiCad stores a roundrect corner as a ratio of the pad's shorter side and recomputes the
+# radius on every read, so an ordinary ratio on an ordinary pad lands on a fractional
+# nanometre. The adapter used to refuse that outright, which rejected five of twenty-three
+# real boards for a quarter-nanometre. These tests pin the rounding *direction*, not merely
+# that the board converts: a control below asserts the modelled pad relates to the true pad
+# the one safe way, and fails if the ceiling is flipped to a floor.
+
+_SHORT_SIDE_NM = 1_000_000  # the subset fixture's roundrect pad is 2.0 x 1.0 mm
+
+
+def _with_ratio(ratio: bytes, *, size: bytes | None = None) -> bytes:
+    """Return the subset fixture with the roundrect pad's ratio, and optionally size, replaced."""
+
+    source = _replace(
+        SUBSET_BOARD.read_bytes(), b"(roundrect_rratio 0.25)", b"(roundrect_rratio " + ratio + b")"
+    )
+    if size is not None:
+        source = _replace_after(source, b'(pad "1" smd roundrect', b"(size 2 1)", size)
+    return source
+
+
+def _exact_radius_nm(ratio: str, short_side_nm: int = _SHORT_SIDE_NM) -> Fraction:
+    """The mathematically exact ``ratio * short_side``, with no rounding anywhere."""
+
+    return Fraction(ratio) * short_side_nm
+
+
+def _roundrect_pad(snapshot: BoardIRSnapshot) -> Pad:
+    return next(pad for pad in snapshot.content.pads if pad.shape is PadShape.ROUNDRECT)
+
+
+def _inside_true_roundrect(
+    point: tuple[Fraction, Fraction],
+    half_x: Fraction,
+    half_y: Fraction,
+    radius: Fraction,
+) -> bool:
+    """Exact containment in a roundrect of *fractional* corner radius, centred on the origin.
+
+    A roundrect is the Minkowski sum of a disc of radius ``r`` with the rectangle inset by ``r``
+    on every side, so a point is inside exactly when its distance to that inset rectangle is at
+    most ``r``. Everything here is :class:`~fractions.Fraction`, so the boundary case is decided
+    exactly rather than within a tolerance - which matters, because the whole question is what
+    happens a fraction of a nanometre either side of the boundary.
+    """
+
+    delta_x = max(abs(point[0]) - (half_x - radius), Fraction(0))
+    delta_y = max(abs(point[1]) - (half_y - radius), Fraction(0))
+    return delta_x * delta_x + delta_y * delta_y <= radius * radius
+
+
+def test_fractional_roundrect_radius_converts_and_records_the_rounding() -> None:
+    """A radius that is not a whole nanometre converts, and says by how much it moved."""
+
+    # 0.2083333333 is the shape of ratio KiCad actually writes: ten significant digits, from a
+    # radius the user set in millimetres. Against a 1.0 mm short side it is 208,333.3333 nm.
+    result = parse_kicad_bytes(_with_ratio(b"0.2083333333"), constraint_profile())
+
+    assert result.snapshot is not None, result.diagnostics
+    assert result.diagnostics == ()
+    assert _roundrect_pad(result.snapshot).roundrect_radius_nm == 208_334
+    assert result.max_roundrect_rounding_nm == 1
+
+
+def test_exact_roundrect_radius_reports_no_rounding() -> None:
+    """The residue is measured, not assumed: an exact board must report a clean zero.
+
+    The token carries trailing zeros so that a wider denominator is exercised too: the residue
+    must come from the arithmetic, not from how many digits the ratio happens to be written with.
+    """
+
+    result = parse_kicad_bytes(_with_ratio(b"0.250000"), constraint_profile())
+
+    assert result.snapshot is not None, result.diagnostics
+    assert _roundrect_pad(result.snapshot).roundrect_radius_nm == 250_000
+    assert result.max_roundrect_rounding_nm == 0
+
+
+def test_roundrect_ratio_of_exactly_one_half_converts_as_a_stadium() -> None:
+    """0.5 is the top of KiCad's own clamp, and makes the short edges vanish entirely."""
+
+    result = parse_kicad_bytes(_with_ratio(b"0.5"), constraint_profile())
+
+    assert result.snapshot is not None, result.diagnostics
+    pad = _roundrect_pad(result.snapshot)
+    assert pad.roundrect_radius_nm == 500_000
+    assert pad.roundrect_radius_nm * 2 == min(pad.size_x_nm, pad.size_y_nm)
+    assert result.max_roundrect_rounding_nm == 0
+
+
+@pytest.mark.parametrize("ratio", [b"0", b"0.0", b"0.000000"])
+def test_roundrect_ratio_of_exactly_zero_is_refused(ratio: bytes) -> None:
+    """KiCad calls a zero-ratio roundrect a rect; Board IR cannot express one, so it refuses.
+
+    This is a deliberate non-claim rather than an oversight. Converting it to ``PadShape.RECT``
+    would be defensible on KiCad's own wording, but that is a shape decision and not a
+    precision one, so it stays refused until it is made on purpose.
+    """
+
+    result = parse_kicad_bytes(_with_ratio(ratio), constraint_profile())
+
+    assert result.snapshot is None
+    assert [item.code for item in result.diagnostics] == ["geometry.invalid"]
+    assert result.diagnostics[0].message == "roundrect ratio must be in (0, 0.5]"
+
+
+@pytest.mark.parametrize("ratio", [b"0.5000001", b"0.6", b"1"])
+def test_roundrect_ratio_above_one_half_is_still_refused(ratio: bytes) -> None:
+    """Out of the supported range is refused, never clamped into it."""
+
+    result = parse_kicad_bytes(_with_ratio(ratio), constraint_profile())
+
+    assert result.snapshot is None
+    assert [item.code for item in result.diagnostics] == ["geometry.invalid"]
+
+
+def test_roundrect_radius_rounding_past_half_the_short_side_is_refused() -> None:
+    """Rounding up must never manufacture a radius the shape cannot hold.
+
+    An odd-nanometre short side with a ratio of one half puts the exact radius half a
+    nanometre above the largest representable one. Rounding *down* to fit would hand the pad a
+    core taller than its real copper, so this refuses instead of clamping.
+    """
+
+    result = parse_kicad_bytes(_with_ratio(b"0.5", size=b"(size 2 1.000001)"), constraint_profile())
+
+    assert result.snapshot is None
+    assert [item.code for item in result.diagnostics] == ["integer.precision"]
+    assert (
+        result.diagnostics[0].message == "roundrect radius rounds up beyond half the short pad side"
+    )
+
+
+def test_rounding_direction_keeps_the_attachment_core_inside_the_true_pad() -> None:
+    """The control: the modelled pad must relate to the true pad the *safe* way.
+
+    A pad plays two roles and they pull opposite ways on a corner radius, because a larger
+    radius means more rounding and therefore *less* copper. This test pins the role that
+    actually reads the value. As attachment copper the pad offers an under-approximating inner
+    core - the full-width band left after the corners are cut - and every corner of that band
+    must lie inside the pad KiCad would really draw. Rounding the radius up shrinks the band
+    and keeps it inside; rounding it down lifts the band's top edge a fraction of a nanometre
+    into the rounded corner, claiming copper that is not there and so licensing the router to
+    assert a connection the board does not have.
+
+    Flipping the ceiling in ``_roundrect_radius`` to a floor fails this test on the containment
+    assertion below - it is the geometry that is pinned, not the arithmetic, so the assertion
+    that breaks is the one naming a core corner that has left the copper.
+    """
+
+    ratio = "0.2083333333"
+    snapshot = parse_success(_with_ratio(ratio.encode()), constraint_profile())
+    pad = _roundrect_pad(snapshot)
+    assert pad.roundrect_radius_nm is not None
+
+    exact_radius = _exact_radius_nm(ratio)
+    assert exact_radius.denominator != 1, "the fixture must exercise a genuinely fractional radius"
+
+    # The safety property itself: every corner of the modelled attachment core lies inside the
+    # pad KiCad would really draw. Checked first, and exactly, because this is the claim - the
+    # rounding rule below is only the mechanism that delivers it.
+    core = pad_core(pad, origin=PointNM(0, 0))
+    assert core is not None
+    half_x, half_y = Fraction(pad.size_x_nm, 2), Fraction(pad.size_y_nm, 2)
+    for corner in (
+        (Fraction(core[0]), Fraction(core[1])),
+        (Fraction(core[2]), Fraction(core[1])),
+        (Fraction(core[0]), Fraction(core[3])),
+        (Fraction(core[2]), Fraction(core[3])),
+    ):
+        assert _inside_true_roundrect(corner, half_x, half_y, exact_radius), (
+            f"modelled attachment core corner {corner} lies outside the true pad "
+            f"(exact radius {exact_radius}); the radius was rounded the unsafe way"
+        )
+
+    # The mechanism. The modelled radius is at least the exact one, and at least the integer
+    # radius KiCad itself derives with KiROUND - the ceiling dominates both, so the safety
+    # argument never has to adjudicate which of the two is the authoritative reference.
+    assert pad.roundrect_radius_nm >= exact_radius
+    # KiROUND is round-half-away-from-zero, which for a positive radius is floor(x + 1/2).
+    assert pad.roundrect_radius_nm >= (exact_radius + Fraction(1, 2)).__floor__()
+
+
+def test_rounding_the_radius_never_shrinks_the_pad_obstacle() -> None:
+    """The other role, stated rather than assumed: the obstacle does not read the radius.
+
+    This is what makes a single rounding rule sufficient for both roles. If an obstacle model
+    ever starts consulting the corner radius, rounding up would begin to under-approximate
+    copper and this test is where that shows up.
+    """
+
+    tight = parse_success(_with_ratio(b"0.0000001"), constraint_profile())
+    generous = parse_success(_with_ratio(b"0.5"), constraint_profile())
+
+    tight_pad, generous_pad = _roundrect_pad(tight), _roundrect_pad(generous)
+    assert tight_pad.roundrect_radius_nm != generous_pad.roundrect_radius_nm
+    assert pad_bounds(tight_pad) == pad_bounds(generous_pad)
+    # And the envelope really is the whole rectangle, not something the radius trimmed.
+    assert pad_bounds(generous_pad) == (
+        generous_pad.center.x - generous_pad.size_x_nm // 2,
+        generous_pad.center.y - generous_pad.size_y_nm // 2,
+        generous_pad.center.x + generous_pad.size_x_nm // 2,
+        generous_pad.center.y + generous_pad.size_y_nm // 2,
+    )
+
+
+# --- Three singleton gaps found by running the adapter against a tree of real boards (#116) ---
+#
+# Each was a *single* board's first refusal, invisible behind more common causes, and each is a
+# different kind of defect: a true refusal reported with the wrong reason, an expectation the
+# format does not share, and a metadata field. The fixtures below are authored here from KiCad's
+# published format rather than copied from the private designs the gaps were measured on.
+
+_NET_TIE_PAD_GROUPS = b'    (net_tie_pad_groups "1, 2")\n'
+
+
+def _footprint_graphic(layer: bytes) -> bytes:
+    """One filled footprint polygon on `layer`, as KiCad writes a net tie's shorting copper."""
+
+    return (
+        b"    (fp_poly\n"
+        b"      (pts (xy 0 -0.65) (xy 2.6 -0.65) (xy 2.6 0.65) (xy 0 0.65))\n"
+        b"      (stroke (width 0) (type solid))\n"
+        b"      (fill yes)\n"
+        b'      (layer "' + layer + b'")\n'
+        b'      (uuid "10000000-0000-0000-0000-0000000000a1")\n'
+        b"    )\n"
+    )
+
+
+def _with_footprint_graphic(layer: bytes, *, net_tie: bool = False) -> bytes:
+    """Return the subset fixture with one footprint graphic on `layer`."""
+
+    addition = (_NET_TIE_PAD_GROUPS if net_tie else b"") + _footprint_graphic(layer)
+    return _insert_before(SUBSET_BOARD.read_bytes(), b'    (pad "1" smd roundrect', addition)
+
+
+def test_net_tie_copper_refuses_as_a_net_tie_rather_than_as_a_stray_graphic() -> None:
+    """The refusal must name the deliberate short, not the layer the copper happens to sit on.
+
+    A `NetTie-2_THT_Pad1.0mm` joining two ground nets was the first refusal on a real board, and
+    it reported `footprint graphic on copper or Edge.Cuts is unsupported` - which reads as a
+    stray drawing left on a copper layer, a thing the user would go looking for and not find.
+    The adapter already refuses net ties, correctly and for a reason no envelope can fix: KiCad
+    declares that "nets attached to pads within a single pad-group are allowed to short", and
+    Board IR models nets as disjoint, so this copper belongs to two nets at once. The preflight
+    simply ran first and answered with the less specific fact.
+    """
+
+    result = parse_kicad_bytes(
+        _with_footprint_graphic(b"F.Cu", net_tie=True), constraint_profile(assign_signal=True)
+    )
+
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.code == "unsupported.construct"
+    assert diagnostic.message == "net-tie footprint copper is unsupported in Board IR adapter v0.2"
+    assert diagnostic.object_kind == "footprint"
+
+
+@pytest.mark.parametrize("layer", [b"F.Cu", b"B.Cu", b"*.Cu"])
+def test_a_footprint_graphic_on_copper_is_still_refused_and_never_ignored(layer: bytes) -> None:
+    """The control on the direction of error: copper is an obstacle, so it may not be dropped.
+
+    Without a net-tie declaration the same polygon is simply copper the adapter does not model.
+    A conservative envelope would be admissible - over-approximating an obstacle is always safe -
+    but no board surveyed carries one, so the refusal stands rather than modelling an unobserved
+    case. What must never happen is the third option: converting the board as though the copper
+    were not there.
+    """
+
+    result = parse_kicad_bytes(
+        _with_footprint_graphic(layer), constraint_profile(assign_signal=True)
+    )
+
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.code == "unsupported.construct"
+    assert diagnostic.message == "footprint graphic on a copper layer is unmodelled copper"
+    assert diagnostic.object_kind == "graphic"
+
+
+def test_a_footprint_graphic_on_edge_cuts_is_named_as_an_outline_not_as_copper() -> None:
+    """The two share a refusal but not a direction: an outline is routing room, copper is not."""
+
+    result = parse_kicad_bytes(
+        _with_footprint_graphic(b"Edge.Cuts"), constraint_profile(assign_signal=True)
+    )
+
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.code == "unsupported.construct"
+    assert diagnostic.message == "footprint graphic on Edge.Cuts is unsupported"
+    assert diagnostic.object_kind == "outline"
+
+
+def test_a_footprint_graphic_on_a_documentation_layer_still_converts() -> None:
+    """The layer decides, not the head: silkscreen is not copper and must stay ignored."""
+
+    parse_success(_with_footprint_graphic(b"F.SilkS"), constraint_profile(assign_signal=True))
+
+
+def _aperture_pad(
+    *, number: bytes = b'""', layers: bytes = b'"F.Paste"', extra: bytes = b""
+) -> bytes:
+    """One KiCad aperture pad: a stencil opening with no copper layer assigned."""
+
+    return (
+        b"    (pad " + number + b" smd roundrect\n"
+        b"      (at 0 0)\n"
+        b"      (size 3.05 2.75)\n"
+        b"      (layers " + layers + b")\n"
+        b"      (roundrect_rratio 0.25)\n"
+        + extra
+        + b'      (uuid "10000000-0000-0000-0000-0000000000b1")\n'
+        b"    )\n"
+    )
+
+
+def _with_pad(pad: bytes) -> bytes:
+    return _insert_before(SUBSET_BOARD.read_bytes(), b'    (pad "1" smd roundrect', pad)
+
+
+def test_a_paste_aperture_pad_is_not_copper_and_contributes_nothing() -> None:
+    """A pad with no copper layer is a stencil opening, and the board must convert around it.
+
+    KiCad defines an aperture pad as one with no copper layer assigned - it cannot even carry a
+    pad number - and footprints use them to subdivide the paste over an exposed thermal tab. A
+    real board carried eight of them on two `TO-252-2` transistors and was refused outright,
+    because the adapter required every `pad` to resolve to at least one copper layer. That
+    expectation, not the board, was the error.
+
+    The assertion is stronger than "it converts": every copper-bearing field must be *identical*
+    to the same board without the aperture. Dropping it is safe precisely because it neither
+    removes an obstacle nor discards an attachment point, and an equality is what says so.
+    """
+
+    baseline = parse_success(SUBSET_BOARD.read_bytes(), constraint_profile(assign_signal=True))
+    with_aperture = parse_success(
+        _with_pad(_aperture_pad()), constraint_profile(assign_signal=True)
+    )
+
+    assert with_aperture.content.pads == baseline.content.pads
+    assert with_aperture.content.footprints == baseline.content.footprints
+    assert with_aperture.content.nets == baseline.content.nets
+    # And the copper pads really are still there - an equality between two empty tuples would
+    # satisfy the assertions above just as well.
+    assert len(baseline.content.pads) == 2
+
+
+@pytest.mark.parametrize(
+    ("description", "pad"),
+    [
+        # KiCad's own rule: an aperture cannot have a pad number. A numbered pad claims to be a
+        # connection point, so a numbered pad with no copper is a contradiction, not an aperture.
+        ("a numbered pad", _aperture_pad(number=b'"3"')),
+        # A net is an attachment claim, and attachment copper may only be under-approximated by
+        # something that exists. Dropping a netted pad would discard the claim entirely.
+        ("a netted pad", _aperture_pad(extra=b'      (net "GND")\n')),
+        # A drill is a hole through copper whatever the layer list says.
+        ("a drilled pad", _aperture_pad(extra=b"      (drill 1)\n")),
+        # Paste and mask are the layers whose meaning is established. A pad somewhere else with
+        # no copper is a construct this project has not read the format for.
+        ("a pad on another technical layer", _aperture_pad(layers=b'"F.SilkS"')),
+    ],
+)
+def test_a_pad_with_no_copper_that_is_not_an_aperture_is_still_refused(
+    description: str, pad: bytes
+) -> None:
+    """The control: "no copper layer" is not on its own a licence to drop a pad."""
+
+    result = parse_kicad_bytes(_with_pad(pad), constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None, description
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.code == "unknown.layer"
+    assert (
+        diagnostic.message == "pad references no copper layer and is not a paste or mask aperture"
+    )
+
+
+def test_a_malformed_aperture_pad_is_still_refused_before_it_can_be_skipped() -> None:
+    """Skipping a pad must not become a way to smuggle unvalidated syntax past the allowlist."""
+
+    result = parse_kicad_bytes(
+        _with_pad(_aperture_pad(extra=b"      (primitives (gr_poly))\n")),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+
+
+def test_the_footprint_placement_status_flag_is_accepted_as_metadata() -> None:
+    """`placed` is autoplacement bookkeeping: no geometry, no layer, no constraint.
+
+    KiCad's format defines it as "a flag to indicate that the footprint has not been placed". A
+    real board carried `(placed yes)` on all 31 of its footprints and was refused for it. As with
+    `descr` and `tags`, accepting it ignores nothing CopperMCP would otherwise have honoured -
+    and the equality below is what makes that a measurement rather than a claim. It is
+    emphatically not `locked`, which is a real constraint and is modelled separately.
+    """
+
+    baseline = parse_success(SUBSET_BOARD.read_bytes(), constraint_profile(assign_signal=True))
+    with_flag = parse_success(
+        _replace(
+            SUBSET_BOARD.read_bytes(),
+            b'    (layer "F.Cu")',
+            b'    (layer "F.Cu")\n    (placed yes)',
+        ),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert with_flag.content.footprints == baseline.content.footprints
+    assert with_flag.content.pads == baseline.content.pads
+
+
+def test_an_unknown_footprint_field_is_still_refused() -> None:
+    """Accepting one status flag must not turn the footprint allowlist into an open one."""
+
+    result = parse_kicad_bytes(
+        _replace(
+            SUBSET_BOARD.read_bytes(),
+            b'    (layer "F.Cu")',
+            b'    (layer "F.Cu")\n    (some_future_footprint_rule yes)',
+        ),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].message == "footprint contains an unsupported semantic field"
+
+
+def test_an_unknown_root_field_is_still_refused() -> None:
+    """And neither does it widen the root allowlist, which stays closed."""
+
+    result = parse_kicad_bytes(
+        _insert_root(SUBSET_BOARD.read_bytes(), b"(some_future_board_rule yes)"),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert (
+        result.diagnostics[0].message
+        == "root expression contains an unsupported semantic construct"
+    )

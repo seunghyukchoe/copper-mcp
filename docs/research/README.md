@@ -86,6 +86,11 @@ When adding a document, add it to the list below in the same sentence form — *
   the owner-bound, durable-storage gates that keep experimental wire Tasks disabled.
 - [MCP excessive-agency evaluation](./mcp-excessive-agency-evaluation.md) defines the seven-case
   offline capability, disclosure, revision, and quota regression boundary.
+- [Excessive-agency evaluation v1](./excessive-agency-eval-v1.md) builds the systematic 29-scenario
+  adversarial suite on top of that boundary and replays it against four project families, three of
+  them held out. It reports 77 passes, 0 failures, and 39 scenarios that could not run — including
+  the finding that the only externally authored family reaches no agency boundary at all — and it
+  refuses to claim that any of this measures a model's behaviour.
 - [Circuit Scene IR references](./circuit-scene-ir-references.md) grounds the typed semantic/visual
   observation contract and its disclosure limits.
 - [FreeRouting real-run evidence](./freerouting-real-run-v2.md) records the first public,
@@ -102,6 +107,12 @@ When adding a document, add it to the list below in the same sentence form — *
   region in which a nested ring is a hole — a topology 31 shipping KiCad library footprints actually
   use. It records the sub-threshold band as an explicit non-claim, and claims nothing about arcs,
   custom courtyard clearance, the tiny-shape band, or intersecting same-footprint rings.
+- [Chamfered and circular courtyards](./courtyard-curved-shapes-v1.md) measures what the #116
+  refused boards actually carry — exact 45-degree chamfers and exact-radius circles, no rotated
+  rectangles, no arcs — pins KiCad 10.0.5's inward circle polygonisation band against the real
+  `kicad-cli`, and restates ADR-0072's outward-envelope direction for a keep-out on an
+  evidence-publishing surface: outer bounds may only prove clearance, inner bounds may only prove
+  violation, and everything between is a declared concession.
 - [KiCad arc tracks as routing obstacles](./kicad-arc-track-obstacles-v1.md) grounds ADR-0070's
   conservative arc envelope in the official S-expression arc grammar and the inscribed-angle
   theorem, and states plainly that the envelope is loose for a near-semicircular arc and claims
@@ -142,6 +153,23 @@ When adding a document, add it to the list below in the same sentence form — *
   numbering replaced a different consecutive one at KiCad 9, and that the two cannot both be
   accepted at once. It claims nothing about non-copper ordinals, the pre-4.0 legacy format, or
   KiCad 11.
+- [KiCad PCM distribution](./kicad-pcm-distribution-v1.md) records the addon package format from
+  the published JSON Schema and the addons-metadata CI rather than the prose guide, listing the six
+  fields on which the two disagree; the archive whitelist, icon bounds, size tolerances, and
+  version-immutability rules a submission is judged against; the split between the in-archive and
+  submitted `metadata.json`; and the two behaviours in KiCad's own plugin manager that decide
+  whether a Python IPC plugin is reachable at all — a `requirements.txt` it cannot use to install
+  CopperMCP, and a `--system-site-packages` venv that is why it does not need to. It claims no
+  submission, acceptance, or publication, and no observed behaviour on any platform.
+- [Roundrect radius precision](./roundrect-radius-precision-v1.md) establishes from KiCad's own
+  padstack source, not from the format prose, that a roundrect corner radius is never stored — a
+  ten-significant-digit ratio of the pad's shorter side is, and the radius is recomputed and
+  `KiROUND`ed on every read — so an ordinary pad lands on a fractional nanometre; it measures 592
+  such pads among 4,537 across 23 real boards with a worst residue of 0.80 nm, and argues the
+  rounding direction by geometry role rather than by "a pad is copper", which points the wrong way
+  because a larger radius means a smaller pad. It claims nothing about chamfered pads, per-layer
+  padstacks, board format versions other than `20260206`, or that the 23-board tree is
+  representative of KiCad boards generally.
 
 ## Terms used in this review
 

@@ -10,13 +10,14 @@ from copper_mcp.board_ir.canonical import (
 )
 from copper_mcp.board_ir.codec import decode_snapshot_json
 from copper_mcp.board_ir.diagnostics import ConversionResult, Diagnostic, Severity
-from copper_mcp.board_ir.limits import ParseLimits
+from copper_mcp.board_ir.limits import BUDGET_EXCEEDED_PREFIX, ParseBudget, ParseLimits
 from copper_mcp.board_ir.types import (
     UDEG_PER_DEGREE,
     Arc,
     BoardIRContent,
     BoardIRSnapshot,
     ConstraintSet,
+    CourtyardCircle,
     DifferentialPairRule,
     Footprint,
     FootprintSide,
@@ -43,10 +44,12 @@ from copper_mcp.board_ir.types import (
     mm_to_nm,
     nm_to_mm,
     normalize_rotation_udeg,
+    signed_double_area,
 )
 from copper_mcp.board_ir.validation import BoardIRValidationError, validate_content
 
 __all__ = [
+    "BUDGET_EXCEEDED_PREFIX",
     "UDEG_PER_DEGREE",
     "Arc",
     "BoardIRContent",
@@ -54,6 +57,7 @@ __all__ = [
     "BoardIRValidationError",
     "ConstraintSet",
     "ConversionResult",
+    "CourtyardCircle",
     "Diagnostic",
     "DifferentialPairRule",
     "Footprint",
@@ -68,6 +72,7 @@ __all__ = [
     "Pad",
     "PadKind",
     "PadShape",
+    "ParseBudget",
     "ParseLimits",
     "PointNM",
     "Ring",
@@ -89,6 +94,7 @@ __all__ = [
     "mm_to_nm",
     "nm_to_mm",
     "normalize_rotation_udeg",
+    "signed_double_area",
     "validate_content",
     "verify_snapshot",
 ]

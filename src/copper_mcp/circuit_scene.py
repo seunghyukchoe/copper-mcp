@@ -16,7 +16,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from math import isqrt
 from typing import Any
 
@@ -40,6 +40,7 @@ from copper_mcp.board_ir import (
 from copper_mcp.config import Settings
 from copper_mcp.kicad_ipc import capture_live_board
 from copper_mcp.models import SCHEMA_VERSION
+from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.request_boundary import (
     CONSTRAINT_FIELDS,
     MAX_JSON_SAFE_INTEGER,
@@ -484,6 +485,15 @@ def _object_bounds(
     for footprint in content.footprints:
         footprint_boxes = [bounds[pad_id] for pad_id in footprint.pad_ids]
         footprint_boxes.extend(_ring_bounds(ring) for ring in footprint.courtyards)
+        footprint_boxes.extend(
+            (
+                circle.center.x - circle.radius_nm,
+                circle.center.y - circle.radius_nm,
+                circle.center.x + circle.radius_nm,
+                circle.center.y + circle.radius_nm,
+            )
+            for circle in footprint.courtyard_circles
+        )
         if footprint_boxes:
             bounds[footprint.id] = (
                 min(box[0] for box in footprint_boxes),
@@ -602,6 +612,18 @@ def _footprint_object(footprint: Footprint) -> SceneObject:
             "side": footprint.side.value,
             "pad_ids": list(footprint.pad_ids),
             "courtyards_nm": [_points(ring) for ring in footprint.courtyards],
+            # The key appears only when a circle exists, which keeps every previously
+            # observable scene revision byte-identical.
+            **(
+                {
+                    "courtyard_circles_nm": [
+                        [circle.center.x, circle.center.y, circle.radius_nm]
+                        for circle in footprint.courtyard_circles
+                    ]
+                }
+                if footprint.courtyard_circles
+                else {}
+            ),
         },
         ref_stability=_ref_stability(footprint.id),
         locked=footprint.locked,
@@ -870,11 +892,7 @@ def _observe_board_scene(
             raise CircuitSceneError("live scene rendering is not available")
     board_revision = f"sha256:{hashlib.sha256(board_source).hexdigest()}"
 
-    default_limits = ParseLimits()
-    limits = replace(
-        default_limits,
-        max_input_bytes=min(default_limits.max_input_bytes, settings.max_board_bytes),
-    )
+    limits = parse_limits_for(settings)
     conversion = parse_kicad_bytes(board_source, request.profile(), limits)
     if any(
         diagnostic.code == FOREIGN_ROOT_DIAGNOSTIC_CODE for diagnostic in conversion.diagnostics
@@ -943,7 +961,10 @@ def _observe_board_scene(
     for footprint in content.footprints:
         layer_ids = ("layer:F.Cu",) if footprint.side.value == "front" else ("layer:B.Cu",)
         detail_units = (
-            1 + len(footprint.pad_ids) + sum(len(ring.points) for ring in footprint.courtyards)
+            1
+            + len(footprint.pad_ids)
+            + sum(len(ring.points) for ring in footprint.courtyards)
+            + len(footprint.courtyard_circles)
         )
         consider(
             _footprint_object(footprint),

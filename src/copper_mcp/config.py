@@ -8,6 +8,7 @@ dedicated secret manager.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,11 +19,19 @@ class ConfigurationError(ValueError):
     """Raised when process configuration is unsafe or invalid."""
 
 
+#: One optional sign and ASCII digits, nothing else. ``int()`` alone is looser than it looks: it
+#: accepts ``"1_000"`` as 1000 and the Arabic-Indic ``"٤"`` as 4, and it strips surrounding
+#: whitespace. Every one of those is a value whose *appearance* in a deployment's environment
+#: differs from the ceiling the process would then enforce, which is exactly the confusion the
+#: exact-membership rule on the allow-flags exists to prevent. A refused spelling is cheap to fix;
+#: a silently reinterpreted one is not.
+_INTEGER_SPELLING = re.compile(r"\A-?[0-9]+\Z")
+
+
 def _bounded_int(name: str, raw: str, minimum: int, maximum: int) -> int:
-    try:
-        value = int(raw)
-    except ValueError as error:
-        raise ConfigurationError(f"{name} must be an integer") from error
+    if not isinstance(raw, str) or not _INTEGER_SPELLING.match(raw):
+        raise ConfigurationError(f"{name} must be an integer")
+    value = int(raw)
     if not minimum <= value <= maximum:
         raise ConfigurationError(f"{name} must be between {minimum} and {maximum}")
     return value
@@ -37,6 +46,24 @@ class Settings:
     host: str = "127.0.0.1"
     port: int = 8765
     max_board_bytes: int = 64 * 1024 * 1024
+    # Structural parse budgets. Every default mirrors the matching ``ParseLimits`` field, and the
+    # measurement each is derived from is recorded in
+    # docs/research/parse-budget-calibration-v1.md. They are settings rather than constants
+    # because ``COPPER_MCP_MAX_BOARD_BYTES`` alone could not admit an ordinary large board: the
+    # node ceiling bound first and had no knob at all (issue #112).
+    #
+    # Upper bounds are not decoration. ``max_parse_tokens`` is the parser's memory control at a
+    # measured ~61 bytes of peak parse arena per admitted token, so its ceiling of 32,000,000 is
+    # also a ~2 GiB residency ceiling; ``max_parse_objects`` cannot usefully exceed the Board IR
+    # schema's own 250,000-object limit, because validation takes the minimum of the two; and
+    # ``max_parse_intersection_tests`` buys O(n^2) work at ~0.83 us per test, so its ceiling of
+    # 50,000,000 is a ~41 s ceiling. None of these may be raised without accepting that cost.
+    max_parse_tokens: int = 4_000_000
+    max_parse_nodes: int = 3_000_000
+    max_parse_children_per_list: int = 500_000
+    max_parse_objects: int = 250_000
+    max_parse_total_vertices: int = 2_000_000
+    max_parse_intersection_tests: int = 2_000_000
     kicad_cli: Path | None = None
     kicad_timeout_seconds: int = 120
     max_drc_report_bytes: int = 8 * 1024 * 1024
@@ -86,6 +113,54 @@ class Settings:
             os.environ.get("COPPER_MCP_MAX_BOARD_BYTES", str(64 * 1024 * 1024)),
             1024,
             1024 * 1024 * 1024,
+        )
+        # Each range runs up to the point where the budget stops being reachable, so no accepted
+        # value is inert. Three different things set that point: the parser's own 16 MiB input
+        # ceiling (a token costs at least one byte, a node or a list child at least two, a vertex
+        # at least ten), the Board IR schema's fixed object limit, and — for the one budget whose
+        # cost is superlinear in input size — an explicit wall-clock ceiling.
+        max_parse_tokens = _bounded_int(
+            "COPPER_MCP_MAX_PARSE_TOKENS",
+            os.environ.get("COPPER_MCP_MAX_PARSE_TOKENS", "4000000"),
+            1,
+            # Also a memory ceiling: peak parse arena measures ~61 bytes per admitted token, so
+            # authorizing the maximum here authorizes roughly 1 GiB of transient residency.
+            16 * 1024 * 1024,
+        )
+        max_parse_nodes = _bounded_int(
+            "COPPER_MCP_MAX_PARSE_NODES",
+            os.environ.get("COPPER_MCP_MAX_PARSE_NODES", "3000000"),
+            1,
+            8 * 1024 * 1024,
+        )
+        max_parse_children_per_list = _bounded_int(
+            "COPPER_MCP_MAX_PARSE_CHILDREN_PER_LIST",
+            os.environ.get("COPPER_MCP_MAX_PARSE_CHILDREN_PER_LIST", "500000"),
+            1,
+            8 * 1024 * 1024,
+        )
+        max_parse_objects = _bounded_int(
+            "COPPER_MCP_MAX_PARSE_OBJECTS",
+            os.environ.get("COPPER_MCP_MAX_PARSE_OBJECTS", "250000"),
+            1,
+            # The Board IR schema's own object ceiling. Validation refuses at the minimum of this
+            # setting and that constant, so accepting a larger value here would be accepting a
+            # number that changes nothing — a setting that lies is worse than one that refuses.
+            250_000,
+        )
+        max_parse_total_vertices = _bounded_int(
+            "COPPER_MCP_MAX_PARSE_TOTAL_VERTICES",
+            os.environ.get("COPPER_MCP_MAX_PARSE_TOTAL_VERTICES", "2000000"),
+            3,
+            2_000_000,
+        )
+        max_parse_intersection_tests = _bounded_int(
+            "COPPER_MCP_MAX_PARSE_INTERSECTION_TESTS",
+            os.environ.get("COPPER_MCP_MAX_PARSE_INTERSECTION_TESTS", "2000000"),
+            1,
+            # ~0.83 us per test, so this ceiling is a ~17 s ceiling. Raising the default trades a
+            # refusal for a slow refusal, which is why it is not derived from the byte ceiling.
+            20_000_000,
         )
         raw_kicad_cli = os.environ.get("COPPER_MCP_KICAD_CLI", "").strip()
         kicad_cli = Path(raw_kicad_cli).expanduser() if raw_kicad_cli else None
@@ -203,6 +278,12 @@ class Settings:
             host=host,
             port=port,
             max_board_bytes=max_board_bytes,
+            max_parse_tokens=max_parse_tokens,
+            max_parse_nodes=max_parse_nodes,
+            max_parse_children_per_list=max_parse_children_per_list,
+            max_parse_objects=max_parse_objects,
+            max_parse_total_vertices=max_parse_total_vertices,
+            max_parse_intersection_tests=max_parse_intersection_tests,
             kicad_cli=kicad_cli,
             kicad_timeout_seconds=kicad_timeout_seconds,
             max_drc_report_bytes=max_drc_report_bytes,

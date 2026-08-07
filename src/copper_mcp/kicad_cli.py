@@ -36,6 +36,7 @@ from copper_mcp.attestation import build_candidate_drc_statement, canonical_stat
 from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
 from copper_mcp.models import DrcSummary, ErcSummary
+from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.routing import LayeredRouteCandidate, LayeredRouteRequest, RouteCandidate
 from copper_mcp.scene_render import (
     RENDER_LAYERS,
@@ -1034,11 +1035,7 @@ def run_zone_fill_authority(
     context_revision = _context_revision(captured_context)
     source = captured_context[board_relative]
     source_revision = _revision(source)
-    default_limits = ParseLimits()
-    parse_limits = replace(
-        default_limits,
-        max_input_bytes=min(default_limits.max_input_bytes, settings.max_board_bytes),
-    )
+    parse_limits = parse_limits_for(settings)
     try:
         cached = read_fill_islands(
             source, max_vertices=settings.max_fill_vertices, limits=parse_limits
@@ -1961,11 +1958,7 @@ def run_route_candidate_drc(
     source = captured_context[board_relative]
     source_revision = _revision(source)
 
-    default_limits = ParseLimits()
-    parse_limits = replace(
-        default_limits,
-        max_input_bytes=min(default_limits.max_input_bytes, settings.max_board_bytes),
-    )
+    parse_limits = parse_limits_for(settings)
     conversion = parse_kicad_bytes(source, profile, parse_limits)
     if conversion.snapshot is None or conversion.diagnostics:
         raise KiCadCliError("captured KiCad board cannot be represented by the supported Board IR")
@@ -2049,11 +2042,7 @@ def run_layered_route_candidate_drc(
     source = captured_context[board_relative]
     source_revision = _revision(source)
 
-    default_limits = ParseLimits()
-    parse_limits = replace(
-        default_limits,
-        max_input_bytes=min(default_limits.max_input_bytes, settings.max_board_bytes),
-    )
+    parse_limits = parse_limits_for(settings)
     conversion = parse_kicad_bytes(source, profile, parse_limits)
     if conversion.snapshot is None or conversion.diagnostics:
         raise KiCadCliError("captured KiCad board cannot be represented by the supported Board IR")

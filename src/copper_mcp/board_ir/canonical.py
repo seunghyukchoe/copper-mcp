@@ -7,7 +7,7 @@ import json
 from dataclasses import replace
 from typing import TypeAlias
 
-from copper_mcp.board_ir.limits import ParseLimits
+from copper_mcp.board_ir.limits import ParseBudget, ParseLimits
 from copper_mcp.board_ir.types import (
     BOARD_IR_SCHEMA,
     BOARD_IR_SCHEMA_VERSION,
@@ -15,6 +15,7 @@ from copper_mcp.board_ir.types import (
     BoardIRContent,
     BoardIRSnapshot,
     ConstraintSet,
+    CourtyardCircle,
     Footprint,
     Keepout,
     Layer,
@@ -130,8 +131,12 @@ def _outline(contour: OutlineContour) -> dict[str, JsonValue]:
     }
 
 
+def _courtyard_circle(circle: CourtyardCircle) -> dict[str, JsonValue]:
+    return {"center": _point(circle.center), "radius_nm": circle.radius_nm}
+
+
 def _footprint(item: Footprint) -> dict[str, JsonValue]:
-    return {
+    payload: dict[str, JsonValue] = {
         "courtyards": [_ring(courtyard) for courtyard in item.courtyards],
         "id": item.id,
         "locked": item.locked,
@@ -140,6 +145,15 @@ def _footprint(item: Footprint) -> dict[str, JsonValue]:
         "rotation_udeg": item.rotation_udeg,
         "side": item.side.value,
     }
+    # The key is emitted only when a circle exists.  Every snapshot digest minted before
+    # circular courtyards were representable therefore keeps encoding byte-for-byte the same
+    # payload, which is what keeps the committed golden identities - and every caller-persisted
+    # snapshot digest - verifiable without a schema-version bump.
+    if item.courtyard_circles:
+        payload["courtyard_circles"] = [
+            _courtyard_circle(circle) for circle in item.courtyard_circles
+        ]
+    return payload
 
 
 def _pad(item: Pad, order: dict[str, int]) -> dict[str, JsonValue]:
@@ -338,6 +352,12 @@ def normalize_content(content: BoardIRContent) -> BoardIRContent:
                                 key=lambda ring: ring.points,
                             )
                         ),
+                        courtyard_circles=tuple(
+                            sorted(
+                                item.courtyard_circles,
+                                key=lambda circle: (circle.center, circle.radius_nm),
+                            )
+                        ),
                     )
                     for item in content.footprints
                 ),
@@ -492,7 +512,9 @@ def _enforce_default_budget(value: JsonValue, payload: bytes) -> None:
     limits = ParseLimits()
     if len(payload) > limits.max_input_bytes:
         raise BoardIRValidationError(
-            "budget.exceeded", "canonical snapshot exceeds the default byte budget", "snapshot"
+            ParseBudget.INPUT_BYTES.value,
+            "canonical snapshot exceeds the default byte budget",
+            "snapshot",
         )
     stack: list[tuple[JsonValue, int]] = [(value, 1)]
     nodes = 0
@@ -501,22 +523,26 @@ def _enforce_default_budget(value: JsonValue, payload: bytes) -> None:
         nodes += 1
         if nodes > limits.max_nodes:
             raise BoardIRValidationError(
-                "budget.exceeded", "canonical snapshot exceeds the default node budget", "snapshot"
+                ParseBudget.NODES.value,
+                "canonical snapshot exceeds the default node budget",
+                "snapshot",
             )
         if depth > limits.max_depth:
             raise BoardIRValidationError(
-                "budget.exceeded", "canonical snapshot exceeds the default depth budget", "snapshot"
+                ParseBudget.DEPTH.value,
+                "canonical snapshot exceeds the default depth budget",
+                "snapshot",
             )
         if isinstance(item, str) and len(item) > limits.max_atom_chars:
             raise BoardIRValidationError(
-                "budget.exceeded",
+                ParseBudget.ATOM_CHARS.value,
                 "canonical snapshot exceeds the default string budget",
                 "snapshot",
             )
         if isinstance(item, list):
             if len(item) > limits.max_children_per_list:
                 raise BoardIRValidationError(
-                    "budget.exceeded",
+                    ParseBudget.CHILDREN_PER_LIST.value,
                     "canonical snapshot exceeds the default array-child budget",
                     "snapshot",
                 )
@@ -524,14 +550,14 @@ def _enforce_default_budget(value: JsonValue, payload: bytes) -> None:
         elif isinstance(item, dict):
             if len(item) > limits.max_children_per_list:
                 raise BoardIRValidationError(
-                    "budget.exceeded",
+                    ParseBudget.CHILDREN_PER_LIST.value,
                     "canonical snapshot exceeds the default object-child budget",
                     "snapshot",
                 )
             for key in item:
                 if len(key) > limits.max_atom_chars:
                     raise BoardIRValidationError(
-                        "budget.exceeded",
+                        ParseBudget.ATOM_CHARS.value,
                         "canonical snapshot exceeds the default string budget",
                         "snapshot",
                     )

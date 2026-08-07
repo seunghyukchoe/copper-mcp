@@ -479,6 +479,8 @@ class LiveEditorContextToolResponse(_ClosedContract):
 Nanometres = Annotated[int, Field(ge=-(2**53 - 1), le=2**53 - 1)]
 PointArray = Annotated[list[Nanometres], Field(min_length=2, max_length=2)]
 Ring = Annotated[list[PointArray], Field(min_length=3, max_length=4096)]
+#: One circular courtyard keep-out as ``[centre_x_nm, centre_y_nm, radius_nm]``.
+CircleArray = Annotated[list[Nanometres], Field(min_length=3, max_length=3)]
 PositiveNanometres = Annotated[int, Field(gt=0, le=2**53 - 1)]
 NonNegativeInteger = Annotated[int, Field(ge=0, le=2**53 - 1)]
 
@@ -652,8 +654,9 @@ class PadGeometryContract(_ClosedContract):
     rotation_udeg: int
     shape: Literal["circle", "rect", "oval", "roundrect"]
     kind: Literal["smd", "through_hole", "np_through_hole"]
-    # A pad with no net is legal and common (mounting holes, NPTH); every other copper
-    # object on a supported board carries one, so only this field is nullable.
+    # A pad with no net is legal and common (mounting holes, NPTH). Tracks, arcs and vias
+    # may also be netless — KiCad's net 0 covers stitching vias and orphaned copper — so
+    # their net_id fields are nullable too. Zones are the exception: a zone must name a net.
     net_id: NetRefId | None
     roundrect_radius_nm: PositiveNanometres | None
     drill_nm: Annotated[list[PositiveNanometres], Field(min_length=2, max_length=2)] | None
@@ -670,6 +673,11 @@ class FootprintGeometryContract(_ClosedContract):
     side: Literal["front", "back"]
     pad_ids: Annotated[list[PadRefId], Field(max_length=100_000)]
     courtyards_nm: Annotated[list[Ring], Field(max_length=64)]
+    # Emitted only when the footprint carries a circular courtyard, so scenes observed
+    # before circles were representable keep validating and keep their revisions.
+    courtyard_circles_nm: (
+        Annotated[list[CircleArray], Field(min_length=1, max_length=64)] | None
+    ) = None
 
 
 class SceneFootprintContract(_SceneObjectContract):
@@ -705,7 +713,7 @@ class SegmentGeometryContract(_ClosedContract):
     start_nm: PointArray
     end_nm: PointArray
     width_nm: PositiveNanometres
-    net_id: NetRefId
+    net_id: NetRefId | None
 
 
 class SceneSegmentContract(_SceneObjectContract):
@@ -718,7 +726,7 @@ class ArcGeometryContract(_ClosedContract):
     mid_nm: PointArray
     end_nm: PointArray
     width_nm: PositiveNanometres
-    net_id: NetRefId
+    net_id: NetRefId | None
 
 
 class SceneArcContract(_SceneObjectContract):
@@ -730,7 +738,7 @@ class ViaGeometryContract(_ClosedContract):
     center_nm: PointArray
     diameter_nm: PositiveNanometres
     drill_nm: PositiveNanometres
-    net_id: NetRefId
+    net_id: NetRefId | None
 
 
 class SceneViaContract(_SceneObjectContract):

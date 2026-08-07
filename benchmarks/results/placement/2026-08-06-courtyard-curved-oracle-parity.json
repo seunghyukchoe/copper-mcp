@@ -1,0 +1,173 @@
+{
+  "date_utc": "2026-08-06",
+  "environment": {
+    "kicad_cli": "10.0.5",
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "metrics": {
+    "case_count": 23,
+    "cases": [
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "proven_clear",
+        "name": "chamfer_penetration_-1000000_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "proven_clear",
+        "name": "chamfer_penetration_-1_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "proven_clear",
+        "name": "chamfer_penetration_0_nm"
+      },
+      {
+        "agreement": "conceded",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "inconclusive",
+        "name": "chamfer_penetration_1_nm"
+      },
+      {
+        "agreement": "conceded",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "inconclusive",
+        "name": "chamfer_penetration_5000_nm"
+      },
+      {
+        "agreement": "conceded",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "inconclusive",
+        "name": "chamfer_penetration_9999_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "violated",
+        "name": "chamfer_penetration_10000_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "violated",
+        "name": "chamfer_penetration_10001_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "violated",
+        "name": "chamfer_penetration_20000_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "violated",
+        "name": "chamfer_penetration_1000000_nm"
+      },
+      {
+        "agreement": "conceded",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "inconclusive",
+        "name": "chamfer_corner_triangle_only"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "proven_clear",
+        "name": "circle_penetration_-1000000_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "proven_clear",
+        "name": "circle_penetration_-1_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "proven_clear",
+        "name": "circle_penetration_0_nm"
+      },
+      {
+        "agreement": "conceded",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "inconclusive",
+        "name": "circle_penetration_1_nm"
+      },
+      {
+        "agreement": "conceded",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "inconclusive",
+        "name": "circle_penetration_5000_nm"
+      },
+      {
+        "agreement": "conceded",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "inconclusive",
+        "name": "circle_penetration_9999_nm"
+      },
+      {
+        "agreement": "conceded",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "inconclusive",
+        "name": "circle_penetration_10000_nm"
+      },
+      {
+        "agreement": "conceded",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "inconclusive",
+        "name": "circle_penetration_10001_nm"
+      },
+      {
+        "agreement": "conceded",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "inconclusive",
+        "name": "circle_penetration_20000_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "violated",
+        "name": "circle_penetration_1000000_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "violated",
+        "name": "circle_deep_in_chamfer_ring"
+      },
+      {
+        "agreement": "conceded",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "inconclusive",
+        "name": "circle_against_chamfer_corner_square"
+      }
+    ],
+    "conceded_inconclusive": 11,
+    "contradictions": [],
+    "courtyard_cache_inset_nm": 5000,
+    "courtyard_collision_threshold_nm": 10000,
+    "exact_parity": 12,
+    "exact_parity_rate": "12/23",
+    "false_negative_clears": [],
+    "false_positive_violations": [],
+    "kicad_invoked": true,
+    "non_contradiction_rate": "23/23",
+    "workspace_mutations": 0
+  },
+  "not_claimed": [
+    "arc courtyard primitives, which remain a typed refusal",
+    "rings mixing chamfers with nesting, which degrade to a concession",
+    "footprint poses that are not quarter turns",
+    "configurable nonzero courtyard clearance",
+    "the sub-threshold cache band, conceded exactly as in B-089",
+    "placement apply or full-board DRC"
+  ],
+  "run_id": "sha256:730781c296d80a25c3a8073eecfb4ab094ef34d107b4b5e12254a61de7a734f1",
+  "schema": "copper-mcp/benchmark/courtyard-curved-oracle-parity/v1",
+  "source_commit": "b4475d0d8f1fa549a710d80d94ae7a49a826d383"
+}
