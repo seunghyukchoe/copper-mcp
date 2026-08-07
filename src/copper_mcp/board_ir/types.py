@@ -142,6 +142,39 @@ class Ring:
 
 
 @dataclass(frozen=True, slots=True)
+class CourtyardCircle:
+    """One exact circular courtyard keep-out: an integer centre and an integer radius.
+
+    KiCad footprints draw round part envelopes (radial capacitors, test points, mounting
+    holes) as an unfilled ``fp_circle`` on a courtyard layer.  The circle itself is kept
+    exact rather than being replaced by a polygon at import time: any polygon stored here
+    would either overstate or understate the keep-out, and the placement evidence surface
+    (ADR-0075) must derive both an outer and an inner bound from the true shape to say
+    which of its three verdicts it is entitled to.  Only circles whose radius is an exact
+    integer nanometre are representable; the adapter refuses the rest.
+    """
+
+    center: PointNM
+    radius_nm: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.center, PointNM):
+            raise ValueError("courtyard circle centre must be a PointNM")
+        _positive("courtyard circle radius", self.radius_nm)
+        for coordinate in (self.center.x, self.center.y):
+            _integer(
+                "courtyard circle extent",
+                coordinate + self.radius_nm,
+                minimum=-JSON_SAFE_INTEGER,
+            )
+            _integer(
+                "courtyard circle extent",
+                coordinate - self.radius_nm,
+                minimum=-JSON_SAFE_INTEGER,
+            )
+
+
+@dataclass(frozen=True, slots=True)
 class UnitSystem:
     """Closed unit declaration for Board IR."""
 
@@ -323,6 +356,7 @@ class Footprint:
     side: FootprintSide
     pad_ids: tuple[str, ...]
     courtyards: tuple[Ring, ...] = ()
+    courtyard_circles: tuple[CourtyardCircle, ...] = ()
     locked: bool = False
 
     def __post_init__(self) -> None:
@@ -341,6 +375,7 @@ class Footprint:
         for pad_id in self.pad_ids:
             _typed_id("footprint pad ID", pad_id, "pad:")
         _tuple_of("footprint courtyards", self.courtyards, Ring)
+        _tuple_of("footprint courtyard circles", self.courtyard_circles, CourtyardCircle)
         if not isinstance(self.locked, bool):
             raise ValueError("footprint locked flag must be boolean")
 
@@ -425,8 +460,15 @@ class ViaKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class Via:
+    """One through via.
+
+    ``net_id`` is ``None`` for copper KiCad stores on net 0 — stitching vias and orphaned
+    copper. Such a via is still a physical obstacle everywhere geometry is consulted, but it
+    can never satisfy a connectivity claim: no request net compares equal to ``None``.
+    """
+
     id: str
-    net_id: str
+    net_id: str | None
     center: PointNM
     diameter_nm: int
     drill_nm: int
@@ -437,7 +479,8 @@ class Via:
 
     def __post_init__(self) -> None:
         _typed_id("via ID", self.id, "via:")
-        _typed_id("net ID", self.net_id, "net:")
+        if self.net_id is not None:
+            _typed_id("net ID", self.net_id, "net:")
         if not isinstance(self.center, PointNM):
             raise ValueError("via center must be a PointNM")
         if not isinstance(self.kind, ViaKind):
@@ -458,8 +501,10 @@ class Via:
 
 @dataclass(frozen=True, slots=True)
 class Segment:
+    """One straight track. ``net_id`` is ``None`` for net-0 (orphaned) copper; see ``Via``."""
+
     id: str
-    net_id: str
+    net_id: str | None
     layer_id: str
     start: PointNM
     end: PointNM
@@ -468,7 +513,8 @@ class Segment:
 
     def __post_init__(self) -> None:
         _typed_id("segment ID", self.id, "segment:")
-        _typed_id("net ID", self.net_id, "net:")
+        if self.net_id is not None:
+            _typed_id("net ID", self.net_id, "net:")
         _typed_id("layer ID", self.layer_id, "layer:")
         if not isinstance(self.start, PointNM) or not isinstance(self.end, PointNM):
             raise ValueError("segment endpoints must be PointNM values")
@@ -481,8 +527,10 @@ class Segment:
 
 @dataclass(frozen=True, slots=True)
 class Arc:
+    """One curved track. ``net_id`` is ``None`` for net-0 (orphaned) copper; see ``Via``."""
+
     id: str
-    net_id: str
+    net_id: str | None
     layer_id: str
     start: PointNM
     mid: PointNM
@@ -492,7 +540,8 @@ class Arc:
 
     def __post_init__(self) -> None:
         _typed_id("arc ID", self.id, "arc:")
-        _typed_id("net ID", self.net_id, "net:")
+        if self.net_id is not None:
+            _typed_id("net ID", self.net_id, "net:")
         _typed_id("layer ID", self.layer_id, "layer:")
         if not all(isinstance(point, PointNM) for point in (self.start, self.mid, self.end)):
             raise ValueError("arc control points must be PointNM values")

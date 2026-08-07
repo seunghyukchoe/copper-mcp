@@ -34,6 +34,46 @@ All notable changes are documented here. The format follows
   validation message is a fixed string chosen by `copper_mcp.board_ir`, and the two that were built
   from an object ID are rebuilt so the board-derived text travels in the locator the refusal drops.
   ([D-158](docs/ledgers/decision-ledger.md), #116)
+- Copper saved on KiCad's net 0 — stitching vias and orphaned tracks, which KiCad 10 writes as
+  `(net "")` — no longer refuses the whole document with `via has no routable net`, the largest
+  single cause in the issue #116 real-board survey (queued on 7 of 12 boards, which carry 115
+  netless vias and 2,687 netless track segments between them). Such copper converts as an
+  obstacle with no connectivity contribution: `net_id` is `None` on the `Via`, `Segment`, or
+  `Arc`, the item never matches any request net, its clearance is the widest class on the board,
+  and no already-connected claim can pass through it — pinned by mutation-checked router tests
+  in both the via-join and segment-attachment directions. All three saved spellings of "no net"
+  (`(net "")`, `(net 0)`, `(net 0 "")`) resolve identically; a negative ordinal is now an
+  explicit typed `net.unknown` refusal, and a netless via is still held to every geometric rule.
+  Board IR, codec, JSON schema 0.2.0, and scene contracts widen `net_id` to nullable in place —
+  strictly additive, with every existing content address byte-identical (ADR-0078, D-159,
+  R-120, #119).
+- **Three singleton real-board refusals, each a different kind of defect.** Found by running the
+  adapter against a working tree of twelve real KiCad boards, where each was the first refusal on
+  exactly one board and invisible behind more common causes.
+  - A footprint graphic on a copper layer now refuses under the name of what it is. The board that
+    found it carries a `NetTie-2_THT_Pad1.0mm` joining two ground nets, and KiCad defines
+    `net_tie_pad_groups` as meaning nets in a group "are allowed to short". The adapter already
+    refused net ties — correctly, because Board IR models nets as disjoint and this copper belongs
+    to two at once, which no envelope can express — but the preflight ran first and reported a
+    stray drawing on a copper layer, sending a user to look for a mistake that is not there. The
+    one message is now three: a net tie, an `Edge.Cuts` graphic (routing *room*, the opposite
+    direction of error), and unmodelled copper. All three still refuse; copper is never dropped.
+    (D-162)
+  - A pad with **no copper layer at all** is a KiCad *aperture* pad — a solder-paste stencil
+    opening, used to subdivide the paste over an exposed thermal tab — and is now omitted from
+    Board IR instead of refusing the board. One board carried eight of them on two `TO-252-2`
+    transistors. Omitting one removes no obstacle and discards no attachment point, and that claim
+    is conditional, so each condition refuses rather than drops when it fails: paste or mask layers
+    only, `smd` kind, no net, no pad number. The regression asserts *equality* of every
+    copper-bearing field with and without the aperture. (D-163, R-122)
+  - `placed`, KiCad's autoplacement status flag, is accepted as footprint metadata — it carries no
+    geometry, no layer and no constraint, unlike `locked`, which is a constraint and stays
+    modelled. One board carried `(placed yes)` on all 31 of its footprints. Both allowlists stay
+    closed, with an unknown footprint field and an unknown root field each pinned by its own
+    control. (D-164)
+
+  No diagnostic code, Board IR field, schema or digest changes, and no golden identity moves.
+  (#116)
 
 - Board metadata that KiCad writes into essentially every real board no longer refuses the whole
   document. `solder_mask_min_width` joins `pad_to_mask_clearance` as accepted setup metadata — it
@@ -47,6 +87,24 @@ All notable changes are documented here. The format follows
   a regression pins that.
 
 ### Added
+
+- **Chamfered and circular courtyards convert, and their legality claims stay honest.** The
+  #116 survey's two courtyard causes — `courtyard edges must be non-zero and axis-aligned`
+  (measured to be exact 45-degree electrolytic-capacitor chamfers, not the hypothesised rotated
+  rectangles) and `courtyard primitive is unsupported by Board IR v0.2` (104 `fp_circle`
+  outlines, zero arcs) — are removed by widening Board IR 0.2.0 to octilinear courtyard rings
+  and a new exact `CourtyardCircle` value. Legality brackets every published verdict by
+  direction: only an outer bound may prove `proven_clear`, only an inner bound witnessed past
+  each side's worst-case cache loss may prove `violated` (two insets, strictly, for a circle,
+  whose cache KiCad polygonises inward before contracting — a 10,001 nm development claim the
+  real tool contradicted and the oracle benchmark caught), and everything between is
+  `inconclusive`. Uncertifiable arrangements degrade to claims-nothing bounds; `fp_arc`,
+  inexact radii, arbitrary slopes, and non-quarter-turn poses stay typed refusals. The
+  canonical encoder emits `courtyard_circles` only when present, so every existing snapshot
+  digest, scene revision, and golden identity is byte-stable. Measured against real
+  `kicad-cli` 10.0.5 over 23 cases: 12 exact parity, 11 conceded, 0 contradictions; on the
+  #116 tree, courtyard-stage refusals drop from 13 boards to zero. (#116, ADR-0080, D-165,
+  R-120, B-093)
 
 - **The KiCad plugin is now a Plugin and Content Manager package, and installing it still grants
   nothing.** `scripts/build_pcm_package.py` produces `com.github.seunghyukchoe.coppermcp-live-observer`
@@ -305,7 +363,7 @@ All notable changes are documented here. The format follows
   half the short side, and a ratio outside `(0, 0.5]`, are still refused rather than clamped. No
   content address moves. See
   [Roundrect radius precision](docs/research/roundrect-radius-precision-v1.md) for the derivation
-  and citations, ADR-0077, D-157, and R-118. (#116)
+  and citations, ADR-0080, D-157, and R-120. (#116)
 - **A stadium pad was being handed a disc's attachment core.** `_pad_cores` gives a round pad its
   largest inscribed square, because a disc's central rectangle degenerates to a bar that can seed
   no search — but it detected that case from the collapse alone, and a roundrect whose radius is
@@ -315,6 +373,7 @@ All notable changes are documented here. The format follows
   in, and reachable from any board where KiCad wrote a `roundrect_rratio` of 0.5. The inscribed
   square is now gated on the pad being a disc. Every roundrect in the core-containment
   parametrisation had a band with real height, so no fixture could have caught it; a stadium case
+  is added. (#116, R-120)
   is added. (#116, R-118)
   moves. ([ADR-0079](docs/adr/0076-segment-assembled-edge-cuts-outline.md), D-154, R-117)
 

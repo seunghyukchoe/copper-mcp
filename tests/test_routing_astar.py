@@ -121,7 +121,9 @@ def _snapshot(
     blocking_pad: tuple[int, int] | None = None,
     blocking_pad_rotation_udeg: int = 0,
     foreign_segment: tuple[int, int, int, int] | None = None,
+    netless_segment: tuple[int, int, int, int] | None = None,
     foreign_via: tuple[int, int] | None = None,
+    netless_via: tuple[int, int] | None = None,
     own_via: bool = False,
     foreign_zones: tuple[Ring, ...] = (),
     foreign_zone_layer_id: str = LAYER_ID,
@@ -147,6 +149,7 @@ def _snapshot(
     copper_layers: tuple[Layer, ...] = (layer,)
     if (
         foreign_via is not None
+        or netless_via is not None
         or own_via
         or foreign_zone_layer_id != LAYER_ID
         or own_segment_layer_id != LAYER_ID
@@ -221,6 +224,17 @@ def _snapshot(
                 width_nm=200,
             ),
         )
+    if netless_segment is not None:
+        segments += (
+            Segment(
+                id="segment:netless",
+                net_id=None,
+                layer_id=LAYER_ID,
+                start=PointNM(netless_segment[0], netless_segment[1]),
+                end=PointNM(netless_segment[2], netless_segment[3]),
+                width_nm=200,
+            ),
+        )
     vias: tuple[Via, ...] = ()
     if foreign_via is not None:
         vias += (
@@ -228,6 +242,18 @@ def _snapshot(
                 id="via:foreign",
                 net_id=OTHER_NET_ID,
                 center=PointNM(*foreign_via),
+                diameter_nm=800,
+                drill_nm=400,
+                start_layer_id=LAYER_ID,
+                end_layer_id="layer:B.Cu",
+            ),
+        )
+    if netless_via is not None:
+        vias += (
+            Via(
+                id="via:netless",
+                net_id=None,
+                center=PointNM(*netless_via),
                 diameter_nm=800,
                 drill_nm=400,
                 start_layer_id=LAYER_ID,
@@ -866,6 +892,67 @@ def test_a_via_on_the_routed_net_still_fails_closed() -> None:
         router.propose(partially_routed, _request(partially_routed)),
         RouteFailureCode.UNSUPPORTED_GEOMETRY,
     )
+
+
+def test_a_netless_stitching_via_is_still_an_obstacle() -> None:
+    # A via saved on KiCad's net 0 has no net to belong to, but its barrel is real copper:
+    # the router must detour around it exactly as it does around any foreign via.
+    router = AStarRouter()
+    blocked = _snapshot(netless_via=(5_000, 5_000))
+
+    detour = _candidate(router.propose(blocked, _request(blocked)))
+
+    assert detour.cost.bend_count > 0
+    assert all(
+        not (4_500 < point.x < 5_500 and 4_500 < point.y < 5_500)
+        for point in detour.patch.paths[0].vertices
+    )
+
+
+def test_a_route_through_a_netless_via_barrel_is_refused_when_no_detour_exists() -> None:
+    # The outline strip leaves no legal centreline outside the via's clearance zone, so the
+    # only geometric way to finish the route would be through the barrel. That is refused.
+    router = AStarRouter()
+    pinched = _snapshot(
+        netless_via=(5_000, 5_000),
+        outline=_rectangle(0, 4_400, 10_000, 5_600),
+    )
+
+    _assert_failure(router.propose(pinched, _request(pinched)), RouteFailureCode.NO_PATH)
+
+
+def test_a_netless_via_never_joins_the_net_it_touches() -> None:
+    # Mutation guard: two same-net stubs each reach the netless via's annulus — the exact
+    # geometry that IS a connection when the via carries the routed net. With no net the via
+    # contributes nothing, so no already-connected claim may appear; the router must instead
+    # propose copper of its own around the barrel. If a mutation lets a None net compare
+    # equal to the routed net, this claim flips to connected and the assertion fails.
+    snapshot = _snapshot(
+        netless_via=(5_000, 5_000),
+        own_segments=((1_000, 5_000, 4_700, 5_000), (5_300, 5_000, 9_000, 5_000)),
+    )
+    router = AStarRouter()
+
+    result = router.propose(snapshot, _request(snapshot))
+
+    assert result.connected is None
+    candidate = _candidate(result)
+    assert candidate.cost.length_nm > 0
+    assert all(
+        not (4_500 < point.x < 5_500 and 4_500 < point.y < 5_500)
+        for path in candidate.patch.paths
+        for point in path.vertices
+    )
+
+
+def test_a_netless_segment_across_both_pads_never_claims_connectivity() -> None:
+    # The netless track lies exactly where same-net copper would close the two-pin net. It
+    # must stay an obstacle: never attachment copper, never a connectivity claim.
+    snapshot = _snapshot(netless_segment=(1_000, 5_000, 9_000, 5_000))
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    assert result.connected is None
 
 
 def test_a_via_clear_of_the_route_does_not_force_a_detour() -> None:
