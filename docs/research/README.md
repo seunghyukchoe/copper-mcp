@@ -170,6 +170,15 @@ When adding a document, add it to the list below in the same sentence form — *
   because a larger radius means a smaller pad. It claims nothing about chamfered pads, per-layer
   padstacks, board format versions other than `20260206`, or that the 23-board tree is
   representative of KiCad boards generally.
+- [Tier-2 real-board capability survey](./tier2-real-board-capability-v1.md) measures what five
+  read-only surfaces return on 12 real boards at default settings, now that 10 of them convert:
+  authoritative KiCad DRC works on all 12 including the two Board IR refuses; a region-scoped
+  Circuit Scene works on 10 of 10 while 8 of 10 whole-board requests silently return empty `vias`,
+  `zones` and `rules` lists; placement preview accepts 991 of 991 footprints and 10 of 10 boards
+  refuse the source-preserving render; route preview routed 0 of 345 nets. It claims nothing
+  electrical, thermal or manufacturable, does not claim an apply would have succeeded had the gate
+  passed, is not a whole-board routing completion result, and does not treat one designer's
+  project family as a sample of KiCad boards generally.
 
 ## Terms used in this review
 

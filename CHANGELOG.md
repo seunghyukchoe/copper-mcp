@@ -6,6 +6,23 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A measured survey of what CopperMCP's downstream surfaces do on real boards, now that real boards
+  convert. Issue #116 moved conversion from 1 of 23 to 10 of 12; this measures step two across five
+  read-only surfaces at default settings, per board, with wall clock on every call. Authoritative
+  KiCad DRC is the one surface that works everywhere — 12 of 12 reported, including both boards
+  Board IR still refuses. A region-scoped Circuit Scene works on 10 of 10, while 8 of 10
+  whole-board requests hit `max_scene_objects` and return empty `vias`, `zones` and `rules` lists
+  for boards holding up to 1,003 vias. Placement preview accepts 991 of 991 footprints with no
+  refusal of any code — and 10 of 10 boards refuse the source-preserving render, so none of it can
+  ever be applied. Route preview routed 0 of 345 nets, 71 of them refused at the default
+  `max_obstacles = 256`; B-088's `off_grid` wall does not appear once here, which localises this
+  corpus's constraint somewhere else entirely. No board was written, copied, or opened in a live
+  editor, and no apply or live-IPC flag was set.
+  ([B-096](docs/ledgers/benchmark-ledger.md),
+  [Tier-2 real-board capability survey](docs/research/tier2-real-board-capability-v1.md), #116)
+
 ### Fixed
 
 - **A KiCad UUID that a board reuses is no longer treated as a Board IR identity.** Issue #116's

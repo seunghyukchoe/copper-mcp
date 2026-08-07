@@ -1,0 +1,1918 @@
+{
+  "benchmark": "real-board-tier2-capability-v1",
+  "boards": [
+    {
+      "board": "mixer/schematics/kicad/ch/ch.kicad_pcb",
+      "board_ir": {
+        "conversion_diagnostic_counts": {},
+        "elapsed_ms": 3551.1,
+        "identity_mix": {
+          "footprints": {
+            "derived": 199,
+            "native": 3
+          },
+          "outline": {
+            "derived": 1
+          },
+          "pads": {
+            "derived": 530,
+            "native": 50
+          },
+          "segments": {
+            "native": 31389
+          },
+          "vias": {
+            "native": 1003
+          },
+          "zones": {
+            "native": 5
+          }
+        },
+        "object_counts": {
+          "arcs": 0,
+          "copper_layers": 4,
+          "differential_pair_rules": 0,
+          "footprints": 202,
+          "keepouts": 0,
+          "length_rules": 0,
+          "net_class_assignments": 147,
+          "net_classes": 1,
+          "nets": 147,
+          "outline": 1,
+          "pads": 580,
+          "segments": 31389,
+          "vias": 1003,
+          "zones": 5
+        },
+        "source_bytes": 9104023,
+        "supported": true
+      },
+      "board_revision": "sha256:ad3cc426d25ecc585848676be66a2cb569197bba1e7e14f43d268eac360137d6",
+      "drc": {
+        "clean": false,
+        "elapsed_ms": 1964.7,
+        "error_count": 942,
+        "kicad_version": "10.0.5",
+        "outcome": "reported",
+        "passed": false,
+        "unconnected_count": 56,
+        "violation_type_counts": {
+          "clearance": 503,
+          "copper_edge_clearance": 4,
+          "hole_clearance": 199,
+          "hole_to_hole": 148,
+          "holes_co_located": 151,
+          "isolated_copper": 44,
+          "shorting_items": 199,
+          "silk_over_copper": 106,
+          "silk_overlap": 128,
+          "solder_mask_bridge": 30,
+          "starved_thermal": 3,
+          "tracks_crossing": 4,
+          "unconnected_items": 56,
+          "via_dangling": 5
+        },
+        "warning_count": 582
+      },
+      "placement": {
+        "elapsed_ms": 17981.4,
+        "refusal_messages": {},
+        "single_subject_latency_ms": {
+          "max": 4047.0,
+          "median": 4024.8,
+          "samples": 3
+        },
+        "source_preserving_render": {
+          "outcome": "refused",
+          "refusal": "source geometry uses revision-derived identities"
+        },
+        "subjects": 202,
+        "verdicts": {
+          "previewed": 202
+        }
+      },
+      "route": {
+        "appliable_geometry": {
+          "outcome": "refused",
+          "refusal": "modeled KiCad geometry requires native uuid or tstamp identities"
+        },
+        "elapsed_ms": 155736.2,
+        "layer": "F.Cu",
+        "nets_attempted": 40,
+        "nets_total": 147,
+        "per_net_latency_ms": {
+          "max": 5249.8,
+          "median": 3848.8
+        },
+        "refusal_messages": {
+          "not_routed/invalid_two_pin_net": "the selected net must resolve to exactly two pads on the selected layer",
+          "not_routed/obstacle_budget_exceeded": "the same-net connectivity model exceeds the configured obstacle budget"
+        },
+        "verdicts": {
+          "already_connected": 15,
+          "not_routed/invalid_two_pin_net": 3,
+          "not_routed/obstacle_budget_exceeded": 22
+        }
+      },
+      "scene": {
+        "bounded": {
+          "elapsed_ms": 3685.5,
+          "radius_nm": 5000000,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 7,
+            "request_scoped_count": 1
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 276,
+              "vias": 2,
+              "zones": 3
+            },
+            "static": {
+              "footprints": 3,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 3,
+              "rules": 1
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": null,
+            "objects_omitted": 0,
+            "objects_returned": 289
+          }
+        },
+        "whole_board": {
+          "elapsed_ms": 3782.0,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 730,
+            "request_scoped_count": 0
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 1217,
+              "vias": 0,
+              "zones": 0
+            },
+            "static": {
+              "footprints": 202,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 580,
+              "rules": 0
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": "max_scene_objects",
+            "objects_omitted": 31181,
+            "objects_returned": 2000
+          }
+        }
+      }
+    },
+    {
+      "board": "mixer/schematics/kicad/ctl/ctl.kicad_pcb",
+      "board_ir": {
+        "conversion_diagnostic_counts": {},
+        "elapsed_ms": 436.6,
+        "identity_mix": {
+          "footprints": {
+            "derived": 25,
+            "native": 4
+          },
+          "outline": {
+            "derived": 1
+          },
+          "pads": {
+            "derived": 55,
+            "native": 50
+          },
+          "segments": {
+            "native": 4451
+          },
+          "vias": {
+            "native": 118
+          },
+          "zones": {
+            "native": 2
+          }
+        },
+        "object_counts": {
+          "arcs": 0,
+          "copper_layers": 2,
+          "differential_pair_rules": 0,
+          "footprints": 29,
+          "keepouts": 0,
+          "length_rules": 0,
+          "net_class_assignments": 45,
+          "net_classes": 1,
+          "nets": 45,
+          "outline": 1,
+          "pads": 105,
+          "segments": 4451,
+          "vias": 118,
+          "zones": 2
+        },
+        "source_bytes": 1069106,
+        "supported": true
+      },
+      "board_revision": "sha256:c5fbcac1d669cc66c4e00e23997af588593d51cb96a57ee0521820f2c0445651",
+      "drc": {
+        "clean": false,
+        "elapsed_ms": 856.1,
+        "error_count": 526,
+        "kicad_version": "10.0.5",
+        "outcome": "reported",
+        "passed": false,
+        "unconnected_count": 8,
+        "violation_type_counts": {
+          "clearance": 299,
+          "copper_edge_clearance": 32,
+          "hole_to_hole": 14,
+          "holes_co_located": 8,
+          "shorting_items": 190,
+          "silk_overlap": 3,
+          "solder_mask_bridge": 5,
+          "unconnected_items": 8
+        },
+        "warning_count": 25
+      },
+      "placement": {
+        "elapsed_ms": 456.1,
+        "refusal_messages": {},
+        "single_subject_latency_ms": {
+          "max": 470.7,
+          "median": 469.1,
+          "samples": 3
+        },
+        "source_preserving_render": {
+          "outcome": "refused",
+          "refusal": "source geometry uses revision-derived identities"
+        },
+        "subjects": 29,
+        "verdicts": {
+          "previewed": 29
+        }
+      },
+      "route": {
+        "appliable_geometry": {
+          "outcome": "refused",
+          "refusal": "modeled KiCad geometry requires native uuid or tstamp identities"
+        },
+        "elapsed_ms": 19178.0,
+        "layer": "F.Cu",
+        "nets_attempted": 40,
+        "nets_total": 45,
+        "per_net_latency_ms": {
+          "max": 888.1,
+          "median": 453.9
+        },
+        "refusal_messages": {
+          "not_routed/invalid_two_pin_net": "the selected net must resolve to exactly two pads on the selected layer",
+          "not_routed/obstacle_budget_exceeded": "the selected-layer obstacle count exceeds the configured obstacle budget",
+          "not_routed/unsupported_geometry": "the selected net already carries a via and is partially routed"
+        },
+        "verdicts": {
+          "already_connected": 30,
+          "not_routed/invalid_two_pin_net": 3,
+          "not_routed/obstacle_budget_exceeded": 6,
+          "not_routed/unsupported_geometry": 1
+        }
+      },
+      "scene": {
+        "bounded": {
+          "elapsed_ms": 464.2,
+          "radius_nm": 5000000,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 7,
+            "request_scoped_count": 1
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 100,
+              "vias": 1,
+              "zones": 2
+            },
+            "static": {
+              "footprints": 4,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 6,
+              "rules": 1
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": null,
+            "objects_omitted": 0,
+            "objects_returned": 115
+          }
+        },
+        "whole_board": {
+          "elapsed_ms": 446.0,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 81,
+            "request_scoped_count": 0
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 1865,
+              "vias": 0,
+              "zones": 0
+            },
+            "static": {
+              "footprints": 29,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 105,
+              "rules": 0
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": "max_scene_objects",
+            "objects_omitted": 2707,
+            "objects_returned": 2000
+          }
+        }
+      }
+    },
+    {
+      "board": "mixer/schematics/kicad/cue/cue.kicad_pcb",
+      "board_ir": {
+        "conversion_diagnostic_counts": {
+          "unsupported.construct": 1
+        },
+        "elapsed_ms": 134.7,
+        "first_diagnostic": {
+          "code": "unsupported.construct",
+          "message": "root expression contains an unsupported semantic construct"
+        },
+        "object_counts": {},
+        "source_bytes": 926639,
+        "supported": false
+      },
+      "board_revision": "sha256:75d8b60a8fbc9b30b17b736bc4e136f5da6fe364e457049ca7a0f37f7b2daf46",
+      "drc": {
+        "clean": false,
+        "elapsed_ms": 763.8,
+        "error_count": 210,
+        "kicad_version": "10.0.5",
+        "outcome": "reported",
+        "passed": false,
+        "unconnected_count": 110,
+        "violation_type_counts": {
+          "clearance": 13,
+          "copper_edge_clearance": 20,
+          "courtyards_overlap": 60,
+          "holes_co_located": 1,
+          "isolated_copper": 11,
+          "lib_footprint_issues": 5,
+          "npth_inside_courtyard": 6,
+          "pth_inside_courtyard": 3,
+          "shorting_items": 52,
+          "silk_edge_clearance": 15,
+          "silk_over_copper": 195,
+          "silk_overlap": 197,
+          "solder_mask_bridge": 56,
+          "track_dangling": 5,
+          "unconnected_items": 110
+        },
+        "warning_count": 429
+      },
+      "placement": {
+        "outcome": "not_attempted",
+        "reason": "board does not convert"
+      },
+      "route": {
+        "outcome": "not_attempted",
+        "reason": "board does not convert"
+      },
+      "scene": {
+        "outcome": "not_attempted",
+        "reason": "board does not convert"
+      }
+    },
+    {
+      "board": "mixer/schematics/kicad/fdr/fdr.kicad_pcb",
+      "board_ir": {
+        "conversion_diagnostic_counts": {},
+        "elapsed_ms": 20.4,
+        "identity_mix": {
+          "footprints": {
+            "native": 17
+          },
+          "outline": {
+            "derived": 1
+          },
+          "pads": {
+            "native": 32
+          },
+          "segments": {
+            "native": 34
+          },
+          "vias": {
+            "native": 1
+          },
+          "zones": {
+            "native": 1
+          }
+        },
+        "object_counts": {
+          "arcs": 0,
+          "copper_layers": 2,
+          "differential_pair_rules": 0,
+          "footprints": 17,
+          "keepouts": 0,
+          "length_rules": 0,
+          "net_class_assignments": 10,
+          "net_classes": 1,
+          "nets": 10,
+          "outline": 1,
+          "pads": 32,
+          "segments": 34,
+          "vias": 1,
+          "zones": 1
+        },
+        "source_bytes": 102188,
+        "supported": true
+      },
+      "board_revision": "sha256:702128476ae6408f892a68a58eba2f6bd8fb547922a696415c1ad253639de76d",
+      "drc": {
+        "clean": false,
+        "elapsed_ms": 611.9,
+        "error_count": 0,
+        "kicad_version": "10.0.5",
+        "outcome": "reported",
+        "passed": true,
+        "unconnected_count": 0,
+        "violation_type_counts": {
+          "lib_footprint_issues": 4
+        },
+        "warning_count": 4
+      },
+      "placement": {
+        "elapsed_ms": 23.7,
+        "refusal_messages": {},
+        "single_subject_latency_ms": {
+          "max": 25.8,
+          "median": 24.2,
+          "samples": 3
+        },
+        "source_preserving_render": {
+          "outcome": "refused",
+          "refusal": "source geometry uses revision-derived identities"
+        },
+        "subjects": 17,
+        "verdicts": {
+          "previewed": 17
+        }
+      },
+      "route": {
+        "appliable_geometry": {
+          "outcome": "refused",
+          "refusal": "modeled KiCad geometry requires native uuid or tstamp identities"
+        },
+        "elapsed_ms": 212.0,
+        "layer": "F.Cu",
+        "nets_attempted": 10,
+        "nets_total": 10,
+        "per_net_latency_ms": {
+          "max": 23.2,
+          "median": 20.9
+        },
+        "refusal_messages": {
+          "not_routed/invalid_two_pin_net": "the selected net must resolve to exactly two pads on the selected layer"
+        },
+        "verdicts": {
+          "already_connected": 9,
+          "not_routed/invalid_two_pin_net": 1
+        }
+      },
+      "scene": {
+        "bounded": {
+          "elapsed_ms": 20.1,
+          "radius_nm": 5000000,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 1,
+            "request_scoped_count": 1
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 3,
+              "vias": 0,
+              "zones": 1
+            },
+            "static": {
+              "footprints": 2,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 2,
+              "rules": 1
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": null,
+            "objects_omitted": 0,
+            "objects_returned": 10
+          }
+        },
+        "whole_board": {
+          "elapsed_ms": 20.2,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 1,
+            "request_scoped_count": 1
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 34,
+              "vias": 1,
+              "zones": 1
+            },
+            "static": {
+              "footprints": 17,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 32,
+              "rules": 1
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": null,
+            "objects_omitted": 0,
+            "objects_returned": 87
+          }
+        }
+      }
+    },
+    {
+      "board": "mixer/schematics/kicad/in/in.kicad_pcb",
+      "board_ir": {
+        "conversion_diagnostic_counts": {},
+        "elapsed_ms": 844.1,
+        "identity_mix": {
+          "footprints": {
+            "derived": 58,
+            "native": 6
+          },
+          "outline": {
+            "derived": 1
+          },
+          "pads": {
+            "derived": 167,
+            "native": 43
+          },
+          "segments": {
+            "native": 7289
+          },
+          "vias": {
+            "native": 196
+          },
+          "zones": {
+            "native": 5
+          }
+        },
+        "object_counts": {
+          "arcs": 0,
+          "copper_layers": 4,
+          "differential_pair_rules": 0,
+          "footprints": 64,
+          "keepouts": 0,
+          "length_rules": 0,
+          "net_class_assignments": 48,
+          "net_classes": 1,
+          "nets": 48,
+          "outline": 1,
+          "pads": 210,
+          "segments": 7289,
+          "vias": 196,
+          "zones": 5
+        },
+        "source_bytes": 2431170,
+        "supported": true
+      },
+      "board_revision": "sha256:565710bb479b52ef5af9b5556a1c9d480296ae14bcf29e591918bebed8771e30",
+      "drc": {
+        "clean": false,
+        "elapsed_ms": 952.4,
+        "error_count": 1007,
+        "kicad_version": "10.0.5",
+        "outcome": "reported",
+        "passed": false,
+        "unconnected_count": 19,
+        "violation_type_counts": {
+          "clearance": 501,
+          "copper_edge_clearance": 97,
+          "hole_clearance": 199,
+          "hole_to_hole": 9,
+          "holes_co_located": 27,
+          "isolated_copper": 28,
+          "shorting_items": 199,
+          "silk_over_copper": 30,
+          "silk_overlap": 4,
+          "solder_mask_bridge": 7,
+          "tracks_crossing": 4,
+          "unconnected_items": 19,
+          "via_dangling": 4
+        },
+        "warning_count": 102
+      },
+      "placement": {
+        "elapsed_ms": 917.8,
+        "refusal_messages": {},
+        "single_subject_latency_ms": {
+          "max": 929.8,
+          "median": 929.0,
+          "samples": 3
+        },
+        "source_preserving_render": {
+          "outcome": "refused",
+          "refusal": "source geometry uses revision-derived identities"
+        },
+        "subjects": 64,
+        "verdicts": {
+          "previewed": 64
+        }
+      },
+      "route": {
+        "appliable_geometry": {
+          "outcome": "refused",
+          "refusal": "modeled KiCad geometry requires native uuid or tstamp identities"
+        },
+        "elapsed_ms": 35795.8,
+        "layer": "F.Cu",
+        "nets_attempted": 40,
+        "nets_total": 48,
+        "per_net_latency_ms": {
+          "max": 929.9,
+          "median": 892.0
+        },
+        "refusal_messages": {
+          "not_routed/invalid_two_pin_net": "the selected net must resolve to exactly two pads on the selected layer",
+          "not_routed/obstacle_budget_exceeded": "the same-net connectivity model exceeds the configured obstacle budget"
+        },
+        "verdicts": {
+          "already_connected": 27,
+          "not_routed/invalid_two_pin_net": 3,
+          "not_routed/obstacle_budget_exceeded": 10
+        }
+      },
+      "scene": {
+        "bounded": {
+          "elapsed_ms": 850.9,
+          "radius_nm": 5000000,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 12,
+            "request_scoped_count": 1
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 472,
+              "vias": 13,
+              "zones": 3
+            },
+            "static": {
+              "footprints": 5,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 9,
+              "rules": 1
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": null,
+            "objects_omitted": 0,
+            "objects_returned": 504
+          }
+        },
+        "whole_board": {
+          "elapsed_ms": 874.2,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 226,
+            "request_scoped_count": 0
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 1725,
+              "vias": 0,
+              "zones": 0
+            },
+            "static": {
+              "footprints": 64,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 210,
+              "rules": 0
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": "max_scene_objects",
+            "objects_omitted": 5766,
+            "objects_returned": 2000
+          }
+        }
+      }
+    },
+    {
+      "board": "mixer/schematics/kicad/iso/iso.kicad_pcb",
+      "board_ir": {
+        "conversion_diagnostic_counts": {},
+        "elapsed_ms": 1492.3,
+        "identity_mix": {
+          "footprints": {
+            "derived": 137,
+            "native": 5
+          },
+          "outline": {
+            "derived": 1
+          },
+          "pads": {
+            "derived": 367,
+            "native": 32
+          },
+          "segments": {
+            "native": 12697
+          },
+          "vias": {
+            "native": 447
+          },
+          "zones": {
+            "native": 5
+          }
+        },
+        "object_counts": {
+          "arcs": 0,
+          "copper_layers": 4,
+          "differential_pair_rules": 0,
+          "footprints": 142,
+          "keepouts": 0,
+          "length_rules": 0,
+          "net_class_assignments": 86,
+          "net_classes": 1,
+          "nets": 86,
+          "outline": 1,
+          "pads": 399,
+          "segments": 12697,
+          "vias": 447,
+          "zones": 5
+        },
+        "source_bytes": 4194661,
+        "supported": true
+      },
+      "board_revision": "sha256:68a164472dca987ebc9c9b1e6da58901530372697621735c9c39b05c2892b046",
+      "drc": {
+        "clean": false,
+        "elapsed_ms": 1173.7,
+        "error_count": 988,
+        "kicad_version": "10.0.5",
+        "outcome": "reported",
+        "passed": false,
+        "unconnected_count": 6,
+        "violation_type_counts": {
+          "clearance": 503,
+          "copper_edge_clearance": 62,
+          "hole_clearance": 199,
+          "hole_to_hole": 56,
+          "isolated_copper": 11,
+          "shorting_items": 199,
+          "silk_over_copper": 103,
+          "silk_overlap": 66,
+          "solder_mask_bridge": 20,
+          "starved_thermal": 1,
+          "tracks_crossing": 4,
+          "unconnected_items": 6,
+          "via_dangling": 4
+        },
+        "warning_count": 240
+      },
+      "placement": {
+        "elapsed_ms": 5073.9,
+        "refusal_messages": {},
+        "single_subject_latency_ms": {
+          "max": 1713.8,
+          "median": 1708.1,
+          "samples": 3
+        },
+        "source_preserving_render": {
+          "outcome": "refused",
+          "refusal": "source geometry uses revision-derived identities"
+        },
+        "subjects": 142,
+        "verdicts": {
+          "previewed": 142
+        }
+      },
+      "route": {
+        "appliable_geometry": {
+          "outcome": "refused",
+          "refusal": "modeled KiCad geometry requires native uuid or tstamp identities"
+        },
+        "elapsed_ms": 63657.8,
+        "layer": "F.Cu",
+        "nets_attempted": 40,
+        "nets_total": 86,
+        "per_net_latency_ms": {
+          "max": 1626.5,
+          "median": 1592.2
+        },
+        "refusal_messages": {
+          "not_routed/invalid_two_pin_net": "the selected net must resolve to exactly two pads on the selected layer",
+          "not_routed/obstacle_budget_exceeded": "the same-net connectivity model exceeds the configured obstacle budget"
+        },
+        "verdicts": {
+          "already_connected": 33,
+          "not_routed/invalid_two_pin_net": 2,
+          "not_routed/obstacle_budget_exceeded": 5
+        }
+      },
+      "scene": {
+        "bounded": {
+          "elapsed_ms": 1593.9,
+          "radius_nm": 5000000,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 40,
+            "request_scoped_count": 1
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 540,
+              "vias": 20,
+              "zones": 4
+            },
+            "static": {
+              "footprints": 13,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 26,
+              "rules": 1
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": null,
+            "objects_omitted": 0,
+            "objects_returned": 605
+          }
+        },
+        "whole_board": {
+          "elapsed_ms": 1526.5,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 505,
+            "request_scoped_count": 0
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 1458,
+              "vias": 0,
+              "zones": 0
+            },
+            "static": {
+              "footprints": 142,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 399,
+              "rules": 0
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": "max_scene_objects",
+            "objects_omitted": 11692,
+            "objects_returned": 2000
+          }
+        }
+      }
+    },
+    {
+      "board": "mixer/schematics/kicad/mtr/mtr.kicad_pcb",
+      "board_ir": {
+        "conversion_diagnostic_counts": {},
+        "elapsed_ms": 36.3,
+        "identity_mix": {
+          "footprints": {
+            "native": 31
+          },
+          "outline": {
+            "derived": 1
+          },
+          "pads": {
+            "native": 71
+          },
+          "segments": {
+            "native": 80
+          },
+          "vias": {
+            "native": 7
+          },
+          "zones": {
+            "native": 1
+          }
+        },
+        "object_counts": {
+          "arcs": 0,
+          "copper_layers": 2,
+          "differential_pair_rules": 0,
+          "footprints": 31,
+          "keepouts": 0,
+          "length_rules": 0,
+          "net_class_assignments": 15,
+          "net_classes": 1,
+          "nets": 15,
+          "outline": 1,
+          "pads": 71,
+          "segments": 80,
+          "vias": 7,
+          "zones": 1
+        },
+        "source_bytes": 163766,
+        "supported": true
+      },
+      "board_revision": "sha256:aef7589b04c7353e2a61dee488218d77c17e3acf229259e44d039f46ac7ed51f",
+      "drc": {
+        "clean": false,
+        "elapsed_ms": 621.9,
+        "error_count": 0,
+        "kicad_version": "10.0.5",
+        "outcome": "reported",
+        "passed": true,
+        "unconnected_count": 0,
+        "violation_type_counts": {
+          "lib_footprint_issues": 4
+        },
+        "warning_count": 4
+      },
+      "placement": {
+        "elapsed_ms": 58.6,
+        "refusal_messages": {},
+        "single_subject_latency_ms": {
+          "max": 62.5,
+          "median": 58.4,
+          "samples": 3
+        },
+        "source_preserving_render": {
+          "outcome": "refused",
+          "refusal": "source geometry uses revision-derived identities"
+        },
+        "subjects": 31,
+        "verdicts": {
+          "previewed": 31
+        }
+      },
+      "route": {
+        "appliable_geometry": {
+          "outcome": "refused",
+          "refusal": "modeled KiCad geometry requires native uuid or tstamp identities"
+        },
+        "elapsed_ms": 598.2,
+        "layer": "F.Cu",
+        "nets_attempted": 15,
+        "nets_total": 15,
+        "per_net_latency_ms": {
+          "max": 42.8,
+          "median": 39.3
+        },
+        "refusal_messages": {
+          "not_routed/invalid_two_pin_net": "the selected net must resolve to exactly two pads on the selected layer"
+        },
+        "verdicts": {
+          "already_connected": 14,
+          "not_routed/invalid_two_pin_net": 1
+        }
+      },
+      "scene": {
+        "bounded": {
+          "elapsed_ms": 37.0,
+          "radius_nm": 5000000,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 1,
+            "request_scoped_count": 1
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 25,
+              "vias": 2,
+              "zones": 1
+            },
+            "static": {
+              "footprints": 7,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 18,
+              "rules": 1
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": null,
+            "objects_omitted": 0,
+            "objects_returned": 55
+          }
+        },
+        "whole_board": {
+          "elapsed_ms": 37.0,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 1,
+            "request_scoped_count": 1
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 80,
+              "vias": 7,
+              "zones": 1
+            },
+            "static": {
+              "footprints": 31,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 71,
+              "rules": 1
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": null,
+            "objects_omitted": 0,
+            "objects_returned": 192
+          }
+        }
+      }
+    },
+    {
+      "board": "mixer/schematics/kicad/out/out.kicad_pcb",
+      "board_ir": {
+        "conversion_diagnostic_counts": {},
+        "elapsed_ms": 1142.1,
+        "identity_mix": {
+          "footprints": {
+            "derived": 81,
+            "native": 3
+          },
+          "outline": {
+            "derived": 1
+          },
+          "pads": {
+            "derived": 268,
+            "native": 17
+          },
+          "segments": {
+            "native": 9758
+          },
+          "vias": {
+            "native": 317
+          },
+          "zones": {
+            "native": 5
+          }
+        },
+        "object_counts": {
+          "arcs": 0,
+          "copper_layers": 4,
+          "differential_pair_rules": 0,
+          "footprints": 84,
+          "keepouts": 0,
+          "length_rules": 0,
+          "net_class_assignments": 65,
+          "net_classes": 1,
+          "nets": 65,
+          "outline": 1,
+          "pads": 285,
+          "segments": 9758,
+          "vias": 317,
+          "zones": 5
+        },
+        "source_bytes": 3367512,
+        "supported": true
+      },
+      "board_revision": "sha256:67d4e0855886f789fc746fbb3ffe6685956ed29ee2ef7a429ce8dab127a47021",
+      "drc": {
+        "clean": false,
+        "elapsed_ms": 1065.0,
+        "error_count": 882,
+        "kicad_version": "10.0.5",
+        "outcome": "reported",
+        "passed": false,
+        "unconnected_count": 18,
+        "violation_type_counts": {
+          "clearance": 501,
+          "copper_edge_clearance": 4,
+          "hole_clearance": 117,
+          "hole_to_hole": 34,
+          "isolated_copper": 6,
+          "shorting_items": 199,
+          "silk_over_copper": 73,
+          "silk_overlap": 39,
+          "solder_mask_bridge": 59,
+          "tracks_crossing": 2,
+          "unconnected_items": 18,
+          "via_dangling": 3
+        },
+        "warning_count": 155
+      },
+      "placement": {
+        "elapsed_ms": 2534.7,
+        "refusal_messages": {},
+        "single_subject_latency_ms": {
+          "max": 1259.2,
+          "median": 1257.4,
+          "samples": 3
+        },
+        "source_preserving_render": {
+          "outcome": "refused",
+          "refusal": "source geometry uses revision-derived identities"
+        },
+        "subjects": 84,
+        "verdicts": {
+          "previewed": 84
+        }
+      },
+      "route": {
+        "appliable_geometry": {
+          "outcome": "refused",
+          "refusal": "modeled KiCad geometry requires native uuid or tstamp identities"
+        },
+        "elapsed_ms": 48157.4,
+        "layer": "F.Cu",
+        "nets_attempted": 40,
+        "nets_total": 65,
+        "per_net_latency_ms": {
+          "max": 1251.0,
+          "median": 1200.0
+        },
+        "refusal_messages": {
+          "not_routed/invalid_two_pin_net": "the selected net must resolve to exactly two pads on the selected layer",
+          "not_routed/obstacle_budget_exceeded": "the same-net connectivity model exceeds the configured obstacle budget"
+        },
+        "verdicts": {
+          "already_connected": 31,
+          "not_routed/invalid_two_pin_net": 2,
+          "not_routed/obstacle_budget_exceeded": 7
+        }
+      },
+      "scene": {
+        "bounded": {
+          "elapsed_ms": 1176.7,
+          "radius_nm": 5000000,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 15,
+            "request_scoped_count": 1
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 279,
+              "vias": 14,
+              "zones": 4
+            },
+            "static": {
+              "footprints": 6,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 8,
+              "rules": 1
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": null,
+            "objects_omitted": 0,
+            "objects_returned": 313
+          }
+        },
+        "whole_board": {
+          "elapsed_ms": 1165.9,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 350,
+            "request_scoped_count": 0
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 1630,
+              "vias": 0,
+              "zones": 0
+            },
+            "static": {
+              "footprints": 84,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 285,
+              "rules": 0
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": "max_scene_objects",
+            "objects_omitted": 8451,
+            "objects_returned": 2000
+          }
+        }
+      }
+    },
+    {
+      "board": "mixer/schematics/kicad/ph/ph.kicad_pcb",
+      "board_ir": {
+        "conversion_diagnostic_counts": {},
+        "elapsed_ms": 1530.9,
+        "identity_mix": {
+          "footprints": {
+            "derived": 155,
+            "native": 1
+          },
+          "outline": {
+            "derived": 1
+          },
+          "pads": {
+            "derived": 403,
+            "native": 3
+          },
+          "segments": {
+            "native": 13072
+          },
+          "vias": {
+            "native": 473
+          },
+          "zones": {
+            "native": 5
+          }
+        },
+        "object_counts": {
+          "arcs": 0,
+          "copper_layers": 4,
+          "differential_pair_rules": 0,
+          "footprints": 156,
+          "keepouts": 0,
+          "length_rules": 0,
+          "net_class_assignments": 80,
+          "net_classes": 1,
+          "nets": 80,
+          "outline": 1,
+          "pads": 406,
+          "segments": 13072,
+          "vias": 473,
+          "zones": 5
+        },
+        "source_bytes": 4366628,
+        "supported": true
+      },
+      "board_revision": "sha256:fd532fbaf013a8f69a0f3f82fa49879b5b5e4234e3ce3b4a5e8124496268ba25",
+      "drc": {
+        "clean": false,
+        "elapsed_ms": 1188.1,
+        "error_count": 1125,
+        "kicad_version": "10.0.5",
+        "outcome": "reported",
+        "passed": false,
+        "unconnected_count": 18,
+        "violation_type_counts": {
+          "clearance": 499,
+          "copper_edge_clearance": 147,
+          "hole_clearance": 200,
+          "hole_to_hole": 34,
+          "isolated_copper": 3,
+          "shorting_items": 200,
+          "silk_over_copper": 137,
+          "silk_overlap": 106,
+          "solder_mask_bridge": 78,
+          "tracks_crossing": 1,
+          "unconnected_items": 18,
+          "via_dangling": 15
+        },
+        "warning_count": 295
+      },
+      "placement": {
+        "elapsed_ms": 5331.9,
+        "refusal_messages": {},
+        "single_subject_latency_ms": {
+          "max": 1810.5,
+          "median": 1775.1,
+          "samples": 3
+        },
+        "source_preserving_render": {
+          "outcome": "refused",
+          "refusal": "source geometry uses revision-derived identities"
+        },
+        "subjects": 156,
+        "verdicts": {
+          "previewed": 156
+        }
+      },
+      "route": {
+        "appliable_geometry": {
+          "outcome": "refused",
+          "refusal": "modeled KiCad geometry requires native uuid or tstamp identities"
+        },
+        "elapsed_ms": 69187.2,
+        "layer": "F.Cu",
+        "nets_attempted": 40,
+        "nets_total": 80,
+        "per_net_latency_ms": {
+          "max": 2760.6,
+          "median": 1650.8
+        },
+        "refusal_messages": {
+          "not_routed/invalid_two_pin_net": "the selected net must resolve to exactly two pads on the selected layer",
+          "not_routed/obstacle_budget_exceeded": "the same-net connectivity model exceeds the configured obstacle budget"
+        },
+        "verdicts": {
+          "already_connected": 34,
+          "not_routed/invalid_two_pin_net": 2,
+          "not_routed/obstacle_budget_exceeded": 4
+        }
+      },
+      "scene": {
+        "bounded": {
+          "elapsed_ms": 1623.1,
+          "radius_nm": 5000000,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 34,
+            "request_scoped_count": 1
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 424,
+              "vias": 17,
+              "zones": 3
+            },
+            "static": {
+              "footprints": 11,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 22,
+              "rules": 1
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": null,
+            "objects_omitted": 0,
+            "objects_returned": 479
+          }
+        },
+        "whole_board": {
+          "elapsed_ms": 1643.6,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 559,
+            "request_scoped_count": 0
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 1437,
+              "vias": 0,
+              "zones": 0
+            },
+            "static": {
+              "footprints": 156,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 406,
+              "rules": 0
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": "max_scene_objects",
+            "objects_omitted": 12114,
+            "objects_returned": 2000
+          }
+        }
+      }
+    },
+    {
+      "board": "mixer/schematics/kicad/pwr/pwr.kicad_pcb",
+      "board_ir": {
+        "conversion_diagnostic_counts": {},
+        "elapsed_ms": 887.6,
+        "identity_mix": {
+          "footprints": {
+            "derived": 110,
+            "native": 3
+          },
+          "outline": {
+            "derived": 1
+          },
+          "pads": {
+            "derived": 320,
+            "native": 10
+          },
+          "segments": {
+            "native": 6344
+          },
+          "vias": {
+            "native": 126
+          },
+          "zones": {
+            "native": 5
+          }
+        },
+        "object_counts": {
+          "arcs": 0,
+          "copper_layers": 4,
+          "differential_pair_rules": 0,
+          "footprints": 113,
+          "keepouts": 0,
+          "length_rules": 0,
+          "net_class_assignments": 64,
+          "net_classes": 1,
+          "nets": 64,
+          "outline": 1,
+          "pads": 330,
+          "segments": 6344,
+          "vias": 126,
+          "zones": 5
+        },
+        "source_bytes": 2948224,
+        "supported": true
+      },
+      "board_revision": "sha256:dd13acebed7f03f7ade1bbd49adc1b35f81e987601d835b3bd985ebbc499a411",
+      "drc": {
+        "clean": false,
+        "elapsed_ms": 999.0,
+        "error_count": 718,
+        "kicad_version": "10.0.5",
+        "outcome": "reported",
+        "passed": false,
+        "unconnected_count": 28,
+        "violation_type_counts": {
+          "clearance": 499,
+          "hole_clearance": 17,
+          "hole_to_hole": 9,
+          "isolated_copper": 40,
+          "shorting_items": 199,
+          "silk_overlap": 60,
+          "tracks_crossing": 3,
+          "unconnected_items": 28,
+          "via_dangling": 15
+        },
+        "warning_count": 124
+      },
+      "placement": {
+        "elapsed_ms": 2051.7,
+        "refusal_messages": {},
+        "single_subject_latency_ms": {
+          "max": 1024.2,
+          "median": 1022.3,
+          "samples": 3
+        },
+        "source_preserving_render": {
+          "outcome": "refused",
+          "refusal": "source geometry uses revision-derived identities"
+        },
+        "subjects": 113,
+        "verdicts": {
+          "previewed": 113
+        }
+      },
+      "route": {
+        "appliable_geometry": {
+          "outcome": "refused",
+          "refusal": "modeled KiCad geometry requires native uuid or tstamp identities"
+        },
+        "elapsed_ms": 39343.7,
+        "layer": "F.Cu",
+        "nets_attempted": 40,
+        "nets_total": 64,
+        "per_net_latency_ms": {
+          "max": 1745.4,
+          "median": 966.4
+        },
+        "refusal_messages": {
+          "not_routed/invalid_two_pin_net": "the selected net must resolve to exactly two pads on the selected layer",
+          "not_routed/obstacle_budget_exceeded": "the same-net connectivity model exceeds the configured obstacle budget"
+        },
+        "verdicts": {
+          "already_connected": 31,
+          "not_routed/invalid_two_pin_net": 3,
+          "not_routed/obstacle_budget_exceeded": 6
+        }
+      },
+      "scene": {
+        "bounded": {
+          "elapsed_ms": 904.0,
+          "radius_nm": 5000000,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 26,
+            "request_scoped_count": 1
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 271,
+              "vias": 3,
+              "zones": 4
+            },
+            "static": {
+              "footprints": 8,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 17,
+              "rules": 1
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": null,
+            "objects_omitted": 0,
+            "objects_returned": 305
+          }
+        },
+        "whole_board": {
+          "elapsed_ms": 907.0,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 431,
+            "request_scoped_count": 0
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 1556,
+              "vias": 0,
+              "zones": 0
+            },
+            "static": {
+              "footprints": 113,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 330,
+              "rules": 0
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": "max_scene_objects",
+            "objects_omitted": 4920,
+            "objects_returned": 2000
+          }
+        }
+      }
+    },
+    {
+      "board": "mixer/schematics/kicad/sum/sum.kicad_pcb",
+      "board_ir": {
+        "conversion_diagnostic_counts": {},
+        "elapsed_ms": 1831.6,
+        "identity_mix": {
+          "footprints": {
+            "derived": 148,
+            "native": 5
+          },
+          "outline": {
+            "derived": 1
+          },
+          "pads": {
+            "derived": 412,
+            "native": 21
+          },
+          "segments": {
+            "native": 14906
+          },
+          "vias": {
+            "native": 516
+          },
+          "zones": {
+            "native": 5
+          }
+        },
+        "object_counts": {
+          "arcs": 0,
+          "copper_layers": 4,
+          "differential_pair_rules": 0,
+          "footprints": 153,
+          "keepouts": 0,
+          "length_rules": 0,
+          "net_class_assignments": 92,
+          "net_classes": 1,
+          "nets": 92,
+          "outline": 1,
+          "pads": 433,
+          "segments": 14906,
+          "vias": 516,
+          "zones": 5
+        },
+        "source_bytes": 4873297,
+        "supported": true
+      },
+      "board_revision": "sha256:19380cdb109ccc6a75f02933f57ed23a5f9e9778ea6a2e13cef9666f17fc927b",
+      "drc": {
+        "clean": false,
+        "elapsed_ms": 1388.1,
+        "error_count": 988,
+        "kicad_version": "10.0.5",
+        "outcome": "reported",
+        "passed": false,
+        "unconnected_count": 11,
+        "violation_type_counts": {
+          "clearance": 501,
+          "copper_edge_clearance": 4,
+          "hole_clearance": 200,
+          "hole_to_hole": 68,
+          "holes_co_located": 38,
+          "isolated_copper": 3,
+          "shorting_items": 200,
+          "silk_over_copper": 51,
+          "silk_overlap": 46,
+          "solder_mask_bridge": 80,
+          "tracks_crossing": 3,
+          "unconnected_items": 11,
+          "via_dangling": 3
+        },
+        "warning_count": 209
+      },
+      "placement": {
+        "elapsed_ms": 6092.5,
+        "refusal_messages": {},
+        "single_subject_latency_ms": {
+          "max": 2173.4,
+          "median": 2146.2,
+          "samples": 3
+        },
+        "source_preserving_render": {
+          "outcome": "refused",
+          "refusal": "source geometry uses revision-derived identities"
+        },
+        "subjects": 153,
+        "verdicts": {
+          "previewed": 153
+        }
+      },
+      "route": {
+        "appliable_geometry": {
+          "outcome": "refused",
+          "refusal": "modeled KiCad geometry requires native uuid or tstamp identities"
+        },
+        "elapsed_ms": 78229.8,
+        "layer": "F.Cu",
+        "nets_attempted": 40,
+        "nets_total": 92,
+        "per_net_latency_ms": {
+          "max": 2091.0,
+          "median": 1952.8
+        },
+        "refusal_messages": {
+          "not_routed/invalid_two_pin_net": "the selected net must resolve to exactly two pads on the selected layer",
+          "not_routed/obstacle_budget_exceeded": "the same-net connectivity model exceeds the configured obstacle budget"
+        },
+        "verdicts": {
+          "already_connected": 26,
+          "not_routed/invalid_two_pin_net": 3,
+          "not_routed/obstacle_budget_exceeded": 11
+        }
+      },
+      "scene": {
+        "bounded": {
+          "elapsed_ms": 1847.7,
+          "radius_nm": 5000000,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 40,
+            "request_scoped_count": 1
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 464,
+              "vias": 10,
+              "zones": 3
+            },
+            "static": {
+              "footprints": 15,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 24,
+              "rules": 1
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": null,
+            "objects_omitted": 0,
+            "objects_returned": 518
+          }
+        },
+        "whole_board": {
+          "elapsed_ms": 1868.8,
+          "ref_stability": {
+            "all_board_refs_native": false,
+            "content_derived_count": 561,
+            "request_scoped_count": 0
+          },
+          "returned": {
+            "mutable": {
+              "arcs": 0,
+              "segments": 1413,
+              "vias": 0,
+              "zones": 0
+            },
+            "static": {
+              "footprints": 153,
+              "keepouts": 0,
+              "outline": 1,
+              "pads": 433,
+              "rules": 0
+            }
+          },
+          "supported": true,
+          "truncation": {
+            "annotations_omitted": 0,
+            "annotations_returned": 0,
+            "ceiling_hit": "max_scene_objects",
+            "objects_omitted": 14015,
+            "objects_returned": 2000
+          }
+        }
+      }
+    },
+    {
+      "board": "phono-preamp/pcb/tier1-rev-a/tier1-rev-a.kicad_pcb",
+      "board_ir": {
+        "conversion_diagnostic_counts": {
+          "unsupported.construct": 1
+        },
+        "elapsed_ms": 671.1,
+        "first_diagnostic": {
+          "code": "unsupported.construct",
+          "message": "net-tie footprint copper is unsupported in Board IR adapter v0.2"
+        },
+        "object_counts": {},
+        "source_bytes": 4386848,
+        "supported": false
+      },
+      "board_revision": "sha256:423e52dcaa6e356181a73dd486c4f943cf0752e45dfaa867612281e7a582bca7",
+      "drc": {
+        "clean": false,
+        "elapsed_ms": 1352.3,
+        "error_count": 0,
+        "kicad_version": "10.0.5",
+        "outcome": "reported",
+        "passed": true,
+        "unconnected_count": 0,
+        "violation_type_counts": {
+          "silk_edge_clearance": 6,
+          "silk_over_copper": 17,
+          "silk_overlap": 14
+        },
+        "warning_count": 37
+      },
+      "placement": {
+        "outcome": "not_attempted",
+        "reason": "board does not convert"
+      },
+      "route": {
+        "outcome": "not_attempted",
+        "reason": "board does not convert"
+      },
+      "scene": {
+        "outcome": "not_attempted",
+        "reason": "board does not convert"
+      }
+    }
+  ],
+  "commit": "086f6cda91fdd6b071acd4ec661d3a4732e43200",
+  "configuration": {
+    "allow_apply": false,
+    "allow_live_apply": false,
+    "allow_live_ipc": false,
+    "bounded_region_radius_nm": 5000000,
+    "constraints": {
+      "clearance_nm": 200000,
+      "track_width_nm": 250000,
+      "via_diameter_nm": 600000,
+      "via_drill_nm": 300000
+    },
+    "max_nets_per_board": 40,
+    "placement_batch": 64,
+    "placement_latency_samples": 3,
+    "route_layer": "F.Cu",
+    "settings_defaults_otherwise": true
+  },
+  "corpus": {
+    "boards": 12,
+    "excluded": [
+      ".history/ directories",
+      "routed-source",
+      "best-board",
+      "-placed"
+    ],
+    "kind": "private working design tree; not redistributable and not committed"
+  },
+  "dirty": true,
+  "environment": {
+    "accelerator": "none (CPU-only)",
+    "machine": "arm64",
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "not_claimed": [
+    "no electrical, thermal, signal-integrity, manufacturing or fabrication claim",
+    "no board was written, applied to, or opened in a live editor",
+    "route preview was run on F.Cu only and on one net at a time against the unrouted snapshot, so the candidates are not mutually compatible and this is not a whole-board completion result",
+    "placement preview was run without rules, so a clean verdict means legal-as-found and not a placement-quality result",
+    "the corpus is one designer's project family, not a random sample of KiCad boards"
+  ],
+  "recorded_at_utc": "2026-08-07T14:23:18+00:00",
+  "run_id": "sha256:95ded9d5e685b788eafe5959f8b19f9e74652ad144cddc0fbca8d0b2b2c11285",
+  "runner_digest": "sha256:fd975e7386d0f473382d2732ff10d3c1ad806d196fb7862c5c280adea94694e3",
+  "scope": "What five read-only CopperMCP surfaces do, per board, on a private real-board corpus at default settings. Conversion counts are the baseline; the measurement is what the surfaces built on conversion produce.",
+  "totals": {
+    "boards_converting": 10,
+    "boards_measured": 12,
+    "drc_clean": 0,
+    "drc_passed": 3,
+    "drc_reported": 12,
+    "placement_source_preserving_render": {
+      "refused": 10
+    },
+    "placement_verdicts": {
+      "previewed": 991
+    },
+    "route_appliable_geometry": {
+      "refused": 10
+    },
+    "route_verdicts": {
+      "already_connected": 250,
+      "not_routed/invalid_two_pin_net": 23,
+      "not_routed/obstacle_budget_exceeded": 71,
+      "not_routed/unsupported_geometry": 1
+    },
+    "scene_whole_board_ceiling": {
+      "max_scene_objects": 8,
+      "none": 2
+    }
+  },
+  "wall_clock_s": 692.8
+}
