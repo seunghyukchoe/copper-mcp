@@ -3,7 +3,8 @@
 - Status: Accepted
 - Date: 2026-08-08
 - Owners: `@seunghyukchoe`
-- Related: ADR-0051, ADR-0078, ADR-0079, D-173, B-088, B-098, R-130, SEC-130, issue #128, issue #112
+- Related: ADR-0011, ADR-0012, ADR-0016, ADR-0051, ADR-0078, ADR-0079, D-173, B-088, B-098, R-130,
+  SEC-130, issue #128, issue #112
 
 ## Context
 
@@ -83,6 +84,12 @@ fixture behaves exactly as before.
 
 **`ROUTER_VERSION` advances to `astar-grid/0.7.0`.** The layered router keeps its own budgets and is
 untouched.
+
+This supersedes one sentence in each of three earlier records, which stay immutable. ADR-0011 said
+every obstacle counts against `max_obstacles`, and that still holds for foreign copper but now only
+within the region. ADR-0016 said attachment copper counts against `max_obstacles`; it counts against
+`max_net_objects`. ADR-0012 closed by noting that `max_obstacles` "needs revisiting before
+multi-net" — this is that revisit.
 
 ## Consequences
 

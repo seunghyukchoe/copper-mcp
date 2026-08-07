@@ -28,7 +28,7 @@
       "max_obstacle_checks": 2000000,
       "max_obstacles": 2048
     },
-    "router_version": "astar-grid/0.6.0",
+    "router_version": "astar-grid/0.7.0",
     "routing_policy": "orthogonal-a-star-spatial-index-v1",
     "runner_sha256": "sha256:8fb5d05fb60a75b66e4720b3aa3ba9e0b28dbd8c3377ac159a239adbc4795fed",
     "seed": 0
@@ -84,7 +84,7 @@
             "bends": 1,
             "board": "ts02_voltage_divider",
             "board_revision": "sha256:0f4da15c21b8b313048c3380e96bded7b54d77f28f9269d83a88b135e3f86a6d",
-            "candidate_digest": "cf2fee08b9deda5fc7f67b4b755bca0d96c9b2b0a2161dbb0d29a831dc7cf9ce",
+            "candidate_digest": "162cce328da0ec666180fb42faad5d6e035303e898cee3d75e68df95fb7fb50c",
             "document_sha256": "fed0121c186d732ce20bfd0065a17be35f5a9a7d82042d57f022a147f018fe22",
             "grid_steps_nm": {
               "250000": 1
@@ -117,7 +117,7 @@
             "bends": 1,
             "board": "ts03_rc_filter",
             "board_revision": "sha256:a77a0fcb88ba5c845c22294225c091fd7f5c62fc4b1733a5d978a74db715c72b",
-            "candidate_digest": "8b691679ef2f5cd89e2df9384a9dbfea5421957a7a804706f2a527c5726db25d",
+            "candidate_digest": "6a94a9ca331420affe3e77a4611dd1e206044e956d3000a248be82779b5850cc",
             "document_sha256": "f5597407c8b506a3bbb1dd53e7908995373c6f76ce7e9828b59867a02f1d79c9",
             "grid_steps_nm": {
               "250000": 1
@@ -150,7 +150,7 @@
             "bends": 1,
             "board": "ts04_dual_led",
             "board_revision": "sha256:51bb8a4aca188fbb0bfef12abe64a89cf30b87eefb244fc501560a1e41d2552b",
-            "candidate_digest": "77eb461e75d62f9fe82b92f4f57c66d26fe57ac15cf114719b5af1156d663e10",
+            "candidate_digest": "750f791637d85d6aabe6099b74c0b41f9f20b7ba674a4b94421d30bd111f5456",
             "document_sha256": "777bccf69ee7d16d0b3da1c90841cf4589d7904e2d5ef38e0e82c139c6d6016d",
             "grid_steps_nm": {
               "250000": 2
@@ -183,7 +183,7 @@
             "bends": 2,
             "board": "ts05_npn_switch",
             "board_revision": "sha256:df89ec800dce22d815831650457012369a0095dd426c4167345f855dc4bbb7e6",
-            "candidate_digest": "9842501adc896e18929cc394ad69906fc1955454bf6e94e8d199c44426b27359",
+            "candidate_digest": "232f44bc695aa0652083e2aef8e570ef04fd6b0f7b31c4aa1f5e39396b3bfc9d",
             "document_sha256": "fe84c51a53238d12654a649f50bcad91da38962be439cdab90bf14429d25ad4e",
             "grid_steps_nm": {
               "250000": 1
@@ -216,7 +216,7 @@
             "bends": 5,
             "board": "ts06_push_pull",
             "board_revision": "sha256:8f7de3f90572a23f908179f53acdb208da120c3ae0c0bb237a29b12c14f4e453",
-            "candidate_digest": "b0472f909dabd0d9edbbbbbd6dc7f5d7e23afb25021a47a3c06d68a4ebcb8cf3",
+            "candidate_digest": "1b4a84b57334038b2a1bf019258505273d9e0473b83fbf98344f98a790148f10",
             "document_sha256": "1cd6bfc5227e0fff4166305b463215deb447d332b43644443391c60fc59d116d",
             "grid_steps_nm": {
               "1000": 2,
@@ -252,7 +252,7 @@
             "bends": 6,
             "board": "ts07_differential_pair",
             "board_revision": "sha256:9c62c6de2dfc7ec93db20c66cc1239add6c0568b72e08b04825bd6f1e6df2333",
-            "candidate_digest": "48d87685dfe23d6f5c4ca77b3157693799b1fc92606bd2eb63c72fd6e1ad24b2",
+            "candidate_digest": "7d884ab47f5f3eed94b2d3e623bb06610bcfce3f496724ad94906752f1e85f7a",
             "document_sha256": "59df862d485b8857e101cfc5ee6ffb57b4b1d773a91d20e2917d13dba4438c04",
             "grid_steps_nm": {
               "1000": 1,
@@ -287,7 +287,7 @@
             "bends": 11,
             "board": "ts08_inverting_amp",
             "board_revision": "sha256:cfac066e0622e5dd6d5924f4634626518f8bfe992f9b0e661b9348310a9f861e",
-            "candidate_digest": "6b1a502a56dc893ffc877dd2d4cc5c6665f251aa003edbf5a7f56ee8a64caf8b",
+            "candidate_digest": "353c8f09e256cace7535f487ddb7fab10d95bc7ab2118cc8d6626b2d9fe5bc84",
             "document_sha256": "203cbc6c93620a84a9211250653eefe3fc6fdf730a1b385d199b454d8524e1a4",
             "grid_steps_nm": {
               "250000": 4
@@ -308,7 +308,7 @@
               "routable_net_count": 4
             },
             "outcomes": {
-              "refused:no_path": 1,
+              "refused:no_path_in_region": 1,
               "routed": 3
             },
             "routed_pad_gap_lower_bound_nm": 53503000,
@@ -321,7 +321,7 @@
             "bends": 14,
             "board": "ts09_active_filter",
             "board_revision": "sha256:f72fb52b3557e96a91fa659a98e3f603f549ef275a7bbd0b326ba263c76b1ebe",
-            "candidate_digest": "1bbd47f1460876a5e6d07967dc23db2849a2e244d16b8a0671b2152a8fbd80ab",
+            "candidate_digest": "999b2cac757d6f91812f1e98b5cd5546bf9bdf360d6149bd4ffc9f4993d536d2",
             "document_sha256": "98bd691ef17f4d9938b770842af9f689d9f61e737de66aac23a73e3c6ed98a93",
             "grid_steps_nm": {
               "250000": 5
@@ -354,7 +354,7 @@
             "bends": 11,
             "board": "ts10_wheatstone_bridge",
             "board_revision": "sha256:65c1d8c1f0f91ad7cbdf9b1a772eb26aa94e9fab5893972c12f0792ae61da51d",
-            "candidate_digest": "f55af7e23bedcfe3e1f89a86383b2ba89c8de87c22809833336057d718ea8cdf",
+            "candidate_digest": "6e01ad925314e3b69a0f684ea370618f220025f96c51fedce15837847f9cdfaa",
             "document_sha256": "ec66069bcc93e7f23912c2ef484f78f34e300922c952011422d8a4c422bdf9c8",
             "grid_steps_nm": {
               "250000": 4
@@ -387,7 +387,7 @@
             "bends": 34,
             "board": "ts11_generated",
             "board_revision": "sha256:bf39bd24a6a8943fd674123335c6182690aef18aa779fd9e9cc2b7f3cd231e94",
-            "candidate_digest": "054feecf7be3f7f746ac55c8f9e673e99f4918b2b545c77b30649cfa4a0eacec",
+            "candidate_digest": "a7a4148f1ac4b2004cf68c0550c91b4805ce88bba56f95c1f4aac47278277091",
             "document_sha256": "cf3a4d551e9407809163c4c68645ddd0c262e6e2dc06a36a73e35292e5bd12d3",
             "grid_steps_nm": {
               "250000": 9
@@ -420,7 +420,7 @@
             "bends": 17,
             "board": "ts12_generated",
             "board_revision": "sha256:a1b37587790a905821f67012c6471d575eade684ba599e5d4357a2f3588ff36f",
-            "candidate_digest": "b32055fb9aad66b05452b6224bc352eff1cc59f224cd8601b2d6911738b0e012",
+            "candidate_digest": "0fd417aadf67407ee142de62790d38a9c614c18e7e9412df065bcce86883c447",
             "document_sha256": "463a0fa657d898b651e5bbd60c5e75dcbc3919b292ea4be270960d003f22b7c6",
             "grid_steps_nm": {
               "250000": 5
@@ -453,7 +453,7 @@
             "bends": 11,
             "board": "ts13_555_blinker",
             "board_revision": "sha256:f432c1bbb6c0879c37ae143758dfe84d2968e949c6bf12f4451467b944344da3",
-            "candidate_digest": "e76d7ee1f9dbad50ee30195b58829bea8e6ce85308efbaf50972fb82cdb4ece1",
+            "candidate_digest": "d225d77ff43951654a9bed2bc74eb4a51565118ef11ae416db0d72e0a829fea0",
             "document_sha256": "db32b0e87b1cd2c81d85bc8c2e9a0e8cf4a80adc57c630d79bb03e2e268e4313",
             "grid_steps_nm": {
               "1000": 3,
@@ -490,7 +490,7 @@
             "bends": 7,
             "board": "ts14_usb_power",
             "board_revision": "sha256:6406f4aebfa6977b560b1660a91ec159527a5a86fcf403cbd5895e35ff8a049b",
-            "candidate_digest": "64f53f74d475cc1e3bffe74a652be00a3b51531a5087b07c2386c61cbfe696e7",
+            "candidate_digest": "9b34b10716dadc3a6de1bd7db730d7172d419dd8437b9455b2c0f9fa54c5d79a",
             "document_sha256": "f0238a8e5ad50a9e8ac445f7d8453e344f3900853c4e26b679a7415a22233fbe",
             "grid_steps_nm": {
               "1000": 3,
@@ -526,7 +526,7 @@
             "bends": 17,
             "board": "ts15_i2c_sensor",
             "board_revision": "sha256:749286b39833a4f3bae156badf487804075db8f4b7f6f2981b5020995918b5bc",
-            "candidate_digest": "68c10e2a0329af1c3717a599bee708ffa1fa59f61054ec308d878151b85461c7",
+            "candidate_digest": "14a462451a10c806f595c61ff783076cd5a77efefe65d065c2f4ce77600f735b",
             "document_sha256": "c0f1281931e18798dcd938a03d56444385619ddc7a7931fd382b140ca765bdd6",
             "grid_steps_nm": {
               "250000": 4
@@ -559,7 +559,7 @@
             "bends": 8,
             "board": "ts16_h_bridge",
             "board_revision": "sha256:9fdde77eba04dc65c5b730585868ac717412462f00136855e09b5a0bac92dba0",
-            "candidate_digest": "5d6539ca747c96b7858ee6b3ffb982fdeea8a0f112f233bddda1502fe8bbad00",
+            "candidate_digest": "f76808cd5a5d2980d7fbd25cefaac0214002407dd66eccfbd767e23369eb1c26",
             "document_sha256": "16354c08f72034b552ef3c432922c98c909571fb1ba13c675867025fb904b45d",
             "grid_steps_nm": {
               "250000": 3
@@ -581,7 +581,7 @@
             },
             "outcomes": {
               "no_routing_work": 9,
-              "refused:no_path": 1,
+              "refused:no_path_in_region": 1,
               "routed": 2
             },
             "routed_pad_gap_lower_bound_nm": 39694000,
@@ -594,7 +594,7 @@
             "bends": 7,
             "board": "ts17_attiny_minimal",
             "board_revision": "sha256:cd945be5570cbd3a88a1ff91842906efe66327e6d572a38543b30cd83fe82627",
-            "candidate_digest": "a32c239ba5a1746337a5a378d94995406134978adbc28e178a712b3d217a837e",
+            "candidate_digest": "6bdd4ce523e310ec22e90df821fc9cb01b3bb54570c3ffbf0647c17219e7a59b",
             "document_sha256": "397d16aea8572fd81cc6e0d969f7aed882835823532182e0d4b51b02fe3c2f35",
             "grid_steps_nm": {
               "1000": 3,
@@ -616,7 +616,8 @@
               "routable_net_count": 8
             },
             "outcomes": {
-              "refused:no_path": 3,
+              "refused:no_path": 1,
+              "refused:no_path_in_region": 2,
               "refused:off_grid": 3,
               "routed": 2
             },
@@ -630,7 +631,7 @@
             "bends": 27,
             "board": "ts18_dual_reg",
             "board_revision": "sha256:edb7cc93024a59cb90b286624b2a0eb7eadca5cffb8d21fc69c7a2167e06b63d",
-            "candidate_digest": "86ff629ebeafc58064deadbab2ed17459b1d2e8536157a64c2bdebc359f740b9",
+            "candidate_digest": "6a7cd5c905c887457945127fefe3945c995a5b34c23182ffa51e4f413d103715",
             "document_sha256": "b21648856f604934592c3e42d3adc274780f57eb7ac9e7e2118f491751a6b2e9",
             "grid_steps_nm": {
               "1000": 7,
@@ -665,7 +666,7 @@
             "bends": 22,
             "board": "ts19_adc_breakout",
             "board_revision": "sha256:15cee1bb09b0ddcdcbd084aeb100fd55eb9aaf3987334e698a1c15f5507a8685",
-            "candidate_digest": "c56ad897563146dad6a7e535552f802c7bd563abed4f5c90ab105847e9ec0c9f",
+            "candidate_digest": "9216e2d3e799e4585eb9223277b60944a6a04fa4fe0797050d1ca102c3f82ae2",
             "document_sha256": "16b73b6de39a4662ddd348fa8cc7d5b56820582fc85387b2adf14ae57bb87600",
             "grid_steps_nm": {
               "10000": 1,
@@ -688,7 +689,7 @@
             },
             "outcomes": {
               "refused:grid_budget_exceeded": 1,
-              "refused:no_path": 3,
+              "refused:no_path_in_region": 3,
               "routed": 5
             },
             "routed_pad_gap_lower_bound_nm": 109914000,
@@ -701,7 +702,7 @@
             "bends": 33,
             "board": "ts20_esp32_wifi",
             "board_revision": "sha256:8cf5d3fb67e0c4a9339df3a682e950af01ab73f5fb60acac6450f1e1404348e3",
-            "candidate_digest": "7a1f829c1790330f4c5a71757325e7c541679652a28b4417b3261f12b1ae4c72",
+            "candidate_digest": "dd662569b636dd5a0298cd0841b0225ca370ed2e6a4b288ed12c3f4556345ab8",
             "document_sha256": "94d1251ee0e7f4812ab2b58b46f5e6bf81a90b49aa0b225aff0ce84b0bac2fe0",
             "grid_steps_nm": {
               "1000": 12,
@@ -726,7 +727,7 @@
             },
             "outcomes": {
               "refused:grid_budget_exceeded": 4,
-              "refused:no_path": 2,
+              "refused:no_path_in_region": 2,
               "refused:off_grid": 10,
               "routed": 7
             },
@@ -750,7 +751,8 @@
         "outcome_breakdown": {
           "no_routing_work": 9,
           "refused:grid_budget_exceeded": 21,
-          "refused:no_path": 11,
+          "refused:no_path": 2,
+          "refused:no_path_in_region": 9,
           "refused:off_grid": 15,
           "routed": 70
         },
@@ -796,7 +798,7 @@
             "bends": 1,
             "board": "ts02_voltage_divider",
             "board_revision": "sha256:0f4da15c21b8b313048c3380e96bded7b54d77f28f9269d83a88b135e3f86a6d",
-            "candidate_digest": "cf2fee08b9deda5fc7f67b4b755bca0d96c9b2b0a2161dbb0d29a831dc7cf9ce",
+            "candidate_digest": "162cce328da0ec666180fb42faad5d6e035303e898cee3d75e68df95fb7fb50c",
             "document_sha256": "fed0121c186d732ce20bfd0065a17be35f5a9a7d82042d57f022a147f018fe22",
             "grid_steps_nm": {
               "250000": 1
@@ -829,7 +831,7 @@
             "bends": 1,
             "board": "ts03_rc_filter",
             "board_revision": "sha256:a77a0fcb88ba5c845c22294225c091fd7f5c62fc4b1733a5d978a74db715c72b",
-            "candidate_digest": "8b691679ef2f5cd89e2df9384a9dbfea5421957a7a804706f2a527c5726db25d",
+            "candidate_digest": "6a94a9ca331420affe3e77a4611dd1e206044e956d3000a248be82779b5850cc",
             "document_sha256": "f5597407c8b506a3bbb1dd53e7908995373c6f76ce7e9828b59867a02f1d79c9",
             "grid_steps_nm": {
               "250000": 1
@@ -862,7 +864,7 @@
             "bends": 1,
             "board": "ts04_dual_led",
             "board_revision": "sha256:51bb8a4aca188fbb0bfef12abe64a89cf30b87eefb244fc501560a1e41d2552b",
-            "candidate_digest": "77eb461e75d62f9fe82b92f4f57c66d26fe57ac15cf114719b5af1156d663e10",
+            "candidate_digest": "750f791637d85d6aabe6099b74c0b41f9f20b7ba674a4b94421d30bd111f5456",
             "document_sha256": "777bccf69ee7d16d0b3da1c90841cf4589d7904e2d5ef38e0e82c139c6d6016d",
             "grid_steps_nm": {
               "250000": 2
@@ -895,7 +897,7 @@
             "bends": 2,
             "board": "ts05_npn_switch",
             "board_revision": "sha256:df89ec800dce22d815831650457012369a0095dd426c4167345f855dc4bbb7e6",
-            "candidate_digest": "9842501adc896e18929cc394ad69906fc1955454bf6e94e8d199c44426b27359",
+            "candidate_digest": "232f44bc695aa0652083e2aef8e570ef04fd6b0f7b31c4aa1f5e39396b3bfc9d",
             "document_sha256": "fe84c51a53238d12654a649f50bcad91da38962be439cdab90bf14429d25ad4e",
             "grid_steps_nm": {
               "250000": 1
@@ -928,7 +930,7 @@
             "bends": 5,
             "board": "ts06_push_pull",
             "board_revision": "sha256:8f7de3f90572a23f908179f53acdb208da120c3ae0c0bb237a29b12c14f4e453",
-            "candidate_digest": "b0472f909dabd0d9edbbbbbd6dc7f5d7e23afb25021a47a3c06d68a4ebcb8cf3",
+            "candidate_digest": "1b4a84b57334038b2a1bf019258505273d9e0473b83fbf98344f98a790148f10",
             "document_sha256": "1cd6bfc5227e0fff4166305b463215deb447d332b43644443391c60fc59d116d",
             "grid_steps_nm": {
               "250000": 6
@@ -962,7 +964,7 @@
             "bends": 6,
             "board": "ts07_differential_pair",
             "board_revision": "sha256:9c62c6de2dfc7ec93db20c66cc1239add6c0568b72e08b04825bd6f1e6df2333",
-            "candidate_digest": "48d87685dfe23d6f5c4ca77b3157693799b1fc92606bd2eb63c72fd6e1ad24b2",
+            "candidate_digest": "7d884ab47f5f3eed94b2d3e623bb06610bcfce3f496724ad94906752f1e85f7a",
             "document_sha256": "59df862d485b8857e101cfc5ee6ffb57b4b1d773a91d20e2917d13dba4438c04",
             "grid_steps_nm": {
               "250000": 5
@@ -996,7 +998,7 @@
             "bends": 11,
             "board": "ts08_inverting_amp",
             "board_revision": "sha256:cfac066e0622e5dd6d5924f4634626518f8bfe992f9b0e661b9348310a9f861e",
-            "candidate_digest": "6b1a502a56dc893ffc877dd2d4cc5c6665f251aa003edbf5a7f56ee8a64caf8b",
+            "candidate_digest": "353c8f09e256cace7535f487ddb7fab10d95bc7ab2118cc8d6626b2d9fe5bc84",
             "document_sha256": "203cbc6c93620a84a9211250653eefe3fc6fdf730a1b385d199b454d8524e1a4",
             "grid_steps_nm": {
               "250000": 4
@@ -1017,7 +1019,7 @@
               "routable_net_count": 4
             },
             "outcomes": {
-              "refused:no_path": 1,
+              "refused:no_path_in_region": 1,
               "routed": 3
             },
             "routed_pad_gap_lower_bound_nm": 53503000,
@@ -1030,7 +1032,7 @@
             "bends": 14,
             "board": "ts09_active_filter",
             "board_revision": "sha256:f72fb52b3557e96a91fa659a98e3f603f549ef275a7bbd0b326ba263c76b1ebe",
-            "candidate_digest": "1bbd47f1460876a5e6d07967dc23db2849a2e244d16b8a0671b2152a8fbd80ab",
+            "candidate_digest": "999b2cac757d6f91812f1e98b5cd5546bf9bdf360d6149bd4ffc9f4993d536d2",
             "document_sha256": "98bd691ef17f4d9938b770842af9f689d9f61e737de66aac23a73e3c6ed98a93",
             "grid_steps_nm": {
               "250000": 5
@@ -1063,7 +1065,7 @@
             "bends": 11,
             "board": "ts10_wheatstone_bridge",
             "board_revision": "sha256:65c1d8c1f0f91ad7cbdf9b1a772eb26aa94e9fab5893972c12f0792ae61da51d",
-            "candidate_digest": "f55af7e23bedcfe3e1f89a86383b2ba89c8de87c22809833336057d718ea8cdf",
+            "candidate_digest": "6e01ad925314e3b69a0f684ea370618f220025f96c51fedce15837847f9cdfaa",
             "document_sha256": "ec66069bcc93e7f23912c2ef484f78f34e300922c952011422d8a4c422bdf9c8",
             "grid_steps_nm": {
               "250000": 4
@@ -1096,7 +1098,7 @@
             "bends": 34,
             "board": "ts11_generated",
             "board_revision": "sha256:bf39bd24a6a8943fd674123335c6182690aef18aa779fd9e9cc2b7f3cd231e94",
-            "candidate_digest": "054feecf7be3f7f746ac55c8f9e673e99f4918b2b545c77b30649cfa4a0eacec",
+            "candidate_digest": "a7a4148f1ac4b2004cf68c0550c91b4805ce88bba56f95c1f4aac47278277091",
             "document_sha256": "cf3a4d551e9407809163c4c68645ddd0c262e6e2dc06a36a73e35292e5bd12d3",
             "grid_steps_nm": {
               "250000": 9
@@ -1129,7 +1131,7 @@
             "bends": 17,
             "board": "ts12_generated",
             "board_revision": "sha256:a1b37587790a905821f67012c6471d575eade684ba599e5d4357a2f3588ff36f",
-            "candidate_digest": "b32055fb9aad66b05452b6224bc352eff1cc59f224cd8601b2d6911738b0e012",
+            "candidate_digest": "0fd417aadf67407ee142de62790d38a9c614c18e7e9412df065bcce86883c447",
             "document_sha256": "463a0fa657d898b651e5bbd60c5e75dcbc3919b292ea4be270960d003f22b7c6",
             "grid_steps_nm": {
               "250000": 5
@@ -1162,7 +1164,7 @@
             "bends": 11,
             "board": "ts13_555_blinker",
             "board_revision": "sha256:f432c1bbb6c0879c37ae143758dfe84d2968e949c6bf12f4451467b944344da3",
-            "candidate_digest": "e76d7ee1f9dbad50ee30195b58829bea8e6ce85308efbaf50972fb82cdb4ece1",
+            "candidate_digest": "d225d77ff43951654a9bed2bc74eb4a51565118ef11ae416db0d72e0a829fea0",
             "document_sha256": "db32b0e87b1cd2c81d85bc8c2e9a0e8cf4a80adc57c630d79bb03e2e268e4313",
             "grid_steps_nm": {
               "250000": 8
@@ -1196,7 +1198,7 @@
             "bends": 7,
             "board": "ts14_usb_power",
             "board_revision": "sha256:6406f4aebfa6977b560b1660a91ec159527a5a86fcf403cbd5895e35ff8a049b",
-            "candidate_digest": "64f53f74d475cc1e3bffe74a652be00a3b51531a5087b07c2386c61cbfe696e7",
+            "candidate_digest": "9b34b10716dadc3a6de1bd7db730d7172d419dd8437b9455b2c0f9fa54c5d79a",
             "document_sha256": "f0238a8e5ad50a9e8ac445f7d8453e344f3900853c4e26b679a7415a22233fbe",
             "grid_steps_nm": {
               "250000": 6
@@ -1231,7 +1233,7 @@
             "bends": 17,
             "board": "ts15_i2c_sensor",
             "board_revision": "sha256:749286b39833a4f3bae156badf487804075db8f4b7f6f2981b5020995918b5bc",
-            "candidate_digest": "68c10e2a0329af1c3717a599bee708ffa1fa59f61054ec308d878151b85461c7",
+            "candidate_digest": "14a462451a10c806f595c61ff783076cd5a77efefe65d065c2f4ce77600f735b",
             "document_sha256": "c0f1281931e18798dcd938a03d56444385619ddc7a7931fd382b140ca765bdd6",
             "grid_steps_nm": {
               "250000": 4
@@ -1264,7 +1266,7 @@
             "bends": 8,
             "board": "ts16_h_bridge",
             "board_revision": "sha256:9fdde77eba04dc65c5b730585868ac717412462f00136855e09b5a0bac92dba0",
-            "candidate_digest": "5d6539ca747c96b7858ee6b3ffb982fdeea8a0f112f233bddda1502fe8bbad00",
+            "candidate_digest": "f76808cd5a5d2980d7fbd25cefaac0214002407dd66eccfbd767e23369eb1c26",
             "document_sha256": "16354c08f72034b552ef3c432922c98c909571fb1ba13c675867025fb904b45d",
             "grid_steps_nm": {
               "250000": 3
@@ -1286,7 +1288,7 @@
             },
             "outcomes": {
               "no_routing_work": 9,
-              "refused:no_path": 1,
+              "refused:no_path_in_region": 1,
               "routed": 2
             },
             "routed_pad_gap_lower_bound_nm": 39694000,
@@ -1299,7 +1301,7 @@
             "bends": 7,
             "board": "ts17_attiny_minimal",
             "board_revision": "sha256:cd945be5570cbd3a88a1ff91842906efe66327e6d572a38543b30cd83fe82627",
-            "candidate_digest": "a32c239ba5a1746337a5a378d94995406134978adbc28e178a712b3d217a837e",
+            "candidate_digest": "6bdd4ce523e310ec22e90df821fc9cb01b3bb54570c3ffbf0647c17219e7a59b",
             "document_sha256": "397d16aea8572fd81cc6e0d969f7aed882835823532182e0d4b51b02fe3c2f35",
             "grid_steps_nm": {
               "250000": 8
@@ -1320,7 +1322,8 @@
               "routable_net_count": 8
             },
             "outcomes": {
-              "refused:no_path": 3,
+              "refused:no_path": 1,
+              "refused:no_path_in_region": 2,
               "refused:off_grid": 3,
               "routed": 2
             },
@@ -1334,7 +1337,7 @@
             "bends": 27,
             "board": "ts18_dual_reg",
             "board_revision": "sha256:edb7cc93024a59cb90b286624b2a0eb7eadca5cffb8d21fc69c7a2167e06b63d",
-            "candidate_digest": "86ff629ebeafc58064deadbab2ed17459b1d2e8536157a64c2bdebc359f740b9",
+            "candidate_digest": "6a7cd5c905c887457945127fefe3945c995a5b34c23182ffa51e4f413d103715",
             "document_sha256": "b21648856f604934592c3e42d3adc274780f57eb7ac9e7e2118f491751a6b2e9",
             "grid_steps_nm": {
               "250000": 13
@@ -1368,7 +1371,7 @@
             "bends": 22,
             "board": "ts19_adc_breakout",
             "board_revision": "sha256:15cee1bb09b0ddcdcbd084aeb100fd55eb9aaf3987334e698a1c15f5507a8685",
-            "candidate_digest": "c56ad897563146dad6a7e535552f802c7bd563abed4f5c90ab105847e9ec0c9f",
+            "candidate_digest": "9216e2d3e799e4585eb9223277b60944a6a04fa4fe0797050d1ca102c3f82ae2",
             "document_sha256": "16b73b6de39a4662ddd348fa8cc7d5b56820582fc85387b2adf14ae57bb87600",
             "grid_steps_nm": {
               "250000": 9
@@ -1389,7 +1392,7 @@
               "routable_net_count": 9
             },
             "outcomes": {
-              "refused:no_path": 3,
+              "refused:no_path_in_region": 3,
               "refused:off_grid": 1,
               "routed": 5
             },
@@ -1403,7 +1406,7 @@
             "bends": 33,
             "board": "ts20_esp32_wifi",
             "board_revision": "sha256:8cf5d3fb67e0c4a9339df3a682e950af01ab73f5fb60acac6450f1e1404348e3",
-            "candidate_digest": "7a1f829c1790330f4c5a71757325e7c541679652a28b4417b3261f12b1ae4c72",
+            "candidate_digest": "dd662569b636dd5a0298cd0841b0225ca370ed2e6a4b288ed12c3f4556345ab8",
             "document_sha256": "94d1251ee0e7f4812ab2b58b46f5e6bf81a90b49aa0b225aff0ce84b0bac2fe0",
             "grid_steps_nm": {
               "250000": 23
@@ -1424,7 +1427,7 @@
               "routable_net_count": 23
             },
             "outcomes": {
-              "refused:no_path": 2,
+              "refused:no_path_in_region": 2,
               "refused:off_grid": 14,
               "routed": 7
             },
@@ -1447,7 +1450,8 @@
         "nets_routed": 70,
         "outcome_breakdown": {
           "no_routing_work": 9,
-          "refused:no_path": 11,
+          "refused:no_path": 2,
+          "refused:no_path_in_region": 9,
           "refused:off_grid": 36,
           "routed": 70
         },
@@ -1479,13 +1483,13 @@
     "that the committed 20-board subset represents the full 36-board corpus",
     "routing optimality: the recorded ratio is against a loose provable lower bound, not against an optimal route"
   ],
-  "run_id": "sha256:feb4924accf3a657780957623f87a995caa04ee8af823d4f4da526319ff3e12a",
+  "run_id": "sha256:facf95ee9770ffab8c1bc403a32a403e55ca79f2c56d1eabc6679eb6ec4dfca3",
   "schema": "copper-mcp/benchmark/simple-route-json-corpus/v1",
-  "source_commit": "40889bdef6b4370a15e1cbea8fe19ed8c8478ca7",
+  "source_commit": "7a868623d4f88e51bda3621c3acf0594d41f813e",
   "timing": {
     "mean_wall_seconds": {
-      "divisor-aligned": 3.427,
-      "fixed": 3.461
+      "divisor-aligned": 3.274,
+      "fixed": 3.283
     },
     "repetitions": 3
   }

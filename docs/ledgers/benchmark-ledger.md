@@ -372,6 +372,16 @@ result or a general performance comparison.
 | Claim | **None.** The artifact classifies itself `exploratory sweep / no quality claim`. The sweep was not predeclared, the fixtures are small and synthetic, and there is no held-out corpus. Qu et al. measured 1.95% relative deviation in rule violations but 0.008% in wirelength across 300 random net orders on a real benchmark, so the 29% wirelength swing seen here from ordering alone is evidence about this fixture, not about routing. |
 | Interpretation | This measures that the three declared slots are separable, deterministic, digest-bound, and behaviorally real — including where they are worse than the default. It does not establish that any slot combination should become the default, and it makes no KiCad DRC, electrical, multilayer, via, fabrication, apply, whole-board, scaling, or FreeRouting-parity claim. Via counts are structurally zero because the negotiated coordinator is single-layer by contract. |
 
+
+#### B-087 — region-scoped obstacle model replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:28f2a2d2dcfd4f3eecb2fa1744edd7e936a238dc9fd9be8692df27fa209d11b0` |
+| What changed | The router's default budgets and obstacle model ([ADR-0087](../adr/0087-region-scoped-obstacle-model.md)); harness, fixtures, plan slots and envelope digests are untouched. |
+| Delta | Candidate digests move because a candidate records `ROUTER_VERSION`, the settings it ran under, and its obstacle-check meter. **No plan-slot outcome, iteration count, rip-up count, overflow figure or replay-determinism result moves**, and the fixtures are small enough that each routing region equals its board, so no geometry is affected. |
+| Artifact | Regenerated [`2026-08-06-negotiated-plan-slots.json`](../../benchmarks/results/routing/2026-08-06-negotiated-plan-slots.json), 10 replays, harness commit `7a868623d4f88e51bda3621c3acf0594d41f813e`. |
+| Interpretation | Unchanged from B-087. |
 ### B-095 — Incremental congestion-ledger retention and the bounded rip-up window
 
 | Field | Recorded evidence |
@@ -393,6 +403,16 @@ result or a general performance comparison.
 | Claim | The exact operation counts are the claim and are reproducible on any host. **No quality claim.** The sweep was not predeclared, the synthetic fixtures are small, the corpus boards are real but yield at most 9 candidates each, and there is no held-out corpus. Nothing here argues that `conflict-window-v1` should become the default; `all-nets-v1` stays. |
 | Interpretation | This measures that ledger reconstruction is no longer linear in the retained set, that the two reconstructions are observationally identical, that the spatial index is conservative and order-independent, and that the bounded rip-up window converges where `conflicted-only-v1` does not while making fewer router calls than full rip-up. It does not establish scaling — 32 nets and 2,099 resources is the largest thing measured — nor KiCad DRC, electrical, multilayer, via, fabrication, apply, whole-board, or FreeRouting-parity validity. Via counts are structurally zero because the negotiated coordinator is single-layer by contract. The router's per-request obstacle index is untouched and still rebuilt once per `propose()` call. |
 
+
+#### B-095 — region-scoped obstacle model replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:df8ffe1e2d160a12e96f6145e8c4d3c18bd99c1ca6a0853c06e3eba93308a9d1` |
+| What changed | The router's default budgets and obstacle model ([ADR-0087](../adr/0087-region-scoped-obstacle-model.md)); the incremental ledger, the rip-up window and the harness are untouched. |
+| Delta | Candidate digests and wall-clock medians move; every portable retention, reconstruction and window measurement is unchanged. The fixtures are small enough that each routing region equals its board. |
+| Artifact | Regenerated [`2026-08-06-incremental-spatial-index.json`](../../benchmarks/results/routing/2026-08-06-incremental-spatial-index.json), 16 replays, harness commit `7a868623d4f88e51bda3621c3acf0594d41f813e`. |
+| Interpretation | Unchanged from B-095. |
 ### B-024 — Public layered route-preview contract
 
 | Field | Recorded evidence |
@@ -1057,6 +1077,17 @@ are the audit copies for the original run IDs.
 | Classification | Declined; no integration or improvement claim. |
 | Interpretation | The helper is regression-checked against the original semantic builder and imports no test code. This is benchmark-attribution evidence only; it adds no profile, transaction, public behavior, routing integration, DRC, FreeRouting parity, apply, or board-mutation claim. |
 
+
+#### B-100 — exact local-repair gate settings-shape regeneration
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:ad0bb8ac7960c09289436b3aa4e2dfbcfc6f3302c9810be12f2f49067e8294c7` |
+| Relation | Regenerates B-072's artifact and supersedes nothing in it. A `####` sub-entry cannot be replayed under its own number, so this takes a new one rather than reusing B-072's. |
+| What changed | `AStarSettings` gained `max_net_objects` and `region_margin_nm` ([ADR-0087](../adr/0087-region-scoped-obstacle-model.md)), and this artifact echoes the settings it ran under, so two fields appear and `run_id` moves. |
+| Delta | **None measured.** The gate is still declined, still ten completed replays, still zero overflow, zero rip-ups, zero rejected allocations, and zero local-repair and validator meters. Every recorded quantity is byte-identical; the only diff is the two new settings fields and the resulting `run_id`. |
+| Artifact | Regenerated [`2026-08-05-exact-local-repair-gate-correction-v2.json`](../../benchmarks/results/routing/2026-08-05-exact-local-repair-gate-correction-v2.json). |
+| Interpretation | Unchanged from B-072. Still a declined gate and a benchmark-attribution record; no integration or improvement claim. |
 #### B-073 — exact orthogonal courtyard topology replay
 
 | Field | Recorded evidence |
@@ -1172,6 +1203,17 @@ are the audit copies for the original run IDs.
 | KiCad authority | The project bounded DRC adapter resolved and SHA-256-bound KiCad 10.0.5 before launching its fixed-argument, private-environment execution. It capped report, stdout, and stderr bytes before strict UTF-8/duplicate-key/structure parsing and checked report/exit consistency. The private combined derivative completed with exit `0`, zero errors, and zero unconnected items; source bytes/inode/mtime remained unchanged. |
 | Limits | One two-pin/one-layer/common-grid fixture only. No apply/export/persistence authority, multilayer/via/zone capacity, electrical or fabrication claim, or general-board scaling result. |
 
+
+#### B-099 — route-bundle region-scoped obstacle model regeneration
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:222a11664e9a638c2781e560254dfb4e194899ded2e195e5e52075f3e1de1cf3` |
+| Relation | Regenerates B-079's artifact, following B-080, B-083 and B-085, which each took a new number for the same reason. |
+| What changed | The router's default budgets and obstacle model ([ADR-0087](../adr/0087-region-scoped-obstacle-model.md)). `_bundle_id` digests every `AStarSettings` field, so the bundle identity moves from `sha256:6b54fa782ec45fe3ac919736799fc6dd51506f71b78acc7db15fe2a57f59bd75` to `sha256:38941a989de4725fa4e5be81e163caffa80ad40401e46f06973befce263a9095`, and the emitted KiCad segment UUIDs — derived from that identity — move with it. |
+| Delta | **Both member candidate IDs are unchanged, and so are their vertices, lengths and bend counts**; the rendered board differs only in derived UUIDs. Baseline overflow 1, bundle overflow 0, `overflow_reduction_units` 1, two candidates, one core replay, three physical pair checks — all unchanged. Re-run against local KiCad 10.0.5: exit 0, zero errors, zero unconnected items, `passed` true, against the newly rendered board revision `sha256:34e01e623b88a477822ee189ebfc495d69b391cf5b6449ec33edf3045381d69e`. |
+| Artifact | Regenerated [`2026-08-05-route-bundle-v1.json`](../../benchmarks/results/routing/2026-08-05-route-bundle-v1.json) under CopperMCP `0.6.0`; bound script `sha256:cadb5e760d23d6d742f1f812d67b35fd5e645cba5bb946877ce7bbd5e448b402` (unchanged). |
+| Interpretation | Unchanged from B-079. Bounded composed-bundle evidence on one committed fixture; no apply, no general scaling claim. |
 #### B-080 — route-bundle boundary and DRC-binding correction
 
 | Field | Recorded evidence |
@@ -1241,6 +1283,17 @@ author, and their refusal breakdowns are the result rather than an error path.
 | Mutation sensitivity | The over-approximation invariant is mutation-checked: `tests/test_simple_route_json_import.py` asserts that every mapped obstacle rectangle contains its exact decimal source rectangle, and a second test replaces the low-edge floor with a ceil and asserts the first test's property now fails. Without that pair, the containment assertion could pass merely because the fixtures were exact at nanometre resolution. |
 | Interpretation | This measures the existing single-layer candidate-only router against imported external geometry. It is not a cross-router comparison, not a whole-board completion result (each net is routed independently against the unrouted snapshot, so the candidates are not mutually compatible), and not a KiCad DRC, electrical, thermal, signal-integrity, or fabrication claim. Nothing was applied, exported, or written. It does not generalise beyond LLM-generated 2-layer tscircuit boards, and the committed 20-board prefix is the easier half of an already-narrow corpus. The 1.1711 ratio is against a loose provable lower bound that ignores every obstacle and bend; it is not an optimality claim. |
 
+
+#### B-088 — region-scoped obstacle model replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:facf95ee9770ffab8c1bc403a32a403e55ca79f2c56d1eabc6679eb6ec4dfca3` |
+| What changed | The router's defaults and obstacle model, not the corpus, the adapter, the grid policies, or the request shape ([ADR-0087](../adr/0087-region-scoped-obstacle-model.md), issue #128). The benchmark's own explicit 2,048-obstacle ceiling is unchanged; what changed beneath it is that the model is scoped to a routing region and the search is confined to that region. |
+| Delta | **70 of 117 nets routed (59.83%) under both grid policies — unchanged.** Routed wire length, bend count, via count and the 1.1711 length ratio are unchanged, board by board. The refusal breakdown moves: under both policies, 9 of the 11 `no_path` refusals are now `no_path_in_region`, on 5 boards, because those boards' routing regions are proper subsets of the board and an exhausted search there is not a statement about the board. `off_grid` and `grid_budget_exceeded` counts are unchanged. Ten of twenty per-board candidate digests move, because a candidate records the obstacle-check meter and a scoped model performs fewer checks; **no path geometry changed on any board**. |
+| What it does not change | The negative result stands exactly as recorded: every two-pin net in this corpus still refuses, all 70 routed nets are still multi-pin, and the constraint is still localised to the lattice rather than to the obstacle model. This replay does not test that hypothesis; issue #128's real-board measurement now makes it testable, which is recorded in B-098. |
+| Artifact | Regenerated [`2026-08-06-simple-route-json-corpus-v1.json`](../../benchmarks/results/routing/2026-08-06-simple-route-json-corpus-v1.json), three repetitions, replayed byte-identically; `tests/test_benchmark_simple_route_json_corpus.py` re-runs the corpus and requires `metrics` to match. |
+| Interpretation | Unchanged from B-088. This remains a single-layer candidate-only measurement over LLM-generated 2-layer boards, not a cross-router comparison and not a whole-board completion result. |
 ### B-089 — KiCad 10.0.5 courtyard oracle parity and the cached-courtyard inset
 
 | Field | Recorded evidence |
@@ -1317,3 +1370,18 @@ part of the result rather than an omission from it.
 | Non-claims | No timing or memory claim on other hardware; no claim that the adversarial set is exhaustive; the corpus is not a random sample of KiCad boards in the world. |
 | Records | [D-166](decision-ledger.md), [SEC-123](security-ledger.md), [ADR-0079](../adr/0079-discriminated-configurable-parse-budgets.md) |
 | Records | [D-165](decision-ledger.md), [SEC-123](security-ledger.md), [ADR-0079](../adr/0079-discriminated-configurable-parse-budgets.md) |
+
+### B-098 — Route obstacle-budget calibration and the real-board verdict re-measurement
+
+| Field | Value |
+|---|---|
+| Question | How many objects does the single-layer router actually model per request on real boards, split by the populations one `max_obstacles` budget was charging; what do those distributions imply for a re-derived default; and what does the raised ceiling cost on the largest real board and on adversarial input? |
+| Artifact | [`docs/research/route-obstacle-budget-calibration-v1.md`](../research/route-obstacle-budget-calibration-v1.md). **No board file, and no derivative of one, is committed**: the corpus is the operator's live audio-project tree, read read-only in place, and the note records only aggregate counts and verdicts. |
+| Method | Every `.kicad_pcb` under the tree excluding `.history/`, 11 of 15 convertible; for each, the first 40 named nets in Board IR canonical order on `F.Cu`, clearance 200,000 nm, track width 250,000 nm, seed 7 — 385 previews, the selection fixed before the run and never adjusted by retrying. Object counts per net measured separately from Board IR using the enforcing code's own population definitions. Before and after runs taken back to back against byte-identical sources, with each board's SHA-256 prefix recorded per row; an earlier pair taken hours apart disagreed on three nets because the tree is a live working copy, and was discarded rather than reported. |
+| Measured distribution | Same-net objects across all layers: p50 90, p99 608, max **755**. Same-net selected-layer attachment tracks: p50 72, max 663. Foreign selected-layer objects, whole board: p50 8,554, max **22,244**. Nets whose obstacle model fits 4,096 objects: 103 of 381 whole-board, **273 of 381** scoped to a 10 mm region — scoping is worth a factor of four in the ceiling for equal coverage. |
+| Cost of the raise | Largest real board (31,389 segments), worst of 40 nets: 1.87 s and 45.5 MiB peak traced allocation at the new default; 1.95 s and 45.5 MiB unscoped at the 32,768 ceiling. Peak memory does not move with the budget — it is dominated by the parsed snapshot, and 32,768 inflated rectangles are about 4 MiB. Adversarial board with its whole region packed on a 100 um pitch: 32,000 objects refuse in 0.84 s at the default; 60,000 refuse in 1.52 s at the default and 1.74 s at the ceiling; Board IR's own byte budget refuses the snapshot past roughly 90,000. |
+| Result | Same 385 previews, byte-identical sources, defaults: `routed` 0 → **14**, `already_connected` 263 → 318, `invalid_two_pin_net` 26 → 31, `off_grid` 0 → **8**, `no_path_in_region` 0 → 7, `obstacle_budget_exceeded` 93 → **3**, `no_path` 0 → 1, `unsupported_geometry` 3 → 3. Every net that moved moved out of `obstacle_budget_exceeded`; nothing regressed. 55 of the 93 became `already_connected`, which was always the true answer for a finished board. |
+| Negative result | **The lattice class becomes visible on real boards for the first time, and is not measured here.** Issue #128 recorded that no `off_grid`, `no_path` or `grid_budget_exceeded` refusal appeared anywhere in this corpus, because the obstacle model was exhausted before any lattice question was asked. Eight `off_grid` refusals now appear, on three boards. B-088 localised its own corpus's constraint to the lattice; that hypothesis was untested on real boards and this entry makes it testable rather than testing it. Three nets still exceed 4,096 scoped objects and were not investigated. |
+| Claim | The defaults are derived from this distribution, and the ceiling from a measured cost, not chosen. `max_net_objects` is derived from its own quadratic instead: 1,024 is the next power of two above the observed maximum of 755 and the largest whose pairwise merge stays under a quarter of the default obstacle-check budget, so the object budget is what refuses and the refusal can name it. |
+| Non-claims | Nothing was DRC-checked, applied, or written; `routed` means a bounded search produced an exact orthogonal path under the modelled obstacles. No timing or memory claim on other hardware. The 10 mm region margin is calibrated against one 11-board mixer corpus and does not generalise. Multi-layer routing has its own budgets and is untouched. |
+| Records | [D-173](decision-ledger.md), [R-130](risk-register.md), [SEC-130](security-ledger.md), [ADR-0087](../adr/0087-region-scoped-obstacle-model.md), issue #128 |
