@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 
-from copper_mcp.board_ir.limits import ParseLimits
+from copper_mcp.board_ir.limits import ParseBudget, ParseLimits
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,7 +89,9 @@ def _tokens(
                 if check_deadline is not None and index % _DEADLINE_CHECK_INTERVAL == 0:
                     check_deadline()
                 if len(string_chars) > limits.max_atom_chars:
-                    raise SExprError("budget.exceeded", "string length budget exceeded", start)
+                    raise SExprError(
+                        ParseBudget.ATOM_CHARS.value, "string length budget exceeded", start
+                    )
             if index >= length:
                 raise SExprError("syntax.invalid", "unterminated quoted string", start)
             index += 1
@@ -102,11 +104,11 @@ def _tokens(
                     check_deadline()
             atom_value = text[start:index]
             if len(atom_value) > limits.max_atom_chars:
-                raise SExprError("budget.exceeded", "atom length budget exceeded", start)
+                raise SExprError(ParseBudget.ATOM_CHARS.value, "atom length budget exceeded", start)
             token = Token("atom", atom_value, start)
         token_count += 1
         if token_count > limits.max_tokens:
-            raise SExprError("budget.exceeded", "token budget exceeded", index)
+            raise SExprError(ParseBudget.TOKENS.value, "token budget exceeded", index)
         yield token
 
 
@@ -124,7 +126,7 @@ def parse_sexpr(
 
     limits = limits or ParseLimits()
     if not isinstance(payload, bytes) or len(payload) > limits.max_input_bytes:
-        raise SExprError("budget.exceeded", "input byte budget exceeded", 0)
+        raise SExprError(ParseBudget.INPUT_BYTES.value, "input byte budget exceeded", 0)
     if check_deadline is not None:
         check_deadline()
     try:
@@ -141,7 +143,9 @@ def parse_sexpr(
         target = stack[-1][0] if stack else roots
         if token.kind == "(":
             if len(stack) + 1 > limits.max_depth:
-                raise SExprError("budget.exceeded", "nesting depth budget exceeded", token.offset)
+                raise SExprError(
+                    ParseBudget.DEPTH.value, "nesting depth budget exceeded", token.offset
+                )
             stack.append(([], token.offset))
             continue
         if token.kind == ")":
@@ -162,9 +166,11 @@ def parse_sexpr(
             target.append(QuotedAtom(token.value) if token.kind == "quoted_atom" else token.value)
             nodes += 1
         if len(target) > limits.max_children_per_list:
-            raise SExprError("budget.exceeded", "list child budget exceeded", token.offset)
+            raise SExprError(
+                ParseBudget.CHILDREN_PER_LIST.value, "list child budget exceeded", token.offset
+            )
         if nodes > limits.max_nodes:
-            raise SExprError("budget.exceeded", "node budget exceeded", token.offset)
+            raise SExprError(ParseBudget.NODES.value, "node budget exceeded", token.offset)
     if stack:
         raise SExprError("syntax.invalid", "unterminated list", stack[-1][1])
     if len(roots) != 1 or not isinstance(roots[0], SExpr):

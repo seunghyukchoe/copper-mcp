@@ -20,13 +20,14 @@ from dataclasses import dataclass, replace
 from typing import Any, cast
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
-from copper_mcp.board_ir import NetClass, ParseLimits
+from copper_mcp.board_ir import NetClass
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import (
     KiCadCliError,
     LayeredRouteCandidateDrcEvidence,
     run_layered_route_candidate_drc,
 )
+from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.request_boundary import (
     MAX_JSON_SAFE_INTEGER,
     RequestError,
@@ -369,9 +370,7 @@ def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]
         net_classes=(request.constraints,),
         default_net_class_id=request.constraints.id,
     )
-    limits = replace(
-        ParseLimits(), max_input_bytes=min(ParseLimits().max_input_bytes, settings.max_board_bytes)
-    )
+    limits = parse_limits_for(settings)
     conversion = parse_kicad_bytes(source, profile, limits)
     if conversion.snapshot is None:
         counts = dict(Counter(diagnostic.code for diagnostic in conversion.diagnostics))

@@ -20,7 +20,7 @@ from copper_mcp.adapters.sexpr import (
 )
 from copper_mcp.board_ir.canonical import make_content, make_snapshot
 from copper_mcp.board_ir.diagnostics import ConversionResult, Diagnostic, Severity
-from copper_mcp.board_ir.limits import ParseLimits
+from copper_mcp.board_ir.limits import ParseBudget, ParseLimits
 from copper_mcp.board_ir.types import (
     JSON_SAFE_INTEGER,
     Arc,
@@ -1093,8 +1093,12 @@ class _Converter:
 
         def append(local_points: tuple[PointNM, ...], locator: str) -> None:
             if len(result) + len(circles) >= 64:
+                # A fixed schema ceiling, not an operator budget: the Board IR decoder refuses the
+                # very same 64-courtyard rule under `schema.limit`, and the two paths disagreeing
+                # about the code for one rule was a defect. Every `budget.exceeded.*` code now
+                # names a `ParseLimits` field an operator can actually move; this is not one.
                 self.fail(
-                    "budget.exceeded",
+                    "schema.limit",
                     "footprint courtyard limit exceeded",
                     locator,
                     object_kind="footprint",
@@ -1168,7 +1172,11 @@ class _Converter:
             elif item.head == "fp_circle":
                 if len(result) + len(circles) >= 64:
                     self.fail(
-                        "budget.exceeded",
+                        # The same fixed 64-courtyard schema ceiling the ring path above
+                        # refuses under, and the Board IR decoder enforces. It is not an
+                        # operator budget -- no `ParseLimits` field moves it -- so it keeps
+                        # `schema.limit` rather than a `budget.exceeded.*` code.
+                        "schema.limit",
                         "footprint courtyard limit exceeded",
                         locator,
                         object_kind="footprint",
@@ -1211,7 +1219,7 @@ class _Converter:
         )
         point_expressions = children(points_expression, "xy")
         if len(point_expressions) > self.limits.max_vertices_per_ring + 1:
-            self.fail("budget.exceeded", "ring vertex budget exceeded", locator)
+            self.fail(ParseBudget.VERTICES_PER_RING.value, "ring vertex budget exceeded", locator)
         points: list[PointNM] = []
         for index, point in enumerate(point_expressions):
             values = atoms(point)
@@ -1320,7 +1328,11 @@ class _Converter:
                     break
                 points.append(current)
                 if len(points) > self.limits.max_vertices_per_ring:
-                    self.fail("budget.exceeded", "ring vertex budget exceeded", footprint_locator)
+                    self.fail(
+                        ParseBudget.VERTICES_PER_RING.value,
+                        "ring vertex budget exceeded",
+                        footprint_locator,
+                    )
             self._require_orthogonal_chain(tuple(points), footprint_locator)
             rings.append(tuple(points))
         return tuple(rings)
@@ -1874,7 +1886,7 @@ class _Converter:
         )
         point_expressions = children(points_expression, "xy")
         if len(point_expressions) > self.limits.max_vertices_per_ring:
-            self.fail("budget.exceeded", "ring vertex budget exceeded", locator)
+            self.fail(ParseBudget.VERTICES_PER_RING.value, "ring vertex budget exceeded", locator)
         points: list[PointNM] = []
         for index, point in enumerate(point_expressions):
             values = atoms(point)
@@ -2217,7 +2229,11 @@ class _Converter:
 
         if len(segments) > self.limits.max_vertices_per_ring:
             self.fail(
-                "budget.exceeded",
+                # The outline ring is bounded by the same per-ring vertex budget every other
+                # ring uses, so it refuses under that budget's own code rather than a bare one.
+                # This path landed after the discriminated codes were written, which is exactly
+                # what the no-bare-code invariant test exists to catch.
+                ParseBudget.VERTICES_PER_RING.value,
                 "Edge.Cuts outline segment budget exceeded",
                 "kicad_pcb",
                 object_kind="outline",

@@ -1453,7 +1453,7 @@ def test_streaming_sexpr_reader_stops_before_tokenizing_large_rejected_tail() ->
     finally:
         tracemalloc.stop()
 
-    assert caught.value.code == "budget.exceeded"
+    assert caught.value.code == "budget.exceeded.children_per_list"
     assert peak < 12_000_000
 
 
@@ -1479,21 +1479,23 @@ def test_parser_deadline_checkpoints_while_scanning_a_large_quoted_atom() -> Non
 
 
 @pytest.mark.parametrize(
-    "limits",
+    ("limits", "expected_code"),
     [
-        ParseLimits(max_input_bytes=64),
-        ParseLimits(max_depth=4),
-        ParseLimits(max_tokens=8),
-        ParseLimits(max_nodes=8),
+        (ParseLimits(max_input_bytes=64), "budget.exceeded.input_bytes"),
+        (ParseLimits(max_depth=4), "budget.exceeded.depth"),
+        (ParseLimits(max_tokens=8), "budget.exceeded.tokens"),
+        (ParseLimits(max_nodes=8), "budget.exceeded.nodes"),
     ],
 )
-def test_parser_limits_fail_closed(limits: ParseLimits) -> None:
+def test_parser_limits_fail_closed(limits: ParseLimits, expected_code: str) -> None:
+    """Each budget fails closed *and* says which one it was: an operator has to know the knob."""
+
     source = SUBSET_BOARD.read_bytes()
     result = parse_kicad_bytes(source, constraint_profile(assign_signal=True), limits)
 
     assert result.snapshot is None
     assert len(result.diagnostics) == 1
-    assert result.diagnostics[0].code == "budget.exceeded"
+    assert result.diagnostics[0].code == expected_code
 
 
 # Random untrusted bytes exercise the public fail-closed boundary without timing assertions.
@@ -2265,7 +2267,7 @@ def test_segment_outline_charges_a_segment_budget() -> None:
     )
 
     assert result.snapshot is None
-    assert result.diagnostics[0].code == "budget.exceeded"
+    assert result.diagnostics[0].code == "budget.exceeded.vertices_per_ring"
     assert "Edge.Cuts outline segment budget" in result.diagnostics[0].message
 
 
@@ -2295,7 +2297,10 @@ def test_pathological_segment_outline_hits_a_budget_instead_of_spinning() -> Non
     )
 
     assert result.snapshot is None
-    assert result.diagnostics[0].code == "budget.exceeded"
+    # The test fixes ``max_intersection_tests``, so that budget is the one that binds;
+    # the property being pinned is that a pathological outline is bounded at all, not
+    # which ceiling happens to stop it first.
+    assert result.diagnostics[0].code.startswith("budget.exceeded.")
 
 
 # --- roundrect corner-radius precision (issue #116, ADR-0077) -----------------------------

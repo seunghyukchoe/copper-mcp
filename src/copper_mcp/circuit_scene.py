@@ -16,7 +16,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from math import isqrt
 from typing import Any
 
@@ -40,6 +40,7 @@ from copper_mcp.board_ir import (
 from copper_mcp.config import Settings
 from copper_mcp.kicad_ipc import capture_live_board
 from copper_mcp.models import SCHEMA_VERSION
+from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.request_boundary import (
     CONSTRAINT_FIELDS,
     MAX_JSON_SAFE_INTEGER,
@@ -891,11 +892,7 @@ def _observe_board_scene(
             raise CircuitSceneError("live scene rendering is not available")
     board_revision = f"sha256:{hashlib.sha256(board_source).hexdigest()}"
 
-    default_limits = ParseLimits()
-    limits = replace(
-        default_limits,
-        max_input_bytes=min(default_limits.max_input_bytes, settings.max_board_bytes),
-    )
+    limits = parse_limits_for(settings)
     conversion = parse_kicad_bytes(board_source, request.profile(), limits)
     if any(
         diagnostic.code == FOREIGN_ROOT_DIAGNOSTIC_CODE for diagnostic in conversion.diagnostics

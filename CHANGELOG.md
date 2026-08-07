@@ -103,7 +103,7 @@ All notable changes are documented here. The format follows
   canonical encoder emits `courtyard_circles` only when present, so every existing snapshot
   digest, scene revision, and golden identity is byte-stable. Measured against real
   `kicad-cli` 10.0.5 over 23 cases: 12 exact parity, 11 conceded, 0 contradictions; on the
-  #116 tree, courtyard-stage refusals drop from 13 boards to zero. (#116, ADR-0080, D-160,
+  #116 tree, courtyard-stage refusals drop from 13 boards to zero. (#116, ADR-0080, D-165,
   R-120, B-093)
 
 - **The KiCad plugin is now a Plugin and Content Manager package, and installing it still grants
@@ -374,6 +374,9 @@ All notable changes are documented here. The format follows
   square is now gated on the pad being a disc. Every roundrect in the core-containment
   parametrisation had a band with real height, so no fixture could have caught it; a stadium case
   is added. (#116, R-120)
+  is added. (#116, R-118)
+  moves. ([ADR-0079](docs/adr/0076-segment-assembled-edge-cuts-outline.md), D-154, R-117)
+
 - **A courtyard drawn as a ring is a ring, not a solid disc.** A footprint whose courtyard is an
   outer boundary plus an inner ring — a donut — was compared ring-by-ring as two independent solids,
   so a part legitimately placed in the hole was reported as a courtyard collision and the candidate

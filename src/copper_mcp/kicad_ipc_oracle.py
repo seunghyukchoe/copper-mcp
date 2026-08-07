@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from copper_mcp.adapters import parse_kicad_bytes
-from copper_mcp.board_ir import ParseLimits
 from copper_mcp.circuit_scene import _observe_board_scene, parse_circuit_scene_request
 from copper_mcp.config import ConfigurationError, Settings
 from copper_mcp.kicad_ipc import (
@@ -29,6 +28,7 @@ from copper_mcp.kicad_ipc import (
     KicadIpcVersionError,
     capture_live_board,
 )
+from copper_mcp.parse_budgets import parse_limits_for
 
 LIVE_IPC_ORACLE_SCHEMA_VERSION = "0.1.0"
 
@@ -287,9 +287,7 @@ def probe_live_kicad_ipc(
     if _deadline_exhausted(deadline):
         return _refused("live_ipc_oracle_deadline_exhausted", socket_configured, token_configured)
     request = parse_circuit_scene_request(_SCENE_PAYLOAD)
-    limits = ParseLimits(
-        max_input_bytes=min(ParseLimits().max_input_bytes, active_settings.max_board_bytes)
-    )
+    limits = parse_limits_for(active_settings)
     conversion = parse_kicad_bytes(captured.source, request.profile(), limits)
     if conversion.snapshot is None or conversion.diagnostics:
         return _refused("board_ir_conversion_unsupported", socket_configured, token_configured)

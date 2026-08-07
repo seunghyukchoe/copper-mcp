@@ -17,13 +17,13 @@ from dataclasses import dataclass, replace
 from typing import Any, Final
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
-from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
 from copper_mcp.layered_route_preview import (
     LayeredRoutePreviewError,
     LayeredRoutePreviewRequest,
     parse_layered_route_preview_request,
 )
+from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.request_boundary import RequestError, mapping, text
 from copper_mcp.routing import (
     LAYERED_ROUTER_VERSION,
@@ -166,10 +166,7 @@ def _prepare_layered_job(payload: object, settings: Settings) -> PreparedLayered
         net_classes=(request.constraints,),
         default_net_class_id=request.constraints.id,
     )
-    limits = replace(
-        ParseLimits(),
-        max_input_bytes=min(ParseLimits().max_input_bytes, settings.max_board_bytes),
-    )
+    limits = parse_limits_for(settings)
     conversion = parse_kicad_bytes(source, profile, limits)
     if conversion.snapshot is None or conversion.diagnostics:
         raise RoutingJobUnsupportedError("routing job board is outside the supported Board IR")

@@ -515,7 +515,7 @@ def test_footprints_and_courtyards_are_charged_to_validation_budgets() -> None:
     validate_content(content, ParseLimits(max_objects=object_count))
     with pytest.raises(BoardIRValidationError) as object_error:
         validate_content(content, ParseLimits(max_objects=object_count - 1))
-    assert object_error.value.code == "budget.exceeded"
+    assert object_error.value.code == "budget.exceeded.objects"
 
     total_vertices = (
         sum(len(contour.outer.points) for contour in content.outline)
@@ -531,7 +531,7 @@ def test_footprints_and_courtyards_are_charged_to_validation_budgets() -> None:
     validate_content(content, ParseLimits(max_total_vertices=total_vertices))
     with pytest.raises(BoardIRValidationError) as vertex_error:
         validate_content(content, ParseLimits(max_total_vertices=total_vertices - 1))
-    assert vertex_error.value.code == "budget.exceeded"
+    assert vertex_error.value.code == "budget.exceeded.total_vertices"
 
 
 def test_one_footprint_may_have_at_most_64_courtyard_rings() -> None:
@@ -747,7 +747,7 @@ def test_decoder_applies_string_budget_to_property_names() -> None:
     with pytest.raises(BoardIRValidationError) as caught:
         decode_snapshot_json(b'{"ABCDE":0}', ParseLimits(max_atom_chars=4))
 
-    assert caught.value.code == "budget.exceeded"
+    assert caught.value.code == "budget.exceeded.atom_chars"
 
 
 def test_decoder_maps_excessive_json_nesting_to_a_bounded_domain_error() -> None:
@@ -756,7 +756,7 @@ def test_decoder_maps_excessive_json_nesting_to_a_bounded_domain_error() -> None
     with pytest.raises(BoardIRValidationError) as caught:
         decode_snapshot_json(deeply_nested)
 
-    assert caught.value.code == "budget.exceeded"
+    assert caught.value.code == "budget.exceeded.depth"
 
 
 def test_geometry_package_has_no_mcp_gui_filesystem_or_adapter_imports() -> None:

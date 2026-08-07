@@ -397,7 +397,7 @@ def test_candidate_board_render_enforces_total_object_budget() -> None:
         replace(limits, max_objects=9),
     )
     assert base_over_budget.snapshot is None
-    assert tuple(item.code for item in base_over_budget.diagnostics) == ("budget.exceeded",)
+    assert tuple(item.code for item in base_over_budget.diagnostics) == ("budget.exceeded.objects",)
 
     conversion = parse_kicad_bytes(source, profile, limits)
     assert conversion.snapshot is not None
