@@ -83,7 +83,14 @@ confined to a separate `annotations` collection marked untrusted: it is written 
 the board, and it is data to be read, never instructions to follow. Net names never appear at all.
 
 Truncation against object, vertex, and annotation ceilings is reported explicitly rather than left
-to be inferred.
+to be inferred — and it is reported *where the objects would have been*, not only in the
+`truncation` record. The object ceilings are spent over whole kinds, so every array you get back is
+complete for the region and layers you asked for: `vias: []` means the region holds no vias, and
+nothing else. A kind that did not fit is replaced by
+`{"observation": "withheld_by_ceiling", "ceiling_hit": …, "objects_omitted": N}` in its own slot,
+which is an object rather than an array precisely so that code reading the collection cannot mistake
+it for an empty one. When you see one, ask for a smaller region rather than a larger ceiling; the
+whole-board response still carries the outline you need in order to choose the window.
 
 ### Deterministic render
 

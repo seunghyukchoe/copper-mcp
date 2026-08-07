@@ -8,6 +8,27 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- **A truncated Circuit Scene no longer empties whole object kinds in silence.** A whole-board
+  `observe_board_scene` returned `vias: []`, `zones: []` and `rules: []` on real boards holding up
+  to 1,003 vias, 5 zones and a net class; eight of the eleven mixer boards that convert hit
+  `max_scene_objects`. The scene spent one object budget in one fixed emission order, and segments —
+  two orders of magnitude more numerous than any other kind on a real board, and fifth in that
+  order — consumed everything, so every kind behind them came back empty. `ceiling_hit` and
+  `objects_omitted` were both correct and both in the wrong place: an empty array from a truncated
+  scene was byte-identical to one from a board that genuinely has none, and the caller who most
+  needed the warning was the one reading the array. The ceilings are now offered to **whole kinds**,
+  smallest first with the fixed declaration order breaking ties, so a kind is admitted only if all
+  of it fits — every array a scene returns is complete for its region and layer filter, and an empty
+  one means the region holds none of that kind. A kind that does not fit is replaced, in its own
+  slot, by `{"observation": "withheld_by_ceiling", "ceiling_hit", "objects_omitted"}`: a value of a
+  different JSON type carrying a one-value literal, so `if not vias` is false, `len(vias) == 0` is
+  false, `vias == []` is false, and iterating it raises. Re-measured read-only over the same corpus,
+  all eight truncating boards now withhold `segments` alone and return every via, zone, pad,
+  footprint and net class they hold; 11 of 11 bounded regions are unchanged at `objects_omitted: 0`.
+  `max_scene_objects` keeps its provisional 2,000 default — the defect was never the ceiling's
+  height. ([ADR-0087](docs/adr/0087-complete-or-withheld-scene-kinds.md),
+  [D-173](docs/ledgers/decision-ledger.md), [R-130](docs/ledgers/risk-register.md),
+  [migration](docs/migrations/copper-mcp-0.7.0.md), #127)
 - **A KiCad UUID that a board reuses is no longer treated as a Board IR identity.** Issue #116's
   one undiagnosed `converted Board IR content failed semantic validation` refusal turned out to be
   `identity.duplicate` on `geometry ID`, and 9 of the 12 real boards surveyed carry the same
@@ -489,6 +510,12 @@ reproduces from its harness.
 
 ### Changed
 
+- **Circuit Scene is `0.3.0`.** Each of the nine kinds under `static` and `mutable` is now an array
+  *or* a `withheld_by_ceiling` object, so a client with a closed schema that types them as arrays
+  stops validating a truncated response. Nothing else in the scene moved, and no content address
+  did: `board_revision` hashes the board bytes and `snapshot_digest` is the Board IR snapshot's, and
+  neither depends on how the response is shaped. See §4 of
+  [the 0.7.0 migration note](docs/migrations/copper-mcp-0.7.0.md). (#127)
 - **Courtyard legality is now three-valued, and ADR-0058's "exact" claim is corrected rather than
   restated.** KiCad's courtyard DRC never looks at footprint graphics; it collides a cached
   `SHAPE_POLY_SET` that `FOOTPRINT::BuildCourtyardCaches` contracts by

@@ -1,10 +1,10 @@
 # Migrating a deployment to CopperMCP 0.7.0
 
-CopperMCP 0.7.0 changes two behaviors a working 0.6.0 deployment can depend on without having
-declared it: a Board IR conversion diagnostic code that callers match on, and the spelling every
-integer environment variable accepts. It also raises four parser defaults, which is a deliberate
-change to a denial-of-service posture and is worth a decision rather than an upgrade. Everything
-else is additive.
+CopperMCP 0.7.0 changes three behaviors a working 0.6.0 deployment can depend on without having
+declared it: a Board IR conversion diagnostic code that callers match on, the spelling every
+integer environment variable accepts, and the shape a Circuit Scene takes when it truncates. It
+also raises four parser defaults, which is a deliberate change to a denial-of-service posture and
+is worth a decision rather than an upgrade. Everything else is additive.
 
 ## 1. `budget.exceeded` becomes ten discriminated codes
 
@@ -99,11 +99,92 @@ To migrate:
   for the worst-case shape: 4 MiB of deeply nested input still costs 244 MiB, because it exhausts
   the token budget rather than the byte budget. The token budget is the memory control.
 
+## 4. Circuit Scene 0.3.0: a truncated kind is no longer an empty array
+
+This one only shows up on a response that was already truncated. If every scene your client asks
+for comes back with `truncation.objects_omitted == 0`, nothing in the response changes and there is
+nothing to do beyond accepting the new `scene_version` string.
+
+The scene used to spend one object budget over the objects of every kind in a fixed emission order.
+Segments outnumber every other kind on a real board by two orders of magnitude and were emitted
+fifth, so on a dense board they consumed the whole budget and every kind behind them — vias, zones,
+and the net class under `rules` — came back `[]`. Measured on eleven real boards, eight returned
+`vias: []` for boards holding up to 1,003 vias (#127). `truncation.ceiling_hit` and
+`truncation.objects_omitted` did say truncation had happened; they did not say *what* was
+truncated, and `vias: []` from a truncated scene was byte-identical to `vias: []` from a board with
+no vias.
+
+0.3.0 spends the ceilings over **whole kinds**. A kind is admitted only if all of it fits, so every
+array in the response is complete for the requested region and layers. A kind that does not fit is
+replaced — in its own slot under `static` or `mutable` — by an object:
+
+```json
+"mutable": {
+  "segments": {
+    "observation": "withheld_by_ceiling",
+    "ceiling_hit": "max_scene_objects",
+    "objects_omitted": 31389
+  },
+  "arcs": [],
+  "vias": [ "... all 1003 of them ..." ],
+  "zones": [ "... all 5 ..." ]
+}
+```
+
+`observation` has exactly one permitted value. There is no spelling of this object that means
+"observed and empty", which is the point: after this change `vias: []` says one thing only — the
+region holds no vias. [ADR-0087](../adr/0087-complete-or-withheld-scene-kinds.md) carries the
+argument, including why a per-kind *count* beside the array was rejected.
+
+**What breaks:** a client with a closed schema that types `static.pads` and the other eight kinds
+as arrays stops validating a truncated response. Every kind is now `array | withheld-object`.
+
+Two second-order effects worth knowing before you meet them:
+
+- **A truncated scene returns fewer objects than it used to.** A withheld kind frees its slots and
+  nothing else fills them. On the densest board measured, `objects_returned` went from 2,000 to
+  1,792 — and the 1,792 now include every footprint, pad, via, zone and the net class, where the
+  2,000 included 1,217 of 31,181 segments and none of the rest.
+- **Which kinds are withheld depends on the board.** Kinds are offered the budget smallest first,
+  so adding objects can change which kind stops fitting. Output stays deterministic for a given
+  board revision and request; it was never stable across revisions.
+
+To migrate:
+
+1. **Branch on the type wherever your client reads a scene kind as a list** —
+   `scene["mutable"]["vias"]`, `scene.static.pads`, and so on:
+
+   ```python
+   vias = scene["mutable"]["vias"]
+   if not isinstance(vias, list):
+       raise NeedsSmallerRegion(vias["objects_omitted"])  # how many you are not seeing
+   ```
+
+   You do not need a fallback for "empty because truncated" any more; that state no longer exists.
+   An empty list is an empty region.
+2. **Widen any generated or hand-written schema** for the nine kinds to a union of the array and
+   the withheld object. `CircuitSceneToolResponse` in `copper_mcp.mcp_contracts` is the
+   authoritative shape and `SceneWithheldKindContract` is the new member.
+3. **On a withheld kind, re-request a bounded region rather than raising the ceiling.** A
+   whole-board request still returns the outline — one object, admitted first — which is what you
+   need in order to choose a window. Raising `COPPER_MCP_MAX_SCENE_OBJECTS` is a legitimate
+   deployment decision, but it does not remove the failure mode: at any ceiling below a board's
+   object count some kind stops fitting, and the largest board measured would need 33,181.
+4. **Accept `scene_version: "0.3.0"`** wherever you pin it. There is no compatibility mode; a
+   deployment serves one scene version.
+
+`max_scene_objects` keeps its 2,000 default. This release deliberately does not raise it: the
+defect was never the ceiling's height, and raising it only moves the first board that reproduces it.
+
 ## What does not require migration
 
 - **Golden identity pins.** `tests/test_golden_identities.py` is unchanged and passing. Parse
   budgets bound what is *admitted*, never what is written, so no candidate ID, bundle ID, placement
-  candidate ID, Board IR snapshot or constraint digest, scene revision, or export digest moves.
+  candidate ID, Board IR snapshot or constraint digest, scene revision, or export digest moves. The
+  scene change in §4 does not move one either: `board_revision` is a hash of the board bytes and
+  `snapshot_digest` is the Board IR snapshot's, and neither depends on how the response is shaped.
+- **The bounded-region scene path.** Eleven of eleven real boards returned a 5 mm window with
+  `objects_omitted: 0` and every kind present as a complete array, before and after §4.
 - **A board that converted under 0.6.0.** Raising a ceiling cannot turn an accepted board into a
   refused one. Boards that were refused for a non-budget reason — an unsupported version,
   construct, or topology — are refused identically and with the same codes.
