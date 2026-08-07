@@ -25,6 +25,9 @@ from copper_mcp.security import (
     create_workspace_file,
     read_workspace_file,
 )
+from copper_mcp.source_to_board_parity_service import (
+    verify_source_to_board_parity_from_snapshot_json,
+)
 from copper_mcp.tools import (
     apply_candidate,
     inspect_board,
@@ -345,6 +348,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     erc_parser.add_argument("path", help="Circuit Intent snapshot JSON inside the workspace")
 
+    parity_parser = subparsers.add_parser(
+        "source-to-board-parity",
+        help="Check whether a workspace board implements a Circuit Intent's connectivity",
+    )
+    parity_parser.add_argument("path", help="Circuit Intent snapshot JSON inside the workspace")
+    parity_parser.add_argument(
+        "--board",
+        required=True,
+        help="Existing .kicad_pcb path inside the workspace; read but never written",
+    )
+
     serve_parser = subparsers.add_parser("serve", help="Run the MCP gateway")
     serve_parser.add_argument("--transport", choices=("stdio", "streamable-http"), default="stdio")
     return parser
@@ -471,6 +485,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             _json_dump(
                 verify_schematic_erc_from_snapshot_json(intent_snapshot.content, settings).to_dict()
+            )
+            return 0
+        if args.command == "source-to-board-parity":
+            intent_snapshot = read_workspace_file(
+                settings.workspace,
+                args.path,
+                allowed_suffixes={".json"},
+                max_bytes=MAX_CIRCUIT_INPUT_BYTES,
+            )
+            _json_dump(
+                verify_source_to_board_parity_from_snapshot_json(
+                    intent_snapshot.content,
+                    args.board,
+                    settings,
+                ).to_dict()
             )
             return 0
         if args.command == "serve":

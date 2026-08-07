@@ -114,6 +114,7 @@ class McpServerTests(unittest.TestCase):
                 "export_routing_candidate",
                 "validate_candidate",
                 "verify_circuit_schematic_erc",
+                "verify_source_to_board_parity",
             },
         )
 

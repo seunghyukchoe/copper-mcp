@@ -122,6 +122,20 @@ def _indent(lines: list[str], spaces: int) -> list[str]:
     return [prefix + line for line in lines]
 
 
+def _on_board(board_eligible: bool) -> str:
+    """Render the symbol flag that decides whether KiCad's board netlist sees this symbol.
+
+    The delivered schematic is ``no``: ADR-0015 scoped a schematic-delivery artifact for a subset
+    with no footprint assignments, and ADR-0056's verifier asserts the resulting
+    ``exclude_from_board`` netlist property. The board-eligible projection ADR-0084 introduces is
+    ``yes``, because an ``on_board no`` symbol never enters the netlist ``pcb drc
+    --schematic-parity`` compares against, which makes a correct board and a wrong one produce
+    identical output.
+    """
+
+    return "yes" if board_eligible else "no"
+
+
 def _library_property(
     key: str,
     value: str,
@@ -136,7 +150,7 @@ def _library_property(
     return lines
 
 
-def _library_symbol(kind: ComponentKind) -> list[str]:
+def _library_symbol(kind: ComponentKind, *, board_eligible: bool = False) -> list[str]:
     if kind is ComponentKind.RESISTOR:
         library_id = "CopperMCP:R"
         unit_name = "R"
@@ -178,7 +192,7 @@ def _library_symbol(kind: ComponentKind) -> list[str]:
 
     lines = [f"(symbol {_quote(library_id)}", "  (pin_numbers (hide yes))"]
     lines.extend(["  (pin_names (offset 0.254) (hide yes))", "  (exclude_from_sim no)"])
-    lines.extend(["  (in_bom yes)", "  (on_board no)"])
+    lines.extend(["  (in_bom yes)", f"  (on_board {_on_board(board_eligible)})"])
     for property_lines in (
         _library_property("Reference", reference, x="2.54", y="0"),
         _library_property("Value", value, x="-2.54", y="0"),
@@ -235,6 +249,7 @@ def _component_instance(
     root_uuid: str,
     project_name: str,
     intent_digest: str,
+    board_eligible: bool = False,
 ) -> list[str]:
     library_id = "CopperMCP:R" if component.kind is ComponentKind.RESISTOR else "CopperMCP:C"
     description = (
@@ -249,7 +264,7 @@ def _component_instance(
             "  (unit 1)",
             "  (exclude_from_sim no)",
             "  (in_bom yes)",
-            "  (on_board no)",
+            f"  (on_board {_on_board(board_eligible)})",
             "  (dnp no)",
             f"  (uuid {_quote(component_uuid)})",
         ]
@@ -331,9 +346,24 @@ def _global_label(
     return lines
 
 
-def render_kicad_schematic(snapshot: CircuitIntentSnapshot) -> KiCadSchematicArtifact:
-    """Render one verified logical topology into deterministic in-memory KiCad bytes."""
+def render_kicad_schematic(
+    snapshot: CircuitIntentSnapshot,
+    *,
+    board_eligible: bool = False,
+) -> KiCadSchematicArtifact:
+    """Render one verified logical topology into deterministic in-memory KiCad bytes.
 
+    ``board_eligible`` selects between the two derivatives ADR-0084 distinguishes. The default
+    ``False`` is the *delivered* schematic and its bytes are frozen — every ADR-0056 round-trip
+    digest and golden identity depends on them. ``True`` is the *parity projection*: the same
+    intent, the same connectivity, differing only in the ``on_board`` flag, which is what lets
+    ``kicad-cli pcb drc --schematic-parity`` see the symbols at all. The projection is never
+    delivered to a caller as a schematic; it exists to give KiCad something to check a board
+    against, and its digest is reported separately so the two are never confused.
+    """
+
+    if type(board_eligible) is not bool:
+        raise ValueError("schematic board eligibility must be a bool")
     verify_snapshot(snapshot)
     content = snapshot.content
     root_uuid = _stable_uuid(snapshot.snapshot_digest, "root-sheet")
@@ -361,7 +391,7 @@ def render_kicad_schematic(snapshot: CircuitIntentSnapshot) -> KiCadSchematicArt
     ]
     kinds = {component.kind for component in content.components}
     for kind in sorted(kinds, key=lambda item: item.value):
-        lines.extend(_indent(_library_symbol(kind), 4))
+        lines.extend(_indent(_library_symbol(kind, board_eligible=board_eligible), 4))
     lines.append("  )")
 
     for net in content.nets:
@@ -396,6 +426,7 @@ def render_kicad_schematic(snapshot: CircuitIntentSnapshot) -> KiCadSchematicArt
                     root_uuid=root_uuid,
                     project_name=content.project_name,
                     intent_digest=snapshot.snapshot_digest,
+                    board_eligible=board_eligible,
                 ),
                 2,
             )

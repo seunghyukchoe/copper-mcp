@@ -23,9 +23,9 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-166` | `D-167` |
-| [Risk register](risk-register.md) | `R-` | `R-123` | `R-124` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-123` | `SEC-124` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-170` | `D-171` |
+| [Risk register](risk-register.md) | `R-` | `R-127` | `R-128` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-127` | `SEC-128` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-095` | `B-096` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
@@ -62,10 +62,10 @@ The rules:
    the checker enforces that.
 
    Because a replay is the one legal way to repeat a number, it is also the one way an accidental
-   duplicate could hide. `scripts/check_ledgers.py` therefore carries the nine existing replays in a
+   duplicate could hide. `scripts/check_ledgers.py` therefore carries the ten existing replays in a
    closed `REPLAY_SUB_ENTRIES` list keyed to their exact heading text, and being listed is necessary
    but not sufficient: the heading must still be a `####` sub-entry, and the `###` entry it replays
-   must already appear earlier in the document. Adding a tenth replay means editing that list and
+   must already appear earlier in the document. Adding an eleventh replay means editing that list and
    saying what it re-measures. A listed exception that stops matching a real heading is itself a
    failure, so an exception cannot be added and then quietly forgotten.
 5. **IDs are three digits, zero-padded**, including past 100 (`D-136`, not `D-0136`). ADR references

@@ -88,6 +88,51 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **Source-to-board connectivity parity is now an authoritative, test-bound claim**, closing
+  issue #66's last leg. `verify_source_to_board_parity` (MCP, both transports) and
+  `copper-mcp source-to-board-parity` ask KiCad's own `pcb drc --schematic-parity` whether a
+  workspace board implements a Circuit Intent's connectivity. The prior slice left this a
+  `not_run` non-claim on a recorded assumption that a board-side verdict needs a project rather
+  than a standalone file. That assumption is wrong for the CLI: `JobExportDrc` derives the
+  schematic from the board filename by swapping the extension and the project load beneath it is
+  guarded by an existence check, so a directory holding only a `.kicad_pcb` and a `.kicad_sch` —
+  no `.kicad_pro`, no library tables — produces a populated `schematic_parity` array. The GUI's
+  parity checkbox is the thing with no effect in standalone mode. Removing that blocker exposed
+  four ways to get a *silent* false pass, and all four are refused rather than reported. An
+  unfetched netlist degrades to `"schematic_parity": []` at exit 0, with the only signal being
+  English on stderr that the containment discards. `--exit-code-violations` ORs three providers
+  into one code 5 that a board with no schematic at all still returns, so it is not passed and the
+  report is parsed instead. Every parity finding is `warning` severity, so `--severity-error`
+  empties the array for a genuinely mismatched board — `--severity-all` is fixed in the argument
+  vector. And the fourth was ours: the delivered schematic marks every symbol `(on_board no)`,
+  correct for the delivery artifact ADR-0015 scoped and fatal here, because such a symbol never
+  enters KiCad's board-side netlist — measured, it yields `extra_footprint` ×2 against a *correct*
+  board and the identical output against a deliberately wrong one. The board is therefore compared
+  against a **board-eligible projection** of the same intent, a second derivative differing only in
+  that flag and reported under its own digest; the delivered artifact's bytes are untouched, so
+  every existing round-trip digest and golden identity is unmoved. No footprint assignment is
+  invented — board-eligibility alone is measured sufficient. Every verdict is gated on a liveness
+  invariant, `count(missing_footprint) + count(footprint_symbol_mismatch) == component_count`,
+  which is a positive proof KiCad loaded the netlist and is `0` in all four false-pass modes; a
+  disagreement is a typed refusal, never a reconciliation. The four connectivity finding types
+  decide the verdict, while the three footprint-identity types are the unavoidable signature of a
+  footprint-less intent and are disclosed as counts rather than claimed as parity failures; an
+  unreviewed type is refused. Evidence binds the intent digest, the delivered schematic digest, the
+  projection digest, and the board revision together, and only digests, counts, and fixed literals
+  cross the boundary — parity descriptions embed net names verbatim and never leave. A real-KiCad
+  control proves a genuinely mismatched board *is* detected. This claims nothing about the
+  delivered schematic file matching the board, about footprints, libraries, or manufacturability;
+  `erc`, `footprint_correctness`, `electrical_validation` and `board_ready` remain explicit
+  non-claims, and only KiCad 10.0.5 was executed.
+  ([ADR-0084](docs/adr/0084-authoritative-source-to-board-parity.md),
+  [D-170](docs/ledgers/decision-ledger.md), [SEC-127](docs/ledgers/security-ledger.md),
+  [R-127](docs/ledgers/risk-register.md),
+  [source-to-board parity research](docs/research/source-to-board-parity-v1.md), #66)
+  The excessive-agency evaluation artifact is re-measured as a
+  [B-090 replay](docs/ledgers/benchmark-ledger.md): the new verification contract declares an eighth
+  single-value non-claim field, and the `non_claim_inference` scenario counts those by introspecting
+  the live contract module rather than from a constant — which is exactly the property that makes
+  that check non-vacuous. All 116 cases, 77 passes and 0 failures are unchanged.
 - **Chamfered and circular courtyards convert, and their legality claims stay honest.** The
   #116 survey's two courtyard causes — `courtyard edges must be non-zero and axis-aligned`
   (measured to be exact 45-degree electrolytic-capacitor chamfers, not the hypothesised rotated

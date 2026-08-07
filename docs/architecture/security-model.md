@@ -180,6 +180,24 @@ makes; the `sandbox-exec` boundary explored in the
 [2026-08-05 containment experiment](../research/kicad-schematic-erc-containment.md) is not
 reintroduced, and no path-taking ERC tool exists.
 
+`verify_source_to_board_parity` adds a third bounded KiCad subprocess surface, reviewed as
+[SEC-127](../ledgers/security-ledger.md). Its exposure is *higher* than the ERC path's and this is
+the one thing worth stating plainly: unlike ERC, it takes a **workspace board** as input, because
+there is no other way to have a board to compare against. The board is read only through the bounded
+workspace reader — closed to `.kicad_pcb`, bounded by `max_board_bytes`, with path escape refused by
+the same reader board DRC uses — and is *copied* into the private snapshot rather than executed in
+place, so the workspace copy is never opened for writing. Containment is otherwise identical to
+board DRC: a fixed argument vector with no caller-supplied flag, no `--save-board`, no
+`--refill-zones`, and no `--exit-code-violations`; a 0700 snapshot made read-only before launch and
+holding exactly `parity.kicad_pcb` and `parity.kicad_sch`; private `HOME`/`TMPDIR`/config; the
+`RLIMIT_FSIZE` wrapper; `stdin`/`stdout`/`stderr` discarded; and post-run revalidation of the
+private state and the snapshot tree, so a `.kicad_prl` or any other side effect is refused rather
+than reported. Both inputs are re-read and compared byte-for-byte afterwards. Only per-type counts,
+digests, and fixed literals are returned — parity finding descriptions embed net names verbatim and
+affected items carry UUIDs and coordinates, none of which crosses the boundary. No `.kicad_pro` is
+written, so no user project can weaken the verdict, and equally the verdict is not necessarily what
+that user's project would report.
+
 Circuit Scene IR `0.2.0` is a current disclosure boundary: structured observation and its optional
 render can reveal placement and connectivity without returning source files. Scene requests are
 region-scoped and revision-bound; objects and footprint pad relationships/courtyard vertices consume

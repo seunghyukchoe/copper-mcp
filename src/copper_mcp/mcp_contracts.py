@@ -302,6 +302,85 @@ class CircuitSchematicErcToolResponse(_ClosedContract):
     verification: SchematicErcVerificationContract
 
 
+class ParityProjectionContract(_ClosedContract):
+    """The board-eligible derivative KiCad actually compared the board against.
+
+    Disclosed rather than hidden. It is not a delivered artifact: it exists only because an
+    ``on_board no`` symbol never enters KiCad's board-side netlist, which would make a correct
+    board and a wrong one produce identical output.
+    """
+
+    kind: Literal["kicad_schematic_board_projection"]
+    artifact_digest: Digest
+    intent_digest: Digest
+    size_bytes: Annotated[int, Field(ge=1, le=1024 * 1024)]
+    differs_from_schematic_by: Literal["board_eligibility"]
+
+
+class ParityBoardContract(_ClosedContract):
+    """Identity of the workspace board the verdict is bound to."""
+
+    board_revision: Digest
+
+
+class ParityCountsContract(_ClosedContract):
+    """Redacted counts behind one parity verdict."""
+
+    components: Annotated[int, Field(ge=1, le=64)]
+    connectivity_findings: Annotated[int, Field(ge=0, le=100_000)]
+    projection_findings: Annotated[int, Field(ge=0, le=100_000)]
+
+
+class ParityEvidenceContract(_ClosedContract):
+    """Transported ``kicad-cli pcb drc --schematic-parity`` verdict.
+
+    ``oracle_live`` is load-bearing, not decorative: an empty parity array is indistinguishable
+    from a check that never ran, so ``passed`` means nothing without it.
+    """
+
+    authority: Literal["kicad-cli-pcb-drc-schematic-parity"]
+    kicad_version: Annotated[str, Field(min_length=1, max_length=128)]
+    drc_schema: Literal["https://schemas.kicad.org/drc.v1.json"]
+    coordinate_units: Literal["mm"]
+    counts: ParityCountsContract
+    parity_type_counts: dict[
+        Annotated[str, Field(min_length=1, max_length=128)],
+        Annotated[int, Field(ge=0, le=100_000)],
+    ]
+    oracle_live: Literal["passed"]
+    passed: bool
+
+
+class SourceToBoardParityVerificationContract(_ClosedContract):
+    """Exact performed and explicitly unperformed verification stages."""
+
+    intent_topology: Literal["passed"]
+    artifact_digest: Literal["passed"]
+    provenance_binding: Literal["passed"]
+    deterministic_replay: Literal["passed"]
+    kicad_cli_parse: Literal["passed"]
+    parity_oracle_live: Literal["passed"]
+    schematic_board_parity: Literal["passed", "failed"]
+    erc: Literal["not_run"]
+    footprint_correctness: Literal["not_run"]
+    electrical_validation: Literal["not_run"]
+    board_ready: Literal[False]
+
+
+class SourceToBoardParityToolResponse(_ClosedContract):
+    """Strict structured output contract for the authoritative source-to-board parity tool."""
+
+    schema_: Literal["copper.source-to-board-parity"] = Field(alias="schema")
+    schema_version: Literal["0.1.0"]
+    status: Literal["checked"]
+    intent: CircuitIntentSummaryContract
+    schematic: SchematicSummaryContract
+    parity_projection: ParityProjectionContract
+    board: ParityBoardContract
+    parity: ParityEvidenceContract
+    verification: SourceToBoardParityVerificationContract
+
+
 class LiveBoardObservationToolResponse(_ClosedContract):
     """Redacted, read-only summary returned by the optional KiCad IPC observer."""
 
@@ -2163,4 +2242,5 @@ __all__ = [
     "RoutingJobStartToolRequestContract",
     "RoutingJobToolResponse",
     "SceneRenderContract",
+    "SourceToBoardParityToolResponse",
 ]

@@ -231,8 +231,17 @@ modelled as a one-value literal (`not_run`, `not_modelled`, `inconclusive`) rath
 - `verify_circuit_schematic_erc` runs the authoritative `kicad-cli sch erc` on a generated schematic
   and round-trips it through KiCad's netlist export. It reports `passed` (no error-severity
   violation) and `clean` (no findings or ignored checks at all) separately — the passive fixture is
-  `passed: true, clean: false`. **ERC-clean is not schematic-to-board parity**, which stays
-  `not_run`; KiCad models board parity as a board-side DRC result with no place in an ERC report.
+  `passed: true, clean: false`. **ERC-clean is not schematic-to-board parity**, which is a separate
+  surface below; KiCad models board parity as a board-side DRC result with no place in an ERC report.
+- `verify_source_to_board_parity` runs the authoritative `kicad-cli pcb drc --schematic-parity` and
+  reports whether a workspace board implements the intent's connectivity. The board is compared
+  against a **board-eligible projection** of the intent, disclosed under its own digest — **a
+  `passed` verdict is not a claim that the schematic file you were handed matches the board.** That
+  file marks every symbol `on_board no` and never enters KiCad's board-side netlist, so it cannot
+  support such a claim. The verdict is refused outright unless KiCad demonstrably accounted for
+  every component, because an empty parity result is also what a check that never ran produces.
+  **Parity is not ERC, footprint correctness, electrical validation, or board readiness**, each of
+  which stays an explicit non-claim on the same response.
 - Schematic-to-board conversion, footprint assignment, and placement remain manual.
 - **DRC-clean is not electrical, signal-integrity, manufacturability, or hardware review.**
 

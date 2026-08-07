@@ -5,8 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0082**.
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0082**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0085**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -23,9 +22,13 @@ allocated plus one. Gaps are reported as information and never fail. Keeping the
 line is deliberate: two branches that both allocate it now conflict textually, so Git refuses the
 merge instead of accepting it.
 
-**Known gap:** there is no ADR-0027. The number was allocated on a branch whose ADR never landed. It
-is deliberately left unused rather than recycled, so that any external reference to ADR-0027 resolves
-to nothing rather than to an unrelated decision.
+**Known gaps:** there is no ADR-0027, and no ADR-0081, ADR-0082, or ADR-0083. ADR-0027 was
+allocated on a branch whose ADR never landed. The 0081–0083 block was allocated by concurrent
+branches that were still open when ADR-0084 landed: this branch took a number above all of them
+rather than the next one, which is the rule the collision that produced 0066–0068 exists to enforce.
+Every one of them is deliberately left unused rather than recycled, so that an external reference
+resolves to nothing rather than to an unrelated decision. If a later branch lands its own record in
+that block, this note is what it corrects.
 
 **How 0066 through 0068 came to be three records:** three concurrent branches each created an
 `ADR-0066` — the atomic route bundle preview, ordered-layer routing, and route-aware placement
@@ -74,7 +77,7 @@ never silently widens it.
 | [0024](0024-placement-intent-and-legalization.md) | Typed placement intent, validated by a deterministic legalizer | Accepted |
 | [0025](0025-file-level-candidate-apply.md) | Apply a route candidate by splicing bytes, not by rewriting a board | Accepted (mutating path added 2026-08-04) |
 | [0026](0026-first-class-footprints-in-board-ir.md) | Make footprints revision-bound Board IR objects before moving them | Accepted |
-| — | *0027 is deliberately unused; see **Known gap** above.* | — |
+| — | *0027 is deliberately unused; see **Known gaps** above.* | — |
 | [0028](0028-revision-bound-scene-route-references.md) | Make Circuit Scene net references directly actionable for routing | Accepted |
 | [0029](0029-read-only-kicad-ipc-observer.md) | Add a redacted, read-only KiCad IPC observer | Accepted |
 | [0030](0030-live-ipc-circuit-scene-binding.md) | Bind a bounded KiCad IPC snapshot to Circuit Scene | Accepted |
@@ -128,14 +131,19 @@ never silently widens it.
 | [0078](0078-netless-copper-as-obstacle.md) | Net-0 copper is an obstacle with no connectivity contribution | Accepted |
 | [0079](0079-discriminated-configurable-parse-budgets.md) | Make the structural parse budgets operator-settable, and name the one that refused | Accepted |
 | [0080](0080-chamfered-and-circular-courtyards.md) | Bracket chamfered and circular courtyards instead of widening them | Accepted |
+| — | *0081 through 0083 are deliberately unused; see **Known gaps** above.* | — |
+| [0081](0081-incremental-retention-and-bounded-ripup-window.md) | Reconstruct the congestion ledger incrementally and bound rip-up by a spatial window | Accepted |
 
 Seventy-seven numbers, seventy-six records, no duplicates — and `scripts/check_adr_numbers.py` now
 Seventy-six numbers, seventy-five records, no duplicates — and `scripts/check_adr_numbers.py` now
-| [0081](0081-incremental-retention-and-bounded-ripup-window.md) | Reconstruct the congestion ledger incrementally and bound rip-up by a spatial window | Accepted |
+| [0084](0084-authoritative-source-to-board-parity.md) | Authoritative source-to-board parity via a board-eligible intent projection | Accepted |
 
 Seventy-five numbers, seventy-four records, no duplicates — and `scripts/check_adr_numbers.py` now
 proves that last clause on every run rather than asserting it. Only 0027 is unused; see
 **Known gap** above.
+Eighty-four numbers, eighty records, no duplicates — and `scripts/check_adr_numbers.py` now
+proves that last clause on every run rather than asserting it. 0027 and 0081 through 0083 are
+unused; see **Known gaps** above.
 
 ## Reading order
 
@@ -218,3 +226,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0079: Make the structural parse budgets operator-settable, and name the one that refused](0079-discriminated-configurable-parse-budgets.md)
 - [ADR-0080: Bracket chamfered and circular courtyards instead of widening them](0080-chamfered-and-circular-courtyards.md)
 - [ADR-0081: Reconstruct the congestion ledger incrementally and bound rip-up by a spatial window](0081-incremental-retention-and-bounded-ripup-window.md)
+- [ADR-0084: Authoritative source-to-board parity via a board-eligible intent projection](0084-authoritative-source-to-board-parity.md)

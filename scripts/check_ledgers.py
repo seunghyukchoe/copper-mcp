@@ -133,6 +133,13 @@ REPLAY_SUB_ENTRIES: dict[tuple[str, str], str] = {
         "docs/ledgers/benchmark-ledger.md",
         "#### B-033 — exact spatial-index identity replay",
     ): "B-033 replayed with exact spatial-index identity",
+    (
+        "docs/ledgers/benchmark-ledger.md",
+        "#### B-090 — declared non-claim surface replay",
+    ): (
+        "B-090 replayed after ADR-0084 added one declared non-claim field to the contract "
+        "module, which the non_claim_inference scenario counts"
+    ),
 }
 
 # Historical double-allocations that predate this checker. Ledgers are

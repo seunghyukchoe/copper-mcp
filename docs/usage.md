@@ -276,9 +276,29 @@ That result reports `passed` (KiCad found no error-severity violation) and `clea
 no ignored checks at all) as two independent signals, plus a round trip that re-reads the schematic
 through `kicad-cli sch export netlist` and compares the recovered components and nets against the
 source intent. The bounded passive fixture is `passed: true, clean: false` — it genuinely produces
-KiCad warnings, and those stay visible. Schematic-to-board parity, electrical validation, and board
-readiness remain explicit non-claims. Because the checked snapshot carries no `.kicad_pro`, KiCad
-applies its default severities, so the verdict is not necessarily what your own project reports.
+KiCad warnings, and those stay visible. Electrical validation and board readiness remain explicit
+non-claims. Because the checked snapshot carries no `.kicad_pro`, KiCad applies its default
+severities, so the verdict is not necessarily what your own project reports.
+
+To ask whether a board you already have implements that intent's connectivity, use the
+source-to-board parity surface, which needs an existing `.kicad_pcb` inside the workspace:
+
+```bash
+copper-mcp --workspace . source-to-board-parity intent/rc-low-pass.json \
+  --board boards/rc-low-pass.kicad_pcb
+```
+
+The board is read and never written, and `kicad-cli pcb drc --schematic-parity` decides the verdict.
+Read the result carefully: `schematic_board_parity: "passed"` says the board matches **the intent's
+connectivity**, not that it matches the schematic file `render-schematic` wrote for you. That file
+marks every symbol `on_board no` — correct for a delivery artifact with no footprint assignments —
+and such a symbol never enters KiCad's board-side netlist, so comparing against it would report a
+correct board and a wrong one identically. The board is compared against a board-eligible
+*projection* of the same intent instead, whose digest is reported separately under
+`parity_projection`. The verdict is refused outright unless KiCad demonstrably accounted for every
+component, because an empty parity result is also what a check that never ran produces. ERC,
+footprint correctness, electrical validation, and board readiness stay explicit non-claims, and only
+per-type counts are returned — no net names, references, or coordinates.
 
 The CLI refuses traversal, symlinks, a suffix other than exact lowercase `.kicad_sch`, and any
 existing output rather than silently overwriting it. The input is captured from one held descriptor,
