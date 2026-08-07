@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0091**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0092**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -22,28 +22,23 @@ allocated plus one. Gaps are reported as information and never fail. Keeping the
 line is deliberate: two branches that both allocate it now conflict textually, so Git refuses the
 merge instead of accepting it.
 
-**Known gaps:** there is no ADR-0027, no ADR-0082 or ADR-0083, and no ADR-0085 or ADR-0086.
+**Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, ADR-0086, or ADR-0089.
 ADR-0027 was allocated on a branch whose ADR never landed. The 0081–0083 block was allocated by
 concurrent branches that were still open when ADR-0084 landed: that branch took a number above all
-of them rather than the next one, which is the rule the collision that produced 0066–0068 exists
-to enforce; ADR-0081 has since landed, and 0082–0083 remain claimed by branches still open.
-0085–0086 are the same situation one round later: ADR-0087 was allocated while two concurrent
-branches (issues #127 and #128) were open, so it took a number above the advertised next-free
-block rather than colliding with them. Every unlanded number is deliberately left unused rather
-than recycled, so that an external reference resolves to nothing rather than to an unrelated
-decision. If a later branch lands its own record in one of these blocks, this note is what it
-**Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086. ADR-0027 was
-**Known gaps:** there is no ADR-0027, no ADR-0081, ADR-0082, or ADR-0083, and no ADR-0085 or
-ADR-0086. ADR-0027 was
-allocated on a branch whose ADR never landed. The 0081–0083 block was allocated by concurrent
-branches that were still open when ADR-0084 landed: that branch took a number above all of them
-rather than the next one, which is the rule the collision that produced 0066–0068 exists to enforce.
-ADR-0081 has since landed from its own branch and is no longer a gap; 0082 and 0083 remain spent.
-0085 and 0086 went the same way — two branches were open alongside ADR-0088 when it landed, so it
-took a number above both rather than the next one. Every unused number is deliberately left unused
-rather than recycled, so that an external reference resolves to nothing rather than to an unrelated
-decision. If a later branch lands its own record in one of these gaps, this note is what it
-corrects.
+of them rather than the next one, which is the rule the collision that produced 0066–0068 exists to
+enforce. ADR-0081 has since landed from its own branch and is no longer a gap; 0082 and 0083 remain
+spent. 0085 and 0086 went the same way — two branches were open alongside ADR-0088 when it landed, so
+it took a number above both rather than the next one. 0090 was claimed the same way by a branch
+still open when ADR-0091 (issue #124) landed, so that record took the number above it — but
+ADR-0090 has since landed from its own branch and is no longer a gap. Every unused number is
+deliberately left unused rather than recycled, so that an external reference resolves to nothing
+rather than to an unrelated decision. If a later branch lands its own record in one of these gaps,
+this note is what it corrects, exactly as it just did for 0090.
+
+Three overlapping copies of this paragraph stood here until ADR-0091 landed, the first truncated
+mid-sentence and one of them contradicting the next line about ADR-0081. They were merge residue
+from the same concurrent-branch period the paragraph describes, and are removed rather than
+extended a fourth time.
 
 ADR-0085 and ADR-0086 repeat the 0081–0083 story exactly: they were allocated by branches for
 issues #126 and #127 that were still open when ADR-0087 landed, so ADR-0087 took a number above
@@ -158,10 +153,11 @@ never silently widens it.
 | [0088](0088-complete-or-withheld-scene-kinds.md) | A truncated scene withholds whole kinds instead of emptying them | Accepted |
 | [0089](0089-region-scoped-obstacle-model.md) | Scope the obstacle model to a routing region, and split the budget that was counting three things | Accepted |
 | [0090](0090-root-level-board-groups.md) | A root board group is organisation, accepted and counted rather than modelled | Accepted |
+| [0091](0091-attaching-pad-zone-connect-overrides.md) | Accept the pad zone-connection overrides that attach, refuse the one that detaches | Accepted |
 
-Ninety numbers, eighty-five records, no duplicates — and `scripts/check_adr_numbers.py` now
-proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and 0086 are
-unused; see **Known gaps** above. The three stray summary sentences that stood here until
+Ninety-one numbers, eighty-six records, no duplicates — and `scripts/check_adr_numbers.py` now
+proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and 0086
+are unused; see **Known gaps** above. The three stray summary sentences that stood here until
 ADR-0088 landed were merge residue from the concurrent branches described above: Git accepted
 three different rewrites of one paragraph because they did not overlap textually.
 
@@ -169,12 +165,11 @@ three different rewrites of one paragraph because they did not overlap textually
 
 The ADRs are chronological, not thematic. To follow one arc, read it in this order:
 
-- **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070, 0076, 0087.
+- **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070, 0076, 0087,
+  0091.
 - **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
-  0066, 0070, 0073.
+  0066, 0070, 0073, 0075, 0089.
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060, 0075.
-  0066, 0070, 0073, 0075.
-- **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060.
 - **Circuit Intent and schematic verification** — 0014, 0015, 0056, 0070.
 - **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065, 0075.
 - **Circuit Scene and rendering** — 0010, 0022, 0023, 0028, 0056.
@@ -250,3 +245,5 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0087: Name an assembled Edge.Cuts outline by the sorted set of its members' own uuids](0087-composite-native-identity-for-assembled-outlines.md)
 - [ADR-0088: A truncated scene withholds whole kinds instead of emptying them](0088-complete-or-withheld-scene-kinds.md)
 - [ADR-0089: Scope the obstacle model to a routing region, and split the budget that was counting three things](0089-region-scoped-obstacle-model.md)
+- [ADR-0090: A root board group is organisation, accepted and counted rather than modelled](0090-root-level-board-groups.md)
+- [ADR-0091: Accept the pad zone-connection overrides that attach, refuse the one that detaches](0091-attaching-pad-zone-connect-overrides.md)
