@@ -549,7 +549,9 @@ class RouteSettingsContract(_ClosedContract):
     proximity_penalty_nm: Annotated[int, Field(ge=0, le=1_000_000_000)] = 50_000
     max_grid_nodes: Annotated[int, Field(ge=1, le=500_000)] = 250_000
     max_expansions: Annotated[int, Field(ge=1, le=1_000_000)] = 100_000
-    max_obstacles: Annotated[int, Field(ge=1, le=4_096)] = 256
+    max_obstacles: Annotated[int, Field(ge=1, le=32_768)] = 4_096
+    max_net_objects: Annotated[int, Field(ge=1, le=4_096)] = 1_024
+    region_margin_nm: Annotated[int, Field(ge=1, le=1_000_000_000)] = 10_000_000
     max_obstacle_checks: Annotated[int, Field(ge=1, le=10_000_000)] = 2_000_000
 
 
@@ -983,10 +985,13 @@ class RouteDiagnosticContract(_ClosedContract):
         "off_grid",
         "grid_budget_exceeded",
         "obstacle_budget_exceeded",
+        "net_object_budget_exceeded",
+        "obstacle_check_budget_exceeded",
         "search_budget_exceeded",
         "cancelled",
         "stale_fill",
         "no_path",
+        "no_path_in_region",
     ]
     message: Annotated[str, Field(min_length=1, max_length=256)]
     expanded_states: NonNegativeInteger

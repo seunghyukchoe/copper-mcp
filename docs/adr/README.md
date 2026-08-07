@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0085**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0088**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -22,13 +22,18 @@ allocated plus one. Gaps are reported as information and never fail. Keeping the
 line is deliberate: two branches that both allocate it now conflict textually, so Git refuses the
 merge instead of accepting it.
 
-**Known gaps:** there is no ADR-0027, and no ADR-0081, ADR-0082, or ADR-0083. ADR-0027 was
+**Known gaps:** there is no ADR-0027, no ADR-0081, ADR-0082, or ADR-0083, and no ADR-0085 or
+ADR-0086. ADR-0027 was
 allocated on a branch whose ADR never landed. The 0081–0083 block was allocated by concurrent
 branches that were still open when ADR-0084 landed: this branch took a number above all of them
 rather than the next one, which is the rule the collision that produced 0066–0068 exists to enforce.
 Every one of them is deliberately left unused rather than recycled, so that an external reference
 resolves to nothing rather than to an unrelated decision. If a later branch lands its own record in
 that block, this note is what it corrects.
+
+ADR-0085 and ADR-0086 repeat the 0081–0083 story exactly: they were allocated by branches for
+issues #126 and #127 that were still open when ADR-0087 landed, so ADR-0087 took a number above
+both rather than the next one. If either lands, it corrects this sentence.
 
 **How 0066 through 0068 came to be three records:** three concurrent branches each created an
 `ADR-0066` — the atomic route bundle preview, ordered-layer routing, and route-aware placement
@@ -137,6 +142,8 @@ never silently widens it.
 Seventy-seven numbers, seventy-six records, no duplicates — and `scripts/check_adr_numbers.py` now
 Seventy-six numbers, seventy-five records, no duplicates — and `scripts/check_adr_numbers.py` now
 | [0084](0084-authoritative-source-to-board-parity.md) | Authoritative source-to-board parity via a board-eligible intent projection | Accepted |
+| — | *0085 and 0086 are deliberately unused; see **Known gaps** above.* | — |
+| [0087](0087-region-scoped-obstacle-model.md) | Scope the obstacle model to a routing region, and split the budget that was counting three things | Accepted |
 
 Seventy-five numbers, seventy-four records, no duplicates — and `scripts/check_adr_numbers.py` now
 proves that last clause on every run rather than asserting it. Only 0027 is unused; see

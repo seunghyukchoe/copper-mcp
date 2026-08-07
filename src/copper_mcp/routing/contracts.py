@@ -29,7 +29,9 @@ _STABLE_NAME = re.compile(r"^[a-z0-9][a-z0-9._/-]{0,127}$")
 _MAX_GRID_NODES = 500_000
 _MAX_EXPANSIONS = 1_000_000
 _MAX_COST_TERM_NM = 1_000_000_000
-_MAX_OBSTACLES = 4_096
+_MAX_OBSTACLES = 32_768
+_MAX_NET_OBJECTS = 4_096
+_MAX_REGION_MARGIN_NM = 1_000_000_000
 _MAX_OBSTACLE_CHECKS = 10_000_000
 
 #: Ordering policy recorded by a candidate whose patch is a single path.
@@ -75,14 +77,33 @@ def _stable_name(name: str, value: str) -> None:
 
 @dataclass(frozen=True, slots=True)
 class AStarSettings:
-    """Integer-only policy and resource limits for the reference A* router."""
+    """Integer-only policy and resource limits for the reference A* router.
+
+    Three of these budgets meter three structurally different populations, and the
+    calibration note ``docs/research/route-obstacle-budget-calibration-v1.md`` records the
+    measurement each default comes from:
+
+    - ``max_obstacles`` bounds the **region-scoped** foreign selected-layer obstacle model —
+      copper the route has to avoid, restricted to the region the lattice can reach.
+    - ``max_net_objects`` bounds the **same-net copper model** — the routed net's own pads,
+      tracks, vias, and verified fill islands across every layer, which decide connectivity and
+      attachment rather than obstruction. Its ceiling is quadratic work, not board size.
+    - ``max_obstacle_checks`` bounds the exact geometric predicates one request may evaluate.
+
+    ``region_margin_nm`` is the width of the corridor added around the routed net's own copper
+    to form that region. It is a capability knob and a work bound at once: the lattice cannot
+    leave the region, so nothing outside it is modelled, and nothing outside it can be routed
+    through either.
+    """
 
     grid_step_nm: int = 250_000
     bend_penalty_nm: int = 500_000
     proximity_penalty_nm: int = 50_000
     max_grid_nodes: int = 250_000
     max_expansions: int = 100_000
-    max_obstacles: int = 256
+    max_obstacles: int = 4_096
+    max_net_objects: int = 1_024
+    region_margin_nm: int = 10_000_000
     max_obstacle_checks: int = 2_000_000
 
     def __post_init__(self) -> None:
@@ -92,6 +113,13 @@ class AStarSettings:
         _integer("grid-node budget", self.max_grid_nodes, minimum=1, maximum=_MAX_GRID_NODES)
         _integer("expansion budget", self.max_expansions, minimum=1, maximum=_MAX_EXPANSIONS)
         _integer("obstacle budget", self.max_obstacles, minimum=1, maximum=_MAX_OBSTACLES)
+        _integer("net-object budget", self.max_net_objects, minimum=1, maximum=_MAX_NET_OBJECTS)
+        _integer(
+            "routing-region margin",
+            self.region_margin_nm,
+            minimum=1,
+            maximum=_MAX_REGION_MARGIN_NM,
+        )
         _integer(
             "obstacle-check budget",
             self.max_obstacle_checks,
@@ -374,10 +402,13 @@ class RouteFailureCode(StrEnum):
     OFF_GRID = "off_grid"
     GRID_BUDGET_EXCEEDED = "grid_budget_exceeded"
     OBSTACLE_BUDGET_EXCEEDED = "obstacle_budget_exceeded"
+    NET_OBJECT_BUDGET_EXCEEDED = "net_object_budget_exceeded"
+    OBSTACLE_CHECK_BUDGET_EXCEEDED = "obstacle_check_budget_exceeded"
     SEARCH_BUDGET_EXCEEDED = "search_budget_exceeded"
     CANCELLED = "cancelled"
     STALE_FILL = "stale_fill"
     NO_PATH = "no_path"
+    NO_PATH_IN_REGION = "no_path_in_region"
 
 
 @dataclass(frozen=True, slots=True)

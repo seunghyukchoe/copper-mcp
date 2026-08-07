@@ -455,7 +455,7 @@ def test_straight_route_is_exact_replayable_and_content_addressed() -> None:
     second = _candidate(router.propose(snapshot, request))
 
     assert router.name == "orthogonal-a-star-spatial-index-v1"
-    assert first.router_version == "astar-grid/0.6.0"
+    assert first.router_version == "astar-grid/0.7.0"
     assert first == second
     assert first.patch.paths[0].vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
     assert first.patch.width_nm == 200
@@ -674,7 +674,11 @@ def test_grid_search_and_cancellation_budgets_are_distinct() -> None:
         {"proximity_penalty_nm": True},
         {"max_grid_nodes": 500_001},
         {"max_expansions": 1_000_001},
-        {"max_obstacles": 4_097},
+        {"max_obstacles": 32_769},
+        {"max_net_objects": 4_097},
+        {"max_net_objects": 0},
+        {"region_margin_nm": 0},
+        {"region_margin_nm": 1_000_000_001},
         {"max_obstacle_checks": 10_000_001},
     ],
 )
@@ -724,10 +728,11 @@ def test_route_contracts_reject_noncanonical_geometry_and_identity_tampering() -
 
 def test_obstacle_work_preparation_cancellation_and_public_types_are_bounded() -> None:
     router = AStarRouter()
-    offboard = tuple(
-        (-10_000 - index * 10, -10_000, -9_995 - index * 10, -9_995) for index in range(130)
-    )
-    snapshot = _snapshot(keepouts=offboard)
+    # In-region keepouts, well clear of the y=5,000 corridor the route takes. They have to be
+    # inside the routing region to be modelled at all: copper the lattice cannot reach is not
+    # charged to the obstacle budget, because it cannot change the answer either.
+    crowd = tuple((200 + index * 10, 500, 205 + index * 10, 600) for index in range(130))
+    snapshot = _snapshot(keepouts=crowd)
 
     count_limited = _request(snapshot, settings=_settings(max_obstacles=2))
     _assert_failure(
@@ -735,13 +740,13 @@ def test_obstacle_work_preparation_cancellation_and_public_types_are_bounded() -
         RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
     )
 
-    one_obstacle = _snapshot(keepouts=(offboard[0],))
+    one_obstacle = _snapshot(keepouts=(crowd[0],))
     relation_limited = _request(
         one_obstacle,
         settings=_settings(max_obstacles=2, max_obstacle_checks=1),
     )
     relation_result = router.propose(one_obstacle, relation_limited)
-    _assert_failure(relation_result, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    _assert_failure(relation_result, RouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED)
     assert relation_result.diagnostic is not None
     assert relation_result.diagnostic.obstacle_checks == 1
     assert relation_result.diagnostic.expanded_states == 1
@@ -1155,7 +1160,7 @@ def test_zones_share_object_and_edge_relation_budgets() -> None:
         ),
     )
 
-    _assert_failure(relation_limited, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    _assert_failure(relation_limited, RouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED)
     assert relation_limited.diagnostic is not None
     assert relation_limited.diagnostic.obstacle_checks == 8
     assert relation_limited.diagnostic.expanded_states == 0
@@ -1395,7 +1400,7 @@ def test_diagonal_core_chain_charges_the_obstacle_check_budget() -> None:
         snapshot, _request(snapshot, settings=_settings(max_obstacle_checks=5))
     )
 
-    _assert_failure(result, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    _assert_failure(result, RouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED)
     assert result.diagnostic is not None
     assert result.diagnostic.obstacle_checks == 5
     assert result.diagnostic.expanded_states == 0
@@ -1582,11 +1587,13 @@ def test_attachment_copper_outside_the_lattice_is_clamped() -> None:
     assert candidate.patch.paths[0].vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
 
 
-def test_attachment_copper_shares_the_obstacle_object_budget() -> None:
+def test_attachment_copper_charges_the_net_object_budget_not_the_obstacle_budget() -> None:
+    """The routed net's own copper and the copper it must avoid are separate populations."""
+
     router = AStarRouter()
     stub_and_keepout = _snapshot(
         own_segments=((1_000, 5_000, 2_000, 5_000),),
-        keepouts=((-10_000, -10_000, -9_995, -9_995),),
+        keepouts=((200, 500, 205, 600), (400, 500, 405, 600)),
     )
     two_stubs = _snapshot(
         own_segments=(
@@ -1595,17 +1602,28 @@ def test_attachment_copper_shares_the_obstacle_object_budget() -> None:
         )
     )
 
+    # One keepout against a budget of one: the obstacle budget still refuses foreign copper.
     shared = router.propose(
         stub_and_keepout, _request(stub_and_keepout, settings=_settings(max_obstacles=1))
     )
     _assert_failure(shared, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    assert shared.diagnostic is not None
+    assert "max_obstacles=1" in shared.diagnostic.message
 
-    attachment_only = router.propose(
+    # Two attachment stubs and no foreign copper: an obstacle budget of one does not refuse,
+    # because attachment copper is not an obstacle.
+    obstacle_limited = router.propose(
         two_stubs, _request(two_stubs, settings=_settings(max_obstacles=1))
     )
-    _assert_failure(attachment_only, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    assert obstacle_limited.ok
+
+    attachment_only = router.propose(
+        two_stubs, _request(two_stubs, settings=_settings(max_net_objects=1))
+    )
+    _assert_failure(attachment_only, RouteFailureCode.NET_OBJECT_BUDGET_EXCEEDED)
     assert attachment_only.diagnostic is not None
     assert "attachment copper" in attachment_only.diagnostic.message
+    assert "max_net_objects=1" in attachment_only.diagnostic.message
 
 
 def test_component_build_respects_the_obstacle_check_budget() -> None:
@@ -1622,7 +1640,7 @@ def test_component_build_respects_the_obstacle_check_budget() -> None:
         _request(snapshot, settings=_settings(max_obstacle_checks=4)),
     )
 
-    _assert_failure(result, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    _assert_failure(result, RouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED)
     assert result.diagnostic is not None
     assert result.diagnostic.obstacle_checks == 4
     assert result.diagnostic.expanded_states == 0
@@ -1817,7 +1835,7 @@ def test_polygon_keepouts_share_the_object_and_relation_budgets() -> None:
     _assert_failure(object_limited, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
 
     mixed = _snapshot(
-        keepouts=((-10_000, -10_000, -9_995, -9_995),),
+        keepouts=((200, 500, 205, 600),),
         polygon_keepouts=(_octagon(5_000, 5_000, 1_000, 300),),
     )
     mixed_limited = router.propose(mixed, _request(mixed, settings=_settings(max_obstacles=1)))
@@ -1826,7 +1844,7 @@ def test_polygon_keepouts_share_the_object_and_relation_budgets() -> None:
     relation_limited = router.propose(
         two_keepouts, _request(two_keepouts, settings=_settings(max_obstacle_checks=4))
     )
-    _assert_failure(relation_limited, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    _assert_failure(relation_limited, RouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED)
     assert relation_limited.diagnostic is not None
     assert relation_limited.diagnostic.obstacle_checks == 4
     assert relation_limited.diagnostic.expanded_states == 0
@@ -2377,7 +2395,7 @@ def test_foreign_diagonal_segments_share_the_object_and_relation_budgets() -> No
     router = AStarRouter()
     snapshot = _snapshot(
         foreign_segment=(4_000, 3_000, 6_000, 7_000),
-        keepouts=((-10_000, -10_000, -9_995, -9_995),),
+        keepouts=((200, 500, 205, 600),),
     )
 
     object_limited = router.propose(
@@ -2388,7 +2406,7 @@ def test_foreign_diagonal_segments_share_the_object_and_relation_budgets() -> No
     relation_limited = router.propose(
         snapshot, _request(snapshot, settings=_settings(max_obstacle_checks=3))
     )
-    _assert_failure(relation_limited, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    _assert_failure(relation_limited, RouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED)
     assert relation_limited.diagnostic is not None
     assert relation_limited.diagnostic.obstacle_checks == 3
     assert relation_limited.diagnostic.expanded_states == 0
@@ -3106,19 +3124,33 @@ def test_verified_fill_without_a_board_ir_zone_is_refused() -> None:
     assert "matching Board IR zone" in result.diagnostic.message
 
 
-def test_the_multilayer_connectivity_model_shares_the_object_ceiling() -> None:
+def test_the_multilayer_connectivity_model_charges_the_net_object_budget() -> None:
+    """Same-net copper is charged to its own budget, and the refusal names that budget.
+
+    Sharing one ceiling with the obstacle model is what made a finished board's own copper
+    look like an obstacle problem: 59 of the 92 real-board refusals in issue #128 were this
+    check, on nets that are simply already connected.
+    """
+
     snapshot = _snapshot(
         own_via=True,
         own_segments=tuple((500 + index * 400, 500, 700 + index * 400, 500) for index in range(8)),
     )
 
     result = AStarRouter().propose(
-        snapshot, _request(snapshot, settings=_settings(max_obstacles=4))
+        snapshot, _request(snapshot, settings=_settings(max_net_objects=4))
     )
 
-    _assert_failure(result, RouteFailureCode.OBSTACLE_BUDGET_EXCEEDED)
+    _assert_failure(result, RouteFailureCode.NET_OBJECT_BUDGET_EXCEEDED)
     assert result.diagnostic is not None
     assert "connectivity model" in result.diagnostic.message
+    assert "max_net_objects=4" in result.diagnostic.message
+
+    # The obstacle budget no longer reaches this population at all.
+    obstacle_limited = AStarRouter().propose(
+        snapshot, _request(snapshot, settings=_settings(max_obstacles=1))
+    )
+    _assert_failure(obstacle_limited, RouteFailureCode.UNSUPPORTED_GEOMETRY)
 
 
 def test_a_same_net_zone_on_another_layer_also_blocks_the_claim() -> None:
