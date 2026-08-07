@@ -21,8 +21,9 @@ from types import MappingProxyType
 from typing import Any
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
-from copper_mcp.board_ir import NetClass, ParseLimits
+from copper_mcp.board_ir import NetClass
 from copper_mcp.config import Settings
+from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.request_boundary import (
     CONSTRAINT_FIELDS,
     MAX_JSON_SAFE_INTEGER,
@@ -464,9 +465,7 @@ def preview_route_bundle(payload: Any, settings: Settings) -> RouteBundlePreview
             request,
             diagnostic="the observed scene no longer matches the current board bytes",
         )
-    limits = ParseLimits(
-        max_input_bytes=min(ParseLimits().max_input_bytes, settings.max_board_bytes)
-    )
+    limits = parse_limits_for(settings)
     conversion = parse_kicad_bytes(source, request.profile(), limits)
     if conversion.snapshot is None or conversion.diagnostics:
         return RouteBundlePreview(

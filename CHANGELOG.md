@@ -24,7 +24,7 @@ All notable changes are documented here. The format follows
   assert precisely the identity the file cannot support. Write-back stays refused, since every
   source-preserving patch path already rejects a snapshot containing a derived identity — a board
   that names 45 resistors alike cannot be patched by that name without risking the wrong one — so
-  this unblocks inspection and leaves mutation closed. ([D-165](docs/ledgers/decision-ledger.md),
+  this unblocks inspection and leaves mutation closed. ([D-166](docs/ledgers/decision-ledger.md),
   [R-123](docs/ledgers/risk-register.md),
   [KiCad UUID uniqueness](docs/research/kicad-uuid-uniqueness-v1.md), #116)
 - A semantic-validation refusal now names the invariant it failed instead of only saying that one
@@ -33,7 +33,7 @@ All notable changes are documented here. The format follows
   carries the validator's own message. Naming the rule is not echoing the board: every Board IR
   validation message is a fixed string chosen by `copper_mcp.board_ir`, and the two that were built
   from an object ID are rebuilt so the board-derived text travels in the locator the refusal drops.
-  ([D-165](docs/ledgers/decision-ledger.md), #116)
+  ([D-166](docs/ledgers/decision-ledger.md), #116)
 - Copper saved on KiCad's net 0 — stitching vias and orphaned tracks, which KiCad 10 writes as
   `(net "")` — no longer refuses the whole document with `via has no routable net`, the largest
   single cause in the issue #116 real-board survey (queued on 7 of 12 boards, which carry 115
@@ -47,6 +47,34 @@ All notable changes are documented here. The format follows
   Board IR, codec, JSON schema 0.2.0, and scene contracts widen `net_id` to nullable in place —
   strictly additive, with every existing content address byte-identical (ADR-0081, D-159,
   R-120, #119).
+- **Three singleton real-board refusals, each a different kind of defect.** Found by running the
+  adapter against a working tree of twelve real KiCad boards, where each was the first refusal on
+  exactly one board and invisible behind more common causes.
+  - A footprint graphic on a copper layer now refuses under the name of what it is. The board that
+    found it carries a `NetTie-2_THT_Pad1.0mm` joining two ground nets, and KiCad defines
+    `net_tie_pad_groups` as meaning nets in a group "are allowed to short". The adapter already
+    refused net ties — correctly, because Board IR models nets as disjoint and this copper belongs
+    to two at once, which no envelope can express — but the preflight ran first and reported a
+    stray drawing on a copper layer, sending a user to look for a mistake that is not there. The
+    one message is now three: a net tie, an `Edge.Cuts` graphic (routing *room*, the opposite
+    direction of error), and unmodelled copper. All three still refuse; copper is never dropped.
+    (D-162)
+  - A pad with **no copper layer at all** is a KiCad *aperture* pad — a solder-paste stencil
+    opening, used to subdivide the paste over an exposed thermal tab — and is now omitted from
+    Board IR instead of refusing the board. One board carried eight of them on two `TO-252-2`
+    transistors. Omitting one removes no obstacle and discards no attachment point, and that claim
+    is conditional, so each condition refuses rather than drops when it fails: paste or mask layers
+    only, `smd` kind, no net, no pad number. The regression asserts *equality* of every
+    copper-bearing field with and without the aperture. (D-163, R-122)
+  - `placed`, KiCad's autoplacement status flag, is accepted as footprint metadata — it carries no
+    geometry, no layer and no constraint, unlike `locked`, which is a constraint and stays
+    modelled. One board carried `(placed yes)` on all 31 of its footprints. Both allowlists stay
+    closed, with an unknown footprint field and an unknown root field each pinned by its own
+    control. (D-164)
+
+  No diagnostic code, Board IR field, schema or digest changes, and no golden identity moves.
+  (#116)
+
 - Board metadata that KiCad writes into essentially every real board no longer refuses the whole
   document. `solder_mask_min_width` joins `pad_to_mask_clearance` as accepted setup metadata — it
   bounds mask slivers, not copper — and `descr` and `tags`, the library documentation strings
@@ -75,7 +103,7 @@ All notable changes are documented here. The format follows
   canonical encoder emits `courtyard_circles` only when present, so every existing snapshot
   digest, scene revision, and golden identity is byte-stable. Measured against real
   `kicad-cli` 10.0.5 over 23 cases: 12 exact parity, 11 conceded, 0 contradictions; on the
-  #116 tree, courtyard-stage refusals drop from 13 boards to zero. (#116, ADR-0080, D-160,
+  #116 tree, courtyard-stage refusals drop from 13 boards to zero. (#116, ADR-0080, D-166,
   R-120, B-093)
 
 - **The KiCad plugin is now a Plugin and Content Manager package, and installing it still grants
@@ -154,7 +182,7 @@ All notable changes are documented here. The format follows
   one. `CongestionLedger` now caches each net's exact resource set and retains by costing
   `min(ripped-up units, retained units)`, with a bare clear when nothing is retained. That third
   branch exists because measurement said so: always subtracting was **60–130% slower** than the
-  path it replaced at zero retention, and the regression is recorded in B-094 rather than designed
+  path it replaced at zero retention, and the regression is recorded in B-095 rather than designed
   around quietly. Across 105 same-fixture A/B points — the congested synthetic channel, a
   parallel-track sweep to 32 nets, and 16 real MIT-licensed corpus boards — every point leaves the
   ledger byte-identical, the 78 with any retention are 11.8% to 99.94% faster (median 74.8%) at
@@ -172,7 +200,7 @@ All notable changes are documented here. The format follows
   capacity, or fallbacks. On the congested fixture it converges in five iterations at the same
   56,000,000 nm of copper as the default while making **22 router calls instead of 30**, where
   `conflicted-only-v1` does not converge at all. A 16-cell window makes 30 calls again, because a
-  wide enough window *is* full rip-up; B-094 records that rather than implying the rule improves
+  wide enough window *is* full rip-up; B-095 records that rather than implying the rule improves
   monotonically. It is not the default: `all-nets-v1` stays, and one synthetic fixture is not a
   criterion. (#64)
 
@@ -395,6 +423,9 @@ reproduces from its harness.
   square is now gated on the pad being a disc. Every roundrect in the core-containment
   parametrisation had a band with real height, so no fixture could have caught it; a stadium case
   is added. (#116, R-120)
+  is added. (#116, R-118)
+  moves. ([ADR-0079](docs/adr/0076-segment-assembled-edge-cuts-outline.md), D-154, R-117)
+
 - **A courtyard drawn as a ring is a ring, not a solid disc.** A footprint whose courtyard is an
   outer boundary plus an inner ring — a donut — was compared ring-by-ring as two independent solids,
   so a part legitimately placed in the hole was reported as a courtyard collision and the candidate

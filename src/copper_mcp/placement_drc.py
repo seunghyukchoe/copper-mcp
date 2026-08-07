@@ -8,16 +8,14 @@ never written, and raw KiCad findings are reduced to the redacted :class:`DrcSum
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 import copper_mcp.kicad_cli as kicad_cli
 from copper_mcp.adapters.kicad_board_ir import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.adapters.kicad_placement_patch import (
     KiCadPlacementPatchError,
     render_kicad_placement_candidate_board,
 )
-from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
+from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.placement.contracts import PlacementCandidate, PlacementCandidateDrcEvidence
 from copper_mcp.security import read_workspace_file
 
@@ -53,11 +51,7 @@ def run_placement_candidate_drc(
     source = captured_context[board_relative]
     source_revision = kicad_cli._revision(source)
 
-    default_limits = ParseLimits()
-    parse_limits = replace(
-        default_limits,
-        max_input_bytes=min(default_limits.max_input_bytes, settings.max_board_bytes),
-    )
+    parse_limits = parse_limits_for(settings)
     conversion = parse_kicad_bytes(source, profile, parse_limits)
     if conversion.snapshot is None or conversion.diagnostics:
         raise kicad_cli.KiCadCliError(

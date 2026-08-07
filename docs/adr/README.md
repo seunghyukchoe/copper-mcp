@@ -126,6 +126,7 @@ never silently widens it.
 | [0076](0076-segment-assembled-edge-cuts-outline.md) | Assemble the board outline from Edge.Cuts segments, and never repair it | Accepted |
 | [0077](0077-roundrect-corner-radius-rounding.md) | Roundrect corner radii round up, by geometry role | Accepted |
 | [0078](0078-netless-copper-as-obstacle.md) | Net-0 copper is an obstacle with no connectivity contribution | Accepted |
+| [0079](0079-discriminated-configurable-parse-budgets.md) | Make the structural parse budgets operator-settable, and name the one that refused | Accepted |
 | [0080](0080-chamfered-and-circular-courtyards.md) | Bracket chamfered and circular courtyards instead of widening them | Accepted |
 
 Seventy-seven numbers, seventy-six records, no duplicates — and `scripts/check_adr_numbers.py` now
@@ -214,5 +215,6 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0076: Assemble the board outline from Edge.Cuts segments, and never repair it](0076-segment-assembled-edge-cuts-outline.md)
 - [ADR-0077: Roundrect corner radii round up, by geometry role](0077-roundrect-corner-radius-rounding.md)
 - [ADR-0078: Net-0 copper is an obstacle with no connectivity contribution](0078-netless-copper-as-obstacle.md)
+- [ADR-0079: Make the structural parse budgets operator-settable, and name the one that refused](0079-discriminated-configurable-parse-budgets.md)
 - [ADR-0080: Bracket chamfered and circular courtyards instead of widening them](0080-chamfered-and-circular-courtyards.md)
 - [ADR-0081: Reconstruct the congestion ledger incrementally and bound rip-up by a spatial window](0081-incremental-retention-and-bounded-ripup-window.md)

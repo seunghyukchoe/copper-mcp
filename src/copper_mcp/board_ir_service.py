@@ -11,14 +11,15 @@ from __future__ import annotations
 import hashlib
 from collections import Counter
 from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
-from copper_mcp.board_ir import BoardIRSnapshot, NetClass, ParseLimits
+from copper_mcp.board_ir import BoardIRSnapshot, NetClass
 from copper_mcp.config import Settings
 from copper_mcp.models import SCHEMA_VERSION
+from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.request_boundary import (
     CONSTRAINT_FIELDS,
     MAX_JSON_SAFE_INTEGER,
@@ -206,11 +207,7 @@ def summarize_board_ir(payload: Any, settings: Settings) -> BoardIrSummary:
     source = board.content
     board_revision = f"sha256:{hashlib.sha256(source).hexdigest()}"
 
-    default_limits = ParseLimits()
-    limits = replace(
-        default_limits,
-        max_input_bytes=min(default_limits.max_input_bytes, settings.max_board_bytes),
-    )
+    limits = parse_limits_for(settings)
     conversion = parse_kicad_bytes(source, request.profile(), limits)
     if conversion.snapshot is None or conversion.diagnostics:
         return BoardIrSummary(

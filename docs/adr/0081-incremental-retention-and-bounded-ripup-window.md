@@ -8,7 +8,7 @@
   [ADR-0055](0055-bounded-negotiated-congestion.md),
   [ADR-0073](0073-declared-negotiation-policy-slots.md),
   [Incremental spatial index research](../research/incremental-spatial-index-v1.md),
-  D-165, B-094, R-123
+  D-166, B-095, R-123
 
 ## Context
 
@@ -74,10 +74,10 @@ never during an A* expansion. The immutable index remains what a single search s
 over exact lattice keys, removing one net's contribution is exact subtraction, not an
 approximation. A resource whose count reaches zero is deleted rather than left at zero — a
 **memory** guard rather than an output guard, since every reader of the present overlay filters on
-`usage > 1` or reads a `Counter` whose default is already zero. B-094's mutation check is what
+`usage > 1` or reads a `Counter` whose default is already zero. B-095's mutation check is what
 established which of the two it is.
 
-`retain_only(S)` does **not** always subtract. B-094 measured that subtracting the departures is
+`retain_only(S)` does **not** always subtract. B-095 measured that subtracting the departures is
 cheaper only when there are fewer of them than there are survivors, so the implementation costs
 `min(ripped-up units, retained units)`, and a pass that retains nothing takes a bare clear. Three
 branches, one result: every branch reaches counters a rebuild would reach, and the tests assert
@@ -163,7 +163,7 @@ zero, so nothing observable moved, while the overlay would have grown pass by pa
 A `live_resource_count` property and an assertion that an incrementally retained ledger tracks
 exactly as many resources as a rebuilt one were added, and the mutant is now caught.
 
-**Measured, with the regression stated.** B-094 replays both reconstructions against one recorded
+**Measured, with the regression stated.** B-095 replays both reconstructions against one recorded
 candidate set, in one process, on the same fixtures: the B-087 congested channel, a synthetic
 parallel-track sweep at 4/8/16/32 nets, and 16 real MIT-licensed SimpleRouteJson corpus boards
 contributing 67 candidates and 13,194 unit resources. Across 105 A/B points every one left the
@@ -181,7 +181,7 @@ is a **constant-factor improvement to a term that is not the bottleneck** — ex
 predicted. What moves the end-to-end number is the window rule reducing router calls from 30 to 22
 (−27%) while converging in the same five iterations at the same 56,000,000 nm of copper, where
 `conflicted-only-v1` does not converge at all. A 16-cell window makes 30 calls again, because a
-wide enough window *is* full rip-up; B-094 records that too.
+wide enough window *is* full rip-up; B-095 records that too.
 
 Nothing here claims KiCad DRC, electrical, multilayer, fabrication, apply, whole-board, or general
 scaling validity. The corpus boards are real but small; no scaling result is claimed from them. No
@@ -203,7 +203,7 @@ rip-up default.
 - **Let the window rule read the index directly, without an exact re-check.** Rejected: it would
   make a digest-bound contract's behaviour depend on an internal acceleration parameter.
 - **Make `conflict-window-v1` the default because it beats `all-nets-v1` on router calls here.**
-  Rejected: one synthetic fixture is not a criterion. B-094 was not predeclared and classifies
+  Rejected: one synthetic fixture is not a criterion. B-095 was not predeclared and classifies
   itself accordingly, and ADR-0073's own precedent is that a default follows measurement on
   reserved fixtures, not on the fixture that motivated the change.
 - **Version the rip-up slot schema to `v2` and include the window unconditionally.** Rejected: it

@@ -372,7 +372,7 @@ result or a general performance comparison.
 | Claim | **None.** The artifact classifies itself `exploratory sweep / no quality claim`. The sweep was not predeclared, the fixtures are small and synthetic, and there is no held-out corpus. Qu et al. measured 1.95% relative deviation in rule violations but 0.008% in wirelength across 300 random net orders on a real benchmark, so the 29% wirelength swing seen here from ordering alone is evidence about this fixture, not about routing. |
 | Interpretation | This measures that the three declared slots are separable, deterministic, digest-bound, and behaviorally real — including where they are worse than the default. It does not establish that any slot combination should become the default, and it makes no KiCad DRC, electrical, multilayer, via, fabrication, apply, whole-board, scaling, or FreeRouting-parity claim. Via counts are structurally zero because the negotiated coordinator is single-layer by contract. |
 
-### B-094 — Incremental congestion-ledger retention and the bounded rip-up window
+### B-095 — Incremental congestion-ledger retention and the bounded rip-up window
 
 | Field | Recorded evidence |
 |---|---|
@@ -1291,3 +1291,16 @@ part of the result rather than an omission from it.
 | Artifact | [`2026-08-06-courtyard-curved-oracle-parity.json`](../../benchmarks/results/placement/2026-08-06-courtyard-curved-oracle-parity.json), validated against its own self-digest by `scripts/check_ledgers.py`. The script raises rather than emitting an artifact if any contradiction appears. |
 | Mutation sensitivity | Six mutations of the direction and demotion guards were applied and every one was caught by the committed suite (`tests/test_courtyard_shapes.py`, `tests/test_placement.py`, `tests/test_golden_identities.py`): `violated` claimed from the outer bounds (6 failures), `proven_clear` claimed from the inner bounds (6), the circle pair's doubled loss halved (5), the bracketed band reported `proven_clear` (7), the mixed-region circle witness doubling removed (5), and the circle band hardened to `violated` (5). No mutation survived. |
 | Interpretation | This measures one DRC provider on the octilinear-plus-circles courtyard subset. It is not a full-board DRC, placement-apply, electrical, or fabrication claim, and nothing was applied or written. It does not cover arcs (still a typed refusal), rings mixing chamfers with nesting (degraded to concessions), non-quarter-turn poses, custom `courtyard_clearance`, or the exact location of the circle polygonisation boundary, which the artifact lists under `not_claimed`. |
+### B-094 — Parse-budget calibration and adversarial bounding
+
+| Field | Value |
+|---|---|
+| Question | What structural budget does an ordinary KiCad board actually need, and do the raised defaults stay bounded on hostile input? |
+| Artifact | [`benchmarks/results/board-ir/2026-08-06-parse-budget-calibration.json`](../../benchmarks/results/board-ir/2026-08-06-parse-budget-calibration.json) |
+| Method | Parse 37 boards -- this repository's fixtures, the MIT-licensed SimpleRouteJson-adjacent corpus, and the CopperTone reference -- recording nodes, tokens, objects and vertices per mebibyte of source; then re-parse deliberately adversarial inputs (deep nesting, wide child lists) at the proposed defaults to confirm they remain bounded. |
+| Measured density | {"children_per_list": {"max": 21196, "median": 7133, "min": 2253}, "nodes": {"max": 169092, "median": 143997, "min": 129520}, "objects": {"max": 14899, "median": 9502, "min": 1130}, "tokens": {"max": 215168, "median": 185249, "min": 168109}} |
+| Adversarial | {"previous_defaults": [{"bytes": 16777200, "elapsed_ns": 756947417, "outcome": "budget.exceeded.nodes", "peak_traced_bytes": 80224431, "shape": "deep", "traced_elapsed_ns": 5313154500}, {"bytes": 16777215, "elapsed_ns": 59027250, "outcome": |
+| Claim | The defaults are derived from this distribution with headroom, not chosen. Nothing here claims a board *will* parse: a board inside every budget can still be refused for a modelling gap. |
+| Non-claims | No timing or memory claim on other hardware; no claim that the adversarial set is exhaustive; the corpus is not a random sample of KiCad boards in the world. |
+| Records | [D-166](decision-ledger.md), [SEC-123](security-ledger.md), [ADR-0079](../adr/0079-discriminated-configurable-parse-budgets.md) |
+

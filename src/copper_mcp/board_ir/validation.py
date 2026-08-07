@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from copper_mcp.board_ir.limits import ParseLimits
+from copper_mcp.board_ir.limits import ParseBudget, ParseLimits
 from copper_mcp.board_ir.types import BoardIRContent, Footprint, PointNM, Ring
 
 _SCHEMA_MAX_COPPER_LAYERS = 64
@@ -153,7 +153,9 @@ def _validate_ring(
 ) -> None:
     size = len(ring.points)
     if size > min(limits.max_vertices_per_ring, _SCHEMA_MAX_RING_POINTS):
-        raise BoardIRValidationError("budget.exceeded", "ring vertex budget exceeded", locator)
+        raise BoardIRValidationError(
+            ParseBudget.VERTICES_PER_RING.value, "ring vertex budget exceeded", locator
+        )
     for first in range(size):
         a = ring.points[first]
         b = ring.points[(first + 1) % size]
@@ -165,7 +167,9 @@ def _validate_ring(
             intersection_budget[0] += 1
             if intersection_budget[0] > limits.max_intersection_tests:
                 raise BoardIRValidationError(
-                    "budget.exceeded", "polygon intersection-test budget exceeded", locator
+                    ParseBudget.INTERSECTION_TESTS.value,
+                    "polygon intersection-test budget exceeded",
+                    locator,
                 )
             c = ring.points[second]
             d = ring.points[(second + 1) % size]
@@ -219,7 +223,7 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
     )
     object_count = sum(len(group) for group in object_groups)
     if object_count > min(limits.max_objects, _SCHEMA_MAX_OBJECTS):
-        raise BoardIRValidationError("budget.exceeded", "object budget exceeded")
+        raise BoardIRValidationError(ParseBudget.OBJECTS.value, "object budget exceeded")
 
     layer_ids = _require_unique((layer.id for layer in content.copper_layers), kind="layer ID")
     _require_unique((layer.name for layer in content.copper_layers), kind="layer name")
@@ -363,7 +367,9 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
             rings.append((locator, courtyard))
     total_vertices = sum(len(ring.points) for _, ring in rings)
     if total_vertices > limits.max_total_vertices:
-        raise BoardIRValidationError("budget.exceeded", "total vertex budget exceeded")
+        raise BoardIRValidationError(
+            ParseBudget.TOTAL_VERTICES.value, "total vertex budget exceeded"
+        )
     intersection_budget = [0]
     for locator, ring in rings:
         _validate_ring(
