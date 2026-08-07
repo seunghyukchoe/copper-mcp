@@ -850,10 +850,10 @@ def preview_placement(request: PlacementPreviewToolRequest) -> PlacementPreviewT
     coordinate. Positions in the response are derived here and snapped to the placement grid.
 
     A ``previewed`` result carries an immutable candidate whose legality was proven
-    deterministically. Note that ``pad_overlap`` is three-valued: ``inconclusive`` means
-    neither clearance nor collision could be proven, and is not a failure. Courtyard overlap is
-    reported as ``proven_clear`` or ``violated`` for the bounded same-side rectangular-courtyard
-    subset. Unsupported courtyard topology fails closed. This tool never applies a
+    deterministically. Note that ``pad_overlap`` and ``courtyard_overlap`` are three-valued:
+    ``inconclusive`` means neither clearance nor collision could be proven, and is not a
+    failure. Courtyard overlap covers the bounded same-side subset - octilinear rings and
+    exact circles. Unsupported courtyard topology fails closed. This tool never applies a
     placement. ``include_drc`` is an opt-in, file-backed replay through KiCad DRC. It returns
     only aggregate findings and digest bindings for a disposable patched board; it never grants
     placement apply authority or exposes board bytes. Live placement does not support DRC.

@@ -484,6 +484,15 @@ def _object_bounds(
     for footprint in content.footprints:
         footprint_boxes = [bounds[pad_id] for pad_id in footprint.pad_ids]
         footprint_boxes.extend(_ring_bounds(ring) for ring in footprint.courtyards)
+        footprint_boxes.extend(
+            (
+                circle.center.x - circle.radius_nm,
+                circle.center.y - circle.radius_nm,
+                circle.center.x + circle.radius_nm,
+                circle.center.y + circle.radius_nm,
+            )
+            for circle in footprint.courtyard_circles
+        )
         if footprint_boxes:
             bounds[footprint.id] = (
                 min(box[0] for box in footprint_boxes),
@@ -602,6 +611,18 @@ def _footprint_object(footprint: Footprint) -> SceneObject:
             "side": footprint.side.value,
             "pad_ids": list(footprint.pad_ids),
             "courtyards_nm": [_points(ring) for ring in footprint.courtyards],
+            # The key appears only when a circle exists, which keeps every previously
+            # observable scene revision byte-identical.
+            **(
+                {
+                    "courtyard_circles_nm": [
+                        [circle.center.x, circle.center.y, circle.radius_nm]
+                        for circle in footprint.courtyard_circles
+                    ]
+                }
+                if footprint.courtyard_circles
+                else {}
+            ),
         },
         ref_stability=_ref_stability(footprint.id),
         locked=footprint.locked,
@@ -943,7 +964,10 @@ def _observe_board_scene(
     for footprint in content.footprints:
         layer_ids = ("layer:F.Cu",) if footprint.side.value == "front" else ("layer:B.Cu",)
         detail_units = (
-            1 + len(footprint.pad_ids) + sum(len(ring.points) for ring in footprint.courtyards)
+            1
+            + len(footprint.pad_ids)
+            + sum(len(ring.points) for ring in footprint.courtyards)
+            + len(footprint.courtyard_circles)
         )
         consider(
             _footprint_object(footprint),

@@ -10,6 +10,7 @@ from types import MappingProxyType
 from copper_mcp.board_ir import (
     BoardIRSnapshot,
     BoardIRValidationError,
+    CourtyardCircle,
     Pad,
     ParseLimits,
     PointNM,
@@ -36,8 +37,10 @@ class FootprintView:
     locked: bool
     #: Union of the footprint's pad bounds in the board frame, as currently placed.
     hull: Rect
-    #: Exact simple orthogonal courtyard rings in the current Board IR board frame.
+    #: Exact simple octilinear courtyard rings in the current Board IR board frame.
     courtyards: tuple[Ring, ...]
+    #: Exact circular courtyard keep-outs in the current Board IR board frame.
+    courtyard_circles: tuple[CourtyardCircle, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.ref_id.startswith("footprint:"):
@@ -52,6 +55,10 @@ class FootprintView:
             isinstance(ring, Ring) for ring in self.courtyards
         ):
             raise PlacementViewError("footprint courtyards must be immutable rings")
+        if not isinstance(self.courtyard_circles, tuple) or not all(
+            isinstance(circle, CourtyardCircle) for circle in self.courtyard_circles
+        ):
+            raise PlacementViewError("footprint courtyard circles must be immutable circles")
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,16 +70,21 @@ class StationaryFootprintView:
     orientation_udeg: int
     side: str
     courtyards: tuple[Ring, ...]
+    courtyard_circles: tuple[CourtyardCircle, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.ref_id.startswith("footprint:"):
             raise PlacementViewError("footprint reference must be typed")
         if self.side not in {"front", "back"}:
             raise PlacementViewError("footprint side must be front or back")
-        if not isinstance(self.courtyards, tuple) or not self.courtyards:
+        if not isinstance(self.courtyards, tuple) or not isinstance(self.courtyard_circles, tuple):
+            raise PlacementViewError("stationary footprint courtyards must be immutable tuples")
+        if not self.courtyards and not self.courtyard_circles:
             raise PlacementViewError("stationary footprint must carry a courtyard")
         if not all(isinstance(ring, Ring) for ring in self.courtyards):
             raise PlacementViewError("stationary footprint courtyards must be immutable rings")
+        if not all(isinstance(circle, CourtyardCircle) for circle in self.courtyard_circles):
+            raise PlacementViewError("stationary footprint circles must be immutable circles")
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,7 +102,7 @@ class PlacementView:
     #: retained so a caller naming one is told it cannot be placed rather than that it does not
     #: exist. The second answer would be false: Board IR carries it and the scene reports it.
     padless_refs: frozenset[str] = frozenset()
-    #: Padless footprints with supported orthogonal courtyards remain stationary collision
+    #: Padless footprints with supported courtyards (rings or circles) remain stationary collision
     #: envelopes.
     stationary: Mapping[str, StationaryFootprintView] = field(default_factory=dict)
 
@@ -166,13 +178,14 @@ def build_placement_view(
             # version has no copper hull with which to evaluate its pad-based rules. Its
             # identity is kept so naming it is refused as unplaceable rather than as unknown.
             padless_refs.add(footprint.id)
-            if footprint.courtyards:
+            if footprint.courtyards or footprint.courtyard_circles:
                 stationary[footprint.id] = StationaryFootprintView(
                     ref_id=footprint.id,
                     origin=footprint.origin,
                     orientation_udeg=footprint.rotation_udeg,
                     side=footprint.side.value,
                     courtyards=footprint.courtyards,
+                    courtyard_circles=footprint.courtyard_circles,
                 )
             continue
         footprints[footprint.id] = FootprintView(
@@ -184,6 +197,7 @@ def build_placement_view(
             locked=footprint.locked,
             hull=hull,
             courtyards=footprint.courtyards,
+            courtyard_circles=footprint.courtyard_circles,
         )
 
     unowned = set(pads_by_id) - set(owner_by_pad)

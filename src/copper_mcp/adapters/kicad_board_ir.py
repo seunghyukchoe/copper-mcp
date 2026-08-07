@@ -6,6 +6,7 @@ import hashlib
 import re
 from collections import Counter
 from dataclasses import dataclass
+from math import isqrt
 from typing import Never
 
 from copper_mcp.adapters.sexpr import (
@@ -24,6 +25,7 @@ from copper_mcp.board_ir.types import (
     JSON_SAFE_INTEGER,
     Arc,
     ConstraintSet,
+    CourtyardCircle,
     DifferentialPairRule,
     Footprint,
     FootprintSide,
@@ -93,7 +95,7 @@ _ROOT_ROUTING_HEADS = frozenset({"arc", "footprint", "segment", "via", "zone"})
 # The only root graphics that may sit on ``Edge.Cuts``: one unfilled rectangle, or straight
 # segments that chain into exactly one closed simple loop.  Both carry the board outline as an
 # exact integer polygon whose vertices are drawn points, so neither can model more room than the
-# board has.  See docs/research/edge-cuts-outline-assembly-v1.md and ADR-0077.
+# board has.  See docs/research/edge-cuts-outline-assembly-v1.md and ADR-0080.
 _EDGE_CUTS_OUTLINE_HEADS = frozenset({"gr_line", "gr_rect"})
 # Curved outline primitives, refused separately so the diagnostic names the curve rather than
 # reporting the same message as an unsupported layer.  An outline curve needs an *inscribed*
@@ -468,7 +470,13 @@ class _Converter:
                 if head.startswith("fp_") or head in {"property", "point"}:
                     layer = self._graphic_layer(item, f"{locator}.graphic")
                     if layer in _COURTYARD_LAYERS:
-                        if head not in {"fp_line", "fp_poly", "fp_rect"}:
+                        # ``fp_arc`` stays refused: an arc is a fragment of a chain rather
+                        # than a closed shape, so no region exists to bound until the whole
+                        # curved chain is modelled - an outward guess would publish
+                        # ``violated`` evidence KiCad does not share (ADR-0072 discusses the
+                        # obstacle direction; a keep-out on an evidence surface cannot copy
+                        # it).
+                        if head not in {"fp_circle", "fp_line", "fp_poly", "fp_rect"}:
                             self.fail(
                                 "unsupported.construct",
                                 "courtyard primitive is unsupported by Board IR v0.2",
@@ -1067,22 +1075,24 @@ class _Converter:
         origin: PointNM,
         turn: int,
         side: FootprintSide,
-    ) -> tuple[Ring, ...]:
-        """Import exact closed orthogonal courtyard centerlines in the board frame.
+    ) -> tuple[tuple[Ring, ...], tuple[CourtyardCircle, ...]]:
+        """Import exact closed courtyard centerlines and circles in the board frame.
 
         KiCad treats every closed shape on the matching courtyard layer as part of the footprint
         envelope.  The bounded Board-IR subset accepts unfilled rectangles and polygons plus
-        complete ``fp_line`` cycles, but only when every edge is horizontal or vertical.  Empty
-        still means that no courtyard was present; a malformed or unsupported shape is never
-        silently omitted.
+        complete ``fp_line`` cycles - with every edge horizontal, vertical, or an exact
+        45-degree chamfer - and unfilled ``fp_circle`` outlines whose radius is an exact
+        integer nanometre.  Empty still means that no courtyard was present; a malformed or
+        unsupported shape is never silently omitted.
         """
 
         expected_layer = "F.CrtYd" if side is FootprintSide.FRONT else "B.CrtYd"
         result: list[Ring] = []
+        circles: list[CourtyardCircle] = []
         line_segments: list[tuple[PointNM, PointNM, str]] = []
 
         def append(local_points: tuple[PointNM, ...], locator: str) -> None:
-            if len(result) >= 64:
+            if len(result) + len(circles) >= 64:
                 self.fail(
                     "budget.exceeded",
                     "footprint courtyard limit exceeded",
@@ -1102,7 +1112,12 @@ class _Converter:
 
         courtyard_index = 0
         for item in footprint.items[1:]:
-            if not isinstance(item, SExpr) or item.head not in {"fp_line", "fp_poly", "fp_rect"}:
+            if not isinstance(item, SExpr) or item.head not in {
+                "fp_circle",
+                "fp_line",
+                "fp_poly",
+                "fp_rect",
+            }:
                 continue
             locator = f"{footprint_locator}.courtyard[{courtyard_index}]"
             courtyard_index += 1
@@ -1150,6 +1165,15 @@ class _Converter:
                 append((start, PointNM(end.x, start.y), end, PointNM(start.x, end.y)), locator)
             elif item.head == "fp_poly":
                 append(self._courtyard_polygon_points(item, locator), locator)
+            elif item.head == "fp_circle":
+                if len(result) + len(circles) >= 64:
+                    self.fail(
+                        "budget.exceeded",
+                        "footprint courtyard limit exceeded",
+                        locator,
+                        object_kind="footprint",
+                    )
+                circles.append(self._courtyard_circle(item, locator, origin=origin, turn=turn))
             else:
                 line_segments.append(self._courtyard_line_segment(item, locator))
 
@@ -1157,7 +1181,8 @@ class _Converter:
             self._closed_courtyard_line_rings(line_segments, footprint_locator)
         ):
             append(ring, f"{footprint_locator}.line_chain[{index}]")
-        return tuple(result)
+        self._require_disjoint_courtyard_circles(tuple(result), tuple(circles), footprint_locator)
+        return tuple(result), tuple(circles)
 
     def _courtyard_polygon_points(self, polygon: SExpr, locator: str) -> tuple[PointNM, ...]:
         """Read one unfilled orthogonal ``fp_poly`` without inventing a closing point."""
@@ -1301,19 +1326,131 @@ class _Converter:
         return tuple(rings)
 
     def _require_orthogonal_chain(self, points: tuple[PointNM, ...], locator: str) -> None:
-        """Fail closed unless every supplied edge is a non-zero orthogonal segment."""
+        """Fail closed unless every edge is non-zero and axis-aligned or an exact chamfer.
+
+        The accepted diagonal class is exactly ``|dx| == |dy|``: a 45-degree chamfer keeps
+        integer-nanometre vertices and stays in-class under every quarter-turn transform the
+        placement model supports.  Real refused boards carried nothing but such chamfers
+        (electrolytic-capacitor courtyards); a rectangle rotated by any other angle has
+        irrational vertices in the source's own frame and still fails closed here.
+        """
 
         if len(points) < 2:
             self.fail("geometry.invalid", "courtyard chain has too few points", locator)
         for index, start in enumerate(points):
             end = points[(index + 1) % len(points)]
-            if (start.x == end.x) == (start.y == end.y):
+            delta_x = end.x - start.x
+            delta_y = end.y - start.y
+            if (delta_x == 0 and delta_y == 0) or (
+                delta_x != 0 and delta_y != 0 and abs(delta_x) != abs(delta_y)
+            ):
                 self.fail(
                     "unsupported.topology",
-                    "courtyard edges must be non-zero and axis-aligned",
+                    "courtyard edges must be non-zero and axis-aligned or 45-degree chamfers",
                     locator,
                     object_kind="footprint",
                 )
+
+    def _courtyard_circle(
+        self, circle: SExpr, locator: str, *, origin: PointNM, turn: int
+    ) -> CourtyardCircle:
+        """Read one unfilled ``fp_circle`` courtyard outline as an exact integer circle.
+
+        The radius is the distance from ``center`` to ``end``.  It is imported only when that
+        distance is an exact integer nanometre; rounding it in either direction would misstate
+        the keep-out on an evidence-publishing surface, so an inexact radius is a typed
+        refusal rather than an approximation.  Every circle in the measured refused boards has
+        an axis-aligned radius point and therefore an exact radius.
+        """
+
+        self._reject_unknown_children(
+            circle,
+            frozenset({"center", "end", "fill", "layer", "locked", "stroke", "tstamp", "uuid"}),
+            locator,
+        )
+        self._validate_direct_atoms(
+            circle, positional_atoms=0, allowed=frozenset({"locked"}), locator=locator
+        )
+        fill = self._values(circle, "fill", locator, minimum=1, maximum=1, required=False)
+        if fill and fill not in {("none",), ("no",)}:
+            self.fail(
+                "unsupported.construct",
+                "filled courtyard circle is unsupported",
+                locator,
+                object_kind="footprint",
+            )
+        center = self._point(circle, "center", locator)
+        end = self._point(circle, "end", locator)
+        delta_x = end.x - center.x
+        delta_y = end.y - center.y
+        radius_squared = delta_x * delta_x + delta_y * delta_y
+        radius = isqrt(radius_squared)
+        if radius * radius != radius_squared:
+            self.fail(
+                "integer.precision",
+                "courtyard circle radius is not an exact nanometre",
+                locator,
+                object_kind="footprint",
+            )
+        if radius == 0:
+            self.fail(
+                "geometry.invalid",
+                "courtyard circle must have a non-zero radius",
+                locator,
+                object_kind="footprint",
+            )
+        try:
+            return CourtyardCircle(
+                center=self._transform(center, origin, turn, locator), radius_nm=radius
+            )
+        except ValueError as error:
+            self.fail("geometry.invalid", str(error), locator, object_kind="footprint")
+
+    def _require_disjoint_courtyard_circles(
+        self,
+        rings: tuple[Ring, ...],
+        circles: tuple[CourtyardCircle, ...],
+        footprint_locator: str,
+    ) -> None:
+        """Refuse a courtyard circle whose box meets any other courtyard shape's box.
+
+        One footprint's courtyard region is filled even-odd across its contours, which equals
+        the plain union only when the contours are disjoint or strictly nested.  A circle
+        cannot join the ring nesting hierarchy, so overlap here would silently subtract area
+        from the keep-out.  The box test is conservative: it can refuse an exotic legal
+        arrangement, never admit an unsound one, and no measured board comes near it.
+        """
+
+        if not circles:
+            return
+        boxes = [
+            (
+                circle.center.x - circle.radius_nm,
+                circle.center.y - circle.radius_nm,
+                circle.center.x + circle.radius_nm,
+                circle.center.y + circle.radius_nm,
+            )
+            for circle in circles
+        ]
+        boxes.extend(
+            (
+                min(point.x for point in ring.points),
+                min(point.y for point in ring.points),
+                max(point.x for point in ring.points),
+                max(point.y for point in ring.points),
+            )
+            for ring in rings
+        )
+        for first in range(len(circles)):
+            for second in range(first + 1, len(boxes)):
+                a, b = boxes[first], boxes[second]
+                if a[2] > b[0] and b[2] > a[0] and a[3] > b[1] and b[3] > a[1]:
+                    self.fail(
+                        "unsupported.topology",
+                        "courtyard circles must be disjoint from other courtyard shapes",
+                        footprint_locator,
+                        object_kind="footprint",
+                    )
 
     def _footprints_and_pads(self) -> tuple[tuple[Footprint, ...], tuple[Pad, ...]]:
         footprints: list[Footprint] = []
@@ -1520,6 +1657,13 @@ class _Converter:
                 )
                 pads.append(pad_item)
                 owned_pad_ids.append(pad_item.id)
+            courtyards, courtyard_circles = self._courtyards(
+                footprint,
+                footprint_locator=footprint_locator,
+                origin=origin,
+                turn=turn,
+                side=side,
+            )
             footprints.append(
                 Footprint(
                     id=footprint_id,
@@ -1527,13 +1671,8 @@ class _Converter:
                     rotation_udeg=footprint_rotation,
                     side=side,
                     pad_ids=tuple(owned_pad_ids),
-                    courtyards=self._courtyards(
-                        footprint,
-                        footprint_locator=footprint_locator,
-                        origin=origin,
-                        turn=turn,
-                        side=side,
-                    ),
+                    courtyards=courtyards,
+                    courtyard_circles=courtyard_circles,
                     locked=footprint_locked,
                 )
             )

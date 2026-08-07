@@ -17,6 +17,7 @@ from copper_mcp.board_ir.types import (
     BoardIRContent,
     BoardIRSnapshot,
     ConstraintSet,
+    CourtyardCircle,
     DifferentialPairRule,
     Footprint,
     FootprintSide,
@@ -43,6 +44,7 @@ from copper_mcp.board_ir.types import (
     mm_to_nm,
     nm_to_mm,
     normalize_rotation_udeg,
+    signed_double_area,
 )
 from copper_mcp.board_ir.validation import BoardIRValidationError, validate_content
 
@@ -54,6 +56,7 @@ __all__ = [
     "BoardIRValidationError",
     "ConstraintSet",
     "ConversionResult",
+    "CourtyardCircle",
     "Diagnostic",
     "DifferentialPairRule",
     "Footprint",
@@ -89,6 +92,7 @@ __all__ = [
     "mm_to_nm",
     "nm_to_mm",
     "normalize_rotation_udeg",
+    "signed_double_area",
     "validate_content",
     "verify_snapshot",
 ]
