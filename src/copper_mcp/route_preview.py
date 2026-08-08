@@ -54,6 +54,7 @@ from copper_mcp.request_boundary import (
 from copper_mcp.routing import (
     AStarRouter,
     AStarSettings,
+    OffGridEvidence,
     RouteCandidate,
     RouteConnection,
     RouteDiagnostic,
@@ -185,6 +186,25 @@ class RoutePreviewRequest:
         if self.expect_snapshot_digest is not None:
             document["expect_snapshot_digest"] = self.expect_snapshot_digest
         return document
+
+
+def _off_grid_document(evidence: OffGridEvidence | None) -> dict[str, Any] | None:
+    """Serialize the geometry of one ``off_grid`` refusal, or ``None`` when there is none.
+
+    Every other diagnostic reports ``None`` here rather than an empty object or a placeholder
+    number, because a diagnostic that never measured a lattice has nothing to say about one.
+    """
+
+    if evidence is None:
+        return None
+    return {
+        "pad_id": evidence.pad_id,
+        "anchor_pad_id": evidence.anchor_pad_id,
+        "grid_step_nm": evidence.grid_step_nm,
+        "miss_x_nm": evidence.miss_x_nm,
+        "miss_y_nm": evidence.miss_y_nm,
+        "largest_representable_step_nm": evidence.largest_representable_step_nm,
+    }
 
 
 def _net_ref_id(value: Any) -> str:
@@ -507,6 +527,7 @@ class RoutePreview:
                     "message": self.diagnostic.message,
                     "expanded_states": self.diagnostic.expanded_states,
                     "obstacle_checks": self.diagnostic.obstacle_checks,
+                    "off_grid": _off_grid_document(self.diagnostic.off_grid),
                 }
             ),
             "conversion_diagnostic_counts": dict(self.conversion_diagnostic_counts),
