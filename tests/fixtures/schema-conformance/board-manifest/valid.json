@@ -1,0 +1,18 @@
+{
+  "board_id": "board:0123456789abcdef",
+  "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "relative_path": "boards/example.kicad_pcb",
+  "format": "kicad_pcb",
+  "size_bytes": 12345,
+  "source_version": "8.0.0",
+  "source_generator": "pcbnew",
+  "counts": {
+    "copper_layers": 2,
+    "footprints": 3,
+    "nets": 4,
+    "segments": 10,
+    "vias": 2,
+    "zones": 1
+  },
+  "schema_version": "1.0"
+}
