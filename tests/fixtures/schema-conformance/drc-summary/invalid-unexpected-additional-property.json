@@ -1,0 +1,17 @@
+{
+  "base_revision": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "drc_context_revision": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "kicad_version": "10.0.5",
+  "drc_schema": "https://schemas.kicad.org/drc.v1.json",
+  "coordinate_units": "mm",
+  "error_count": 0,
+  "warning_count": 0,
+  "exclusion_count": 0,
+  "ignored_check_count": 0,
+  "unconnected_count": 0,
+  "violation_type_counts": {},
+  "passed": true,
+  "clean": true,
+  "schema_version": "1.0",
+  "unexpected_field": "not declared by the schema"
+}
