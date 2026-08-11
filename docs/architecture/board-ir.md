@@ -88,6 +88,16 @@ board. The schema is the field-level reference.
   The largest such round-up on a board is reported as `ConversionResult.max_roundrect_rounding_nm`.
   A ratio outside `(0, 0.5]`, or one whose rounded-up radius would exceed half the short side, is
   refused rather than clamped. See [ADR-0077](../adr/0077-roundrect-corner-radius-rounding.md).
+- An **unlocked** root `(group ...)` is editor organisation and is read past rather than refused.
+  KiCad models it as a "transparent container" whose position is derived from its members', with no
+  layer and no net, and every member is a root object converted on its own terms — so the copper,
+  outline and nets a document holds are the same set with the group read as without it. The
+  grouping is not modelled: Board IR has no membership relation, so the number of accepted and
+  unmodelled groups is reported as `ConversionResult.unmodelled_group_count`. A **locked** group is
+  refused, because `BOARD_ITEM::IsLocked()` derives every member's lock from it and Board IR would
+  otherwise convert those members as unlocked; lock is an authorization gate, not a hint. A group
+  carrying any child head outside KiCad's own writer vocabulary is refused rather than assumed
+  inert. See [ADR-0090](../adr/0090-root-level-board-groups.md).
 - IDs use type prefixes such as `layer:`, `net:`, `class:`, `footprint:`, `pad:`, `via:`,
   `segment:`, `arc:`, `zone:`, `keepout:`, `contour:`, and `rule:`. IDs and display names have
   different roles.
@@ -156,7 +166,7 @@ contains a bounded machine-readable diagnostic and no snapshot.
 | Board metadata | Exact KiCad PCB format version `20260206`, optional `generator`, ordered copper declarations `0/F.Cu`, contiguous even-numbered inner layers, then `B.Cu`, and a narrow setup-metadata allowlist with KiCad-default front/back via tenting. |
 | Nets | Quote-aware named item-level net references and legacy numeric root declarations; quoted numeric text remains a name while bare signed numeric tokens retain legacy net-code meaning. |
 | Outline | Exactly one contour on `Edge.Cuts`, drawn either as one unfilled `gr_rect` or as `gr_line` segments that chain, by exact endpoint coincidence, into one closed simple loop. See [ADR-0077](../adr/0076-segment-assembled-edge-cuts-outline.md). |
-| Footprints/pads | Footprints on `F.Cu` or `B.Cu` with rotations in 90-degree increments, exact origin/side/lock/pad ownership, and optional unfilled `fp_rect`, orthogonal `fp_poly`, or closed orthogonal `fp_line` courtyard centerlines on the matching layer; `smd`, `thru_hole`, and `np_thru_hole` pads; circle, rect, oval, and roundrect shapes; round or oval drills; copper layer names, `*.Cu`, and `F&B.Cu`. |
+| Footprints/pads | Footprints on `F.Cu` or `B.Cu` with rotations in 90-degree increments, exact origin/side/lock/pad ownership, and optional unfilled `fp_rect`, orthogonal `fp_poly`, or closed orthogonal `fp_line` courtyard centerlines on the matching layer; `smd`, `thru_hole`, and `np_thru_hole` pads; circle, rect, oval, and roundrect shapes; round or oval drills; copper layer names, `*.Cu`, and `F&B.Cu`; and a pad `zone_connect` override of `1`, `2` or `3` — the three that attach the pad to a same-net pour — accepted as a proven no-op and modelled as nothing, per [ADR-0091](../adr/0091-attaching-pad-zone-connect-overrides.md). |
 | Routed copper | Net-bound straight `segment` items, exact start/mid/end `arc` items, and through vias spanning the declared copper stack. |
 | Zones | Net-bound, single-copper-layer, solid zones with one polygon loop; explicit priority, thermal/through-hole-thermal/solid/none pad connection, always/never island removal, clearance, and conditionally required thermal dimensions. |
 | Keepouts | Copper-layer sets, exactly one polygon loop, the five modeled prohibition flags, and lock state. |
@@ -203,6 +213,9 @@ including:
   smoothing, minimum-area island removal, and other unmodeled zone semantics;
 - non-neutral capping/filling/covering/plugging, non-default board via tenting, per-via tenting
   overrides, and pad/via copper-removal or custom-connectivity options;
+- a pad `zone_connect` of `0`, which detaches the pad from its pour, and any value outside
+  KiCad's `ZONE_CONNECTION` enum; and pad-level `clearance`, `offset`, `options`, `primitives`,
+  `thermal_bridge_angle`, `thermal_bridge_width` and `thermal_gap`, each refused by name;
 - setup defaults, stackup/routing-rule constructs, and other setup fields outside the documented
   non-routing metadata allowlist;
 - simultaneous UUID/tstamp identities and malformed, unresolved, or unconnected legacy net codes;

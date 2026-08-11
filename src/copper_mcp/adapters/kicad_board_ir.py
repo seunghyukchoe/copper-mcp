@@ -92,6 +92,50 @@ _ROOT_METADATA_HEADS = frozenset(
     }
 )
 _ROOT_ROUTING_HEADS = frozenset({"arc", "footprint", "segment", "via", "zone"})
+# KiCad's board-level grouping construct, and one of the root sections the board file format
+# enumerates ("Header, General, Layers, Setup, Properties, Nets, Footprints, Graphic Items, Images,
+# Tracks, Zones, Groups").  A group is organisation, not geometry: KiCad's own class comment reads
+# "A set of BOARD_ITEMs ... The group is transparent container - e.g., its position is derived from
+# the position of its members", `PCB_GROUP::SetLayer` is a no-op, and `IsOnCopperLayer` returns
+# false because "a group might have members on a copper layer, but isn't itself on any layer".
+# Every member is named by UUID and is a board object this adapter already converts on its own, so
+# an *unlocked* group adds no copper, no outline, no net and no constraint.  Ignoring one therefore
+# cannot shrink an obstacle or grow the routing room: both directions of error are untouched
+# because nothing geometric is read from it in the first place.  See
+# docs/research/kicad-board-groups-v1.md and ADR-0090.
+#
+# A *locked* group is a different construct and is refused.  `BOARD_ITEM::IsLocked()`
+# (pcbnew/board_item.cpp) begins `if( EDA_GROUP* group = GetParentGroup() ) { if(
+# group->AsEdaItem()->IsLocked() ) return true; }` -- so a locked group makes every member locked in
+# KiCad's own model, transitively through nested groups, without any member's own s-expression
+# saying so.  Lock is a hard authorization gate here, not a hint, and a member read as unlocked
+# would authorize a move KiCad forbids.  This is the one asymmetric direction in the construct, and
+# it is exactly the direction that must fail closed.  See `_check_root_group`.
+_ROOT_GROUP_HEAD = "group"
+# The child heads `PCB_IO_KICAD_SEXPR::format( const PCB_GROUP* )` can emit, after the quoted group
+# name: the group's own uuid, an optional `locked` flag, an optional design-block `lib_id`, and the
+# member list.  This is a *depth-one head* allowlist, not a full grammar -- it constrains which
+# children may appear, not what nests inside them.  That is sufficient here because no child of a
+# group carries geometry, connectivity or a constraint that Board IR models, with `locked` the one
+# exception, which is read and refused rather than allowlisted through.  A group carrying any other
+# head is a construct this adapter has not read, and is refused rather than assumed inert.
+_ROOT_GROUP_HEADS = frozenset({"lib_id", "locked", "members", "uuid"})
+# The only `locked` value a group may carry and still be read past.  KiCad writes the flag only
+# when the group *is* locked (`FormatBool`), so this is a defensive accept rather than an observed
+# form; every other value, `yes` included, refuses.
+_UNLOCKED_GROUP_VALUES = ("no",)
+# Root sections the KiCad board file format defines and Board IR v0.2 does not model, mapped to
+# the refusal each one earns.  The message is a *value from this table*, selected by an equality
+# test against the source token and never built from it, so a refusal can name the construct
+# without echoing one byte of the board -- the board's own text is untrusted data and a head is
+# board bytes like any other.  A head absent from this table is not a documented root section at
+# all; it is refused without being named, and the indexed locator still says where it sits.  The
+# table is deliberately partial: an entry is added when the construct is cited, not guessed.
+_UNMODELLED_ROOT_HEADS: dict[str, str] = {
+    "dimension": "root dimension objects are unsupported",
+    "image": "root embedded images are unsupported",
+    "property": "root board properties are unsupported",
+}
 # The only root graphics that may sit on ``Edge.Cuts``: one unfilled rectangle, or straight
 # segments that chain into exactly one closed simple loop.  Both carry the board outline as an
 # exact integer polygon whose vertices are drawn points, so neither can model more room than the
@@ -156,6 +200,28 @@ _FOOTPRINT_METADATA_HEADS = frozenset(
 # an electrical connection point and cannot even carry a pad number. See
 # docs/research/kicad-aperture-pads-and-net-ties-v1.md.
 _APERTURE_PAD_LAYERS = frozenset({"B.Mask", "B.Paste", "F.Mask", "F.Paste"})
+
+# Pad fields that change the pad's own copper, its clearance, or its thermal-relief geometry.
+# Each one would make Board IR describe copper it cannot derive, so each refuses by name.
+# `zone_connect` deliberately is *not* in this tuple; see ADR-0091 and
+# `_require_attaching_pad_zone_connection`.
+_UNSUPPORTED_PAD_FIELDS = (
+    "clearance",
+    "offset",
+    "options",
+    "primitives",
+    "thermal_bridge_angle",
+    "thermal_bridge_width",
+    "thermal_gap",
+)
+
+# KiCad's `ZONE_CONNECTION` enum as a pad writes it: 0 NONE, 1 THERMAL, 2 FULL, 3 THT_THERMAL.
+# `INHERITED` (-1) is never written -- an absent token *is* inheritance. 1, 2 and 3 all attach the
+# pad to a same-net pour (3 resolves to 1 on a plated through-hole pad and to 2 otherwise), so
+# discarding them can only under-state attachment. 0 detaches, which is the one direction Board IR
+# may not lose. See ADR-0091 and docs/research/kicad-pad-zone-connect-v1.md.
+_ATTACHING_PAD_ZONE_CONNECTIONS = frozenset({"1", "2", "3"})
+_DETACHING_PAD_ZONE_CONNECTION = "0"
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,6 +305,9 @@ class _Converter:
         self.source_revision = f"sha256:{hashlib.sha256(payload).hexdigest()}"
         # Largest single roundrect radius rounding, in nanometres, measured rather than asserted.
         self.max_roundrect_rounding_nm = 0
+        # Root ``(group ...)`` expressions accepted as editor organisation and not modelled.
+        # Measured in the preflight and reported rather than dropped in silence.
+        self.root_group_count = 0
         if self.root.head != KICAD_PCB_ROOT_HEAD:
             self.fail(
                 FOREIGN_ROOT_DIAGNOSTIC_CODE,
@@ -377,16 +446,85 @@ class _Converter:
             )
         return values[0]
 
+    def _check_root_group(self, expression: SExpr, locator: str) -> None:
+        """Accept one *unlocked* root ``(group ...)`` as editor organisation, on a closed shape.
+
+        The acceptance argument is about what a group *is*, and it is conditional, so each
+        condition is checked and refuses rather than being assumed:
+
+        - **It is not locked.** This is the condition the first version of this change missed, and
+          it is the only one that carries a safety consequence. ``BOARD_ITEM::IsLocked()`` opens
+          with ``if( EDA_GROUP* group = GetParentGroup() ) { if( group->AsEdaItem()->IsLocked() )
+          return true; }``, so a locked group makes every member locked in KiCad's own model --
+          transitively, and without any member's own s-expression saying so. Lock is a hard
+          authorization gate in this project, not a hint: ``placement/solver.py`` will not select a
+          locked footprint as a subject, ``placement/legalizer.py`` raises "moving a locked
+          footprint is not authorized", and ``kicad_placement_patch.py`` refuses "locked footprint
+          movement is unsupported". Reading a locked group past would present its members at
+          ``locked=False`` and authorize a move KiCad forbids. That is the unsafe direction, so it
+          fails closed.
+        - **It carries no geometry of its own.** KiCad models a group as a "transparent container"
+          whose position "is derived from the position of its members", with a no-op ``SetLayer``
+          and an ``IsOnCopperLayer`` that is false by construction. Every member is named by UUID
+          and is itself a root object this adapter converts on its own terms. So the copper this
+          board contains, the outline it contains and the nets it contains are exactly the same
+          set with an unlocked group read as with it ignored. There is no quantity to round the
+          wrong way -- which is exactly why *lock* had to be found by reading KiCad's model rather
+          than by comparing two conversions, since a constraint that lives in a runtime derivation
+          is invisible to any equality between two outputs of the same reader.
+        - **Its children are only the heads KiCad's writer emits.** A group carrying an unknown
+          child is a construct that has not been read, and it refuses. Widening the root allowlist
+          by one head does not open it. This is a depth-one head check, not a full grammar: it
+          constrains which children may appear, not what nests inside them, which is sufficient
+          because no group child carries geometry or connectivity Board IR models, and the one
+          child that carries a constraint is read rather than allowlisted through.
+        - **It has the writer's leading name atom and no other positional semantics.** A bare
+          ``(group)`` or a group with stray trailing atoms is malformed for this adapter and
+          refuses rather than being waved through as inert.
+
+        What is *not* claimed is that the grouping survives an edit. A caller that moves one member
+        of a group the designer meant to keep together breaks the designer's intent, and Board IR
+        has no field in which to hold that intent. That is a modelling gap, so it is recorded --
+        ``ConversionResult.unmodelled_group_count`` -- rather than being silently dropped or
+        allowed to masquerade as a modelled constraint. See R-134 and ADR-0090.
+        """
+
+        self._reject_unknown_children(expression, _ROOT_GROUP_HEADS, locator)
+        self._validate_direct_atoms(
+            expression,
+            positional_atoms=1,
+            allowed=frozenset(),
+            locator=locator,
+        )
+        locked = self._values(expression, "locked", locator, minimum=1, maximum=1, required=False)
+        if locked and locked != _UNLOCKED_GROUP_VALUES:
+            self.fail(
+                "unsupported.construct",
+                "a locked group locks its members and is unsupported",
+                locator,
+                object_kind="group",
+            )
+
     def _semantic_preflight(self) -> None:
         """Reject physical semantics that the v0.2 model cannot preserve."""
 
-        for item in self.root.items[1:]:
+        groups = 0
+        for index, item in enumerate(self.root.items[1:]):
+            # The index is computed here, not read from the board, so it names the position of the
+            # offending child without echoing anything the board author controls.  Before this,
+            # every root refusal reported the constant ``kicad_pcb.unsupported`` and an operator
+            # could not locate the construct without a debugger.
+            root_locator = f"kicad_pcb.child[{index}]"
             if not isinstance(item, SExpr) or item.head is None:
                 self.fail(
-                    "syntax.invalid", "root expression contains a malformed item", "kicad_pcb"
+                    "syntax.invalid", "root expression contains a malformed item", root_locator
                 )
             head = item.head
             if head in _ROOT_METADATA_HEADS or head in _ROOT_ROUTING_HEADS:
+                continue
+            if head == _ROOT_GROUP_HEAD:
+                self._check_root_group(item, root_locator)
+                groups += 1
                 continue
             if head.startswith("gr_"):
                 layer = self._graphic_layer(item, "kicad_pcb.graphic")
@@ -411,9 +549,12 @@ class _Converter:
                 continue
             self.fail(
                 "unsupported.construct",
-                "root expression contains an unsupported semantic construct",
-                "kicad_pcb.unsupported",
+                _UNMODELLED_ROOT_HEADS.get(
+                    head, "root expression contains an unsupported semantic construct"
+                ),
+                root_locator,
             )
+        self.root_group_count = groups
 
         general = self._one(self.root, "general", "kicad_pcb", required=False)
         if general is not None:
@@ -957,6 +1098,81 @@ class _Converter:
             locator,
             object_kind="pad",
         )
+
+    def _require_attaching_pad_zone_connection(self, pad: SExpr, locator: str) -> None:
+        """Accept a pad `zone_connect` override only when it *attaches* the pad to its pour.
+
+        `zone_connect` is an input to KiCad's own zone filler, and the filler is the only thing
+        that turns it into copper. (Two other places *read* it -- the starved-thermal DRC test and
+        the UI inspection tool -- and neither produces geometry.) It does not move the pad, change
+        the pad's shape, change any clearance the router honours, or change the zone outline.
+        In `ZONE_FILLER::knockoutThermalReliefs` the resolved value selects one
+        of three treatments -- `THERMAL` knocks out a thermal-gap annulus and adds spokes back,
+        `NONE` knocks the pad out with clearance, `FULL` knocks nothing out -- and the finished
+        fill is intersected with the zone's own extents, so poured copper stays a subset of the
+        zone boundary for *every* value. That is what keeps the boundary obstacle of ADR-0013 an
+        over-approximation here, and the exact-fill obstacle of ADR-0039/ADR-0070 is KiCad's own
+        recomputed polygon, which already has the value applied.
+
+        So the field cannot break the obstacle direction. What it can break is the connectivity
+        direction, and only in one of its values. Board IR already publishes a pad-to-pour
+        attachment statement -- `Zone.pad_connection`, parsed from the zone's `connect_pads`,
+        carried into every snapshot digest but not into Circuit Scene -- and a pad's
+        `zone_connect` overrides that statement for one pad:
+
+        - `1` (thermal relief), `2` (solid fill) and `3` (through-hole thermal, which KiCad's
+          `DRC_ENGINE::EvalZoneConnection` resolves to `1` on a plated through-hole pad and to `2`
+          on any other) all *attach*. Discarding one never turns `Zone.pad_connection` into a claim
+          of attachment where there is none. It can leave the published *mode* wrong in either
+          direction -- a zone saying `solid` over a pad overridden to `1` overstates the copper, a
+          zone saying `no` over a pad overridden to `2` understates it -- but both readings still
+          answer "attached", so no connection the board lacks is ever claimed.
+        - `0` *detaches*. Discarding it can leave Board IR publishing `solid` or `thermal`
+          attachment for a pad its designer deliberately isolated -- a claimed connection the
+          board does not have, which is the one direction this project forbids. It is also the
+          only value whose information no other Board IR field records, so it is refused even
+          where the zone itself already says `no` and the loss would be provably harmless.
+
+        Nothing here models the value. Board IR carries no pad-level zone-connection field, and a
+        board carrying `1`, `2` or `3` converts to content equal to the same board without it in
+        every field but `source.revision`, which is the digest of the file bytes and must move
+        because they did. That equality measures a no-op and schema stability; it is *not* a
+        soundness argument, because the converter propagates nothing and the equality would hold
+        just as well if `0` were admitted. Soundness rests on the KiCad semantics above plus
+        ADR-0021's rule that pad-to-pour attachment comes only from verified fill. If a future
+        surface ever infers it from anything else, this acceptance becomes unsound and must be
+        revisited -- see R-135.
+
+        See ADR-0091 and docs/research/kicad-pad-zone-connect-v1.md.
+        """
+
+        values = self._values(
+            pad,
+            "zone_connect",
+            locator,
+            minimum=1,
+            maximum=1,
+            required=False,
+        )
+        if not values:
+            return
+        value = values[0]
+        if is_quoted_atom(value) or (
+            value != _DETACHING_PAD_ZONE_CONNECTION and value not in _ATTACHING_PAD_ZONE_CONNECTIONS
+        ):
+            self.fail(
+                "unsupported.construct",
+                "pad zone connection mode is unsupported",
+                locator,
+                object_kind="pad",
+            )
+        if value == _DETACHING_PAD_ZONE_CONNECTION:
+            self.fail(
+                "unsupported.construct",
+                "pad zone_connect 0 detaches the pad from its pour and is unsupported",
+                locator,
+                object_kind="pad",
+            )
 
     def _quarter_turn(self, rotation_udeg: int, locator: str) -> int:
         quarter = 90_000_000
@@ -1569,6 +1785,18 @@ class _Converter:
             pad_layers_by_number: dict[str, frozenset[str]] = {}
             for pad_index, pad in enumerate(children(footprint, "pad")):
                 locator = f"{footprint_locator}.pad[{pad_index}]"
+                # The named refusals run *before* the closed allowlist below, not after it.
+                # Placed after, every one of them was unreachable: the allowlist rejected the
+                # same heads first with a message that named no field, so a board carrying an
+                # overridden pad clearance was told only that some field was unsupported.
+                for unsupported_head in _UNSUPPORTED_PAD_FIELDS:
+                    if children(pad, unsupported_head):
+                        self.fail(
+                            "unsupported.construct",
+                            f"pad field {unsupported_head!r} is unsupported",
+                            locator,
+                            object_kind="pad",
+                        )
                 self._reject_unknown_children(
                     pad,
                     frozenset(
@@ -1586,6 +1814,7 @@ class _Converter:
                             "size",
                             "tstamp",
                             "uuid",
+                            "zone_connect",
                         }
                     ),
                     locator,
@@ -1616,6 +1845,11 @@ class _Converter:
                         locator,
                         object_kind="pad",
                     )
+                # Validated before the aperture skip below, not after it: `zone_connect` is on the
+                # pad allowlist now, so a skipped pad would otherwise carry it past every check.
+                # The value is inert on an aperture, which has no copper for a pour to reach --
+                # but skipping a pad must not become a way to smuggle an unvalidated token in.
+                self._require_attaching_pad_zone_connection(pad, locator)
                 # A pad with no copper is a stencil aperture, not copper the router may attach to
                 # or must avoid. It is skipped only once every condition in `_is_aperture_pad`
                 # holds; anything else with no copper layer refuses there. The skip sits after the
@@ -1676,23 +1910,6 @@ class _Converter:
                         locator,
                         object_kind="pad",
                     )
-                for unsupported_head in (
-                    "clearance",
-                    "offset",
-                    "options",
-                    "primitives",
-                    "thermal_bridge_angle",
-                    "thermal_bridge_width",
-                    "thermal_gap",
-                    "zone_connect",
-                ):
-                    if children(pad, unsupported_head):
-                        self.fail(
-                            "unsupported.construct",
-                            f"pad field {unsupported_head!r} is unsupported",
-                            locator,
-                            object_kind="pad",
-                        )
                 drill_values = self._values(
                     pad,
                     "drill",
@@ -2731,6 +2948,7 @@ class _Converter:
         return ConversionResult(
             snapshot=make_snapshot(content),
             max_roundrect_rounding_nm=self.max_roundrect_rounding_nm,
+            unmodelled_group_count=self.root_group_count,
         )
 
 

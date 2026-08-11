@@ -7,7 +7,8 @@ The contract pinned here resolves its two roles separately, each in the only saf
 direction:
 
 - **Obstacle — over-approximated.**  The polygon converts to a full-width netless
-  ``Segment`` along its long midline whose stadium contains the drawn rectangle, so a
+  ``Segment`` along its long midline whose modelled envelope — the endpoint bounding box
+  grown by ``(width_nm + 1) // 2`` on all four sides — contains the drawn rectangle, so a
   third net can never route through the tie, and even the tied nets are kept out of it
   (over-refusal is the accepted direction for obstacles).
 - **Connectivity — under-approximated.**  ``net_id`` is ``None``: the tied nets are

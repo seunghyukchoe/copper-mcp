@@ -74,6 +74,68 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- **A root-level `(group …)` no longer refuses a whole board, and no root refusal is anonymous any
+  more.** A `pcbnew` backup of one real KiCad 10 board — 103 footprints, 349 pads, 4 filled zones —
+  was refused outright for three editor selections, by a message that named nothing: `root
+  expression contains an unsupported semantic construct` at the constant locator
+  `kicad_pcb.unsupported`. **As of this entry it unblocks no board that is blocked today**, and the
+  timing is worth stating exactly: `B-096` measured that board refusing for this construct on
+  2026-08-07, when its then-current save carried the three groups; the designer re-saved it without
+  them on 2026-08-08, so today only two `.kicad_pcb.bak-*` backups carry a group and every
+  currently-saved `.kicad_pcb` has none. The blocker was real and moved on its own, which is
+  precisely why this lands as hardening against a construct KiCad writes whenever a designer groups
+  a selection. `group` is a documented root section of the board format, and on the read side an
+  *unlocked* one is inert — the proof is an equality rather than an argument: the backup converted
+  with and without its three groups differs in exactly one Board IR content field, `source`, whose
+  revision is the digest of the source bytes. `outline`, `nets`, `constraints`, `footprints`,
+  `pads`, `vias`, `segments`, `arcs`, `zones` and `keepouts` are equal to the nanometre. **A locked
+  group is refused, and that is not a detail.** `BOARD_ITEM::IsLocked()` derives an item's lock from
+  its parent group, so `(locked yes)` on a group locks every member transitively without any
+  member's own s-expression saying so; lock is a hard authorization gate here, so reading one past
+  would have converted members at `locked=False` and authorized a move KiCad forbids. Acceptance is
+  otherwise conditional and each condition refuses: a group's children are checked against the head
+  vocabulary KiCad's writer emits (`uuid`, `locked`, `lib_id`, `members`) and its leading name atom
+  is required, so the root allowlist stays closed. The grouping itself is *not* modelled — Board IR
+  has no field for "these objects belong together" — so it is recorded rather than dropped in
+  silence, as `ConversionResult.unmodelled_group_count`. Write-back stays open for grouped boards
+  and that was verified, not assumed: a real placement splice leaves the group's bytes and the whole
+  document tail byte-identical. Every root refusal now carries `kicad_pcb.child[N]`, an index
+  computed from the parse, and names the construct when it is a documented root section, by looking
+  the token up in a closed table and emitting *that table's* literal — the board's own text stays
+  untrusted and reaches no message. No content address moves: a board with no group converts
+  identically, and a board with one previously produced no snapshot at all.
+  ([ADR-0090](docs/adr/0090-root-level-board-groups.md),
+  [D-177](docs/ledgers/decision-ledger.md), [R-134](docs/ledgers/risk-register.md),
+  [SEC-133](docs/ledgers/security-ledger.md),
+  [KiCad board groups](docs/research/kicad-board-groups-v1.md), #129)
+- **A pad that asks a copper pour to attach to it no longer refuses the board.** A pad's
+  `(zone_connect N)` was refused outright, grouped with `clearance`, `offset` and `primitives`.
+  That grouping was wrong about what the field is: those three change the pad's own copper or the
+  clearance the router honours, while `zone_connect` derives nothing — it is an input to KiCad's
+  own zone filler; nothing else turns it into copper. Read from KiCad 10's filler, the finished
+  fill is clipped to the zone's own extents, so poured copper is a subset of the zone boundary for
+  *every* value of the field, and the conservative zone obstacle stays conservative regardless.
+  Values `1` (thermal relief), `2` (solid fill) and `3` (through-hole thermal, which KiCad resolves
+  to `1` or `2` by pad type) all **attach** the pad, so discarding one never turns Board IR's
+  `Zone.pad_connection` into a claim of attachment where there is none — the published *mode* can
+  end up wrong in either direction, but both readings still answer "attached" — and they are now
+  accepted. Value `0` **detaches**, so discarding it could leave Board IR publishing
+  `Zone.pad_connection` as `thermal` or `solid` over a pad its designer deliberately isolated; it
+  keeps refusing, and so does every value outside KiCad's enum. Acceptance changes nothing that is
+  modelled, and a test measures that rather than asserting it: a board carrying `1`, `2` or `3`
+  converts to content equal to the same board without it in every field but the source digest, so
+  no pinned identity moves and the Board IR schema version does not bump. That equality is a
+  no-op and schema-stability measurement, not a safety argument — it would hold for any accepted
+  value, `0` included; soundness rests on KiCad's own semantics plus ADR-0021's rule that
+  pad-to-pour attachment comes only from verified fill. Separately, the seven other named pad
+  refusals —
+  `clearance`, `offset`, `options`, `primitives`, `thermal_bridge_angle`, `thermal_bridge_width`,
+  `thermal_gap` — were **unreachable**: the pad allowlist refused the same fields first with a
+  message naming no field, so the issue that found this quotes a sentence the adapter could not
+  emit. Each now says which field it refused, without opening the allowlist by one head.
+  ([ADR-0091](docs/adr/0091-attaching-pad-zone-connect-overrides.md),
+  [D-178](docs/ledgers/decision-ledger.md), [R-135](docs/ledgers/risk-register.md),
+  [KiCad pad zone_connect](docs/research/kicad-pad-zone-connect-v1.md), #124)
 - **A board outline assembled from `Edge.Cuts` `gr_line` segments no longer makes the whole board
   permanently unappliable.** Issue #126 measured that both apply gates refused every real board
   that converts, and that on three of them the assembled outline was the *only* derived identity —

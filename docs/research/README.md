@@ -121,6 +121,13 @@ When adding a document, add it to the list below in the same sentence form — *
   board and a deliberately wrong one, which is what forces a board-eligible projection and the
   arithmetic liveness invariant that gates every verdict. It carries a dated reproduction of every
   measurement and one correction to its own §4.
+- [KiCad pad `zone_connect`](./kicad-pad-zone-connect-v1.md) establishes from KiCad 10's zone filler
+  and DRC engine that the filler is the only thing that turns the field into copper, that the finished
+  fill is clipped to the zone's own extents so poured copper is a subset of the zone boundary for
+  every value, and that of the four values only `0` removes an attachment — which is what separates
+  the three CopperMCP can discard from the one it may not. It grounds ADR-0091 and claims nothing
+  about how the override should eventually be modelled, nothing about thermal spoke geometry, and
+  nothing about the population of boards that carry it.
 - [KiCad arc tracks as routing obstacles](./kicad-arc-track-obstacles-v1.md) grounds ADR-0070's
   conservative arc envelope in the official S-expression arc grammar and the inscribed-angle
   theorem, and states plainly that the envelope is loose for a near-semicircular arc and claims

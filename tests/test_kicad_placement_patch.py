@@ -380,3 +380,56 @@ def test_render_still_refuses_when_an_outline_member_has_no_native_identity() ->
         render_kicad_placement_candidate_board(
             source, conversion.snapshot, result.candidate, profile
         )
+
+
+# Shaped as KiCad 10 writes a board group: quoted name, the group's own uuid, member UUIDs.
+# The members are the fixture's own footprint identities, so this is a real selection.
+_ROOT_GROUP = (
+    b'  (group "Input stage"\n'
+    b'    (uuid "5d4757ce-239e-4b95-9019-069ab6718878")\n'
+    b'    (members "92000000-0000-0000-0000-000000000010"\n'
+    b'      "92000000-0000-0000-0000-000000000020")\n'
+    b"  )\n"
+)
+
+
+def _grouped_source() -> bytes:
+    """The placement fixture with one root ``(group ...)`` before its closing delimiter."""
+
+    source = FIXTURE.read_bytes()
+    closing = source.rfind(b"\n)")
+    assert closing > 0
+    return source[:closing] + b"\n" + _ROOT_GROUP.rstrip(b"\n") + source[closing:]
+
+
+def test_a_placement_splice_leaves_a_root_group_byte_identical() -> None:
+    """Write-back over a grouped board is verified, not assumed.
+
+    Issue #129 left this open: a group's membership is by UUID, a member's UUID does not change
+    when it moves, and the patch path is byte-preserving outside its target expressions -- so a
+    group *should* survive a placement splice verbatim. "Should" is not evidence. This renders a
+    real move on a board carrying a group and asserts the group's bytes are unchanged, so the
+    conservative fallback issue #129 named -- refusing write-back on any grouped board -- is not
+    needed. If a future splice ever rewrites the tail of the document, this fails.
+    """
+
+    source = _grouped_source()
+    source, snapshot, profile, candidate, subject = _candidate(source)
+
+    rendered = render_kicad_placement_candidate_board(source, snapshot, candidate, profile)
+
+    assert rendered != source
+    assert rendered.count(_ROOT_GROUP.rstrip(b"\n")) == 1
+    # Byte-exact, and in the same place: everything after the moved footprint is untouched.
+    assert (
+        rendered[rendered.index(_ROOT_GROUP.rstrip(b"\n")) :]
+        == source[source.index(_ROOT_GROUP.rstrip(b"\n")) :]
+    )
+
+    patched = parse_kicad_bytes(rendered, profile)
+    assert patched.diagnostics == ()
+    assert patched.snapshot is not None
+    assert patched.unmodelled_group_count == 1
+    moved = next(item for item in patched.snapshot.content.footprints if item.id == subject)
+    assert moved.origin.x == 47_250_000
+    assert moved.origin.y == 15_500_000

@@ -22,17 +22,25 @@ allocated plus one. Gaps are reported as information and never fail. Keeping the
 line is deliberate: two branches that both allocate it now conflict textually, so Git refuses the
 merge instead of accepting it.
 
-**Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, ADR-0086, ADR-0090, or
-ADR-0091. ADR-0027 was allocated on a branch whose ADR never landed. The 0081-0083 block was
-allocated by concurrent branches that were still open when ADR-0084 landed: that branch took a
-number above all of them rather than the next one, which is the rule the collision that produced
-0066-0068 exists to enforce. ADR-0081 has since landed from its own branch and is no longer a gap.
-0085 and 0086 went the same way one round later -- two branches (issues #126 and #127) were open
-when ADR-0087 landed, so it took a number above both -- and 0090 and 0091 are the same situation
-again, claimed by two branches still open when ADR-0092 landed. Every unused number is deliberately
-left unused rather than recycled, so that an external reference resolves to nothing rather than to
-an unrelated decision. If a later branch lands its own record in one of these gaps, this note is
-what it corrects.
+**Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086.
+ADR-0027 was allocated on a branch whose ADR never landed. The 0081–0083 block was allocated by
+concurrent branches that were still open when ADR-0084 landed: that branch took a number above all
+of them rather than the next one, which is the rule the collision that produced 0066–0068 exists to
+enforce. ADR-0081 has since landed from its own branch and is no longer a gap; 0082 and 0083 remain
+spent. 0085 and 0086 went the same way — two branches were open alongside ADR-0088 when it landed, so
+it took a number above both rather than the next one. 0090 was claimed the same way by a branch
+still open when ADR-0091 (issue #124) landed, so that record took the number above it — but
+ADR-0090 has since landed from its own branch and is no longer a gap, and ADR-0092 then took the
+next number cleanly above both. Every unused number is deliberately left unused rather than
+recycled, so that an external reference resolves to nothing rather than to an unrelated decision.
+If a later branch lands its own record in one of these gaps, this note is what it corrects, exactly
+as it just did for 0090.
+
+Two corrections are folded into the list above rather than left standing. ADR-0089 was named as a
+gap while the record existed and was indexed two lines below; and three overlapping copies of this
+paragraph stood here until ADR-0091 landed, the first truncated mid-sentence and one of them
+contradicting the next line about ADR-0081. Both were merge residue from the same concurrent-branch
+period the paragraph describes, and are removed rather than extended again.
 
 **ADR-0082 is now permanently spent rather than merely claimed.** It was allocated by the branch
 that first wrote the net-tie copper decision. That branch sat ungated while ADR-0084 and later
@@ -156,25 +164,25 @@ never silently widens it.
 | [0087](0087-composite-native-identity-for-assembled-outlines.md) | Name an assembled Edge.Cuts outline by the sorted set of its members' own uuids | Accepted |
 | [0088](0088-complete-or-withheld-scene-kinds.md) | A truncated scene withholds whole kinds instead of emptying them | Accepted |
 | [0089](0089-region-scoped-obstacle-model.md) | Scope the obstacle model to a routing region, and split the budget that was counting three things | Accepted |
-| — | *0090 and 0091 are deliberately unused; see **Known gaps** above.* | — |
+| [0090](0090-root-level-board-groups.md) | A root board group is organisation, accepted and counted rather than modelled | Accepted |
+| [0091](0091-attaching-pad-zone-connect-overrides.md) | Accept the pad zone-connection overrides that attach, refuse the one that detaches | Accepted |
 | [0092](0092-net-tie-copper-as-netless-obstacle.md) | Net-tie copper is a netless obstacle, and the tie is never a connectivity claim | Accepted |
 
-Ninety-two numbers, eighty-five records, no duplicates — and `scripts/check_adr_numbers.py` now
-proves that last clause on every run rather than asserting it. The seven unused numbers are 0027,
-0082, 0083, 0085, 0086, 0090 and 0091; see **Known gaps** above. The stray summary sentences that
-accumulated here through ADR-0088 were merge residue from the concurrent branches described above:
-Git accepted several different rewrites of one paragraph because they did not overlap textually.
+Ninety-two numbers, eighty-seven records, no duplicates — and `scripts/check_adr_numbers.py` now
+proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and 0086
+are unused; see **Known gaps** above. The three stray summary sentences that stood here until
+ADR-0088 landed were merge residue from the concurrent branches described above: Git accepted
+three different rewrites of one paragraph because they did not overlap textually.
 
 ## Reading order
 
 The ADRs are chronological, not thematic. To follow one arc, read it in this order:
 
-- **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070, 0076, 0087.
+- **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070, 0076, 0087,
+  0091, 0092.
 - **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
-  0066, 0070, 0073.
+  0066, 0070, 0073, 0075, 0089.
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060, 0075.
-  0066, 0070, 0073, 0075.
-- **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060.
 - **Circuit Intent and schematic verification** — 0014, 0015, 0056, 0070.
 - **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065, 0075.
 - **Circuit Scene and rendering** — 0010, 0022, 0023, 0028, 0056.
@@ -250,4 +258,6 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0087: Name an assembled Edge.Cuts outline by the sorted set of its members' own uuids](0087-composite-native-identity-for-assembled-outlines.md)
 - [ADR-0088: A truncated scene withholds whole kinds instead of emptying them](0088-complete-or-withheld-scene-kinds.md)
 - [ADR-0089: Scope the obstacle model to a routing region, and split the budget that was counting three things](0089-region-scoped-obstacle-model.md)
+- [ADR-0090: A root board group is organisation, accepted and counted rather than modelled](0090-root-level-board-groups.md)
+- [ADR-0091: Accept the pad zone-connection overrides that attach, refuse the one that detaches](0091-attaching-pad-zone-connect-overrides.md)
 - [ADR-0092: Net-tie copper is a netless obstacle, and the tie is never a connectivity claim](0092-net-tie-copper-as-netless-obstacle.md)
