@@ -248,8 +248,9 @@ To add a fixture for a schema (new or existing):
    contract; changing one goes through the same review as any other (see "Adding a public contract"
    below).
 
-The validator is `jsonschema.Draft202012Validator`, already a runtime dependency and version-bounded
-in `pyproject.toml` — adding conformance coverage needs no new dependency. Call
+The validator is `jsonschema.Draft202012Validator`, already a development-only dependency and
+version-bounded in `pyproject.toml` (`jsonschema>=4.25,<5`, in the `dev` extra, not in the runtime
+`dependencies` list) — adding conformance coverage needs no new dependency. Call
 `Draft202012Validator.check_schema` on a schema before using it, so a malformed schema fails as a
 malformed schema rather than as a mysteriously permissive one.
 

@@ -269,6 +269,23 @@ def _field_parity(schema: dict[str, Any], emitted: set[str]) -> tuple[set[str], 
     return declared - emitted, emitted - declared
 
 
+def _coverage_gaps(found: set[str], recorded: set[str]) -> tuple[set[str], set[str]]:
+    """Compare the schema files on disk against the schemas ``_SCHEMA_COVERAGE`` records.
+
+    Returns ``(on disk with no recorded proof, recorded but no longer on disk)``. The first element
+    is the one that matters most: a new schema file shipping with nothing proving it accepts a real
+    payload is exactly how issue #11's defect would recur.
+    """
+
+    return found - recorded, recorded - found
+
+
+def _proof_is_defined(source: str, test: str) -> bool:
+    """Whether a module's source still defines the test function a proof entry names."""
+
+    return f"def {test}(" in source
+
+
 def _rejections(name: str, payload: dict[str, Any]) -> set[tuple[str, str]]:
     return {
         (str(error.validator), _subject(error)) for error in _validator(name).iter_errors(payload)
@@ -337,11 +354,45 @@ def test_every_published_schema_has_a_named_proof() -> None:
     """A new file under `schemas/` cannot ship without a recorded proof that it accepts reality."""
 
     found = {str(path.relative_to(SCHEMA_ROOT)) for path in SCHEMA_ROOT.rglob("*.schema.json")}
+    unproved, stale = _coverage_gaps(found, set(_SCHEMA_COVERAGE))
 
-    assert found == set(_SCHEMA_COVERAGE), (
+    assert (unproved, stale) == (set(), set()), (
         "schemas/ and _SCHEMA_COVERAGE disagree — add the new schema's proof (or record why it "
-        f"needs none): on disk={sorted(found)} recorded={sorted(_SCHEMA_COVERAGE)}"
+        f"needs none): unproved on disk={sorted(unproved)} recorded but missing={sorted(stale)}"
     )
+
+
+def test_the_coverage_completeness_check_is_sensitive_in_both_directions() -> None:
+    """Guard the guard: the check that catches an unproved schema needs its own evidence.
+
+    Comparing two sets that are equal today proves nothing about what happens when they diverge,
+    and divergence is the entire point of this guard. The second case is the one that keeps issue
+    #11's class of defect from recurring: a schema file added with no proof recorded for it.
+    """
+
+    assert _coverage_gaps({"a.schema.json"}, {"a.schema.json"}) == (set(), set())
+    assert _coverage_gaps({"a.schema.json", "new.schema.json"}, {"a.schema.json"}) == (
+        {"new.schema.json"},
+        set(),
+    )
+    assert _coverage_gaps({"a.schema.json"}, {"a.schema.json", "deleted.schema.json"}) == (
+        set(),
+        {"deleted.schema.json"},
+    )
+
+
+def test_the_proof_existence_check_notices_a_renamed_or_deleted_proof() -> None:
+    """Guard the guard: a substring check that is never shown failing is not a check.
+
+    ``_SCHEMA_COVERAGE`` names proofs that live in other modules, so the only thing tying an entry
+    to a real test is this lookup. If it silently returned true, every entry would keep claiming a
+    proof that had been renamed away.
+    """
+
+    source = "def test_a_real_proof() -> None:\n    pass\n"
+
+    assert _proof_is_defined(source, "test_a_real_proof")
+    assert not _proof_is_defined(source, "test_a_proof_that_was_renamed")
 
 
 @pytest.mark.parametrize(
@@ -355,7 +406,7 @@ def test_every_recorded_proof_still_exists(schema_path: str) -> None:
     assert proof.kind in {_EMITTED, _COMMITTED, _LEGACY}, proof.kind
     module = ROOT / proof.module
     assert module.is_file(), f"{schema_path} names a proof module that does not exist: {module}"
-    assert f"def {proof.test}(" in module.read_text(encoding="utf-8"), (
+    assert _proof_is_defined(module.read_text(encoding="utf-8"), proof.test), (
         f"{schema_path} names {proof.test} in {proof.module}, which no longer defines it"
     )
 

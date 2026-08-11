@@ -77,8 +77,9 @@ All notable changes are documented here. The format follows
   is (`emitted_payload`, `committed_artifact`, or `legacy_no_emitter` for `board-ir/0.1.0`, which
   the active codec refuses by design so no live payload exists to check). A completeness test fails
   when a new schema file appears with no entry; a second test fails when a recorded proof is
-  renamed or deleted. No new dependency: `jsonschema` is already a version-bounded runtime
-  dependency. `docs/development.md` documents how to add a fixture.
+  renamed or deleted. No new dependency: `jsonschema` is already a version-bounded development-only
+  dependency (`jsonschema>=4.25,<5`, in the `dev` extra, not in the runtime `dependencies` list).
+  `docs/development.md` documents how to add a fixture.
   ([R-137](docs/ledgers/risk-register.md), #11)
 
 - **A routing region, so the obstacle budget bounds work instead of board size.** A two-pin route
