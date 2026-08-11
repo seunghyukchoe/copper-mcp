@@ -2116,21 +2116,36 @@ class _Converter:
                     locator,
                     object_kind="footprint",
                 )
+            # `stroke` is **required**, not optional. An omitted field is not an explicitly
+            # zero one: the whole width argument for modelling this polygon as its long
+            # midline is that the drawn copper is the rectangle and nothing more, and the only
+            # thing establishing that is `(width 0)`. Reading a missing `stroke` as zero would
+            # let any non-zero default -- KiCad's, a future writer's, or a hand-edited file's --
+            # widen the real copper past the modelled segment, which **understates** the
+            # obstacle. That is the one direction the invariant forbids.
+            #
+            # It costs nothing measurable: across the survey corpus, all 331 `fp_poly`
+            # expressions in 20 board files carry an explicit stroke, the net-tie polygons
+            # among them written by KiCad 10 as `(stroke (width 0) (type solid))`. So the
+            # omitted form is unobserved, and refusing it is D-178's rule applied -- accept
+            # only what is provably free of copper, refuse the rest, and pin the refusal.
             stroke = self._one(item, "stroke", locator, required=False)
-            if stroke is not None:
-                self._reject_unknown_children(
-                    stroke, frozenset({"type", "width"}), f"{locator}.stroke"
+            if stroke is None:
+                self.fail(
+                    "unsupported.construct",
+                    "net-tie copper polygon must declare its outline stroke",
+                    locator,
+                    object_kind="footprint",
                 )
-                stroke_width = self._values(
-                    stroke, "width", f"{locator}.stroke", minimum=1, maximum=1
+            self._reject_unknown_children(stroke, frozenset({"type", "width"}), f"{locator}.stroke")
+            stroke_width = self._values(stroke, "width", f"{locator}.stroke", minimum=1, maximum=1)
+            if self._mm(stroke_width[0], f"{locator}.stroke.width") != 0:
+                self.fail(
+                    "unsupported.construct",
+                    "net-tie copper polygon with a stroked outline is unsupported",
+                    locator,
+                    object_kind="footprint",
                 )
-                if self._mm(stroke_width[0], f"{locator}.stroke.width") != 0:
-                    self.fail(
-                        "unsupported.construct",
-                        "net-tie copper polygon with a stroked outline is unsupported",
-                        locator,
-                        object_kind="footprint",
-                    )
             points_expression = self._one(item, "pts", locator)
             assert points_expression is not None
             self._reject_unknown_children(points_expression, frozenset({"xy"}), f"{locator}.pts")

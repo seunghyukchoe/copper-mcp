@@ -545,3 +545,71 @@ def test_a_net_tie_declaration_with_no_pad_group_says_so() -> None:
 
     assert code == "syntax.invalid"
     assert message == "net_tie_pad_groups declares no pad group"
+
+
+def test_a_net_tie_polygon_with_no_stroke_at_all_refuses() -> None:
+    """An *omitted* stroke is not an explicitly zero one, and reading it as zero understates copper.
+
+    The entire argument for modelling a tie polygon as its long midline is that the drawn copper
+    is the rectangle and nothing more, and the only thing establishing that is `(width 0)`. When
+    the field was optional, a polygon with no `stroke` skipped the sole outline-width check and
+    still emitted a segment -- so any non-zero default, from KiCad or a future writer or a
+    hand-edited file, would put real copper outside the modelled obstacle. That is the one
+    direction the direction-of-error rule forbids: obstacles may only ever **over**-approximate.
+
+    Refusing costs nothing measurable. Across the survey corpus all 331 `fp_poly` expressions in
+    20 board files carry an explicit stroke, and KiCad 10 writes the net-tie polygons as
+    `(stroke (width 0) (type solid))`, so the omitted form is unobserved on real boards. This is
+    D-178's rule applied: accept only what is provably free of copper, refuse the rest, and pin
+    the refusal so nobody widens it later by accident.
+    """
+
+    source = NET_TIE_BOARD.read_bytes().replace(b"      (stroke (width 0) (type solid))\n", b"")
+    # Both tie polygons lose their stroke; the Edge.Cuts rectangle keeps its own.
+    assert source.count(b"(stroke") == 1
+
+    code, message = _refusal(source)
+
+    assert code == "unsupported.construct"
+    assert message == "net-tie copper polygon must declare its outline stroke"
+
+
+def test_the_tie_polygon_field_contract_is_the_closed_list_adr_0092_states() -> None:
+    """Required fields refuse when absent; permitted-but-optional ones convert when absent.
+
+    ADR-0092 states the accepted tie polygon as a closed field list rather than prose, because
+    prose is what let two widenings through unnoticed -- a closed five-point ring, and an omitted
+    stroke that skipped the only copper-width check. This pins the list itself, so a future
+    change that makes a required field optional (or drops a permitted one) fails here.
+    """
+
+    baseline = NET_TIE_BOARD.read_bytes()
+
+    # Required: removing any one of these must refuse, never convert.
+    required = {
+        "stroke": b"      (stroke (width 0) (type solid))\n",
+        "fill": b"      (fill yes)\n",
+        "layer": b'      (layer "F.Cu")\n',
+    }
+    for name, line in required.items():
+        assert line in baseline, name
+        result = parse_kicad_bytes(baseline.replace(line, b"", 1), _profile())
+        assert result.snapshot is None, f"removing {name} must refuse"
+
+    # Permitted but optional: the polygon still converts without its uuid, and the tie copper's
+    # *geometry* is unchanged -- the polygon's own uuid names no segment, which is exactly why
+    # the identity is revision-derived. The ids themselves are deliberately not compared: a
+    # derived id hashes the source revision, so removing any byte moves it, and that is the
+    # property keeping every write-back path refused (ADR-0026).
+    without_uuid = baseline.replace(
+        b'      (uuid "20000000-0000-0000-0000-000000000002")\n', b"", 1
+    )
+
+    def geometry(source: bytes) -> list[tuple[object, ...]]:
+        return [
+            (tie.net_id, tie.layer_id, tie.start, tie.end, tie.width_nm, tie.locked)
+            for tie in _tie_segments(_snapshot(source))
+        ]
+
+    assert geometry(without_uuid) == geometry(baseline)
+    assert all(":derived:" in tie.id for tie in _tie_segments(_snapshot(without_uuid)))

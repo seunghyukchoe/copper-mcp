@@ -331,15 +331,19 @@ All notable changes are documented here. The format follows
   deliberately report unconnected through the tie exactly as net-0 stitching copper behaves
   (ADR-0078). The identities are revision-derived on purpose — an `fp_poly` is not a track, so
   its UUID names no segment — and that keeps every write-back path refused (ADR-0026): no patch
-  can separate the tie copper from the pads it shorts. The accepted subset is the surveyed
-  construct (one group of two existing distinct pad names; filled, unstroked, axis-aligned
-  rectangular polygons on copper layers the tied pads occupy) plus one stated widening — a
-  five-point ring whose last point repeats the first is accepted, since the closing point
-  carries no geometry and is dropped before the corner check; a five-point ring that does *not*
-  close still refuses. A tie polygon on `Edge.Cuts` refuses too: the outline is routing room and
-  may only be under-approximated (ADR-0076), the opposite direction from an obstacle. Thirteen
-  malformed-tie variants each keep their own typed refusal, and the third-net guard is pinned
-  with a no-tie mutation control. No schema or digest change — boards without net ties are
+  can separate the tie copper from the pads it shorts. **The accepted subset is stated as a
+  closed list of the tie polygon's required and permitted fields** (ADR-0092), not as prose —
+  prose is what let two constructs through that it claimed not to accept: a five-point ring, and
+  a polygon with no `stroke` field at all. The second ran in the forbidden direction, because
+  the only thing establishing that the drawn copper is the rectangle and nothing more is
+  `(width 0)`, so an omitted field skipping that check could put real copper *outside* the
+  modelled obstacle. `stroke` is now required; all 331 `fp_poly` expressions across the 20-file
+  corpus carry one, so the omitted form is unobserved on real boards. The closing-point widening
+  is kept and stated — a five-point ring whose last point repeats the first is accepted, since
+  the closing point carries no geometry; one that does *not* close still refuses. A tie polygon
+  on `Edge.Cuts` refuses too: the outline is routing room and may only be under-approximated
+  (ADR-0076), the opposite direction from an obstacle. Fourteen malformed-tie variants each keep
+  their own typed refusal, and the third-net guard is pinned with a no-tie mutation control. No schema or digest change — boards without net ties are
   byte-identical, and the committed golden digests pin that.
 
   **This converts no additional board, and that is the measured result, not an expectation.**

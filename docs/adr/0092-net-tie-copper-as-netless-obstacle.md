@@ -52,22 +52,51 @@ connectivity claim of any kind is made through it.**
   (ADR-0026's mechanism), so no route or placement patch can ever separate the tie copper from
   the pads it shorts. A net-tie board is observable and previewable, never patchable.
 
-The accepted subset is the surveyed construct plus one deliberate widening, and everything else
-refuses typed: one group of exactly two distinct, existing pad names (whitespace around names
-stripped, as KiCad writes `"1, 2"`); filled, unstroked `fp_poly` rectangles that are axis-aligned
-after the footprint's orthogonal transform; each polygon on one declared copper layer that every
-pad of the tied group occupies; and at least one such polygon per declaring footprint.
-Multi-group ties, one- or three-pad groups, a group naming a missing pad, non-rectangular or
-stroked or unfilled copper, tie copper on a layer with no group pad, a polygon on `Edge.Cuts`,
-and a declaration with no tie copper at all are each a distinct typed refusal.
+### The accepted subset, as a closed field list
 
-The widening is the ring form, and it is stated rather than glossed: the survey observed a
-four-point ring, and a **five-point ring whose last point repeats the first** is also accepted,
-because KiCad's writer may close a polygon explicitly and the closing point carries no geometry.
-It is dropped before the corner check, so the accepted shape is identical. A five-point ring that
-does *not* close — one whose repeated vertex sits elsewhere — still refuses, even though its
-corner set is a rectangle and accepting it would be sound; the point count is what separates it
-from anything measured, and an unmeasured accept is the thing this subset exists to avoid.
+This is stated as an explicit list of fields rather than as prose, and that is a correction
+rather than a presentation choice. **The first version of this record described the subset in
+prose as "exactly what the survey observed", and it was not.** Two constructs the prose did not
+cover were being accepted, and neither was found by reading the prose — one was found by
+adversarial review and one by mutation:
+
+- A **five-point ring** was accepted where the survey observed a four-point ring.
+- A polygon with **no `stroke` field at all** was accepted, because the field was read as
+  optional and its absence skipped the only outline-width check. That one ran in the forbidden
+  direction: the entire argument for modelling the polygon as its long midline is that the drawn
+  copper is the rectangle and nothing more, and only `(width 0)` establishes that. Any non-zero
+  default behind an omitted field would have put real copper outside the modelled obstacle —
+  an **under**-approximated obstacle, which the direction-of-error rule forbids outright.
+
+A prose description is what let both through, so the contract is now a list that a reader can
+check field by field and a test pins directly.
+
+**Footprint** — `net_tie_pad_groups` required, appearing exactly once, holding exactly one group
+of exactly two distinct pad names that the footprint actually carries (whitespace around names is
+stripped, as KiCad writes `"1, 2"`). At least one tie polygon must convert.
+
+**Tie polygon** — an `fp_poly` whose children are drawn only from
+`{fill, layer, locked, pts, stroke, tstamp, uuid}`:
+
+| field | required | accepted value |
+|---|---|---|
+| `pts` | yes | 4 points, or 5 where the last repeats the first (the closing point is dropped); an axis-aligned rectangle with 4 distinct corners after the footprint's orthogonal transform |
+| `fill` | yes | `yes` |
+| `stroke` | **yes** | `width` `0`; `type` unconstrained |
+| `layer` | yes | one declared copper layer that **every** pad of the tied group occupies; never `Edge.Cuts` |
+| `locked` | no | either; ORed with the footprint's own lock |
+| `tstamp` / `uuid` | no | any; it names no `Segment`, so it is not read for identity |
+
+Everything else is a distinct typed refusal — fourteen of them pinned. A five-point ring that
+does *not* close still refuses, even though its corner set is a rectangle and accepting it would
+be sound: the point count is what separates it from anything measured, and an unmeasured accept
+is the thing this subset exists to avoid.
+
+Requiring `stroke` costs nothing measurable. Across the survey corpus, all 331 `fp_poly`
+expressions in 20 board files carry an explicit stroke, and KiCad 10 writes the net-tie polygons
+as `(stroke (width 0) (type solid))`, so the omitted form is unobserved on real boards. This is
+D-178's rule applied: accept only what is provably free of copper, refuse the rest, and pin the
+refusal so nobody widens it later by accident.
 
 No schema, codec, or digest change: netless segments have existed since ADR-0078, and boards
 without net ties produce byte-identical content — the committed golden digests pin that.
