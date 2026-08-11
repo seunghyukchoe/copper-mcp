@@ -1,0 +1,615 @@
+"""Net-tie footprints: netless obstacle copper, no connectivity claim (ADR-0092).
+
+KiCad's ``net_tie_pad_groups`` declares that "nets attached to pads within a single
+pad-group are allowed to short", and the footprint's filled copper polygon *is* that
+short.  Board IR models nets as disjoint, so the copper cannot carry either tied net.
+The contract pinned here resolves its two roles separately, each in the only safe
+direction:
+
+- **Obstacle — over-approximated.**  The polygon converts to a full-width netless
+  ``Segment`` along its long midline whose modelled envelope — the endpoint bounding box
+  grown by ``(width_nm + 1) // 2`` on all four sides — contains the drawn rectangle, so a
+  third net can never route through the tie, and even the tied nets are kept out of it
+  (over-refusal is the accepted direction for obstacles).
+- **Connectivity — under-approximated.**  ``net_id`` is ``None``: the tied nets are
+  *never* claimed connected through the tie, even though the fabricated board joins
+  them.  A joined-nets claim could not be test-bound without proving the polygon
+  actually bridges both pad groups, so it is a typed non-claim, mirrored on ADR-0078's
+  net-0 copper.
+- **Write-back — refused.**  The tie segments carry revision-derived identities on
+  purpose (an ``fp_poly`` is not a KiCad track, so its UUID names no segment), and every
+  source-preserving patch path refuses a snapshot containing a derived identity
+  (ADR-0026).  No patch can break the short because no patch can touch the board at all.
+"""
+
+from __future__ import annotations
+
+from dataclasses import replace
+from itertools import pairwise
+from pathlib import Path
+
+import pytest
+
+from copper_mcp.adapters import KiCadConstraintProfile, net_id_for_name, parse_kicad_bytes
+from copper_mcp.adapters.kicad_placement_patch import (
+    KiCadPlacementPatchError,
+    _require_native_geometry_identities,
+)
+from copper_mcp.board_ir import (
+    BoardIRSnapshot,
+    NetClass,
+    PointNM,
+    make_snapshot,
+)
+from copper_mcp.routing import AStarRouter, AStarSettings, RouteCandidate, RouteRequest
+
+NET_TIE_BOARD = Path(__file__).parent / "fixtures" / "board-ir-v0.2" / "net-tie-two-pad.kicad_pcb"
+
+#: The tie polygon in board coordinates: local (0, -0.65)..(2.6, 0.65) placed at (20, 15).
+TIE_RECT_NM = (20_000_000, 14_350_000, 22_600_000, 15_650_000)
+
+#: One tie polygon exactly as the fixture carries it, for removal surgery.
+_F_CU_TIE_POLY = (
+    b"    (fp_poly\n"
+    b"      (pts (xy 0 -0.65) (xy 2.6 -0.65) (xy 2.6 0.65) (xy 0 0.65))\n"
+    b"      (stroke (width 0) (type solid))\n"
+    b"      (fill yes)\n"
+    b'      (layer "F.Cu")\n'
+    b'      (uuid "20000000-0000-0000-0000-000000000002")\n'
+    b"    )\n"
+)
+_B_CU_TIE_POLY = _F_CU_TIE_POLY.replace(b'"F.Cu"', b'"B.Cu"').replace(
+    b"-000000000002", b"-000000000003"
+)
+
+
+def _profile() -> KiCadConstraintProfile:
+    default = NetClass(
+        id="class:default",
+        name="Default",
+        clearance_nm=250_000,
+        track_width_nm=250_000,
+        via_diameter_nm=800_000,
+        via_drill_nm=400_000,
+    )
+    return KiCadConstraintProfile(net_classes=(default,), default_net_class_id=default.id)
+
+
+def _snapshot(source: bytes | None = None) -> BoardIRSnapshot:
+    result = parse_kicad_bytes(source or NET_TIE_BOARD.read_bytes(), _profile())
+    assert result.diagnostics == ()
+    assert result.snapshot is not None
+    return result.snapshot
+
+
+def _refusal(source: bytes) -> tuple[str, str]:
+    result = parse_kicad_bytes(source, _profile())
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    return diagnostic.code, diagnostic.message
+
+
+def _tie_segments(snapshot: BoardIRSnapshot) -> list:
+    return [item for item in snapshot.content.segments if ":derived:" in item.id]
+
+
+def _request(snapshot: BoardIRSnapshot, net_name: str, *, grid_step_nm: int) -> RouteRequest:
+    return RouteRequest(
+        board_revision=snapshot.snapshot_digest,
+        net_id=net_id_for_name(net_name),
+        layer_id="layer:F.Cu",
+        seed=7,
+        settings=AStarSettings(grid_step_nm=grid_step_nm),
+    )
+
+
+def _orthogonal_edge_meets_rect(
+    start: PointNM, end: PointNM, rect: tuple[int, int, int, int]
+) -> bool:
+    min_x, min_y, max_x, max_y = rect
+    lo_x, hi_x = sorted((start.x, end.x))
+    lo_y, hi_y = sorted((start.y, end.y))
+    return hi_x >= min_x and lo_x <= max_x and hi_y >= min_y and lo_y <= max_y
+
+
+# --- Conversion: the representation itself -------------------------------------------------
+
+
+def test_two_pad_net_tie_converts_with_netless_obstacle_copper() -> None:
+    """The board converts; each tie polygon is one netless full-width segment.
+
+    The drawn rectangle is (20, 14.35)..(22.6, 15.65) on both outer layers.  The modelled
+    segment runs its long midline at the rectangle's full height, so the router's
+    ceil-rounded half width covers the rectangle exactly and over-approximates only by the
+    two end caps — a superset, never a subset, of the real copper.
+    """
+
+    content = _snapshot().content
+
+    ties = _tie_segments(_snapshot())
+    assert len(ties) == 2
+    assert {tie.layer_id for tie in ties} == {"layer:F.Cu", "layer:B.Cu"}
+    for tie in ties:
+        assert tie.net_id is None
+        assert tie.start == PointNM(20_000_000, 15_000_000)
+        assert tie.end == PointNM(22_600_000, 15_000_000)
+        assert tie.width_nm == 1_300_000
+    # The tied pads keep their own nets, and the nets stay disjoint objects.
+    assert {net.name for net in content.nets} == {"GND_A", "GND_B", "SIG"}
+    pads_by_net = {pad.net_id for pad in content.pads}
+    assert net_id_for_name("GND_A") in pads_by_net
+    assert net_id_for_name("GND_B") in pads_by_net
+
+
+def test_net_tie_boards_stay_write_back_refused() -> None:
+    """ADR-0026's mechanism applies: derived identities keep every patch path closed.
+
+    The tie segments are revision-derived by construction, and both source-preserving
+    patch adapters refuse any snapshot carrying a derived identity — so no route or
+    placement write-back can ever separate the tie copper from the pads it shorts.
+    """
+
+    with pytest.raises(KiCadPlacementPatchError):
+        _require_native_geometry_identities(_snapshot())
+
+
+# --- Obstacle role: a third net is kept out, and the guard is mutation-checked --------------
+
+
+def test_a_third_net_route_through_the_tie_copper_is_refused_as_an_obstacle() -> None:
+    """SIG's straight corridor crosses the tie rectangle, so the route must detour.
+
+    The two SIG pads sit at (21.5, 8) and (21.5, 24): the straight track between them
+    passes between the tie pads and through the tie polygon.  With the tie modelled the
+    router detours around it; no vertex and no edge of the candidate may meet the tie
+    rectangle.
+    """
+
+    snapshot = _snapshot()
+    result = AStarRouter().propose(snapshot, _request(snapshot, "SIG", grid_step_nm=500_000))
+
+    assert result.connected is None
+    assert isinstance(result.candidate, RouteCandidate)
+    path = result.candidate.patch.paths[0]
+    assert result.candidate.cost.bend_count > 0
+    for start, end in pairwise(path.vertices):
+        assert not _orthogonal_edge_meets_rect(start, end, TIE_RECT_NM)
+
+
+def test_the_third_net_guard_is_load_bearing() -> None:
+    """Mutation check: with the tie segments deleted, the same route goes straight through.
+
+    This is the control experiment for the test above.  If the adapter ever stopped
+    converting tie copper — the guard whose removal is the dangerous mutation — the SIG
+    route would cross the tie rectangle exactly as it does here, and the detour assertion
+    above is what would catch it.
+    """
+
+    snapshot = _snapshot()
+    mutated_content = replace(
+        snapshot.content,
+        segments=tuple(
+            segment for segment in snapshot.content.segments if ":derived:" not in segment.id
+        ),
+    )
+    mutated = make_snapshot(mutated_content)
+
+    result = AStarRouter().propose(mutated, _request(mutated, "SIG", grid_step_nm=500_000))
+
+    assert result.connected is None
+    assert isinstance(result.candidate, RouteCandidate)
+    assert result.candidate.cost.bend_count == 0
+    path = result.candidate.patch.paths[0]
+    assert any(
+        _orthogonal_edge_meets_rect(start, end, TIE_RECT_NM)
+        for start, end in pairwise(path.vertices)
+    )
+
+
+# --- Connectivity role: the non-claim is pinned explicitly ----------------------------------
+
+
+def test_the_tied_nets_are_never_claimed_connected_through_the_tie() -> None:
+    """GND_A's two pads are physically joined only through the tie; the model says nothing.
+
+    The GND_A stub track ends on the tie polygon clear of both tie pads, so on the
+    fabricated board GND_A's connector pad reaches tie pad 1 (and GND_B) through the tie
+    copper.  Connectivity under-approximates: netless copper joins nothing, so no
+    already-connected claim may appear.  If a mutation ever let a ``None`` net compare
+    equal to the routed net — or let tie copper adopt a tied net — the stub, the tie and
+    tie pad 1 would fuse into one component and ``connected`` would flip non-None here.
+    The router does not even propose new GND_A copper: the tie obstacle envelope covers
+    tie pad 1 entirely, so over-refusal, the accepted direction, is the outcome.
+    """
+
+    snapshot = _snapshot()
+    result = AStarRouter().propose(snapshot, _request(snapshot, "GND_A", grid_step_nm=100_000))
+
+    assert result.connected is None
+    assert result.candidate is None
+    assert result.diagnostic is not None
+
+
+# --- Malformed ties still refuse -------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("surgery", "expected_code", "expected_message"),
+    [
+        pytest.param(
+            (b'"1, 2"', b'"1, 9"', 1),
+            "syntax.invalid",
+            "net-tie pad group references a pad the footprint does not carry",
+            id="group-names-a-missing-pad",
+        ),
+        pytest.param(
+            (b'"1, 2"', b'"1, 2, 3"', 1),
+            "unsupported.construct",
+            "net-tie pad groups of other than two pads are unsupported",
+            id="three-pad-group",
+        ),
+        pytest.param(
+            (b'"1, 2"', b'"1"', 1),
+            "unsupported.construct",
+            "net-tie pad groups of other than two pads are unsupported",
+            id="one-pad-group",
+        ),
+        pytest.param(
+            (b'"1, 2"', b'"1" "2"', 1),
+            "unsupported.construct",
+            "net-tie footprints with more than one pad group are unsupported",
+            id="two-groups",
+        ),
+        pytest.param(
+            (b'"1, 2"', b'"1, "', 1),
+            "syntax.invalid",
+            "net-tie pad group is malformed",
+            id="empty-pad-name",
+        ),
+        pytest.param(
+            (b'"1, 2"', b'"1, 1"', 1),
+            "syntax.invalid",
+            "net-tie pad group is malformed",
+            id="repeated-pad-name",
+        ),
+        pytest.param(
+            (b"(xy 0 -0.65) (xy 2.6 -0.65)", b"(xy 0 -0.65) (xy 2.7 -0.75) (xy 2.6 -0.65)", 1),
+            "unsupported.construct",
+            "net-tie copper polygon must be an axis-aligned rectangle",
+            id="non-rectangular-polygon",
+        ),
+        pytest.param(
+            (b"(xy 0 -0.65)", b"(xy 0.1 -0.6)", 1),
+            "unsupported.construct",
+            "net-tie copper polygon must be an axis-aligned rectangle",
+            id="skewed-corner",
+        ),
+        pytest.param(
+            (b"(stroke (width 0) (type solid))", b"(stroke (width 0.1) (type solid))", 1),
+            "unsupported.construct",
+            "net-tie copper polygon with a stroked outline is unsupported",
+            id="stroked-outline",
+        ),
+        pytest.param(
+            (b"(fill yes)", b"(fill no)", 1),
+            "unsupported.construct",
+            "net-tie copper polygon must be filled",
+            id="unfilled-polygon",
+        ),
+    ],
+)
+def test_a_malformed_net_tie_still_refuses_typed(
+    surgery: tuple[bytes, bytes, int], expected_code: str, expected_message: str
+) -> None:
+    old, new, count = surgery
+    source = NET_TIE_BOARD.read_bytes()
+    assert source.count(old) >= count
+    mutated = source.replace(old, new, count)
+
+    code, message = _refusal(mutated)
+
+    assert code == expected_code
+    assert message == expected_message
+
+
+def test_tie_copper_on_a_layer_its_pads_do_not_occupy_refuses() -> None:
+    """A B.Cu polygon whose tied pads exist only on F.Cu cannot be part of the short."""
+
+    source = NET_TIE_BOARD.read_bytes().replace(b'(layers "*.Cu")', b'(layers "F.Cu")')
+
+    code, message = _refusal(source)
+
+    assert code == "unsupported.construct"
+    assert message == "net-tie copper lies on a copper layer its tied pads do not occupy"
+
+
+def test_a_net_tie_without_tie_copper_refuses() -> None:
+    """A declaration with no supported shorting copper is an unobserved construct."""
+
+    source = NET_TIE_BOARD.read_bytes().replace(_F_CU_TIE_POLY, b"").replace(_B_CU_TIE_POLY, b"")
+    assert b"fp_poly" not in source
+
+    code, message = _refusal(source)
+
+    assert code == "unsupported.construct"
+    assert message == "net-tie footprint carries no supported tie copper"
+
+
+def test_a_non_polygon_net_tie_primitive_refuses_by_name() -> None:
+    """The preflight names the unsupported primitive instead of calling it a stray drawing."""
+
+    source = NET_TIE_BOARD.read_bytes().replace(
+        _F_CU_TIE_POLY,
+        (
+            b"    (fp_line\n"
+            b"      (start 0 0) (end 2.6 0)\n"
+            b"      (stroke (width 1.3) (type solid))\n"
+            b'      (layer "F.Cu")\n'
+            b'      (uuid "20000000-0000-0000-0000-0000000000f2")\n'
+            b"    )\n"
+        ),
+    )
+
+    code, message = _refusal(source)
+
+    assert code == "unsupported.construct"
+    assert message == "net-tie copper must be a filled polygon; other primitives are unsupported"
+
+
+def test_a_square_tie_takes_the_x_axis_midline_so_the_degenerate_case_is_pinned() -> None:
+    """A square tie has no long side, and the tie-break must still be one fixed answer.
+
+    `x_max - x_min >= y_max - y_min` picks the x-axis midline when the two are equal. Both
+    branches are sound -- each modelled envelope contains the square -- but they are *different*
+    segments, so the choice is observable in every published content address. Weakening the
+    comparison to `>` silently transposes the emitted geometry on exactly this input and on no
+    other, which is the shape of defect that reaches a digest before it reaches a person.
+    """
+
+    square = NET_TIE_BOARD.read_bytes().replace(
+        b"(xy 0 -0.65) (xy 2.6 -0.65) (xy 2.6 0.65) (xy 0 0.65)",
+        b"(xy 0 -0.65) (xy 1.3 -0.65) (xy 1.3 0.65) (xy 0 0.65)",
+    )
+
+    ties = _tie_segments(_snapshot(square))
+
+    assert len(ties) == 2
+    for tie in ties:
+        # The x-axis branch: a horizontal midline spanning the square, full width.
+        assert tie.start == PointNM(20_000_000, 15_000_000)
+        assert tie.end == PointNM(21_300_000, 15_000_000)
+        assert tie.start.y == tie.end.y
+        assert tie.width_nm == 1_300_000
+
+
+def test_duplicate_pad_numbers_intersect_their_layers_rather_than_union_them() -> None:
+    """A tied pad number occupies only the layers *every* pad carrying it occupies.
+
+    The fixture's pad "1" is through-hole on `*.Cu`; adding a second pad "1" that is SMD on
+    `F.Cu` alone means copper called "1" is not present on `B.Cu` for both of them. Intersecting
+    is the conservative reading and refuses the `B.Cu` tie polygon; unioning would accept a tie
+    on a layer one of the tied pads never reaches, which is a connectivity claim the geometry
+    does not support.
+    """
+
+    source = NET_TIE_BOARD.read_bytes().replace(
+        b'    (pad "2" thru_hole circle',
+        b'    (pad "1" smd rect\n'
+        b"      (at 0 0)\n"
+        b"      (size 1 1)\n"
+        b'      (layers "F.Cu")\n'
+        b'      (net "GND_A")\n'
+        b'      (uuid "20000000-0000-0000-0000-0000000000f1")\n'
+        b"    )\n"
+        b'    (pad "2" thru_hole circle',
+    )
+
+    code, message = _refusal(source)
+
+    assert code == "unsupported.construct"
+    assert message == "net-tie copper lies on a copper layer its tied pads do not occupy"
+
+
+def test_a_five_point_tie_polygon_refuses_even_when_its_corner_set_is_a_rectangle() -> None:
+    """Four points, not merely four distinct corners: a repeated vertex is still refused.
+
+    A five-point ring whose last point does not close it can still carry exactly four distinct
+    corners with two distinct x and two distinct y values, so every *corner-set* check passes.
+    Only the point count separates it from the surveyed construct. The accepted subset is
+    deliberately exactly what was measured, and everything wider is a typed refusal rather than
+    an accepted guess -- accepting this shape would be sound and still unmeasured.
+    """
+
+    source = NET_TIE_BOARD.read_bytes().replace(
+        b"(xy 0 -0.65) (xy 2.6 -0.65) (xy 2.6 0.65) (xy 0 0.65)",
+        b"(xy 0 -0.65) (xy 2.6 -0.65) (xy 2.6 0.65) (xy 0 0.65) (xy 2.6 -0.65)",
+    )
+
+    code, message = _refusal(source)
+
+    assert code == "unsupported.construct"
+    assert message == "net-tie copper polygon must be an axis-aligned rectangle"
+
+
+def test_a_footprint_declaring_net_tie_pad_groups_twice_refuses() -> None:
+    """Two declarations are a contradiction the adapter must not silently resolve.
+
+    Reading the first and ignoring the rest would pick one of two possible tie topologies by
+    document order, so the second declaration's pads would be tied in the file and untied in
+    Board IR -- a connectivity claim made by omission.
+    """
+
+    source = NET_TIE_BOARD.read_bytes().replace(
+        b'(net_tie_pad_groups "1, 2")',
+        b'(net_tie_pad_groups "1, 2")\n    (net_tie_pad_groups "1, 2")',
+    )
+
+    code, message = _refusal(source)
+
+    assert code == "syntax.duplicate_field"
+    assert message == "footprint declares net_tie_pad_groups more than once"
+
+
+def test_a_net_tie_polygon_on_edge_cuts_refuses_rather_than_being_dropped() -> None:
+    """The preflight pass-through is for *copper*, and Edge.Cuts is the opposite invariant.
+
+    A net-tie footprint's `fp_poly` is waved past the stray-graphic refusal so it can convert as
+    an obstacle. `Edge.Cuts` must not ride along on that exemption: the board outline is routing
+    *room* and may only be **under**-approximated (ADR-0076), the opposite direction from an
+    obstacle, so a polygon there is a different question with a different safe answer.
+
+    Deleting the `layer != "Edge.Cuts"` condition from the pass-through leaves the whole suite
+    green, and under that mutant this board *converts* while the Edge.Cuts polygon is silently
+    dropped -- copper-shaped reasoning applied to the outline, losing board area with nothing
+    saying so. This test is the coverage that guard did not have.
+    """
+
+    source = NET_TIE_BOARD.read_bytes().replace(
+        b'      (layer "B.Cu")\n', b'      (layer "Edge.Cuts")\n'
+    )
+
+    code, message = _refusal(source)
+
+    assert code == "unsupported.construct"
+    assert message == "footprint graphic on Edge.Cuts is unsupported"
+
+
+def test_an_odd_nanometre_short_side_pins_the_floor_rounded_midline() -> None:
+    """Floor, not ceil: on an odd short side the two differ by one nanometre, and it is visible.
+
+    Every committed tie fixture has an even 1,300,000 nm short side, where `(a + b) // 2` and
+    `(a + b + 1) // 2` are equal -- so the whole suite cannot tell the two apart, and mutating
+    floor to ceil survives it. Both roundings are *sound*: each keeps the modelled envelope a
+    superset of the drawn rectangle. But the segment they emit differs, and a segment is
+    content, so the choice reaches every published content address. This is the same class the
+    square-tie test exists for -- a difference that reaches a digest before it reaches a person.
+
+    A 3 nm short side placed at 15.000000 mm spans 15_000_000..15_000_003 nm: floor puts the
+    midline at 15_000_001 and ceil at 15_000_002.
+
+    Both orientations are covered, because the two branches round on *different* axes with
+    separate expressions -- pinning only the wide case leaves the tall case's `(x_min + x_max)`
+    rounding free, and mutating that one alone survives everything else in this file.
+    """
+
+    # (polygon points, expected start, expected end, the drawn extent across the short axis)
+    wide = (
+        b"(xy 0 0) (xy 2.6 0) (xy 2.6 0.000003) (xy 0 0.000003)",
+        PointNM(20_000_000, 15_000_001),
+        PointNM(22_600_000, 15_000_001),
+        (15_000_000, 15_000_003),
+    )
+    tall = (
+        b"(xy 0 0) (xy 0.000003 0) (xy 0.000003 2.6) (xy 0 2.6)",
+        PointNM(20_000_001, 15_000_000),
+        PointNM(20_000_001, 17_600_000),
+        (20_000_000, 20_000_003),
+    )
+
+    for points, expected_start, expected_end, (drawn_lo, drawn_hi) in (wide, tall):
+        source = NET_TIE_BOARD.read_bytes().replace(
+            b"(xy 0 -0.65) (xy 2.6 -0.65) (xy 2.6 0.65) (xy 0 0.65)", points
+        )
+
+        ties = _tie_segments(_snapshot(source))
+
+        assert len(ties) == 2
+        for tie in ties:
+            assert tie.width_nm == 3
+            # Floor, not the one-nanometre-higher midline a ceil would give.
+            assert tie.start == expected_start
+            assert tie.end == expected_end
+            # Tightness against the *drawn* extent, which is what makes the floor safe rather
+            # than lucky: grown by the routers' half width the segment reaches the far edge
+            # exactly and covers the near edge with one nanometre to spare. A ceil midline
+            # would still cover, but it would leave the slack on the other side -- so this
+            # asserts the rounding direction, not merely that the copper is contained.
+            half_width = (tie.width_nm + 1) // 2
+            centre = tie.start.y if tie.start.y == tie.end.y else tie.start.x
+            assert centre + half_width == drawn_hi
+            assert centre - half_width == drawn_lo - 1
+
+
+def test_a_net_tie_declaration_with_no_pad_group_says_so() -> None:
+    """`(net_tie_pad_groups)` carries no group, and the refusal must not call that "more than one".
+
+    The refusal itself was always right -- the construct is unreadable and the board is refused --
+    but it described the opposite defect, and a reader fixes what the message describes.
+    """
+
+    source = NET_TIE_BOARD.read_bytes().replace(
+        b'(net_tie_pad_groups "1, 2")', b"(net_tie_pad_groups)"
+    )
+
+    code, message = _refusal(source)
+
+    assert code == "syntax.invalid"
+    assert message == "net_tie_pad_groups declares no pad group"
+
+
+def test_a_net_tie_polygon_with_no_stroke_at_all_refuses() -> None:
+    """An *omitted* stroke is not an explicitly zero one, and reading it as zero understates copper.
+
+    The entire argument for modelling a tie polygon as its long midline is that the drawn copper
+    is the rectangle and nothing more, and the only thing establishing that is `(width 0)`. When
+    the field was optional, a polygon with no `stroke` skipped the sole outline-width check and
+    still emitted a segment -- so any non-zero default, from KiCad or a future writer or a
+    hand-edited file, would put real copper outside the modelled obstacle. That is the one
+    direction the direction-of-error rule forbids: obstacles may only ever **over**-approximate.
+
+    Refusing costs nothing measurable. Across the survey corpus all 331 `fp_poly` expressions in
+    20 board files carry an explicit stroke, and KiCad 10 writes the net-tie polygons as
+    `(stroke (width 0) (type solid))`, so the omitted form is unobserved on real boards. This is
+    D-178's rule applied: accept only what is provably free of copper, refuse the rest, and pin
+    the refusal so nobody widens it later by accident.
+    """
+
+    source = NET_TIE_BOARD.read_bytes().replace(b"      (stroke (width 0) (type solid))\n", b"")
+    # Both tie polygons lose their stroke; the Edge.Cuts rectangle keeps its own.
+    assert source.count(b"(stroke") == 1
+
+    code, message = _refusal(source)
+
+    assert code == "unsupported.construct"
+    assert message == "net-tie copper polygon must declare its outline stroke"
+
+
+def test_the_tie_polygon_field_contract_is_the_closed_list_adr_0092_states() -> None:
+    """Required fields refuse when absent; permitted-but-optional ones convert when absent.
+
+    ADR-0092 states the accepted tie polygon as a closed field list rather than prose, because
+    prose is what let two widenings through unnoticed -- a closed five-point ring, and an omitted
+    stroke that skipped the only copper-width check. This pins the list itself, so a future
+    change that makes a required field optional (or drops a permitted one) fails here.
+    """
+
+    baseline = NET_TIE_BOARD.read_bytes()
+
+    # Required: removing any one of these must refuse, never convert.
+    required = {
+        "stroke": b"      (stroke (width 0) (type solid))\n",
+        "fill": b"      (fill yes)\n",
+        "layer": b'      (layer "F.Cu")\n',
+    }
+    for name, line in required.items():
+        assert line in baseline, name
+        result = parse_kicad_bytes(baseline.replace(line, b"", 1), _profile())
+        assert result.snapshot is None, f"removing {name} must refuse"
+
+    # Permitted but optional: the polygon still converts without its uuid, and the tie copper's
+    # *geometry* is unchanged -- the polygon's own uuid names no segment, which is exactly why
+    # the identity is revision-derived. The ids themselves are deliberately not compared: a
+    # derived id hashes the source revision, so removing any byte moves it, and that is the
+    # property keeping every write-back path refused (ADR-0026).
+    without_uuid = baseline.replace(
+        b'      (uuid "20000000-0000-0000-0000-000000000002")\n', b"", 1
+    )
+
+    def geometry(source: bytes) -> list[tuple[object, ...]]:
+        return [
+            (tie.net_id, tie.layer_id, tie.start, tie.end, tie.width_nm, tie.locked)
+            for tie in _tie_segments(_snapshot(source))
+        ]
+
+    assert geometry(without_uuid) == geometry(baseline)
+    assert all(":derived:" in tie.id for tie in _tie_segments(_snapshot(without_uuid)))

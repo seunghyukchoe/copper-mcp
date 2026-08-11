@@ -46,6 +46,19 @@ The rules:
    the same parallel-branch period that produced the six collisions. Either way the number is
    spent, so that an external reference resolves to nothing rather than to an unrelated entry. Do
    not fill a gap to tidy the sequence.
+
+   `D-177`/`R-134` and `D-178`/`R-135` are rule 1 worked through to its end. Both were held by
+   open branches when `D-179`/`R-136` was allocated, so `D-179`/`R-136` took numbers above both
+   rather than colliding with them; both branches have since landed and filled their own numbers,
+   so this left no gap at all. Had either been abandoned its number would simply have been spent.
+   Nothing recycles a number in either outcome.
+
+   `D-179`/`R-136` then landed *after* `D-180`/`R-137`, and that is not a breach of rule 2. A
+   number is allocated when its pull request opens, not when it merges, so a branch held open
+   across another's merge lands below the tip and momentarily looks like it is filling a gap.
+   The rule forbids **claiming a spent number to tidy the sequence**; it does not require merge
+   order to match numeric order, and the ledgers are ordered by ID rather than by merge date
+   precisely so that this case reads correctly afterwards.
 3. **A correction gets a new ID.** Because rows are append-only, a superseding or clarifying entry
    is a new entry that names what it corrects — never an edit to the original. `B-075`
    ("held-out audio evidence-source provenance correction") is the model: it states what it
