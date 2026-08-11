@@ -74,6 +74,23 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- **An unsupported pad refused with a message naming neither of the two things it could be.**
+  `pad kind or shape is unsupported` covered both positional tokens of a pad header, so a caller
+  could not tell which one the adapter rejected, nor which construct it was. On the one real
+  board in the survey corpus that reaches this refusal the answer is a `connect` pad — KiCad's
+  edge connector — and recovering that took reading the board file by hand. Kind and shape are
+  now two separate refusals, and an unsupported *kind* that the KiCad format documents is named
+  from a closed table (`_UNMODELLED_PAD_KINDS`), under exactly the rule `_UNMODELLED_ROOT_HEADS`
+  already follows: the message is a *value from that table*, selected by an equality test against
+  the source token and never built from it, so the refusal names the construct without echoing
+  one byte of the board. An undocumented token is still refused unnamed, and the indexed locator
+  says which pad in both cases. This is the same defect class D-178 repaired for seven pad
+  refusals the allowlist had made unreachable — there the control flow was wrong, here the
+  control flow always ran and the message carried no information. **Nothing changes about what is
+  accepted or refused**: same code, same locator, same set of boards. Modelling an edge-connector
+  pad is a separate contract decision and is deliberately not taken here.
+  ([#116](https://github.com/seunghyukchoe/copper-mcp/issues/116))
+
 - **A root-level `(group …)` no longer refuses a whole board, and no root refusal is anonymous any
   more.** A `pcbnew` backup of one real KiCad 10 board — 103 footprints, 349 pads, 4 filled zones —
   was refused outright for three editor selections, by a message that named nothing: `root
@@ -320,6 +337,17 @@ All notable changes are documented here. The format follows
   variants each keep their own typed refusal, and the third-net guard is pinned with a
   no-tie mutation control. No schema or digest change — boards without net ties are
   byte-identical, and the committed golden digests pin that.
+
+  **This converts no additional board in the survey corpus, and that is the measured result, not
+  an expectation.** Re-measured read-only before and after on the same tree, the conversion count
+  is unchanged: 11 of the 12 boards in the #116 survey set convert both before and after (11 of
+  17 across the corpus as it stands today, which has grown by five phono boards since that
+  survey). The one board carrying a net tie, `tier1-rev-a`, has **three** blockers stacked on it
+  and this removes only the first. Its refusal advances from `net-tie footprint copper is
+  unsupported in Board IR adapter v0.2` to a refusal for `connect`-kind pads — KiCad's edge
+  connector — with the intervening `zone_connect` blocker having been removed separately by
+  D-178. Advancing the refusal is real progress and is how a stack of blockers is measured, but
+  it is not a conversion, and nothing here should be read as claiming the corpus reaches 12 of 12.
   ([ADR-0092](docs/adr/0092-net-tie-copper-as-netless-obstacle.md),
   [D-179](docs/ledgers/decision-ledger.md), [R-136](docs/ledgers/risk-register.md),
   [KiCad net-tie modelling](docs/research/kicad-net-tie-modelling-v1.md), #116)

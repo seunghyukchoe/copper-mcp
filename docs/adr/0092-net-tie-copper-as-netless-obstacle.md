@@ -66,9 +66,13 @@ without net ties produce byte-identical content — the committed golden digests
 
 ## Consequences
 
-- The net-tie refusal is gone as a survey cause. The board that carried it exposes the next
-  queued constructs (per-pad `zone_connect` overrides and `connect`-kind pads), which are
-  separate contract decisions and remain typed refusals.
+- The net-tie refusal is gone as a survey cause, and **no additional board converts** — measured
+  before and after, not expected. The one board that carried a net tie, `tier1-rev-a`, had three
+  blockers stacked on it; this removes the first, D-178 removed the second (per-pad
+  `zone_connect` overrides), and the third, `connect`-kind pads, still refuses. Its refusal
+  therefore advances rather than clearing, and the corpus conversion count is unchanged at 11 of
+  the 12 boards the #116 survey enumerated. Modelling an edge-connector pad is a separate
+  contract decision and is not taken here.
 - The connectivity under-claim is permanent until a bridge proof exists: a caller asking whether
   the two tied nets are connected is told less than the board knows. That asymmetry, and the
   fact that a router may consequently propose joining the tied nets with new copper elsewhere (which

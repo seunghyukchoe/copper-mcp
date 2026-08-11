@@ -354,3 +354,97 @@ def test_a_non_polygon_net_tie_primitive_refuses_by_name() -> None:
 
     assert code == "unsupported.construct"
     assert message == "net-tie copper must be a filled polygon; other primitives are unsupported"
+
+
+def test_a_square_tie_takes_the_x_axis_midline_so_the_degenerate_case_is_pinned() -> None:
+    """A square tie has no long side, and the tie-break must still be one fixed answer.
+
+    `x_max - x_min >= y_max - y_min` picks the x-axis midline when the two are equal. Both
+    branches are sound -- each modelled envelope contains the square -- but they are *different*
+    segments, so the choice is observable in every published content address. Weakening the
+    comparison to `>` silently transposes the emitted geometry on exactly this input and on no
+    other, which is the shape of defect that reaches a digest before it reaches a person.
+    """
+
+    square = NET_TIE_BOARD.read_bytes().replace(
+        b"(xy 0 -0.65) (xy 2.6 -0.65) (xy 2.6 0.65) (xy 0 0.65)",
+        b"(xy 0 -0.65) (xy 1.3 -0.65) (xy 1.3 0.65) (xy 0 0.65)",
+    )
+
+    ties = _tie_segments(_snapshot(square))
+
+    assert len(ties) == 2
+    for tie in ties:
+        # The x-axis branch: a horizontal midline spanning the square, full width.
+        assert tie.start == PointNM(20_000_000, 15_000_000)
+        assert tie.end == PointNM(21_300_000, 15_000_000)
+        assert tie.start.y == tie.end.y
+        assert tie.width_nm == 1_300_000
+
+
+def test_duplicate_pad_numbers_intersect_their_layers_rather_than_union_them() -> None:
+    """A tied pad number occupies only the layers *every* pad carrying it occupies.
+
+    The fixture's pad "1" is through-hole on `*.Cu`; adding a second pad "1" that is SMD on
+    `F.Cu` alone means copper called "1" is not present on `B.Cu` for both of them. Intersecting
+    is the conservative reading and refuses the `B.Cu` tie polygon; unioning would accept a tie
+    on a layer one of the tied pads never reaches, which is a connectivity claim the geometry
+    does not support.
+    """
+
+    source = NET_TIE_BOARD.read_bytes().replace(
+        b'    (pad "2" thru_hole circle',
+        b'    (pad "1" smd rect\n'
+        b"      (at 0 0)\n"
+        b"      (size 1 1)\n"
+        b'      (layers "F.Cu")\n'
+        b'      (net "GND_A")\n'
+        b'      (uuid "20000000-0000-0000-0000-0000000000f1")\n'
+        b"    )\n"
+        b'    (pad "2" thru_hole circle',
+    )
+
+    code, message = _refusal(source)
+
+    assert code == "unsupported.construct"
+    assert message == "net-tie copper lies on a copper layer its tied pads do not occupy"
+
+
+def test_a_five_point_tie_polygon_refuses_even_when_its_corner_set_is_a_rectangle() -> None:
+    """Four points, not merely four distinct corners: a repeated vertex is still refused.
+
+    A five-point ring whose last point does not close it can still carry exactly four distinct
+    corners with two distinct x and two distinct y values, so every *corner-set* check passes.
+    Only the point count separates it from the surveyed construct. The accepted subset is
+    deliberately exactly what was measured, and everything wider is a typed refusal rather than
+    an accepted guess -- accepting this shape would be sound and still unmeasured.
+    """
+
+    source = NET_TIE_BOARD.read_bytes().replace(
+        b"(xy 0 -0.65) (xy 2.6 -0.65) (xy 2.6 0.65) (xy 0 0.65)",
+        b"(xy 0 -0.65) (xy 2.6 -0.65) (xy 2.6 0.65) (xy 0 0.65) (xy 2.6 -0.65)",
+    )
+
+    code, message = _refusal(source)
+
+    assert code == "unsupported.construct"
+    assert message == "net-tie copper polygon must be an axis-aligned rectangle"
+
+
+def test_a_footprint_declaring_net_tie_pad_groups_twice_refuses() -> None:
+    """Two declarations are a contradiction the adapter must not silently resolve.
+
+    Reading the first and ignoring the rest would pick one of two possible tie topologies by
+    document order, so the second declaration's pads would be tied in the file and untied in
+    Board IR -- a connectivity claim made by omission.
+    """
+
+    source = NET_TIE_BOARD.read_bytes().replace(
+        b'(net_tie_pad_groups "1, 2")',
+        b'(net_tie_pad_groups "1, 2")\n    (net_tie_pad_groups "1, 2")',
+    )
+
+    code, message = _refusal(source)
+
+    assert code == "syntax.duplicate_field"
+    assert message == "footprint declares net_tie_pad_groups more than once"

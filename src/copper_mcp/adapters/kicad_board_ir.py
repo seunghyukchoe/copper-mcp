@@ -136,6 +136,20 @@ _UNMODELLED_ROOT_HEADS: dict[str, str] = {
     "image": "root embedded images are unsupported",
     "property": "root board properties are unsupported",
 }
+# Pad kinds the KiCad board format defines (`PAD_ATTR_T`: PTH, SMD, CONN, NPTH) and Board IR
+# v0.2 does not model, under exactly the rule `_UNMODELLED_ROOT_HEADS` documents above: the
+# message is a *value from this table*, selected by an equality test against the source token
+# and never built from it, so the refusal names the construct without echoing one byte of the
+# board.  A token absent from this table is not a documented pad kind at all and refuses
+# unnamed, with the indexed locator still saying which pad.
+#
+# `connect` is KiCad's edge-connector pad -- copper like an SMD pad but deliberately left out
+# of the paste layer.  Modelling it is a contract decision (it is real copper, so it is an
+# obstacle, but its attachment and plating semantics differ from SMD) and is deliberately not
+# taken here; this table only makes the refusal say which construct it is.
+_UNMODELLED_PAD_KINDS: dict[str, str] = {
+    "connect": "edge-connector pads are unsupported",
+}
 # The only root graphics that may sit on ``Edge.Cuts``: one unfilled rectangle, or straight
 # segments that chain into exactly one closed simple loop.  Both carry the board outline as an
 # exact integer polygon whose vertices are drawn points, so neither can model more room than the
@@ -1831,17 +1845,32 @@ class _Converter:
                         "syntax.invalid", "pad header is malformed", locator, object_kind="pad"
                     )
                 number, raw_kind, raw_shape = header
-                try:
-                    kind = {
-                        "smd": PadKind.SMD,
-                        "thru_hole": PadKind.THROUGH_HOLE,
-                        "np_thru_hole": PadKind.NPTH,
-                    }[raw_kind]
-                    shape = PadShape(raw_shape)
-                except (KeyError, ValueError):
+                # Kind and shape refuse separately. One message covering both named neither, so
+                # a caller reading it could not tell which of the two positional tokens was the
+                # problem -- and on the one real board that reaches this, the answer (a
+                # `connect` pad) was recoverable only by reading the file. Same defect class as
+                # the seven pad refusals D-178 made reachable, in the message rather than in the
+                # control flow. Neither refusal changes: same code, same locator, same set of
+                # boards refused.
+                pad_kind_by_token = {
+                    "smd": PadKind.SMD,
+                    "thru_hole": PadKind.THROUGH_HOLE,
+                    "np_thru_hole": PadKind.NPTH,
+                }
+                if raw_kind not in pad_kind_by_token:
                     self.fail(
                         "unsupported.construct",
-                        "pad kind or shape is unsupported",
+                        _UNMODELLED_PAD_KINDS.get(raw_kind, "pad kind is unsupported"),
+                        locator,
+                        object_kind="pad",
+                    )
+                kind = pad_kind_by_token[raw_kind]
+                try:
+                    shape = PadShape(raw_shape)
+                except ValueError:
+                    self.fail(
+                        "unsupported.construct",
+                        "pad shape is unsupported",
                         locator,
                         object_kind="pad",
                     )

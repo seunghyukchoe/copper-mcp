@@ -3603,3 +3603,85 @@ def test_a_group_name_is_never_echoed_either() -> None:
     assert result.diagnostics == ()
     assert result.snapshot is not None
     assert b"SYSTEM" not in encode_snapshot(result.snapshot)
+
+
+def _pad_with_header(kind: bytes, shape: bytes) -> bytes:
+    """One otherwise-valid copper pad carrying the given kind and shape tokens."""
+
+    return (
+        b"    (pad " + b'"9" ' + kind + b" " + shape + b"\n"
+        b"      (at 0 0)\n"
+        b"      (size 3.05 2.75)\n"
+        b'      (layers "F.Cu" "F.Mask")\n'
+        b'      (uuid "10000000-0000-0000-0000-0000000000c1")\n'
+        b"    )\n"
+    )
+
+
+def test_an_unsupported_pad_kind_and_shape_refuse_as_two_different_diagnostics() -> None:
+    """The pad header's two tokens refuse separately, so a caller learns which one was wrong.
+
+    One message covered both ("pad kind or shape is unsupported") and therefore named neither.
+    That is the defect class D-178 repaired in the *control flow* for seven pad refusals the
+    allowlist made unreachable; here the check always ran and the message was the thing carrying
+    no information. On the one real board that reaches it, the cause is a `connect` pad, and
+    recovering that took reading the file.
+
+    Neither refusal's reach changes: same code, same locator, same set of boards refused.
+    """
+
+    kind_refusal = parse_kicad_bytes(
+        _with_pad(_pad_with_header(b"mystery_kind", b"circle")),
+        constraint_profile(assign_signal=True),
+    )
+    shape_refusal = parse_kicad_bytes(
+        _with_pad(_pad_with_header(b"smd", b"trapezoid")),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert kind_refusal.snapshot is None
+    assert kind_refusal.diagnostics[0].code == "unsupported.construct"
+    assert kind_refusal.diagnostics[0].object_kind == "pad"
+    assert kind_refusal.diagnostics[0].message == "pad kind is unsupported"
+
+    assert shape_refusal.snapshot is None
+    assert shape_refusal.diagnostics[0].code == "unsupported.construct"
+    assert shape_refusal.diagnostics[0].object_kind == "pad"
+    assert shape_refusal.diagnostics[0].message == "pad shape is unsupported"
+
+    # The two are genuinely distinguishable, which is the whole point of the split.
+    assert kind_refusal.diagnostics[0].message != shape_refusal.diagnostics[0].message
+
+
+def test_an_edge_connector_pad_is_refused_by_name_without_echoing_the_board() -> None:
+    """`connect` is a documented KiCad pad kind, so the refusal may name it from a closed table.
+
+    This is the `_UNMODELLED_ROOT_HEADS` rule applied to pad kinds: the message is a *value from*
+    `_UNMODELLED_PAD_KINDS`, selected by an equality test against the source token and never
+    built from it, so the diagnostic names the construct without echoing one byte of the board.
+    An undocumented token is refused unnamed, and the indexed locator still says which pad.
+
+    Naming it is all this does. Modelling an edge-connector pad is a separate contract decision
+    -- it is real copper, so it is an obstacle, but its attachment and plating semantics differ
+    from SMD -- and is deliberately not taken here.
+    """
+
+    named = parse_kicad_bytes(
+        _with_pad(_pad_with_header(b"connect", b"circle")),
+        constraint_profile(assign_signal=True),
+    )
+    unnamed = parse_kicad_bytes(
+        _with_pad(_pad_with_header(b"mystery_kind", b"circle")),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert named.snapshot is None
+    assert named.diagnostics[0].code == "unsupported.construct"
+    assert named.diagnostics[0].message == "edge-connector pads are unsupported"
+    # The locator says which pad, in both the named and the unnamed case.
+    assert named.diagnostics[0].source_locator.endswith(".pad[0]")
+    assert unnamed.diagnostics[0].source_locator == named.diagnostics[0].source_locator
+
+    # The undocumented token is refused without being named, and its own bytes never appear.
+    assert unnamed.diagnostics[0].message == "pad kind is unsupported"
+    assert "mystery_kind" not in unnamed.diagnostics[0].message
