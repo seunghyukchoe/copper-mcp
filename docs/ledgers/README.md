@@ -43,9 +43,11 @@ The rules:
    Taking a number *above* the next free one is the other half of the same safety net, and it is
    how `D-181`/`R-138` were allocated: two branches were open on the same base, one holding
    `D-179`/`R-136` and one holding `D-180`/`R-137`, so this record stepped over both rather than
-   racing them. `D-179`, `D-180`, `R-136` and `R-137` are therefore live claims and not gaps at
-   the moment of writing; if one of those branches is abandoned its number becomes a permanent
-   gap under rule 2, like any other spent number.
+   racing them. `D-180` and `R-137` have since landed from their own branch, which is the
+   mechanism working as intended — stepping over a live claim costs nothing when it lands.
+   `D-179` and `R-136` are still live claims and not gaps at the moment of writing; if that
+   branch is abandoned its numbers become permanent gaps under rule 2, like any other spent
+   number.
 2. **Numbers are never reused.** A gap is permanent, and the checker reports gaps as information
    rather than failing on them. `D-039`, `SEC-021`, and `B-006` are unused because their entries
    were withdrawn before merge. `SEC-114` has no recorded claimant at all; it was skipped during

@@ -44,6 +44,41 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- **CopperMCP's published DRC schema rejected CopperMCP's own published DRC payload.**
+  `schemas/drc-summary.schema.json` sets `"additionalProperties": false` and never declared
+  `clean`, while `DrcSummary.to_dict()` has always emitted it -- so every payload from
+  `attestation.py`, `post_placement_observation.py` and `route_preview.py` failed validation
+  against the schema a third party would download. The schema is completed rather than the field
+  dropped, and the two are not interchangeable: `clean` **is** derivable from the six count fields
+  the schema already declares, but it is also already published -- `RouteDrcSummaryContract` is a
+  closed MCP contract that declares `clean` as required and validates it against those same counts,
+  so removing it from `to_dict()` would break the wire contract the model feeds, at a pinned
+  `schema_version` of `1.0`, for a field whose sibling `passed` is derived from the same counts and
+  declared. It is declared **required**, matching the MCP contract, so the two published contracts
+  cannot disagree in the opposite direction. **No content address moves**: schema files are hashed
+  into no digest, `to_dict()` is unchanged byte for byte, and `tests/test_golden_identities.py`
+  passes unmodified. ([D-180](docs/ledgers/decision-ledger.md),
+  [R-137](docs/ledgers/risk-register.md), #11)
+
+- **The DRC schema let a board lie about being clean.** Declaring `clean` was necessary but not
+  sufficient: typed only as `boolean`, a payload carrying `warning_count: 1` beside `clean: true`
+  validated against the published schema, while `DrcSummary.clean` and the closed
+  `RouteDrcSummaryContract` both refuse it. A schema-only consumer could therefore accept and
+  display a board as clean that CopperMCP's own runtime refuses to call clean -- a false claim
+  about a board, reachable through the contract we publish, and a worse failure than the
+  `additionalProperties` defect above, which only made a *true* payload fail. `passed` had the
+  identical hole. Both are now pinned in **both directions** with `if`/`then`/`else` over `const`
+  values: `passed` is true exactly when `error_count` and `unconnected_count` are `0`, and `clean`
+  is true exactly when all five counts are `0` **and** `violation_type_counts` is empty -- the last
+  condition matters, because a present-but-zero violation type is `passed` and not `clean`. The
+  schema is checked against `DrcSummary`'s own answer over a grid exercising each count's
+  contribution, four negative fixtures pin the lying payloads, and eight mutations of the
+  constraint were each killed. Not expressible in JSON Schema, and stated rather than hidden: the
+  model also requires the violation-type counts to sum to
+  `error + warning + exclusion + unconnected`. `board-manifest` and `candidate` were checked for
+  the same class of gap and carry no derived value.
+  ([D-180](docs/ledgers/decision-ledger.md), [R-137](docs/ledgers/risk-register.md), #11)
+
 - **Route preview routed 0 of 385 nets on real boards, and the budget that refused them was
   counting three different things.** Measured read-only against a live audio-project tree, 93 of
   385 previews refused `obstacle_budget_exceeded` at default settings against boards carrying up to
@@ -64,6 +99,32 @@ All notable changes are documented here. The format follows
   [obstacle-budget calibration](docs/research/route-obstacle-budget-calibration-v1.md), #128)
 
 ### Added
+
+- **Every JSON Schema published under `schemas/` now has a named proof that it accepts what the
+  code really emits.** `tests/test_schema_conformance.py` loads the schema files themselves --
+  the artifacts a third party downloads, which no test previously read -- and checks them in three
+  layers. Committed fixtures under `tests/fixtures/schema-conformance/` give each of the board
+  manifest, candidate and DRC summary schemas one minimal `valid.json` and six focused
+  `invalid-<condition>.json` files (missing required field, unexpected property at the root and
+  inside a nested object, negative count, malformed SHA-256 identifier, wrong schema version); each
+  invalid fixture differs from `valid.json` in exactly one way and `_EXPECTED_REJECTIONS` names the
+  precise `(keyword, field)` errors it must produce, so a fixture that drifts and starts failing
+  for an unrelated reason fails the suite instead of appearing to still work. Each `valid.json` is
+  asserted equal to what the model's `to_dict()` actually publishes, round-tripped through JSON.
+  And `_field_parity` compares the schema's declared property names against that emitted key set
+  directly -- the comparison that had never been made, and the one that catches the *missing-field*
+  defect above without needing a fixture at all. Its limit is recorded in its own test rather than
+  left implied: it compares **names**, so it is structurally blind to what a schema says about a
+  value, and it reported parity while a payload lying about `clean` still validated. All ten schema
+  files are accounted for in
+  `_SCHEMA_COVERAGE`, which names the exact test function proving each one and how strong the proof
+  is (`emitted_payload`, `committed_artifact`, or `legacy_no_emitter` for `board-ir/0.1.0`, which
+  the active codec refuses by design so no live payload exists to check). A completeness test fails
+  when a new schema file appears with no entry; a second test fails when a recorded proof is
+  renamed or deleted. No new dependency: `jsonschema` is already a version-bounded development-only
+  dependency (`jsonschema>=4.25,<5`, in the `dev` extra, not in the runtime `dependencies` list).
+  `docs/development.md` documents how to add a fixture.
+  ([R-137](docs/ledgers/risk-register.md), #11)
 
 - **A routing region, so the obstacle budget bounds work instead of board size.** A two-pin route
   only interacts with copper near the corridor between its pads, but the router was modelling the
