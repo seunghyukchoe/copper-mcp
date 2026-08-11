@@ -38,6 +38,25 @@ All notable changes are documented here. The format follows
   passes unmodified. ([D-180](docs/ledgers/decision-ledger.md),
   [R-137](docs/ledgers/risk-register.md), #11)
 
+- **The DRC schema let a board lie about being clean.** Declaring `clean` was necessary but not
+  sufficient: typed only as `boolean`, a payload carrying `warning_count: 1` beside `clean: true`
+  validated against the published schema, while `DrcSummary.clean` and the closed
+  `RouteDrcSummaryContract` both refuse it. A schema-only consumer could therefore accept and
+  display a board as clean that CopperMCP's own runtime refuses to call clean -- a false claim
+  about a board, reachable through the contract we publish, and a worse failure than the
+  `additionalProperties` defect above, which only made a *true* payload fail. `passed` had the
+  identical hole. Both are now pinned in **both directions** with `if`/`then`/`else` over `const`
+  values: `passed` is true exactly when `error_count` and `unconnected_count` are `0`, and `clean`
+  is true exactly when all five counts are `0` **and** `violation_type_counts` is empty -- the last
+  condition matters, because a present-but-zero violation type is `passed` and not `clean`. The
+  schema is checked against `DrcSummary`'s own answer over a grid exercising each count's
+  contribution, four negative fixtures pin the lying payloads, and eight mutations of the
+  constraint were each killed. Not expressible in JSON Schema, and stated rather than hidden: the
+  model also requires the violation-type counts to sum to
+  `error + warning + exclusion + unconnected`. `board-manifest` and `candidate` were checked for
+  the same class of gap and carry no derived value.
+  ([D-180](docs/ledgers/decision-ledger.md), [R-137](docs/ledgers/risk-register.md), #11)
+
 - **Route preview routed 0 of 385 nets on real boards, and the budget that refused them was
   counting three different things.** Measured read-only against a live audio-project tree, 93 of
   385 previews refused `obstacle_budget_exceeded` at default settings against boards carrying up to
@@ -71,8 +90,11 @@ All notable changes are documented here. The format follows
   for an unrelated reason fails the suite instead of appearing to still work. Each `valid.json` is
   asserted equal to what the model's `to_dict()` actually publishes, round-tripped through JSON.
   And `_field_parity` compares the schema's declared property names against that emitted key set
-  directly -- the comparison that had never been made, and the one that catches the `clean` defect
-  above without needing a fixture at all. All ten schema files are accounted for in
+  directly -- the comparison that had never been made, and the one that catches the *missing-field*
+  defect above without needing a fixture at all. Its limit is recorded in its own test rather than
+  left implied: it compares **names**, so it is structurally blind to what a schema says about a
+  value, and it reported parity while a payload lying about `clean` still validated. All ten schema
+  files are accounted for in
   `_SCHEMA_COVERAGE`, which names the exact test function proving each one and how strong the proof
   is (`emitted_payload`, `committed_artifact`, or `legacy_no_emitter` for `board-ir/0.1.0`, which
   the active codec refuses by design so no live payload exists to check). A completeness test fails

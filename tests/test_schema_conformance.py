@@ -161,8 +161,11 @@ _DIRECT_SCHEMAS = ("board-manifest", "candidate", "drc-summary")
 # ``additionalProperties`` the error's own path stops at the enclosing object, so the field name is
 # recovered structurally (see ``_subject``) — otherwise the two DRC ``required`` fixtures below
 # would be indistinguishable, and the one that pins issue #11 would prove nothing specific.
-# Every invalid fixture differs from its `valid.json` in exactly one way, so each expected set has
-# exactly one member and an unexpected extra error fails the test loudly.
+# Every invalid fixture differs from its `valid.json` in exactly one field, and an unexpected extra
+# error fails the test loudly. One changed field may legitimately produce more than one error now
+# that the DRC schema pins the `passed`/`clean` derivation: a negative `error_count` is both an
+# out-of-range count *and* a report whose derived flags no longer follow from its counts. Both are
+# recorded rather than one being papered over.
 _EXPECTED_REJECTIONS: dict[tuple[str, str], set[tuple[str, str]]] = {
     ("board-manifest", "invalid-missing-required-field.json"): {("required", "counts")},
     ("board-manifest", "invalid-unexpected-additional-property.json"): {
@@ -189,7 +192,17 @@ _EXPECTED_REJECTIONS: dict[tuple[str, str], set[tuple[str, str]]] = {
     ("drc-summary", "invalid-unexpected-additional-property.json"): {
         ("additionalProperties", "unexpected_field")
     },
-    ("drc-summary", "invalid-negative-count.json"): {("minimum", "error_count")},
+    ("drc-summary", "invalid-clean-true-beside-a-finding.json"): {("const", "clean")},
+    ("drc-summary", "invalid-clean-false-on-a-report-with-no-findings.json"): {("const", "clean")},
+    ("drc-summary", "invalid-passed-true-beside-an-error.json"): {("const", "passed")},
+    ("drc-summary", "invalid-passed-false-on-a-report-with-no-errors.json"): {("const", "passed")},
+    # A negative `error_count` is out of range *and* falsifies both derived flags, which the schema
+    # now pins. All three are recorded so the fixture keeps proving every consequence it has.
+    ("drc-summary", "invalid-negative-count.json"): {
+        ("minimum", "error_count"),
+        ("const", "passed"),
+        ("const", "clean"),
+    },
     ("drc-summary", "invalid-malformed-sha256-base-revision.json"): {("pattern", "base_revision")},
     ("drc-summary", "invalid-wrong-schema-version.json"): {("const", "schema_version")},
 }
@@ -509,6 +522,102 @@ def test_drc_summary_schema_still_requires_the_derived_clean_field() -> None:
     assert schema["properties"]["clean"]["type"] == "boolean"
     assert "clean" in schema["required"]
     assert _rejections("drc-summary", without_clean) == {("required", "clean")}
+
+
+#: ``(error, warning, exclusion, unconnected, ignored, violation_type_counts)`` combinations that
+#: exercise each count's independent contribution to ``passed`` and ``clean``. Every row satisfies
+#: the model's own rule that the violation-type counts sum to
+#: ``error + warning + exclusion + unconnected``.
+_COUNT_GRID = [
+    (0, 0, 0, 0, 0, {}),
+    (0, 1, 0, 0, 0, {"silk_over_copper": 1}),
+    (2, 0, 0, 0, 0, {"clearance": 2}),
+    (0, 0, 1, 0, 0, {"courtyards_overlap": 1}),
+    (0, 0, 0, 1, 0, {"unconnected_items": 1}),
+    (0, 0, 0, 0, 3, {}),
+    # Every count is zero, yet a violation type is present with a zero count, so the report is
+    # `passed` but **not** `clean`. This row is why the schema's `clean` condition also requires
+    # `violation_type_counts` to be empty rather than only checking the five counts.
+    (0, 0, 0, 0, 0, {"silk_over_copper": 0}),
+]
+
+
+def _summary_payload(
+    errors: int,
+    warnings: int,
+    exclusions: int,
+    unconnected: int,
+    ignored: int,
+    counts: dict[str, int],
+) -> dict[str, Any]:
+    summary = DrcSummary(
+        base_revision=f"sha256:{_SHA_C}",
+        drc_context_revision=f"sha256:{_SHA_D}",
+        kicad_version="10.0.5",
+        drc_schema="https://schemas.kicad.org/drc.v1.json",
+        coordinate_units="mm",
+        error_count=errors,
+        warning_count=warnings,
+        exclusion_count=exclusions,
+        ignored_check_count=ignored,
+        unconnected_count=unconnected,
+        violation_type_counts=counts,
+        passed=errors == 0 and unconnected == 0,
+    )
+    return _as_wire_json(summary.to_dict())
+
+
+@pytest.mark.parametrize(
+    "row", _COUNT_GRID, ids=lambda row: f"e{row[0]}w{row[1]}x{row[2]}u{row[3]}i{row[4]}"
+)
+def test_the_schema_derives_passed_and_clean_exactly_as_the_model_does(
+    row: tuple[int, int, int, int, int, dict[str, int]],
+) -> None:
+    """The schema must agree with `DrcSummary` on both derived flags, in both directions.
+
+    Declaring `passed` and `clean` as free booleans would let a payload claim `clean: true` beside a
+    nonzero count and still validate — a **false claim about a board**, reachable through the
+    contract CopperMCP publishes, which the runtime model and the closed MCP contract both refuse.
+    That is a worse failure than the `additionalProperties` defect this branch started from: that
+    one made a true payload fail, this one would make a false payload pass. So the schema pins the
+    derivation, and this test checks it against the code's own answer rather than against a
+    restatement of it: the honest payload is accepted, and flipping either flag is rejected.
+    """
+
+    payload = _summary_payload(*row)
+
+    assert _rejections("drc-summary", payload) == set()
+    assert _rejections("drc-summary", {**payload, "clean": not payload["clean"]}) == {
+        ("const", "clean")
+    }
+    assert _rejections("drc-summary", {**payload, "passed": not payload["passed"]}) == {
+        ("const", "passed")
+    }
+
+
+def test_field_parity_compares_names_only_and_cannot_see_the_derivation() -> None:
+    """State the limit plainly: `_field_parity` would not have caught the consistency gap.
+
+    `_field_parity` compares the schema's declared property *names* against the emitted key set. It
+    is blind to what a schema says about a value, so it reported no mismatch while `clean` was
+    declared as an unconstrained boolean and a lying payload validated. Naming that here keeps the
+    coverage story honest — the `allOf` derivation above is what closes the semantic gap, and the
+    grid test above is what proves it.
+    """
+
+    schema = _schema("drc-summary")
+    emitted = set(_EMITTERS["drc-summary"]())
+    # The schema as it stood before this change: same property names, no derivation pinned.
+    unconstrained = {key: value for key, value in schema.items() if key != "allOf"}
+
+    # Field parity is satisfied by both, because both declare exactly the emitted names.
+    assert _field_parity(schema, emitted) == (set(), set())
+    assert _field_parity(unconstrained, emitted) == (set(), set())
+
+    # Yet only one of them refuses a payload that claims to be clean beside a real finding.
+    lying = {**_emitted_drc_summary(), "warning_count": 1, "violation_type_counts": {"silk": 1}}
+    assert list(Draft202012Validator(unconstrained).iter_errors(lying)) == []
+    assert list(Draft202012Validator(schema).iter_errors(lying)) != []
 
 
 @pytest.mark.parametrize(

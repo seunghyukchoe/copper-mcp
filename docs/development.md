@@ -237,10 +237,23 @@ To add a fixture for a schema (new or existing):
    the wire format has a JSON array), and assert the committed fixture equals it. A fixture the
    code cannot produce proves nothing about the code. Register the builder in `_EMITTERS` so
    `_field_parity` compares the schema's declared property names against the emitted key set — that
-   comparison alone would have caught the `clean` defect.
-4. Add the schema's relative path to `_SCHEMA_COVERAGE`, naming the test function that carries the
+   comparison alone would have caught the missing-field half of the `clean` defect. Note what it
+   cannot do: it compares **names**, so it says nothing about what a schema permits as a *value*.
+4. **If the model derives a field from other fields, pin the derivation in the schema, in both
+   directions.** Declaring a derived field is not enough. `clean` and `passed` are computed from
+   the DRC counts, and while they were typed as plain booleans a payload could claim `clean: true`
+   beside `warning_count: 1` and validate — a false claim about a board, which the runtime model
+   and the MCP contract both refuse. The direction-of-error rule applies to schemas too, and this
+   is the direction that matters: a schema that omits a field makes a *true* payload fail, while a
+   schema that declares a field without its rule lets a *false* payload pass. Express it with
+   `if`/`then`/`else` over `const` values (see `schemas/drc-summary.schema.json`), test it against
+   the model's own answer over a grid of inputs rather than a restatement of the rule, and add
+   negative fixtures for both the overstating and understating cases. Where the format cannot
+   express the invariant — JSON Schema has no arithmetic, so a sum across sibling fields is out of
+   reach — say so in a `$comment` rather than leaving the reader to assume it is covered.
+5. Add the schema's relative path to `_SCHEMA_COVERAGE`, naming the test function that carries the
    proof and its `kind`, even when that test lives in a different module.
-5. If a fixture reveals that the real payload disagrees with the schema, **stop and decide the fix
+6. If a fixture reveals that the real payload disagrees with the schema, **stop and decide the fix
    on its merits** rather than editing whichever side is easier. Ask which side is already
    published (an MCP contract in `src/copper_mcp/mcp_contracts.py` usually is), whether the payload
    is content-addressed or version-pinned, and whether `tests/test_golden_identities.py` would
