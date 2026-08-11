@@ -2834,27 +2834,41 @@ def _with_footprint_graphic(layer: bytes, *, net_tie: bool = False) -> bytes:
     return _insert_before(SUBSET_BOARD.read_bytes(), b'    (pad "1" smd roundrect', addition)
 
 
-def test_net_tie_copper_refuses_as_a_net_tie_rather_than_as_a_stray_graphic() -> None:
-    """The refusal must name the deliberate short, not the layer the copper happens to sit on.
+def test_net_tie_copper_converts_as_a_netless_obstacle_segment() -> None:
+    """A declared net tie now converts; its copper is an obstacle that claims no connection.
 
-    A `NetTie-2_THT_Pad1.0mm` joining two ground nets was the first refusal on a real board, and
-    it reported `footprint graphic on copper or Edge.Cuts is unsupported` - which reads as a
-    stray drawing left on a copper layer, a thing the user would go looking for and not find.
-    The adapter already refuses net ties, correctly and for a reason no envelope can fix: KiCad
-    declares that "nets attached to pads within a single pad-group are allowed to short", and
-    Board IR models nets as disjoint, so this copper belongs to two nets at once. The preflight
-    simply ran first and answered with the less specific fact.
+    D-162 recorded why this used to refuse and left the modelling open; ADR-0092 answers it.
+    KiCad declares that "nets attached to pads within a single pad-group are allowed to short",
+    and Board IR models nets as disjoint, so the shorting polygon belongs to two nets at once.
+    The two roles the copper plays resolve separately under the direction-of-error rules: as an
+    obstacle it over-approximates (a netless full-width segment whose modelled envelope — the
+    endpoint bounding box grown by ``(width_nm + 1) // 2`` on all four sides — contains the drawn
+    rectangle), and as connectivity it under-approximates (``net_id None`` — the tied nets are
+    never claimed connected through it). The identity is revision-derived on purpose, which is
+    what keeps every write-back path refused (ADR-0026): a patch cannot break the short.
     """
 
-    result = parse_kicad_bytes(
+    snapshot = parse_success(
         _with_footprint_graphic(b"F.Cu", net_tie=True), constraint_profile(assign_signal=True)
     )
+    content = snapshot.content
 
-    assert result.snapshot is None
-    diagnostic = result.diagnostics[0]
-    assert diagnostic.code == "unsupported.construct"
-    assert diagnostic.message == "net-tie footprint copper is unsupported in Board IR adapter v0.2"
-    assert diagnostic.object_kind == "footprint"
+    tie = [segment for segment in content.segments if ":derived:" in segment.id]
+    assert len(tie) == 1
+    # The footprint sits at (10, 10) turned 90 degrees, so the local (0, -0.65)..(2.6, 0.65)
+    # rectangle lands at (9.35, 7.4)..(10.65, 10): a vertical 1.3 mm-wide bar. The modelled
+    # segment is its long midline at full width — the drawn rectangle is contained in the
+    # segment's modelled envelope, over-approximated only by the square caps.
+    assert tie[0].net_id is None
+    assert tie[0].layer_id == "layer:F.Cu"
+    assert tie[0].start == PointNM(10_000_000, 7_400_000)
+    assert tie[0].end == PointNM(10_000_000, 10_000_000)
+    assert tie[0].width_nm == 1_300_000
+    # The tied nets stay disjoint: no net merging, no adopted net, no connectivity claim.
+    assert {net.name for net in content.nets} == {"GND", "SIG_µ"}
+    # And the board stays write-back refused: the derived identity is load-bearing.
+    with pytest.raises(KiCadPlacementPatchError):
+        _require_native_geometry_identities(snapshot)
 
 
 @pytest.mark.parametrize("layer", [b"F.Cu", b"B.Cu", b"*.Cu"])
@@ -3589,3 +3603,85 @@ def test_a_group_name_is_never_echoed_either() -> None:
     assert result.diagnostics == ()
     assert result.snapshot is not None
     assert b"SYSTEM" not in encode_snapshot(result.snapshot)
+
+
+def _pad_with_header(kind: bytes, shape: bytes) -> bytes:
+    """One otherwise-valid copper pad carrying the given kind and shape tokens."""
+
+    return (
+        b"    (pad " + b'"9" ' + kind + b" " + shape + b"\n"
+        b"      (at 0 0)\n"
+        b"      (size 3.05 2.75)\n"
+        b'      (layers "F.Cu" "F.Mask")\n'
+        b'      (uuid "10000000-0000-0000-0000-0000000000c1")\n'
+        b"    )\n"
+    )
+
+
+def test_an_unsupported_pad_kind_and_shape_refuse_as_two_different_diagnostics() -> None:
+    """The pad header's two tokens refuse separately, so a caller learns which one was wrong.
+
+    One message covered both ("pad kind or shape is unsupported") and therefore named neither.
+    That is the defect class D-178 repaired in the *control flow* for seven pad refusals the
+    allowlist made unreachable; here the check always ran and the message was the thing carrying
+    no information. On the one real board that reaches it, the cause is a `connect` pad, and
+    recovering that took reading the file.
+
+    Neither refusal's reach changes: same code, same locator, same set of boards refused.
+    """
+
+    kind_refusal = parse_kicad_bytes(
+        _with_pad(_pad_with_header(b"mystery_kind", b"circle")),
+        constraint_profile(assign_signal=True),
+    )
+    shape_refusal = parse_kicad_bytes(
+        _with_pad(_pad_with_header(b"smd", b"trapezoid")),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert kind_refusal.snapshot is None
+    assert kind_refusal.diagnostics[0].code == "unsupported.construct"
+    assert kind_refusal.diagnostics[0].object_kind == "pad"
+    assert kind_refusal.diagnostics[0].message == "pad kind is unsupported"
+
+    assert shape_refusal.snapshot is None
+    assert shape_refusal.diagnostics[0].code == "unsupported.construct"
+    assert shape_refusal.diagnostics[0].object_kind == "pad"
+    assert shape_refusal.diagnostics[0].message == "pad shape is unsupported"
+
+    # The two are genuinely distinguishable, which is the whole point of the split.
+    assert kind_refusal.diagnostics[0].message != shape_refusal.diagnostics[0].message
+
+
+def test_an_edge_connector_pad_is_refused_by_name_without_echoing_the_board() -> None:
+    """`connect` is a documented KiCad pad kind, so the refusal may name it from a closed table.
+
+    This is the `_UNMODELLED_ROOT_HEADS` rule applied to pad kinds: the message is a *value from*
+    `_UNMODELLED_PAD_KINDS`, selected by an equality test against the source token and never
+    built from it, so the diagnostic names the construct without echoing one byte of the board.
+    An undocumented token is refused unnamed, and the indexed locator still says which pad.
+
+    Naming it is all this does. Modelling an edge-connector pad is a separate contract decision
+    -- it is real copper, so it is an obstacle, but its attachment and plating semantics differ
+    from SMD -- and is deliberately not taken here.
+    """
+
+    named = parse_kicad_bytes(
+        _with_pad(_pad_with_header(b"connect", b"circle")),
+        constraint_profile(assign_signal=True),
+    )
+    unnamed = parse_kicad_bytes(
+        _with_pad(_pad_with_header(b"mystery_kind", b"circle")),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert named.snapshot is None
+    assert named.diagnostics[0].code == "unsupported.construct"
+    assert named.diagnostics[0].message == "edge-connector pads are unsupported"
+    # The locator says which pad, in both the named and the unnamed case.
+    assert named.diagnostics[0].source_locator.endswith(".pad[0]")
+    assert unnamed.diagnostics[0].source_locator == named.diagnostics[0].source_locator
+
+    # The undocumented token is refused without being named, and its own bytes never appear.
+    assert unnamed.diagnostics[0].message == "pad kind is unsupported"
+    assert "mystery_kind" not in unnamed.diagnostics[0].message

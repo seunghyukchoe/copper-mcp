@@ -157,6 +157,23 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- **An unsupported pad refused with a message naming neither of the two things it could be.**
+  `pad kind or shape is unsupported` covered both positional tokens of a pad header, so a caller
+  could not tell which one the adapter rejected, nor which construct it was. On the one real
+  board in the survey corpus that reaches this refusal the answer is a `connect` pad — KiCad's
+  edge connector — and recovering that took reading the board file by hand. Kind and shape are
+  now two separate refusals, and an unsupported *kind* that the KiCad format documents is named
+  from a closed table (`_UNMODELLED_PAD_KINDS`), under exactly the rule `_UNMODELLED_ROOT_HEADS`
+  already follows: the message is a *value from that table*, selected by an equality test against
+  the source token and never built from it, so the refusal names the construct without echoing
+  one byte of the board. An undocumented token is still refused unnamed, and the indexed locator
+  says which pad in both cases. This is the same defect class D-178 repaired for seven pad
+  refusals the allowlist had made unreachable — there the control flow was wrong, here the
+  control flow always ran and the message carried no information. **Nothing changes about what is
+  accepted or refused**: same code, same locator, same set of boards. Modelling an edge-connector
+  pad is a separate contract decision and is deliberately not taken here.
+  ([#116](https://github.com/seunghyukchoe/copper-mcp/issues/116))
+
 - **A root-level `(group …)` no longer refuses a whole board, and no root refusal is anonymous any
   more.** A `pcbnew` backup of one real KiCad 10 board — 103 footprints, 349 pads, 4 filled zones —
   was refused outright for three editor selections, by a message that named nothing: `root
@@ -384,6 +401,53 @@ All notable changes are documented here. The format follows
   single-value non-claim field, and the `non_claim_inference` scenario counts those by introspecting
   the live contract module rather than from a constant — which is exactly the property that makes
   that check non-vacuous. All 116 cases, 77 passes and 0 failures are unchanged.
+- **Net-tie footprints convert: the declared short's copper is a netless obstacle, and the tie
+  is never a connectivity claim.** KiCad's `net_tie_pad_groups` declares that "nets attached to
+  pads within a single pad-group are allowed to short", and the footprint's filled copper
+  polygon is that short — copper belonging to two disjoint nets at once, which D-162 recorded as
+  the one refusal no envelope could lift because its two roles point in opposite safe
+  directions. ADR-0092 resolves the roles separately: as an **obstacle** each tie rectangle
+  becomes a full-width `Segment` with `net_id None` along its long midline — a strict superset
+  of the drawn copper, so a third net can never route through the tie and even the tied nets are
+  kept out of it (over-refusal is the accepted direction) — and as **connectivity** nothing is
+  claimed, because a joined-nets edge cannot be test-bound from the file alone, so the tied nets
+  deliberately report unconnected through the tie exactly as net-0 stitching copper behaves
+  (ADR-0078). The identities are revision-derived on purpose — an `fp_poly` is not a track, so
+  its UUID names no segment — and that keeps every write-back path refused (ADR-0026): no patch
+  can separate the tie copper from the pads it shorts. **The accepted subset is stated as a
+  closed list of the tie polygon's required and permitted fields** (ADR-0092), not as prose —
+  prose is what let two constructs through that it claimed not to accept: a five-point ring, and
+  a polygon with no `stroke` field at all. The second ran in the forbidden direction, because
+  the only thing establishing that the drawn copper is the rectangle and nothing more is
+  `(width 0)`, so an omitted field skipping that check could put real copper *outside* the
+  modelled obstacle. `stroke` is now required; all 331 `fp_poly` expressions across the 20-file
+  corpus carry one, so the omitted form is unobserved on real boards. The closing-point widening
+  is kept and stated — a five-point ring whose last point repeats the first is accepted, since
+  the closing point carries no geometry; one that does *not* close still refuses. A tie polygon
+  on `Edge.Cuts` refuses too: the outline is routing room and may only be under-approximated
+  (ADR-0076), the opposite direction from an obstacle. Fourteen malformed-tie variants each keep
+  their own typed refusal, and the third-net guard is pinned with a no-tie mutation control. No schema or digest change — boards without net ties are
+  byte-identical, and the committed golden digests pin that.
+
+  **This converts no additional board, and that is the measured result, not an expectation.**
+  Net-tie footprint copper now converts as a netless obstacle; the conversion count is unchanged
+  — 11 of the 12 boards in the #116 survey set convert, which is 11 of all 17 boards in the
+  corpus as saved today, the six refusals being typed: connect-kind (edge-connector) pads on one
+  board, root board properties on four phono saves, and a root copper graphic on one. Measured
+  read-only before and after on the same tree; the corpus has grown by five phono saves since
+  the survey, which is why both denominators are given.
+
+  The one board carrying a net tie, `tier1-rev-a`, has **three** blockers stacked on it and this
+  removes only the first. Its refusal advances from `net-tie footprint copper is unsupported in
+  Board IR adapter v0.2` to a refusal for `connect`-kind pads — KiCad's edge connector — with the
+  intervening `zone_connect` blocker having been removed separately by D-178. Advancing a refusal
+  through a stack is real progress and is how such a stack is measured, but it is not a
+  conversion, and nothing here should be read as claiming the corpus reaches 12 of 12. The three
+  remaining conversion gaps are tracked as #138 (edge-connector pads), #140 (root board
+  properties) and #141 (root copper graphic).
+  ([ADR-0092](docs/adr/0092-net-tie-copper-as-netless-obstacle.md),
+  [D-179](docs/ledgers/decision-ledger.md), [R-136](docs/ledgers/risk-register.md),
+  [KiCad net-tie modelling](docs/research/kicad-net-tie-modelling-v1.md), #116)
 - **Chamfered and circular courtyards convert, and their legality claims stay honest.** The
   #116 survey's two courtyard causes — `courtyard edges must be non-zero and axis-aligned`
   (measured to be exact 45-degree electrolytic-capacitor chamfers, not the hypothesised rotated
