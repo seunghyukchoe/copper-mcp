@@ -17,6 +17,7 @@
     "unconnected_count",
     "violation_type_counts",
     "passed",
+    "clean",
     "schema_version"
   ],
   "properties": {
@@ -35,7 +36,54 @@
       "maxProperties": 1000,
       "additionalProperties": {"type": "integer", "minimum": 0}
     },
-    "passed": {"type": "boolean"},
+    "passed": {
+      "type": "boolean",
+      "description": "Hard gate: true when KiCad reported no error-severity violation and no unconnected item. Warnings and exclusions are permitted, because KiCad treats them as non-blocking.",
+      "$comment": "Derived from error_count and unconnected_count. Published rather than left to the caller so every consumer applies the same gate."
+    },
+    "clean": {
+      "type": "boolean",
+      "description": "Stricter presentation signal: true only when the report carries no findings and no ignored checks at all. A warning-only board is passed but not clean.",
+      "$comment": "Derived from the five counts and violation_type_counts. Published rather than left to the caller so a warning-only report can never be re-derived as clean by a consumer that forgets ignored_check_count."
+    },
     "schema_version": {"const": "1.0"}
-  }
+  },
+  "$comment": "`passed` and `clean` are derived from the counts above, so the schema pins the derivation in both directions rather than declaring two free booleans. Without these, a payload could claim `clean: true` beside a nonzero count and still validate — a false claim about a board, reachable through the published contract, which the runtime model and the closed MCP contract both refuse. Not expressible here: the model also requires the violation-type counts to sum to error + warning + exclusion + unconnected, and JSON Schema has no arithmetic over sibling values.",
+  "allOf": [
+    {
+      "title": "passed is true exactly when there is no error and nothing unconnected",
+      "if": {
+        "properties": {
+          "error_count": {"const": 0},
+          "unconnected_count": {"const": 0}
+        },
+        "required": ["error_count", "unconnected_count"]
+      },
+      "then": {"properties": {"passed": {"const": true}}},
+      "else": {"properties": {"passed": {"const": false}}}
+    },
+    {
+      "title": "clean is true exactly when there is no finding and no ignored check at all",
+      "if": {
+        "properties": {
+          "error_count": {"const": 0},
+          "warning_count": {"const": 0},
+          "exclusion_count": {"const": 0},
+          "ignored_check_count": {"const": 0},
+          "unconnected_count": {"const": 0},
+          "violation_type_counts": {"maxProperties": 0}
+        },
+        "required": [
+          "error_count",
+          "warning_count",
+          "exclusion_count",
+          "ignored_check_count",
+          "unconnected_count",
+          "violation_type_counts"
+        ]
+      },
+      "then": {"properties": {"clean": {"const": true}}},
+      "else": {"properties": {"clean": {"const": false}}}
+    }
+  ]
 }

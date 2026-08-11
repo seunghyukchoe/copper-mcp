@@ -190,6 +190,83 @@ does **not** prove.
 4. Route it through Board IR and the existing typed refusals. An import path that special-cases the
    corpus is measuring the harness, not the router.
 
+## Adding a schema conformance fixture
+
+`schemas/` holds the published JSON Schema files for CopperMCP's wire-visible payloads. A schema
+file can drift from the Python model that is supposed to satisfy it — a field renamed on one side,
+not the other — without any test noticing, because the model's own boundary tests validate against
+its own runtime rules, not against the schema file a third party would actually load. Direct schema
+conformance tests close that gap by loading the schema itself and checking fixtures against it.
+
+That gap was real, not theoretical. `schemas/drc-summary.schema.json` set
+`"additionalProperties": false` and never declared the `clean` field that `DrcSummary.to_dict()`
+has always emitted, so CopperMCP's own published DRC payload failed CopperMCP's own published
+schema. See [D-180](ledgers/decision-ledger.md) for why the schema was completed rather than the
+field dropped, and [R-137](ledgers/risk-register.md) for the residual risk.
+
+`tests/test_schema_conformance.py` is the single place that records how *every* file under
+`schemas/` is covered. Its `_SCHEMA_COVERAGE` mapping names, for each schema, the exact test
+function that proves it accepts a real payload, and how strong that proof is:
+
+- `emitted_payload` — a test builds the payload through the production code path and validates it
+  against the schema file. This is the claim to aim for.
+- `committed_artifact` — the published artifact is a file in this repository, and a test validates
+  those exact committed bytes.
+- `legacy_no_emitter` — the schema is kept for documents an earlier release produced and nothing
+  emits it any more, so the strongest available check is the committed golden document. This is a
+  one-value literal for a non-claim, not a softer `emitted_payload`.
+
+Two guards keep the map honest: `test_every_published_schema_has_a_named_proof` fails when a file
+appears under `schemas/` with no entry, and `test_every_recorded_proof_still_exists` fails when an
+entry names a test that has been renamed or deleted.
+
+To add a fixture for a schema (new or existing):
+
+1. Put fixtures under `tests/fixtures/schema-conformance/<schema-name>/`: one `valid.json`, plus one
+   `invalid-<condition>.json` per malformed condition. Name the invalid fixture after the condition
+   it demonstrates (`invalid-missing-required-field.json`, `invalid-malformed-sha256-<field>.json`,
+   `invalid-negative-count.json`, `invalid-unexpected-additional-property.json`,
+   `invalid-wrong-schema-version.json`) so a reader never has to open the file to know what it
+   tests. Keep fixtures minimal; do not paste a real board, job, or candidate wholesale.
+2. Make each invalid fixture differ from `valid.json` in **exactly one** way, then record the errors
+   it must produce in `_EXPECTED_REJECTIONS` as `(keyword, field)` pairs. Asserting only "some
+   error" is too weak — a fixture that drifts out of date fails for a new, unrelated reason and
+   still looks like it is working.
+3. Where the schema has a Python model with a `to_dict()`, build the valid payload from a real
+   instance, round-trip it through `json.dumps`/`json.loads` (a dataclass may hold a `tuple` where
+   the wire format has a JSON array), and assert the committed fixture equals it. A fixture the
+   code cannot produce proves nothing about the code. Register the builder in `_EMITTERS` so
+   `_field_parity` compares the schema's declared property names against the emitted key set — that
+   comparison alone would have caught the missing-field half of the `clean` defect. Note what it
+   cannot do: it compares **names**, so it says nothing about what a schema permits as a *value*.
+4. **If the model derives a field from other fields, pin the derivation in the schema, in both
+   directions.** Declaring a derived field is not enough. `clean` and `passed` are computed from
+   the DRC counts, and while they were typed as plain booleans a payload could claim `clean: true`
+   beside `warning_count: 1` and validate — a false claim about a board, which the runtime model
+   and the MCP contract both refuse. The direction-of-error rule applies to schemas too, and this
+   is the direction that matters: a schema that omits a field makes a *true* payload fail, while a
+   schema that declares a field without its rule lets a *false* payload pass. Express it with
+   `if`/`then`/`else` over `const` values (see `schemas/drc-summary.schema.json`), test it against
+   the model's own answer over a grid of inputs rather than a restatement of the rule, and add
+   negative fixtures for both the overstating and understating cases. Where the format cannot
+   express the invariant — JSON Schema has no arithmetic, so a sum across sibling fields is out of
+   reach — say so in a `$comment` rather than leaving the reader to assume it is covered.
+5. Add the schema's relative path to `_SCHEMA_COVERAGE`, naming the test function that carries the
+   proof and its `kind`, even when that test lives in a different module.
+6. If a fixture reveals that the real payload disagrees with the schema, **stop and decide the fix
+   on its merits** rather than editing whichever side is easier. Ask which side is already
+   published (an MCP contract in `src/copper_mcp/mcp_contracts.py` usually is), whether the payload
+   is content-addressed or version-pinned, and whether `tests/test_golden_identities.py` would
+   move. Record the decision in the decision ledger and the changelog. A schema is a public
+   contract; changing one goes through the same review as any other (see "Adding a public contract"
+   below).
+
+The validator is `jsonschema.Draft202012Validator`, already a development-only dependency and
+version-bounded in `pyproject.toml` (`jsonschema>=4.25,<5`, in the `dev` extra, not in the runtime
+`dependencies` list) — adding conformance coverage needs no new dependency. Call
+`Draft202012Validator.check_schema` on a schema before using it, so a malformed schema fails as a
+malformed schema rather than as a mysteriously permissive one.
+
 ## Adding a public contract
 
 1. Open an RFC issue.

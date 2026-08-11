@@ -1,0 +1,16 @@
+{
+  "candidate_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "base_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "status": "proposed",
+  "metrics": {
+    "hard_drc_errors": 0,
+    "unrouted_connections": 0,
+    "vias": 2,
+    "wire_length_mm": 12.5,
+    "runtime_seconds": 0.5
+  },
+  "router_version": "0.6.0",
+  "seed": 1,
+  "warnings": [],
+  "schema_version": "1.0"
+}
