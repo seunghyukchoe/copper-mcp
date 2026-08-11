@@ -8,7 +8,7 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from itertools import pairwise
-from math import isqrt
+from math import gcd, isqrt
 from typing import TypeAlias, cast
 
 from copper_mcp.board_ir import (
@@ -29,10 +29,12 @@ from copper_mcp.board_ir import (
 from copper_mcp.routing.contracts import (
     BATCHED_ONE_STEINER_ORDERING,
     COMPONENT_MST_ORDERING,
+    MAX_REPRESENTABLE_STEP_NM,
     SINGLE_PATH_ORDERING,
     AStarSettings,
     CancellationCheck,
     CongestionPenalty,
+    OffGridEvidence,
     RouteCandidate,
     RouteConnection,
     RouteCost,
@@ -170,6 +172,7 @@ class _ExpectedFailureError(Exception):
     message: str
     expanded_states: int = 0
     obstacle_checks: int = 0
+    off_grid: OffGridEvidence | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,8 +230,9 @@ def _fail(
     *,
     expanded_states: int = 0,
     obstacle_checks: int = 0,
+    off_grid: OffGridEvidence | None = None,
 ) -> _ExpectedFailureError:
-    return _ExpectedFailureError(code, message, expanded_states, obstacle_checks)
+    return _ExpectedFailureError(code, message, expanded_states, obstacle_checks, off_grid)
 
 
 def _result_failure(failure: _ExpectedFailureError) -> RouteResult:
@@ -238,7 +242,65 @@ def _result_failure(failure: _ExpectedFailureError) -> RouteResult:
             message=failure.message,
             expanded_states=failure.expanded_states,
             obstacle_checks=failure.obstacle_checks,
+            off_grid=failure.off_grid,
         )
+    )
+
+
+def _nearest_lattice_miss(delta_nm: int, step_nm: int) -> int:
+    """Signed nanometres from the nearest lattice line to a pad centre offset by ``delta_nm``.
+
+    Exact integer arithmetic throughout: ``remainder`` is the distance up from the lattice line
+    below, ``step_nm - remainder`` the distance down from the one above, and the comparison is
+    doubled rather than halved so no division rounds. Ties go to the lower line, which makes the
+    result a function of the inputs alone rather than of how the tie was broken.
+    """
+
+    remainder = delta_nm % step_nm
+    return remainder if 2 * remainder <= step_nm else remainder - step_nm
+
+
+#: Fixed lead sentence of every ``off_grid`` message, carrying no board-derived value.
+#:
+#: The geometry that follows it is per-request evidence a caller is entitled to (ADR-0093), but
+#: it is still derived from the caller's board, so anything that records refusal messages into a
+#: durable artifact truncates here rather than storing the numbers. `scripts/
+#: benchmark_real_board_capability.py` imports this constant for exactly that reason.
+OFF_GRID_MESSAGE_LEAD = "a pad centre does not lie on the requested routing lattice"
+
+
+def _off_grid_evidence(
+    start_pad: Pad,
+    end_pad: Pad,
+    delta_x: int,
+    delta_y: int,
+    step_nm: int,
+) -> OffGridEvidence:
+    """Measure one off-lattice pad centre against the lattice anchored at the other pad.
+
+    The greatest common divisor of the two deltas is the largest step at which the centre is
+    representable at all. It is reported because it is the number that separates the two very
+    different situations a caller can be in: a coarse-but-usable divisor says a finer lattice
+    would include this pad, and a divisor of a few nanometres says no lattice a router can hold
+    would, so the pad has to move. It does not promise that routing succeeds at that step, and
+    on measured real boards it usually does not (B-100).
+
+    That divisor is bounded by the larger pad-centre delta, not by the lattice, so on a board
+    placing the two pads near opposite legal Board IR coordinate extremes it exceeds the
+    JSON-safe integer the contract publishes -- ``2 * (2**53 - 1)`` is the worst case. It is
+    withheld as ``None`` there rather than clamped, because a clamped divisor would be a false
+    claim about the board and this one is a refusal a caller must still receive as a typed
+    refusal. Every other field is bounded by the request's own settings and stays exact.
+    """
+
+    divisor = gcd(abs(delta_x), abs(delta_y))
+    return OffGridEvidence(
+        pad_id=end_pad.id,
+        anchor_pad_id=start_pad.id,
+        grid_step_nm=step_nm,
+        miss_x_nm=_nearest_lattice_miss(delta_x, step_nm),
+        miss_y_nm=_nearest_lattice_miss(delta_y, step_nm),
+        largest_representable_step_nm=divisor if divisor <= MAX_REPRESENTABLE_STEP_NM else None,
     )
 
 
@@ -1763,9 +1825,18 @@ def _prepare(
     # the centres to divide would refuse boards the search can route perfectly well — and would
     # be unsatisfiable in practice, since the divisor has to serve every pad at once.
     if two_pin and (delta_x % step != 0 or delta_y % step != 0):
+        evidence = _off_grid_evidence(start_pad, end_pad, delta_x, delta_y, step)
+        divisor = (
+            f"{evidence.largest_representable_step_nm} nm"
+            if evidence.largest_representable_step_nm is not None
+            else "above this contract's exact-integer range"
+        )
         raise _fail(
             RouteFailureCode.OFF_GRID,
-            "the pad-center delta is not divisible by the requested grid step",
+            f"{OFF_GRID_MESSAGE_LEAD}: it misses the nearest lattice point by "
+            f"({evidence.miss_x_nm} nm, {evidence.miss_y_nm} nm) at grid_step_nm={step}; "
+            f"the largest step that represents this pad pair is {divisor}",
+            off_grid=evidence,
         )
     # The lattice spans the routing region, never the whole safe board. This is what makes the
     # region-scoped obstacle model sound rather than merely cheaper: a node the search can

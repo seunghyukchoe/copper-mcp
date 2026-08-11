@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 import copper_mcp.kicad_cli as kicad_cli
 import copper_mcp.request_boundary as request_boundary
@@ -19,6 +20,7 @@ from copper_mcp.adapters import net_id_for_name
 from copper_mcp.board_ir import PointNM
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import KiCadCliError, RouteCandidateDrcEvidence, ZoneFillAuthority
+from copper_mcp.mcp_contracts import RoutePreviewToolResponse
 from copper_mcp.models import DrcSummary
 from copper_mcp.route_preview import (
     RoutePreview,
@@ -436,6 +438,174 @@ def test_preview_reports_a_diagnostic_instead_of_routing_off_grid(tmp_path: Path
     assert preview.diagnostic.code is RouteFailureCode.OFF_GRID
     assert preview.snapshot_digest is not None
     assert preview.to_dict()["diagnostic"]["code"] == "off_grid"
+
+
+def test_an_off_grid_preview_publishes_the_pad_the_pitch_and_the_miss(tmp_path: Path) -> None:
+    """The public document carries the evidence, as exact integers (ADR-0093).
+
+    The fixture's two pads are 20 mm apart on one axis, so a 300,000 nm lattice misses by
+    100,000 nm and the largest step representing the pair is the 20 mm separation itself --
+    a divisor far *larger* than the requested step, which is why the field is named for
+    representability rather than for fineness.
+    """
+
+    _, settings = _workspace(tmp_path)
+
+    preview = preview_route(_request(settings={"grid_step_nm": 300_000}), settings)
+
+    diagnostic = preview.to_dict()["diagnostic"]
+    assert diagnostic["off_grid"] == {
+        "pad_id": "pad:kicad:20000000-0000-0000-0000-000000000004",
+        "anchor_pad_id": "pad:kicad:20000000-0000-0000-0000-000000000002",
+        "grid_step_nm": 300_000,
+        "miss_x_nm": -100_000,
+        "miss_y_nm": 0,
+        "largest_representable_step_nm": 20_000_000,
+    }
+    assert diagnostic["message"] == (
+        "a pad centre does not lie on the requested routing lattice: it misses the nearest "
+        "lattice point by (-100000 nm, 0 nm) at grid_step_nm=300000; the largest step that "
+        "represents this pad pair is 20000000 nm"
+    )
+
+
+def test_the_published_off_grid_contract_binds_the_evidence_to_its_own_code(
+    tmp_path: Path,
+) -> None:
+    """The MCP response contract accepts the real document and rejects a mismatched one.
+
+    The service and the published contract check the same biconditional independently, so a
+    payload assembled by anything other than ``RoutePreview.to_dict`` -- a rewriting transport,
+    a replayed artifact -- cannot smuggle lattice geometry into a refusal that measured none,
+    and cannot strip it from one that did.
+    """
+
+    _, settings = _workspace(tmp_path)
+    document = preview_route(_request(settings={"grid_step_nm": 300_000}), settings).to_dict()
+
+    validated = RoutePreviewToolResponse.model_validate(document).model_dump()
+    assert validated["diagnostic"]["off_grid"]["miss_x_nm"] == -100_000
+
+    moved = json.loads(json.dumps(document))
+    moved["diagnostic"]["code"] = "no_path"
+    with pytest.raises(ValidationError):
+        RoutePreviewToolResponse.model_validate(moved)
+
+    stripped = json.loads(json.dumps(document))
+    stripped["diagnostic"]["off_grid"] = None
+    with pytest.raises(ValidationError):
+        RoutePreviewToolResponse.model_validate(stripped)
+
+    # Absence is the same refusal as an explicit null, which is the property that lets the
+    # field carry a default without weakening anything: a producer cannot omit its way out.
+    absent = json.loads(json.dumps(document))
+    del absent["diagnostic"]["off_grid"]
+    with pytest.raises(ValidationError):
+        RoutePreviewToolResponse.model_validate(absent)
+
+
+def test_a_pre_evidence_diagnostic_of_another_code_still_validates(tmp_path: Path) -> None:
+    """``off_grid`` defaults to ``None``, so a payload recorded before ADR-0093 still parses.
+
+    Requiredness would have bought no property the biconditional does not already provide --
+    the case above proves an absent key is refused on the ``off_grid`` code -- while
+    invalidating every diagnostic of every *other* code a caller had already stored. That is
+    the whole argument for the default, and this is the test that would fail without it.
+    """
+
+    _, settings = _workspace(tmp_path)
+    document = preview_route(_request(net="MISSING"), settings).to_dict()
+    legacy = json.loads(json.dumps(document))
+    del legacy["diagnostic"]["off_grid"]
+
+    validated = RoutePreviewToolResponse.model_validate(legacy).model_dump()
+
+    assert validated["diagnostic"]["code"] == "invalid_two_pin_net"
+    assert validated["diagnostic"]["off_grid"] is None
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("anchor_pad_id", "pad:kicad:20000000-0000-0000-0000-000000000004"),
+        ("miss_x_nm", 150_001),
+        ("miss_y_nm", -150_001),
+        ("largest_representable_step_nm", 900_000),
+    ],
+)
+def test_the_published_contract_refuses_a_forged_self_contradicting_measurement(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    """The published schema asserts everything the runtime asserts, not a weaker subset.
+
+    Each forgery is individually well-typed and in range, and each contradicts the refusal
+    carrying it: an anchor equal to the pad, a miss wider than half the step it names, a miss
+    of zero on both axes, and a divisor the requested step divides -- which would mean the pair
+    is *on* the lattice. A schema that accepted these would let a consumer validating against
+    the published contract alone accept a payload `copper_mcp` itself refuses to construct.
+    """
+
+    _, settings = _workspace(tmp_path)
+    document = preview_route(_request(settings={"grid_step_nm": 300_000}), settings).to_dict()
+    forged = json.loads(json.dumps(document))
+    forged["diagnostic"]["off_grid"][field] = value
+
+    with pytest.raises(ValidationError):
+        RoutePreviewToolResponse.model_validate(forged)
+
+
+def test_the_published_contract_accepts_a_withheld_divisor_but_not_an_unrepresentable_one(
+    tmp_path: Path,
+) -> None:
+    """`null` is the published shape for a divisor too large to carry exactly.
+
+    A pad pair near opposite legal Board IR coordinate extremes has a divisor above the
+    JSON-safe range, so the schema has to admit `null` there — and must still refuse an actual
+    integer above that range, which no JSON consumer could read back without losing precision.
+    Accepting the second would reintroduce the defect one layer out from where it was fixed.
+    """
+
+    _, settings = _workspace(tmp_path)
+    document = preview_route(_request(settings={"grid_step_nm": 300_000}), settings).to_dict()
+
+    withheld = json.loads(json.dumps(document))
+    withheld["diagnostic"]["off_grid"]["largest_representable_step_nm"] = None
+    validated = RoutePreviewToolResponse.model_validate(withheld).model_dump()
+    assert validated["diagnostic"]["off_grid"]["largest_representable_step_nm"] is None
+    # The rest of the evidence is untouched, so the refusal stays actionable without it.
+    assert validated["diagnostic"]["off_grid"]["miss_x_nm"] == -100_000
+
+    unrepresentable = json.loads(json.dumps(document))
+    unrepresentable["diagnostic"]["off_grid"]["largest_representable_step_nm"] = 2**53
+    with pytest.raises(ValidationError):
+        RoutePreviewToolResponse.model_validate(unrepresentable)
+
+
+def test_the_published_contract_refuses_a_miss_of_zero_on_both_axes(tmp_path: Path) -> None:
+    _, settings = _workspace(tmp_path)
+    document = preview_route(_request(settings={"grid_step_nm": 300_000}), settings).to_dict()
+    forged = json.loads(json.dumps(document))
+    forged["diagnostic"]["off_grid"]["miss_x_nm"] = 0
+    forged["diagnostic"]["off_grid"]["miss_y_nm"] = 0
+
+    with pytest.raises(ValidationError):
+        RoutePreviewToolResponse.model_validate(forged)
+
+
+def test_a_diagnostic_that_measured_no_lattice_reports_no_lattice_geometry(tmp_path: Path) -> None:
+    """``off_grid`` is ``None`` on every other code, never an empty object or a zero.
+
+    A placeholder would read as a measured miss of zero nanometres, which is the one thing a
+    pad that was never measured against a lattice cannot be said to be.
+    """
+
+    _, settings = _workspace(tmp_path)
+
+    preview = preview_route(_request(net="MISSING"), settings)
+
+    document = preview.to_dict()
+    assert document["diagnostic"]["code"] == "invalid_two_pin_net"
+    assert document["diagnostic"]["off_grid"] is None
 
 
 def test_preview_reports_a_diagnostic_for_an_unknown_net(tmp_path: Path) -> None:

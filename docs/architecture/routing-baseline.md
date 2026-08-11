@@ -235,6 +235,14 @@ search-budget, cancellation, unsupported constraint, unsupported geometry, stale
 snapshot/request, off-grid endpoint, and no-path outcomes remain distinct. Failure diagnostics carry
 deterministic expanded-state and obstacle-check counts.
 
+The off-grid diagnostic additionally carries a typed `OffGridEvidence`: the off-lattice pad, its
+lattice anchor, the pitch in use, the signed per-axis miss to the nearest lattice line, and the
+greatest common divisor of the two pad-centre deltas. `RouteDiagnostic` enforces a biconditional —
+this evidence appears on the off-grid code and on no other, and never appears absent from it — so
+the oracle, which shares `_prepare` and therefore raises the same failure, passes it through rather
+than rebuilding a diagnostic the constructor would reject
+([ADR-0093](../adr/0093-actionable-off-grid-refusals.md)).
+
 ## Benchmark oracle
 
 `routing/oracle.py` provides a benchmark-only Dijkstra oracle that sets the heuristic to zero while

@@ -4,6 +4,7 @@ import math
 import random
 from dataclasses import replace
 from itertools import pairwise
+from typing import cast
 
 import pytest
 
@@ -32,9 +33,12 @@ from copper_mcp.board_ir import (
     make_content,
     make_snapshot,
 )
+from copper_mcp.board_ir.types import JSON_SAFE_INTEGER
+from copper_mcp.mcp_contracts import OffGridEvidenceContract
 from copper_mcp.routing import (
     AStarRouter,
     AStarSettings,
+    OffGridEvidence,
     RouteCandidate,
     RouteConnection,
     RouteDiagnostic,
@@ -48,10 +52,12 @@ from copper_mcp.routing import (
     verify_candidate_id,
 )
 from copper_mcp.routing.astar import (
+    OFF_GRID_MESSAGE_LEAD,
     _arc_envelope,
     _arc_sagitta_bound_nm,
     _arc_spans_at_most_half_turn,
     _diagonal_segment_cores,
+    _off_grid_evidence,
     _pad_cores,
     _point_segment_distance_lt,
     _prepare,
@@ -645,6 +651,324 @@ def test_revision_snapshot_net_grid_and_geometry_fail_closed() -> None:
         router.propose(snapshot, _request(snapshot, net_id="net:missing")),
         RouteFailureCode.INVALID_TWO_PIN_NET,
     )
+
+
+def test_an_off_grid_refusal_names_the_pad_the_pitch_and_the_exact_miss() -> None:
+    """The refusal carries what a designer needs to act, as exact integers (ADR-0093).
+
+    The fixture lattice is 1,000 nm and the anchor pad sits at x = 1,000, so an end pad at
+    x = 9,001 is one nanometre past a lattice line. 8,001 is the largest step that represents
+    the pair, which is deliberately *larger* than the requested 1,000 nm step: representability
+    is divisibility, not magnitude.
+    """
+
+    snapshot = _snapshot(end=(9_001, 5_000))
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.OFF_GRID)
+    assert result.diagnostic is not None
+    assert result.diagnostic.off_grid == OffGridEvidence(
+        pad_id="pad:02",
+        anchor_pad_id="pad:01",
+        grid_step_nm=1_000,
+        miss_x_nm=1,
+        miss_y_nm=0,
+        largest_representable_step_nm=8_001,
+    )
+    assert result.diagnostic.message == (
+        f"{OFF_GRID_MESSAGE_LEAD}: it misses the nearest lattice point by (1 nm, 0 nm) at "
+        "grid_step_nm=1000; the largest step that represents this pad pair is 8001 nm"
+    )
+
+
+def test_the_off_grid_miss_is_signed_toward_the_nearest_line_and_ties_go_low() -> None:
+    """Three placements pin the sign, the tie, and the negative-delta branch.
+
+    Each one kills a different arithmetic mutation: reporting the remainder instead of the
+    signed miss, breaking the half-step tie upward, and taking the remainder of ``abs(delta)``
+    so a pad on the far side of the anchor reports the wrong sign.
+    """
+
+    def evidence_for(end: tuple[int, int], start: tuple[int, int] = (1_000, 5_000)) -> object:
+        snapshot = _snapshot(start=start, end=end)
+        result = AStarRouter().propose(snapshot, _request(snapshot))
+        _assert_failure(result, RouteFailureCode.OFF_GRID)
+        assert result.diagnostic is not None
+        return result.diagnostic.off_grid
+
+    # 8,999 nm along: nearer the line above, so the miss is negative.
+    above = evidence_for((9_999, 5_000))
+    assert isinstance(above, OffGridEvidence)
+    assert (above.miss_x_nm, above.miss_y_nm) == (-1, 0)
+
+    # Exactly half a step: the tie resolves to the lower line, so the miss stays positive.
+    tie = evidence_for((9_500, 5_000))
+    assert isinstance(tie, OffGridEvidence)
+    assert (tie.miss_x_nm, tie.miss_y_nm) == (500, 0)
+    assert tie.largest_representable_step_nm == 8_500
+
+    # The anchor is the lower pad ID, not the leftmost pad, so this delta is negative.
+    behind = evidence_for((1_000, 5_000), start=(9_001, 5_000))
+    assert isinstance(behind, OffGridEvidence)
+    assert (behind.miss_x_nm, behind.miss_y_nm) == (-1, 0)
+    assert behind.pad_id == "pad:02"
+    assert behind.anchor_pad_id == "pad:01"
+
+
+def test_an_off_grid_miss_on_both_axes_is_reported_on_both_axes() -> None:
+    snapshot = _snapshot(end=(9_001, 5_002))
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.OFF_GRID)
+    assert result.diagnostic is not None
+    assert result.diagnostic.off_grid is not None
+    assert (result.diagnostic.off_grid.miss_x_nm, result.diagnostic.off_grid.miss_y_nm) == (1, 2)
+    # gcd(8_001, 2) == 1: no lattice coarser than one nanometre represents this pair.
+    assert result.diagnostic.off_grid.largest_representable_step_nm == 1
+
+
+def test_the_off_grid_message_stays_inside_the_contract_bound_at_its_widest() -> None:
+    """The message interpolates four unbounded-looking integers, so pin the worst case.
+
+    Every one is at its contract maximum: a half-step miss on both axes at the largest legal
+    grid step, and a representable step at the JSON-safe integer ceiling.
+    """
+
+    widest = (
+        f"{OFF_GRID_MESSAGE_LEAD}: it misses the nearest lattice point by "
+        f"({-500_000_000} nm, {-500_000_000} nm) at grid_step_nm={1_000_000_000}; "
+        f"the largest step that represents this pad pair is {2**53 - 1} nm"
+    )
+
+    assert len(widest) <= 256
+    RouteDiagnostic(
+        code=RouteFailureCode.OFF_GRID,
+        message=widest,
+        off_grid=OffGridEvidence(
+            pad_id="pad:01",
+            anchor_pad_id="pad:02",
+            grid_step_nm=1_000_000_000,
+            miss_x_nm=-500_000_000,
+            miss_y_nm=-500_000_000,
+            largest_representable_step_nm=2**53 - 1,
+        ),
+    )
+
+    # The withheld branch is *longer* than the numeric one, and the first attempt at it
+    # overflowed 256 characters -- which would have moved the crash rather than removed it.
+    withheld = (
+        f"{OFF_GRID_MESSAGE_LEAD}: it misses the nearest lattice point by "
+        f"({-500_000_000} nm, {-500_000_000} nm) at grid_step_nm={1_000_000_000}; "
+        "the largest step that represents this pad pair is above this contract's "
+        "exact-integer range"
+    )
+
+    assert len(withheld) <= 256
+    RouteDiagnostic(
+        code=RouteFailureCode.OFF_GRID,
+        message=withheld,
+        off_grid=OffGridEvidence(
+            pad_id="pad:01",
+            anchor_pad_id="pad:02",
+            grid_step_nm=1_000_000_000,
+            miss_x_nm=-500_000_000,
+            miss_y_nm=-500_000_000,
+            largest_representable_step_nm=None,
+        ),
+    )
+
+
+def test_pads_at_opposite_coordinate_extremes_refuse_rather_than_raise() -> None:
+    """A legal Board IR board must never reach a caller as an exception.
+
+    Board IR admits any coordinate in ``[-(2**53 - 1), 2**53 - 1]``, so a pad-centre delta
+    reaches ``2 * (2**53 - 1)`` and its divisor with it. Every other field of the evidence is
+    bounded by the *request's* settings; this one alone is bounded by the *board*, which is why
+    it alone can leave the JSON-safe range. It used to raise ``ValueError`` out of
+    ``propose`` -- past ``_fail``, past ``preview_route``, and out of the MCP tool -- for input
+    the format permits. The divisor is now withheld and the refusal stays typed.
+    """
+
+    limit = JSON_SAFE_INTEGER
+    snapshot = _snapshot(
+        start=(-limit + 1, 0),
+        end=(limit - 1, 0),
+        outline=_rectangle(-limit, -limit, limit, limit),
+    )
+
+    result = AStarRouter().propose(
+        snapshot, _request(snapshot, settings=_settings(grid_step_nm=1_000_000_000))
+    )
+
+    _assert_failure(result, RouteFailureCode.OFF_GRID)
+    assert result.diagnostic is not None
+    assert result.diagnostic.off_grid is not None
+    # Withheld, never clamped and never fabricated: the true divisor is 2**54 - 2.
+    assert result.diagnostic.off_grid.largest_representable_step_nm is None
+    # Everything bounded by the request's settings is still exact and still actionable.
+    assert result.diagnostic.off_grid.grid_step_nm == 1_000_000_000
+    assert result.diagnostic.off_grid.miss_x_nm == -490_518_020
+    assert result.diagnostic.off_grid.miss_y_nm == 0
+    assert "above this contract's exact-integer range" in result.diagnostic.message
+
+
+def test_no_legal_geometry_can_make_the_evidence_constructor_reject_its_own_measurement() -> None:
+    """Sweep the legal input space instead of reasoning about it field by field.
+
+    The first adversarial review of #142 proved by contrapositive, guard by guard, that the
+    constructor cannot reject genuine router evidence. The proof was sound for the guards it
+    enumerated and silent about the one bound that was not among them, and a second review
+    found the crash. A proof that ranges over an enumerated set of guards says nothing about a
+    bound outside that set, so this asserts the property over inputs rather than over guards:
+    whatever the router can measure, both contract layers must accept.
+
+    Both layers, because a value the dataclass admits and the published schema refuses is the
+    same defect one seam further out.
+    """
+
+    limit = JSON_SAFE_INTEGER
+    extremes = (-limit, -limit + 1, -1, 0, 1, limit - 1, limit)
+    steps = (1, 2, 3, 250_000, 999_999_937, 1_000_000_000)
+    generator = random.Random(20260812)  # noqa: S311 - deterministic sweep, not a secret
+    coordinates = [*extremes, *(generator.randint(-limit, limit) for _ in range(96))]
+
+    checked = 0
+    withheld = 0
+    for step in steps:
+        for start_x in coordinates:
+            for end_x in (coordinates[checked % len(coordinates)], -start_x, limit - start_x % 7):
+                if not -limit <= end_x <= limit:
+                    continue
+                delta_x = end_x - start_x
+                # A net routed along one axis gives ``delta_y == 0`` and therefore a divisor of
+                # ``abs(delta_x)`` -- the largest a divisor can be, and the shape that overflows.
+                # Without it the sweep exercises 1,400 cases and reaches the overflow in none.
+                for delta_y in (0, delta_x, start_x // 3 - end_x // 5):
+                    if delta_x % step == 0 and delta_y % step == 0:
+                        continue
+                    evidence = _off_grid_evidence(
+                        _pad("pad:01", (0, 0)), _pad("pad:02", (0, 0)), delta_x, delta_y, step
+                    )
+                    OffGridEvidenceContract.model_validate(
+                        {
+                            "pad_id": evidence.pad_id,
+                            "anchor_pad_id": evidence.anchor_pad_id,
+                            "grid_step_nm": evidence.grid_step_nm,
+                            "miss_x_nm": evidence.miss_x_nm,
+                            "miss_y_nm": evidence.miss_y_nm,
+                            "largest_representable_step_nm": (
+                                evidence.largest_representable_step_nm
+                            ),
+                        }
+                    )
+                    checked += 1
+                    withheld += evidence.largest_representable_step_nm is None
+
+    # A sweep that silently exercised nothing would pass, so require it to have bitten -- and
+    # to have reached the overflow region specifically, which is the whole reason it exists.
+    assert checked > 3_000
+    assert withheld > 100
+
+
+def test_the_largest_divisor_that_still_fits_is_reported_rather_than_withheld() -> None:
+    """The boundary is off-by-one sensitive, so pin the value that must still be reported.
+
+    A divisor of exactly ``2**53 - 1`` fits and must be a number; one nanometre more must be
+    withheld. Without both halves, capping at the wrong side of the boundary passes.
+    """
+
+    limit = JSON_SAFE_INTEGER
+    snapshot = _snapshot(
+        start=(0, 0), end=(limit, 0), outline=_rectangle(-limit, -limit, limit, limit)
+    )
+
+    result = AStarRouter().propose(
+        snapshot, _request(snapshot, settings=_settings(grid_step_nm=1_000_000_000))
+    )
+
+    _assert_failure(result, RouteFailureCode.OFF_GRID)
+    assert result.diagnostic is not None
+    assert result.diagnostic.off_grid is not None
+    assert result.diagnostic.off_grid.largest_representable_step_nm == limit
+
+
+def test_off_grid_evidence_belongs_to_the_off_grid_code_and_to_no_other() -> None:
+    evidence = OffGridEvidence(
+        pad_id="pad:02",
+        anchor_pad_id="pad:01",
+        grid_step_nm=1_000,
+        miss_x_nm=1,
+        miss_y_nm=0,
+        largest_representable_step_nm=8_001,
+    )
+
+    with pytest.raises(ValueError, match="off_grid diagnostic alone"):
+        RouteDiagnostic(code=RouteFailureCode.NO_PATH, message="no path", off_grid=evidence)
+    with pytest.raises(ValueError, match="off_grid diagnostic alone"):
+        RouteDiagnostic(code=RouteFailureCode.OFF_GRID, message="off grid")
+    with pytest.raises(ValueError, match="must be typed"):
+        RouteDiagnostic(
+            code=RouteFailureCode.OFF_GRID,
+            message="off grid",
+            off_grid=cast("OffGridEvidence", {"pad_id": "pad:02"}),
+        )
+
+
+@pytest.mark.parametrize(
+    ("changes", "expected"),
+    [
+        ({"pad_id": "footprint:02"}, "must be a stable pad ID"),
+        ({"anchor_pad_id": "pad:02"}, "lattice anchor must differ"),
+        ({"grid_step_nm": 0}, "grid step is outside"),
+        ({"largest_representable_step_nm": 0}, "representable step is outside"),
+        ({"miss_x_nm": 501}, "x miss is outside"),
+        ({"miss_y_nm": -501}, "y miss is outside"),
+        ({"miss_x_nm": 0, "miss_y_nm": 0}, "at least one axis"),
+        ({"largest_representable_step_nm": 2_000}, "must not be representable"),
+    ],
+)
+def test_off_grid_evidence_refuses_a_self_contradicting_measurement(
+    changes: dict[str, object], expected: str
+) -> None:
+    """Every field is checked against the others, not merely against its own range.
+
+    The last two cases are the ones that matter: a pad that misses on neither axis is on the
+    lattice, and a pair whose largest representable step is a multiple of the requested step is
+    representable at it. Either would be evidence contradicting the refusal carrying it.
+    """
+
+    fields: dict[str, object] = {
+        "pad_id": "pad:02",
+        "anchor_pad_id": "pad:01",
+        "grid_step_nm": 1_000,
+        "miss_x_nm": 1,
+        "miss_y_nm": 0,
+        "largest_representable_step_nm": 8_001,
+    }
+    fields.update(changes)
+
+    with pytest.raises(ValueError, match=expected):
+        OffGridEvidence(**fields)  # type: ignore[arg-type]
+
+
+def test_the_dijkstra_oracle_returns_the_off_grid_refusal_rather_than_raising() -> None:
+    """The oracle shares ``_prepare``, so it meets the same failure and must carry its evidence.
+
+    Rebuilding the diagnostic without the evidence does not lose a field quietly: the
+    diagnostic requires evidence on exactly this code, so the oracle would raise instead of
+    refusing.
+    """
+
+    snapshot = _snapshot(end=(9_001, 5_000))
+
+    result = run_dijkstra_oracle(snapshot, _request(snapshot))
+
+    assert result.diagnostic is not None
+    assert result.diagnostic.code is RouteFailureCode.OFF_GRID
+    assert result.diagnostic.off_grid is not None
+    assert result.diagnostic.off_grid.largest_representable_step_nm == 8_001
 
 
 def test_grid_search_and_cancellation_budgets_are_distinct() -> None:

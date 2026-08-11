@@ -48,6 +48,7 @@ from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.placement.contracts import parse_placement_intent
 from copper_mcp.placement_preview import preview_placement as preview_placement_service
 from copper_mcp.route_preview import parse_route_preview_request
+from copper_mcp.routing.astar import OFF_GRID_MESSAGE_LEAD
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -355,6 +356,22 @@ def _route_appliable(conversion: Any) -> dict[str, Any]:
     return {"outcome": "appliable"}
 
 
+def _redacted_message(diagnostic: dict[str, Any]) -> str:
+    """One refusal message with every board-derived value removed.
+
+    Most routing refusals are fixed strings chosen by ``copper_mcp.routing``. ``off_grid`` is
+    not: since ADR-0093 it interpolates the pad's miss distance and the largest lattice step
+    that represents the pad pair, which are per-request geometry a *caller* is entitled to and
+    this artifact is not -- it is committed to a public repository while the corpus is a private
+    design tree. The lead sentence is imported rather than retyped, so a reworded message cannot
+    silently start carrying geometry into the artifact.
+    """
+
+    if diagnostic.get("off_grid") is not None:
+        return OFF_GRID_MESSAGE_LEAD
+    return str(diagnostic["message"])
+
+
 def _measure_route(
     board: str, settings: Settings, net_names: list[str], conversion: Any
 ) -> dict[str, Any]:
@@ -386,7 +403,7 @@ def _measure_route(
         verdict = document["status"] if code is None else f"{document['status']}/{code}"
         verdicts[verdict] += 1
         if verdict not in messages and diagnostic.get("message"):
-            messages[verdict] = str(diagnostic["message"])
+            messages[verdict] = _redacted_message(diagnostic)
     record: dict[str, Any] = {
         "nets_total": len(net_names),
         "nets_attempted": len(attempted),

@@ -17,8 +17,11 @@ takes an operator environment flag plus a single-use token that the server minte
 a model can produce. Plan for the candidate to be the deliverable.
 
 **2. A refusal is an instruction, not an error to retry.** Every refusal below is typed and
-non-echoing: it tells you what class of thing went wrong and nothing about the board. Retrying the
-identical request is always wrong. The correct move is either "re-observe, then rebuild the request
+non-echoing: it tells you what class of thing went wrong, and — with one deliberate exception —
+nothing about the board. The exception is `off_grid` on the single-layer route surface, which
+carries the pad, the pitch and the exact miss so that the refusal is actionable at all
+([ADR-0093](adr/0093-actionable-off-grid-refusals.md)); it is per-request geometry about the net
+you named, never anything about board density. Retrying the identical request is always wrong. The correct move is either "re-observe, then rebuild the request
 from the new digests" or "stop and report" — the tables in
 [Refusal codes: what to do next](#refusal-codes-what-to-do-next) say which.
 
@@ -101,7 +104,7 @@ parse for geometry, and you must not present it as one.
 | `invalid_two_pin_net` | route | The selected net does not present a routable two-pin problem under the request as written. | Re-read the net's pads in the scene. Either select a different net or accept that this net is outside the two-pin path; do not retry verbatim. |
 | `unsupported_constraint` | route, layered route | The constraint profile is outside what the router models. | Change the constraint profile to one the tool documents, or stop. Not retryable as sent. |
 | `unsupported_geometry` | route, layered route, placement | Geometry in scope is outside the supported subset. On placement this also covers a proposal that would move a **locked** footprint. | Stop routing/placing that object. Report the limit. Unlocking a footprint is never implicit and is not something an agent should do on the user's behalf. |
-| `off_grid` | route, layered route | An endpoint does not lie on the requested routing lattice. | Adjust `grid_step_nm` so the endpoints are representable, or pick different endpoints. Re-observe first if the board may have changed. |
+| `off_grid` | route, layered route | An endpoint does not lie on the requested routing lattice. On the single-layer route surface the diagnostic carries an `off_grid` object naming the pad, its lattice anchor, the pitch in use, the signed per-axis miss in nanometres, and `largest_representable_step_nm` — the largest step at which the pad pair can be expressed at all, or `null` when even that exceeds the JSON-safe integer range. | Read the evidence before changing anything. `largest_representable_step_nm` is a statement about *representability*, never a promise of routability: on the 18 real-board refusals measured in B-100, re-running at exactly that step with `max_grid_nodes` at its ceiling routed **none** of them — 13 had a pad centre outside the board outline inset by half the routed track width, and 5 exceeded the node budget. Setting `grid_step_nm` to it is worth one attempt when the value is coarse (tens of micrometres) and the pads are close together; when it is a handful of nanometres, no lattice will help and the honest answer is that the pad has to move. Do not move it yourself. Re-observe first if the board may have changed. |
 | `grid_budget_exceeded` | route, layered route | The lattice needed more nodes than `max_grid_nodes` allows. | Shrink the problem: coarser `grid_step_nm`, or a smaller region. Raising the ceiling blindly trades a refusal for a slow refusal. |
 | `obstacle_budget_exceeded` | route, layered route, routing job | The **region-scoped foreign-copper** model needed more objects than `max_obstacles` allows. The message names the budget and its configured value. | Narrow the region (`region_margin_nm`) before raising `max_obstacles`. This is an admission that the model ran out, **not** a proof that no route exists. |
 | `net_object_budget_exceeded` | route | The routed net's **own** copper — pads, tracks, vias, verified fill, across every layer — exceeded `max_net_objects`. This is the connectivity and attachment model, not the obstacle model, and its cost is quadratic. | Raise `max_net_objects` deliberately, knowing the pairwise merge grows with its square, or select a net with less copper. Nothing about obstacles is implicated. |

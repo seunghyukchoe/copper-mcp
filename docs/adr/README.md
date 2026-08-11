@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0093**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0094**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -23,6 +23,10 @@ line is deliberate: two branches that both allocate it now conflict textually, s
 merge instead of accepting it.
 
 **Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086.
+ADR-0089 was listed here until this line was corrected: it landed from its own branch as the
+region-scoped obstacle model and is not a gap. ADR-0092 was listed too, and has since landed from
+its own branch as the net-tie netless-obstacle model; this sentence is that correction, exactly as
+the note anticipated.
 ADR-0027 was allocated on a branch whose ADR never landed. The 0081–0083 block was allocated by
 concurrent branches that were still open when ADR-0084 landed: that branch took a number above all
 of them rather than the next one, which is the rule the collision that produced 0066–0068 exists to
@@ -165,10 +169,11 @@ never silently widens it.
 | [0090](0090-root-level-board-groups.md) | A root board group is organisation, accepted and counted rather than modelled | Accepted |
 | [0091](0091-attaching-pad-zone-connect-overrides.md) | Accept the pad zone-connection overrides that attach, refuse the one that detaches | Accepted |
 | [0092](0092-net-tie-copper-as-netless-obstacle.md) | Net-tie copper is a netless obstacle, and the tie is never a connectivity claim | Accepted |
+| [0093](0093-actionable-off-grid-refusals.md) | An off-grid refusal carries the pad, the pitch and the exact miss | Accepted |
 
-Ninety-two numbers, eighty-seven records, no duplicates — and `scripts/check_adr_numbers.py` now
-proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and 0086
-are unused; see **Known gaps** above. The three stray summary sentences that stood here until
+Ninety-three numbers, eighty-eight records, no duplicates — and `scripts/check_adr_numbers.py`
+now proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and
+0086 are unused; see **Known gaps** above. The three stray summary sentences that stood here until
 ADR-0088 landed were merge residue from the concurrent branches described above: Git accepted
 three different rewrites of one paragraph because they did not overlap textually.
 
@@ -179,7 +184,7 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070, 0076, 0087,
   0091, 0092.
 - **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
-  0066, 0070, 0073, 0075, 0089.
+  0066, 0070, 0073, 0075, 0089, 0093.
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060, 0075.
 - **Circuit Intent and schematic verification** — 0014, 0015, 0056, 0070.
 - **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065, 0075.
@@ -259,3 +264,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0090: A root board group is organisation, accepted and counted rather than modelled](0090-root-level-board-groups.md)
 - [ADR-0091: Accept the pad zone-connection overrides that attach, refuse the one that detaches](0091-attaching-pad-zone-connect-overrides.md)
 - [ADR-0092: Net-tie copper is a netless obstacle, and the tie is never a connectivity claim](0092-net-tie-copper-as-netless-obstacle.md)
+- [ADR-0093: An off-grid refusal carries the pad, the pitch and the exact miss](0093-actionable-off-grid-refusals.md)

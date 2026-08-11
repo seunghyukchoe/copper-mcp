@@ -23,10 +23,10 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-180` | `D-181` |
-| [Risk register](risk-register.md) | `R-` | `R-137` | `R-138` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-133` | `SEC-134` |
-| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-099` | `B-100` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-181` | `D-182` |
+| [Risk register](risk-register.md) | `R-` | `R-138` | `R-139` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-134` | `SEC-135` |
+| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-100` | `B-101` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
 The rules:
@@ -40,6 +40,14 @@ The rules:
    renumber before merging. Updating the row above is the cheap safety net: it is one line per ID
    space, so two branches that both take the next number now conflict *textually* and Git refuses
    the merge instead of accepting it silently.
+   Taking a number *above* the next free one is the other half of the same safety net, and it is
+   how `D-181`/`R-138` were allocated: two branches were open on the same base, one holding
+   `D-179`/`R-136` and one holding `D-180`/`R-137`, so this record stepped over both rather than
+   racing them. `D-180` and `R-137` have since landed from their own branch, which is the
+   mechanism working as intended — stepping over a live claim costs nothing when it lands.
+   `D-179` and `R-136` are still live claims and not gaps at the moment of writing; if that
+   branch is abandoned its numbers become permanent gaps under rule 2, like any other spent
+   number.
 2. **Numbers are never reused.** A gap is permanent, and the checker reports gaps as information
    rather than failing on them. `D-039`, `SEC-021`, and `B-006` are unused because their entries
    were withdrawn before merge. `SEC-114` has no recorded claimant at all; it was skipped during

@@ -8,6 +8,28 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- **An `off_grid` route refusal now says which pad, what pitch, and how far.** It previously said
+  only "the pad-center delta is not divisible by the requested grid step", which names the rule and
+  not the board. The `not_routed` diagnostic carries a typed `off_grid` object — the off-lattice
+  pad, its lattice anchor, `grid_step_nm` in use, the signed per-axis nanometres from the nearest
+  lattice line to the pad centre, and `largest_representable_step_nm`, the greatest common divisor
+  of the two pad-centre deltas — the last being `null` on the rare board whose pads sit near
+  opposite legal coordinate extremes, where the divisor exceeds the JSON-safe integer range and is
+  withheld rather than clamped. Every other diagnostic carries `off_grid: null`, never an empty
+  object and never a zero, because a refusal that measured no lattice has nothing to say about one.
+  **The key is optional with a `null` default, so a diagnostic payload you recorded before this
+  release still validates**; an `off_grid`-coded payload that lacks it is still refused, and so is
+  one whose values contradict each other — both checks run in the published schema as well as at
+  runtime, so validating against the schema alone accepts nothing the service would refuse to build.
+  **Routing semantics do not change**: the lattice, the search, `ROUTER_VERSION` and every published
+  content address are untouched, and all 385 real-board verdicts are byte-identical before and
+  after. `largest_representable_step_nm` states representability and never routability — measured on
+  18 real-board refusals, re-previewing each at exactly that step with the node budget at its
+  ceiling routes **none** of them. ([ADR-0093](docs/adr/0093-actionable-off-grid-refusals.md),
+  [D-181](docs/ledgers/decision-ledger.md), [B-100](docs/ledgers/benchmark-ledger.md),
+  [SEC-134](docs/ledgers/security-ledger.md),
+  [off-grid lattice refusal research](docs/research/off-grid-lattice-refusal-v1.md), #136)
+
 - **Route candidate identities move, and stored ones stop verifying.** `ROUTER_VERSION` advances to
   `astar-grid/0.7.0` because the router's default budgets and obstacle model changed. **No path
   geometry changed anywhere** — the two-pad golden fixture, the NE5532 fixture, and all twenty
