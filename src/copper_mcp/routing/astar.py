@@ -29,6 +29,7 @@ from copper_mcp.board_ir import (
 from copper_mcp.routing.contracts import (
     BATCHED_ONE_STEINER_ORDERING,
     COMPONENT_MST_ORDERING,
+    MAX_REPRESENTABLE_STEP_NM,
     SINGLE_PATH_ORDERING,
     AStarSettings,
     CancellationCheck,
@@ -283,15 +284,23 @@ def _off_grid_evidence(
     would include this pad, and a divisor of a few nanometres says no lattice a router can hold
     would, so the pad has to move. It does not promise that routing succeeds at that step, and
     on measured real boards it usually does not (B-100).
+
+    That divisor is bounded by the larger pad-centre delta, not by the lattice, so on a board
+    placing the two pads near opposite legal Board IR coordinate extremes it exceeds the
+    JSON-safe integer the contract publishes -- ``2 * (2**53 - 1)`` is the worst case. It is
+    withheld as ``None`` there rather than clamped, because a clamped divisor would be a false
+    claim about the board and this one is a refusal a caller must still receive as a typed
+    refusal. Every other field is bounded by the request's own settings and stays exact.
     """
 
+    divisor = gcd(abs(delta_x), abs(delta_y))
     return OffGridEvidence(
         pad_id=end_pad.id,
         anchor_pad_id=start_pad.id,
         grid_step_nm=step_nm,
         miss_x_nm=_nearest_lattice_miss(delta_x, step_nm),
         miss_y_nm=_nearest_lattice_miss(delta_y, step_nm),
-        largest_representable_step_nm=gcd(abs(delta_x), abs(delta_y)),
+        largest_representable_step_nm=divisor if divisor <= MAX_REPRESENTABLE_STEP_NM else None,
     )
 
 
@@ -1817,12 +1826,16 @@ def _prepare(
     # be unsatisfiable in practice, since the divisor has to serve every pad at once.
     if two_pin and (delta_x % step != 0 or delta_y % step != 0):
         evidence = _off_grid_evidence(start_pad, end_pad, delta_x, delta_y, step)
+        divisor = (
+            f"{evidence.largest_representable_step_nm} nm"
+            if evidence.largest_representable_step_nm is not None
+            else "above this contract's exact-integer range"
+        )
         raise _fail(
             RouteFailureCode.OFF_GRID,
             f"{OFF_GRID_MESSAGE_LEAD}: it misses the nearest lattice point by "
             f"({evidence.miss_x_nm} nm, {evidence.miss_y_nm} nm) at grid_step_nm={step}; "
-            "the largest step that represents this pad pair is "
-            f"{evidence.largest_representable_step_nm} nm",
+            f"the largest step that represents this pad pair is {divisor}",
             off_grid=evidence,
         )
     # The lattice spans the routing region, never the whole safe board. This is what makes the

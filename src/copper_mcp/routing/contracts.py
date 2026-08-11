@@ -34,6 +34,16 @@ _MAX_NET_OBJECTS = 4_096
 _MAX_REGION_MARGIN_NM = 1_000_000_000
 _MAX_OBSTACLE_CHECKS = 10_000_000
 
+#: Largest divisor ``OffGridEvidence.largest_representable_step_nm`` can carry exactly.
+#:
+#: Defined here, beside the validator that enforces it, and imported by the producer in
+#: ``routing/astar.py`` rather than restated there, so the bound the router caps at and the
+#: bound the contract admits cannot drift apart. Unlike every other field of that evidence,
+#: this one is bounded by the board's coordinates rather than by the request's settings: the
+#: divisor of two pad-centre deltas reaches ``2 * (2**53 - 1)`` when the pads sit near opposite
+#: legal Board IR extremes, so a value above this is possible and is withheld, never clamped.
+MAX_REPRESENTABLE_STEP_NM = _JSON_SAFE_INTEGER
+
 #: Ordering policy recorded by a candidate whose patch is a single path.
 SINGLE_PATH_ORDERING = "single-path"
 #: Deterministic minimum spanning tree over the net's initial connected components.
@@ -435,6 +445,15 @@ class OffGridEvidence:
     3 nm here, because KiCad writes millimetre coordinates one nanometre short of the round
     value the part was placed at -- which is board content, not a conversion defect, and
     collapses the divisor without moving the pad by anything a designer could see.
+
+    It is ``None`` when that divisor exceeds the JSON-safe integer range this contract
+    publishes, which needs a pad separation above 2**53 - 1 nm and is therefore reachable only
+    from pads near opposite legal Board IR coordinate extremes. ``None`` is the honest answer
+    and a clamp is not: the pair *is* representable at some step, and no integer this contract
+    can carry names it. Every other field stays exact, so the refusal is still actionable --
+    and the divisor was never actionable in this case anyway, since it already exceeds the
+    largest ``grid_step_nm`` a request may ask for. This is the crash path a second adversarial
+    review found on PR #142 (ADR-0093, SEC-134).
     """
 
     pad_id: str
@@ -442,7 +461,7 @@ class OffGridEvidence:
     grid_step_nm: int
     miss_x_nm: int
     miss_y_nm: int
-    largest_representable_step_nm: int
+    largest_representable_step_nm: int | None
 
     def __post_init__(self) -> None:
         _typed_id("off-grid pad ID", self.pad_id, "pad:")
@@ -450,12 +469,18 @@ class OffGridEvidence:
         if self.pad_id == self.anchor_pad_id:
             raise ValueError("an off-grid pad and its lattice anchor must differ")
         _integer("off-grid grid step", self.grid_step_nm, minimum=1, maximum=_MAX_COST_TERM_NM)
-        _integer("off-grid representable step", self.largest_representable_step_nm, minimum=1)
         half_step = self.grid_step_nm // 2
         for axis, miss in (("x", self.miss_x_nm), ("y", self.miss_y_nm)):
             _integer(f"off-grid {axis} miss", miss, minimum=-half_step, maximum=half_step)
         if self.miss_x_nm == 0 and self.miss_y_nm == 0:
             raise ValueError("an off-grid pad must miss the lattice on at least one axis")
+        if self.largest_representable_step_nm is None:
+            # Withheld because it does not fit, so there is no value to range-check and no
+            # divisibility to test. The check below is not lost in any meaningful sense: a
+            # divisor above 2**53 - 1 cannot be a multiple of a step at or below 10**9 unless
+            # the pair were on the lattice, in which case this refusal would not exist.
+            return
+        _integer("off-grid representable step", self.largest_representable_step_nm, minimum=1)
         # The requested step represents this centre exactly when it divides the greatest common
         # divisor of the two deltas. A larger divisor is not a contradiction — a centre 8,001 nm
         # away is representable at 8,001 nm and not at 1,000 nm — so the invariant is

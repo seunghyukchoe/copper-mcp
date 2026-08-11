@@ -554,6 +554,33 @@ def test_the_published_contract_refuses_a_forged_self_contradicting_measurement(
         RoutePreviewToolResponse.model_validate(forged)
 
 
+def test_the_published_contract_accepts_a_withheld_divisor_but_not_an_unrepresentable_one(
+    tmp_path: Path,
+) -> None:
+    """`null` is the published shape for a divisor too large to carry exactly.
+
+    A pad pair near opposite legal Board IR coordinate extremes has a divisor above the
+    JSON-safe range, so the schema has to admit `null` there — and must still refuse an actual
+    integer above that range, which no JSON consumer could read back without losing precision.
+    Accepting the second would reintroduce the defect one layer out from where it was fixed.
+    """
+
+    _, settings = _workspace(tmp_path)
+    document = preview_route(_request(settings={"grid_step_nm": 300_000}), settings).to_dict()
+
+    withheld = json.loads(json.dumps(document))
+    withheld["diagnostic"]["off_grid"]["largest_representable_step_nm"] = None
+    validated = RoutePreviewToolResponse.model_validate(withheld).model_dump()
+    assert validated["diagnostic"]["off_grid"]["largest_representable_step_nm"] is None
+    # The rest of the evidence is untouched, so the refusal stays actionable without it.
+    assert validated["diagnostic"]["off_grid"]["miss_x_nm"] == -100_000
+
+    unrepresentable = json.loads(json.dumps(document))
+    unrepresentable["diagnostic"]["off_grid"]["largest_representable_step_nm"] = 2**53
+    with pytest.raises(ValidationError):
+        RoutePreviewToolResponse.model_validate(unrepresentable)
+
+
 def test_the_published_contract_refuses_a_miss_of_zero_on_both_axes(tmp_path: Path) -> None:
     _, settings = _workspace(tmp_path)
     document = preview_route(_request(settings={"grid_step_nm": 300_000}), settings).to_dict()

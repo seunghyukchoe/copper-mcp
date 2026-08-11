@@ -320,7 +320,10 @@ to construct. It names the off-lattice pad,
 the pad the lattice is anchored at, the `grid_step_nm` in use, the signed per-axis nanometres from
 the nearest lattice line to the pad centre, and `largest_representable_step_nm`, the greatest common
 divisor of the two pad-centre deltas. The last is a statement about representability and not a
-prediction that routing succeeds at that step. Every other diagnostic reports `off_grid: null` —
+prediction that routing succeeds at that step, and it is `null` when the divisor exceeds the
+JSON-safe integer range — reachable only from pads near opposite legal coordinate extremes, where
+it is withheld rather than clamped because a clamped divisor would be a false claim. The other
+fields stay exact there, so the refusal is still actionable. Every other diagnostic reports `off_grid: null` —
 never an empty object, never a zero — because a refusal that measured no lattice has nothing to say
 about one ([ADR-0093](../adr/0093-actionable-off-grid-refusals.md)).
 

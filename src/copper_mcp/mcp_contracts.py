@@ -1017,7 +1017,12 @@ class OffGridEvidenceContract(_ClosedContract):
     grid_step_nm: Annotated[int, Field(ge=1, le=1_000_000_000)]
     miss_x_nm: Annotated[int, Field(ge=-500_000_000, le=500_000_000)]
     miss_y_nm: Annotated[int, Field(ge=-500_000_000, le=500_000_000)]
-    largest_representable_step_nm: Annotated[int, Field(ge=1, le=2**53 - 1)]
+    #: ``None`` when the divisor exceeds the JSON-safe integer range, which needs a pad
+    #: separation above 2**53 - 1 nm and so is reachable only from pads near opposite legal
+    #: Board IR coordinate extremes. Alone among these fields it is bounded by the board's
+    #: coordinates rather than by the request's settings, which is why it alone can overflow.
+    #: Withheld rather than clamped: a clamped divisor would be a false claim about the board.
+    largest_representable_step_nm: Annotated[int, Field(ge=1, le=2**53 - 1)] | None
 
     @model_validator(mode="after")
     def _measurement_is_self_consistent(self) -> OffGridEvidenceContract:
@@ -1033,7 +1038,12 @@ class OffGridEvidenceContract(_ClosedContract):
         # Divisibility, never magnitude: a pair 8,001 nm apart is representable at 8,001 nm and
         # not at 1,000 nm, so a divisor larger than the requested step is ordinary. What cannot
         # hold is the requested step dividing it, which would mean the pair is on the lattice.
-        if self.largest_representable_step_nm % self.grid_step_nm == 0:
+        # A withheld divisor has nothing to divide, and cannot contradict the refusal either:
+        # it exceeds 2**53 - 1 while the step is at most 10**9.
+        if (
+            self.largest_representable_step_nm is not None
+            and self.largest_representable_step_nm % self.grid_step_nm == 0
+        ):
             raise ValueError("an off-grid pad pair must not be representable at the requested step")
         return self
 

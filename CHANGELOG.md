@@ -13,7 +13,9 @@ All notable changes are documented here. The format follows
   not the board. The `not_routed` diagnostic carries a typed `off_grid` object — the off-lattice
   pad, its lattice anchor, `grid_step_nm` in use, the signed per-axis nanometres from the nearest
   lattice line to the pad centre, and `largest_representable_step_nm`, the greatest common divisor
-  of the two pad-centre deltas. Every other diagnostic carries `off_grid: null`, never an empty
+  of the two pad-centre deltas — the last being `null` on the rare board whose pads sit near
+  opposite legal coordinate extremes, where the divisor exceeds the JSON-safe integer range and is
+  withheld rather than clamped. Every other diagnostic carries `off_grid: null`, never an empty
   object and never a zero, because a refusal that measured no lattice has nothing to say about one.
   **The key is optional with a `null` default, so a diagnostic payload you recorded before this
   release still validates**; an `off_grid`-coded payload that lacks it is still refused, and so is

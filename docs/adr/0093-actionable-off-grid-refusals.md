@@ -50,7 +50,7 @@ disclosure decision and nothing more.
 | `anchor_pad_id` | the pad the lattice is anchored at |
 | `grid_step_nm` | the pitch actually in use |
 | `miss_x_nm`, `miss_y_nm` | signed nanometres from the nearest lattice line **to** the pad centre |
-| `largest_representable_step_nm` | gcd of the two centre deltas |
+| `largest_representable_step_nm` | gcd of the two centre deltas, or `null` when that exceeds the JSON-safe range |
 
 Every value is an exact integer computed from the request the caller made against bytes the caller
 supplied. The signed miss is chosen over an unsigned distance because it is directly actionable:
@@ -78,6 +78,27 @@ published schema that asserts less than the runtime lets a schema-only consumer 
 project's own code refuses to construct — the same defect a reviewer raised against sibling #137 —
 so no guard is left to the runtime alone, and each is pinned by a test that fails without it.
 
+**Twice now on this change, a stated property has been broader than what was checked.** The first
+review found the published schema asserting less than the runtime. A second review then found a
+reachable crash path — a divisor above the JSON-safe range raising `ValueError` out of the tool for
+input the format permits — inside the very property the first review had proved: that the
+constructor "cannot reject genuine router evidence". That proof reasoned over an enumerated set of
+guards and the failing bound was not in the set, which is a proof about the enumeration and not
+about the constructor. Both are recorded rather than quietly fixed, and the response is the
+enumeration below plus a sweep over inputs instead of over guards: 3,833 legal geometries, 974 of
+them in the overflow region, each required to construct and to validate at both layers.
+
+**`largest_representable_step_nm` is withheld as `null` when it does not fit, never clamped.** It
+is the one field bounded by the *board* rather than by the *request*: Board IR admits any
+coordinate in `[-(2**53 - 1), 2**53 - 1]`, so a pad-centre delta reaches `2 * (2**53 - 1)` and its
+divisor with it, above the JSON-safe integer range the contract publishes. A clamp would be a false
+claim about the board, and raising the bound would publish an integer no JSON consumer can read
+back without losing precision. Every other field stays exact, so the refusal remains actionable —
+and the divisor was never actionable in that case anyway, since it already exceeds the largest
+`grid_step_nm` a request may ask for. The withholding threshold lives in
+`MAX_REPRESENTABLE_STEP_NM`, defined beside the validator and imported by the producer, so the
+bound the router caps at and the bound the contract admits cannot drift apart.
+
 **`largest_representable_step_nm` is a statement about representability, never a prediction.** It
 says the largest step at which the pair can be expressed, not that routing succeeds there — B-100
 measured that it usually does not. The contract documents this, and the code emits no field
@@ -86,6 +107,32 @@ claiming routability, because it cannot prove one.
 **Nothing about routing semantics changes.** The lattice, the search, `ROUTER_VERSION`
 (`astar-grid/0.7.0`), every pinned identity in `tests/test_golden_identities.py`, and all 385
 real-board verdicts are untouched and byte-identical.
+
+### Every field, against legal-input extremes
+
+The gap above was found by a second review after the first had proved, guard by guard, that the
+constructor "cannot reject genuine router evidence". That proof was sound for the guards it
+enumerated and silent about a bound that was not among them. The enumeration is therefore recorded
+here rather than left as a review artifact, and the adversarial input to reason from is the
+coordinate extremes: Board IR admits `[-(2**53 - 1), 2**53 - 1]`, so `abs(delta) <= 2**54 - 2`.
+
+| Field or validator | Bounded by | Worst legal input | Reachable out of range? |
+|---|---|---|---|
+| `pad_id`, `anchor_pad_id` | Board IR's `_TYPED_ID` | any legal pad ID | **No.** Board IR's regex, `routing._typed_id`, and the published `PadRefId` pattern admit the same set — `[A-Za-z0-9_.:-]{1,160}` after the prefix — and a pad reaching the router has already passed Board IR validation. |
+| `pad_id != anchor_pad_id` | Board IR geometry-ID uniqueness | a two-pad net | **No.** IDs are unique across geometry, and the endpoints are the first and last of a two-element sorted list. |
+| `grid_step_nm` | `AStarSettings` | any accepted setting | **No.** Both bounds are `_MAX_COST_TERM_NM`, validated before the router runs. |
+| `miss_x_nm`, `miss_y_nm` | the **step**, not the board | any delta at any step | **No.** `r = delta % step ∈ [0, step)`; if `2r <= step` the miss is `r <= step//2`, otherwise `r - step ∈ [-((step-1)//2), -1]`. Independent of `abs(delta)`. The published absolute bound of ±5×10⁸ is exactly half the largest legal step. |
+| both-misses-zero guard | the `off_grid` precondition | — | **Cannot fire.** `r != 0` implies `miss != 0`, and the refusal exists only when some `r != 0`. |
+| representability guard | the `off_grid` precondition | — | **Cannot fire.** `step` dividing the gcd would mean it divides both deltas, which is not `off_grid`. |
+| divisor `>= 1` | the `off_grid` precondition | — | **Cannot fire.** The gcd is 0 only when both deltas are 0. |
+| **divisor `<= 2**53 - 1`** | the **board's coordinates** | pads near opposite extremes | **YES — this was the defect.** `gcd` reaches `2**54 - 2`; the constructor raised `ValueError` past `_fail`, past `preview_route`, and out of the MCP tool. |
+| message length `<= 256` | the interpolated integers | all at maximum width | **Numeric branch 227, safe. The withheld branch was 259 on the first attempt** — the fix had moved the crash rather than removed it. Shortened to 249, and both branches are now pinned. |
+
+**The rule this yields, for the next diagnostic that carries evidence:** separate the fields bounded
+by the *request's own settings* from those bounded by the *board*. The first kind cannot overflow,
+because the settings were validated before the work began. The second kind can, and needs a bound
+that is derived from the input domain rather than assumed from what real boards look like. Here
+exactly one field was of the second kind, and it was the one that broke.
 
 ## Consequences
 
