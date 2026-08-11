@@ -36,11 +36,14 @@ recycled, so that an external reference resolves to nothing rather than to an un
 If a later branch lands its own record in one of these gaps, this note is what it corrects, exactly
 as it just did for 0090.
 
-Two corrections are folded into the list above rather than left standing. ADR-0089 was named as a
-gap while the record existed and was indexed two lines below; and three overlapping copies of this
-paragraph stood here until ADR-0091 landed, the first truncated mid-sentence and one of them
-contradicting the next line about ADR-0081. Both were merge residue from the same concurrent-branch
-period the paragraph describes, and are removed rather than extended again.
+Two corrections are folded into the list above rather than left standing, and this paragraph is
+the **only** account of them — a second overlapping one was written while resolving this branch's
+merge and is removed rather than left to become a fourth copy. ADR-0089 was named as a gap while
+the record existed and was indexed two lines below. And three overlapping revisions of this
+paragraph stood here until ADR-0091 landed, one truncated mid-sentence and one contradicting the
+next line about ADR-0081; the surviving text above is the union of their facts, with every
+contradiction resolved against the files actually present in this directory. Both were merge
+residue from the concurrent-branch period the paragraph describes.
 
 **ADR-0082 is now permanently spent rather than merely claimed.** It was allocated by the branch
 that first wrote the net-tie copper decision. That branch sat ungated while ADR-0084 and later
@@ -50,11 +53,6 @@ Nothing will ever occupy 0082: recycling it would silently repoint every externa
 abandoned draft at a record it never described, which is the exact failure the never-reuse rule
 exists to prevent. ADR-0083 remains claimed by a branch that has not landed and is spent on the same
 terms whether or not it ever does.
-
-This paragraph also repairs a merge artifact: three overlapping revisions of the gap note had
-accumulated here, one of them truncated mid-sentence, and they disagreed with each other about
-whether ADR-0081 was still a gap. The surviving text above is the union of their facts with the
-contradictions resolved against the files actually present in this directory.
 
 **How 0066 through 0068 came to be three records:** three concurrent branches each created an
 `ADR-0066` — the atomic route bundle preview, ordered-layer routing, and route-aware placement

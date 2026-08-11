@@ -331,23 +331,33 @@ All notable changes are documented here. The format follows
   deliberately report unconnected through the tie exactly as net-0 stitching copper behaves
   (ADR-0078). The identities are revision-derived on purpose — an `fp_poly` is not a track, so
   its UUID names no segment — and that keeps every write-back path refused (ADR-0026): no patch
-  can separate the tie copper from the pads it shorts. The accepted subset is exactly the
-  surveyed construct (one group of two existing distinct pad names; filled, unstroked,
-  axis-aligned rectangular polygons on copper layers the tied pads occupy); ten malformed-tie
-  variants each keep their own typed refusal, and the third-net guard is pinned with a
-  no-tie mutation control. No schema or digest change — boards without net ties are
+  can separate the tie copper from the pads it shorts. The accepted subset is the surveyed
+  construct (one group of two existing distinct pad names; filled, unstroked, axis-aligned
+  rectangular polygons on copper layers the tied pads occupy) plus one stated widening — a
+  five-point ring whose last point repeats the first is accepted, since the closing point
+  carries no geometry and is dropped before the corner check; a five-point ring that does *not*
+  close still refuses. A tie polygon on `Edge.Cuts` refuses too: the outline is routing room and
+  may only be under-approximated (ADR-0076), the opposite direction from an obstacle. Thirteen
+  malformed-tie variants each keep their own typed refusal, and the third-net guard is pinned
+  with a no-tie mutation control. No schema or digest change — boards without net ties are
   byte-identical, and the committed golden digests pin that.
 
-  **This converts no additional board in the survey corpus, and that is the measured result, not
-  an expectation.** Re-measured read-only before and after on the same tree, the conversion count
-  is unchanged: 11 of the 12 boards in the #116 survey set convert both before and after (11 of
-  17 across the corpus as it stands today, which has grown by five phono boards since that
-  survey). The one board carrying a net tie, `tier1-rev-a`, has **three** blockers stacked on it
-  and this removes only the first. Its refusal advances from `net-tie footprint copper is
-  unsupported in Board IR adapter v0.2` to a refusal for `connect`-kind pads — KiCad's edge
-  connector — with the intervening `zone_connect` blocker having been removed separately by
-  D-178. Advancing the refusal is real progress and is how a stack of blockers is measured, but
-  it is not a conversion, and nothing here should be read as claiming the corpus reaches 12 of 12.
+  **This converts no additional board, and that is the measured result, not an expectation.**
+  Net-tie footprint copper now converts as a netless obstacle; the conversion count is unchanged
+  — 11 of the 12 boards in the #116 survey set convert, which is 11 of all 17 boards in the
+  corpus as saved today, the six refusals being typed: connect-kind (edge-connector) pads on one
+  board, root board properties on four phono saves, and a root copper graphic on one. Measured
+  read-only before and after on the same tree; the corpus has grown by five phono saves since
+  the survey, which is why both denominators are given.
+
+  The one board carrying a net tie, `tier1-rev-a`, has **three** blockers stacked on it and this
+  removes only the first. Its refusal advances from `net-tie footprint copper is unsupported in
+  Board IR adapter v0.2` to a refusal for `connect`-kind pads — KiCad's edge connector — with the
+  intervening `zone_connect` blocker having been removed separately by D-178. Advancing a refusal
+  through a stack is real progress and is how such a stack is measured, but it is not a
+  conversion, and nothing here should be read as claiming the corpus reaches 12 of 12. The three
+  remaining conversion gaps are tracked as #138 (edge-connector pads), #140 (root board
+  properties) and #141 (root copper graphic).
   ([ADR-0092](docs/adr/0092-net-tie-copper-as-netless-obstacle.md),
   [D-179](docs/ledgers/decision-ledger.md), [R-136](docs/ledgers/risk-register.md),
   [KiCad net-tie modelling](docs/research/kicad-net-tie-modelling-v1.md), #116)

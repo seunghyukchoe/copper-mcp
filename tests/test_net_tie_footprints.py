@@ -448,3 +448,100 @@ def test_a_footprint_declaring_net_tie_pad_groups_twice_refuses() -> None:
 
     assert code == "syntax.duplicate_field"
     assert message == "footprint declares net_tie_pad_groups more than once"
+
+
+def test_a_net_tie_polygon_on_edge_cuts_refuses_rather_than_being_dropped() -> None:
+    """The preflight pass-through is for *copper*, and Edge.Cuts is the opposite invariant.
+
+    A net-tie footprint's `fp_poly` is waved past the stray-graphic refusal so it can convert as
+    an obstacle. `Edge.Cuts` must not ride along on that exemption: the board outline is routing
+    *room* and may only be **under**-approximated (ADR-0076), the opposite direction from an
+    obstacle, so a polygon there is a different question with a different safe answer.
+
+    Deleting the `layer != "Edge.Cuts"` condition from the pass-through leaves the whole suite
+    green, and under that mutant this board *converts* while the Edge.Cuts polygon is silently
+    dropped -- copper-shaped reasoning applied to the outline, losing board area with nothing
+    saying so. This test is the coverage that guard did not have.
+    """
+
+    source = NET_TIE_BOARD.read_bytes().replace(
+        b'      (layer "B.Cu")\n', b'      (layer "Edge.Cuts")\n'
+    )
+
+    code, message = _refusal(source)
+
+    assert code == "unsupported.construct"
+    assert message == "footprint graphic on Edge.Cuts is unsupported"
+
+
+def test_an_odd_nanometre_short_side_pins_the_floor_rounded_midline() -> None:
+    """Floor, not ceil: on an odd short side the two differ by one nanometre, and it is visible.
+
+    Every committed tie fixture has an even 1,300,000 nm short side, where `(a + b) // 2` and
+    `(a + b + 1) // 2` are equal -- so the whole suite cannot tell the two apart, and mutating
+    floor to ceil survives it. Both roundings are *sound*: each keeps the modelled envelope a
+    superset of the drawn rectangle. But the segment they emit differs, and a segment is
+    content, so the choice reaches every published content address. This is the same class the
+    square-tie test exists for -- a difference that reaches a digest before it reaches a person.
+
+    A 3 nm short side placed at 15.000000 mm spans 15_000_000..15_000_003 nm: floor puts the
+    midline at 15_000_001 and ceil at 15_000_002.
+
+    Both orientations are covered, because the two branches round on *different* axes with
+    separate expressions -- pinning only the wide case leaves the tall case's `(x_min + x_max)`
+    rounding free, and mutating that one alone survives everything else in this file.
+    """
+
+    # (polygon points, expected start, expected end, the drawn extent across the short axis)
+    wide = (
+        b"(xy 0 0) (xy 2.6 0) (xy 2.6 0.000003) (xy 0 0.000003)",
+        PointNM(20_000_000, 15_000_001),
+        PointNM(22_600_000, 15_000_001),
+        (15_000_000, 15_000_003),
+    )
+    tall = (
+        b"(xy 0 0) (xy 0.000003 0) (xy 0.000003 2.6) (xy 0 2.6)",
+        PointNM(20_000_001, 15_000_000),
+        PointNM(20_000_001, 17_600_000),
+        (20_000_000, 20_000_003),
+    )
+
+    for points, expected_start, expected_end, (drawn_lo, drawn_hi) in (wide, tall):
+        source = NET_TIE_BOARD.read_bytes().replace(
+            b"(xy 0 -0.65) (xy 2.6 -0.65) (xy 2.6 0.65) (xy 0 0.65)", points
+        )
+
+        ties = _tie_segments(_snapshot(source))
+
+        assert len(ties) == 2
+        for tie in ties:
+            assert tie.width_nm == 3
+            # Floor, not the one-nanometre-higher midline a ceil would give.
+            assert tie.start == expected_start
+            assert tie.end == expected_end
+            # Tightness against the *drawn* extent, which is what makes the floor safe rather
+            # than lucky: grown by the routers' half width the segment reaches the far edge
+            # exactly and covers the near edge with one nanometre to spare. A ceil midline
+            # would still cover, but it would leave the slack on the other side -- so this
+            # asserts the rounding direction, not merely that the copper is contained.
+            half_width = (tie.width_nm + 1) // 2
+            centre = tie.start.y if tie.start.y == tie.end.y else tie.start.x
+            assert centre + half_width == drawn_hi
+            assert centre - half_width == drawn_lo - 1
+
+
+def test_a_net_tie_declaration_with_no_pad_group_says_so() -> None:
+    """`(net_tie_pad_groups)` carries no group, and the refusal must not call that "more than one".
+
+    The refusal itself was always right -- the construct is unreadable and the board is refused --
+    but it described the opposite defect, and a reader fixes what the message describes.
+    """
+
+    source = NET_TIE_BOARD.read_bytes().replace(
+        b'(net_tie_pad_groups "1, 2")', b"(net_tie_pad_groups)"
+    )
+
+    code, message = _refusal(source)
+
+    assert code == "syntax.invalid"
+    assert message == "net_tie_pad_groups declares no pad group"

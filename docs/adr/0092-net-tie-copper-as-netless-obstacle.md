@@ -52,14 +52,22 @@ connectivity claim of any kind is made through it.**
   (ADR-0026's mechanism), so no route or placement patch can ever separate the tie copper from
   the pads it shorts. A net-tie board is observable and previewable, never patchable.
 
-The accepted subset is exactly what the survey observed, and everything wider refuses typed: one
-group of exactly two distinct, existing pad names (whitespace around names stripped, as KiCad
-writes `"1, 2"`); filled, unstroked `fp_poly` rectangles that are axis-aligned after the
-footprint's orthogonal transform; each polygon on one declared copper layer that every pad of the
-tied group occupies; and at least one such polygon per declaring footprint. Multi-group ties,
-one- or three-pad groups, a group naming a missing pad, non-rectangular or stroked or unfilled
-copper, tie copper on a layer with no group pad, and a declaration with no tie copper at all are
-each a distinct typed refusal.
+The accepted subset is the surveyed construct plus one deliberate widening, and everything else
+refuses typed: one group of exactly two distinct, existing pad names (whitespace around names
+stripped, as KiCad writes `"1, 2"`); filled, unstroked `fp_poly` rectangles that are axis-aligned
+after the footprint's orthogonal transform; each polygon on one declared copper layer that every
+pad of the tied group occupies; and at least one such polygon per declaring footprint.
+Multi-group ties, one- or three-pad groups, a group naming a missing pad, non-rectangular or
+stroked or unfilled copper, tie copper on a layer with no group pad, a polygon on `Edge.Cuts`,
+and a declaration with no tie copper at all are each a distinct typed refusal.
+
+The widening is the ring form, and it is stated rather than glossed: the survey observed a
+four-point ring, and a **five-point ring whose last point repeats the first** is also accepted,
+because KiCad's writer may close a polygon explicitly and the closing point carries no geometry.
+It is dropped before the corner check, so the accepted shape is identical. A five-point ring that
+does *not* close — one whose repeated vertex sits elsewhere — still refuses, even though its
+corner set is a rectangle and accepting it would be sound; the point count is what separates it
+from anything measured, and an unmeasured accept is the thing this subset exists to avoid.
 
 No schema, codec, or digest change: netless segments have existed since ADR-0078, and boards
 without net ties produce byte-identical content — the committed golden digests pin that.

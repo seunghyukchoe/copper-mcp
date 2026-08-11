@@ -1732,6 +1732,16 @@ class _Converter:
             values = atoms(declarations[0])
         except SExprError as error:
             self.fail(error.code, error.message, f"byte:{error.offset}")
+        if not values:
+            # `(net_tie_pad_groups)` with no group at all. Refusing it as "more than one pad
+            # group" was the right refusal under the wrong words, which is the same defect as
+            # a message that names nothing: a reader fixes what the message describes.
+            self.fail(
+                "syntax.invalid",
+                "net_tie_pad_groups declares no pad group",
+                locator,
+                object_kind="footprint",
+            )
         if len(values) != 1:
             self.fail(
                 "unsupported.construct",
