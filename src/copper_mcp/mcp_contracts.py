@@ -992,6 +992,26 @@ class RouteConnectionContract(_ClosedContract):
     obstacle_checks: NonNegativeInteger
 
 
+class OffGridEvidenceContract(_ClosedContract):
+    """Exact lattice geometry for one ``off_grid`` refusal, on the net the caller named.
+
+    Disclosure follows the settled precedent rather than widening it (ADR-0093, SEC-134):
+    SEC-011 already permits object counts, ADR-0079 refusals already carry byte-offset
+    locators, ``RouteConnectionContract`` already publishes ``start_pad_id`` and ``end_pad_id``
+    for the same net, and a routed candidate publishes absolute path vertices. This says
+    strictly less than either successful outcome of the same request. It carries no board
+    density: no object counts, no net names, no absolute coordinates -- only two pad
+    identities, a relative miss, and a divisor.
+    """
+
+    pad_id: PadRefId
+    anchor_pad_id: PadRefId
+    grid_step_nm: Annotated[int, Field(ge=1, le=1_000_000_000)]
+    miss_x_nm: Annotated[int, Field(ge=-500_000_000, le=500_000_000)]
+    miss_y_nm: Annotated[int, Field(ge=-500_000_000, le=500_000_000)]
+    largest_representable_step_nm: Annotated[int, Field(ge=1, le=2**53 - 1)]
+
+
 class RouteDiagnosticContract(_ClosedContract):
     """One typed, bounded, non-echoing routing outcome."""
 
@@ -1016,6 +1036,13 @@ class RouteDiagnosticContract(_ClosedContract):
     message: Annotated[str, Field(min_length=1, max_length=256)]
     expanded_states: NonNegativeInteger
     obstacle_checks: NonNegativeInteger
+    off_grid: OffGridEvidenceContract | None
+
+    @model_validator(mode="after")
+    def _evidence_matches_its_code(self) -> RouteDiagnosticContract:
+        if (self.off_grid is not None) is not (self.code == "off_grid"):
+            raise ValueError("off-grid evidence belongs to the off_grid diagnostic alone")
+        return self
 
 
 class RouteDrcSummaryContract(_ClosedContract):

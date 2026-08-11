@@ -4,6 +4,7 @@ import math
 import random
 from dataclasses import replace
 from itertools import pairwise
+from typing import cast
 
 import pytest
 
@@ -35,6 +36,7 @@ from copper_mcp.board_ir import (
 from copper_mcp.routing import (
     AStarRouter,
     AStarSettings,
+    OffGridEvidence,
     RouteCandidate,
     RouteConnection,
     RouteDiagnostic,
@@ -48,6 +50,7 @@ from copper_mcp.routing import (
     verify_candidate_id,
 )
 from copper_mcp.routing.astar import (
+    OFF_GRID_MESSAGE_LEAD,
     _arc_envelope,
     _arc_sagitta_bound_nm,
     _arc_spans_at_most_half_turn,
@@ -645,6 +648,187 @@ def test_revision_snapshot_net_grid_and_geometry_fail_closed() -> None:
         router.propose(snapshot, _request(snapshot, net_id="net:missing")),
         RouteFailureCode.INVALID_TWO_PIN_NET,
     )
+
+
+def test_an_off_grid_refusal_names_the_pad_the_pitch_and_the_exact_miss() -> None:
+    """The refusal carries what a designer needs to act, as exact integers (ADR-0093).
+
+    The fixture lattice is 1,000 nm and the anchor pad sits at x = 1,000, so an end pad at
+    x = 9,001 is one nanometre past a lattice line. 8,001 is the largest step that represents
+    the pair, which is deliberately *larger* than the requested 1,000 nm step: representability
+    is divisibility, not magnitude.
+    """
+
+    snapshot = _snapshot(end=(9_001, 5_000))
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.OFF_GRID)
+    assert result.diagnostic is not None
+    assert result.diagnostic.off_grid == OffGridEvidence(
+        pad_id="pad:02",
+        anchor_pad_id="pad:01",
+        grid_step_nm=1_000,
+        miss_x_nm=1,
+        miss_y_nm=0,
+        largest_representable_step_nm=8_001,
+    )
+    assert result.diagnostic.message == (
+        f"{OFF_GRID_MESSAGE_LEAD}: it misses the nearest lattice point by (1 nm, 0 nm) at "
+        "grid_step_nm=1000; the largest step that represents this pad pair is 8001 nm"
+    )
+
+
+def test_the_off_grid_miss_is_signed_toward_the_nearest_line_and_ties_go_low() -> None:
+    """Three placements pin the sign, the tie, and the negative-delta branch.
+
+    Each one kills a different arithmetic mutation: reporting the remainder instead of the
+    signed miss, breaking the half-step tie upward, and taking the remainder of ``abs(delta)``
+    so a pad on the far side of the anchor reports the wrong sign.
+    """
+
+    def evidence_for(end: tuple[int, int], start: tuple[int, int] = (1_000, 5_000)) -> object:
+        snapshot = _snapshot(start=start, end=end)
+        result = AStarRouter().propose(snapshot, _request(snapshot))
+        _assert_failure(result, RouteFailureCode.OFF_GRID)
+        assert result.diagnostic is not None
+        return result.diagnostic.off_grid
+
+    # 8,999 nm along: nearer the line above, so the miss is negative.
+    above = evidence_for((9_999, 5_000))
+    assert isinstance(above, OffGridEvidence)
+    assert (above.miss_x_nm, above.miss_y_nm) == (-1, 0)
+
+    # Exactly half a step: the tie resolves to the lower line, so the miss stays positive.
+    tie = evidence_for((9_500, 5_000))
+    assert isinstance(tie, OffGridEvidence)
+    assert (tie.miss_x_nm, tie.miss_y_nm) == (500, 0)
+    assert tie.largest_representable_step_nm == 8_500
+
+    # The anchor is the lower pad ID, not the leftmost pad, so this delta is negative.
+    behind = evidence_for((1_000, 5_000), start=(9_001, 5_000))
+    assert isinstance(behind, OffGridEvidence)
+    assert (behind.miss_x_nm, behind.miss_y_nm) == (-1, 0)
+    assert behind.pad_id == "pad:02"
+    assert behind.anchor_pad_id == "pad:01"
+
+
+def test_an_off_grid_miss_on_both_axes_is_reported_on_both_axes() -> None:
+    snapshot = _snapshot(end=(9_001, 5_002))
+
+    result = AStarRouter().propose(snapshot, _request(snapshot))
+
+    _assert_failure(result, RouteFailureCode.OFF_GRID)
+    assert result.diagnostic is not None
+    assert result.diagnostic.off_grid is not None
+    assert (result.diagnostic.off_grid.miss_x_nm, result.diagnostic.off_grid.miss_y_nm) == (1, 2)
+    # gcd(8_001, 2) == 1: no lattice coarser than one nanometre represents this pair.
+    assert result.diagnostic.off_grid.largest_representable_step_nm == 1
+
+
+def test_the_off_grid_message_stays_inside_the_contract_bound_at_its_widest() -> None:
+    """The message interpolates four unbounded-looking integers, so pin the worst case.
+
+    Every one is at its contract maximum: a half-step miss on both axes at the largest legal
+    grid step, and a representable step at the JSON-safe integer ceiling.
+    """
+
+    widest = (
+        f"{OFF_GRID_MESSAGE_LEAD}: it misses the nearest lattice point by "
+        f"({-500_000_000} nm, {-500_000_000} nm) at grid_step_nm={1_000_000_000}; "
+        f"the largest step that represents this pad pair is {2**53 - 1} nm"
+    )
+
+    assert len(widest) <= 256
+    RouteDiagnostic(
+        code=RouteFailureCode.OFF_GRID,
+        message=widest,
+        off_grid=OffGridEvidence(
+            pad_id="pad:01",
+            anchor_pad_id="pad:02",
+            grid_step_nm=1_000_000_000,
+            miss_x_nm=-500_000_000,
+            miss_y_nm=-500_000_000,
+            largest_representable_step_nm=2**53 - 1,
+        ),
+    )
+
+
+def test_off_grid_evidence_belongs_to_the_off_grid_code_and_to_no_other() -> None:
+    evidence = OffGridEvidence(
+        pad_id="pad:02",
+        anchor_pad_id="pad:01",
+        grid_step_nm=1_000,
+        miss_x_nm=1,
+        miss_y_nm=0,
+        largest_representable_step_nm=8_001,
+    )
+
+    with pytest.raises(ValueError, match="off_grid diagnostic alone"):
+        RouteDiagnostic(code=RouteFailureCode.NO_PATH, message="no path", off_grid=evidence)
+    with pytest.raises(ValueError, match="off_grid diagnostic alone"):
+        RouteDiagnostic(code=RouteFailureCode.OFF_GRID, message="off grid")
+    with pytest.raises(ValueError, match="must be typed"):
+        RouteDiagnostic(
+            code=RouteFailureCode.OFF_GRID,
+            message="off grid",
+            off_grid=cast("OffGridEvidence", {"pad_id": "pad:02"}),
+        )
+
+
+@pytest.mark.parametrize(
+    ("changes", "expected"),
+    [
+        ({"pad_id": "footprint:02"}, "must be a stable pad ID"),
+        ({"anchor_pad_id": "pad:02"}, "lattice anchor must differ"),
+        ({"grid_step_nm": 0}, "grid step is outside"),
+        ({"largest_representable_step_nm": 0}, "representable step is outside"),
+        ({"miss_x_nm": 501}, "x miss is outside"),
+        ({"miss_y_nm": -501}, "y miss is outside"),
+        ({"miss_x_nm": 0, "miss_y_nm": 0}, "at least one axis"),
+        ({"largest_representable_step_nm": 2_000}, "must not be representable"),
+    ],
+)
+def test_off_grid_evidence_refuses_a_self_contradicting_measurement(
+    changes: dict[str, object], expected: str
+) -> None:
+    """Every field is checked against the others, not merely against its own range.
+
+    The last two cases are the ones that matter: a pad that misses on neither axis is on the
+    lattice, and a pair whose largest representable step is a multiple of the requested step is
+    representable at it. Either would be evidence contradicting the refusal carrying it.
+    """
+
+    fields: dict[str, object] = {
+        "pad_id": "pad:02",
+        "anchor_pad_id": "pad:01",
+        "grid_step_nm": 1_000,
+        "miss_x_nm": 1,
+        "miss_y_nm": 0,
+        "largest_representable_step_nm": 8_001,
+    }
+    fields.update(changes)
+
+    with pytest.raises(ValueError, match=expected):
+        OffGridEvidence(**fields)  # type: ignore[arg-type]
+
+
+def test_the_dijkstra_oracle_returns_the_off_grid_refusal_rather_than_raising() -> None:
+    """The oracle shares ``_prepare``, so it meets the same failure and must carry its evidence.
+
+    Rebuilding the diagnostic without the evidence does not lose a field quietly: the
+    diagnostic requires evidence on exactly this code, so the oracle would raise instead of
+    refusing.
+    """
+
+    snapshot = _snapshot(end=(9_001, 5_000))
+
+    result = run_dijkstra_oracle(snapshot, _request(snapshot))
+
+    assert result.diagnostic is not None
+    assert result.diagnostic.code is RouteFailureCode.OFF_GRID
+    assert result.diagnostic.off_grid is not None
+    assert result.diagnostic.off_grid.largest_representable_step_nm == 8_001
 
 
 def test_grid_search_and_cancellation_budgets_are_distinct() -> None:

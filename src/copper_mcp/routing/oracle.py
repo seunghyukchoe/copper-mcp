@@ -97,6 +97,11 @@ def _failure_result(failure: _ExpectedFailureError) -> DijkstraResult:
             message=failure.message,
             expanded_states=failure.expanded_states,
             obstacle_checks=failure.obstacle_checks,
+            # The oracle shares `_prepare`, so it raises the same off-grid failure the router
+            # does. Dropping the evidence here would not merely lose a field: `RouteDiagnostic`
+            # requires evidence on exactly the `off_grid` code, so the oracle would raise a
+            # `ValueError` instead of returning the refusal it was asked for.
+            off_grid=failure.off_grid,
         ),
     )
 

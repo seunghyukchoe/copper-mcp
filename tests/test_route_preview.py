@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 import copper_mcp.kicad_cli as kicad_cli
 import copper_mcp.request_boundary as request_boundary
@@ -19,6 +20,7 @@ from copper_mcp.adapters import net_id_for_name
 from copper_mcp.board_ir import PointNM
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import KiCadCliError, RouteCandidateDrcEvidence, ZoneFillAuthority
+from copper_mcp.mcp_contracts import RoutePreviewToolResponse
 from copper_mcp.models import DrcSummary
 from copper_mcp.route_preview import (
     RoutePreview,
@@ -436,6 +438,79 @@ def test_preview_reports_a_diagnostic_instead_of_routing_off_grid(tmp_path: Path
     assert preview.diagnostic.code is RouteFailureCode.OFF_GRID
     assert preview.snapshot_digest is not None
     assert preview.to_dict()["diagnostic"]["code"] == "off_grid"
+
+
+def test_an_off_grid_preview_publishes_the_pad_the_pitch_and_the_miss(tmp_path: Path) -> None:
+    """The public document carries the evidence, as exact integers (ADR-0093).
+
+    The fixture's two pads are 20 mm apart on one axis, so a 300,000 nm lattice misses by
+    100,000 nm and the largest step representing the pair is the 20 mm separation itself --
+    a divisor far *larger* than the requested step, which is why the field is named for
+    representability rather than for fineness.
+    """
+
+    _, settings = _workspace(tmp_path)
+
+    preview = preview_route(_request(settings={"grid_step_nm": 300_000}), settings)
+
+    diagnostic = preview.to_dict()["diagnostic"]
+    assert diagnostic["off_grid"] == {
+        "pad_id": "pad:kicad:20000000-0000-0000-0000-000000000004",
+        "anchor_pad_id": "pad:kicad:20000000-0000-0000-0000-000000000002",
+        "grid_step_nm": 300_000,
+        "miss_x_nm": -100_000,
+        "miss_y_nm": 0,
+        "largest_representable_step_nm": 20_000_000,
+    }
+    assert diagnostic["message"] == (
+        "a pad centre does not lie on the requested routing lattice: it misses the nearest "
+        "lattice point by (-100000 nm, 0 nm) at grid_step_nm=300000; the largest step that "
+        "represents this pad pair is 20000000 nm"
+    )
+
+
+def test_the_published_off_grid_contract_binds_the_evidence_to_its_own_code(
+    tmp_path: Path,
+) -> None:
+    """The MCP response contract accepts the real document and rejects a mismatched one.
+
+    The service and the published contract check the same biconditional independently, so a
+    payload assembled by anything other than ``RoutePreview.to_dict`` -- a rewriting transport,
+    a replayed artifact -- cannot smuggle lattice geometry into a refusal that measured none,
+    and cannot strip it from one that did.
+    """
+
+    _, settings = _workspace(tmp_path)
+    document = preview_route(_request(settings={"grid_step_nm": 300_000}), settings).to_dict()
+
+    validated = RoutePreviewToolResponse.model_validate(document).model_dump()
+    assert validated["diagnostic"]["off_grid"]["miss_x_nm"] == -100_000
+
+    moved = json.loads(json.dumps(document))
+    moved["diagnostic"]["code"] = "no_path"
+    with pytest.raises(ValidationError):
+        RoutePreviewToolResponse.model_validate(moved)
+
+    stripped = json.loads(json.dumps(document))
+    stripped["diagnostic"]["off_grid"] = None
+    with pytest.raises(ValidationError):
+        RoutePreviewToolResponse.model_validate(stripped)
+
+
+def test_a_diagnostic_that_measured_no_lattice_reports_no_lattice_geometry(tmp_path: Path) -> None:
+    """``off_grid`` is ``None`` on every other code, never an empty object or a zero.
+
+    A placeholder would read as a measured miss of zero nanometres, which is the one thing a
+    pad that was never measured against a lattice cannot be said to be.
+    """
+
+    _, settings = _workspace(tmp_path)
+
+    preview = preview_route(_request(net="MISSING"), settings)
+
+    document = preview.to_dict()
+    assert document["diagnostic"]["code"] == "invalid_two_pin_net"
+    assert document["diagnostic"]["off_grid"] is None
 
 
 def test_preview_reports_a_diagnostic_for_an_unknown_net(tmp_path: Path) -> None:

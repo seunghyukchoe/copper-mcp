@@ -412,6 +412,58 @@ class RouteFailureCode(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class OffGridEvidence:
+    """Exact per-pad geometry for one ``off_grid`` refusal.
+
+    A two-pin route joins pad centres, so the lattice is anchored at ``anchor_pad_id`` and
+    ``pad_id`` is the centre that has to land on it. Every field is an exact integer computed
+    from the request the caller made against bytes the caller supplied; nothing here is
+    estimated, and nothing here counts board objects.
+
+    ``miss_x_nm`` and ``miss_y_nm`` are signed displacements *from the nearest lattice line to
+    the pad centre*, so moving the pad by ``(-miss_x_nm, -miss_y_nm)`` puts it on the lattice
+    and ``abs(miss) <= grid_step_nm // 2`` on each axis. At least one of them is non-zero,
+    because a pad that misses on neither axis is on the lattice.
+
+    ``largest_representable_step_nm`` is the greatest common divisor of the two centre deltas:
+    the largest lattice step at which this pad pair is representable at all. It is a statement
+    about representability and **not** a prediction that routing succeeds there. B-100 measured
+    18 real-board ``off_grid`` refusals, re-previewed every one of them at exactly this step
+    with ``max_grid_nodes`` at its ceiling, and routed **none**: five then exceeded the node
+    budget and thirteen had a pad outside the board outline. Ten of the eighteen report 1 or
+    3 nm here, because KiCad writes millimetre coordinates one nanometre short of the round
+    value the part was placed at -- which is board content, not a conversion defect, and
+    collapses the divisor without moving the pad by anything a designer could see.
+    """
+
+    pad_id: str
+    anchor_pad_id: str
+    grid_step_nm: int
+    miss_x_nm: int
+    miss_y_nm: int
+    largest_representable_step_nm: int
+
+    def __post_init__(self) -> None:
+        _typed_id("off-grid pad ID", self.pad_id, "pad:")
+        _typed_id("off-grid anchor pad ID", self.anchor_pad_id, "pad:")
+        if self.pad_id == self.anchor_pad_id:
+            raise ValueError("an off-grid pad and its lattice anchor must differ")
+        _integer("off-grid grid step", self.grid_step_nm, minimum=1, maximum=_MAX_COST_TERM_NM)
+        _integer("off-grid representable step", self.largest_representable_step_nm, minimum=1)
+        half_step = self.grid_step_nm // 2
+        for axis, miss in (("x", self.miss_x_nm), ("y", self.miss_y_nm)):
+            _integer(f"off-grid {axis} miss", miss, minimum=-half_step, maximum=half_step)
+        if self.miss_x_nm == 0 and self.miss_y_nm == 0:
+            raise ValueError("an off-grid pad must miss the lattice on at least one axis")
+        # The requested step represents this centre exactly when it divides the greatest common
+        # divisor of the two deltas. A larger divisor is not a contradiction — a centre 8,001 nm
+        # away is representable at 8,001 nm and not at 1,000 nm — so the invariant is
+        # divisibility, never magnitude.
+        if self.largest_representable_step_nm % self.grid_step_nm == 0:
+            raise ValueError("an off-grid pad pair must not be representable at the requested step")
+
+
+@dataclass(frozen=True, slots=True)
 class RouteDiagnostic:
     """Non-echoing diagnostic for one expected routing failure."""
 
@@ -419,6 +471,7 @@ class RouteDiagnostic:
     message: str
     expanded_states: int = 0
     obstacle_checks: int = 0
+    off_grid: OffGridEvidence | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.code, RouteFailureCode):
@@ -427,6 +480,12 @@ class RouteDiagnostic:
             raise ValueError("diagnostic message is malformed")
         _integer("diagnostic expanded states", self.expanded_states)
         _integer("diagnostic obstacle checks", self.obstacle_checks)
+        # The evidence is carried by exactly the code it explains. Attaching it to another code
+        # would let a caller read lattice geometry out of a refusal that never measured any.
+        if (self.off_grid is not None) is not (self.code is RouteFailureCode.OFF_GRID):
+            raise ValueError("off-grid evidence belongs to the off_grid diagnostic alone")
+        if self.off_grid is not None and not isinstance(self.off_grid, OffGridEvidence):
+            raise ValueError("off-grid evidence must be typed")
 
 
 @dataclass(frozen=True, slots=True)

@@ -309,6 +309,16 @@ values are `single-path` for two-pin routes, `batched-1-steiner-v1` for low-degr
 proposals (at most nine evolving components), and `component-mst-v1` for larger trees. An unrouted response carries one typed, non-echoing diagnostic; an unsupported board
 carries bounded conversion diagnostic-code counts instead of raw adapter text.
 
+The diagnostic carries one optional evidence object, `off_grid`, and carries it on exactly the
+`off_grid` code — the contract refuses a payload that attaches it to another code and refuses an
+`off_grid` diagnostic without it, so a caller may branch on either. It names the off-lattice pad,
+the pad the lattice is anchored at, the `grid_step_nm` in use, the signed per-axis nanometres from
+the nearest lattice line to the pad centre, and `largest_representable_step_nm`, the greatest common
+divisor of the two pad-centre deltas. The last is a statement about representability and not a
+prediction that routing succeeds at that step. Every other diagnostic reports `off_grid: null` —
+never an empty object, never a zero — because a refusal that measured no lattice has nothing to say
+about one ([ADR-0093](../adr/0093-actionable-off-grid-refusals.md)).
+
 `already_connected` is a terminal success, not a failure: the two pads already share one copper
 component on the selected layer, so there is nothing to propose. Its `connection` object carries the
 Board IR base revision it is bound to, both endpoint pad IDs, and integer counts of the attachment
