@@ -30,8 +30,8 @@ correct refusal that leaves the caller with nowhere to go.
 [B-088](../ledgers/benchmark-ledger.md) had localised the routing constraint "to the lattice"; the
 [research note](../research/off-grid-lattice-refusal-v1.md) re-previewed all 18 nets at exactly the
 finest lattice their own geometry admits, with `max_grid_nodes` at its ceiling, and **routed none**:
-13 have a pad outside the board's own `Edge.Cuts` outline and 5 exceed the node budget at the pitch
-they require. The median axis miss is 55,000 nm against a 250,000 nm pitch, so this is not a
+13 have a pad centre outside the board outline inset by half the requested track width (125,000 nm at the measured net class) and 5 exceed
+the node budget at the pitch they require. The median axis miss is 55,000 nm against a 250,000 nm pitch, so this is not a
 near-miss against a slightly coarse default either; and the nanometre residues that collapse ten of
 the divisors to 1 or 3 nm are authored by KiCad into the board file — a millimetre literal one
 nanometre short of the round value the part was placed at — and converted exactly, so they are
@@ -61,12 +61,22 @@ resolve to the lower line, so the value is a function of the inputs alone.
 refuses evidence on any other code *and* refuses an `off_grid` diagnostic without it; the published
 `RouteDiagnosticContract` re-checks the same condition independently, so a payload assembled by
 anything other than the service — a rewriting transport, a replayed artifact — can neither smuggle
-lattice geometry into a refusal that measured none nor strip it from one that did.
+lattice geometry into a refusal that measured none nor strip it from one that did. The published
+field is optional with a `None` default; an *absent* key is the same refusal as an explicit `null`,
+because the default resolves first and the biconditional then fires. That is why requiredness adds
+nothing, and the alternative below records why it was removed.
 
-**The evidence contract refuses to describe an impossible measurement.** A pad that misses on
-neither axis is on the lattice; a pair whose largest representable step is a multiple of the
-requested step is representable at it; a miss larger than half a step is not a miss to the *nearest*
-line. Each is a refusal, not a clamp.
+**Both evidence contracts refuse to describe an impossible measurement, and the published one is
+not the weaker of the two.** A pad that misses on neither axis is on the lattice; a pair whose
+largest representable step is a multiple of the requested step is representable at it; a miss
+larger than half a step is not a miss to the *nearest* line; an anchor equal to the pad it anchors
+is not a measurement. Each is a refusal, not a clamp, in the backend `OffGridEvidence` **and** in
+the published `OffGridEvidenceContract`. The first version of this record checked all four in the
+dataclass only and claimed the property for "the evidence contract"; adversarial review forged
+four individually well-typed, in-range payloads and the published schema accepted every one. A
+published schema that asserts less than the runtime lets a schema-only consumer accept what this
+project's own code refuses to construct — the same defect a reviewer raised against sibling #137 —
+so no guard is left to the runtime alone, and each is pinned by a test that fails without it.
 
 **`largest_representable_step_nm` is a statement about representability, never a prediction.** It
 says the largest step at which the pair can be expressed, not that routing succeeds there — B-100
@@ -87,12 +97,17 @@ B-100.
 
 **Disclosure widens by two pad identities and one relative displacement, and by nothing else.**
 This is inside the settled precedent rather than an extension of it: SEC-011 permits object counts,
-ADR-0079 refusals already carry byte-offset locators, `RouteConnectionContract` already publishes
-`start_pad_id` and `end_pad_id` for the same net, and a routed candidate publishes absolute path
-vertices. An `off_grid` refusal now says strictly less than either successful outcome of the same
-request. No object count, no net name, no absolute coordinate, and nothing about board density
-enters the payload — the deliberate line ADR-0089 drew when it refused to report observed obstacle
-counts. SEC-134 records the review.
+ADR-0079 refusals already carry byte-offset locators, and `RouteConnectionContract` already
+publishes `start_pad_id` and `end_pad_id` for the same net. An `off_grid` refusal says strictly
+less than a **routed** preview of the same request, which publishes absolute path vertices.
+It does *not* say strictly less than `already_connected`, which carries pad identities and counts
+but no geometry at all — the relative miss and the divisor are not derivable from it — and for a
+net that can never be routed the comparison against the routed outcome is in any case vacuous.
+The load-bearing argument is therefore the one that holds for every request rather than the
+comparison: this is per-request geometry about the net the caller named, computed from bytes the
+caller supplied. No object count, no net name, no absolute coordinate, and nothing about board
+density enters the payload — the deliberate line ADR-0089 drew when it refused to report observed
+obstacle counts. SEC-134 records the review.
 
 **One committed artifact had to be taught to redact.**
 `scripts/benchmark_real_board_capability.py` records one refusal message per verdict into a JSON
@@ -113,6 +128,20 @@ of the lattice class. Naming it is this record's contribution; fixing it is not,
 the risk that the new evidence reads as a complete diagnosis when it is one layer of several.
 
 ## Alternatives considered
+
+**Make `off_grid` a required key on `RouteDiagnosticContract`.** This is what the first version of
+this record did, by declaring `off_grid: OffGridEvidenceContract | None` with no default, and it is
+rejected. State the property requiredness would provide: there is none. The anti-strip property —
+that a payload carrying `code: "off_grid"` without evidence is refused — comes from the
+presence↔code biconditional and not from requiredness, because an absent key resolves to the
+default and the biconditional then refuses it. A test pins exactly that, deleting the key rather
+than setting it to `null`. What requiredness *does* do is invalidate every diagnostic of every
+**other** code that a caller recorded before this change, since a stored `no_path` or
+`stale_revision` payload has no such key. That is a compatibility break bought for nothing, and it
+was recorded nowhere. The field is therefore `| None = None`, our own serializer emits it on every
+response regardless, and the break does not happen. The general rule this instance follows: a
+default is the right shape whenever the invariant is *relational* — enforced between fields —
+rather than *presence-based*.
 
 **Lower the default `grid_step_nm`.** Rejected by measurement, not by taste. The greatest common
 divisor across all eighteen pad pairs is 1 nm, and 1,000 nm even after the KiCad-authored residues

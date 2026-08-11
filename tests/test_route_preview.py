@@ -496,6 +496,74 @@ def test_the_published_off_grid_contract_binds_the_evidence_to_its_own_code(
     with pytest.raises(ValidationError):
         RoutePreviewToolResponse.model_validate(stripped)
 
+    # Absence is the same refusal as an explicit null, which is the property that lets the
+    # field carry a default without weakening anything: a producer cannot omit its way out.
+    absent = json.loads(json.dumps(document))
+    del absent["diagnostic"]["off_grid"]
+    with pytest.raises(ValidationError):
+        RoutePreviewToolResponse.model_validate(absent)
+
+
+def test_a_pre_evidence_diagnostic_of_another_code_still_validates(tmp_path: Path) -> None:
+    """``off_grid`` defaults to ``None``, so a payload recorded before ADR-0093 still parses.
+
+    Requiredness would have bought no property the biconditional does not already provide --
+    the case above proves an absent key is refused on the ``off_grid`` code -- while
+    invalidating every diagnostic of every *other* code a caller had already stored. That is
+    the whole argument for the default, and this is the test that would fail without it.
+    """
+
+    _, settings = _workspace(tmp_path)
+    document = preview_route(_request(net="MISSING"), settings).to_dict()
+    legacy = json.loads(json.dumps(document))
+    del legacy["diagnostic"]["off_grid"]
+
+    validated = RoutePreviewToolResponse.model_validate(legacy).model_dump()
+
+    assert validated["diagnostic"]["code"] == "invalid_two_pin_net"
+    assert validated["diagnostic"]["off_grid"] is None
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("anchor_pad_id", "pad:kicad:20000000-0000-0000-0000-000000000004"),
+        ("miss_x_nm", 150_001),
+        ("miss_y_nm", -150_001),
+        ("largest_representable_step_nm", 900_000),
+    ],
+)
+def test_the_published_contract_refuses_a_forged_self_contradicting_measurement(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    """The published schema asserts everything the runtime asserts, not a weaker subset.
+
+    Each forgery is individually well-typed and in range, and each contradicts the refusal
+    carrying it: an anchor equal to the pad, a miss wider than half the step it names, a miss
+    of zero on both axes, and a divisor the requested step divides -- which would mean the pair
+    is *on* the lattice. A schema that accepted these would let a consumer validating against
+    the published contract alone accept a payload `copper_mcp` itself refuses to construct.
+    """
+
+    _, settings = _workspace(tmp_path)
+    document = preview_route(_request(settings={"grid_step_nm": 300_000}), settings).to_dict()
+    forged = json.loads(json.dumps(document))
+    forged["diagnostic"]["off_grid"][field] = value
+
+    with pytest.raises(ValidationError):
+        RoutePreviewToolResponse.model_validate(forged)
+
+
+def test_the_published_contract_refuses_a_miss_of_zero_on_both_axes(tmp_path: Path) -> None:
+    _, settings = _workspace(tmp_path)
+    document = preview_route(_request(settings={"grid_step_nm": 300_000}), settings).to_dict()
+    forged = json.loads(json.dumps(document))
+    forged["diagnostic"]["off_grid"]["miss_x_nm"] = 0
+    forged["diagnostic"]["off_grid"]["miss_y_nm"] = 0
+
+    with pytest.raises(ValidationError):
+        RoutePreviewToolResponse.model_validate(forged)
+
 
 def test_a_diagnostic_that_measured_no_lattice_reports_no_lattice_geometry(tmp_path: Path) -> None:
     """``off_grid`` is ``None`` on every other code, never an empty object or a zero.

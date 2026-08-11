@@ -430,7 +430,8 @@ class OffGridEvidence:
     about representability and **not** a prediction that routing succeeds there. B-100 measured
     18 real-board ``off_grid`` refusals, re-previewed every one of them at exactly this step
     with ``max_grid_nodes`` at its ceiling, and routed **none**: five then exceeded the node
-    budget and thirteen had a pad outside the board outline. Ten of the eighteen report 1 or
+    budget and thirteen had a pad centre outside the board outline inset by half the routed
+    track width. Ten of the eighteen report 1 or
     3 nm here, because KiCad writes millimetre coordinates one nanometre short of the round
     value the part was placed at -- which is board content, not a conversion defect, and
     collapses the divisor without moving the pad by anything a designer could see.

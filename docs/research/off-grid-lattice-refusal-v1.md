@@ -122,17 +122,20 @@ The two groups fail for different reasons, and both are structural:
   3.3 × 10¹⁴ nodes to span the pad-to-pad bounding box alone — before the 10 mm region margin is
   added — against a ceiling of 5 × 10⁵. Lowering `grid_step_nm` trades one refusal for another.
 - **Thirteen** refuse `no_path` with "the start pad cannot contain the routed width", and the cause
-  is not the lattice at all: on that board the `Edge.Cuts` outline bounds a rectangle that does not
-  contain the pads of these nets. It is a layout in progress whose footprints have not been brought
-  inside its own outline, so no route can be proposed there at any pitch.
+  is not the lattice at all. What the refusal proves, exactly, is that a pad centre of the net lies
+  outside the board outline **inset by half the requested track width** — 125,000 nm at this net
+  class. It does not discriminate a pad far outside the outline from one inside it but within half
+  a track width of its edge; both raise this code, and nothing recorded here separates them. Why
+  the pads sit there is not measured and is not claimed. The containment test is step-independent,
+  so the refusal holds at every pitch, not only at the one tried.
 
 ## 6. Verdict on B-088's hypothesis
 
 **Refuted, in the form that mattered.** B-088's hypothesis was that the constraint is localised to
 the lattice. On real boards the lattice is where the refusal is *reported* and not where the
 constraint *is*: change the lattice to the best value the geometry allows and zero of eighteen
-nets route. Thirteen are blocked by a pad outside the board outline and five by the node budget at
-the pitch their own geometry demands.
+nets route. Thirteen are blocked by a pad centre outside the board outline inset by half the routed
+track width, and five by the node budget at the pitch their own geometry demands.
 
 This is the same shape of finding as ADR-0089's: one refusal standing in front of another and
 being read as the whole answer. There it was `obstacle_budget_exceeded` hiding the lattice class;

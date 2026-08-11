@@ -997,11 +997,19 @@ class OffGridEvidenceContract(_ClosedContract):
 
     Disclosure follows the settled precedent rather than widening it (ADR-0093, SEC-134):
     SEC-011 already permits object counts, ADR-0079 refusals already carry byte-offset
-    locators, ``RouteConnectionContract`` already publishes ``start_pad_id`` and ``end_pad_id``
-    for the same net, and a routed candidate publishes absolute path vertices. This says
-    strictly less than either successful outcome of the same request. It carries no board
-    density: no object counts, no net names, no absolute coordinates -- only two pad
-    identities, a relative miss, and a divisor.
+    locators, and ``RouteConnectionContract`` already publishes ``start_pad_id`` and
+    ``end_pad_id`` for the same net. This says strictly less than a *routed* preview of the
+    same request, which publishes absolute path vertices. It says something an
+    ``already_connected`` response does not, since that carries pad identities and counts but
+    no geometry -- so the load-bearing argument is not that comparison but the one that holds
+    for every request: this is per-request geometry about the net the caller named, computed
+    from bytes the caller supplied. It carries no board density: no object counts, no net
+    names, no absolute coordinates -- only two pad identities, a relative miss, and a divisor.
+
+    Every cross-field invariant the backend ``OffGridEvidence`` enforces is enforced here too,
+    and deliberately not left to the runtime. A published schema that asserts less than the
+    runtime does lets a schema-only consumer accept a payload this project's own code would
+    refuse, which is the defect a reviewer raised against a sibling change (#137).
     """
 
     pad_id: PadRefId
@@ -1010,6 +1018,24 @@ class OffGridEvidenceContract(_ClosedContract):
     miss_x_nm: Annotated[int, Field(ge=-500_000_000, le=500_000_000)]
     miss_y_nm: Annotated[int, Field(ge=-500_000_000, le=500_000_000)]
     largest_representable_step_nm: Annotated[int, Field(ge=1, le=2**53 - 1)]
+
+    @model_validator(mode="after")
+    def _measurement_is_self_consistent(self) -> OffGridEvidenceContract:
+        if self.pad_id == self.anchor_pad_id:
+            raise ValueError("an off-grid pad and its lattice anchor must differ")
+        half_step = self.grid_step_nm // 2
+        if abs(self.miss_x_nm) > half_step or abs(self.miss_y_nm) > half_step:
+            raise ValueError(
+                "an off-grid miss cannot exceed half the lattice step it is measured against"
+            )
+        if self.miss_x_nm == 0 and self.miss_y_nm == 0:
+            raise ValueError("an off-grid pad must miss the lattice on at least one axis")
+        # Divisibility, never magnitude: a pair 8,001 nm apart is representable at 8,001 nm and
+        # not at 1,000 nm, so a divisor larger than the requested step is ordinary. What cannot
+        # hold is the requested step dividing it, which would mean the pair is on the lattice.
+        if self.largest_representable_step_nm % self.grid_step_nm == 0:
+            raise ValueError("an off-grid pad pair must not be representable at the requested step")
+        return self
 
 
 class RouteDiagnosticContract(_ClosedContract):
@@ -1036,7 +1062,13 @@ class RouteDiagnosticContract(_ClosedContract):
     message: Annotated[str, Field(min_length=1, max_length=256)]
     expanded_states: NonNegativeInteger
     obstacle_checks: NonNegativeInteger
-    off_grid: OffGridEvidenceContract | None
+    #: Optional with a ``None`` default, deliberately, and the choice is argued in ADR-0093.
+    #: Requiredness would provide no property the biconditional below does not already provide
+    #: -- a payload carrying ``code: "off_grid"`` and no evidence still fails, because the
+    #: default resolves to ``None`` and the biconditional then refuses it. What requiredness
+    #: *would* do is invalidate every previously recorded diagnostic of every other code, which
+    #: is a compatibility break bought for nothing. Our own serializer emits the key always.
+    off_grid: OffGridEvidenceContract | None = None
 
     @model_validator(mode="after")
     def _evidence_matches_its_code(self) -> RouteDiagnosticContract:

@@ -15,6 +15,10 @@ All notable changes are documented here. The format follows
   lattice line to the pad centre, and `largest_representable_step_nm`, the greatest common divisor
   of the two pad-centre deltas. Every other diagnostic carries `off_grid: null`, never an empty
   object and never a zero, because a refusal that measured no lattice has nothing to say about one.
+  **The key is optional with a `null` default, so a diagnostic payload you recorded before this
+  release still validates**; an `off_grid`-coded payload that lacks it is still refused, and so is
+  one whose values contradict each other — both checks run in the published schema as well as at
+  runtime, so validating against the schema alone accepts nothing the service would refuse to build.
   **Routing semantics do not change**: the lattice, the search, `ROUTER_VERSION` and every published
   content address are untouched, and all 385 real-board verdicts are byte-identical before and
   after. `largest_representable_step_nm` states representability and never routability — measured on
