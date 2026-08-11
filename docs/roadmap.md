@@ -3,6 +3,37 @@
 Roadmap items describe outcomes, not promises about dates. Each milestone requires tests,
 documentation, ledger updates, and benchmark evidence.
 
+## Milestone state
+
+**The GitHub milestones are the source of truth, not the checkboxes below.** A checkbox records
+engineering sub-state and is written by hand; a milestone's issue counts are derived. Where the two
+disagree, believe this table and file the discrepancy. Read live with
+`gh issue list -R seunghyukchoe/copper-mcp` and
+`gh api repos/seunghyukchoe/copper-mcp/milestones`.
+
+As of 2026-08-12:
+
+| Milestone | Closed | Open | State |
+|---|---|---|---|
+| M1 — KiCad inspection completion | 7 | 1 | Open. The sole remaining issue is [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116), the real-board conversion survey. |
+| M2 — Routing depth | 3 | 2 | Open: [#63](https://github.com/seunghyukchoe/copper-mcp/issues/63) fill-aware zone routing obstacles and [#65](https://github.com/seunghyukchoe/copper-mcp/issues/65) benchmark comparison against open baselines. |
+| M3 — Safe application completion | 0 | 1 | Open: [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68), IPC one-undo-commit apply. |
+| M4 — Scene, policy, and evaluation | 3 | 0 | **Complete.** Every tracked issue is closed. |
+| M5 — Performance and physics | 0 | 6 | Not started. |
+
+Two cautions about this table, because both have misled a reader before:
+
+- **"M4 complete" means every issue tracked under M4 is closed. It does not mean the M4 section
+  below has no `[~]` items left.** Several genuinely remain — broader source fidelity, editor
+  authority, solving for a placement, and the policy-plugin work — and they are untracked rather
+  than done. A milestone closing is an accounting fact about the tracker.
+- Three conversion gaps filed after the M1 survey —
+  [#138](https://github.com/seunghyukchoe/copper-mcp/issues/138),
+  [#140](https://github.com/seunghyukchoe/copper-mcp/issues/140) and
+  [#141](https://github.com/seunghyukchoe/copper-mcp/issues/141) — carry **no milestone** and so
+  appear in none of the counts above. They are real open work; see
+  [what does not convert](#what-does-not-convert).
+
 ## M0 — Repository foundation (`0.1.x`, complete)
 
 - [x] Secure workspace and file boundary.
@@ -15,7 +46,27 @@ documentation, ledger updates, and benchmark evidence.
   reference-only external source metadata.
 - [x] First public GitHub release.
 
-## M1 — KiCad inspection and validation (`0.4.x`, current)
+## M1 — KiCad inspection and validation (current)
+
+### What does not convert
+
+The one open M1 issue is the real-board conversion survey. Measured on the private working corpus
+on 2026-08-11: **11 of the 12 boards in the
+[#116](https://github.com/seunghyukchoe/copper-mcp/issues/116)
+survey set convert, which is 11 of all 17 boards in that corpus as saved today.** Six refuse, each
+for exactly one named construct:
+
+| Refusing saves | Construct | Issue |
+|---|---|---|
+| 1 | `connect`-kind (edge-connector) pads | [#138](https://github.com/seunghyukchoe/copper-mcp/issues/138) |
+| 4 | root board `property` text variables | [#140](https://github.com/seunghyukchoe/copper-mcp/issues/140) |
+| 1 | a root copper graphic (`gr_text` on `F.Cu`) | [#141](https://github.com/seunghyukchoe/copper-mcp/issues/141) |
+
+**No "converts every board" result is claimed at any count**, and none should be stated until a
+re-measured survey supports it. The counts above supersede earlier survey figures — including
+#116's own title, written before four of the five newer saves existed — rather than correcting
+them in place. Dated research notes and benchmark-ledger rows keep whatever they measured on the
+day they measured it.
 
 - [x] Official `kicad-python` IPC plugin and redacted live-board observer. The optional
   `inspect_live_board` MCP tool and `hardware/kicad-ipc-plugin` action use only local KiCad IPC,
@@ -29,12 +80,19 @@ documentation, ledger updates, and benchmark evidence.
 - [x] Deterministic passive-layout readability baseline with wider grid placement, extended leads,
   separated labels/properties, real KiCad SVG inspection, and a structural regression.
 - [x] Descriptor-anchored workspace reads and exact-lowercase create-only schematic output.
-- [~] Schematic round trip, authoritative ERC, and source-to-board connectivity parity. The
+- [x] Schematic round trip, authoritative ERC, and source-to-board connectivity parity
+  (issue #66, closed). The
   bounded passive subset now has exact deterministic schematic replay, authoritative `kicad-cli sch
   erc` evidence bound to the generated schematic digest, and a live KiCad round trip that exports a
   `kicadxml` netlist and checks recovered components and nets against the source intent through the
-  reusable `kicad_schematic_parity` verifier. Source-to-PCB connectivity parity and broader
-  symbol/library coverage remain open.
+  reusable `kicad_schematic_parity` verifier. Source-to-board connectivity parity now ships as
+  `verify_source_to_board_parity`, running the authoritative `kicad-cli pcb drc --schematic-parity`
+  against a **board-eligible projection** of the intent under its own digest, and refusing a
+  verdict outright unless KiCad demonstrably accounted for every component — an empty parity array
+  is also what a check that never ran produces. A `passed` verdict is deliberately **not** a claim
+  that the delivered schematic file matches the board: that file marks every symbol `on_board no`
+  and never enters KiCad's board-side netlist. Broader symbol/library coverage remains open, and
+  parity is not ERC, footprint correctness, electrical validation, or board readiness.
 - [~] Live KiCad IPC snapshot to Circuit Scene and route-proposal binding. `observe_live_board_scene`
   converts the exact captured IPC serialization through Board IR, and `preview_live_route` now
   returns a deterministic read-only candidate from a scene `net_ref_id` with both stale-session
@@ -48,25 +106,43 @@ documentation, ledger updates, and benchmark evidence.
   routing remains open because the workstation IPC server is disabled.
 - [x] Canonical Board IR v0.2 contract with integer units, typed constraints, strict codecs,
   content digests, first-class footprint pose/side/lock/pad ownership, and bounded simple closed
-  orthogonal courtyard rings: unfilled `fp_rect`, `fp_poly`, and unordered complete `fp_line`
-  cycles. The immutable v0.1 schema remains as legacy compatibility evidence.
+  courtyard shapes: unfilled `fp_rect`, `fp_poly`, and unordered complete `fp_line` cycles whose
+  every edge is horizontal, vertical, or an exact 45-degree chamfer, plus unfilled `fp_circle`
+  outlines of exact integer radius (ADR-0080). The immutable v0.1 schema remains as legacy
+  compatibility evidence.
 - [x] Board IR application-service and MCP exposure as a read-only structural summary.
-- [~] Broader KiCad geometry and rule coverage. Foreign-net arc tracks spanning at most half a
-  turn are now a conservative integer polygon envelope obstacle on the single-layer router, with
-  distinct typed refusals for an arc past half a turn and for an arc on the routed net. Curved
-  board outlines, additional pad shapes (custom/chamfered), placement-enabled rule areas, net-tie
-  footprints, and oval holes remain refused and are still open, by the tracking issue's own
-  accounting of what it left.
+- [x] Broader KiCad geometry and rule coverage (issue #67, closed). Foreign-net arc tracks spanning
+  at most half a turn are a conservative integer polygon envelope obstacle on the single-layer
+  router, with distinct typed refusals for an arc past half a turn and for an arc on the routed
+  net. Since the issue was written the adapter has additionally accepted oval pad drills,
+  45-degree-chamfered and exact-integer-radius circular courtyards (ADR-0080), copper carrying no
+  routable net as a netless obstacle (ADR-0078), net-tie `fp_poly` copper as netless obstacle
+  copper (ADR-0092), unlocked root groups (ADR-0090), and attaching pad `zone_connect` overrides
+  (ADR-0091). **Still refused:** curved board outlines (`Edge.Cuts` arcs, circles, polygons,
+  béziers), pad shapes outside `circle`/`rect`/`oval`/`roundrect` and custom pad primitives,
+  `connect`-kind pads, placement-enabled rule areas,
+  `fp_arc` courtyards, outline holes, and blind/buried/microvias. The residual real-board
+  conversion gaps are counted in [what does not convert](#what-does-not-convert), and the
+  authoritative accepted/rejected matrix is
+  [the Board IR contract](architecture/board-ir.md#kicad-read-only-subset), not this list.
 - [x] Copper stack validated against KiCad's own layer numbering rather than a synthesized
   arithmetic rule, correcting a defect that had refused every real board with more than two copper
   layers behind the same fail-closed diagnostic a two-layer board also uses. Declaration position
   fixes the layer name; the name fixes KiCad's own declared ID (`F.Cu=0`, `B.Cu=2`,
   `In{N}.Cu=2+2N`), so a four-layer board's IDs deliberately do not ascend. Board IR's own
   `Layer.index` and every two-layer content address are unchanged.
-- [ ] Board outlines drawn as `gr_line` on `Edge.Cuts` are refused; only `gr_rect` is accepted
-  today, which blocks ordinary real boards whose outline is not a single rectangle.
-- [ ] Parse budgets are fixed and not operator-configurable, so some ordinary real boards are
-  refused purely on size rather than on any modelling gap.
+- [x] Board outlines assembled from `Edge.Cuts` `gr_line` segments. An outline may now be one
+  unfilled `gr_rect` **or** `gr_line` segments that chain, by exact endpoint coincidence, into one
+  closed simple loop, taking a composite native identity from its members' UUIDs (ADR-0076,
+  ADR-0087, issue #111). The outline is routing room, so it is never repaired into something
+  larger than what was drawn: an open contour, a near-miss gap, a spur, a duplicate or zero-length
+  segment, a self-intersection, or two disjoint loops each still refuse.
+- [x] Operator-configurable parse budgets. Six structural budgets — `max_tokens`, `max_nodes`,
+  `max_children_per_list`, `max_objects`, `max_total_vertices`, `max_intersection_tests` — are now
+  taken as configured through the matching `COPPER_MCP_MAX_PARSE_*` variables and one
+  `parse_limits_for()` seam, so a budget moves for every board-reading service at once or for none
+  (ADR-0079, issue #112). Previously thirteen call sites hardcoded them and only the byte ceiling
+  moved. `max_input_bytes` deliberately keeps `min` semantics.
 - [x] Headless `kicad-cli pcb drc --format json` validation.
 - [x] Minimal KiCad child environment, private working directory, bounded private
   global-configuration/state roots, and snapshot-confined file-table dependencies.
@@ -74,6 +150,12 @@ documentation, ledger updates, and benchmark evidence.
 - [x] Version-skew and stale-board tests for the DRC adapter.
 
 ## M2 — Deterministic routing baseline
+
+Tracker state: 3 closed, 2 open — [#63](https://github.com/seunghyukchoe/copper-mcp/issues/63)
+fill-aware zone routing obstacles and
+[#65](https://github.com/seunghyukchoe/copper-mcp/issues/65) benchmark comparison against open
+baselines. Note that the fill-aware routing item below is `[x]` for the single-layer A* core while
+#63 stays open for the layered seam's public contract; the two are not the same scope.
 
 - [~] Single two-pin A* routing with exact connectivity.
   - [x] Candidate-only integer four-neighbour reference with exact revision binding, deterministic
@@ -178,7 +260,8 @@ documentation, ledger updates, and benchmark evidence.
     open.
 - [x] Attachment to existing same-net copper and bounded partial-route completion.
 - [ ] Multilayer vias and keepouts.
-- [~] Negotiated-congestion multi-net routing.
+- [x] Negotiated-congestion multi-net routing (issue #62, closed). The sub-items below record what
+  the closed issue delivered and, where a sub-item is `[~]`, what it explicitly did not.
   - [x] Read-only route-bundle preview: two through eight known net references now compose into
     one immutable revision-bound plan only after deterministic whole-composition replay and the
     existing exact cross-net clearance gate. B-079 records a KiCad-checked private combined
@@ -207,7 +290,7 @@ documentation, ledger updates, and benchmark evidence.
     zero divergence and finds six worse than the default on the one fixture where negotiation
     genuinely iterates, including both rip-up rules and history decay, which fail to converge;
     multilayer/via negotiation, KiCad DRC, electrical, and fabrication authority are unchanged.
-- [~] Incremental spatial index and bounded rip-up/reroute.
+- [x] Incremental spatial index and bounded rip-up/reroute (issue #64, closed).
   - [x] Immutable conservative obstacle index for exact A*/Dijkstra query narrowing, with
     canonical linear fallback, differential route tests, and B-033 evidence.
   - [x] Candidate-only bounded rip-up/reroute coordination is covered by the negotiated
@@ -246,6 +329,9 @@ documentation, ledger updates, and benchmark evidence.
   verification, persistence, and remote transport remain open before this roadmap item can close.
 
 ## M3 — Safe candidate application
+
+Tracker state: 1 open — [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68), the IPC
+one-undo-commit apply. Both file-backed applies ship; the live one does not.
 
 - [x] Durable routing jobs and cancellation. The bounded internal ledger, single-worker lease
   recovery, redacted candidate manifests, file-backed layered request/result persistence,
@@ -297,13 +383,17 @@ documentation, ledger updates, and benchmark evidence.
 
 ## M4 — High-fidelity Circuit Scene and AI policy plugins
 
+Tracker state: **complete** — 3 closed, 0 open (issues #69, #72, #74). Read that as an accounting
+fact about the milestone, not as a claim that every `[~]` below is finished; the remaining ones are
+untracked, not done.
+
 Circuit Scene IR covers both semantic and visual observation, and placement has a public preview
 surface judged by a deterministic legalizer. The bounded file-backed placement apply gate is now
 implemented; what remains is broader source fidelity, post-action/editor authority, solving for a
 placement, and the policy-plugin work.
 
 - [x] Versioned Circuit Scene IR for bounded semantic and visual observation. Semantic observation
-  is `observe_board_scene` (Circuit Scene IR 0.2.0): region-scoped, exact integer geometry,
+  is `observe_board_scene` (Circuit Scene IR 0.3.0): region-scoped, exact integer geometry,
   first-class footprint pose/pad ownership/courtyard observation, a static/mutable partition,
   stable Board IR references with declared durability, relationship-aware explicit truncation,
   and board text quarantined in a separately typed untrusted collection. Visual
@@ -404,6 +494,9 @@ placement, and the policy-plugin work.
 
 ## M5 — Performance and physics
 
+Tracker state: 0 closed, 6 open (issues #87, #88, #89, #90, #91, #99). Nothing in this milestone
+has landed; B-068 establishes only the measurement prerequisite.
+
 - [~] Profile-guided Rust acceleration. B-068 establishes only the clean-worktree measurement
   prerequisite: fixed routing, placement, and Circuit Scene fixtures; invariant output digests;
   unprofiled timing samples; and a separate bounded cumulative profile. No Rust, SIMD, GPU, speedup,
@@ -452,10 +545,13 @@ recorded in [the OpenSSF research note](research/openssf-criticality-and-supply-
   registered, every registered tool appears in it, and every diagnostic code it names still exists,
   so the document cannot silently drift from the implementation; a root `llms.txt` points an LLM at
   it first.
-- [ ] Package the KiCad IPC plugin for the official Plugin and Content Manager (PCM), so
+- [x] Package the KiCad IPC plugin for the official Plugin and Content Manager (PCM), so
   `hardware/kicad-ipc-plugin` no longer needs a manual install, while keeping the
   token-never-leaves-the-plugin property and `COPPER_MCP_ALLOW_LIVE_IPC` default-off documented in
-  the listing.
+  the listing (issue #98, closed). It installs as
+  `com.github.seunghyukchoe.coppermcp-live-observer`, `kicad_version` `9.0.1`, built reproducibly
+  by `make pcm`. Installing it grants nothing on its own: the operator flag still has to be set in
+  the environment KiCad was launched from.
 - [ ] Build an adoption and evidence path: versioned audio-board examples, reproducible benchmark
   commands, downstream smoke tests, citations, and a small set of independent users or projects
   that can validate the documented MCP/KiCad contracts without uploading proprietary boards.

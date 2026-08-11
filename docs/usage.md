@@ -89,8 +89,11 @@ complete for the region and layers you asked for: `vias: []` means the region ho
 nothing else. A kind that did not fit is replaced by
 `{"observation": "withheld_by_ceiling", "ceiling_hit": …, "objects_omitted": N}` in its own slot,
 which is an object rather than an array precisely so that code reading the collection cannot mistake
-it for an empty one. When you see one, ask for a smaller region rather than a larger ceiling; the
-whole-board response still carries the outline you need in order to choose the window.
+it for an empty one. When you see one, ask for a smaller region rather than a larger ceiling.
+Kinds are offered the budget smallest first, which in practice admits the outline and the rules —
+the two you need in order to choose a window — ahead of the tens of thousands of segments. That is
+a greedy ordering and not a guarantee: `outline` is a withholdable kind like any other, so read its
+slot rather than assuming it is there.
 
 ### Deterministic render
 

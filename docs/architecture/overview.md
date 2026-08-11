@@ -53,8 +53,9 @@ live revision before it can release the synchronous connection.
 | `mcp_server.py` | MCP tools/resources and transport configuration. |
 
 Board IR `0.2.0` is the domain and source-adapter foundation. It adds immutable footprint pose,
-side, lock state, total pad ownership, and bounded board-frame simple orthogonal courtyard rings to the
-geometry already used by routing. A narrow deterministic
+side, lock state, total pad ownership, and bounded board-frame simple closed octilinear courtyard
+rings and exact-integer-radius courtyard circles to the geometry already used by routing.
+A narrow deterministic
 [two-pin routing baseline](routing-baseline.md) now produces immutable in-memory candidates for
 supported synthetic Board IR inputs. The pure adapter can serialize an exact replayed candidate in
 memory, an internal service binds that private derivative to strict aggregate KiCad DRC evidence,
@@ -99,7 +100,8 @@ process exit; no secure memory-erasure claim is made. See the
 
 ## High-fidelity circuit perception and placement north star
 
-Circuit Scene IR `0.2.0` is the current bounded structured board observation contract. It exposes
+Circuit Scene IR `0.3.0` is the current bounded structured board observation contract
+(`circuit_scene.SCENE_VERSION`). It exposes
 revision-bound footprint pose, side, lock state, pad ownership, and supported courtyard rings beside
 the existing pads and copper. Region scoping, typed reference durability, object/detail ceilings,
 and quarantined board-author text keep the observation explicit; an optional normalized render is
