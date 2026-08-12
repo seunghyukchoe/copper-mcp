@@ -117,13 +117,17 @@ the existing per-ring vertex budget applies to a far-side ring exactly as to a n
   that stopped here no longer stop here. On the two-footprint fixture, the same placement that the
   side-gated model would have called `proven_clear` is now `violated`, matching the tool.
 - **The measured conversion count did not move, and this change does not claim it did.**
-  Conversion stops at the first error. On `main` the courtyard refusal is not even reachable —
-  the same three boards stop earlier, on root board properties (#150). With #150 applied the
-  courtyard refusal appears and this change removes it, and all three boards then stop on a
-  *further* blocker, `pad field 'options' is unsupported`, a custom-shape pad field. The corpus
-  reads 11 of 17 before and 11 of 17 after, on every combination measured. The frontier moved; the
-  count did not. That is the expected outcome of removing one blocker from a stack, and it is
-  filed as its own issue rather than counted here.
+  Conversion stops at the first error, so a refusal names the frontier and never the stack behind
+  it. On `main` the courtyard refusal is not reachable at all: the same three boards stop earlier,
+  on root board properties (#150, still open). With #150 applied the courtyard refusal appears,
+  this change removes it, and all three boards then stop on a *further* blocker —
+  `pad field 'options' is unsupported`, a custom-shape SMD pad, filed as #153. The survey corpus
+  reads **11 of 18 before and 11 of 18 after**, on `main` and on `main` + #150 alike, with all 18
+  board digests identical across every run. (The corpus is a live tree and grew from 17 boards to
+  18 during this work; the added board is refused by an unrelated construct both before and after,
+  and the before→after→before triple reproduces itself exactly, so the growth is recorded rather
+  than averaged over.) The frontier moved; the count did not. That is the expected outcome of
+  removing one blocker from a stack, and this is the fourth instance of it in this project.
 - **Write-back is unchanged and still refuses.** The source-preserving placement serializer accepts
   only front-side footprints whose courtyard rectangles are on `F.CrtYd`, so a feed-through part is
   previewable and not movable through it — the same asymmetry ADR-0080 recorded for chamfered and

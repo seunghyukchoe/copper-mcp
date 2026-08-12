@@ -67,6 +67,10 @@ All notable changes are documented here. The format follows
   other side of the board. Write-back is unchanged: the source-preserving placement serializer
   still refuses any board carrying a far-side courtyard rectangle, so such a footprint is
   previewable and not movable through it.
+  **It converts no additional board today.** Conversion stops at the first error, and the three
+  corpus boards this unblocks stop again one construct later, on a custom-shape SMD pad (#153); on
+  `main` the courtyard refusal is not even reachable, because root board properties (#150) stop the
+  same boards first. The survey corpus reads 11 of 18 before and 11 of 18 after.
   ([ADR-0097](docs/adr/0097-courtyard-layer-decides-the-side.md),
   [D-187](docs/ledgers/decision-ledger.md), [B-101](docs/ledgers/benchmark-ledger.md),
   [R-142](docs/ledgers/risk-register.md), issue #151)
