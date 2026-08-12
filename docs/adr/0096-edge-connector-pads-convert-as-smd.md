@@ -1,11 +1,12 @@
 # ADR-0096: An edge-connector pad converts as an SMD pad, and the discarded token is counted
 
-- Status: Accepted
+- Status: Accepted (amended 2026-08-12 after adversarial review of PR #149; see D-187)
 - Date: 2026-08-12
 - Owners: `@seunghyukchoe`
 - Related: [Issue #138](https://github.com/seunghyukchoe/copper-mcp/issues/138), ADR-0004,
   ADR-0013, ADR-0021, ADR-0076, ADR-0090, ADR-0091, ADR-0092,
-  [KiCad `connect` pad research](../research/kicad-connect-pad-attribute-v1.md)
+  [KiCad `connect` pad research](../research/kicad-connect-pad-attribute-v1.md),
+  [D-187](../ledgers/decision-ledger.md), [R-142](../ledgers/risk-register.md)
 
 ## Context
 
@@ -16,16 +17,22 @@ real board, `phono-preamp/tier1-rev-a`, carries two of them on one footprint, an
 
 Adding `"connect": PadKind.<something>` to the adapter's kind table would have made the board
 convert in one line, and that is precisely why it was filed as an issue rather than shipped as a
-patch. `PadKind` is published into `canonical._pad()`, so it is inside `BOARD_IR_V02_SNAPSHOT_DIGEST`
-and every address derived from it, and it is enumerated as a closed `enum` in the **published**
-`schemas/board-ir/0.2.0.schema.json`. A one-line map entry is a contract decision wearing a
-dictionary's clothes.
+patch. `PadKind` is published into `canonical._pad()`, so a pad's *kind value* is inside
+`BOARD_IR_V02_SNAPSHOT_DIGEST` and every address derived from it, and the set of legal kinds is
+enumerated as a closed `enum` in the **published** `schemas/board-ir/0.2.0.schema.json`. A
+one-line map entry is a contract decision wearing a dictionary's clothes.
 
 ### What `connect` provably is
 
-Established by enumerating and reading **every** occurrence of `PAD_ATTRIB::CONN` in KiCad's
-source outside the foreign-format import plug-ins — 35 occurrences across 17 files at commit
-`42cc8ba`. Every citation is in the [research note](../research/kicad-connect-pad-attribute-v1.md).
+Established by two sweeps of KiCad's source outside the foreign-format import plug-ins: every
+occurrence of `PAD_ATTRIB::CONN` — 35 across 17 files — and, because that sweep is structurally
+blind to sites that test `== PAD_ATTRIB::SMD` *alone* where a `CONN` pad silently takes the other
+branch, every occurrence of `PAD_ATTRIB::SMD` as well. The second sweep was added after
+adversarial review of PR #149 found a site the first had missed; the blind spot is recorded in
+the [research note](../research/kicad-connect-pad-attribute-v1.md), which carries every citation.
+A test on `PTH` or `NPTH` cannot separate the two — it puts both in the same branch, checked
+rather than assumed — so the union of the two sweeps is complete for direct attribute comparisons
+in `pcbnew/`, and complete for nothing beyond that.
 
 `PAD_ATTRIB` is a closed four-member enum (`padstack.h:96-105`) in bijection with the four header
 tokens; `parsePAD` rejects anything else outright. `CONN` is documented in the enum's own comments
@@ -44,15 +51,32 @@ Every subsystem that could give it different *copper* gives it none:
   pad-properties dialog states in its own comment that the two are the same type of pad, differing
   only in a default non-technical layer set (`dialog_pad_properties.cpp:2143-2152`).
 
-Exactly three things differ, and all three sit outside what a Board IR `Pad` claims:
+**At least ten** things differ — a lower bound, not an enumeration — and every one sits outside
+what a Board IR `Pad` claims. The load-bearing classes:
 
 1. **Solder paste** — a paste layer on a `CONN` pad raises `DRCE_PADSTACK` (`pad.cpp:3252-3257`),
    after which control falls through into the `SMD` case. Board IR models no paste layer.
 2. **Gerber aperture attribute** — `CONNECTORPAD` rather than `SMDPAD_CUDEF`
    (`plot_brditems_plotter.cpp:206-227`). CopperMCP emits no Gerber.
-3. **Edge.Cuts clearance DRC exemption** — a `CONN` pad is skipped by the board-edge clearance
+3. **Pick-and-place exclusion** — `FOOTPRINT::HasThroughHolePads` (`footprint.cpp:4451-4460`)
+   tests `!= PAD_ATTRIB::SMD`, so a `CONN` pad makes its whole footprint count as through-hole,
+   and `place_file_exporter.cpp:145` drops it from the position file under "exclude all TH". This
+   is the site the first sweep missed, and it is the reason the count is now a lower bound.
+4. **Edge.Cuts clearance DRC exemption** — a `CONN` pad is skipped by the board-edge clearance
    test, grouped with `PAD_PROP::CASTELLATED` (`drc_test_provider_edge_clearance.cpp:431-439`).
    A finger is meant to reach the edge.
+5. **A distinct value in the property system** — `PAD_DESC` (`pad.cpp:3665-3671`) maps `CONN` to
+   `Edge connector`, so a *user-authored* KiCad DRC rule expression can select on it.
+6. **Reporting and UI**, four more: footprint pad tallies (`footprint.cpp:1687-1700`, where a
+   `CONN` pad counts as neither SMD nor THT), a board-statistics row
+   (`board_statistics_report.cpp:112-114`), the clearance inspector's layer pick
+   (`board_inspection_tool.cpp:818-833`), and the footprint editor's pad-area readout
+   (`pad.cpp:2195-2205`). One further site (`pad.cpp:3229`, a `PAD_PROP::BGA` padstack error) is
+   unreachable from CopperMCP, which refuses any pad carrying a `PAD_PROP`.
+
+Three of these — 3, 5 and the statistics row — change output a user can see, and the reason that
+does not become an exception is stated in the decision below: the output is produced by *KiCad*,
+from a file in which the `connect` token survives.
 
 **Plating is not a pad attribute in KiCad at all.** The issue's hypothesis that gold fingers carry
 a plating semantic does not survive contact with the source: `PAD` has no plating field, the only
@@ -114,6 +138,26 @@ count, not a diagnostic, because every caller of `parse_kicad_bytes` treats a no
 It counts **converted** pads only — after the aperture skip and after every refusal — so it can
 never report copper that was not modelled. It is a number, not a set: nothing tells a caller
 *which* pads were edge connectors.
+
+**And it is readable one layer deep only. From an MCP client the discard is silent.** The count
+lives on `ConversionResult`, which is an in-process return value. `BoardIrSummary`
+(`board_ir_service.py:100-181`) carries no field for it, so it reaches no MCP contract, no CLI
+output and no Circuit Scene. This is not special to this count — `unmodelled_group_count` and
+`max_roundrect_rounding_nm` are equally invisible there, and that is a pre-existing gap rather
+than one this decision opens — but the first version of this ADR said the distinction was
+"discarded loudly", and against the surface most consumers actually use, it is not. R-142 carries
+it, and no surface is widened here to fix it, because doing so is a published-contract change of
+its own and belongs in its own decision.
+
+**What genuinely bounds the loss is the write path, and it is proved rather than asserted.** Both
+patch adapters are source-preserving splices that rewrite only pose and route geometry, never a
+pad header, so the `connect` token survives in the `.kicad_pcb` byte-for-byte — and therefore
+KiCad's own DRC, position file, Gerbers and rule expressions all still see an edge connector, no
+matter what CopperMCP did or did not tell its caller.
+`test_a_placement_splice_leaves_an_edge_connector_pad_token_intact` renders a real placement move
+over a board whose *moved* footprint carries `connect` pads — the hardest case the splice offers,
+since it rewrites that footprint's own `at` and every one of its pads' — and asserts the tokens
+are still there afterwards.
 
 ### Why the equality test proves what it proves, and nothing more
 
@@ -178,30 +222,64 @@ Two results are worth recording rather than just counting:
   (it is keyword-defaulted and appended last), but a caller exhaustively destructuring one gains
   a field. No migration note is required and none is written, because no version constant moves
   and no persisted artifact stops verifying; the `CHANGELOG` entry is the whole notice.
-- **The distinction is genuinely gone from the IR.** A consumer reading `kind == "smd"` cannot
+- **The distinction is genuinely gone from the IR, and the count only partly compensates.** The
+  count is invisible to every published surface (above), so an MCP client sees nothing at all. A
+  consumer reading `kind == "smd"` cannot
   recover that the designer wrote `connect`, and one generating fabrication output would put paste
   on a finger. R-141 carries that; the count is the only signal.
-- `phono-preamp/tier1-rev-a` converts. The measured corpus effect is recorded in the benchmark
-  ledger, not claimed here.
+- `phono-preamp/tier1-rev-a` converts. The measured corpus effect is stated in prose in
+  decision-ledger row D-186; **no benchmark-ledger entry accompanies it**, because the runner's
+  output derives from a private corpus and is deliberately not committed.
 
 ## Alternatives considered
 
-- **Add a `PadKind.EDGE_CONNECTOR` member.** Rejected, and the cost is much sharper than the
-  generic "a new member is a schema change". `BOARD_IR_SCHEMA_VERSION` is written into the
-  canonical payload (`canonical.py:570-571`), so it is inside every Board IR digest. That forces a
-  choice between two bad options. Widening the enum **in place** at `0.2.0` corrupts a published
-  contract: a consumer holding `0.2.0` was promised a closed three-value domain and would reject a
-  snapshot CopperMCP calls valid, silently, at a version that did not change. Bumping to `0.3.0`
-  instead moves `BOARD_IR_V02_SNAPSHOT_DIGEST` and its byte count and cascades into the route
-  candidate, layered candidate, placement candidate, bundle, scene, render, job, manifest, export
-  and attestation identities — every content address in the repository — for a member **nothing
-  reads**: no router, no placer, no scene, no DRC path branches on `PadKind` other than the
-  `Pad` invariants themselves. It would also need the schema's `if kind == "smd" then drill is
-  null else drill is positive` clause rewritten, and the matching `Pad.__post_init__` invariants,
-  or a `connect` pad would be required to carry a drill it cannot have. That is ADR-0091's
-  rejected `PadZoneConnection` alternative with a larger blast radius and the same conclusion:
-  when a surface needs the distinction, that is the change to make, and it should spend a schema
-  version on a field with a consumer.
+- **Add a `PadKind.EDGE_CONNECTOR` member.** Rejected — but on a narrower argument than this
+  ADR first gave, and the correction matters enough to state before the reasoning.
+
+  **The retracted claim.** The first version of this record said `BOARD_IR_SCHEMA_VERSION` "sits
+  inside every Board IR digest", so a bump to `0.3.0` would move `BOARD_IR_V02_SNAPSHOT_DIGEST`
+  and its byte count and cascade into every content address in the project. **That is false, and
+  it was reasoned rather than measured.** The snapshot digest is taken over `_content_payload`
+  (`canonical.py:486`), which carries no schema version; the version appears only in the
+  *envelope* (`canonical.py:571`). Setting `BOARD_IR_SCHEMA_VERSION = "0.3.0"` in a throwaway tree
+  and recomputing gives a **byte-identical digest** (`sha256:157661bf…`) and an **identical
+  encoded length** (4,280 — "0.3.0" and "0.2.0" are the same width). Downstream identities bind
+  `base_revision = snapshot_digest`, so there is no cascade. See D-187.
+
+  **What a bump actually costs**, measured by bumping the constant and running the suite rather
+  than by reading the code: the committed envelope fixture
+  `tests/fixtures/board-ir-v0.2/schema-valid.json` must be regenerated (its `schema_version`
+  string, not its digest); `codec.py:843` refuses every persisted `0.2.0` envelope, which is a
+  real migration for anyone storing snapshots; `BoardIrSummary.ir_schema_version` and a few
+  committed benchmark artifacts carry the string. Bounded and mechanical, not a cascade.
+
+  **Why the decision still stands on the true costs.** Three reasons survive, and one of them is
+  by itself sufficient:
+
+  1. **Widening the enum in place at `0.2.0` is still unacceptable, and that is the cheap-looking
+     option.** A consumer holding the published `0.2.0` schema was promised a closed three-value
+     domain; it would reject a snapshot CopperMCP calls valid, silently, at a version that did not
+     move. Nothing about the digest finding touches this. It is on its own decisive against the
+     no-bump form of the alternative.
+  2. **Nothing reads a fourth member.** No router, placer, scene, DRC or apply path branches on
+     `PadKind` outside `Pad`'s own invariants. Spending a schema version — and imposing
+     `codec.py`'s refusal of stored `0.2.0` envelopes on real users — to record a distinction none
+     of their tooling consumes is the cost ADR-0091 declined to pay for `PadZoneConnection`, on
+     the same reasoning. Reversing that precedent should take a consumer, not a preference.
+  3. **The alternative carries a correctness hazard the digest finding does not touch.** The
+     schema's `if kind == "smd" then drill is null else drill is positive` clause and the matching
+     `Pad.__post_init__` invariant would both need rewriting, or a `connect` pad would be required
+     to carry a drill it cannot have.
+
+  **And the honest counterweight, recorded rather than buried.** Two things found in review make
+  the case *for* eventually modelling the distinction stronger than this ADR first implied: KiCad
+  really does consume it outside fabrication metadata (the pick-and-place exclusion, and a
+  property-system value user-authored DRC rules can name), and CopperMCP's own disclosure is
+  weaker than claimed (R-142). What holds the decision here is that nothing in *this* repository
+  reads it today, and that the write path preserves the token so no user artifact is degraded
+  meanwhile. The bump is now *known* to be cheap — digest-stable, one fixture, one codec gate —
+  which is itself a reason not to pre-pay for it: the option stays open at a price we have
+  measured instead of guessed.
 - **Keep refusing.** Rejected. The refusal is not supported by either direction-of-error rule
   once the source has been read, and ADR-0091 named this failure mode: a refusal without an
   argument is how a tool acquires superstitions.
@@ -228,5 +306,8 @@ Two results are worth recording rather than just counting:
   [ADR-0091](0091-attaching-pad-zone-connect-overrides.md),
   [ADR-0092](0092-net-tie-copper-as-netless-obstacle.md)
 - [KiCad `connect` pad research](../research/kicad-connect-pad-attribute-v1.md)
-- [Decision ledger D-186](../ledgers/decision-ledger.md),
-  [Risk register R-141](../ledgers/risk-register.md)
+- [Decision ledger D-186](../ledgers/decision-ledger.md) and its correction
+  [D-187](../ledgers/decision-ledger.md), which carries the retracted digest-cascade mechanism,
+  the measured cost of a schema bump, and the divergence recount
+- [Risk register R-141](../ledgers/risk-register.md) and
+  [R-142](../ledgers/risk-register.md), which carries the in-process-only reach of the count

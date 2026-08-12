@@ -99,17 +99,20 @@ board. The schema is the field-level reference.
   carrying any child head outside KiCad's own writer vocabulary is refused rather than assumed
   inert. See [ADR-0090](../adr/0090-root-level-board-groups.md).
 - A pad whose kind token is `connect` — KiCad's `PAD_ATTRIB::CONN`, the edge-card connector
-  finger — converts as `PadKind.SMD`. KiCad's own model makes the two the same pad: its
-  connectivity engine, its push-and-shove router, its layer trimming and its hole suppression all
-  put `CONN` and `SMD` in one shared case body, and the three things that differ — no solder
-  paste, a distinct Gerber aperture attribute, and an exemption from the Edge.Cuts clearance DRC
-  test — are all outside what a Board IR `Pad` claims. `PadKind` gains **no member**: nothing in
-  this repository would read it, and `BOARD_IR_SCHEMA_VERSION` sits inside the canonical payload,
-  so widening the enum would either corrupt the published `0.2.0` schema in place or move every
-  content address in the project for a distinction with no consumer. The token is therefore
-  discarded, and discarded loudly: `ConversionResult.edge_connector_pad_count` reports how many
-  pads it happened to, following the same measured-field pattern as the group count above. See
-  [ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md).
+  finger — converts as `PadKind.SMD`. KiCad's own model makes the two the same pad wherever copper
+  is at stake: its connectivity engine, its push-and-shove router, its layer trimming and its hole
+  suppression all put `CONN` and `SMD` in one shared case body. At least ten things do differ —
+  solder paste, the Gerber aperture attribute, pick-and-place "exclude all TH", the Edge.Cuts
+  clearance DRC exemption, a distinct property-system value user DRC rules can name, and four
+  reporting surfaces — and every one is outside what a Board IR `Pad` claims. `PadKind` gains
+  **no member**: nothing in this repository would read it, and widening the published `0.2.0`
+  enum in place would break a consumer promised a closed three-value domain. The token is
+  therefore discarded, and `ConversionResult.edge_connector_pad_count` reports how many pads it
+  happened to — an **in-process** count that reaches no MCP contract, CLI output or scene, exactly
+  like the group count above. What bounds the loss is the write path: both patch adapters are
+  source-preserving splices, so the `connect` token survives in the `.kicad_pcb` and KiCad's own
+  DRC and fabrication output still see an edge connector. See
+  [ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md) and R-142.
 - IDs use type prefixes such as `layer:`, `net:`, `class:`, `footprint:`, `pad:`, `via:`,
   `segment:`, `arc:`, `zone:`, `keepout:`, `contour:`, and `rule:`. IDs and display names have
   different roles.

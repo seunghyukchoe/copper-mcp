@@ -14,16 +14,43 @@ format definition.
 
 ## Sources
 
-All citations are against commit `42cc8ba` of the KiCad source mirror
-(<https://github.com/KiCad/kicad-source-mirror>), fetched 2026-08-12, together with the
-S-expression board format documentation at <https://dev-docs.kicad.org/en/file-formats/sexpr-pcb/>.
+All citations are against the KiCad source mirror
+(<https://github.com/KiCad/kicad-source-mirror>), together with the S-expression board format
+documentation at <https://dev-docs.kicad.org/en/file-formats/sexpr-pcb/>. First read at commit
+`42cc8ba` and re-verified line-for-line at commit `72eb6aa` on the same day, when the second
+sweep below was added; every cited line number is identical at both, and the occurrence count is
+unchanged.
 
-The method is exhaustive rather than illustrative: every occurrence of `PAD_ATTRIB::CONN` in the
-tree was enumerated and read. Import plug-ins for foreign formats (Altium, Eagle, CADSTAR,
-EasyEDA, Fabmaster, P-CAD, gEDA, legacy, ODB++, IPC-2581, SolidWorks) are excluded — they only
-decide which KiCad attribute a *foreign* pad becomes, and say nothing about what the attribute
-means once it exists. What remains is **35 occurrences across 17 files**, and all of them are
-accounted for below.
+### Method, and the blind spot the first version of this note had
+
+The first sweep enumerated every occurrence of `PAD_ATTRIB::CONN` and read all of them. Import
+plug-ins for foreign formats (Altium, Eagle, CADSTAR, EasyEDA, Fabmaster, P-CAD, gEDA, legacy,
+ODB++, IPC-2581, SolidWorks, DipTrace, Autotrax, Sprint-Layout, PADS, Allegro) are excluded — they
+only decide which KiCad attribute a *foreign* pad becomes, and say nothing about what the
+attribute means once it exists. What remains is **35 occurrences across 17 files**.
+
+**That sweep is structurally incomplete, and adversarial review of PR #149 proved it.** A site
+that tests `== PAD_ATTRIB::SMD` *alone* contains no `CONN` literal, so it is invisible to a
+`CONN` grep — and a `CONN` pad silently takes the other branch. `FOOTPRINT::HasThroughHolePads`
+(Finding 2, difference 4) is exactly that shape, and the first version of this note missed it and
+then claimed exhaustiveness anyway. **The lesson is the method, not the site: a grep for the
+value you are reasoning about cannot see the branches that test its siblings.**
+
+The sweep is therefore run twice, and the second half is what completes it for direct attribute
+reads:
+
+- `CONN` and `SMD` can only diverge at a site that either names `CONN` explicitly, or tests `SMD`
+  alone. A test on `PTH` or `NPTH` puts `SMD` and `CONN` in the *same* branch, so it cannot
+  separate them — that was checked rather than assumed, by sweeping those two literals as well
+  and finding no site where the two part company.
+- So the union of the `CONN` sweep and the `SMD` sweep is complete **for direct comparisons of
+  the pad attribute inside `pcbnew/`**.
+
+What that union still does not cover, stated so no later reader mistakes it for exhaustiveness:
+behaviour reached through the property system by *user-authored* DRC rule expressions (which can
+name `Edge connector` — Finding 2, difference 5), external plugins reading `PT_EDGE_CONNECTOR`
+over the IPC API, and anything outside the swept directories. The list below is therefore a
+**lower bound** of at least ten divergences, not a complete enumeration.
 
 ## Finding 1 — the token, and the closed vocabulary it belongs to
 
@@ -52,13 +79,14 @@ handler treats the two identically when deciding whether to keep a parsed drill 
 (`…_sexpr_parser.cpp:6589-6592`). **A `connect` pad has no hole, established at the parser and not
 merely by convention.**
 
-## Finding 2 — every place KiCad distinguishes `CONN` from `SMD`
+## Finding 2 — where `CONN` and `SMD` share a branch, and where they part
 
-This is the finding the modelling turns on. The 35 non-importer occurrences fall into three
-groups: sites that put `CONN` and `SMD` in one shared case body or one shared boolean; sites that
-name `CONN` separately but produce no geometry (serialization, the IPC API enum mapping, a
-statistics row, two UI filters, six display strings); and exactly **three** sites where a `CONN`
-pad is genuinely treated differently. The shared-body sites, by subsystem:
+This is the finding the modelling turns on, and it has two halves. The first is a *universal*
+claim and is the load-bearing one; the second is a *lower bound* and is not.
+
+**The universal half.** Every subsystem that decides what copper a pad is, where it sits, what
+it spans, whether it has a hole, or what it connects to puts `CONN` and `SMD` in one shared case
+body. These are the sites, by subsystem:
 
 | Subsystem | Site | What the shared branch does |
 |---|---|---|
@@ -75,18 +103,22 @@ pad is genuinely treated differently. The shared-body sites, by subsystem:
 | Teardrops | `dialogs/dialog_global_edit_teardrops.cpp:403-405` | the "SMD pads" checkbox selects `SMD` and `CONN` together |
 | UI text | `pad.cpp:2185-2192`, `pad.cpp:2555-2605` | both describe themselves by layer mask rather than as "PTH pad" |
 
-The no-geometry sites are the file writer and parser (Finding 1), the IPC API enum mapping to
-`PT_EDGE_CONNECTOR` (`api/api_pcb_enums.cpp:67`, `:85`), a board-statistics row
-(`board_statistics_report.cpp:114`), the pad-type display strings (`pad.cpp:2540`, `pad.cpp:3671`,
-`dialogs/dialog_fp_edit_pad_table.cpp:214`), the pad-properties and pad-table dialogs that let a
-user *set* the attribute (`dialog_pad_properties.cpp:93`, `:775`;
+Serialization, the IPC API enum mapping to `PT_EDGE_CONNECTOR` (`api/api_pcb_enums.cpp:67`,
+`:85`), the pad-type display strings (`pad.cpp:2540`, `dialogs/dialog_fp_edit_pad_table.cpp:214`),
+the dialogs that let a user *set* the attribute (`dialog_pad_properties.cpp:93`, `:775`;
 `dialog_fp_edit_pad_table.cpp:438`, `:645`), and the "push pad settings" type filter
-(`tools/pad_tool.cpp:222-227`), which special-cases `CONN` only to keep aperture and non-aperture
-pads apart. None of them changes what copper a pad is.
+(`tools/pad_tool.cpp:222-227`) all name `CONN` separately without changing what copper a pad is.
 
-**There is no site anywhere that gives a `CONN` pad different copper, a different shape, a
+**Across both sweeps, no site anywhere gives a `CONN` pad different copper, a different shape, a
 different size, a different position, a different layer span, a different hole, or a different
-electrical connection from an `SMD` pad.** The three genuine differences are:
+electrical connection from an `SMD` pad.** That is the claim the modelling rests on, and the
+second sweep is what lets it be stated: a divergence must name `CONN` or test `SMD` alone, and
+both literals have now been read.
+
+**The lower-bound half.** At least **ten** sites do treat a `CONN` pad differently. None is
+copper geometry or connectivity, and they sort into four classes:
+
+*Fabrication and export output — three:*
 
 1. **Solder paste.** `pad.cpp:3252-3257`: a `CONN` pad carrying `F.Paste` or `B.Paste` raises
    `DRCE_PADSTACK` advising an SMD pad instead — and then falls through into the `SMD` case, which
@@ -95,10 +127,36 @@ electrical connection from an `SMD` pad.** The three genuine differences are:
 2. **Gerber aperture attribute.** `plot_brditems_plotter.cpp:206-227`: on an outer copper layer a
    `CONN` pad plots with `GBR_APERTURE_ATTRIB_CONNECTORPAD` where an `SMD` pad plots with
    `GBR_APERTURE_ATTRIB_SMDPAD_CUDEF`. Fabrication metadata; identical geometry.
-3. **Edge.Cuts clearance DRC exemption.** `drc/drc_test_provider_edge_clearance.cpp:431-439`: a
+3. **Pick-and-place exclusion.** `FOOTPRINT::HasThroughHolePads` (`footprint.cpp:4451-4460`)
+   returns true when *any* pad is `!= PAD_ATTRIB::SMD`, so a `CONN` pad makes its whole footprint
+   count as through-hole. Its sole caller, `exporters/place_file_exporter.cpp:145`, drops that
+   footprint from the position file under "exclude all TH". **This is the site the first sweep
+   missed** — it contains no `CONN` literal.
+
+*Rule and DRC surface — two:*
+
+4. **Edge.Cuts clearance DRC exemption.** `drc/drc_test_provider_edge_clearance.cpp:431-439`: a
    `CONN` pad is skipped by the board-edge clearance test entirely, grouped with
-   `PAD_PROP::CASTELLATED`. This is the one difference that is not about fabrication output: an
-   edge-connector finger is *meant* to run to the board edge, and KiCad declines to flag it.
+   `PAD_PROP::CASTELLATED`. An edge-connector finger is *meant* to run to the board edge, and
+   KiCad declines to flag it.
+5. **A distinct value in the property system.** `PAD_DESC` (`pad.cpp:3665-3671`) maps `CONN` to
+   `Edge connector` where `SMD` maps to `SMD`, so a *user-authored* KiCad DRC rule expression can
+   select on it. This is the one divergence reachable by something a board author writes rather
+   than something KiCad decides.
+
+*Reporting and UI only — four:*
+
+6. Footprint pad tallies: `footprint.cpp:1687-1700` increments `smd_count` only for `SMD` and
+   `tht_count` only for `PTH`, so a `CONN` pad is counted as neither.
+7. Board statistics: `board_statistics_report.cpp:112-114` gives `CONN` its own "Connector:" row.
+8. The clearance inspector's layer pick: `tools/board_inspection_tool.cpp:818-833` special-cases
+   `SMD` alone, so a `CONN` pad falls to the generic branch.
+9. The footprint editor's pad-area readout: `pad.cpp:2195-2205`, shown for `SMD` only.
+
+*Unreachable from CopperMCP — one:*
+
+10. `pad.cpp:3229` raises a padstack error for a `PAD_PROP::BGA` pad that is not `SMD`. CopperMCP
+    refuses any pad carrying a `PAD_PROP` at all, so this cannot be reached through it.
 
 ## Finding 3 — plating is not a pad attribute at all
 
@@ -131,12 +189,20 @@ argument the `smd` aperture rests on; it is deferred, not rejected on principle.
 ## Finding 4 — what this means for the direction-of-error rules
 
 CopperMCP requires obstacles to over-approximate and connectivity and the board outline to
-under-approximate. Taking the three differences in turn, against a model that converts a `connect`
-pad exactly as an `smd` pad:
+under-approximate. Taking every divergence class in turn, against a model that converts a
+`connect` pad exactly as an `smd` pad:
 
 - **Paste.** Board IR models copper geometry and carries no paste layer, no mask layer, and no
   fabrication output. Nothing over- or under-approximates, because nothing is claimed.
-- **Gerber aperture attribute.** Same: CopperMCP emits no Gerber.
+- **Gerber aperture attribute, pick-and-place exclusion, statistics rows, UI readouts.** Same:
+  CopperMCP emits no Gerber, no position file, no board statistics and no pad dialog. It is worth
+  saying why the pick-and-place case does not become an exception even though it changes real
+  fabrication output: the output is produced by *KiCad*, from the `.kicad_pcb` file, and the
+  `connect` token is still in that file — both CopperMCP patch adapters are source-preserving
+  splices that rewrite only pose and route geometry. Nothing CopperMCP writes can turn a finger
+  into an SMD pad, so KiCad's position file, Gerbers and DRC all still see `connect`.
+- **The property-system value.** A user-authored DRC rule naming `Edge connector` is evaluated by
+  KiCad against the file, for the same reason. CopperMCP evaluates no rule expressions.
 - **Edge clearance exemption.** CopperMCP derives no edge clearance of its own. Authoritative DRC
   is delegated to KiCad (ADR-0004), which applies its own exemption, so the exemption is honoured
   by the only surface that consults it. In the *routing* direction the exemption cannot be
@@ -159,5 +225,8 @@ pad claims exactly what KiCad claims — no more.
   attribute token.
 - It does not establish that a `connect` pad with a paste layer is meaningful. KiCad's own padstack
   test calls that combination an error, and CopperMCP refuses it rather than guessing.
-- It measures nothing. The corpus effect of the decision it supports is recorded in the benchmark
-  ledger, not here.
+- It measures nothing, and **no benchmark-ledger entry accompanies it.** The corpus effect of the
+  decision it supports is stated in prose in decision-ledger row D-186, because the runner's
+  output derives from a private corpus and is deliberately not committed. An earlier version of
+  this sentence said the effect was "recorded in the benchmark ledger", which was never true; that
+  is corrected here and in D-187.

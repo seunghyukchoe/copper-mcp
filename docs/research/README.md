@@ -129,14 +129,18 @@ When adding a document, add it to the list below in the same sentence form — *
   about how the override should eventually be modelled, nothing about thermal spoke geometry, and
   nothing about the population of boards that carry it.
 - [KiCad `connect` pads](./kicad-connect-pad-attribute-v1.md) establishes what
-  `PAD_ATTRIB::CONN` is by enumerating and reading **every** occurrence of it in KiCad's source
-  outside the foreign-format import plug-ins — 35 across 17 files. Its central finding is that the
+  `PAD_ATTRIB::CONN` is from two sweeps of KiCad's source outside the foreign-format import
+  plug-ins: every occurrence of `PAD_ATTRIB::CONN` (35 across 17 files) and every occurrence of
+  `PAD_ATTRIB::SMD`. Its central finding is universal and is what the modelling rests on — the
   connectivity engine, the push-and-shove router, layer trimming and hole suppression all put
-  `CONN` and `SMD` in one shared case body, so exactly three things differ: solder paste, the
-  Gerber aperture attribute, and an exemption from the Edge.Cuts clearance DRC test. It also
-  disposes of the plating hypothesis — plating is not a pad attribute in KiCad at all. It grounds
-  ADR-0096, and claims nothing about castellated pads, per-layer padstacks, or the population of
-  boards that carry an edge connector.
+  `CONN` and `SMD` in one shared case body, so no site anywhere gives the two different copper,
+  layer span, hole or connectivity. It also carries a **lower bound** of ten divergences, none of
+  them geometric, and the methodological correction that produced it: a sweep for one enum value
+  is structurally blind to branches testing its siblings, which is how the first version missed
+  the pick-and-place exclusion and then claimed exhaustiveness anyway. It disposes of the plating
+  hypothesis — plating is not a pad attribute in KiCad at all. It grounds ADR-0096 and D-187, and
+  claims nothing about castellated pads, per-layer padstacks, behaviour reached through
+  user-authored DRC rules, or the population of boards that carry an edge connector.
 - [KiCad arc tracks as routing obstacles](./kicad-arc-track-obstacles-v1.md) grounds ADR-0070's
   conservative arc envelope in the official S-expression arc grammar and the inscribed-angle
   theorem, and states plainly that the envelope is loose for a near-semicircular arc and claims

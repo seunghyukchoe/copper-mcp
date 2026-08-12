@@ -1884,27 +1884,38 @@ class _Converter:
                 # control flow. That board no longer reaches it; see below.
                 #
                 # `connect` is KiCad's `PAD_ATTRIB::CONN`, and it converts as `PadKind.SMD`
-                # because that is what KiCad's own model says it is, not as a convenience. Every
-                # branch in KiCad 10 that mentions `CONN` either groups it with `SMD` in the same
-                # case body or concerns fabrication output Board IR does not model; there is no
-                # branch anywhere that gives it different copper, a different layer span, a
-                # different hole, or different connectivity. `connectivity_items.cpp:164-176`
+                # because that is what KiCad's own model says it is, not as a convenience. The
+                # claim that matters is universal and was established by sweeping *two* literals,
+                # `PAD_ATTRIB::CONN` and `PAD_ATTRIB::SMD` -- the second because a site testing
+                # `== SMD` alone contains no `CONN` token and is invisible to a `CONN` grep, which
+                # is how the first version of this work missed one. **No site anywhere gives a
+                # `CONN` pad different copper, a different layer span, a different hole, or
+                # different connectivity from an `SMD` pad.** `connectivity_items.cpp:164-176`
                 # puts `SMD`, `CONN` and `NPTH` in one case that pins the item to the front of
                 # its copper stack; `pns_kicad_iface.cpp:1631-1648` gives `CONN` and `SMD` one
                 # shared case; `pad.cpp:1626-1641` trims both to at most one copper layer;
                 # `pad.cpp:2886-2891` and the parser at `…_sexpr_parser.cpp:6433-6437` force the
-                # drill to zero for both. What differs is solder paste (`pad.cpp:3252-3257`
-                # raises `DRCE_PADSTACK` when a `CONN` pad carries a paste layer), the Gerber
-                # aperture attribute (`plot_brditems_plotter.cpp:206-227`), and an exemption from
-                # the Edge.Cuts clearance DRC test (`drc_test_provider_edge_clearance.cpp:431-
-                # 439`, where it is grouped with `PAD_PROP::CASTELLATED`) -- a finger is meant to
-                # run to the board edge. Board IR models no paste layer, emits no Gerber, and
-                # derives no edge clearance of its own (ADR-0004 delegates DRC to KiCad, which
-                # applies that exemption itself), so all three are outside what a `Pad` claims.
+                # drill to zero for both.
                 #
-                # The distinction is therefore *discarded*, not preserved, and it is counted
-                # rather than dropped in silence: see `edge_connector_pad_count` below and
-                # ADR-0096, which also records why a new `PadKind` member was rejected.
+                # At least ten things *do* differ -- a lower bound, not an enumeration -- and none
+                # is geometry or connectivity: solder paste (`pad.cpp:3252-3257`), the Gerber
+                # aperture attribute (`plot_brditems_plotter.cpp:206-227`), pick-and-place
+                # "exclude all TH" (`footprint.cpp:4451-4460` via
+                # `place_file_exporter.cpp:145`), the Edge.Cuts clearance DRC exemption
+                # (`drc_test_provider_edge_clearance.cpp:431-439`), a distinct property-system
+                # value user-authored DRC rules can name (`pad.cpp:3665-3671`), and four
+                # reporting surfaces. Board IR models no paste, emits no Gerber and no position
+                # file, evaluates no rule expressions, and derives no edge clearance of its own
+                # (ADR-0004 delegates DRC to KiCad), so every one is outside what a `Pad` claims
+                # -- and the outputs that do change are produced by KiCad from a file in which
+                # the `connect` token survives, because both patch adapters are source-preserving
+                # splices that never rewrite a pad header.
+                #
+                # The distinction is therefore *discarded*, not preserved. It is counted rather
+                # than dropped in silence -- see `edge_connector_pad_count` below -- but that
+                # count is in-process only and reaches no published surface (R-142). ADR-0096 and
+                # D-187 record why a new `PadKind` member was rejected, and what that alternative
+                # actually costs.
                 if raw_kind not in _PAD_KIND_BY_TOKEN:
                     self.fail(
                         "unsupported.construct",

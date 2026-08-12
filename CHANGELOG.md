@@ -14,31 +14,38 @@ All notable changes are documented here. The format follows
   `enum` in the published `schemas/board-ir/0.2.0.schema.json`, so what to do with a fourth kind is
   a contract decision.
 
-  What `connect` is was established by enumerating and reading **every** occurrence of
-  `PAD_ATTRIB::CONN` in KiCad's source outside the foreign-format import plug-ins — 35 occurrences
-  across 17 files. KiCad's own model makes it the same pad as `smd`: the connectivity engine puts
-  `SMD`, `NPTH` and `CONN` in one case that pins the item to a single copper layer; the
-  push-and-shove router gives `CONN` and `SMD` one shared case; layer trimming and hole
-  suppression treat them identically; and the pad-properties dialog says so in its own comment.
-  Exactly three things differ, and all three sit outside what a Board IR `Pad` claims — no solder
-  paste, a distinct Gerber aperture attribute, and an exemption from the Edge.Cuts clearance DRC
-  test. Plating is not a pad attribute in KiCad at all: the only plated/unplated distinction is
-  `PTH` versus `NPTH`, which is about the hole, and a `connect` pad has none.
+  What `connect` is was established by two sweeps of KiCad's source outside the foreign-format
+  import plug-ins: every occurrence of `PAD_ATTRIB::CONN` — 35 across 17 files — and, because
+  that is structurally blind to sites testing `== PAD_ATTRIB::SMD` alone where a `CONN` pad
+  silently takes the other branch, every occurrence of `PAD_ATTRIB::SMD` too. KiCad's own model
+  makes it the same pad as `smd` wherever copper is at stake: the connectivity engine puts `SMD`,
+  `NPTH` and `CONN` in one case pinning the item to a single copper layer; the push-and-shove
+  router gives `CONN` and `SMD` one shared case; layer trimming and hole suppression treat them
+  identically; the pad-properties dialog says so in its own comment. **At least ten** things do
+  differ — a lower bound, not an enumeration — and every one sits outside what a Board IR `Pad`
+  claims: solder paste, the Gerber aperture attribute, pick-and-place "exclude all TH", the
+  Edge.Cuts clearance DRC exemption, a distinct property-system value that user-authored DRC rules
+  can name, and four reporting surfaces. Plating is not a pad attribute in KiCad at all: the only
+  plated/unplated distinction is `PTH` versus `NPTH`, which is about the hole.
 
   **`PadKind` gains no member and no published schema changes.** Nothing in this repository would
-  read a fourth member, and `BOARD_IR_SCHEMA_VERSION` sits inside the canonical payload — so
-  widening the enum would either corrupt the published `0.2.0` contract in place, promising a
-  closed three-value domain and then breaking it silently, or bump to `0.3.0` and move every
-  content address in the project for a distinction with no consumer. **No pinned identity in
-  `tests/test_golden_identities.py` moves**, and no board that converted before converts
-  differently.
+  read a fourth member, and widening the published `0.2.0` enum in place would silently break a
+  consumer promised a closed three-value domain. Bumping to `0.3.0` instead is *cheaper* than this
+  entry first claimed — measured, the snapshot digest and its byte count do not move at all — but
+  it still refuses every persisted `0.2.0` envelope at `codec.py`, for a member nothing reads.
+  **No pinned identity in `tests/test_golden_identities.py` moves**, and no board that converted
+  before converts differently.
 
-  The token is discarded, and discarded loudly: `ConversionResult.edge_connector_pad_count`
-  reports how many pads it happened to, the same measured-field pattern as
-  `unmodelled_group_count`. One form still refuses — a `connect` pad with **no copper layer at
-  all**: the paste/mask aperture skip tests the source token and requires literally `smd`, so an
-  aperture-shaped edge-connector pad is refused rather than read past. That is unchanged
-  behaviour, since every `connect` pad refused before.
+  The token is discarded, and the count is the disclosure —
+  `ConversionResult.edge_connector_pad_count`, the same measured-field pattern as
+  `unmodelled_group_count`. Be clear about its reach: it is an **in-process** value on
+  `ConversionResult` and reaches no MCP contract, CLI output or scene, so from an MCP client the
+  discard is silent. What bounds the loss is the write path — both patch adapters are
+  source-preserving splices, so the `connect` token survives in the `.kicad_pcb` byte-for-byte and
+  KiCad's own DRC, position file and Gerbers still see an edge connector. One form still refuses:
+  a `connect` pad with **no copper layer at all**, because the paste/mask aperture skip tests the
+  source token and requires literally `smd`. That is unchanged behaviour, since every `connect`
+  pad refused before.
 
   `_UNMODELLED_PAD_KINDS` is deleted rather than emptied. Its one entry was `connect`; KiCad's pad
   attribute is closed at four tokens and all four are now modelled, so a lookup that can never
@@ -54,6 +61,15 @@ All notable changes are documented here. The format follows
   the pre-existing revision-derived-identity reason B-099 recorded.
   ([ADR-0096](docs/adr/0096-edge-connector-pads-convert-as-smd.md),
   [#138](https://github.com/seunghyukchoe/copper-mcp/issues/138))
+
+- **A placement splice is now proved to leave an edge-connector pad's token intact.** The mapping
+  above is only tolerable because the *file* still records what Board IR no longer does, and that
+  was an assertion. `test_a_placement_splice_leaves_an_edge_connector_pad_token_intact` renders a
+  real placement move over a board whose *moved* footprint carries `connect` pads — the hardest
+  case the write-back path offers, since the splice rewrites that footprint's own `at` and every
+  one of its pads' — and asserts the tokens survive byte-for-byte. If a future splice ever
+  re-emitted a pad header from Board IR it would write `smd` over `connect`, silently adding
+  solder paste to an edge-connector finger; this fails first.
 
 ### Changed
 

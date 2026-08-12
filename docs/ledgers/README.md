@@ -23,8 +23,8 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-186` | `D-187` |
-| [Risk register](risk-register.md) | `R-` | `R-141` | `R-142` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-187` | `D-188` |
+| [Risk register](risk-register.md) | `R-` | `R-142` | `R-143` |
 | [Security review ledger](security-ledger.md) | `SEC-` | `SEC-137` | `SEC-138` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-100` | `B-101` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
@@ -63,7 +63,10 @@ The rules:
 
    `D-184`/`D-185`, `R-139`/`R-140` and `SEC-135`/`SEC-136` are the same mechanism running again
    at the time of writing: two branches were open on this same base holding one pair each (issues
-   #140 and #141), so `D-186`/`R-141`/`SEC-137` stepped over both rather than racing them. They are
+   #140 and #141), so `D-186`/`R-141`/`SEC-137` stepped over both rather than racing them. (`D-187`
+   and `R-142` were then taken on the same branch, by rule 3: adversarial review found a false
+   mechanism in `D-186`, and a row that has been pushed is corrected with a new ID rather than
+   edited, even though it had not yet reached `main`.) They are
    **live claims, not gaps**, and the checker reports them as unallocated because it cannot see an
    unmerged branch. If either branch is abandoned its numbers become permanent gaps like any other
    spent number, and this paragraph becomes the correction to make.
