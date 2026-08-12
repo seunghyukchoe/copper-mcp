@@ -2962,6 +2962,13 @@ _COPPER_TEXT_REFUSAL_MESSAGE = (
 def test_root_copper_text_refuses_under_its_own_name(head: bytes, layer: bytes) -> None:
     """Copper lettering is real copper, and it refuses saying so rather than as "a graphic".
 
+    Both heads, deliberately. `gr_text_box` is the one that looks separable — it carries two exact
+    nanometre corners in the document, which would be a derivable envelope — and it is not: those
+    corners bound neither axis, overflowing 0.1425 mm below for a descender, 3.86 mm above and
+    3.75 mm below for thirty wrapping words, and 11.10 mm to each side for one unbreakable
+    52-character word, all measured in section 4.4 of the envelope research note. Splitting this
+    parametrisation is therefore a decision that needs a new measurement, not a simplification.
+
     The refusal itself is ADR-0095's decision and is not new: what is new is that it names the
     construct. A drawn `gr_line` on copper and a `gr_text` on copper used to report the same
     sentence, and they do not fail for the same reason. A drawn primitive carries its own

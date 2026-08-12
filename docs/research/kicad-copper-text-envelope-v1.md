@@ -15,7 +15,7 @@ document carries — `at`, `size`, `thickness`, the string, and the `(effects �
 [ADR-0013](../adr/0013-polygon-zone-obstacles.md) is the template: it does not model a zone's fill,
 it models a region the fill provably cannot leave.
 
-The answer is no, for three independent reasons, and each one is measured rather than argued.
+The answer is no, for four independent reasons, and each one is measured rather than argued.
 
 No board content from the surveyed working tree is reproduced here. The corpus appears only as
 counts; every measured figure below comes from a synthetic board authored for this note, and those
@@ -74,19 +74,20 @@ legend. And the corpus is one project family in any case; it is not the accepted
 Board IR's accepted set is defined by what the adapter admits, and anything it admits it must be
 correct for.
 
-## 3 — What *is* derivable, so that the gap is stated exactly
+## 3 — What the other inputs do, so that the gap is stated exactly
 
-Two of the four inputs are settled, and neither is the problem.
+Two of the four inputs are *not* where the problem is. That is a weaker statement than "settled",
+and the difference matters — see the caveat at the end of this section.
 
-**The pen width is bounded from the file, whatever the file says.**
-`EDA_TEXT::GetEffectiveTextPenWidth` ends with `penWidth = ClampTextPenSize( penWidth,
-GetTextSize() )`, and `ClampTextPenSize( aPenSize, aSize, aStrict )` is
+**The pen width has a bound, and its status is exactly the status of every other read of one
+build's source.** `EDA_TEXT::GetEffectiveTextPenWidth` ends with
+`penWidth = ClampTextPenSize( penWidth, GetTextSize() )`, and
+`ClampTextPenSize( aPenSize, aSize, aStrict )` is
 `std::min( aPenSize, KiROUND( aSize * (aStrict ? 0.18 : 0.25) ) )` over
-`std::min( |size.x|, |size.y| )`. So the plotted stroke width can never exceed a quarter of the
-smaller text dimension, no matter what `(thickness …)` claims. Measured at `(size 1.27 1.27)`:
-declared `0.5` and declared `2.0` **both** plot at `0.3175` mm, exactly `1.27 / 4`. A declared
-thickness is therefore always an over-estimate of the plotted pen and using it is safe; an absent
-one is covered by the same clamp.
+`std::min( |size.x|, |size.y| )`. So the plotted stroke width cannot exceed a quarter of the
+smaller text dimension, whatever `(thickness …)` claims. Measured at `(size 1.27 1.27)`: declared
+`0.5` and declared `2.0` **both** plot at `0.3175` mm, exactly `1.27 / 4`. A declared thickness is
+therefore an over-estimate of the plotted pen, and an absent one is covered by the same clamp.
 
 **`at`, the rotation and `justify` place the box, and do so predictably.** Measured on `mmmm` at
 `(size 1.27 1.27)` anchored at `(50, 30)`: `justify left` puts the ink at x ∈ [50.33, 56.65],
@@ -97,7 +98,17 @@ one is covered by the same clamp.
 What is not derivable is the only thing that matters: **which glyphs get plotted, and how far each
 one reaches**.
 
-## 4 — Three reasons the plotted glyph run is not a function of the board document
+**The caveat, stated rather than left implicit.** "The clamp only lowers" is a fact about KiCad
+10.0.5's source, read from that source — which is *the same class of fact* as "no Newstroke glyph
+advances more than 1.5083 × size", and §5's condition 4 refuses to rely on that class without a
+mechanism that makes a build mismatch refuse. Calling the pen width "settled" while refusing the
+glyph extents on those grounds would be claiming more for one than the argument permits for the
+other. It costs nothing to be consistent here, because **the pen bound is not load-bearing**: the
+construct refuses whatever the pen does, and the bound is recorded only so the reader can see
+exactly which inputs are and are not the reason. If the construct were ever accepted, the clamp
+would need condition 4 just as much as the glyph table does.
+
+## 4 — Four reasons the plotted copper is not a function of the board document
 
 ### 4.1 `${…}` resolves from documents CopperMCP does not read, and from no document at all
 
@@ -146,7 +157,7 @@ This is the case the corpus actually carries, and it is the one where a bound lo
 is not, and it fails one step earlier than expected.
 
 **KiCad's own text bounding box excludes part of the plotted copper.**
-`STROKE_FONT::drawSingleLineText` ends with `aBBox->SetEnd( cursor.x - KiROUND( glyphSize.x * INTER_CHAR ), cursor.y - glyphSize.y )`
+`STROKE_FONT::GetTextAsGlyphs` ends with `aBBox->SetEnd( cursor.x - KiROUND( glyphSize.x * INTER_CHAR ), cursor.y - glyphSize.y )`
 — the box is exactly `size.y` tall, measured up from the baseline. Descenders and overbars are
 outside it by construction. Measured at `(size 1.27 1.27)` with `justify left bottom`, which is
 KiCad placing *its own* box's bottom edge at the anchor `y = 30`, so ink past `y = 30` is ink
@@ -185,7 +196,7 @@ false ceilings one step outside the sample. Measured the same way, at the same s
 | `漢` | 2.0970 mm | **1.6512** |
 
 `Ж` alone is 12.6 % over the ASCII ceiling, and an overbar run reaches 0.884 × size above the
-anchor against an ASCII ceiling of 0.7493. `drawSingleLineText` indexes glyphs as
+anchor against an ASCII ceiling of 0.7493. `GetTextAsGlyphs` indexes glyphs as
 `dd = c - ' '` against `m_glyphBoundingBoxes->size()`, so the repertoire is finite — but its size, and every extent in it,
 is a property of the KiCad build doing the plotting. Nothing in the board file, in the format, or
 in CopperMCP declares which build that is, so a glyph widened in a later Newstroke turns every
@@ -204,6 +215,54 @@ Three further layout behaviours would each need their own bound and none is in t
 `INTER_CHAR = 0.2` between glyphs, `SUPER_SUB_SIZE_MULTIPLIER = 0.8` with `SUPER_HEIGHT_OFFSET =
 0.35` / `SUB_HEIGHT_OFFSET = 0.15` for `^{}` and `_{}`, and `\t` snapping to a four-column stop
 (measured at 1.27 mm: `A\tB` plots 5.8436 mm wide against 2.1545 mm for `AB`).
+
+### 4.4 `gr_text_box` carries its own corners, and they bound neither dimension
+
+This is the strongest objection to refusing text, and it deserves its own measurement rather than
+being folded in by analogy. A `gr_text_box` is placed by `(start …)` and `(end …)` — two corners,
+in the document, in exact nanometres. If the plotted copper stayed inside them there would be a
+derivable envelope for at least one of the two heads, and refusing both identically would be
+wrong.
+
+It does not stay inside them. Declared box `(start 20 30) (end 60 32)` — 40 × 2 mm — at
+`(size 1.27 1.27)`, measuring **the glyph strokes only** with the plotted border excluded (the
+`<g class="stroked-text">` groups, so the rectangle KiCad draws at the declared corners cannot be
+mistaken for text ink):
+
+| String | Overflows the declared box by |
+|---|---|
+| `mmmm` | nothing — inside |
+| `(g)pqy` | **0.1425 mm below the bottom edge** |
+| `~{ABC}` | **0.1227 mm above the top edge** |
+| `word` × 30 | **3.8594 mm above and 3.7479 mm below** |
+| one unbreakable 52-character word | **11.1037 mm left and 11.0432 mm right** |
+
+Both overflows are unbounded, and both scale linearly with a string length that §4.1 has already
+shown is not derivable:
+
+| One unbreakable word | Ink width | Horizontal overflow, each side |
+|---|---:|---:|
+| 26 characters | 31.0017 mm | inside |
+| 52 characters | 62.1469 mm | ≈ 11.07 mm |
+| 104 characters | 124.4373 mm | ≈ 42.22 mm |
+| 208 characters | 249.0183 mm | ≈ 104.51 mm |
+
+| Wrapping words | Ink height | Vertical overflow, each side |
+|---|---:|---:|
+| 5 words | 1.4288 mm | inside |
+| 14 words | 3.4734 mm | ≈ 0.74 mm |
+| 30 words | 9.6073 mm | ≈ 3.80 mm |
+| 60 words | 17.7858 mm | ≈ 7.89 mm |
+
+Two mechanisms, and neither is a corner case. **Vertically**, the box wraps: text longer than one
+line grows the block downward *and* upward past both declared edges, so the height is a function of
+the line count, which is a function of the string. **Horizontally**, a run with no break
+opportunity cannot wrap at all, so it is laid out at full advance and centred — a 208-character
+word overflows a 40 mm box by more than 104 mm on each side, ten times the box's own width.
+
+So the corners are not an envelope in either axis. They are a *layout hint*, and the copper is
+placed relative to them by the same font machinery §4.3 shows is not in the document. That is why
+the refusal covers both heads identically, and it is measured rather than assumed.
 
 ## 5 — Verdict, and what would have to become true
 
@@ -229,6 +288,33 @@ are required; any three leave a hole.
    version has to be checkable at conversion time, so that a KiCad whose Newstroke differs from the
    pinned one refuses instead of silently under-approximating. Without this, item 3 is sound only
    for the build it was measured against, which is the same thing as unsound. (Answers 4.3.)
+5. **The corners of a `gr_text_box` must bound its copper**, or the head stays refused separately
+   from `gr_text`. Today they bound neither axis and both overflows scale with the string, so
+   nothing is gained by splitting the two heads. (Answers 4.4.)
+
+### 5.1 — A note on how the citations in this document are checked
+
+Every KiCad symbol named above was verified by fetching `kicad-source-mirror` at tag `10.0.5` and
+reading the file, not from memory. That verification is a **manual** step and no gate performs it.
+`scripts/check_doc_links.py` answers two questions — does a relative Markdown link resolve, and
+does a label naming a record (`ADR-NNNN`, `D-NNN`, …) agree with the record its target identifies —
+and a **code-symbol label is structurally outside both**. A Markdown link whose label is
+`FOO::bar` and whose target is a `github.com/.../foo.cpp#L1-L2` URL passes whether or not
+`FOO::bar` exists, because the target is a network URL the checker deliberately does not fetch and
+the label carries no record identifier for it to judge.
+
+This is not hypothetical here. The first version of this note attributed the bounding-box line to
+`STROKE_FONT::drawSingleLineText`, a KiCad-6-era name that does not exist at 10.0.5; the line is
+real and lives in `STROKE_FONT::GetTextAsGlyphs`. Right target, wrong label — exactly the class
+`D-182` records for a Markdown link whose target resolved and whose label named the wrong ADR, and
+exactly the class that checker was built for. It cannot reach this one. Adversarial review caught
+it; nothing mechanical would have.
+
+The practical consequence for a reader: **treat a code-symbol citation in this repository as
+verified by whoever wrote it and by whoever reviewed it, and by nothing else.** Re-read the source
+before relying on one. The measurements in this note are independent of the labels — every number
+comes from the oracle in §1 and §6, so a wrong symbol name misdirects a reader without changing a
+result.
 
 Until then, the honest model of copper lettering is a refusal that says so.
 
@@ -265,12 +351,29 @@ Section 4.1's second row additionally needs a sibling `pv.kicad_pro` containing
 `{"meta": {"filename": "pv.kicad_pro", "version": 1}, "text_variables": {"MYVAR":
 "EXPANDED-WWWWWWWWWWWW"}}`, with the board saved as `pv.kicad_pcb` beside it.
 
+Section 4.4's bodies are text boxes on the same board, with `STRING` replaced per row:
+
+```
+(gr_text_box "STRING" (start 20 30) (end 60 32) (layer "F.Cu")
+  (effects (font (size 1.27 1.27))))
+```
+
+Section 4.4 is the one measurement where the plotted **border** must be excluded, because KiCad
+draws a rectangle at the declared corners and its union with the glyphs would hide exactly the
+overflow being measured. The glyph strokes are the `<path>` elements inside the
+`<g class="stroked-text">` groups; everything outside those groups is the border and is discarded
+before the bounding box is taken. Reading the union instead reports the declared corners back
+unchanged for every string that overflows vertically, which is how a wrong method would look
+right.
+
 ## 7 — Sources
 
 - [`EDA_TEXT::GetEffectiveTextPenWidth`, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/common/eda_text.cpp#L449-L467)
 - [`GetPenSizeForNormal`, `GetPenSizeForBold` and `ClampTextPenSize`, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/common/gr_text.cpp#L37-L96)
-- [`STROKE_FONT::drawSingleLineText` and the Newstroke decode, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/common/font/stroke_font.cpp#L45-L290)
+- [`STROKE_FONT::GetTextAsGlyphs` (L202–291), `loadNewStrokeFont` (L99) and the Newstroke decode, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/common/font/stroke_font.cpp#L45-L291)
 - [`PCB_TEXT::GetShownText` and its text-variable resolver, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/pcbnew/pcb_text.cpp#L162-L195)
+- [`BOARD::ResolveTextVar`, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/pcbnew/board.cpp#L510)
+- [`EDA_TEXT::HasTextVars`, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/include/eda_text.h#L128)
 - [`FONTCONFIG::FindFont` substitution report, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/common/font/fontconfig.cpp#L374-L380)
 - [KiCad board file format: graphic items and text effects](https://dev-docs.kicad.org/en/file-formats/sexpr-pcb/)
 - [ADR-0011](../adr/0011-existing-copper-obstacles.md), [ADR-0013](../adr/0013-polygon-zone-obstacles.md), [ADR-0070](../adr/0070-layered-fill-aware-obstacles.md), [ADR-0072](../adr/0072-conservative-arc-track-envelopes.md), [ADR-0075](../adr/0075-courtyard-oracle-parity.md), [ADR-0090](../adr/0090-root-level-board-groups.md)

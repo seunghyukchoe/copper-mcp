@@ -174,7 +174,7 @@ _EDGE_CUTS_LINE_FIELDS = frozenset({"end", "layer", "locked", "start", "stroke",
 # unsupported" cannot tell which they are looking at.  A drawn primitive carries its own geometry
 # in the document and could in principle be enveloped the way ADR-0013 envelopes a zone outline.
 # Copper lettering cannot: the glyph run KiCad plots is not a function of the board document's
-# bytes.  Three independent mechanisms establish that, each measured against KiCad 10.0.5's own
+# bytes.  Four independent mechanisms establish that, each measured against KiCad 10.0.5's own
 # plotter in docs/research/kicad-copper-text-envelope-v1.md:
 #
 #   * `${...}` in the string is expanded by `PCB_TEXT::GetShownText` through
@@ -188,10 +188,19 @@ _EDGE_CUTS_LINE_FIELDS = frozenset({"end", "layer", "locked", "start", "stroke",
 #     KiCad's compiled-in `newstroke_font` table, not in the board, and KiCad's own text box is
 #     *not* a containing box: at 1.27 mm, `(g)pqy` plots 0.3995 mm past its bottom edge and an
 #     overbar run 0.5957 mm past its top.
+#   * `gr_text_box` is in this table for a reason that had to be measured rather than assumed by
+#     analogy with `gr_text`, because it is the one text head that *does* carry two exact corners
+#     in the document -- which would have been a derivable envelope.  It is not one: the corners
+#     bound neither axis.  A 40x2 mm declared box at 1.27 mm is overflowed 0.1425 mm below by a
+#     descender, 3.7479 mm below and 3.8594 mm above by thirty wrapping words, and 11.1037 mm to
+#     each side by one unbreakable 52-character word that cannot wrap at all -- both overflows
+#     growing linearly and without bound in a string length the first bullet already shows is not
+#     derivable.
 #
-# So there is no box derivable from `at`, `size`, `thickness` and the string that is provably
-# containing, and an obstacle that is not provably containing is an under-approximation waiting
-# to happen.  See ADR-0095 for the decision and for what would have to become true to accept it.
+# So there is no box derivable from `at`, `start`/`end`, `size`, `thickness` and the string that
+# is provably containing, and an obstacle that is not provably containing is an
+# under-approximation waiting to happen.  See ADR-0095 for the decision and for what would have
+# to become true to accept it.
 _UNNAMED_COPPER_GRAPHIC: tuple[str, str] = ("root graphic on copper is unsupported", "graphic")
 _COPPER_TEXT_REFUSAL: tuple[str, str] = (
     "copper text has no envelope derivable from the board and is unsupported",

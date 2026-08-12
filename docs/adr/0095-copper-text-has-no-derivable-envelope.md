@@ -26,7 +26,7 @@ copper?** ADR-0013 is the precedent for the shape of a yes — it does not model
 models a region the fill cannot leave — and this record is what happens when the same question gets
 a no.
 
-It gets a no three times over, for reasons that are independent, and all three are measured against
+It gets a no four times over, for reasons that are independent, and all four are measured against
 `kicad-cli` 10.0.5 in the [research note](../research/kicad-copper-text-envelope-v1.md).
 
 **1. The rendered string is not a function of the board document.** `PCB_TEXT::GetShownText`
@@ -47,7 +47,7 @@ an installed `Helvetica` and 6.5992 mm — 16 % wider — with a face this machi
 document carries neither the outlines nor a digest of the font it means.
 
 **3. For the built-in stroke font, KiCad's own bounding box is not a containing box.**
-`STROKE_FONT::drawSingleLineText` sets the box end to `cursor.y - glyphSize.y`, so the box is
+`STROKE_FONT::GetTextAsGlyphs` sets the box end to `cursor.y - glyphSize.y`, so the box is
 exactly `size.y` tall from the baseline and descenders and overbars fall outside it *by
 construction*. Measured at 1.27 mm with `justify left bottom`, which puts KiCad's *own* box
 bottom at the anchor, `(g)pqy` plots **0.3995 mm below it** and `~{ABC}` **0.5957 mm above the
@@ -69,12 +69,34 @@ that *is* structural — a coordinate byte read as `c - 'R'` spans at most ~12 �
 `mmmm` at 1.27 mm into a 61 mm box against 6.3274 mm of measured
 ink, and still does not survive reason 1.
 
-Two of the four inputs *are* settled, and saying so is what makes the gap precise rather than
-vague. The plotted pen width is bounded from the file whatever the file claims:
+**4. `gr_text_box` carries its own corners, and they bound neither axis.** This is the strongest
+objection to the decision and it is answered by measurement rather than by analogy, because a text
+box *does* put two exact nanometre corners in the document — if the copper stayed inside them,
+refusing both heads identically would be wrong. It does not. Declared box `(start 20 30)
+(end 60 32)` at 1.27 mm, measuring the glyph strokes alone with the plotted border excluded:
+`(g)pqy` overflows **0.1425 mm below** the bottom edge and `~{ABC}` **0.1227 mm above** the top;
+`word` × 30 overflows **3.8594 mm above and 3.7479 mm below**, because the box wraps and grows in
+both vertical directions; and a single unbreakable 52-character word, which cannot wrap at all,
+overflows **11.1037 mm left and 11.0432 mm right**. Both overflows scale linearly and without
+bound with the string — a 208-character word leaves a 40 mm box by more than 104 mm on each side —
+and the string is exactly what reason 1 shows is not derivable. The corners are a layout hint, not
+an envelope.
+
+Two of the four inputs are *not* where the problem is, and saying which makes the gap precise
+rather than vague. The plotted pen width has a bound whatever `(thickness …)` claims:
 `GetEffectiveTextPenWidth` ends in `ClampTextPenSize`, which caps it at a quarter of
 `min(|size.x|, |size.y|)` — measured, a declared thickness of 0.5 mm and one of 2.0 mm both plot at
 0.3175 mm on a 1.27 mm text. And `at`, rotation and `justify` place the box predictably. The gap is
 entirely in *which glyphs, and how far each reaches*.
+
+That pen bound is deliberately **not** called settled, and the distinction is the decision's own
+logic applied to itself. "The clamp only lowers" is a read of KiCad 10.0.5's source — the same
+class of fact as "no Newstroke glyph advances more than 1.5083 × size", which condition 4 below
+refuses to rely on without a mechanism that makes a build mismatch refuse. Claiming more for one
+than for the other would be exactly the inconsistency this record exists to avoid. Nothing rests
+on it: the construct refuses whatever the pen does, and the bound is recorded only so a reader can
+see which inputs are and are not the reason. If the construct were ever accepted, the clamp would
+need condition 4 too.
 
 ## Decision
 
@@ -107,7 +129,14 @@ A root text expression is read past **only** when every row holds:
 | head | exactly `gr_text` or `gr_text_box` |
 | `(layer …)` | present, exactly one value |
 | that layer value | **not** `Edge.Cuts`, **not** `*.Cu`, **not** `F&B.Cu`, and **not** any name ending in `.Cu` |
-| every other field — `at`, `effects`, `font`, `size`, `thickness`, `face`, `justify`, `knockout`, `uuid`, the string itself | unread, unconstrained, and contributing nothing |
+| every other field — `at`, `start`, `end`, `effects`, `font`, `size`, `thickness`, `face`, `justify`, `knockout`, `margins`, `uuid`, `render_cache`, the string itself | unread, unconstrained, and contributing nothing |
+
+The table is scoped to text because this record is about text, and that scoping is a presentational
+choice rather than a claim about the code: the adapter's ignore path is keyed on the layer for
+**every** `gr_*` head, so a `gr_circle` on `F.SilkS` is read past on exactly the same test and the
+same argument. That behaviour predates this decision and is unchanged by it; the table above is its
+text-shaped instance, not a narrower rule. Anyone widening the *copper* refusal should read it as
+"the layer decides, for all graphics" and not as "two heads are special".
 
 The last row is the load-bearing one and it is a claim, so it is stated as one: the **layer**
 decides, and nothing else can. A layer outside that copper test carries no copper in any KiCad
@@ -191,13 +220,27 @@ construction whether the dropped construct is inert or catastrophic. Here the co
 so the differential would have been maximally reassuring and exactly wrong. The argument in this
 record is entirely about what the document does and does not determine.
 
+**A code-symbol citation in this repository is checked by review and by nothing else, and this
+record is the proof.** Adversarial review found that the bounding-box line quoted above was
+attributed five times to `STROKE_FONT::drawSingleLineText`, a KiCad-6-era name that does not exist
+at 10.0.5; the line is real and lives in `STROKE_FONT::GetTextAsGlyphs`. Right target, wrong label
+— the D-182 class exactly, and `scripts/check_doc_links.py` **structurally cannot** catch it: it
+asks whether a relative Markdown link resolves and whether a label naming a record agrees with its
+target, and a code-symbol label is neither. Every other symbol this record cites was then re-read
+from the tagged source and confirmed (§5.1 of the research note lists the check). Nothing
+structural moved, because every number here comes from the oracle rather than from the labels — but
+the useful part is the limitation, not the correction: **treat a code-symbol citation here as
+verified by its author and its reviewer, and by no gate.**
+
 **What would have to become true is written down, so this can be revisited on evidence rather than
 on appetite.** Section 5 of the research note lists four conditions, and all four are required:
 the project's `text_variables` digested into the source set with path- and clock-derived variables
 refused; `(face …)` refused or carrying trusted, freshness-bound outlines; the glyph extents a read
 value pinned by digest rather than a measured constant; and a font-build mismatch that refuses
 rather than passing. Item four is the one that is easy to skip and fatal to skip: without it, item
-three is sound only for the build it was measured against.
+three is sound only for the build it was measured against. A fifth condition applies to
+`gr_text_box` alone — its corners would have to bound its copper, which today they do not in either
+axis — so the two heads cannot be split apart even if the first four were met.
 
 ## Alternatives considered
 

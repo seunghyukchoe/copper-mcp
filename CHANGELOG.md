@@ -24,9 +24,13 @@ All notable changes are documented here. The format follows
   10.0.5 show the board document does not determine a containing region: `${…}` resolves from the
   sibling `.kicad_pro` (one byte-identical board plots 8.5650 mm of ink without it and 28.4012 mm
   with it) and from the file path and the clock; `(face …)` is resolved by fontconfig, which
-  substitutes silently when the face is missing; and KiCad's own text box is `size.y` tall from the
-  baseline, so descenders and overbars leave it by up to 0.47 × the text size. What would have to
-  become true to accept the construct is written down rather than left implied.
+  substitutes silently when the face is missing; KiCad's own text box is `size.y` tall from the
+  baseline, so descenders and overbars leave it by up to 0.47 × the text size; and `gr_text_box`,
+  the one head that *does* carry two exact corners in the document, is overflowed by its own copper
+  in **both** axes — 11.10 mm to each side by a single unbreakable 52-character word that cannot
+  wrap, and 3.86 mm above by thirty wrapping words — with both overflows scaling without bound in a
+  string length the first mechanism already puts outside the document. What would have to become
+  true to accept the construct is written down rather than left implied.
   ([ADR-0095](docs/adr/0095-copper-text-has-no-derivable-envelope.md),
   [D-185](docs/ledgers/decision-ledger.md), [R-140](docs/ledgers/risk-register.md),
   [SEC-136](docs/ledgers/security-ledger.md),
