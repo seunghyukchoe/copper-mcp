@@ -45,6 +45,8 @@ disclosure depend on severity and coordination needs. No bounty program is curre
 - Run the service as an unprivileged user with access only to the necessary project directory.
 - Treat all MCP parameters, KiCad files, plugin responses, AI output, and candidate files as
   untrusted input.
-- Keep any future `apply_candidate` operation separately authorized and auditable.
+- Keep `apply_candidate` and `apply_placement_candidate` — the only operations that write to a
+  board file — separately authorized and auditable: default-off behind `COPPER_MCP_ALLOW_APPLY`,
+  each requiring its own single-use token.
 
 See the complete [security model](docs/architecture/security-model.md).

@@ -3,7 +3,7 @@
 ## Product boundary
 
 CopperMCP is a local-first PCB automation platform. The deterministic core owns geometry,
-connectivity, validation, and future file mutation. AI and MCP layers may propose policy and invoke
+connectivity, validation, and file mutation. AI and MCP layers may propose policy and invoke
 bounded operations, but must never bypass validation or apply model-generated copper directly.
 
 ## Required workflow
@@ -19,7 +19,8 @@ bounded operations, but must never bypass validation or apply model-generated co
 ## Commands
 
 - `make test`: dependency-light unit tests.
-- `make lint`: Ruff plus version and ledger checks.
+- `make lint`: Ruff plus the version, ledger, ADR-number, documentation-link, audio-benchmark, and
+  Circuit Intent checkers.
 - `make typecheck`: strict mypy.
 - `make security`: repository secret scan and dependency audit.
 - `make build`: build the source distribution and wheel.
@@ -34,7 +35,9 @@ crates may be introduced only behind the stable contracts in `src/copper_mcp/rou
   model-provider tokens.
 - Keep network transports bound to loopback by default.
 - Validate every external input at its boundary and cap file, job, model, and iteration budgets.
-- `apply_candidate` must remain a separate, explicitly authorized operation when implemented.
+- `apply_candidate` and `apply_placement_candidate` are the only surfaces that write to a user's
+  board file. They must remain separate, explicitly authorized operations: default-off behind
+  `COPPER_MCP_ALLOW_APPLY`, each requiring its own single-use token.
 - Never log board contents, credentials, prompts containing proprietary designs, or bearer tokens.
 
 ## Versioning and releases

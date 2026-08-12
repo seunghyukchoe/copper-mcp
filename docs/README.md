@@ -18,7 +18,7 @@ The repository root holds the front door ([`README.md`](../README.md)), the agen
 | Drive CopperMCP as an AI agent | [Agent contract](agents.md) |
 | Understand the system boundaries | [Architecture overview](architecture/overview.md) |
 | Contribute a change | [`CONTRIBUTING.md`](../CONTRIBUTING.md), then [Development guide](development.md) |
-| Pick up the project as a continuing maintainer or agent | [Handoff documents](handoff/README.md) |
+| Pick up the project as a continuing maintainer or agent | [Project state](handoff/project-state.md) |
 
 ## Product and direction
 
@@ -65,8 +65,11 @@ contract.
 - [Release process](releasing.md) — versioning, tagging, attestation, and ledger authorization.
 - [GitHub repository setup checklist](github-setup.md) — the protections that live in GitHub
   settings rather than in this repository.
-- [Handoff documents](handoff/README.md) — current engineering state and continuing-agent
-  onboarding.
+- [Project state](handoff/project-state.md) — the living record of current engineering state: the
+  released version, the contract versions in force, the tool surface, the invariants, how a change
+  ships, and the known limitations. Updated every release. Its neighbour
+  [`handoff/codex-onboarding.md`](handoff/codex-onboarding.md) is a **dated 2026-08-05 record, kept
+  as history and superseded** — see [the handoff index](handoff/README.md).
 
 ## Reference
 
@@ -74,6 +77,9 @@ contract.
   from the source board rather than auto-migrated.
 - [CopperMCP 0.6.0 migration](migrations/copper-mcp-0.6.0.md) — the default-off live IPC opt-in and
   the new `unsupported.document` diagnostic code.
+- [CopperMCP 0.7.0 migration](migrations/copper-mcp-0.7.0.md) — the `ROUTER_VERSION` bump that
+  invalidates every stored candidate identity, two families of discriminated diagnostic codes, the
+  raised parser and router defaults, and what does *not* require migration.
 - [Public media assets](assets/README.md) — project media, with provenance; not routing or
   benchmark evidence.
 
@@ -81,12 +87,19 @@ contract.
 
 - **ADRs** record a decision once. They are not updated as the code changes; a later ADR supersedes
   an earlier one and the earlier one's status is amended to say so.
-- **Ledgers** are append-only. Corrections are dated notes, never row rewrites. See
-  [ledgers/README.md](ledgers/README.md) for how IDs are allocated.
+- **Ledgers** are append-only. A correction is a dated note or a new entry with a new ID that names
+  what it corrects — never a row rewrite. See [ledgers/README.md](ledgers/README.md) for how IDs
+  are allocated.
 - **Research documents** are dated snapshots of external evidence, not maintained summaries. Each
   one records what was true when it was gathered.
-- **Handoff documents** record a state that ages. Where a handoff and the repository disagree, the
-  repository is right.
+- **`docs/handoff/project-state.md` is the one living document in this tree.** It asserts present
+  tense on purpose and is updated in every release pull request. Everything else here is either a
+  contract (ADRs, architecture, schemas), an append-only record (ledgers), or a dated snapshot
+  (research, migrations, the superseded 2026-08-05 onboarding handoff). Even the living document
+  ages between releases: where it and the repository disagree, the repository is right.
 - Every relative link in this tree is checked by `scripts/check_doc_links.py`, which runs in
-  `make lint`. Ledger IDs and ADR numbers are checked there too, by `scripts/check_ledgers.py` and
+  `make lint`. It answers two questions: does the target resolve, and — when a link's label names a
+  record (`ADR-NNNN`, `D-NNN`, `R-NNN`, `SEC-NNN`, `B-NNN`) and its target is a path that
+  identifies a record — do the two name the same record. A label that names no record is not
+  judged. Ledger IDs and ADR numbers are checked there too, by `scripts/check_ledgers.py` and
   `scripts/check_adr_numbers.py`: one entry per number, in order, with gaps reported but allowed.
