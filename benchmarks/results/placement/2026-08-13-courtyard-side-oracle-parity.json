@@ -1,5 +1,5 @@
 {
-  "date_utc": "2026-08-12",
+  "date_utc": "2026-08-13",
   "environment": {
     "kicad_cli": "10.0.5",
     "platform": "macOS-26.5.2-arm64-arm-64bit",
@@ -109,7 +109,8 @@
     "the pth_inside_courtyard rule, which KiCad also reports and this model does not evaluate",
     "placement apply or write-back of a footprint carrying a far-side courtyard, which the source-preserving serializer still refuses"
   ],
-  "run_id": "sha256:9ebbf00ea3ca8f3c5db5549ac110b0976ba02c3067d4ffc4718968ec3a87ed93",
+  "run_id": "sha256:4edf71ca94773b62d30890bd3900224557a72b9a0d17809fafe04b05a83a1bfa",
   "schema": "copper-mcp/benchmark/courtyard-side-oracle-parity/v1",
-  "source_commit": "da51f7d70fea5dbe7b2382da1ffee452b972b802"
+  "source_commit": "df9e9348b91693d801daf66bdd865aed52526589",
+  "source_dirty": false
 }
