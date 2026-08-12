@@ -84,7 +84,8 @@ one is covered by the same clamp.
 **`at`, the rotation and `justify` place the box, and do so predictably.** Measured on `mmmm` at
 `(size 1.27 1.27)` anchored at `(50, 30)`: `justify left` puts the ink at x ∈ [50.33, 56.65],
 `justify right` at [43.35, 49.67], `justify top` at y ∈ [30.40, 31.40], `justify bottom` at
-[28.91, 29.92]; `(at 50 30 90)` transposes the extents exactly. Nothing surprising is hiding here.
+[28.91, 29.92]; `(at 50 30 90)` rotates the ink about the anchor and swaps the extents exactly,
+6.3274 × 1.0055 mm becoming 1.0055 × 6.3274 mm. Nothing surprising is hiding here.
 
 What is not derivable is the only thing that matters: **which glyphs get plotted, and how far each
 one reaches**.
@@ -140,10 +141,11 @@ is not, and it fails one step earlier than expected.
 **KiCad's own text bounding box excludes part of the plotted copper.**
 `STROKE_FONT::drawSingleLineText` ends with `aBBox->SetEnd( cursor.x - KiROUND( glyphSize.x * INTER_CHAR ), cursor.y - glyphSize.y )`
 — the box is exactly `size.y` tall, measured up from the baseline. Descenders and overbars are
-outside it by construction. Measured at `(size 1.27 1.27)` with `justify left bottom`, so the
-anchor `(50, 30)` **is** the box's bottom-left corner:
+outside it by construction. Measured at `(size 1.27 1.27)` with `justify left bottom`, which is
+KiCad placing *its own* box's bottom edge at the anchor `y = 30`, so ink past `y = 30` is ink
+outside the box KiCad computed:
 
-| String | Ink past the box bottom | Ink past the box top |
+| String | Ink below the box bottom (`y = 30`) | Ink above the box top (`y = 30 − size.y`) |
 |---|---:|---:|
 | `mmmm` | 0 | 0 |
 | `(g)pqy` | **0.3995 mm** (0.315 × size) | 0 |

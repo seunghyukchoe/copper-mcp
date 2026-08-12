@@ -49,10 +49,11 @@ document carries neither the outlines nor a digest of the font it means.
 **3. For the built-in stroke font, KiCad's own bounding box is not a containing box.**
 `STROKE_FONT::drawSingleLineText` sets the box end to `cursor.y - glyphSize.y`, so the box is
 exactly `size.y` tall from the baseline and descenders and overbars fall outside it *by
-construction*. Measured at 1.27 mm with the anchor at the box's bottom-left corner, `(g)pqy` plots
-**0.3995 mm past the bottom** and `~{ABC}` **0.5957 mm past the top** — up to 0.47 × the text size
-outside. That disposes of the most obvious candidate: even a perfect reproduction of KiCad's own
-box would under-approximate, which is the forbidden direction.
+construction*. Measured at 1.27 mm with `justify left bottom`, which puts KiCad's *own* box
+bottom at the anchor, `(g)pqy` plots **0.3995 mm below it** and `~{ABC}` **0.5957 mm above the
+box top** — up to 0.47 × the text size outside. That disposes of the most obvious candidate:
+even a perfect reproduction of KiCad's own box would under-approximate, which is the forbidden
+direction.
 
 The only remaining candidate is a per-glyph bound, and Newstroke's extents live in a C array
 compiled into KiCad (`#include <newstroke_font.h>`, decoded as `(coordinate[0] - 'R') / 21`), not
@@ -61,11 +62,11 @@ exhaustive ASCII maxima at 1.27 mm — advance 1.5083 × size, 0.7493 × size ab
 0.8996 × size below — are sample maxima over one repertoire in one build, and they are already
 known to be false ceilings one step outside the sample: `Ж` advances 1.6988 × size and `漢`
 1.6512 × size, the first 12.6 % over the ASCII ceiling, and an overbar run reaches 0.884 × size
-above the anchor against an ASCII ceiling of 0.7493. Nothing in the
-board, the format, or CopperMCP declares which font build will plot the gerbers, so a glyph
-widened in a later Newstroke would silently turn every emitted envelope into an
-under-approximation. The one bound that *is* structural — a coordinate byte read as `c - 'R'`
-spans at most ~12 × size — turns `mmmm` at 1.27 mm into a 61 mm box against 6.3274 mm of measured
+above the anchor against an ASCII ceiling of 0.7493. Nothing in the board, the format, or
+CopperMCP declares which font build will plot the gerbers, so a glyph widened in a later
+Newstroke would silently turn every emitted envelope into an under-approximation. The one bound
+that *is* structural — a coordinate byte read as `c - 'R'` spans at most ~12 × size — turns
+`mmmm` at 1.27 mm into a 61 mm box against 6.3274 mm of measured
 ink, and still does not survive reason 1.
 
 Two of the four inputs *are* settled, and saying so is what makes the gap precise rather than
