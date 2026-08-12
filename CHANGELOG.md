@@ -151,32 +151,43 @@ All notable changes are documented here. The format follows
 ### Added
 
 - **Mutation claims are now reproducible from the repository, and every prior one is honestly
-  classified.** A defect was found in the scratch harnesses behind all 21 hand-applied mutation
-  runs this project has published (~160 mutants): a mutant that changes a `.py` file without
-  changing its byte count, applied or restored within the same filesystem second, is invisible to
-  CPython's `(mtime, size)` bytecode-invalidation check, so a stale `__pycache__` entry silently
-  runs the wrong code — and a stale mutant poisoning the next invocation registers as a **false
-  kill**, making "0 survivors" the optimistic side of the error. The audit that sized it found the
-  larger problem: no harness was ever committed, so no mutation claim was reproducible by anyone.
-  Every claim on `main` is now classified from what its record states: 4 `safe` (the control is a
-  committed test or fixture), 2 `exposed` (the record states a fast targeted invocation), 19
-  `unauditable` (the record does not establish a reproducible run — including D-184/SEC-135,
-  which hit the defect live, recorded the 189-failure incident, and are the first rows to state
-  their own limit: the harness is not committed), 0 shown false — three of the twenty-one runs
-  reported genuine survivors that produced real tests, and nothing shows any verdict wrong. Open
-  PR #154 already reports `Mutants: not_run` with a planned set — the honest literal this
+  classified.** A defect was found in the scratch harnesses behind all 24 hand-applied mutation
+  runs this project has published (~170 mutants, a lower bound): a mutant that changes a `.py`
+  file without changing its byte count, applied or restored within the same filesystem second, is
+  invisible to CPython's `(mtime, size)` bytecode-invalidation check, so a stale `__pycache__`
+  entry silently runs the wrong code — and a stale mutant poisoning the next invocation registers
+  as a **false kill**, making "0 survivors" the optimistic side of the error. The audit that sized
+  it found the larger problem: no harness was ever committed, so no mutation claim was
+  reproducible by anyone. Every claim on `main` is now classified from what its record states:
+  4 `safe` (the control is a committed test or fixture), 2 `exposed` (the record states a fast
+  targeted invocation — B-089 and B-093, now qualified in their own ledger by correction row
+  B-102), 22 further runs `unauditable` (the record does not establish a reproducible run —
+  including D-184/SEC-135, which hit the defect live, recorded the 189-failure incident, and are
+  the first rows to state their own limit: the harness is not committed), 0 shown false — four of
+  the twenty-four runs reported genuine survivors that produced real tests, and nothing shows any
+  verdict wrong. The count is itself a correction: the first sweep of this audit missed four
+  claims and five sibling citations, and ADR-0098 states the undercount instead of absorbing it.
+  Open PR #154 already reports `Mutants: not_run` with a planned set — the honest literal this
   standard now gives a home as a committed spec.
   The fix is structural: `scripts/mutation_harness.py` is committed and purges bytecode caches
   around every application and restoration, requires each anchor to match exactly once, refuses
   mutants that do not compile or apply — loudly, never counting them — and proves every kill in
   both directions; mutant specs are committed under `docs/mutants/` with a required
-  mutant→killing-test mapping; `tests/test_mutation_harness.py` reconstructs the stale-bytecode
-  defect deterministically and re-checks every committed spec's anchors on every CI run. The first
-  committed spec re-derives three of ADR-0096's mutants against current source and ran to
-  `killed: 3`. Kill verdicts stay review-time evidence re-executed on demand; the anchor gate is
-  the part CI owns. ([ADR-0098](docs/adr/0098-reproducible-mutation-evidence.md),
+  mutant→killing-test mapping; no mutant is applied until the unmutated killing tests pass and
+  only pytest exit 1 counts as a kill, because a second live incident (PR #154's first scratch
+  harness reporting 11/11 killed while a mistyped test path made pytest exit 4 and run nothing)
+  showed the class is "any non-assertion exit reads as a kill", not just stale bytecode; a hard
+  failure mid-run aborts into the report — the raising mutant and every mutant after it are
+  recorded as `not_run`, never omitted;
+  `tests/test_mutation_harness.py` reconstructs the stale-bytecode defect deterministically and
+  gates every committed spec on every CI run: anchors still match exactly once, killing tests
+  still collect, and no spec names the gate itself as its oracle. The first committed spec
+  re-derives three of ADR-0096's mutants against current source and ran to `killed: 3`. Kill
+  verdicts stay review-time evidence re-executed on demand; the gates own what CI can see, and
+  what they cannot see (semantic drift around an intact anchor) is named rather than implied. ([ADR-0098](docs/adr/0098-reproducible-mutation-evidence.md),
   [D-188](docs/ledgers/decision-ledger.md), [R-143](docs/ledgers/risk-register.md),
-  [SEC-138](docs/ledgers/security-ledger.md), [`docs/mutants/`](docs/mutants/README.md))
+  [SEC-138](docs/ledgers/security-ledger.md), [B-102](docs/ledgers/benchmark-ledger.md),
+  [`docs/mutants/`](docs/mutants/README.md))
 
 ## [0.7.0] - 2026-08-12
 

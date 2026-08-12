@@ -96,7 +96,10 @@ description only when it is reproducible from the repository ([ADR-0098](adr/009
 That means:
 
 - **Run mutants only through `scripts/mutation_harness.py`**, never through an ad-hoc
-  apply-and-pytest loop. CPython's default `.pyc` invalidation keys on `(mtime, size)`, so a
+  apply-and-pytest loop — and remember that "the killing test failed" is a weak proxy for "the
+  mutant was caught": the harness refuses to apply any mutant until the unmutated killing tests
+  pass, and counts only pytest exit 1 as a kill (a mistyped path exits 4; PR #154's first
+  scratch harness read that as 11/11 killed while running nothing). CPython's default `.pyc` invalidation keys on `(mtime, size)`, so a
   byte-count-preserving edit applied or restored within one filesystem second silently runs stale
   bytecode — in a fast harness loop that turns into false kills. The committed harness purges
   `__pycache__` around every application and restoration, sets `PYTHONDONTWRITEBYTECODE=1`,
@@ -111,10 +114,16 @@ That means:
   Claims published before ADR-0098 are classified in that ADR (`safe` / `exposed` /
   `unauditable`) and should be cited with their literal.
 
-CI re-checks every committed spec's anchors against current source
-(`tests/test_mutation_harness.py::TestCommittedSpecs`); when an anchor drifts, re-anchor the
-mutant and re-run the spec rather than editing the anchor to quiet the gate. The kill verdicts
-themselves are review-time evidence re-executed on demand, not a CI step.
+CI re-checks every committed spec on every run (`tests/test_mutation_harness.py::TestCommittedSpecs`):
+anchors must still match exactly once, every killing test must still collect, and no spec may
+name the harness's own test module as its oracle (that gate fails for any applied mutant of a
+committed spec, so it would be a universal false-kill oracle). When an anchor drifts, re-anchor
+the mutant and re-run the spec rather than editing the anchor to quiet the gate. The kill
+verdicts themselves are review-time evidence re-executed on demand, not a CI step — and that
+split is stated narrowly on purpose: the gates catch mutants that stop applying and mappings
+that stop naming a real test, but a verdict can still rot invisibly when code *around* an intact
+anchor changes meaning or an interpreter or dependency bump changes what a test exercises, which
+is why a spec is re-run whenever review touches the code it anchors.
 
 ## Public request boundary
 

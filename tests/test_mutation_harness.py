@@ -26,13 +26,16 @@ import pytest
 
 from scripts.mutation_harness import (
     OUTCOME_CONTROL_FAILED,
+    OUTCOME_INVALID_RUN,
     OUTCOME_INVALID_SYNTAX,
     OUTCOME_KILLED,
+    OUTCOME_NOT_RUN,
     OUTCOME_STALE_ANCHOR,
     OUTCOME_SURVIVED,
     OUTCOME_SURVIVED_DECLARED_EQUIVALENT,
     SpecError,
     anchor_occurrences,
+    baseline_tests,
     build_report,
     load_spec,
     purge_bytecode_caches,
@@ -182,14 +185,15 @@ class TestVerdicts:
         widget = tmp_path / "src" / "widget.py"
         before = widget.read_bytes()
         spec = load_spec(_write_spec(tmp_path, [_boundary_mutant()]))
-        results, passed = run_spec(tmp_path, spec)
+        results, passed, baseline_returncode = run_spec(tmp_path, spec)
         assert passed is True
+        assert baseline_returncode == 0
         assert results[0].outcome == OUTCOME_KILLED
         assert results[0].mutant_returncode != 0
         assert results[0].control_returncode == 0
         assert results[0].caches_purged >= 0
         assert widget.read_bytes() == before
-        report = build_report(tmp_path, spec, results, passed)
+        report = build_report(tmp_path, spec, results, passed, baseline_returncode)
         assert report["passed"] is True
         assert report["summary"] == {OUTCOME_KILLED: 1}
         mutant_row = report["mutants"][0]  # type: ignore[index]
@@ -204,7 +208,7 @@ class TestVerdicts:
                 [_boundary_mutant(killing_tests=["tests/test_widget.py::test_far_from_boundary"])],
             )
         )
-        results, passed = run_spec(tmp_path, spec)
+        results, passed, _baseline = run_spec(tmp_path, spec)
         assert passed is False
         assert results[0].outcome == OUTCOME_SURVIVED
 
@@ -223,7 +227,7 @@ class TestVerdicts:
                 ],
             )
         )
-        results, passed = run_spec(tmp_path, spec)
+        results, passed, _baseline = run_spec(tmp_path, spec)
         assert passed is True
         assert results[0].outcome == OUTCOME_SURVIVED_DECLARED_EQUIVALENT
 
@@ -240,19 +244,118 @@ class TestVerdicts:
                 ],
             )
         )
-        results, passed = run_spec(tmp_path, spec)
+        results, passed, _baseline = run_spec(tmp_path, spec)
         assert passed is False
         assert results[0].outcome == OUTCOME_KILLED
 
+    def test_a_hard_failure_reports_not_run_for_every_unreached_mutant(
+        self, tmp_path: Path
+    ) -> None:
+        """An abort lands in the report, not past it: no mutant is ever omitted."""
+        _write_project(tmp_path, BOUNDARY_TEST)
+        # A non-UTF-8 target makes run_mutant raise before any test runs: a hard failure,
+        # not a verdict about the mutant.
+        (tmp_path / "src" / "binary.py").write_bytes(b"\xff\xfe not text")
+        first = _boundary_mutant(file="src/binary.py")
+        second = _boundary_mutant()
+        second["id"] = "M2"
+        spec = load_spec(_write_spec(tmp_path, [first, second]))
+        results, passed, baseline_returncode = run_spec(tmp_path, spec)
+        assert passed is False
+        assert [result.outcome for result in results] == [OUTCOME_NOT_RUN, OUTCOME_NOT_RUN]
+        assert "hard failure" in results[0].detail
+        assert "not reached" in results[1].detail
+        report = build_report(tmp_path, spec, results, passed, baseline_returncode)
+        assert report["summary"] == {OUTCOME_NOT_RUN: 2}
+        assert len(report["mutants"]) == 2  # type: ignore[arg-type]
+
     def test_a_broken_control_supports_no_verdict(self, tmp_path: Path) -> None:
-        broken_test = (
-            "from widget import is_wide\n\n\ndef test_boundary() -> None:\n    assert is_wide(9)\n"
+        """A stateful (flaky) test passes its baseline, "kills" the mutant, then fails the
+        control -- and the harness refuses the kill rather than banking it. This is also the
+        committed demonstration that one flaky test is one false-kill candidate: the
+        two-direction check catches state that persists, but a coin-flip flake that landed
+        the other way would not be caught, which is why the standard says to weigh the
+        killing-test choice, not just the count."""
+        stateful_test = (
+            "from pathlib import Path\n"
+            "\n"
+            "from widget import is_wide\n"
+            "\n"
+            "\n"
+            "def test_boundary() -> None:\n"
+            '    marker = Path(__file__).parent / "ran_once"\n'
+            '    assert not marker.exists(), "stateful failure on every run after the first"\n'
+            '    marker.write_text("x", encoding="utf-8")\n'
+            "    assert is_wide(10)\n"
         )
-        _write_project(tmp_path, broken_test)
+        _write_project(tmp_path, stateful_test)
         spec = load_spec(_write_spec(tmp_path, [_boundary_mutant()]))
-        results, passed = run_spec(tmp_path, spec)
+        results, passed, baseline_returncode = run_spec(tmp_path, spec)
+        assert baseline_returncode == 0
         assert passed is False
         assert results[0].outcome == OUTCOME_CONTROL_FAILED
+
+    def test_a_nonexistent_killing_test_never_reports_a_kill(self, tmp_path: Path) -> None:
+        """PR #154's first scratch harness reported 11/11 killed while running zero tests:
+        the named test file did not exist, pytest exited 4 every time, and exit 4 was read
+        as a kill. Here, the baseline gate refuses before any mutant is applied."""
+        _write_project(tmp_path, BOUNDARY_TEST)
+        widget = tmp_path / "src" / "widget.py"
+        before = widget.read_bytes()
+        spec = load_spec(
+            _write_spec(
+                tmp_path,
+                [_boundary_mutant(killing_tests=["tests/test_absent.py::test_nothing"])],
+            )
+        )
+        results, passed, baseline_returncode = run_spec(tmp_path, spec)
+        assert baseline_returncode == 4
+        assert passed is False
+        assert results[0].outcome == OUTCOME_NOT_RUN
+        assert "baseline failed" in results[0].detail
+        assert widget.read_bytes() == before, "no mutant may be applied on a red baseline"
+
+    def test_an_import_breaking_mutant_is_invalid_run_not_killed(self, tmp_path: Path) -> None:
+        """A mutant that kills the *collection* rather than the test proves nothing about
+        coverage: pytest exits 4, not 1, and the harness refuses to call that a kill."""
+        _write_project(tmp_path, BOUNDARY_TEST)
+        spec = load_spec(
+            _write_spec(
+                tmp_path,
+                [
+                    _boundary_mutant(
+                        anchor="def is_wide(value: int) -> bool:",
+                        replacement=(
+                            'raise RuntimeError("import bomb")\n'
+                            "\n"
+                            "\n"
+                            "def is_wide(value: int) -> bool:"
+                        ),
+                    )
+                ],
+            )
+        )
+        results, passed, baseline_returncode = run_spec(tmp_path, spec)
+        assert baseline_returncode == 0
+        assert passed is False
+        assert results[0].outcome == OUTCOME_INVALID_RUN
+        assert results[0].mutant_returncode == 4
+        assert results[0].control_returncode == 0
+
+    def test_baseline_tests_deduplicate_in_order(self, tmp_path: Path) -> None:
+        first = _boundary_mutant()
+        second = _boundary_mutant(
+            killing_tests=[
+                "tests/test_widget.py::test_other",
+                "tests/test_widget.py::test_boundary",
+            ]
+        )
+        second["id"] = "M2"
+        spec = load_spec(_write_spec(tmp_path, [first, second]))
+        assert baseline_tests(spec) == (
+            "tests/test_widget.py::test_boundary",
+            "tests/test_widget.py::test_other",
+        )
 
 
 class TestBytecodeStaleness:
@@ -309,7 +412,14 @@ class TestBytecodeStaleness:
 
 
 class TestCommittedSpecs:
-    """Committed mutation claims must stay reproducible against today's source."""
+    """Committed mutation claims must stay reproducible against today's source.
+
+    This gate owns the claim-validity conditions CI can actually see: anchors that still match
+    exactly once, killing tests that still collect, and no spec naming this module's own tests
+    as its oracle. It deliberately does not re-run the kills — semantic drift around an intact
+    anchor, or an interpreter or dependency bump, can still rot a verdict without tripping
+    anything here, which is exactly why a kill verdict stays review-time evidence.
+    """
 
     def test_committed_mutant_specs_stay_anchored_to_current_source(self) -> None:
         spec_paths = sorted(MUTANT_SPEC_DIR.glob("*.json"))
@@ -325,3 +435,41 @@ class TestCommittedSpecs:
                     f"{mutant.file}; a committed mutant must keep matching exactly once, "
                     "so re-anchor it (and re-run the spec) rather than letting the claim rot"
                 )
+
+    def test_no_committed_spec_names_the_harness_suite_as_its_oracle(self) -> None:
+        """`TestCommittedSpecs` fails for *any* applied mutant of a committed spec, so naming
+        this module as a killing test would be a universal false-kill oracle."""
+        for spec_path in sorted(MUTANT_SPEC_DIR.glob("*.json")):
+            spec = load_spec(spec_path)
+            for mutant in spec.mutants:
+                for test in mutant.killing_tests:
+                    assert not test.startswith("tests/test_mutation_harness.py"), (
+                        f"{spec_path.name}:{mutant.mutant_id} names {test} as a killing test; "
+                        "the spec gate kills every applied mutant of a committed spec, so it "
+                        "proves nothing about the mutant -- name the behavioural test instead"
+                    )
+
+    def test_every_committed_killing_test_still_collects(self) -> None:
+        """A renamed killing test must fail this gate, not silently hollow out a claim."""
+        nodes: list[str] = []
+        for spec_path in sorted(MUTANT_SPEC_DIR.glob("*.json")):
+            spec = load_spec(spec_path)
+            for mutant in spec.mutants:
+                nodes.extend(mutant.killing_tests)
+        assert nodes
+        environment = dict(os.environ)
+        environment["PYTHONPATH"] = f"src{os.pathsep}."
+        argv = [sys.executable, "-m", "pytest", "--collect-only", "-q", "--no-cov", *nodes]
+        completed = subprocess.run(  # noqa: S603 - fixed interpreter, argv from committed specs
+            argv,
+            cwd=REPO_ROOT,
+            env=environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+        assert completed.returncode == 0, (
+            "a committed spec names a killing test that no longer collects; re-point the spec "
+            "(and re-run it) rather than letting the claim rot:\n"
+            + completed.stdout.decode("utf-8", errors="replace")[-2000:]
+        )

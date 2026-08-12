@@ -6,7 +6,7 @@ committed here is not evidence under that ADR; it is prose.
 
 ## Why this directory exists
 
-Before ADR-0098, every mutation run in this project — roughly 160 hand-applied mutants across 21
+Before ADR-0098, every mutation run in this project — roughly 170 hand-applied mutants across 24
 recorded runs — was executed by a harness living in an agent's scratch directory, deleted with the
 session that wrote it. No claim was reproducible by anyone, and the shared harness pattern carried
 a defect: a mutant that changes a file without changing its byte count, applied or restored within
@@ -26,6 +26,15 @@ subprocess with `PYTHONDONTWRITEBYTECODE=1`, requires each anchor to match **exa
 proves each kill in both directions: the named tests must fail with the mutant applied and pass on
 the byte-identically restored source. A mutant that does not apply is `stale_anchor` and fails the
 run loudly — it is never skipped and never counted as killed.
+
+Two guards exist because both failure modes happened for real:
+
+- **No mutant is applied until the unmutated killing tests pass.** PR #154's first scratch
+  harness reported 11/11 killed while executing zero tests — a mistyped test path made pytest
+  exit 4 every time, and exit 4 read as a kill. A red baseline measures nothing.
+- **Only pytest exit 1 counts as a kill.** Exit 0 is a survivor; every other exit (2 interrupted,
+  3 internal error, 4 usage/collection error, 5 nothing collected) is `invalid_run`, because a
+  kill is only evidence if the run that produced it was capable of reporting a survivor.
 
 ## Spec format (`mutation-harness/1`)
 
@@ -56,8 +65,9 @@ run loudly — it is never skipped and never counted as killed.
 ```
 
 Outcomes are a closed vocabulary: `killed`, `survived`, `survived_declared_equivalent`,
-`stale_anchor`, `invalid_syntax`, `control_failed`, `not_run`. A mutant the harness never reached
-is reported as `not_run`, never omitted.
+`stale_anchor`, `invalid_syntax`, `control_failed`, `invalid_run`, `not_run`. A mutant the
+harness never reached is reported as `not_run`, never omitted — including when the baseline
+fails or a hard failure aborts the run: the report is still written, with every mutant in it.
 
 ## What a mutation claim must state to be auditable
 
@@ -74,6 +84,26 @@ that states:
 4. **The disposition of every non-kill** — `survived` is a finding to act on;
    `survived_declared_equivalent` requires the argument; `stale_anchor` requires re-anchoring and
    a re-run, never a silent skip.
+5. **The interpreter** — the harness report records `python_version` and `platform`, and the
+   claim must carry (or link a report carrying) them. A run on an interpreter outside
+   `requires-python` and the CI matrix is not evidence about the shipped code; PR #154 discarded
+   a whole gate run for exactly this after `python3 -m venv` silently picked up Python 3.14.
+
+Two rules about killing tests, both enforced by the CI gate:
+
+- **Never name `tests/test_mutation_harness.py` (or its `TestCommittedSpecs` gate) as a killing
+  test.** That gate fails for *any* applied mutant of a committed spec, so it would "kill"
+  every mutant regardless of behaviour — a universal false-kill oracle that proves nothing.
+- **Killing tests must be real, collectable node IDs.** The gate runs
+  `pytest --collect-only` over every committed mapping, so a renamed test fails the build
+  instead of silently hollowing out a claim.
+
+And one limit to keep in view when reading a report: **`killed` means the named tests fail with
+the mutant applied and pass without it — not that the behaviour is covered.** A comment-only
+mutant reports `killed` if its killing test reads the source file, and one flaky test is one
+false kill (each direction runs once; there is no repetition and no failure-cause attribution).
+Choose killing tests that exercise the mutated behaviour, and weigh the mapping, not just the
+count.
 
 ## Staying anchored
 

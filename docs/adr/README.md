@@ -184,9 +184,11 @@ never silently widens it.
 | [0096](0096-edge-connector-pads-convert-as-smd.md) | An edge-connector pad converts as an SMD pad, and the discarded token is counted | Accepted |
 | [0098](0098-reproducible-mutation-evidence.md) | A mutation claim is evidence only if the repository can re-run it | Accepted |
 
-Ninety-six numbers, ninety records, no duplicates — and `scripts/check_adr_numbers.py`
-now proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and
-0086 are unused, and 0094 is a live claim on an open branch rather than a gap; see
+Ninety-eight numbers, ninety-two records, no duplicates — and `scripts/check_adr_numbers.py`
+now proves that last clause on every run rather than asserting it (the previous revision of this
+sentence said "ninety-six numbers, ninety records", stale by two landings at the time it was
+read; the checker's own output is the count to trust). 0027, 0082, 0083, 0085 and
+0086 are unused, and 0097 is a live claim on an open branch rather than a gap; see
 **Known gaps** above. The three stray summary sentences that stood here until
 ADR-0088 landed were merge residue from the concurrent branches described above: Git accepted
 three different rewrites of one paragraph because they did not overlap textually.

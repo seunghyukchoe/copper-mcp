@@ -26,7 +26,7 @@ contain, so it cannot go stale unnoticed.
 | [Decision ledger](decision-ledger.md) | `D-` | `D-188` | `D-189` |
 | [Risk register](risk-register.md) | `R-` | `R-143` | `R-144` |
 | [Security review ledger](security-ledger.md) | `SEC-` | `SEC-138` | `SEC-139` |
-| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-100` | `B-101` |
+| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-102` | `B-103` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
 The rules:
@@ -69,9 +69,12 @@ The rules:
    any other spent number, and this paragraph becomes the correction to make. Both branches have
    since landed and filled their own numbers — `D-185`/`R-140`/`SEC-136` with issue #141's
    branch, `D-184`/`R-139`/`SEC-135` with PR #150 — so that round left no gap at all. The
-   mechanism then ran a third time: PR #154 was open holding `D-187`/`R-142` (with ADR-0097 and
-   B-101) when this record landed, so `D-188`/`R-143`/`SEC-138` stepped over it rather than
-   racing it.
+   mechanism then ran a third time, in both directions at once: PR #154 was open holding
+   `D-187`/`R-142` (with ADR-0097 and B-101) when this record allocated `D-188`/`R-143`/
+   `SEC-138`/`B-102` above it — and #154, unable to confirm from its worktree that `SEC-138` was
+   free, took `SEC-139` and stepped over *this* record's live claim in return. Both directions
+   are rule 1 working as designed; whichever lands second resolves the registry line's textual
+   conflict.
 
    **A row that has only been pushed to a branch is not yet a record, and rule 3 does not reach
    it.** Adversarial review found a false mechanism in `D-186` while its pull request was still
