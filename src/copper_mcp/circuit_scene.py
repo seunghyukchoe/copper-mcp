@@ -497,7 +497,9 @@ def _object_bounds(
         )
     for footprint in content.footprints:
         footprint_boxes = [bounds[pad_id] for pad_id in footprint.pad_ids]
-        footprint_boxes.extend(_ring_bounds(ring) for ring in footprint.courtyards)
+        footprint_boxes.extend(
+            _ring_bounds(ring) for ring in (*footprint.courtyards, *footprint.far_side_courtyards)
+        )
         footprint_boxes.extend(
             (
                 circle.center.x - circle.radius_nm,
@@ -505,7 +507,10 @@ def _object_bounds(
                 circle.center.x + circle.radius_nm,
                 circle.center.y + circle.radius_nm,
             )
-            for circle in footprint.courtyard_circles
+            for circle in (
+                *footprint.courtyard_circles,
+                *footprint.far_side_courtyard_circles,
+            )
         )
         if footprint_boxes:
             bounds[footprint.id] = (
@@ -635,6 +640,29 @@ def _footprint_object(footprint: Footprint) -> SceneObject:
                     ]
                 }
                 if footprint.courtyard_circles
+                else {}
+            ),
+            # Same rule for the courtyard on the layer opposite the footprint's own side. It is
+            # reported rather than folded into `courtyards_nm`, because the two sets keep out on
+            # different physical layers and a consumer that unioned them would read a keep-out
+            # on a side that has none (ADR-0097).
+            **(
+                {
+                    "far_side_courtyards_nm": [
+                        _points(ring) for ring in footprint.far_side_courtyards
+                    ]
+                }
+                if footprint.far_side_courtyards
+                else {}
+            ),
+            **(
+                {
+                    "far_side_courtyard_circles_nm": [
+                        [circle.center.x, circle.center.y, circle.radius_nm]
+                        for circle in footprint.far_side_courtyard_circles
+                    ]
+                }
+                if footprint.far_side_courtyard_circles
                 else {}
             ),
         },
@@ -853,6 +881,10 @@ def _footprint_detail_units(footprint: Footprint) -> int:
         + len(footprint.pad_ids)
         + sum(len(ring.points) for ring in footprint.courtyards)
         + len(footprint.courtyard_circles)
+        # Far-side courtyard vertices are emitted into the same object, so they cost the same
+        # budget. Omitting them would let a feed-through part overrun the declared ceiling.
+        + sum(len(ring.points) for ring in footprint.far_side_courtyards)
+        + len(footprint.far_side_courtyard_circles)
     )
 
 

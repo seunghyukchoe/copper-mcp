@@ -348,7 +348,17 @@ class FootprintSide(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class Footprint:
-    """One placeable footprint and its exact board-frame ownership geometry."""
+    """One placeable footprint and its exact board-frame ownership geometry.
+
+    **Courtyards are held per courtyard layer, not per footprint.**  KiCad keys a courtyard to
+    the layer the shape is drawn on and never consults the footprint's own side: a footprint on
+    ``F.Cu`` may legitimately carry ``B.CrtYd`` geometry, and that geometry constrains the
+    *back*.  ``courtyards`` and ``courtyard_circles`` are the shapes on the layer matching
+    :attr:`side`; ``far_side_courtyards`` and ``far_side_courtyard_circles`` are the shapes on
+    the opposite one.  The two sets are never pooled: they are separate even-odd regions on
+    separate physical layers, exactly as KiCad's front and back courtyard caches are.  See
+    ADR-0097.
+    """
 
     id: str
     origin: PointNM
@@ -358,6 +368,8 @@ class Footprint:
     courtyards: tuple[Ring, ...] = ()
     courtyard_circles: tuple[CourtyardCircle, ...] = ()
     locked: bool = False
+    far_side_courtyards: tuple[Ring, ...] = ()
+    far_side_courtyard_circles: tuple[CourtyardCircle, ...] = ()
 
     def __post_init__(self) -> None:
         _typed_id("footprint ID", self.id, "footprint:")
@@ -376,8 +388,30 @@ class Footprint:
             _typed_id("footprint pad ID", pad_id, "pad:")
         _tuple_of("footprint courtyards", self.courtyards, Ring)
         _tuple_of("footprint courtyard circles", self.courtyard_circles, CourtyardCircle)
+        _tuple_of("footprint far-side courtyards", self.far_side_courtyards, Ring)
+        _tuple_of(
+            "footprint far-side courtyard circles",
+            self.far_side_courtyard_circles,
+            CourtyardCircle,
+        )
         if not isinstance(self.locked, bool):
             raise ValueError("footprint locked flag must be boolean")
+
+    @property
+    def front_courtyards(self) -> tuple[tuple[Ring, ...], tuple[CourtyardCircle, ...]]:
+        """Rings and circles on ``F.CrtYd``, whichever side the footprint itself is on."""
+
+        if self.side is FootprintSide.FRONT:
+            return self.courtyards, self.courtyard_circles
+        return self.far_side_courtyards, self.far_side_courtyard_circles
+
+    @property
+    def back_courtyards(self) -> tuple[tuple[Ring, ...], tuple[CourtyardCircle, ...]]:
+        """Rings and circles on ``B.CrtYd``, whichever side the footprint itself is on."""
+
+        if self.side is FootprintSide.BACK:
+            return self.courtyards, self.courtyard_circles
+        return self.far_side_courtyards, self.far_side_courtyard_circles
 
 
 class PadKind(StrEnum):
