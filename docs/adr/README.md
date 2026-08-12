@@ -23,11 +23,11 @@ line is deliberate: two branches that both allocate it now conflict textually, s
 merge instead of accepting it.
 
 **Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086.
-ADR-0094 and ADR-0095 are **live claims, not gaps**, held by two branches open on this same
-base when ADR-0096 was allocated (issues #140 and #141). ADR-0096 stepped over both rather
-than racing them, exactly as the ledger convention's rule 1 prescribes; if either branch is
-abandoned its number becomes a permanent gap like any other spent number, and this sentence
-becomes the correction to make.
+ADR-0094 is a **live claim, not a gap** — held by an open branch (issue #140) on this same base
+when ADR-0095 and ADR-0096 were allocated. Both stepped over it rather than racing it, exactly as
+the ledger convention's rule 1 prescribes. ADR-0095 has since landed; if #140's branch is
+abandoned, 0094 becomes a permanent gap like any other spent number and this sentence becomes the
+correction to make.
 ADR-0089 was listed here until this line was corrected: it landed from its own branch as the
 region-scoped obstacle model and is not a gap. ADR-0092 was listed too, and has since landed from
 its own branch as the net-tie netless-obstacle model; this sentence is that correction, exactly as
@@ -175,13 +175,14 @@ never silently widens it.
 | [0091](0091-attaching-pad-zone-connect-overrides.md) | Accept the pad zone-connection overrides that attach, refuse the one that detaches | Accepted |
 | [0092](0092-net-tie-copper-as-netless-obstacle.md) | Net-tie copper is a netless obstacle, and the tie is never a connectivity claim | Accepted |
 | [0093](0093-actionable-off-grid-refusals.md) | An off-grid refusal carries the pad, the pitch and the exact miss | Accepted |
-| — | *0094 and 0095 are live claims on open branches, not gaps; see **Known gaps** above.* | — |
+| — | *0094 is a live claim on an open branch, not a gap; see **Known gaps** above.* | — |
+| [0095](0095-copper-text-has-no-derivable-envelope.md) | Copper text has no envelope derivable from the board, and refuses under its own name | Accepted |
 | [0096](0096-edge-connector-pads-convert-as-smd.md) | An edge-connector pad converts as an SMD pad, and the discarded token is counted | Accepted |
 
-Ninety-six numbers, eighty-nine records, no duplicates — and `scripts/check_adr_numbers.py`
+Ninety-six numbers, ninety records, no duplicates — and `scripts/check_adr_numbers.py`
 now proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and
-0086 are unused, and 0094 and 0095 are live claims rather than gaps; see **Known gaps** above.
-The three stray summary sentences that stood here until
+0086 are unused, and 0094 is a live claim on an open branch rather than a gap; see
+**Known gaps** above. The three stray summary sentences that stood here until
 ADR-0088 landed were merge residue from the concurrent branches described above: Git accepted
 three different rewrites of one paragraph because they did not overlap textually.
 
@@ -190,7 +191,7 @@ three different rewrites of one paragraph because they did not overlap textually
 The ADRs are chronological, not thematic. To follow one arc, read it in this order:
 
 - **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070, 0076, 0087,
-  0091, 0092, 0096.
+  0091, 0092, 0095, 0096.
 - **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
   0066, 0070, 0073, 0075, 0089, 0093.
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060, 0075.
@@ -273,4 +274,5 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0091: Accept the pad zone-connection overrides that attach, refuse the one that detaches](0091-attaching-pad-zone-connect-overrides.md)
 - [ADR-0092: Net-tie copper is a netless obstacle, and the tie is never a connectivity claim](0092-net-tie-copper-as-netless-obstacle.md)
 - [ADR-0093: An off-grid refusal carries the pad, the pitch and the exact miss](0093-actionable-off-grid-refusals.md)
+- [ADR-0095: Copper text has no envelope derivable from the board, and refuses under its own name](0095-copper-text-has-no-derivable-envelope.md)
 - [ADR-0096: An edge-connector pad converts as an SMD pad, and the discarded token is counted](0096-edge-connector-pads-convert-as-smd.md)

@@ -243,7 +243,11 @@ worse than none, because it will be ignored.
    [#140](https://github.com/seunghyukchoe/copper-mcp/issues/140),
    [#141](https://github.com/seunghyukchoe/copper-mcp/issues/141)) one construct at a time, each
    with source-oracle fixtures and a re-measured survey. Do not report a conversion count that a
-   fresh measurement does not support.
+   fresh measurement does not support. **#141 is answered and is not a gap to take**: copper text
+   has no envelope derivable from the board document, measured against `kicad-cli`, so it stays
+   refused by decision rather than by omission
+   ([ADR-0095](../adr/0095-copper-text-has-no-derivable-envelope.md)) — the board it blocks stays
+   blocked and the count is unchanged. Two conversion gaps remain.
 2. **Make the real-board routing result mean something.** 14 of 385 is a floor, not a capability.
    The next step is DRC evidence and cross-net compatibility on a real board, not a larger sweep.
 3. **Close placement data-fidelity and post-action gates.** Model and replay author text,

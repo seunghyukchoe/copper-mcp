@@ -218,12 +218,21 @@ including:
   branching spur, a duplicate or zero-length segment, a self-intersection, or two disjoint loops.
   The outline is routing room, so it is never repaired into something larger than what was drawn;
 - `Edge.Cuts` outline holes;
-- root or footprint-local text/graphics on copper — including a root `gr_text` on `F.Cu`, which is
-  real copper and so would have to be *over*-approximated to be admitted at all, and a containing
-  glyph envelope needs font metrics Board IR does not model
-  ([#141](https://github.com/seunghyukchoe/copper-mcp/issues/141)) — and any footprint-local
-  `Edge.Cuts` primitive. The net-tie `fp_poly` above is the one exception, and only when its
-  footprint declares `net_tie_pad_groups`;
+- root or footprint-local text/graphics on copper, and any footprint-local `Edge.Cuts` primitive.
+  A root `gr_text` or `gr_text_box` on a copper layer refuses under its own name — `copper text has
+  no envelope derivable from the board and is unsupported`, `object_kind: text` — because it is
+  real copper, so it would have to be *over*-approximated to be admitted at all, and **no
+  containing envelope is derivable from the board document**: `${…}` resolves from the sibling
+  project file, from the board's path and from the clock; `(face …)` resolves through the host's
+  font cache, which substitutes silently when the face is missing; and KiCad's own text box is
+  `size.y` tall from the baseline, so descenders and overbars fall outside it. Measured in
+  [ADR-0095](../adr/0095-copper-text-has-no-derivable-envelope.md) and the
+  [envelope research note](../research/kicad-copper-text-envelope-v1.md), which also records what
+  would have to become true to accept it
+  ([#141](https://github.com/seunghyukchoe/copper-mcp/issues/141)). Text on a **non-copper** layer
+  is not copper and converts as before. Every other graphic head on copper keeps the unnamed
+  `root graphic on copper is unsupported`. The net-tie `fp_poly` above is the one exception, and
+  only when its footprint declares `net_tie_pad_groups`;
 - footprint rotations not divisible by 90 degrees;
 - courtyard ring edges at any slope other than horizontal, vertical, or an exact 45-degree chamfer
   (`|dx| == |dy|`); an `fp_circle` courtyard whose radius is not an exact integer nanometre, or one
