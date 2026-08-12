@@ -16,9 +16,12 @@ write copper. Every generated result is an immutable candidate bound to an exact
 until a human explicitly applies it.
 
 > [!IMPORTANT]
-> CopperMCP `0.4.x` is an **MVP-alpha**. The released `0.4` line is entirely non-mutating; current
-> unreleased `main` adds one operator-gated, token-authorized route apply. Read
-> [What CopperMCP does not claim](#what-coppermcp-does-not-claim) before relying on any result.
+> CopperMCP is an **MVP-alpha** — `server_info` reports `maturity: "mvp"`, and the version badge
+> above is the authoritative released line. Exactly two operations write to a board file,
+> `apply_candidate` and `apply_placement_candidate`; both are off by default behind an operator
+> environment flag plus an operation-scoped single-use token that no model can mint. Everything
+> else reads. Read [What CopperMCP does not claim](#what-coppermcp-does-not-claim) before relying
+> on any result.
 
 ## Why this project exists
 
@@ -89,16 +92,20 @@ confinement, including protection against parent-path and symlink escapes. SHA-2
 and versioned JSON schemas throughout.
 
 **Represent a board exactly.** Immutable Board IR `0.2.0` with exact integer units, typed
-constraints, canonical digests, first-class footprint pose/side/lock/pad ownership, simple orthogonal
-courtyard rings, and a bounded fail-closed converter for a documented KiCad subset. The 0.1 schema
+constraints, canonical digests, first-class footprint pose/side/lock/pad ownership, simple closed
+octilinear courtyard rings and exact-integer-radius courtyard circles, and a bounded fail-closed
+converter for a documented KiCad subset. The 0.1 schema
 remains available as immutable compatibility evidence; [migration](docs/migrations/board-ir-0.2.md)
 re-converts the original board rather than inventing parents.
 
-**Observe a board semantically.** Circuit Scene IR `0.2.0` over MCP and the CLI. A mandatory region
+**Observe a board semantically.** Circuit Scene IR `0.3.0` over MCP and the CLI. A mandatory region
 returns full-precision integer geometry for overlapping objects, split into `static` (outline,
 footprints, pads, keepouts, rules) and `mutable` (segments, arcs, vias, zones) so code meaning to
 read only the givens cannot iterate over both. Objects are named by the Board IR references they
-already carry, each declaring how durable that reference is, and truncation is reported explicitly.
+already carry, each declaring how durable that reference is. Every array a scene returns is
+**complete** for the region: a kind that does not fit a ceiling is replaced by a
+`withheld_by_ceiling` observation carrying the ceiling it hit and the number of objects omitted,
+so a short list can never be misread as an absent one.
 Board text is off by default and, when requested, appears only in a separately typed `annotations`
 collection marked untrusted; net names never appear at all.
 
@@ -109,9 +116,12 @@ byte-identical, and the evidence records every input that changes the bytes.
 **Route.** Bounded integer A* candidates on a documented rectangular Board IR subset. A two-pad net
 routes as one path; a wider net routes as a deterministic spanning tree over its components. Routing
 avoids existing foreign-net pads, segments at any angle, through vias, rectangular and polygon track
-keepouts, and conservative solid-zone polygon envelopes under exact integer clearance, with
-independent lattice, search, and obstacle-work ceilings. Same-net copper is attachment rather than a
-refusal, so a partly routed net completes from what is already there.
+keepouts, and conservative solid-zone polygon envelopes under exact integer clearance. The foreign-
+copper obstacle model is scoped to a region around the net being routed rather than to the whole
+board, and five independent ceilings bound the work — lattice nodes, search expansions, region
+obstacles, the routed net's own copper, and exact geometric checks — each with its own typed
+refusal, so a budget admission is never reported as a proof. Same-net copper is attachment rather
+than a refusal, so a partly routed net completes from what is already there.
 
 **Recognize existing connectivity.** A net already joined by existing copper is identified across any
 pad count, through same-net through vias between layers, and — behind the opt-in
@@ -128,8 +138,8 @@ context, without writing a candidate file into the source workspace.
 non-mutating preview. Seven rule kinds name objects only by scene references and carry exact integer
 parameters; the language has no way to state an absolute coordinate or to permit an overlap. A
 candidate proves exactly four things: pad overlap, board-outline containment, keepout respect, and —
-for Board IR `0.2`'s simple orthogonal courtyard rings, between footprints on the same physical
-side — courtyard overlap.
+for Board IR `0.2`'s simple closed octilinear courtyard rings and circles, between footprints on the
+same physical side — courtyard overlap.
 
 **Build a schematic.** Immutable Circuit Intent IR `0.1.0` for bounded two-pin resistor/capacitor
 topology, with a strict codec, canonical content digest, and deterministic in-memory KiCad
@@ -158,7 +168,7 @@ unsupported property refuses before a single byte is written.
 **Watch a live editor, read-only.** An optional official `kicad-python` IPC observer and KiCad
 PCB-editor plugin that report only a live board digest, version compatibility, and bounded object
 counts, plus an `observe_live_board_scene` bridge that converts the exact active-editor snapshot
-into Circuit Scene `0.2.0` geometry. They never mutate KiCad or expose board text, net names, UUIDs,
+into Circuit Scene `0.3.0` geometry. They never mutate KiCad or expose board text, net names, UUIDs,
 or geometry beyond the scene contract. Reaching a running editor is an outbound action, so it is off
 by default behind the exact `COPPER_MCP_ALLOW_LIVE_IPC` flag; with it off the live tools stay listed
 and refuse, and no IPC socket is read from the environment or opened. The plugin half installs from
@@ -194,22 +204,58 @@ modelled as a one-value literal (`not_run`, `not_modelled`, `inconclusive`) rath
   with real KiCad DRC, not yet on a board genuinely requiring new copper. This is the project's
   largest empirical gap.
 - Multi-pin nets route as a deterministic spanning tree. **Steiner optimality is not claimed.**
+- **`preview_route` routes one net at a time, on one layer, against the snapshot as observed.** Two
+  candidates for two different nets are **not** mutually compatible: neither was searched against
+  the other's copper, and nothing in either candidate says so. `preview_route_bundle` is the only
+  surface that composes nets — two to eight of them, published only when negotiated routing, a
+  complete composition replay, and the exact cross-net clearance gate all succeed. Presenting a
+  set of independent candidates as a plan is a claim CopperMCP never made.
+- A budget refusal is not a proof. `search_budget_exceeded`, `grid_budget_exceeded`,
+  `obstacle_budget_exceeded`, `obstacle_check_budget_exceeded` and `net_object_budget_exceeded` all
+  mean the work ran out. Only `no_path` is a completed search, and `no_path_in_region` is completed
+  only inside a region that is a proper subset of the board.
 - Zone fill is **not** routing authority. Verified fill informs connectivity only; the routing
   obstacle model continues to use the conservative zone envelope.
 - Routing succeeds only for the documented Board IR and single-layer subset. Anything else returns a
   typed diagnostic rather than a guess.
 
+**Board conversion.**
+
+- **Not every real KiCad board converts to Board IR.** The converter is a documented subset and
+  fails closed on everything outside it. As measured on the private working corpus on 2026-08-11:
+  **11 of the 12 boards in the [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116)
+  survey set convert, which is 11 of all 17 boards in the corpus as saved today.** The six that do
+  not each refuse for exactly one named construct — `connect`-kind (edge-connector) pads on one
+  board ([#138](https://github.com/seunghyukchoe/copper-mcp/issues/138)), root board properties on
+  four saves ([#140](https://github.com/seunghyukchoe/copper-mcp/issues/140)), and a root copper
+  graphic on one ([#141](https://github.com/seunghyukchoe/copper-mcp/issues/141)). Each is a typed
+  refusal naming the construct, never a partial or repaired board. **No "converts every board"
+  result is claimed at any count**, and the counts above supersede any earlier survey figure.
+- A refusal is not a verdict on the board. It says the construct is outside the documented subset,
+  which is the conservative direction — the converter over-refuses rather than guess at geometry.
+
 **Placement.**
 
 - **There is no placement solver.** Placement is judged, not searched: you propose, CopperMCP rules
   on it.
-- Courtyard overlap **is** evaluated, but only for simple orthogonal rings, only between footprints
-  on the same physical side, and only as overlap — there is no configurable courtyard clearance.
-  General topology is open: same-footprint ring nesting treats a donut courtyard as solid
-  ([#74](https://github.com/seunghyukchoe/copper-mcp/issues/74)), and KiCad's own cached-outline
-  inset means it registers a collision only past roughly 10,000 nm of penetration where this
-  predicate reports overlap from 1 nm ([#72](https://github.com/seunghyukchoe/copper-mcp/issues/72)).
-  Both gaps err toward refusing a placement KiCad would accept.
+- A placement preview evaluates **legality**, never quality. A candidate that comes back clean was
+  judged legal against the rules it was given — and a preview run with no rules proves only that
+  the placement is legal as found. There is no score, no ranking, and no statement that one legal
+  placement is better than another.
+- Courtyard overlap **is** evaluated, but only between footprints on the same physical side, only
+  over simple closed octilinear rings (edges horizontal, vertical, or exact 45-degree chamfers) and
+  circles of exact integer radius, and only as overlap — there is **no configurable courtyard
+  clearance**. Arcs, curves, arbitrary slopes, fills, and open or branching contours are refused
+  upstream by Board IR rather than judged here.
+- Courtyard overlap is **three-valued**, and bound to what KiCad 10.0.5 actually compares rather
+  than to raw ring geometry: a footprint's rings form one even-odd region, so a ring nested inside
+  another is a **hole** and a donut courtyard's centre is occupiable; and each region is contracted
+  by KiCad's 5,000 nm `BuildCourtyardCaches` inset, so a nominal penetration below 10,000 nm is
+  reported `inconclusive` rather than rounded either way (ADR-0075, closing
+  [#72](https://github.com/seunghyukchoe/copper-mcp/issues/72) and
+  [#74](https://github.com/seunghyukchoe/copper-mcp/issues/74)). `proven_clear` is licensed only by
+  an outer bound and `violated` only by an inner one; anything neither bracket certifies stays
+  `inconclusive`. Do not read `inconclusive` as either answer.
 - Pad overlap is deliberately three-valued: `inconclusive` means neither clearance nor collision
   could be proven, not that something is wrong.
 - A placement candidate is bound to KiCad DRC evidence only when a preview is asked for it with

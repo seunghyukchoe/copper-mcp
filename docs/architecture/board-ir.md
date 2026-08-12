@@ -119,7 +119,7 @@ board. The schema is the field-level reference.
 | Stack | Ordered copper layers of kind `signal`, `plane`, or `mixed`. |
 | Connectivity | Stable net IDs with UTF-8 display names. |
 | Constraints | Net classes, one assignment per net, differential-pair rules, and min/max length rules. |
-| Components | Footprint identity, board-frame origin, normalized rotation, side, lock state, total pad ownership, and up to 64 exact simple orthogonal courtyard rings. |
+| Components | Footprint identity, board-frame origin, normalized rotation, side, lock state, total pad ownership, and up to 64 exact simple courtyard shapes — rings whose every edge is horizontal, vertical, or an exact 45-degree chamfer, plus circles of exact integer radius ([ADR-0080](../adr/0080-chamfered-and-circular-courtyards.md)). The 64 ceiling is a fixed schema limit reported as `schema.limit`, not an operator budget. |
 | Terminations | SMD, through-hole, and NPTH pads; circle, rectangle, oval, and rounded-rectangle shapes. |
 | Existing copper | Straight segments, exact three-point arcs, full-stack through vias, and solid zones with priority, pad-connection, island-removal, clearance, and thermal intent. |
 | Exclusions | Multi-layer polygonal keepouts with explicit track, via, pad, zone, and footprint prohibitions. |
@@ -165,9 +165,10 @@ contains a bounded machine-readable diagnostic and no snapshot.
 |---|---|
 | Board metadata | Exact KiCad PCB format version `20260206`, optional `generator`, ordered copper declarations `0/F.Cu`, contiguous even-numbered inner layers, then `B.Cu`, and a narrow setup-metadata allowlist with KiCad-default front/back via tenting. |
 | Nets | Quote-aware named item-level net references and legacy numeric root declarations; quoted numeric text remains a name while bare signed numeric tokens retain legacy net-code meaning. |
-| Outline | Exactly one contour on `Edge.Cuts`, drawn either as one unfilled `gr_rect` or as `gr_line` segments that chain, by exact endpoint coincidence, into one closed simple loop. See [ADR-0077](../adr/0076-segment-assembled-edge-cuts-outline.md). |
-| Footprints/pads | Footprints on `F.Cu` or `B.Cu` with rotations in 90-degree increments, exact origin/side/lock/pad ownership, and optional unfilled `fp_rect`, orthogonal `fp_poly`, or closed orthogonal `fp_line` courtyard centerlines on the matching layer; `smd`, `thru_hole`, and `np_thru_hole` pads; circle, rect, oval, and roundrect shapes; round or oval drills; copper layer names, `*.Cu`, and `F&B.Cu`; and a pad `zone_connect` override of `1`, `2` or `3` — the three that attach the pad to a same-net pour — accepted as a proven no-op and modelled as nothing, per [ADR-0091](../adr/0091-attaching-pad-zone-connect-overrides.md). |
-| Routed copper | Net-bound straight `segment` items, exact start/mid/end `arc` items, and through vias spanning the declared copper stack. |
+| Outline | Exactly one contour on `Edge.Cuts`, drawn either as one unfilled `gr_rect` or as `gr_line` segments that chain, by exact endpoint coincidence, into one closed simple loop. See [ADR-0076](../adr/0076-segment-assembled-edge-cuts-outline.md). |
+| Footprints/pads | Footprints on `F.Cu` or `B.Cu` with rotations in 90-degree increments, exact origin/side/lock/pad ownership, and optional unfilled `fp_rect`, `fp_poly`, or closed complete `fp_line` courtyard centerlines on the matching layer — every edge horizontal, vertical, or an exact 45-degree chamfer — plus unfilled `fp_circle` outlines whose radius is an exact integer nanometre; `smd`, `thru_hole`, and `np_thru_hole` pads; circle, rect, oval, and roundrect shapes; round or oval drills; copper layer names, `*.Cu`, and `F&B.Cu`; and a pad `zone_connect` override of `1`, `2` or `3` — the three that attach the pad to a same-net pour — accepted as a proven no-op and modelled as nothing, per [ADR-0091](../adr/0091-attaching-pad-zone-connect-overrides.md). |
+| Routed copper | Straight `segment` items, exact start/mid/end `arc` items, and through vias spanning the declared copper stack. Copper carrying no routable net converts as an obstacle with `net_id` `None` rather than refusing the board, per [ADR-0078](../adr/0078-netless-copper-as-obstacle.md); it is an obstacle only and contributes nothing to connectivity. |
+| Net-tie copper | A footprint declaring `net_tie_pad_groups` may draw its deliberate short as an `fp_poly` on `F.Cu`/`B.Cu`. That polygon converts to netless obstacle copper under the same `net_id` `None` contract, so the short is modelled as something to route around and never as a connection. Every other primitive a net-tie footprint could draw the short with — `fp_line`, `fp_arc`, `fp_rect`, `fp_circle` — is refused by name. See [ADR-0092](../adr/0092-net-tie-copper-as-netless-obstacle.md). |
 | Zones | Net-bound, single-copper-layer, solid zones with one polygon loop; explicit priority, thermal/through-hole-thermal/solid/none pad connection, always/never island removal, clearance, and conditionally required thermal dimensions. |
 | Keepouts | Copper-layer sets, exactly one polygon loop, the five modeled prohibition flags, and lock state. |
 | Constraints | A caller-supplied `KiCadConstraintProfile` containing net classes, a default class, optional per-net-name assignments, differential-pair rules, and length rules. |
@@ -202,12 +203,33 @@ including:
   branching spur, a duplicate or zero-length segment, a self-intersection, or two disjoint loops.
   The outline is routing room, so it is never repaired into something larger than what was drawn;
 - `Edge.Cuts` outline holes;
-- root or footprint-local text/graphics on copper, and any footprint-local `Edge.Cuts` primitive;
+- root or footprint-local text/graphics on copper — including a root `gr_text` on `F.Cu`, which is
+  real copper and so would have to be *over*-approximated to be admitted at all, and a containing
+  glyph envelope needs font metrics Board IR does not model
+  ([#141](https://github.com/seunghyukchoe/copper-mcp/issues/141)) — and any footprint-local
+  `Edge.Cuts` primitive. The net-tie `fp_poly` above is the one exception, and only when its
+  footprint declares `net_tie_pad_groups`;
 - footprint rotations not divisible by 90 degrees;
-- curved, diagonal, filled, open, branching, duplicate-edge, mixed-layer, or other unsupported
-  courtyard topology, a courtyard layer that disagrees with the supported front/back footprint,
-  and more than 64 courtyard rings on one footprint;
-- custom or other unmodeled pad shapes and custom pad primitives;
+- courtyard ring edges at any slope other than horizontal, vertical, or an exact 45-degree chamfer
+  (`|dx| == |dy|`); an `fp_circle` courtyard whose radius is not an exact integer nanometre, or one
+  whose bounding box meets any sibling courtyard shape's bounding box — a circle cannot join the
+  even-odd ring-nesting hierarchy, so an overlap there would silently subtract keep-out area, and
+  the box test is deliberately conservative (it may refuse an exotic legal arrangement, never admit
+  an unsound one); `fp_arc` courtyards; and filled, open, branching,
+  duplicate-edge, mixed-layer, or otherwise unsupported courtyard topology, a courtyard layer that
+  disagrees with the supported front/back footprint, and more than 64 courtyard shapes on one
+  footprint;
+- custom or other unmodeled pad shapes and custom pad primitives. Pad **kind** and pad **shape**
+  are two separate refusals, because one message covering both positional tokens of a pad header
+  named neither. Of KiCad's four documented kinds (`PAD_ATTR_T`: PTH, SMD, CONN, NPTH) only
+  `connect` — the edge-connector pad — is documented-but-unmodelled, and it refuses by name
+  ([#138](https://github.com/seunghyukchoe/copper-mcp/issues/138)). Whether it maps to `SMD`, earns
+  its own `PadKind`, or stays refused is an open contract decision, not a missing table entry:
+  `PadKind` is published into every snapshot digest;
+- root sections the KiCad format defines and Board IR v0.2 does not model, each refused by name
+  from a closed table: `dimension` objects, embedded `image`s, and root board `property` text
+  variables ([#140](https://github.com/seunghyukchoe/copper-mcp/issues/140)). A root head absent
+  from that table refuses without being named, with the indexed locator still saying where it sits;
 - blind, buried, or microvias in KiCad input;
 - multiple polygon loops or holes in a zone/keepout, multi-layer copper zones, hatched fills,
   smoothing, minimum-area island removal, and other unmodeled zone semantics;
@@ -230,8 +252,22 @@ not parsed from `.kicad_pro` or `.kicad_dru` in this adapter.
 ## Resource limits and diagnostics
 
 Default independent limits bound input bytes, parse depth, token/node counts, atom size, list width,
-object count, vertices, intersection work, and diagnostics. Callers may supply a stricter positive
-`ParseLimits` value. These limits are compatibility and security boundaries, not promises that every
+object count, vertices, intersection work, and diagnostics. An in-process caller may supply its own
+positive `ParseLimits` value.
+
+Six of these are **operator-settable**, and are taken as configured rather than clamped down:
+`max_tokens`, `max_nodes`, `max_children_per_list`, `max_objects`, `max_total_vertices` and
+`max_intersection_tests`, through the matching `COPPER_MCP_MAX_PARSE_*` environment variables and
+the single `parse_budgets.parse_limits_for()` seam, so a budget moves for every board-reading
+service at once or for none ([ADR-0079](../adr/0079-discriminated-configurable-parse-budgets.md);
+before it, thirteen call sites hardcoded the structural budgets and an operator could move only the
+byte ceiling). `max_input_bytes` is the deliberate exception and keeps `min` semantics against
+`COPPER_MCP_MAX_BOARD_BYTES`, which also governs workspace reads, DRC captures and live-editor
+serializations and must not widen the parser as a side effect. `max_depth`, `max_atom_chars`,
+`max_vertices_per_ring` and `max_diagnostics` are deliberately not exposed: they bound the shape of
+one construct rather than the scale of a document.
+
+These limits are compatibility and security boundaries, not promises that every
 input below each individual cap is cheap. The JSON Schema describes the portable structural ceiling;
 an externally produced schema-valid document can still exceed a decoder's operational security
 budget. CopperMCP's public writers never emit a snapshot that the default decoder would reject for
