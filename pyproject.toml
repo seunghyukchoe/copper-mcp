@@ -58,6 +58,36 @@ Repository = "https://github.com/seunghyukchoe/copper-mcp"
 [tool.hatch.build.targets.wheel]
 packages = ["src/copper_mcp"]
 
+# The sdist ships an explicit allowlist, not an exclusion list.  Hatchling honours `.gitignore`
+# but not `.git/info/exclude`, and this repository keeps agent worktrees under `.claude/worktrees/`
+# via the latter — so a default sdist swept in 20,452 files, twenty-eight whole checkouts of this
+# repository, and weighed 124 MB against a 544 KB wheel.  An allowlist cannot regress that way when
+# something new lands in the tree; a denylist can only be as complete as the last person to edit it.
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/tests",
+  "/docs",
+  "/schemas",
+  "/benchmarks",
+  "/hardware",
+  "/scripts",
+  "/AGENTS.md",
+  "/CHANGELOG.md",
+  "/CITATION.cff",
+  "/CODE_OF_CONDUCT.md",
+  "/CONTRIBUTING.md",
+  "/Dockerfile",
+  "/GOVERNANCE.md",
+  "/LICENSE",
+  "/Makefile",
+  "/README.md",
+  "/SECURITY.md",
+  "/SUPPORT.md",
+  "/llms.txt",
+  "/pyproject.toml",
+]
+
 [tool.ruff]
 target-version = "py311"
 line-length = 100

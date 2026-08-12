@@ -55,6 +55,17 @@ seven pad refusals that could never fire now fire with their own text; and the p
 
 ### Fixed
 
+- **The source distribution shipped twenty-eight copies of this repository.** A default hatchling
+  sdist swept `.claude/worktrees/` into the artifact — **20,452 files and 124 MB against a 544 KB
+  wheel** — because hatchling honours `.gitignore` and this repository excludes agent worktrees
+  through `.git/info/exclude`, which is local, untracked, and invisible to the packager. The sdist
+  now ships an explicit **allowlist** rather than an exclusion list: an exclusion list is only ever
+  as complete as its last edit, while an allowlist cannot regress when something new lands in the
+  tree. The artifact is now 717 files and 4.8 MB with no `.claude`, `.hypothesis` or worktree entry
+  in it. Three tests pin the shape in both directions — that it stays an allowlist, that every
+  entry names something real, and that no newly tracked top-level entry falls out of it unnoticed.
+  Caught by the release build, before publication. ([D-183](docs/ledgers/decision-ledger.md))
+
 - **CopperMCP's published DRC schema rejected CopperMCP's own published DRC payload.**
   `schemas/drc-summary.schema.json` sets `"additionalProperties": false` and never declared
   `clean`, while `DrcSummary.to_dict()` has always emitted it -- so every payload from
