@@ -425,6 +425,17 @@ def _project_footprint(footprint: Footprint, placement: FootprintPlacement) -> F
             replace(circle, center=_project_point(circle.center, footprint, placement))
             for circle in footprint.courtyard_circles
         ),
+        # The opposite-layer courtyard is the same rigid body under the same orthogonal map
+        # (ADR-0097); leaving it at the saved pose would project a keep-out onto board area the
+        # part no longer occupies while vacating area it now does.
+        far_side_courtyards=tuple(
+            Ring(tuple(_project_point(point, footprint, placement) for point in courtyard.points))
+            for courtyard in footprint.far_side_courtyards
+        ),
+        far_side_courtyard_circles=tuple(
+            replace(circle, center=_project_point(circle.center, footprint, placement))
+            for circle in footprint.far_side_courtyard_circles
+        ),
     )
 
 

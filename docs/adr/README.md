@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0097**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0098**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -23,11 +23,12 @@ line is deliberate: two branches that both allocate it now conflict textually, s
 merge instead of accepting it.
 
 **Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086.
-ADR-0094 is a **live claim, not a gap** — held by an open branch (issue #140) on this same base
-when ADR-0095 and ADR-0096 were allocated. Both stepped over it rather than racing it, exactly as
-the ledger convention's rule 1 prescribes. ADR-0095 has since landed; if #140's branch is
-abandoned, 0094 becomes a permanent gap like any other spent number and this sentence becomes the
-correction to make.
+ADR-0094 and ADR-0096 stood here as live claims on open branches rather than as gaps, and this
+sentence is that note doing its job: both have since landed — 0094 as the root-board-property
+model and 0096 as the edge-connector pad model — so neither is a gap and neither is spent.
+ADR-0095 stepped over 0094, and ADR-0097 then stepped over both 0094 and 0096 rather than racing
+them, the same move the 0081–0083 block records. Stepping over a live claim cost nothing in either
+case, which is the mechanism working as intended.
 ADR-0089 was listed here until this line was corrected: it landed from its own branch as the
 region-scoped obstacle model and is not a gap. ADR-0092 was listed too, and has since landed from
 its own branch as the net-tie netless-obstacle model; this sentence is that correction, exactly as
@@ -175,15 +176,14 @@ never silently widens it.
 | [0091](0091-attaching-pad-zone-connect-overrides.md) | Accept the pad zone-connection overrides that attach, refuse the one that detaches | Accepted |
 | [0092](0092-net-tie-copper-as-netless-obstacle.md) | Net-tie copper is a netless obstacle, and the tie is never a connectivity claim | Accepted |
 | [0093](0093-actionable-off-grid-refusals.md) | An off-grid refusal carries the pad, the pitch and the exact miss | Accepted |
-| — | *0094 is a live claim on an open branch, not a gap; see **Known gaps** above.* | — |
 | [0094](0094-root-board-properties-as-metadata.md) | A root board property is a text variable, accepted and counted rather than modelled | Accepted |
 | [0095](0095-copper-text-has-no-derivable-envelope.md) | Copper text has no envelope derivable from the board, and refuses under its own name | Accepted |
 | [0096](0096-edge-connector-pads-convert-as-smd.md) | An edge-connector pad converts as an SMD pad, and the discarded token is counted | Accepted |
+| [0097](0097-courtyard-layer-decides-the-side.md) | A courtyard keeps out on the layer it is drawn on, not on its footprint's side | Accepted |
 
-Ninety-six numbers, ninety records, no duplicates — and `scripts/check_adr_numbers.py`
+Ninety-seven numbers, ninety-two records, no duplicates — and `scripts/check_adr_numbers.py`
 now proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and
-0086 are unused, and 0094 is a live claim on an open branch rather than a gap; see
-**Known gaps** above. The three stray summary sentences that stood here until
+0086 are unused; see **Known gaps** above. The three stray summary sentences that stood here until
 ADR-0088 landed were merge residue from the concurrent branches described above: Git accepted
 three different rewrites of one paragraph because they did not overlap textually.
 
@@ -192,12 +192,12 @@ three different rewrites of one paragraph because they did not overlap textually
 The ADRs are chronological, not thematic. To follow one arc, read it in this order:
 
 - **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070, 0076, 0087,
-  0091, 0092, 0095, 0096.
+  0091, 0092, 0095, 0096, 0097.
 - **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
   0066, 0070, 0073, 0075, 0089, 0093.
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060, 0075.
 - **Circuit Intent and schematic verification** — 0014, 0015, 0056, 0070.
-- **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065, 0075.
+- **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065, 0075, 0097.
 - **Circuit Scene and rendering** — 0010, 0022, 0023, 0028, 0056.
 - **Live KiCad IPC** — 0029, 0030, 0031, 0032, 0033, 0044, 0063, 0069, 0074.
 - **Durable jobs and persistence** — 0043, 0046, 0047, 0048.
@@ -278,3 +278,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0094: A root board property is a text variable, accepted and counted rather than modelled](0094-root-board-properties-as-metadata.md)
 - [ADR-0095: Copper text has no envelope derivable from the board, and refuses under its own name](0095-copper-text-has-no-derivable-envelope.md)
 - [ADR-0096: An edge-connector pad converts as an SMD pad, and the discarded token is counted](0096-edge-connector-pads-convert-as-smd.md)
+- [ADR-0097: A courtyard keeps out on the layer it is drawn on, not on its footprint's side](0097-courtyard-layer-decides-the-side.md)

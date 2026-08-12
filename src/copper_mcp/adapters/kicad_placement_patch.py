@@ -164,6 +164,16 @@ def _expected_content(
                 courtyards=tuple(
                     _move_ring(ring, footprint, x, y, rotation) for ring in footprint.courtyards
                 ),
+                # A far-side courtyard rectangle moves with its footprint exactly as a near-side
+                # one does. `_validate_footprint_expression` refuses every board that carries one
+                # before this is reached, so no corpus board exercises it today; it is written
+                # correctly anyway, because the failure mode of getting it wrong is a *silent*
+                # geometry disagreement between the expected content and the re-parsed board
+                # rather than a typed refusal (ADR-0097).
+                far_side_courtyards=tuple(
+                    _move_ring(ring, footprint, x, y, rotation)
+                    for ring in footprint.far_side_courtyards
+                ),
             )
         )
 

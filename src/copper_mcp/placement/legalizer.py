@@ -159,8 +159,27 @@ class _PlacedFootprint:
     moved: bool
     pads: tuple[_PlacedPad, ...]
     hull: Rect
+    #: Courtyard geometry on the layer matching ``side``.
     courtyards: tuple[Ring, ...]
     courtyard_circles: tuple[CourtyardCircle, ...]
+    #: Courtyard geometry on the layer opposite ``side`` (ADR-0097).
+    far_side_courtyards: tuple[Ring, ...] = ()
+    far_side_courtyard_circles: tuple[CourtyardCircle, ...] = ()
+
+    def on_layer(self, front: bool) -> tuple[tuple[Ring, ...], tuple[CourtyardCircle, ...]]:
+        """Return the rings and circles this footprint draws on ``F.CrtYd`` or ``B.CrtYd``.
+
+        The footprint's own side selects which of the two stored sets is the named layer; it
+        never decides *whether* the footprint occupies that layer. That is KiCad's model:
+        ``FOOTPRINT::BuildCourtyardCaches`` files each shape by the shape's own layer and the
+        courtyard DRC provider compares front against front and back against back, consulting
+        neither footprint's side (``pcbnew/footprint.cpp``,
+        ``pcbnew/drc/drc_test_provider_courtyard_clearance.cpp``, KiCad 10.0.5).
+        """
+
+        if (self.side == "front") == front:
+            return self.courtyards, self.courtyard_circles
+        return self.far_side_courtyards, self.far_side_courtyard_circles
 
 
 def snap(value: int, grid_nm: int) -> int:
@@ -340,6 +359,31 @@ def _place(
             )
             for circle in footprint.courtyard_circles
         )
+        # The far-side courtyard is part of the same rigid body and moves with it. A quarter turn
+        # about the footprint origin is the same map on either courtyard layer, because the pose
+        # change this version admits is a translation plus an orthogonal rotation and never a
+        # flip -- a proposal naming a different `side` is refused above as unmodelled, so no
+        # mirror is ever required here and the two layers never trade contents.
+        far_side_courtyards = tuple(
+            _place_ring(
+                ring,
+                footprint.origin,
+                footprint.orientation_udeg,
+                origin,
+                orientation,
+            )
+            for ring in footprint.far_side_courtyards
+        )
+        far_side_courtyard_circles = tuple(
+            _place_circle(
+                circle,
+                footprint.origin,
+                footprint.orientation_udeg,
+                origin,
+                orientation,
+            )
+            for circle in footprint.far_side_courtyard_circles
+        )
         placed.append(
             _PlacedFootprint(
                 ref_id=ref_id,
@@ -351,6 +395,8 @@ def _place(
                 hull=hull,
                 courtyards=courtyards,
                 courtyard_circles=courtyard_circles,
+                far_side_courtyards=far_side_courtyards,
+                far_side_courtyard_circles=far_side_courtyard_circles,
             )
         )
     # Graphics-only footprints cannot be moved or used as rule references, but a rectangular
@@ -360,10 +406,16 @@ def _place(
         budget.charge()
         stationary_footprint = view.stationary[ref_id]
         stationary_hull: Rect | None = None
-        for ring in stationary_footprint.courtyards:
+        for ring in (
+            *stationary_footprint.courtyards,
+            *stationary_footprint.far_side_courtyards,
+        ):
             bounds = ring_bounds(ring)
             stationary_hull = bounds if stationary_hull is None else union(stationary_hull, bounds)
-        for circle in stationary_footprint.courtyard_circles:
+        for circle in (
+            *stationary_footprint.courtyard_circles,
+            *stationary_footprint.far_side_courtyard_circles,
+        ):
             bounds = (
                 circle.center.x - circle.radius_nm,
                 circle.center.y - circle.radius_nm,
@@ -383,6 +435,8 @@ def _place(
                 hull=stationary_hull,
                 courtyards=stationary_footprint.courtyards,
                 courtyard_circles=stationary_footprint.courtyard_circles,
+                far_side_courtyards=stationary_footprint.far_side_courtyards,
+                far_side_courtyard_circles=stationary_footprint.far_side_courtyard_circles,
             )
         )
     return tuple(placed)
@@ -483,38 +537,63 @@ def _keepout_respect(
 
 
 def _courtyard_overlap(placed: tuple[_PlacedFootprint, ...], budget: _Budget) -> str:
-    """Check same-side courtyards - rings, chamfers, and circles - against KiCad 10.0.5's model.
+    """Check per-layer courtyards - rings, chamfers, and circles - against KiCad 10.0.5's model.
 
     Board IR v0.2 accepts simple closed octilinear courtyard rings and exact circular
     courtyards.  A footprint's contours are one even-odd region rather than a set of
     independent solids, matching the contour hierarchy KiCad builds, and the region is
-    contracted by the cached-courtyard inset before the collision test.  Front and back
-    courtyards are independent physical layers, so cross-side contact is not a collision.
+    contracted by the cached-courtyard inset before the collision test.
     See :func:`courtyard_region_overlap` for why the answer is three-valued, which bound is
     allowed to prove which claim, and why anything else is ``inconclusive``.
+
+    **The pairing is by courtyard layer, not by footprint side** (ADR-0097).  ``F.CrtYd`` and
+    ``B.CrtYd`` are independent physical layers, so cross-layer contact is still not a
+    collision - but a footprint may draw on the layer opposite its own side, and when it does,
+    that geometry keeps out on the layer it is drawn on.  Real ``kicad-cli`` 10.0.5 reports
+    ``courtyards_overlap`` for two coincident ``B.CrtYd`` rectangles whether their footprints
+    sit on the front, the back, or one of each, and reports nothing for a ``B.CrtYd`` against
+    an ``F.CrtYd``.  Gating on the footprint's side instead would have published
+    ``proven_clear`` for the first case - a keep-out silently dropped, in the one direction an
+    obstacle may never err.
+
+    For a board on which every courtyard matches its footprint's side, this enumerates exactly
+    the pairs the previous same-side gate enumerated: the opposite-layer set of every footprint
+    is empty, so its comparison is skipped, and the matching-layer comparison happens only
+    between two footprints on the same side.
     """
 
     verdict = "proven_clear"
     for first_index, first in enumerate(placed):
-        if not first.courtyards and not first.courtyard_circles:
+        if not (
+            first.courtyards
+            or first.courtyard_circles
+            or first.far_side_courtyards
+            or first.far_side_courtyard_circles
+        ):
+            # Unchanged from the same-side gate: a footprint with no courtyard on either layer
+            # is skipped before it charges the pair budget, so a board of courtyard-less
+            # footprints consumes exactly the checks it consumed before.
             continue
         for second in placed[first_index + 1 :]:
             budget.charge()
-            if first.side != second.side or (
-                not second.courtyards and not second.courtyard_circles
-            ):
-                continue
-            outcome = courtyard_region_overlap(
-                first.courtyards,
-                second.courtyards,
-                first_circles=first.courtyard_circles,
-                second_circles=second.courtyard_circles,
-                charge=budget.charge,
-            )
-            if outcome == "violated":
-                return "violated"
-            if outcome == "inconclusive":
-                verdict = "inconclusive"
+            for front in (True, False):
+                first_rings, first_circles = first.on_layer(front)
+                if not first_rings and not first_circles:
+                    continue
+                second_rings, second_circles = second.on_layer(front)
+                if not second_rings and not second_circles:
+                    continue
+                outcome = courtyard_region_overlap(
+                    first_rings,
+                    second_rings,
+                    first_circles=first_circles,
+                    second_circles=second_circles,
+                    charge=budget.charge,
+                )
+                if outcome == "violated":
+                    return "violated"
+                if outcome == "inconclusive":
+                    verdict = "inconclusive"
     return verdict
 
 

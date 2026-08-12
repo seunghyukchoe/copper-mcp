@@ -153,6 +153,15 @@ def _footprint(item: Footprint) -> dict[str, JsonValue]:
         payload["courtyard_circles"] = [
             _courtyard_circle(circle) for circle in item.courtyard_circles
         ]
+    # Same rule, same reason, for the courtyard on the layer opposite the footprint's own side
+    # (ADR-0097).  A footprint whose courtyards all match its side encodes byte-for-byte as it
+    # did before the far side was representable, so no previously minted digest moves.
+    if item.far_side_courtyards:
+        payload["far_side_courtyards"] = [_ring(ring) for ring in item.far_side_courtyards]
+    if item.far_side_courtyard_circles:
+        payload["far_side_courtyard_circles"] = [
+            _courtyard_circle(circle) for circle in item.far_side_courtyard_circles
+        ]
     return payload
 
 
@@ -355,6 +364,21 @@ def normalize_content(content: BoardIRContent) -> BoardIRContent:
                         courtyard_circles=tuple(
                             sorted(
                                 item.courtyard_circles,
+                                key=lambda circle: (circle.center, circle.radius_nm),
+                            )
+                        ),
+                        far_side_courtyards=tuple(
+                            sorted(
+                                (
+                                    Ring(_normalize_ring(courtyard, clockwise=False))
+                                    for courtyard in item.far_side_courtyards
+                                ),
+                                key=lambda ring: ring.points,
+                            )
+                        ),
+                        far_side_courtyard_circles=tuple(
+                            sorted(
+                                item.far_side_courtyard_circles,
                                 key=lambda circle: (circle.center, circle.radius_nm),
                             )
                         ),

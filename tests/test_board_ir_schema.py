@@ -27,6 +27,7 @@ VALID_FIXTURE = ACTIVE_FIXTURE_ROOT / "schema-valid.json"
 INVALID_FIXTURE = ACTIVE_FIXTURE_ROOT / "schema-invalid.json"
 LEGACY_VALID_FIXTURE = LEGACY_FIXTURE_ROOT / "schema-valid.json"
 SUBSET_BOARD = LEGACY_FIXTURE_ROOT / "subset.kicad_pcb"
+FAR_SIDE_BOARD = ACTIVE_FIXTURE_ROOT / "courtyard-far-side.kicad_pcb"
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -229,3 +230,55 @@ def test_schema_and_runtime_both_reject_more_than_64_copper_layers() -> None:
         decode_snapshot_json(json.dumps(payload).encode())
 
     assert caught.value.code == "schema.limit"
+
+
+def test_schema_accepts_an_emitted_far_side_courtyard_payload_and_closes_it() -> None:
+    """The far-side keys are proved by a payload the adapter really emits, not by a fixture.
+
+    A schema that omits a field the code emits makes a true payload fail; a schema that declares
+    it without its constraints lets a false one pass (R-137). Both directions are checked here:
+    the emitted payload validates, an empty array does not - the encoder omits the key rather
+    than emitting `[]`, so an empty one is not a payload this project produces - and the object
+    stays closed against a near-miss key name.
+    """
+
+    default = NetClass(
+        id="class:default",
+        name="Default",
+        clearance_nm=250_000,
+        track_width_nm=250_000,
+        via_diameter_nm=800_000,
+        via_drill_nm=400_000,
+    )
+    profile = KiCadConstraintProfile(net_classes=(default,), default_net_class_id=default.id)
+    result = parse_kicad_bytes(FAR_SIDE_BOARD.read_bytes(), profile)
+    assert result.diagnostics == ()
+    assert result.snapshot is not None
+    payload = json.loads(encode_snapshot(result.snapshot))
+
+    assert list(_validator().iter_errors(payload)) == []
+    carrier = next(
+        footprint
+        for footprint in payload["content"]["items"]["footprints"]
+        if "far_side_courtyards" in footprint
+    )
+    assert len(carrier["far_side_courtyards"]) == 1
+
+    emptied = deepcopy(payload)
+    next(
+        footprint
+        for footprint in emptied["content"]["items"]["footprints"]
+        if "far_side_courtyards" in footprint
+    )["far_side_courtyards"] = []
+    assert any(error.validator == "minItems" for error in _validator().iter_errors(emptied))
+
+    misspelled = deepcopy(payload)
+    footprint = next(
+        item
+        for item in misspelled["content"]["items"]["footprints"]
+        if "far_side_courtyards" in item
+    )
+    footprint["far_side_courtyard"] = footprint.pop("far_side_courtyards")
+    assert any(
+        error.validator == "additionalProperties" for error in _validator().iter_errors(misspelled)
+    )

@@ -63,34 +63,43 @@ def _require_disjoint_courtyard_circles(footprint: Footprint) -> None:
     placement geometry a sound union.  Boxes may touch; only interior overlap is refused.
     The check is deliberately conservative (boxes, not exact shapes) - it can refuse a legal
     but exotic arrangement, and it can never admit an unsound one.
+
+    **The check is per courtyard layer, and must be.**  A footprint's front and back courtyards
+    are separate even-odd regions on separate physical layers (ADR-0097), so a back circle
+    meeting a front ring flips no parity and deletes no area.  Pooling the two sets here would
+    refuse the stock KiCad through-board footprints whose back courtyard is drawn *inside* their
+    front one, for a hazard that cannot exist across layers.
     """
 
-    if not footprint.courtyard_circles:
-        return
-    boxes: list[tuple[int, int, int, int]] = []
-    for circle in footprint.courtyard_circles:
-        boxes.append(
-            (
-                circle.center.x - circle.radius_nm,
-                circle.center.y - circle.radius_nm,
-                circle.center.x + circle.radius_nm,
-                circle.center.y + circle.radius_nm,
-            )
-        )
-    for ring in footprint.courtyards:
-        xs = [point.x for point in ring.points]
-        ys = [point.y for point in ring.points]
-        boxes.append((min(xs), min(ys), max(xs), max(ys)))
-    circle_count = len(footprint.courtyard_circles)
-    for first in range(circle_count):
-        for second in range(first + 1, len(boxes)):
-            a, b = boxes[first], boxes[second]
-            if a[2] > b[0] and b[2] > a[0] and a[3] > b[1] and b[3] > a[1]:
-                raise BoardIRValidationError(
-                    "unsupported.topology",
-                    "courtyard circles must be disjoint from the footprint's other courtyards",
-                    footprint.id,
+    for circles, rings in (
+        (footprint.courtyard_circles, footprint.courtyards),
+        (footprint.far_side_courtyard_circles, footprint.far_side_courtyards),
+    ):
+        if not circles:
+            continue
+        boxes: list[tuple[int, int, int, int]] = []
+        for circle in circles:
+            boxes.append(
+                (
+                    circle.center.x - circle.radius_nm,
+                    circle.center.y - circle.radius_nm,
+                    circle.center.x + circle.radius_nm,
+                    circle.center.y + circle.radius_nm,
                 )
+            )
+        for ring in rings:
+            xs = [point.x for point in ring.points]
+            ys = [point.y for point in ring.points]
+            boxes.append((min(xs), min(ys), max(xs), max(ys)))
+        for first in range(len(circles)):
+            for second in range(first + 1, len(boxes)):
+                a, b = boxes[first], boxes[second]
+                if a[2] > b[0] and b[2] > a[0] and a[3] > b[1] and b[3] > a[1]:
+                    raise BoardIRValidationError(
+                        "unsupported.topology",
+                        "courtyard circles must be disjoint from the footprint's other courtyards",
+                        footprint.id,
+                    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,7 +297,12 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
     pad_ids = {pad.id for pad in content.pads}
     owned_pad_ids: list[str] = []
     for footprint in content.footprints:
-        courtyard_count = len(footprint.courtyards) + len(footprint.courtyard_circles)
+        courtyard_count = (
+            len(footprint.courtyards)
+            + len(footprint.courtyard_circles)
+            + len(footprint.far_side_courtyards)
+            + len(footprint.far_side_courtyard_circles)
+        )
         if courtyard_count > _SCHEMA_MAX_COURTYARDS_PER_FOOTPRINT:
             raise BoardIRValidationError(
                 "schema.limit",
@@ -363,6 +377,10 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
     for footprint in content.footprints:
         for index, courtyard in enumerate(footprint.courtyards):
             locator = f"{footprint.id}.courtyards[{index}]"
+            _require_octilinear_courtyard(courtyard, locator)
+            rings.append((locator, courtyard))
+        for index, courtyard in enumerate(footprint.far_side_courtyards):
+            locator = f"{footprint.id}.far_side_courtyards[{index}]"
             _require_octilinear_courtyard(courtyard, locator)
             rings.append((locator, courtyard))
     total_vertices = sum(len(ring.points) for _, ring in rings)

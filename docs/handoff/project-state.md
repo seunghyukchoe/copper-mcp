@@ -72,8 +72,8 @@ the source of truth over both**, so read it with
 `gh issue list -R seunghyukchoe/copper-mcp` and
 `gh api repos/seunghyukchoe/copper-mcp/milestones` rather than trusting a checkbox.
 
-**Record ranges.** ADR-0001 … ADR-0095, next unused **0096**. Ledgers: `D-185`, `R-140`, `SEC-136`,
-`B-100` are the highest allocated; allocate in the pull request that lands the entry, never before,
+**Record ranges.** ADR-0001 … ADR-0097, next unused **0098**. Ledgers: `D-187`, `R-142`, `SEC-139`,
+`B-101` are the highest allocated; allocate in the pull request that lands the entry, never before,
 per [the ID convention](../ledgers/README.md).
 
 ---
@@ -258,13 +258,20 @@ worse than none, because it will be ignored.
    does not support — and **expect a stack**: removing the blocker
    [#140](https://github.com/seunghyukchoe/copper-mcp/issues/140) named left the corpus at 11 of 17
    and exposed two further constructs (a courtyard layer disagreeing with its footprint's side on
-   three boards, an unsupported field inside a pad on one), neither yet filed. **#141 is answered
+   three boards, an unsupported field inside a pad), both since filed as #151 and #153. **#141 is answered
    and is not a gap to take**: copper text has no envelope derivable from the board document,
    measured against `kicad-cli`, so it stays refused by decision rather than by omission
    ([ADR-0095](../adr/0095-copper-text-has-no-derivable-envelope.md)) — the board it blocks stays
    blocked and the count is unchanged.
-   [#138](https://github.com/seunghyukchoe/copper-mcp/issues/138) remains, one board, plus the two
-   constructs above.
+   [#138](https://github.com/seunghyukchoe/copper-mcp/issues/138) is closed — the edge-connector
+   pad converts as SMD ([ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md)) — and
+   **#151 is answered and also moved no count**: a courtyard keys to the layer it is drawn on and
+   not to its footprint's side, so the three phono saves that stopped there now stop one blocker
+   later, on a custom-shape SMD pad
+   ([#153](https://github.com/seunghyukchoe/copper-mcp/issues/153),
+   [ADR-0097](../adr/0097-courtyard-layer-decides-the-side.md)). That is the fourth time removing a
+   refusal has exposed the next one rather than converting a board; treat a stack of blockers as
+   the default and measure after each, never before.
 2. **Make the real-board routing result mean something.** 14 of 385 is a floor, not a capability.
    The next step is DRC evidence and cross-net compatibility on a real board, not a larger sweep.
 3. **Close placement data-fidelity and post-action gates.** Model and replay author text,
@@ -273,6 +280,9 @@ worse than none, because it will be ignored.
    bounded contracts.
 4. **Generalize courtyard and side-aware geometry.** Add source-oracle fixtures for arc and
    multi-loop topology, nonzero clearance, and safe side flips before widening mutation support.
+   Note that per-layer courtyards now exist ([ADR-0097](../adr/0097-courtyard-layer-decides-the-side.md)):
+   a side flip has to swap a footprint's two courtyard sets as well as mirror them, and the
+   source-preserving serializer still refuses every board carrying a far-side courtyard rectangle.
 5. **IPC apply ([#68](https://github.com/seunghyukchoe/copper-mcp/issues/68)).**
    `kicad-python`'s `begin_commit` / `push_commit` gives a genuine single-undo-step transaction
    into a running KiCad. The hard part is binding an in-memory document to a file digest;
