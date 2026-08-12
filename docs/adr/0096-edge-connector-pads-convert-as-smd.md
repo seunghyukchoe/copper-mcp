@@ -1,12 +1,11 @@
 # ADR-0096: An edge-connector pad converts as an SMD pad, and the discarded token is counted
 
-- Status: Accepted (amended 2026-08-12 after adversarial review of PR #149; see D-187)
+- Status: Accepted (amended 2026-08-12, before merge, after adversarial review of PR #149)
 - Date: 2026-08-12
 - Owners: `@seunghyukchoe`
 - Related: [Issue #138](https://github.com/seunghyukchoe/copper-mcp/issues/138), ADR-0004,
   ADR-0013, ADR-0021, ADR-0076, ADR-0090, ADR-0091, ADR-0092,
-  [KiCad `connect` pad research](../research/kicad-connect-pad-attribute-v1.md),
-  [D-187](../ledgers/decision-ledger.md), [R-142](../ledgers/risk-register.md)
+  [KiCad `connect` pad research](../research/kicad-connect-pad-attribute-v1.md)
 
 ## Context
 
@@ -142,12 +141,17 @@ never report copper that was not modelled. It is a number, not a set: nothing te
 **And it is readable one layer deep only. From an MCP client the discard is silent.** The count
 lives on `ConversionResult`, which is an in-process return value. `BoardIrSummary`
 (`board_ir_service.py:100-181`) carries no field for it, so it reaches no MCP contract, no CLI
-output and no Circuit Scene. This is not special to this count — `unmodelled_group_count` and
-`max_roundrect_rounding_nm` are equally invisible there, and that is a pre-existing gap rather
-than one this decision opens — but the first version of this ADR said the distinction was
-"discarded loudly", and against the surface most consumers actually use, it is not. R-142 carries
-it, and no surface is widened here to fix it, because doing so is a published-contract change of
-its own and belongs in its own decision.
+output and no Circuit Scene. The first version of this ADR said the distinction was "discarded
+loudly"; against the surface most consumers actually use, it is not, and that is retracted.
+
+**This is a property of the measured-field pattern, not of this decision, and it is worth naming
+once so nobody rediscovers it a fourth time.** `unmodelled_group_count` (ADR-0090) and
+`max_roundrect_rounding_nm` (D-157) are equally invisible from an MCP client, for the same reason:
+all three live on `ConversionResult`, which no published surface carries. That makes the situation
+worse rather than better — three separate decisions now rest on a disclosure channel a client
+cannot read. R-141 carries it. No surface is widened here to fix it, because doing so is a
+published-contract change on `BoardIrSummary` and its MCP schema, it should properly cover all
+three counts rather than the one this ADR happens to add, and it belongs in its own decision.
 
 **What genuinely bounds the loss is the write path, and it is proved rather than asserted.** Both
 patch adapters are source-preserving splices that rewrite only pose and route geometry, never a
@@ -244,7 +248,7 @@ Two results are worth recording rather than just counting:
   *envelope* (`canonical.py:571`). Setting `BOARD_IR_SCHEMA_VERSION = "0.3.0"` in a throwaway tree
   and recomputing gives a **byte-identical digest** (`sha256:157661bf…`) and an **identical
   encoded length** (4,280 — "0.3.0" and "0.2.0" are the same width). Downstream identities bind
-  `base_revision = snapshot_digest`, so there is no cascade. See D-187.
+  `base_revision = snapshot_digest`, so there is no cascade. See D-186.
 
   **What a bump actually costs**, measured by bumping the constant and running the suite rather
   than by reading the code: the committed envelope fixture
@@ -275,11 +279,17 @@ Two results are worth recording rather than just counting:
   the case *for* eventually modelling the distinction stronger than this ADR first implied: KiCad
   really does consume it outside fabrication metadata (the pick-and-place exclusion, and a
   property-system value user-authored DRC rules can name), and CopperMCP's own disclosure is
-  weaker than claimed (R-142). What holds the decision here is that nothing in *this* repository
+  weaker than claimed (R-141). What holds the decision here is that nothing in *this* repository
   reads it today, and that the write path preserves the token so no user artifact is degraded
-  meanwhile. The bump is now *known* to be cheap — digest-stable, one fixture, one codec gate —
-  which is itself a reason not to pre-pay for it: the option stays open at a price we have
-  measured instead of guessed.
+  meanwhile.
+
+  **The irony is worth keeping rather than smoothing away.** The digest finding makes the
+  *rejected* alternative cheaper than this record originally claimed — digest-stable, one
+  regenerated fixture, one codec gate — which strengthens the case for taking it later. That is
+  precisely the reason not to take it now: **an option at a known price is worth more than an
+  option at a price you guessed.** Pre-paying converts a cheap, deferrable, reversible change into
+  a spent schema version and a migration imposed on every consumer storing snapshots, in exchange
+  for a member with no reader. When a reader appears, the price is on the table and measured.
 - **Keep refusing.** Rejected. The refusal is not supported by either direction-of-error rule
   once the source has been read, and ADR-0091 named this failure mode: a refusal without an
   argument is how a tool acquires superstitions.
@@ -306,8 +316,7 @@ Two results are worth recording rather than just counting:
   [ADR-0091](0091-attaching-pad-zone-connect-overrides.md),
   [ADR-0092](0092-net-tie-copper-as-netless-obstacle.md)
 - [KiCad `connect` pad research](../research/kicad-connect-pad-attribute-v1.md)
-- [Decision ledger D-186](../ledgers/decision-ledger.md) and its correction
-  [D-187](../ledgers/decision-ledger.md), which carries the retracted digest-cascade mechanism,
-  the measured cost of a schema bump, and the divergence recount
-- [Risk register R-141](../ledgers/risk-register.md) and
-  [R-142](../ledgers/risk-register.md), which carries the in-process-only reach of the count
+- [Decision ledger D-186](../ledgers/decision-ledger.md), which carries the retracted
+  digest-cascade claim, the measured cost of a schema bump, and the divergence recount
+- [Risk register R-141](../ledgers/risk-register.md), which carries the in-process-only reach of
+  the count

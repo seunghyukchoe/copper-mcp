@@ -112,7 +112,7 @@ board. The schema is the field-level reference.
   like the group count above. What bounds the loss is the write path: both patch adapters are
   source-preserving splices, so the `connect` token survives in the `.kicad_pcb` and KiCad's own
   DRC and fabrication output still see an edge connector. See
-  [ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md) and R-142.
+  [ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md) and R-141.
 - IDs use type prefixes such as `layer:`, `net:`, `class:`, `footprint:`, `pad:`, `via:`,
   `segment:`, `arc:`, `zone:`, `keepout:`, `contour:`, and `rule:`. IDs and display names have
   different roles.

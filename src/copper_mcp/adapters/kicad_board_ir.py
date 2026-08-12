@@ -1913,8 +1913,8 @@ class _Converter:
                 #
                 # The distinction is therefore *discarded*, not preserved. It is counted rather
                 # than dropped in silence -- see `edge_connector_pad_count` below -- but that
-                # count is in-process only and reaches no published surface (R-142). ADR-0096 and
-                # D-187 record why a new `PadKind` member was rejected, and what that alternative
+                # count is in-process only and reaches no published surface (R-141). ADR-0096 and
+                # D-186 record why a new `PadKind` member was rejected, and what that alternative
                 # actually costs.
                 if raw_kind not in _PAD_KIND_BY_TOKEN:
                     self.fail(

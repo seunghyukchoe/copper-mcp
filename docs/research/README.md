@@ -138,7 +138,7 @@ When adding a document, add it to the list below in the same sentence form — *
   them geometric, and the methodological correction that produced it: a sweep for one enum value
   is structurally blind to branches testing its siblings, which is how the first version missed
   the pick-and-place exclusion and then claimed exhaustiveness anyway. It disposes of the plating
-  hypothesis — plating is not a pad attribute in KiCad at all. It grounds ADR-0096 and D-187, and
+  hypothesis — plating is not a pad attribute in KiCad at all. It grounds ADR-0096 and D-186, and
   claims nothing about castellated pads, per-layer padstacks, behaviour reached through
   user-authored DRC rules, or the population of boards that carry an edge connector.
 - [KiCad arc tracks as routing obstacles](./kicad-arc-track-obstacles-v1.md) grounds ADR-0070's

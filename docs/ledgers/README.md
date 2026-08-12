@@ -23,8 +23,8 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-187` | `D-188` |
-| [Risk register](risk-register.md) | `R-` | `R-142` | `R-143` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-186` | `D-187` |
+| [Risk register](risk-register.md) | `R-` | `R-141` | `R-142` |
 | [Security review ledger](security-ledger.md) | `SEC-` | `SEC-137` | `SEC-138` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-100` | `B-101` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
@@ -63,13 +63,21 @@ The rules:
 
    `D-184`/`D-185`, `R-139`/`R-140` and `SEC-135`/`SEC-136` are the same mechanism running again
    at the time of writing: two branches were open on this same base holding one pair each (issues
-   #140 and #141), so `D-186`/`R-141`/`SEC-137` stepped over both rather than racing them. (`D-187`
-   and `R-142` were then taken on the same branch, by rule 3: adversarial review found a false
-   mechanism in `D-186`, and a row that has been pushed is corrected with a new ID rather than
-   edited, even though it had not yet reached `main`.) They are
-   **live claims, not gaps**, and the checker reports them as unallocated because it cannot see an
-   unmerged branch. If either branch is abandoned its numbers become permanent gaps like any other
-   spent number, and this paragraph becomes the correction to make.
+   #140 and #141), so `D-186`/`R-141`/`SEC-137` stepped over both rather than racing them. They
+   are **live claims, not gaps**, and the checker reports them as unallocated because it cannot
+   see an unmerged branch. If either branch is abandoned its numbers become permanent gaps like
+   any other spent number, and this paragraph becomes the correction to make.
+
+   **A row that has only been pushed to a branch is not yet a record, and rule 3 does not reach
+   it.** Adversarial review found a false mechanism in `D-186` while its pull request was still
+   open. The first instinct was to append a correction row, and that was wrong. Append-only
+   protects the *merged* ledger and the external citations that resolve against it; an unmerged
+   row has neither reader nor citation, so amending it destroys nothing — while appending would
+   have landed a false mechanism on `main` *together with* its correction, where `main` can
+   instead carry only the truth. `D-186` and `R-141` were therefore corrected **in place** before
+   merge, and no numbers were spent. Pushing a branch is not publishing a row. Rule 3 still
+   governs everything that has landed: once a row is on `main` someone may have cited it, and it
+   is corrected by a new ID and never edited.
 
    `D-179`/`R-136` then landed *after* `D-180`/`R-137`, and that is not a breach of rule 2. A
    number is allocated when its pull request opens, not when it merges, so a branch held open

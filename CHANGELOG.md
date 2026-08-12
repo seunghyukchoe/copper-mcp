@@ -40,7 +40,9 @@ All notable changes are documented here. The format follows
   `ConversionResult.edge_connector_pad_count`, the same measured-field pattern as
   `unmodelled_group_count`. Be clear about its reach: it is an **in-process** value on
   `ConversionResult` and reaches no MCP contract, CLI output or scene, so from an MCP client the
-  discard is silent. What bounds the loss is the write path — both patch adapters are
+  discard is silent. That is true of `unmodelled_group_count` and `max_roundrect_rounding_nm` too
+  — a pre-existing property of the measured-field pattern rather than something this change
+  introduces, and named here so it does not have to be rediscovered a fourth time. What bounds the loss is the write path — both patch adapters are
   source-preserving splices, so the `connect` token survives in the `.kicad_pcb` byte-for-byte and
   KiCad's own DRC, position file and Gerbers still see an edge connector. One form still refuses:
   a `connect` pad with **no copper layer at all**, because the paste/mask aperture skip tests the

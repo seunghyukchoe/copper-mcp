@@ -229,4 +229,4 @@ pad claims exactly what KiCad claims — no more.
   decision it supports is stated in prose in decision-ledger row D-186, because the runner's
   output derives from a private corpus and is deliberately not committed. An earlier version of
   this sentence said the effect was "recorded in the benchmark ledger", which was never true; that
-  is corrected here and in D-187.
+  is corrected here and in D-186.
