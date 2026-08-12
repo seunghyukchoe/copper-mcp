@@ -58,7 +58,7 @@ for its own reasons, and independently of whether any property is present.**
 
 | Terminus | Existing behaviour, unchanged by this decision |
 |---|---|
-| Root text on a copper layer (`gr_text`, `gr_text_box`) | refused by the `gr_*` branch on any copper layer (issue #141 owns the sentence) |
+| Root text on a copper layer (`gr_text`, `gr_text_box`) | refused by the `gr_*` branch on any copper layer ([ADR-0095](0095-copper-text-has-no-derivable-envelope.md) owns the sentence) |
 | Footprint text on a copper layer (`fp_text`, footprint field) | refused — a footprint graphic on a copper layer is unmodelled copper |
 | `(barcode …)`, `(table …)` | not in the root vocabulary; refused without being named |
 | `.kicad_dru` custom rules | never parsed by this adapter (ADR-0005, and the Board IR contract) |
@@ -177,9 +177,11 @@ property. A reader should treat that leg as resting on the architecture statemen
 [the Board IR contract](../architecture/board-ir.md), re-checked by review, not by CI.
 
 The pins assert the **typed code**, never the refusal sentence. A sentence is documentation of a
-contract owned by whichever decision defines the construct — #141 renames the root-copper-text
-sentence in a branch that merges cleanly with this one — so pinning prose here would have broken two
-independently correct changes at the point where neither diff touches the other's lines.
+contract owned by whichever decision defines the construct, and this was not hypothetical:
+[ADR-0095](0095-copper-text-has-no-derivable-envelope.md) landed while this branch was open and
+renamed the root-copper-text sentence, in a diff that merges cleanly with this one. Pinning prose
+here would have broken two independently correct changes at the point where neither touches the
+other's lines.
 
 **Root board properties become Circuit Scene annotations, and that is a decision rather than a side
 effect.** `circuit_scene.py` skipped root `(property …)` on the recorded ground that "the Board IR

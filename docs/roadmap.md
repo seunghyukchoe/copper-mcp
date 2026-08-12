@@ -60,7 +60,7 @@ for exactly one named construct:
 |---|---|---|
 | 1 | `connect`-kind (edge-connector) pads | [#138](https://github.com/seunghyukchoe/copper-mcp/issues/138) |
 | 4 | root board `property` text variables | [#140](https://github.com/seunghyukchoe/copper-mcp/issues/140) |
-| 1 | a root copper graphic (`gr_text` on `F.Cu`) | [#141](https://github.com/seunghyukchoe/copper-mcp/issues/141) |
+| 1 | a root copper graphic (`gr_text` on `F.Cu`) — **answered and staying refused**, see [ADR-0095](adr/0095-copper-text-has-no-derivable-envelope.md) | [#141](https://github.com/seunghyukchoe/copper-mcp/issues/141) |
 
 **No "converts every board" result is claimed at any count**, and none should be stated until a
 re-measured survey supports it. The counts above supersede earlier survey figures — including

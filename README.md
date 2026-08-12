@@ -228,7 +228,7 @@ modelled as a one-value literal (`not_run`, `not_modelled`, `inconclusive`) rath
   corpus as saved today convert — unchanged by that acceptance**, which the same runner measured at
   11 of 17 immediately before it. Six saves refuse, each with a typed refusal naming one construct,
   never a partial or repaired board: `connect`-kind (edge-connector) pads on one board
-  ([#138](https://github.com/seunghyukchoe/copper-mcp/issues/138)), a root copper graphic on one
+  ([#138](https://github.com/seunghyukchoe/copper-mcp/issues/138)), copper text on one
   ([#141](https://github.com/seunghyukchoe/copper-mcp/issues/141)), a courtyard whose layer
   disagrees with its footprint's side on three, and an unsupported field inside a pad on one. **A
   refusal names the first blocker in document order and nothing more**: the four boards that

@@ -205,7 +205,7 @@ any property is present**:
 
 | Terminus | This adapter's existing behaviour | Pinned by a property-coupled test? |
 |---|---|---|
-| Root text on a copper layer (`gr_text`, `gr_text_box`) | refused by the `gr_*` branch on any copper layer (issue #141 owns the sentence) | yes |
+| Root text on a copper layer (`gr_text`, `gr_text_box`) | refused by the `gr_*` branch on any copper layer ([ADR-0095](../adr/0095-copper-text-has-no-derivable-envelope.md) owns the sentence) | yes |
 | Footprint text on a copper layer (`fp_text`, footprint field) | refused: a footprint graphic on a copper layer is unmodelled copper | yes |
 | `(barcode …)` | not in the root vocabulary; refused without being named | yes |
 | `(table …)` | not in the root vocabulary; refused without being named | no — same mechanism as `barcode`, not separately pinned |
