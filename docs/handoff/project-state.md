@@ -242,7 +242,13 @@ worse than none, because it will be ignored.
    has no envelope derivable from the board document, measured against `kicad-cli`, so it stays
    refused by decision rather than by omission
    ([ADR-0095](../adr/0095-copper-text-has-no-derivable-envelope.md)) — the board it blocks stays
-   blocked and the count is unchanged. Two conversion gaps remain.
+   blocked and the count is unchanged. **#151 is answered and also moved no count**: a courtyard
+   keys to the layer it is drawn on and not to its footprint's side, so the three phono saves that
+   stopped there now stop one blocker later, on a custom-shape SMD pad
+   ([#153](https://github.com/seunghyukchoe/copper-mcp/issues/153),
+   [ADR-0097](../adr/0097-courtyard-layer-decides-the-side.md)). That is the fourth time removing a
+   refusal has exposed the next one rather than converting a board; treat a stack of blockers as
+   the default and measure after each, never before.
 2. **Make the real-board routing result mean something.** 14 of 385 is a floor, not a capability.
    The next step is DRC evidence and cross-net compatibility on a real board, not a larger sweep.
 3. **Close placement data-fidelity and post-action gates.** Model and replay author text,
@@ -251,6 +257,9 @@ worse than none, because it will be ignored.
    bounded contracts.
 4. **Generalize courtyard and side-aware geometry.** Add source-oracle fixtures for arc and
    multi-loop topology, nonzero clearance, and safe side flips before widening mutation support.
+   Note that per-layer courtyards now exist ([ADR-0097](../adr/0097-courtyard-layer-decides-the-side.md)):
+   a side flip has to swap a footprint's two courtyard sets as well as mirror them, and the
+   source-preserving serializer still refuses every board carrying a far-side courtyard rectangle.
 5. **IPC apply ([#68](https://github.com/seunghyukchoe/copper-mcp/issues/68)).**
    `kicad-python`'s `begin_commit` / `push_commit` gives a genuine single-undo-step transaction
    into a running KiCad. The hard part is binding an in-memory document to a file digest;
