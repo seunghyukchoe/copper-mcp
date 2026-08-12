@@ -40,9 +40,9 @@ plots as filled `<path>` polygons instead, with no stroke, and is measured from 
 also emits an invisible `<text>` element carrying its own `textLength`, which is KiCad's advance
 width for the run and is quoted where it is useful.
 
-Two sanity checks that the instrument reads what it claims: `'m'` at `(size 1.27 1.27)` with no
+Two sanity checks that the instrument reads what it claims: text at `(size 1.27 1.27)` with no
 `(thickness …)` plots at `stroke-width` `0.1588` mm, which is `1.27 / 8` to the emitted precision
-and matches `GetPenSizeForNormal`; the same glyph with `(bold yes)` plots at `0.254` mm, which is
+and matches `GetPenSizeForNormal`; the same text with `(bold yes)` plots at `0.254` mm, which is
 `1.27 / 5` and matches `GetPenSizeForBold`.
 
 ## 2 — What the corpus actually carries
@@ -60,12 +60,19 @@ graphic children:
 Of the 71 root texts, **69 are on `F.SilkS`** and **2 are on `F.Cu`** — the latter being one live
 save and its own `.history` copy of the same board, so **one board in the corpus is refused for
 this and nothing else**. Across all 71, the `(effects (font …))` children that appear are `size`
-(71), `thickness` (69) and `bold` (4). No `face` and no `${…}` occurs anywhere in the tree today.
+(71), `thickness` (69) and `bold` (4). `(face …)` occurs **zero** times in the whole tree, and no
+root text string carries `${…}` — though the tree does carry 9,162 `${` occurrences elsewhere,
+4,714 of them `${REFERENCE}` in footprint fields and 4,448 `${KICAD10_3DMODEL_DIR}` in model
+paths, so the mechanism is ordinary on these boards and it is only its appearance in *root* text
+that is currently absent.
 
-That last sentence is why this note exists rather than a patch. It is tempting to read "no `face`
-and no `${…}` in the corpus" as "the hard cases do not happen", and the corpus is one designer's
-project family; it is not the accepted document set. Board IR's accepted set is defined by what the
-adapter admits, and anything it admits it must be correct for.
+That paragraph is why this note exists rather than a patch, and it cuts the opposite way from how
+it first reads. It is tempting to take "no `face`, no `${…}` in a root text" as "the hard cases do
+not happen" — but text variables are already in daily use on these very boards, four thousand
+`${REFERENCE}` fields deep, so nothing about this designer's habits keeps one out of a copper
+legend. And the corpus is one project family in any case; it is not the accepted document set.
+Board IR's accepted set is defined by what the adapter admits, and anything it admits it must be
+correct for.
 
 ## 3 — What *is* derivable, so that the gap is stated exactly
 
