@@ -6,6 +6,17 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-12
+
+Upgrading from 0.6.0: see the [0.7.0 migration notes](docs/migrations/copper-mcp-0.7.0.md).
+`ROUTER_VERSION` advances to `astar-grid/0.7.0`, so every stored route candidate and bundle
+identity must be re-derived; one Board IR conversion diagnostic code becomes ten discriminated
+ones and one routing budget code becomes three; every integer environment variable now requires an
+unambiguous ASCII spelling; a truncated Circuit Scene withholds a whole kind instead of returning
+an empty array; every root Board IR refusal moves off the constant locator `kicad_pcb.unsupported`;
+seven pad refusals that could never fire now fire with their own text; and the published
+`drc-summary` schema enforces the `passed` and `clean` derivations in both directions.
+
 ### Changed
 
 - **An `off_grid` route refusal now says which pad, what pitch, and how far.** It previously said
@@ -93,7 +104,11 @@ All notable changes are documented here. The format follows
   code instead of borrowing the object budget's. Every one of these refusals now names the budget
   and its configured value — and deliberately not the observed count, which would disclose board
   density. Result on the same corpus, byte-identical sources: `routed` 0 → 14, `already_connected`
-  263 → 318, `obstacle_budget_exceeded` 93 → 3, with nothing regressed.
+  263 → 318, `obstacle_budget_exceeded` 93 → 3, with nothing regressed. **These are 385 independent
+  single-net previews, not a board completion figure**: each ran one net at a time on `F.Cu` against
+  the same unrouted snapshot, so the 14 routed candidates are not mutually compatible and no subset
+  of them may be read as a partial routing of any board. The important number is not the 14 anyway —
+  it is the 55 nets that are now correctly reported `already_connected` instead of as a work failure.
   ([D-176](docs/ledgers/decision-ledger.md), [SEC-132](docs/ledgers/security-ledger.md),
   [B-096](docs/ledgers/benchmark-ledger.md),
   [obstacle-budget calibration](docs/research/route-obstacle-budget-calibration-v1.md), #128)
@@ -138,20 +153,35 @@ All notable changes are documented here. The format follows
   exhausts inside a proper-subset region refuses under a new `no_path_in_region` code rather than
   claiming `no_path` about a board it never modelled. ([ADR-0089](docs/adr/0089-region-scoped-obstacle-model.md),
   [R-133](docs/ledgers/risk-register.md), #128)
-### Added
 
 - A measured survey of what CopperMCP's downstream surfaces do on real boards, now that real boards
-  convert. Issue #116 moved conversion from 1 of 23 to 10 of 12; this measures step two across five
+  convert. Issue #116 had moved conversion from 1 of 23 to 10 of 12 at the time this ran
+  (2026-08-07); later work in this same release moves it to 11 of the 12 boards in the #116 survey
+  set, which is 11 of all 17 boards in the corpus as saved today. This measures step two across five
   read-only surfaces at default settings, per board, with wall clock on every call. Authoritative
-  KiCad DRC is the one surface that works everywhere — 12 of 12 reported, including both boards
-  Board IR still refuses. A region-scoped Circuit Scene works on 10 of 10, while 8 of 10
+  KiCad DRC is the one surface that reported on every board — 12 of 12 reported (3 pass, 0 clean),
+  including both boards Board IR refused at that commit; that is a count of DRC runs that returned a
+  verdict, not a conversion result. A region-scoped Circuit Scene works on 10 of 10, while 8 of 10
   whole-board requests hit `max_scene_objects` and return empty `vias`, `zones` and `rules` lists
-  for boards holding up to 1,003 vias. Placement preview accepts 991 of 991 footprints with no
-  refusal of any code — and 10 of 10 boards refuse the source-preserving render, so none of it can
-  ever be applied. Route preview routed 0 of 345 nets, 71 of them refused at the default
-  `max_obstacles = 256`; B-088's `off_grid` wall does not appear once here, which localises this
-  corpus's constraint somewhere else entirely. No board was written, copied, or opened in a live
-  editor, and no apply or live-IPC flag was set.
+  for boards holding up to 1,003 vias — **that last finding is what #127 fixed later in this same
+  release**, so a 0.7.0 deployment does not reproduce it; a truncated kind is now withheld by name
+  rather than emptied. Placement preview accepts 991 of 991 footprints with no refusal of any code —
+  and 10 of 10 boards refuse the source-preserving render, so none of it can ever be applied. Route
+  preview routed 0 of 345 nets, 71 of them refused at the then-default `max_obstacles = 256`, which
+  #128 re-derived later in this release; B-088's `off_grid` wall does not appear once here, which at
+  the time localised this corpus's constraint somewhere else entirely — B-096 and B-100 later showed
+  the lattice class was simply being masked by the obstacle budget, and eight `off_grid` refusals
+  appear once that budget is fixed. No board was written, copied, or opened in a live editor, and no
+  apply or live-IPC flag was set.
+
+  **Two non-claims travel with these numbers and are restated here rather than left in the ledger.**
+  Route preview ran **one layer and one net at a time against the unrouted snapshot**, so the
+  candidates are not mutually compatible and this is not a whole-board completion result. Placement
+  preview ran **without rules**, so a clean verdict means legal-as-found and not placement quality.
+  Appliability was measured by calling the apply path's own pure identity predicate, which proves
+  the gate refuses and not that an apply would otherwise have succeeded. One designer's mostly
+  four-layer project family is not a random sample of KiCad boards, and the timings are one machine
+  and one run.
   ([B-099](docs/ledgers/benchmark-ledger.md),
   [Tier-2 real-board capability survey](docs/research/tier2-real-board-capability-v1.md), #116)
 
@@ -292,8 +322,8 @@ All notable changes are documented here. The format follows
   assert precisely the identity the file cannot support. Write-back stays refused, since every
   source-preserving patch path already rejects a snapshot containing a derived identity — a board
   that names 45 resistors alike cannot be patched by that name without risking the wrong one — so
-  this unblocks inspection and leaves mutation closed. ([D-166](docs/ledgers/decision-ledger.md),
-  [R-123](docs/ledgers/risk-register.md),
+  this unblocks inspection and leaves mutation closed. ([D-158](docs/ledgers/decision-ledger.md),
+  [R-119](docs/ledgers/risk-register.md),
   [KiCad UUID uniqueness](docs/research/kicad-uuid-uniqueness-v1.md), #116)
 - A semantic-validation refusal now names the invariant it failed instead of only saying that one
   failed. `converted Board IR content failed semantic validation` was a wrapper that identified no
@@ -301,7 +331,7 @@ All notable changes are documented here. The format follows
   carries the validator's own message. Naming the rule is not echoing the board: every Board IR
   validation message is a fixed string chosen by `copper_mcp.board_ir`, and the two that were built
   from an object ID are rebuilt so the board-derived text travels in the locator the refusal drops.
-  ([D-166](docs/ledgers/decision-ledger.md), #116)
+  ([D-158](docs/ledgers/decision-ledger.md), #116)
 - Copper saved on KiCad's net 0 — stitching vias and orphaned tracks, which KiCad 10 writes as
   `(net "")` — no longer refuses the whole document with `via has no routable net`, the largest
   single cause in the issue #116 real-board survey (queued on 7 of 12 boards, which carry 115
@@ -313,7 +343,7 @@ All notable changes are documented here. The format follows
   (`(net "")`, `(net 0)`, `(net 0 "")`) resolve identically; a negative ordinal is now an
   explicit typed `net.unknown` refusal, and a netless via is still held to every geometric rule.
   Board IR, codec, JSON schema 0.2.0, and scene contracts widen `net_id` to nullable in place —
-  strictly additive, with every existing content address byte-identical (ADR-0081, D-159,
+  strictly additive, with every existing content address byte-identical (ADR-0078, D-159,
   R-120, #119).
 - **Three singleton real-board refusals, each a different kind of defect.** Found by running the
   adapter against a working tree of twelve real KiCad boards, where each was the first refusal on
@@ -463,8 +493,8 @@ All notable changes are documented here. The format follows
   canonical encoder emits `courtyard_circles` only when present, so every existing snapshot
   digest, scene revision, and golden identity is byte-stable. Measured against real
   `kicad-cli` 10.0.5 over 23 cases: 12 exact parity, 11 conceded, 0 contradictions; on the
-  #116 tree, courtyard-stage refusals drop from 13 boards to zero. (#116, ADR-0080, D-166,
-  R-120, B-093)
+  #116 tree, courtyard-stage refusals drop from 13 boards to zero. (#116, ADR-0080, D-161,
+  R-121, B-093)
 
 - **The KiCad plugin is now a Plugin and Content Manager package, and installing it still grants
   nothing.** `scripts/build_pcm_package.py` produces `com.github.seunghyukchoe.coppermcp-live-observer`
@@ -503,7 +533,6 @@ All notable changes are documented here. The format follows
   KiCad-backed ones with their normal typed diagnostics. No mutation flag is set in the image, so
   it is read-only unless an operator opts in at run time exactly as on a host install.
 
-### Added
 - **CopperMCP's central safety claim is now an adversarial test suite instead of a sentence.** The
   claim is a negative — an agent driving this server cannot cause an unintended board mutation and
   cannot extract a verification that was never computed, even when it tries — so it cannot be
@@ -526,7 +555,6 @@ All notable changes are documented here. The format follows
   caller can construct anything, and a passing catalog is coverage rather than absence. Four
   discriminator tests deliberately break a boundary and require the harness to record a failure,
   because a suite that cannot fail is not evidence. (D-156, SEC-122, B-090, #69)
-  because a suite that cannot fail is not evidence. (D-152, SEC-121, B-089, #69)
 - **The negotiated coordinator stops rebuilding what it just decided to keep, and gets a rip-up
   window that is actually bounded.** ADR-0073 recorded its own gap honestly: every retained
   candidate was re-added to the congestion ledger from scratch each pass, re-deriving its unit
@@ -607,8 +635,14 @@ reproduces from its harness.
   A* two-pin path requires the pad-centre delta to divide by the lattice step and external
   coordinates do not oblige. Running the corpus a second time under a per-net divisor-aligned grid
   step converts those `off_grid` refusals into `grid_budget_exceeded` ones and routes no additional
-  net, which localises the constraint to the lattice-node budget rather than to grid alignment —
-  a finding that either configuration alone would have hidden. FreeRouting is not installed in the
+  net, which localises **this corpus's** constraint to the lattice-node budget rather than to grid
+  alignment — a finding that either configuration alone would have hidden, and one that does not
+  transfer: B-100 later re-ran the same question on real hardware and found the lattice is where
+  the refusal is *reported*, not where the constraint is. **The 59.83% is not a whole-board
+  completion result**: every net is routed independently against the unrouted snapshot, so the
+  candidates are not mutually compatible and no subset of them is a partial routing of any board.
+  The 1.1711 ratio is against a loose provable lower bound that ignores every obstacle and bend, so
+  it is not an optimality claim either. FreeRouting is not installed in the
   recording environment and no bridge to it exists, so the baseline comparison is recorded as
   `not_run` rather than estimated; the cross-router comparison remains unmeasured. (#65)
 - **The first externally licensed corpus in the tree, with the licence checked before the bytes.**
@@ -772,7 +806,8 @@ reproduces from its harness.
   half the short side, and a ratio outside `(0, 0.5]`, are still refused rather than clamped. No
   content address moves. See
   [Roundrect radius precision](docs/research/roundrect-radius-precision-v1.md) for the derivation
-  and citations, ADR-0080, D-157, and R-120. (#116)
+  and citations, [ADR-0077](docs/adr/0077-roundrect-corner-radius-rounding.md), D-157, and
+  R-118. (#116)
 - **A stadium pad was being handed a disc's attachment core.** `_pad_cores` gives a round pad its
   largest inscribed square, because a disc's central rectangle degenerates to a bar that can seed
   no search — but it detected that case from the collapse alone, and a roundrect whose radius is
@@ -782,9 +817,7 @@ reproduces from its harness.
   in, and reachable from any board where KiCad wrote a `roundrect_rratio` of 0.5. The inscribed
   square is now gated on the pad being a disc. Every roundrect in the core-containment
   parametrisation had a band with real height, so no fixture could have caught it; a stadium case
-  is added. (#116, R-120)
   is added. (#116, R-118)
-  moves. ([ADR-0079](docs/adr/0076-segment-assembled-edge-cuts-outline.md), D-154, R-117)
 
 - **A courtyard drawn as a ring is a ring, not a solid disc.** A footprint whose courtyard is an
   outer boundary plus an inner ring — a donut — was compared ring-by-ring as two independent solids,
@@ -861,7 +894,6 @@ reproduces from its harness.
   [KiCad copper layer numbering](docs/research/kicad-copper-layer-numbering-v1.md) for the
   derivation and citations, D-153, and R-116 for the class of defect — a validation rule no fixture
   ever contradicted. (#104)
-### Changed
 
 - The KiCad plugin entrypoint imports `copper_mcp.kicad_ipc` inside `main()` rather than at module
   scope. A PCM install delivers the plugin file and not CopperMCP, so at module scope a new user's
