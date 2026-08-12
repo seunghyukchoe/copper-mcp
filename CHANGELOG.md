@@ -6,6 +6,30 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Copper lettering now refuses under its own name, and the refusal is a finding rather than a
+  to-do.** A root `gr_text` or `gr_text_box` on a copper layer reported the same sentence as a stray
+  `gr_line` — `root graphic on copper is unsupported` — and the two do not fail for the same reason.
+  It now reports `copper text has no envelope derivable from the board and is unsupported` with
+  `object_kind: text`; every other graphic head on copper keeps the old sentence and
+  `object_kind: graphic`. **No board's outcome changes**: nothing that converted now refuses,
+  nothing that refused now converts, no Board IR field, schema or content address moves, and the
+  real-board corpus stays at 11 of 17 measured back to back on byte-identical sources. Text on a
+  non-copper layer converts exactly as before, and that acceptance is now pinned by test as a closed
+  field table — the layer decides, and nothing else can. The refusal stays because copper text is an
+  obstacle, obstacles may only be over-approximated, and three measurements against `kicad-cli`
+  10.0.5 show the board document does not determine a containing region: `${…}` resolves from the
+  sibling `.kicad_pro` (one byte-identical board plots 8.5650 mm of ink without it and 28.4012 mm
+  with it) and from the file path and the clock; `(face …)` is resolved by fontconfig, which
+  substitutes silently when the face is missing; and KiCad's own text box is `size.y` tall from the
+  baseline, so descenders and overbars leave it by up to 0.47 × the text size. What would have to
+  become true to accept the construct is written down rather than left implied.
+  ([ADR-0095](docs/adr/0095-copper-text-has-no-derivable-envelope.md),
+  [D-185](docs/ledgers/decision-ledger.md), [R-140](docs/ledgers/risk-register.md),
+  [SEC-136](docs/ledgers/security-ledger.md),
+  [KiCad copper text envelope research](docs/research/kicad-copper-text-envelope-v1.md), #141)
+
 ## [0.7.0] - 2026-08-12
 
 Upgrading from 0.6.0: see the [0.7.0 migration notes](docs/migrations/copper-mcp-0.7.0.md).
