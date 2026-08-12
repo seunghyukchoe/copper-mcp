@@ -23,9 +23,9 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-186` | `D-187` |
-| [Risk register](risk-register.md) | `R-` | `R-141` | `R-142` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-137` | `SEC-138` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-188` | `D-189` |
+| [Risk register](risk-register.md) | `R-` | `R-143` | `R-144` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-138` | `SEC-139` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-100` | `B-101` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
@@ -66,7 +66,12 @@ The rules:
    #140 and #141), so `D-186`/`R-141`/`SEC-137` stepped over both rather than racing them. They
    are **live claims, not gaps**, and the checker reports them as unallocated because it cannot
    see an unmerged branch. If either branch is abandoned its numbers become permanent gaps like
-   any other spent number, and this paragraph becomes the correction to make.
+   any other spent number, and this paragraph becomes the correction to make. Both branches have
+   since landed and filled their own numbers — `D-185`/`R-140`/`SEC-136` with issue #141's
+   branch, `D-184`/`R-139`/`SEC-135` with PR #150 — so that round left no gap at all. The
+   mechanism then ran a third time: PR #154 was open holding `D-187`/`R-142` (with ADR-0097 and
+   B-101) when this record landed, so `D-188`/`R-143`/`SEC-138` stepped over it rather than
+   racing it.
 
    **A row that has only been pushed to a branch is not yet a record, and rule 3 does not reach
    it.** Adversarial review found a false mechanism in `D-186` while its pull request was still

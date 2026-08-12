@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0097**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0099**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -23,11 +23,14 @@ line is deliberate: two branches that both allocate it now conflict textually, s
 merge instead of accepting it.
 
 **Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086.
-ADR-0094 is a **live claim, not a gap** — held by an open branch (issue #140) on this same base
-when ADR-0095 and ADR-0096 were allocated. Both stepped over it rather than racing it, exactly as
-the ledger convention's rule 1 prescribes. ADR-0095 has since landed; if #140's branch is
-abandoned, 0094 becomes a permanent gap like any other spent number and this sentence becomes the
-correction to make.
+ADR-0094 was a **live claim** held by an open branch (issue #140) on this same base when
+ADR-0095 and ADR-0096 were allocated. Both stepped over it rather than racing it, exactly as
+the ledger convention's rule 1 prescribes, and it has since landed from its own branch (PR #150)
+as the root-board-properties decision — this sentence is the correction the earlier note
+anticipated, and 0094 is not a gap.
+ADR-0097 is likewise a **live claim, not a gap** — held by open PR #154 when ADR-0098 was
+allocated, so ADR-0098 stepped over it. If that branch is abandoned, 0097 becomes a permanent
+gap and this sentence becomes the correction to make.
 ADR-0089 was listed here until this line was corrected: it landed from its own branch as the
 region-scoped obstacle model and is not a gap. ADR-0092 was listed too, and has since landed from
 its own branch as the net-tie netless-obstacle model; this sentence is that correction, exactly as
@@ -179,6 +182,7 @@ never silently widens it.
 | [0094](0094-root-board-properties-as-metadata.md) | A root board property is a text variable, accepted and counted rather than modelled | Accepted |
 | [0095](0095-copper-text-has-no-derivable-envelope.md) | Copper text has no envelope derivable from the board, and refuses under its own name | Accepted |
 | [0096](0096-edge-connector-pads-convert-as-smd.md) | An edge-connector pad converts as an SMD pad, and the discarded token is counted | Accepted |
+| [0098](0098-reproducible-mutation-evidence.md) | A mutation claim is evidence only if the repository can re-run it | Accepted |
 
 Ninety-six numbers, ninety records, no duplicates — and `scripts/check_adr_numbers.py`
 now proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and
@@ -278,3 +282,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0094: A root board property is a text variable, accepted and counted rather than modelled](0094-root-board-properties-as-metadata.md)
 - [ADR-0095: Copper text has no envelope derivable from the board, and refuses under its own name](0095-copper-text-has-no-derivable-envelope.md)
 - [ADR-0096: An edge-connector pad converts as an SMD pad, and the discarded token is counted](0096-edge-connector-pads-convert-as-smd.md)
+- [ADR-0098: A mutation claim is evidence only if the repository can re-run it](0098-reproducible-mutation-evidence.md)

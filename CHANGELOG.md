@@ -148,6 +148,36 @@ All notable changes are documented here. The format follows
   [SEC-135](docs/ledgers/security-ledger.md),
   [#140](https://github.com/seunghyukchoe/copper-mcp/issues/140))
 
+### Added
+
+- **Mutation claims are now reproducible from the repository, and every prior one is honestly
+  classified.** A defect was found in the scratch harnesses behind all 21 hand-applied mutation
+  runs this project has published (~160 mutants): a mutant that changes a `.py` file without
+  changing its byte count, applied or restored within the same filesystem second, is invisible to
+  CPython's `(mtime, size)` bytecode-invalidation check, so a stale `__pycache__` entry silently
+  runs the wrong code — and a stale mutant poisoning the next invocation registers as a **false
+  kill**, making "0 survivors" the optimistic side of the error. The audit that sized it found the
+  larger problem: no harness was ever committed, so no mutation claim was reproducible by anyone.
+  Every claim on `main` is now classified from what its record states: 4 `safe` (the control is a
+  committed test or fixture), 2 `exposed` (the record states a fast targeted invocation), 19
+  `unauditable` (the record does not establish a reproducible run — including D-184/SEC-135,
+  which hit the defect live, recorded the 189-failure incident, and are the first rows to state
+  their own limit: the harness is not committed), 0 shown false — three of the twenty-one runs
+  reported genuine survivors that produced real tests, and nothing shows any verdict wrong. Open
+  PR #154 already reports `Mutants: not_run` with a planned set — the honest literal this
+  standard now gives a home as a committed spec.
+  The fix is structural: `scripts/mutation_harness.py` is committed and purges bytecode caches
+  around every application and restoration, requires each anchor to match exactly once, refuses
+  mutants that do not compile or apply — loudly, never counting them — and proves every kill in
+  both directions; mutant specs are committed under `docs/mutants/` with a required
+  mutant→killing-test mapping; `tests/test_mutation_harness.py` reconstructs the stale-bytecode
+  defect deterministically and re-checks every committed spec's anchors on every CI run. The first
+  committed spec re-derives three of ADR-0096's mutants against current source and ran to
+  `killed: 3`. Kill verdicts stay review-time evidence re-executed on demand; the anchor gate is
+  the part CI owns. ([ADR-0098](docs/adr/0098-reproducible-mutation-evidence.md),
+  [D-188](docs/ledgers/decision-ledger.md), [R-143](docs/ledgers/risk-register.md),
+  [SEC-138](docs/ledgers/security-ledger.md), [`docs/mutants/`](docs/mutants/README.md))
+
 ## [0.7.0] - 2026-08-12
 
 Upgrading from 0.6.0: see the [0.7.0 migration notes](docs/migrations/copper-mcp-0.7.0.md).
