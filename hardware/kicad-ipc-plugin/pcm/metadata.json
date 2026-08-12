@@ -32,7 +32,7 @@
   ],
   "versions": [
     {
-      "version": "0.6.0",
+      "version": "0.7.0",
       "status": "testing",
       "kicad_version": "9.0.1",
       "runtime": "ipc"
