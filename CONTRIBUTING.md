@@ -39,7 +39,7 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 
 | Target | What it runs |
 |---|---|
-| `make lint` | Ruff, plus the version, ledger, documentation-link, audio-benchmark, and circuit-intent checkers |
+| `make lint` | Ruff, plus the version, ledger, ADR-number, documentation-link, audio-benchmark, and circuit-intent checkers |
 | `make typecheck` | Strict mypy over `src` |
 | `make test` | The full pytest suite |
 | `make security` | Repository secret scan and `pip-audit` |

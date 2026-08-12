@@ -1,4 +1,20 @@
-# Codex handoff — CopperMCP (updated 2026-08-05)
+# Codex handoff — CopperMCP, 2026-08-05 (superseded)
+
+> **This is a dated record, not the current state.** It was written on 2026-08-05 to hand one
+> in-flight branch to one continuing agent, and it is kept because that is what it is: a record of
+> where the work stood that day. It is **not** maintained, and several statements below are now
+> false — it names `v0.4.0` as the last released posture (the last published release is `v0.6.0`,
+> and a `0.7.0` section is written in `CHANGELOG.md`), and it stands on the working branch
+> `codex/live-route-proposal`, which no longer exists on the remote.
+>
+> **Superseded by [`project-state.md`](project-state.md)**, which is the living handoff: it carries
+> the current versions, contract versions, tool counts, milestone state, limitations, and the
+> "how every change ships here" and destructive-capability rules that used to live in this file.
+> A continuing agent should read that document and `AGENTS.md`, and use this one only to see what
+> was believed on 2026-08-05.
+>
+> Nothing below is edited. Like a research note or a ledger row, a dated record is superseded
+> rather than rewritten.
 
 You are picking up CopperMCP. This document is the fast path for the Codex agent that continues the
 work. Read [`project-state.md`](project-state.md) for the full state; read `AGENTS.md` for the

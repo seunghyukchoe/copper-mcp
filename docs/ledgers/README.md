@@ -23,7 +23,7 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-181` | `D-182` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-182` | `D-183` |
 | [Risk register](risk-register.md) | `R-` | `R-138` | `R-139` |
 | [Security review ledger](security-ledger.md) | `SEC-` | `SEC-134` | `SEC-135` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-100` | `B-101` |
@@ -73,8 +73,11 @@ The rules:
    supersedes, what it leaves immutable, and what it does not claim. This holds even when the
    original is *plainly* wrong and the fix is *trivially* safe: `B-076` records the corrected
    targets for two broken Markdown links rather than repointing them in place, and
-   `scripts/check_doc_links.py` carries those two targets as named exemptions. Convenience is
-   exactly the pressure this rule exists to resist — a record that can be tidied is not a record.
+   `scripts/check_doc_links.py` carries those two targets as named exemptions. `D-182` is the same
+   move for a link whose target resolves but whose *label* names the wrong ADR: `D-155` stands as
+   written, the correction is a new row, and the misnamed label is carried in that checker's
+   `EXEMPT_LABEL_RECORDS` list under the same discipline. Convenience is exactly the pressure this
+   rule exists to resist — a record that can be tidied is not a record.
 4. **A replay of an existing benchmark reuses that benchmark's ID**, as a `####` sub-entry whose
    heading reads `B-0NN — <what changed> replay`. A replay that measures something new is a new
    `B-` number instead. The benchmark ledger is organized by topic, so a replay sub-entry sits with
@@ -83,11 +86,11 @@ The rules:
    the checker enforces that.
 
    Because a replay is the one legal way to repeat a number, it is also the one way an accidental
-   duplicate could hide. `scripts/check_ledgers.py` therefore carries the ten existing replays in a
-   closed `REPLAY_SUB_ENTRIES` list keyed to their exact heading text, and being listed is necessary
-   but not sufficient: the heading must still be a `####` sub-entry, and the `###` entry it replays
-   must already appear earlier in the document. Adding an eleventh replay means editing that list and
-   saying what it re-measures. A listed exception that stops matching a real heading is itself a
+   duplicate could hide. `scripts/check_ledgers.py` therefore carries the thirteen existing replays
+   in a closed `REPLAY_SUB_ENTRIES` list keyed to their exact heading text, and being listed is
+   necessary but not sufficient: the heading must still be a `####` sub-entry, and the `###` entry it
+   replays must already appear earlier in the document. Adding another replay means editing that list
+   and saying what it re-measures. A listed exception that stops matching a real heading is itself a
    failure, so an exception cannot be added and then quietly forgotten.
 5. **IDs are three digits, zero-padded**, including past 100 (`D-136`, not `D-0136`). ADR references
    are four digits (`ADR-0065`) and are links into `docs/adr/`, never ledger-allocated IDs. The

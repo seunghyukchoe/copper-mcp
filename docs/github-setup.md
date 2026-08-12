@@ -3,9 +3,16 @@
 The files in this repository configure automation, but several protections live in GitHub settings
 and must be enabled after the remote repository is created.
 
+`seunghyukchoe/copper-mcp` is live and past its first release, so read this as the standing list of
+settings that are not versioned here rather than as a one-time bootstrap. **This document cannot
+tell you which of them are actually enabled** — settings live on GitHub, and only GitHub answers
+that. Verify with `gh api repos/seunghyukchoe/copper-mcp` and the repository's own settings pages
+before claiming a protection is in force.
+
 ## Repository metadata
 
-- Create the public repository as `seunghyukchoe/copper-mcp` or update all canonical URLs first.
+- The public repository is `seunghyukchoe/copper-mcp`; a rename means updating every canonical URL
+  in this tree first.
 - Description: `Local-first, AI-extensible PCB automation through MCP.`
 - Topics: `pcb`, `eda`, `kicad`, `mcp`, `autorouting`, `open-hardware`, `ai`.
 - Enable Issues, Discussions, Projects, Releases, and the Security tab.
@@ -45,8 +52,8 @@ python scripts/sync_labels.py --repo seunghyukchoe/copper-mcp
 Create a public roadmap project with `Backlog`, `Ready`, `In progress`, `In review`, and `Done`.
 Track milestone, priority, area, target release, and blocking relationship.
 
-## First release
+## Releases
 
-Complete the `0.1.0` milestone, close the changelog section, update the release ledger, run
-`make check`, then follow [the release process](releasing.md). Do not enable PyPI publication until
-trusted publishing and package ownership receive a separate security review.
+Complete the milestone, close the changelog section, update the release ledger, run `make check`,
+then follow [the release process](releasing.md). Do not enable PyPI publication until trusted
+publishing and package ownership receive a separate security review.
