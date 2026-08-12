@@ -98,6 +98,21 @@ board. The schema is the field-level reference.
   otherwise convert those members as unlocked; lock is an authorization gate, not a hint. A group
   carrying any child head outside KiCad's own writer vocabulary is refused rather than assumed
   inert. See [ADR-0090](../adr/0090-root-level-board-groups.md).
+- A pad whose kind token is `connect` — KiCad's `PAD_ATTRIB::CONN`, the edge-card connector
+  finger — converts as `PadKind.SMD`. KiCad's own model makes the two the same pad wherever copper
+  is at stake: its connectivity engine, its push-and-shove router, its layer trimming and its hole
+  suppression all put `CONN` and `SMD` in one shared case body. At least ten things do differ —
+  solder paste, the Gerber aperture attribute, pick-and-place "exclude all TH", the Edge.Cuts
+  clearance DRC exemption, a distinct property-system value user DRC rules can name, and four
+  reporting surfaces — and every one is outside what a Board IR `Pad` claims. `PadKind` gains
+  **no member**: nothing in this repository would read it, and widening the published `0.2.0`
+  enum in place would break a consumer promised a closed three-value domain. The token is
+  therefore discarded, and `ConversionResult.edge_connector_pad_count` reports how many pads it
+  happened to — an **in-process** count that reaches no MCP contract, CLI output or scene, exactly
+  like the group count above. What bounds the loss is the write path: both patch adapters are
+  source-preserving splices, so the `connect` token survives in the `.kicad_pcb` and KiCad's own
+  DRC and fabrication output still see an edge connector. See
+  [ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md) and R-141.
 - A root `(property "<key>" "<value>")` is one entry of the board's text-variable map and is read
   past rather than refused. KiCad's only consumer of that map is `BOARD::ResolveTextVar`, which
   expands `${KEY}` while rendering text, and Board IR models no text — so the pair carries no
@@ -175,7 +190,7 @@ contains a bounded machine-readable diagnostic and no snapshot.
 | Board metadata | Exact KiCad PCB format version `20260206`, optional `generator`, ordered copper declarations `0/F.Cu`, contiguous even-numbered inner layers, then `B.Cu`, and a narrow setup-metadata allowlist with KiCad-default front/back via tenting. |
 | Nets | Quote-aware named item-level net references and legacy numeric root declarations; quoted numeric text remains a name while bare signed numeric tokens retain legacy net-code meaning. |
 | Outline | Exactly one contour on `Edge.Cuts`, drawn either as one unfilled `gr_rect` or as `gr_line` segments that chain, by exact endpoint coincidence, into one closed simple loop. See [ADR-0076](../adr/0076-segment-assembled-edge-cuts-outline.md). |
-| Footprints/pads | Footprints on `F.Cu` or `B.Cu` with rotations in 90-degree increments, exact origin/side/lock/pad ownership, and optional unfilled `fp_rect`, `fp_poly`, or closed complete `fp_line` courtyard centerlines on the matching layer — every edge horizontal, vertical, or an exact 45-degree chamfer — plus unfilled `fp_circle` outlines whose radius is an exact integer nanometre; `smd`, `thru_hole`, and `np_thru_hole` pads; circle, rect, oval, and roundrect shapes; round or oval drills; copper layer names, `*.Cu`, and `F&B.Cu`; and a pad `zone_connect` override of `1`, `2` or `3` — the three that attach the pad to a same-net pour — accepted as a proven no-op and modelled as nothing, per [ADR-0091](../adr/0091-attaching-pad-zone-connect-overrides.md). |
+| Footprints/pads | Footprints on `F.Cu` or `B.Cu` with rotations in 90-degree increments, exact origin/side/lock/pad ownership, and optional unfilled `fp_rect`, `fp_poly`, or closed complete `fp_line` courtyard centerlines on the matching layer — every edge horizontal, vertical, or an exact 45-degree chamfer — plus unfilled `fp_circle` outlines whose radius is an exact integer nanometre; all four KiCad pad kinds, `smd`, `thru_hole`, `np_thru_hole` and `connect` — the last being the edge-connector pad, which converts as `PadKind.SMD` and is counted in `ConversionResult.edge_connector_pad_count` per [ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md); circle, rect, oval, and roundrect shapes; round or oval drills; copper layer names, `*.Cu`, and `F&B.Cu`; and a pad `zone_connect` override of `1`, `2` or `3` — the three that attach the pad to a same-net pour — accepted as a proven no-op and modelled as nothing, per [ADR-0091](../adr/0091-attaching-pad-zone-connect-overrides.md). |
 | Routed copper | Straight `segment` items, exact start/mid/end `arc` items, and through vias spanning the declared copper stack. Copper carrying no routable net converts as an obstacle with `net_id` `None` rather than refusing the board, per [ADR-0078](../adr/0078-netless-copper-as-obstacle.md); it is an obstacle only and contributes nothing to connectivity. |
 | Net-tie copper | A footprint declaring `net_tie_pad_groups` may draw its deliberate short as an `fp_poly` on `F.Cu`/`B.Cu`. That polygon converts to netless obstacle copper under the same `net_id` `None` contract, so the short is modelled as something to route around and never as a connection. Every other primitive a net-tie footprint could draw the short with — `fp_line`, `fp_arc`, `fp_rect`, `fp_circle` — is refused by name. See [ADR-0092](../adr/0092-net-tie-copper-as-netless-obstacle.md). |
 | Zones | Net-bound, single-copper-layer, solid zones with one polygon loop; explicit priority, thermal/through-hole-thermal/solid/none pad connection, always/never island removal, clearance, and conditionally required thermal dimensions. |
@@ -239,11 +254,12 @@ including:
   footprint;
 - custom or other unmodeled pad shapes and custom pad primitives. Pad **kind** and pad **shape**
   are two separate refusals, because one message covering both positional tokens of a pad header
-  named neither. Of KiCad's four documented kinds (`PAD_ATTR_T`: PTH, SMD, CONN, NPTH) only
-  `connect` — the edge-connector pad — is documented-but-unmodelled, and it refuses by name
-  ([#138](https://github.com/seunghyukchoe/copper-mcp/issues/138)). Whether it maps to `SMD`, earns
-  its own `PadKind`, or stays refused is an open contract decision, not a missing table entry:
-  `PadKind` is published into every snapshot digest;
+  named neither. All four of KiCad's documented kinds (`PAD_ATTRIB`: PTH, SMD, CONN, NPTH) are now
+  modelled, so a refused kind token is not a documented pad kind at all and refuses without being
+  named, with the indexed locator still saying which pad. A **copper-less `connect` pad** is the
+  one form that still refuses: the paste/mask aperture skip tests the source token and requires
+  literally `smd`, so an aperture-shaped edge-connector pad is refused rather than read past
+  ([ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md));
 - root sections the KiCad format defines and Board IR v0.2 does not model, each refused by name
   from a closed table: `dimension` objects, embedded `image`s, and root board `property` text
   variables ([#140](https://github.com/seunghyukchoe/copper-mcp/issues/140)). A root head absent

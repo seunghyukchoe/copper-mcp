@@ -63,6 +63,18 @@ class ConversionResult:
     B-096 measured the same tree a day earlier when one board's live save still carried three.
     See ADR-0090 and R-134.
 
+    ``edge_connector_pad_count`` counts the pads whose source token was ``connect`` -- KiCad's
+    ``PAD_ATTRIB::CONN``, the edge-connector finger -- and which converted as ``PadKind.SMD``.
+    KiCad's own model makes the two the same pad geometrically and electrically, and the three
+    things that differ (no solder paste, a distinct Gerber aperture attribute, and an exemption
+    from the Edge.Cuts clearance DRC test) are all outside what a Board IR ``Pad`` claims, so the
+    conversion loses nothing Board IR was modelling. What it does lose is the *token*: a caller
+    reading ``kind == "smd"`` cannot tell that the designer wrote ``connect``, and a caller that
+    generates fabrication output, or that reasons about copper running to the board edge, needs
+    to know. This count is the disclosure. It is a count and not a diagnostic for the same reason
+    the two above are -- every caller of ``parse_kicad_bytes`` treats a non-empty ``diagnostics``
+    tuple as a refusal -- and it counts converted pads only, so an aperture-skipped or refused pad
+    never appears in it. See ADR-0096 and R-141.
     ``unmodelled_board_property_count`` counts the root ``(property "<key>" "<value>")``
     expressions the KiCad adapter accepted and did not model.  A root board property is one entry
     of ``BOARD::m_properties``, the board's text-variable map: two strings, read only by
@@ -81,6 +93,7 @@ class ConversionResult:
     diagnostics: tuple[Diagnostic, ...] = ()
     max_roundrect_rounding_nm: int = 0
     unmodelled_group_count: int = 0
+    edge_connector_pad_count: int = 0
     unmodelled_board_property_count: int = 0
 
     def __post_init__(self) -> None:
@@ -103,6 +116,12 @@ class ConversionResult:
         ):
             raise ValueError("conversion group count must be a non-negative integer")
         if (
+            isinstance(self.edge_connector_pad_count, bool)
+            or not isinstance(self.edge_connector_pad_count, int)
+            or self.edge_connector_pad_count < 0
+        ):
+            raise ValueError("conversion edge-connector pad count must be a non-negative integer")
+        if (
             isinstance(self.unmodelled_board_property_count, bool)
             or not isinstance(self.unmodelled_board_property_count, int)
             or self.unmodelled_board_property_count < 0
@@ -117,5 +136,7 @@ class ConversionResult:
             raise ValueError("a failed conversion cannot report a rounding")
         if self.snapshot is None and self.unmodelled_group_count:
             raise ValueError("a failed conversion cannot report a group count")
+        if self.snapshot is None and self.edge_connector_pad_count:
+            raise ValueError("a failed conversion cannot report an edge-connector pad count")
         if self.snapshot is None and self.unmodelled_board_property_count:
             raise ValueError("a failed conversion cannot report a board property count")

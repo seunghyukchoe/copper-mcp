@@ -180,6 +180,21 @@ worse than none, because it will be ignored.
 
 ## 5. Known limitations, stated plainly
 
+- **Not every real board converts.** Measured on the private working corpus on 2026-08-12, before
+  and after ADR-0096 back to back, **12 of the 12 boards in the
+  [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116) survey set convert, which is 12 of
+  all 17 boards in that corpus as saved today** — up from 11 and 11. Five saves refuse, each for
+  exactly one named construct: root board `property` text variables on four phono saves
+  ([#140](https://github.com/seunghyukchoe/copper-mcp/issues/140)) and a root copper graphic on one
+  ([#141](https://github.com/seunghyukchoe/copper-mcp/issues/141)). The board gained is the
+  phono-preamp save that carried `connect`-kind (edge-connector) pads, which now convert as SMD
+  pads and are counted in `ConversionResult.edge_connector_pad_count`
+  ([#138](https://github.com/seunghyukchoe/copper-mcp/issues/138),
+  [ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md)). **No "converts every board"
+  result is claimed at any count** — five corpus saves still refuse — and none should be stated
+  until a re-measured survey supports it. Conversion is also not appliability: the newly converted
+  board refuses both write-back gates for the pre-existing revision-derived-identity reason B-099
+  recorded.
 - **Not every real board converts, and a refusal names only the *first* blocker.** Re-measured on
   the private working corpus on 2026-08-12, after root board `property` text variables were accepted
   (D-184, ADR-0094): **11 of the 17 boards in that corpus as saved today convert — the same count

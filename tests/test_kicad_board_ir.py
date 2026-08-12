@@ -18,6 +18,7 @@ from copper_mcp.adapters import KiCadConstraintProfile, net_id_for_name, parse_k
 from copper_mcp.adapters.kicad_board_ir import (
     _ATTACHING_PAD_ZONE_CONNECTIONS,
     _DETACHING_PAD_ZONE_CONNECTION,
+    _PAD_KIND_BY_TOKEN,
     _ROOT_GROUP_HEADS,
 )
 from copper_mcp.adapters.kicad_placement_patch import (
@@ -36,6 +37,7 @@ from copper_mcp.board_ir import (
     FootprintSide,
     NetClass,
     Pad,
+    PadKind,
     PadShape,
     ParseLimits,
     PointNM,
@@ -4031,6 +4033,24 @@ def _pad_with_header(kind: bytes, shape: bytes) -> bytes:
     )
 
 
+def _copper_pad_with_kind(kind: bytes, uuid_tail: bytes = b"c1") -> bytes:
+    """One pad that *converts*, differing from its siblings only in the kind token.
+
+    `_pad_with_header` above exists to reach the header refusals and is deliberately malformed
+    past them -- its circle is not round.  Everything that must convert uses this instead, so a
+    kind-mapping assertion cannot be satisfied by a shared geometry refusal.
+    """
+
+    return (
+        b"    (pad " + b'"9" ' + kind + b" circle\n"
+        b"      (at 0 0)\n"
+        b"      (size 3 3)\n"
+        b'      (layers "F.Cu" "F.Mask")\n'
+        b'      (uuid "10000000-0000-0000-0000-0000000000' + uuid_tail + b'")\n'
+        b"    )\n"
+    )
+
+
 def test_an_unsupported_pad_kind_and_shape_refuse_as_two_different_diagnostics() -> None:
     """The pad header's two tokens refuse separately, so a caller learns which one was wrong.
 
@@ -4066,35 +4086,209 @@ def test_an_unsupported_pad_kind_and_shape_refuse_as_two_different_diagnostics()
     assert kind_refusal.diagnostics[0].message != shape_refusal.diagnostics[0].message
 
 
-def test_an_edge_connector_pad_is_refused_by_name_without_echoing_the_board() -> None:
-    """`connect` is a documented KiCad pad kind, so the refusal may name it from a closed table.
+def test_the_pad_kind_table_maps_exactly_kicads_four_documented_tokens() -> None:
+    """The accepted kind tokens must be exactly `PAD_ATTRIB`'s four, no more and no fewer.
 
-    This is the `_UNMODELLED_ROOT_HEADS` rule applied to pad kinds: the message is a *value from*
-    `_UNMODELLED_PAD_KINDS`, selected by an equality test against the source token and never
-    built from it, so the diagnostic names the construct without echoing one byte of the board.
-    An undocumented token is refused unnamed, and the indexed locator still says which pad.
+    KiCad's `parsePAD` switches on `thru_hole`, `smd`, `connect` and `np_thru_hole` and calls
+    `Expecting(...)` on anything else, so the vocabulary is closed at four. This is the
+    partition test ADR-0091 needed for `zone_connect`, applied to the pad header: the
+    behavioural tests below cannot see a fifth token quietly added to the table, nor `connect`
+    quietly re-pointed at a member that does not exist yet, because either would still leave
+    every existing board converting exactly as it does now.
 
-    Naming it is all this does. Modelling an edge-connector pad is a separate contract decision
-    -- it is real copper, so it is an obstacle, but its attachment and plating semantics differ
-    from SMD -- and is deliberately not taken here.
+    Stating it here also states the consequence of ADR-0096: there is no documented-but-
+    unmodelled pad kind left, which is why `_UNMODELLED_PAD_KINDS` was deleted rather than
+    kept as a one-entry table with nothing to name.
+
+    The domain assertion is against the constant and not only against sampled tokens, because a
+    sampled test cannot see a key nobody thought to write down. The mutation run found exactly
+    that: a fifth entry added to the table survived every behavioural test here, since no board
+    that exists carries the token it admits.
     """
 
-    named = parse_kicad_bytes(
-        _with_pad(_pad_with_header(b"connect", b"circle")),
+    kicad_pad_attribute_tokens = frozenset({"smd", "connect", "thru_hole", "np_thru_hole"})
+
+    assert frozenset(_PAD_KIND_BY_TOKEN) == kicad_pad_attribute_tokens
+    assert _PAD_KIND_BY_TOKEN["connect"] is _PAD_KIND_BY_TOKEN["smd"] is PadKind.SMD
+    assert _PAD_KIND_BY_TOKEN["thru_hole"] is PadKind.THROUGH_HOLE
+    assert _PAD_KIND_BY_TOKEN["np_thru_hole"] is PadKind.NPTH
+
+    accepted = {
+        token: parse_kicad_bytes(
+            _with_pad(
+                _copper_pad_with_kind(token.encode())
+                if token in {"smd", "connect"}
+                else _copper_pad_with_kind(token.encode()).replace(
+                    b"      (layers", b"      (drill 1)\n      (layers"
+                )
+            ),
+            constraint_profile(assign_signal=True),
+        )
+        for token in ("smd", "connect", "thru_hole", "np_thru_hole")
+    }
+
+    # Every documented token converts.  `np_thru_hole` refuses only on the net it inherits from
+    # the fixture pad, not on its kind, so it is checked for the absence of a *kind* refusal.
+    for token, result in accepted.items():
+        messages = tuple(item.message for item in result.diagnostics)
+        assert "pad kind is unsupported" not in messages, token
+
+    # And nothing outside the four does.
+    for token in ("connector", "conn", "smd_conn", "edge_connector", ""):
+        refused = parse_kicad_bytes(
+            _with_pad(_pad_with_header(token.encode() or b"x", b"circle")),
+            constraint_profile(assign_signal=True),
+        )
+        assert refused.snapshot is None, token
+        assert refused.diagnostics[0].message == "pad kind is unsupported", token
+
+
+def test_a_connect_pad_converts_as_the_smd_pad_kicad_says_it_is() -> None:
+    """A `connect` pad and the same pad written `smd` produce byte-identical Board IR content.
+
+    **This equality is a statement of what the mapping is, not an argument that it is sound.**
+    It holds by construction for any two tokens the kind table sends to one `PadKind` member, so
+    it would hold identically if `connect` had been mapped to `THROUGH_HOLE`. What it does
+    establish, and what nothing else here would: the mapping really is to `SMD`, no field of the
+    converted pad carries the source token, and no content address moves for a board that gains
+    one -- which is the whole reason a new `PadKind` member was rejected (ADR-0096).
+
+    Soundness rests entirely on the KiCad-domain argument in ADR-0096 and the research note:
+    every branch in KiCad 10 that mentions `PAD_ATTRIB::CONN` either shares a case body with
+    `SMD` (connectivity, the P&S router, layer trimming, hole suppression) or concerns solder
+    paste, Gerber aperture attributes, or the Edge.Cuts clearance DRC exemption -- none of which
+    a Board IR `Pad` claims.
+    """
+
+    as_smd = parse_success(
+        _with_pad(_copper_pad_with_kind(b"smd")), constraint_profile(assign_signal=True)
+    )
+    as_connect = parse_success(
+        _with_pad(_copper_pad_with_kind(b"connect")), constraint_profile(assign_signal=True)
+    )
+
+    # `source` differs: its revision is the digest of the file bytes, and the two files differ.
+    assert as_connect.content.pads == as_smd.content.pads
+    assert as_connect.content.footprints == as_smd.content.footprints
+    assert as_connect.content.nets == as_smd.content.nets
+    assert as_connect.content.segments == as_smd.content.segments
+    assert as_connect.content.zones == as_smd.content.zones
+    assert replace(as_connect.content, source=as_smd.content.source) == as_smd.content
+
+    # The converted pad is copper on one layer with no hole - an obstacle and an attachment
+    # point - and the source token appears nowhere in the encoded snapshot.
+    converted = next(pad for pad in as_connect.content.pads if pad.id.endswith("c1"))
+    assert converted.kind is PadKind.SMD
+    assert converted.drill_x_nm is None and converted.drill_y_nm is None
+    # The source token survives nowhere as a value.  (The bare substring would match the
+    # `pad_connection` *field name*, which is a zone's attachment mode and unrelated.)
+    assert b'"connect"' not in encode_snapshot(as_connect)
+    assert {pad.kind for pad in as_connect.content.pads} <= set(PadKind)
+
+
+def test_an_edge_connector_pad_is_counted_so_the_discarded_distinction_is_not_silent() -> None:
+    """Mapping `connect` to `smd` discards the token; the count is what says so.
+
+    This is the D-157/ADR-0090 measured-field pattern, not a diagnostic: every caller of
+    `parse_kicad_bytes` treats a non-empty `diagnostics` tuple as a refusal, so a warning would
+    refuse the board this change exists to admit.
+
+    The count discriminates on the *source token*, which is the only thing that survives the
+    mapping. A mutant that counted `kind is PadKind.SMD` instead would count ordinary SMD pads,
+    and a mutant that never incremented would report zero on a board that carries two - so the
+    baseline assertion below is as load-bearing as the positive one.
+    """
+
+    baseline = parse_kicad_bytes(SUBSET_BOARD.read_bytes(), constraint_profile(assign_signal=True))
+    one = parse_kicad_bytes(
+        _with_pad(_copper_pad_with_kind(b"connect")), constraint_profile(assign_signal=True)
+    )
+    two = parse_kicad_bytes(
+        _with_pad(_copper_pad_with_kind(b"connect") + _copper_pad_with_kind(b"connect", b"c2")),
         constraint_profile(assign_signal=True),
     )
+    smd_only = parse_kicad_bytes(
+        _with_pad(_copper_pad_with_kind(b"smd")), constraint_profile(assign_signal=True)
+    )
+
+    # The fixture already carries ordinary SMD pads, and none of them is an edge connector.
+    assert baseline.snapshot is not None
+    assert any(pad.kind is PadKind.SMD for pad in baseline.snapshot.content.pads)
+    assert baseline.edge_connector_pad_count == 0
+    assert smd_only.edge_connector_pad_count == 0
+    assert one.edge_connector_pad_count == 1
+    assert two.edge_connector_pad_count == 2
+
+
+def test_an_edge_connector_pad_that_never_converts_is_never_counted() -> None:
+    """The count is a disclosure about converted copper, so a refused pad must not appear in it.
+
+    Both halves matter. A refused document reports no count at all -- `ConversionResult` refuses
+    to carry one without a snapshot -- and a `connect` pad with no copper layer refuses rather
+    than being read past as a paste aperture, so it can neither be counted nor silently dropped.
+    """
+
+    refused = parse_kicad_bytes(
+        _with_pad(_pad_with_header(b"connect", b"trapezoid")),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert refused.snapshot is None
+    assert refused.diagnostics[0].message == "pad shape is unsupported"
+    assert refused.edge_connector_pad_count == 0
+
+
+def test_a_paste_only_connect_pad_refuses_instead_of_reading_as_an_aperture() -> None:
+    """The aperture skip tests the source token, not the resolved `PadKind`, and must keep doing so.
+
+    Before ADR-0096 the two were the same question. Now `connect` resolves to `PadKind.SMD`, so a
+    skip keyed on the resolved kind would start reading a paste-bearing `connect` pad past as a
+    stencil aperture -- a construct KiCad's own padstack test reports as an error
+    (`pad.cpp`, `DRCE_PADSTACK`, "connector pads normally have no solder paste"). Its meaning is
+    not established, so it refuses. No surveyed board carries one, and over-refusal is the
+    conservative direction.
+
+    The control is the `smd` form of the identical pad, which is a real aperture and is skipped.
+    """
+
+    paste_only = b'      (layers "F.Paste")\n'
+    connect_aperture = (
+        b'    (pad "" connect circle\n      (at 0 0)\n      (size 3.05 2.75)\n'
+        + paste_only
+        + b'      (uuid "10000000-0000-0000-0000-0000000000c1")\n    )\n'
+    )
+    smd_aperture = connect_aperture.replace(b'"" connect ', b'"" smd ')
+
+    refused = parse_kicad_bytes(_with_pad(connect_aperture), constraint_profile(assign_signal=True))
+    skipped = parse_kicad_bytes(_with_pad(smd_aperture), constraint_profile(assign_signal=True))
+
+    assert refused.snapshot is None
+    assert refused.diagnostics[0].code == "unknown.layer"
+    assert (
+        refused.diagnostics[0].message
+        == "pad references no copper layer and is not a paste or mask aperture"
+    )
+    assert skipped.snapshot is None or skipped.diagnostics == ()
+    assert skipped.snapshot is not None
+    assert skipped.edge_connector_pad_count == 0
+
+
+def test_an_undocumented_pad_kind_is_refused_without_echoing_the_board() -> None:
+    """A token outside KiCad's four is refused unnamed, and its own bytes never appear.
+
+    `_UNMODELLED_PAD_KINDS` is gone because it has nothing left to name, but the non-echo rule it
+    enforced is a standing property of every refusal, not a property of that table. The indexed
+    locator still says which pad, which is the part a caller needs.
+    """
+
     unnamed = parse_kicad_bytes(
         _with_pad(_pad_with_header(b"mystery_kind", b"circle")),
         constraint_profile(assign_signal=True),
     )
 
-    assert named.snapshot is None
-    assert named.diagnostics[0].code == "unsupported.construct"
-    assert named.diagnostics[0].message == "edge-connector pads are unsupported"
-    # The locator says which pad, in both the named and the unnamed case.
-    assert named.diagnostics[0].source_locator.endswith(".pad[0]")
-    assert unnamed.diagnostics[0].source_locator == named.diagnostics[0].source_locator
-
-    # The undocumented token is refused without being named, and its own bytes never appear.
+    assert unnamed.snapshot is None
+    assert unnamed.diagnostics[0].code == "unsupported.construct"
+    assert unnamed.diagnostics[0].object_kind == "pad"
     assert unnamed.diagnostics[0].message == "pad kind is unsupported"
     assert "mystery_kind" not in unnamed.diagnostics[0].message
+    assert unnamed.diagnostics[0].source_locator.endswith(".pad[0]")
