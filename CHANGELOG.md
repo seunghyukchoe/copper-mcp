@@ -15,7 +15,9 @@ All notable changes are documented here. The format follows
   `object_kind: text`; every other graphic head on copper keeps the old sentence and
   `object_kind: graphic`. **No board's outcome changes**: nothing that converted now refuses,
   nothing that refused now converts, no Board IR field, schema or content address moves, and the
-  real-board corpus stays at 11 of 17 measured back to back on byte-identical sources. Text on a
+  real-board corpus stays at 11 of 17, with every recorded total equal; a back-to-back
+  conversion-only pair over the same 17 boards, all digests identical, differs in exactly one row
+  and only in its message and `object_kind`. Text on a
   non-copper layer converts exactly as before, and that acceptance is now pinned by test as a closed
   field table — the layer decides, and nothing else can. The refusal stays because copper text is an
   obstacle, obstacles may only be over-approximated, and three measurements against `kicad-cli`

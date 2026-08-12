@@ -136,10 +136,31 @@ it, and ADR-0070 refuses stale zone fill for exactly that reason.
 ## Consequences
 
 **The corpus count does not move, and that is the honest result.** 11 of 17 boards convert before
-this change and 11 of 17 after, measured back to back on byte-identical sources with
-`scripts/benchmark_real_board_capability.py`. The one board this construct blocks stays blocked;
-what changes is that its refusal now says which construct and why. A change that moved the count
-here would have had to invent the envelope section 4 of the research note shows cannot be derived.
+this change and 11 of 17 after, on the five-surface harness
+(`scripts/benchmark_real_board_capability.py`), with **every recorded total equal** — conversion,
+DRC, scene, placement, route verdicts and appliability alike. The one board this construct blocks
+stays blocked; what changes is that its refusal now says which construct and why. A change that
+moved the count here would have had to invent the envelope section 4 of the research note shows
+cannot be derived.
+
+**That harness pair is not on byte-identical sources, and the exception is named rather than
+smoothed over.** Each run takes about an hour against a live working tree, and between them the
+designer re-saved exactly one board — `phono-v3`, the board this construct blocks, which grew by
+1,381 bytes. Its refusal is unchanged in kind (still `unsupported.construct`, still one
+diagnostic, still the root copper text) and every total still compares equal, but B-100 discarded a
+pair taken hours apart for this reason and this one deserves the same scepticism. So a second,
+tighter measurement was taken: **conversion only**, through the harness's own board selection,
+constraint profile and adapter entry point, three runs back to back in before/after/before order.
+All 17 digests are identical across all three runs, the before pair reproduces itself exactly, and
+**11 of 17 convert both ways**. Exactly one row differs anywhere, and only in two fields:
+
+```text
+phono-v3   before: unsupported.construct | root graphic on copper is unsupported | graphic
+           after : unsupported.construct | copper text has no envelope derivable … | text
+```
+
+The other five refusals are unchanged: four `root board properties are unsupported` (#140) and one
+`edge-connector pads are unsupported` (#138).
 
 **No content address moves, and no schema changes.** A board carrying copper text produced no
 snapshot before this change and produces none after. `object_kind: text` is a new value in an
