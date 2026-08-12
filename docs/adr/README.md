@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0098**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0099**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -23,12 +23,13 @@ line is deliberate: two branches that both allocate it now conflict textually, s
 merge instead of accepting it.
 
 **Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086.
-ADR-0094 and ADR-0096 stood here as live claims on open branches rather than as gaps, and this
-sentence is that note doing its job: both have since landed — 0094 as the root-board-property
-model and 0096 as the edge-connector pad model — so neither is a gap and neither is spent.
-ADR-0095 stepped over 0094, and ADR-0097 then stepped over both 0094 and 0096 rather than racing
-them, the same move the 0081–0083 block records. Stepping over a live claim cost nothing in either
-case, which is the mechanism working as intended.
+ADR-0094 was a **live claim** held by an open branch (issue #140) when ADR-0095 and ADR-0096 were
+allocated. Both stepped over it rather than racing it, exactly as the ledger convention's rule 1
+prescribes, and it has since landed from its own branch (PR #150) as the root-board-properties
+decision — this sentence is the correction the earlier note anticipated, and 0094 is not a gap.
+ADR-0097 went the same way: it was a live claim held by open PR #154 when ADR-0098 was allocated,
+so ADR-0098 stepped over it, and it has since landed as the courtyard-layer decision. Neither is a
+gap; both notes are corrections that came due exactly as written.
 ADR-0089 was listed here until this line was corrected: it landed from its own branch as the
 region-scoped obstacle model and is not a gap. ADR-0092 was listed too, and has since landed from
 its own branch as the net-tie netless-obstacle model; this sentence is that correction, exactly as
@@ -184,6 +185,14 @@ never silently widens it.
 Ninety-seven numbers, ninety-two records, no duplicates — and `scripts/check_adr_numbers.py`
 now proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and
 0086 are unused; see **Known gaps** above. The three stray summary sentences that stood here until
+| [0098](0098-reproducible-mutation-evidence.md) | A mutation claim is evidence only if the repository can re-run it | Accepted |
+
+Ninety-eight numbers, ninety-two records, no duplicates — and `scripts/check_adr_numbers.py`
+now proves that last clause on every run rather than asserting it (the previous revision of this
+sentence said "ninety-six numbers, ninety records", stale by two landings at the time it was
+read; the checker's own output is the count to trust). 0027, 0082, 0083, 0085 and
+0086 are unused, and 0097 is a live claim on an open branch rather than a gap; see
+**Known gaps** above. The three stray summary sentences that stood here until
 ADR-0088 landed were merge residue from the concurrent branches described above: Git accepted
 three different rewrites of one paragraph because they did not overlap textually.
 
@@ -279,3 +288,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0095: Copper text has no envelope derivable from the board, and refuses under its own name](0095-copper-text-has-no-derivable-envelope.md)
 - [ADR-0096: An edge-connector pad converts as an SMD pad, and the discarded token is counted](0096-edge-connector-pads-convert-as-smd.md)
 - [ADR-0097: A courtyard keeps out on the layer it is drawn on, not on its footprint's side](0097-courtyard-layer-decides-the-side.md)
+- [ADR-0098: A mutation claim is evidence only if the repository can re-run it](0098-reproducible-mutation-evidence.md)

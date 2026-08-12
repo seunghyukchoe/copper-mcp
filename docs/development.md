@@ -89,6 +89,42 @@ proposal. It requires the original `LayeredRouteRequest`, replays the candidate 
 and binds full-stack through-vias to the private KiCad DRC context. The layered evidence remains an
 internal, read-only gate; it is not exposed through MCP or CLI and cannot issue an apply token.
 
+## Mutation evidence
+
+A mutation-testing claim ("N mutants, M killed") is admissible in a ledger row, ADR, or PR
+description only when it is reproducible from the repository ([ADR-0098](adr/0098-reproducible-mutation-evidence.md)).
+That means:
+
+- **Run mutants only through `scripts/mutation_harness.py`**, never through an ad-hoc
+  apply-and-pytest loop — and remember that "the killing test failed" is a weak proxy for "the
+  mutant was caught": the harness refuses to apply any mutant until the unmutated killing tests
+  pass, and counts only pytest exit 1 as a kill (a mistyped path exits 4; PR #154's first
+  scratch harness read that as 11/11 killed while running nothing). CPython's default `.pyc` invalidation keys on `(mtime, size)`, so a
+  byte-count-preserving edit applied or restored within one filesystem second silently runs stale
+  bytecode — in a fast harness loop that turns into false kills. The committed harness purges
+  `__pycache__` around every application and restoration, sets `PYTHONDONTWRITEBYTECODE=1`,
+  requires each anchor to match exactly once, refuses non-compiling mutants, and proves each kill
+  in both directions (named tests fail with the mutant applied, pass on the byte-identically
+  restored source).
+- **Commit the spec under [`docs/mutants/`](mutants/README.md)**: anchors, replacements, the
+  expectation per mutant, and the mutant→killing-test mapping. A declared-equivalent mutant must
+  carry its argument. Outcomes are a closed vocabulary; a mutant not reached is `not_run`, never
+  omitted.
+- **Cite the spec from the claim.** A kill count with no committed spec is prose, not evidence.
+  Claims published before ADR-0098 are classified in that ADR (`safe` / `exposed` /
+  `unauditable`) and should be cited with their literal.
+
+CI re-checks every committed spec on every run (`tests/test_mutation_harness.py::TestCommittedSpecs`):
+anchors must still match exactly once, every killing test must still collect, and no spec may
+name the harness's own test module as its oracle (that gate fails for any applied mutant of a
+committed spec, so it would be a universal false-kill oracle). When an anchor drifts, re-anchor
+the mutant and re-run the spec rather than editing the anchor to quiet the gate. The kill
+verdicts themselves are review-time evidence re-executed on demand, not a CI step — and that
+split is stated narrowly on purpose: the gates catch mutants that stop applying and mappings
+that stop naming a real test, but a verdict can still rot invisibly when code *around* an intact
+anchor changes meaning or an interpreter or dependency bump changes what a test exercises, which
+is why a spec is re-run whenever review touches the code it anchors.
+
 ## Public request boundary
 
 Every public service that accepts a JSON-shaped request parses it through `request_boundary.py`.

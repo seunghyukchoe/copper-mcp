@@ -1,0 +1,36 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": ["-q", "--no-cov"],
+  "mutants": [
+    {
+      "id": "PK1-fifth-key",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "    \"np_thru_hole\": PadKind.NPTH,\n}",
+      "replacement": "    \"np_thru_hole\": PadKind.NPTH,\n    \"castellated\": PadKind.SMD,\n}",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_the_pad_kind_table_maps_exactly_kicads_four_documented_tokens"
+      ]
+    },
+    {
+      "id": "PK2-connect-repointed",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "    \"connect\": PadKind.SMD,",
+      "replacement": "    \"connect\": PadKind.THROUGH_HOLE,",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_the_pad_kind_table_maps_exactly_kicads_four_documented_tokens"
+      ]
+    },
+    {
+      "id": "PK3-kind-refusal-deleted",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                if raw_kind not in _PAD_KIND_BY_TOKEN:\n                    self.fail(\n                        \"unsupported.construct\",\n                        \"pad kind is unsupported\",\n                        locator,\n                        object_kind=\"pad\",\n                    )\n                kind = _PAD_KIND_BY_TOKEN[raw_kind]",
+      "replacement": "                kind = _PAD_KIND_BY_TOKEN.get(raw_kind, PadKind.SMD)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_an_undocumented_pad_kind_is_refused_without_echoing_the_board"
+      ]
+    }
+  ]
+}
