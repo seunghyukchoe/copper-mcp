@@ -160,6 +160,56 @@ _EDGE_CUTS_OUTLINE_HEADS = frozenset({"gr_line", "gr_rect"})
 # approximation, which is not ADR-0072's conservative arc envelope run backwards.
 _EDGE_CUTS_CURVE_HEADS = frozenset({"gr_arc", "gr_bezier", "gr_circle", "gr_curve"})
 _EDGE_CUTS_LINE_FIELDS = frozenset({"end", "layer", "locked", "start", "stroke", "tstamp", "uuid"})
+# Root graphics on a copper layer, mapped to the refusal each earns.  Every one of them is real
+# copper and therefore an obstacle, and an obstacle may only be over-approximated -- so all of
+# them refuse.  What this table changes is only *what the refusal says*, under exactly the rule
+# `_UNMODELLED_ROOT_HEADS` documents above: the sentence is a value from this table, selected by
+# an equality test against the source token and never built from it, so the refusal can name the
+# construct without echoing one byte of the board.  A head absent from the table falls back to
+# `_UNNAMED_COPPER_GRAPHIC` and is refused without being named -- still located, still refused,
+# just not named, exactly as an undocumented root head is.
+#
+# `gr_text` and `gr_text_box` are separated out because they refuse for a *different and stronger*
+# reason than a stray drawn line does, and an operator who reads "root graphic on copper is
+# unsupported" cannot tell which they are looking at.  A drawn primitive carries its own geometry
+# in the document and could in principle be enveloped the way ADR-0013 envelopes a zone outline.
+# Copper lettering cannot: the glyph run KiCad plots is not a function of the board document's
+# bytes.  Four independent mechanisms establish that, each measured against KiCad 10.0.5's own
+# plotter in docs/research/kicad-copper-text-envelope-v1.md:
+#
+#   * `${...}` in the string is expanded by `PCB_TEXT::GetShownText` through
+#     `BOARD::ResolveTextVar`, which reads the *project* file's `text_variables` -- a second
+#     document CopperMCP neither reads nor digests -- and `${FILENAME}`, `${PROJECTNAME}` and
+#     `${CURRENT_DATE}` resolve from the path and the clock, which are in no document at all.
+#   * `(face "...")` selects a TrueType outline font resolved through the host's font cache, and
+#     fontconfig silently substitutes when it is missing ("Font '%s' not found; substituting
+#     '%s'."), so the plotted copper is a function of the rendering machine.
+#   * Even for the built-in stroke font with a literal ASCII string, the glyph extents live in
+#     KiCad's compiled-in `newstroke_font` table, not in the board, and KiCad's own text box is
+#     *not* a containing box: at 1.27 mm, `(g)pqy` plots 0.3995 mm past its bottom edge and an
+#     overbar run 0.5957 mm past its top.
+#   * `gr_text_box` is in this table for a reason that had to be measured rather than assumed by
+#     analogy with `gr_text`, because it is the one text head that *does* carry two exact corners
+#     in the document -- which would have been a derivable envelope.  It is not one: the corners
+#     bound neither axis.  A 40x2 mm declared box at 1.27 mm is overflowed 0.1425 mm below by a
+#     descender, 3.7479 mm below and 3.8594 mm above by thirty wrapping words, and 11.1037 mm to
+#     each side by one unbreakable 52-character word that cannot wrap at all -- both overflows
+#     growing linearly and without bound in a string length the first bullet already shows is not
+#     derivable.
+#
+# So there is no box derivable from `at`, `start`/`end`, `size`, `thickness` and the string that
+# is provably containing, and an obstacle that is not provably containing is an
+# under-approximation waiting to happen.  See ADR-0095 for the decision and for what would have
+# to become true to accept it.
+_UNNAMED_COPPER_GRAPHIC: tuple[str, str] = ("root graphic on copper is unsupported", "graphic")
+_COPPER_TEXT_REFUSAL: tuple[str, str] = (
+    "copper text has no envelope derivable from the board and is unsupported",
+    "text",
+)
+_UNMODELLED_COPPER_GRAPHIC_HEADS: dict[str, tuple[str, str]] = {
+    "gr_text": _COPPER_TEXT_REFUSAL,
+    "gr_text_box": _COPPER_TEXT_REFUSAL,
+}
 _SETUP_METADATA_HEADS = frozenset(
     {
         "allow_soldermask_bridges_in_footprints",
@@ -554,11 +604,14 @@ class _Converter:
                         object_kind="outline",
                     )
                 if self._is_routing_layer(layer) and layer != "Edge.Cuts":
+                    message, kind = _UNMODELLED_COPPER_GRAPHIC_HEADS.get(
+                        head, _UNNAMED_COPPER_GRAPHIC
+                    )
                     self.fail(
                         "unsupported.construct",
-                        "root graphic on copper is unsupported",
+                        message,
                         "kicad_pcb.graphic",
-                        object_kind="graphic",
+                        object_kind=kind,
                     )
                 continue
             self.fail(
