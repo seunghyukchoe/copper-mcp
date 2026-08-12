@@ -383,11 +383,14 @@ def test_far_side_courtyard_vertices_cost_the_scene_vertex_budget() -> None:
 
 
 def test_the_sixty_four_courtyard_ceiling_counts_both_layers_together() -> None:
-    """One ceiling per footprint, enforced identically by the adapter and by the decoder.
+    """One ceiling per footprint, **at the adapter**.
 
     Counting each layer separately would let a footprint carry 128 shapes through a rule whose
     schema says 64, and the two paths disagreeing about one rule is the defect `schema.limit`
-    exists to prevent.
+    exists to prevent. This covers the adapter's copy only; the JSON decoder's copy has its own
+    test below, and content validation's has a third. An earlier version of this docstring
+    claimed the decoder was covered here and it was not - a mutant that charged the decoder's
+    ceiling to the near layer alone survived the whole suite.
     """
 
     def board(front: int, back: int) -> bytes:
@@ -450,6 +453,47 @@ def test_the_sixty_four_courtyard_ceiling_counts_both_layers_together() -> None:
     assert over_ceiling.diagnostics[0].source_locator.startswith(
         "kicad_pcb.footprint[0].courtyard["
     )
+
+
+def test_the_decoder_refuses_a_far_side_overflow_of_the_shared_ceiling() -> None:
+    """The untrusted-JSON path refuses at the shared ceiling, including a far-side-only overflow.
+
+    The adapter's copy of the ceiling is pinned above and content validation's below, but neither
+    runs on the path a *caller-supplied* Board IR envelope takes. This pins that one, and pins
+    the half that a per-layer count would miss: 64 shapes on the far side alone, with a single
+    near-side ring, must still refuse.
+
+    What this does **not** claim is that `codec._decode_content`'s own copy of the rule is what
+    refuses. It is not reachable independently: `_decode_content` has exactly one caller, and
+    `validate_content` runs on the next line with the identical combined ceiling, so the decoder's
+    copy is shadowed defence-in-depth. Removing it changes no observable outcome here - code,
+    locator and message are identical with and without it - which is why the mutant that charges
+    the decoder's ceiling to the near layer alone is recorded as equivalent rather than as a gap.
+    The guarantee this test owns is the one a caller can observe: the decode surface refuses.
+    """
+
+    base = json.loads(encode_snapshot(_snapshot(FIXTURE.read_bytes())))
+    carrier = next(
+        item for item in base["content"]["items"]["footprints"] if "far_side_courtyards" in item
+    )
+    near = carrier["courtyards"][0]
+    far = carrier["far_side_courtyards"][0]
+
+    def envelope(near_count: int, far_count: int) -> bytes:
+        document = json.loads(encode_snapshot(_snapshot(FIXTURE.read_bytes())))
+        for item in document["content"]["items"]["footprints"]:
+            if "far_side_courtyards" in item:
+                item["courtyards"] = [near] * near_count
+                item["far_side_courtyards"] = [far] * far_count
+        return json.dumps(document).encode()
+
+    with pytest.raises(BoardIRValidationError) as over:
+        decode_snapshot_json(envelope(33, 32))
+    assert over.value.code == "schema.limit"
+
+    with pytest.raises(BoardIRValidationError) as far_only:
+        decode_snapshot_json(envelope(1, 64))
+    assert far_only.value.code == "schema.limit"
 
 
 def test_a_decoded_far_side_ring_is_held_to_the_same_octilinear_rule() -> None:
