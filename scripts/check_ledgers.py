@@ -162,6 +162,18 @@ REPLAY_SUB_ENTRIES: dict[tuple[str, str], str] = {
         "B-088 replayed under the region-scoped obstacle model: the routed count is unchanged "
         "and 9 of 11 no_path refusals are reclassified no_path_in_region"
     ),
+    # B-099's runner and corpus, re-run before and after the root-board-property accept
+    # (ADR-0094, D-184, issue #140). It re-measures the same question on the same method, so it
+    # reuses the parent number under rule 4 rather than taking a new one; the corpus has grown
+    # from 12 boards to 17 in the interval, which the sub-entry states. The delta is that there
+    # is none: 11 of 17 convert before and after.
+    (
+        "docs/ledgers/benchmark-ledger.md",
+        "#### B-099 — root-property accept replay",
+    ): (
+        "B-099 replayed before and after accepting root board properties: the converting count "
+        "is unchanged at 11 of 17 and four refusals advance to the next construct"
+    ),
 }
 
 # Historical double-allocations that predate this checker. Ledgers are

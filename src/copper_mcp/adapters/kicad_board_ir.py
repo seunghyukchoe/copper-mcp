@@ -134,7 +134,6 @@ _UNLOCKED_GROUP_VALUES = ("no",)
 _UNMODELLED_ROOT_HEADS: dict[str, str] = {
     "dimension": "root dimension objects are unsupported",
     "image": "root embedded images are unsupported",
-    "property": "root board properties are unsupported",
 }
 # There is deliberately no `_UNMODELLED_PAD_KINDS` table any more, and its absence is the
 # statement.  KiCad's pad attribute is a *closed* four-token vocabulary: `parsePAD` switches on
@@ -147,6 +146,47 @@ _UNMODELLED_ROOT_HEADS: dict[str, str] = {
 # it is deleted rather than kept empty.  A token that reaches the refusal below is not a
 # documented pad kind at all: it refuses unnamed, without echoing one byte of the board, and the
 # indexed locator still says which pad.
+# The board file format's "Properties" root section -- one of the root sections the format
+# enumerates, documented since KiCad 6.0 as "a key value pair for storing user defined
+# information" with a string key and a string value and nothing else.  It is one entry of
+# `BOARD::m_properties`, a `std::map<wxString, wxString>`, written by
+# `PCB_IO_KICAD_SEXPR::formatProperties` as `(property %s %s)` through `Quotew`, which quotes
+# unconditionally.  See docs/research/kicad-root-board-properties-v1.md and ADR-0094.
+#
+# The accept is NOT "a property is cosmetic", and that claim would be false.  KiCad's only reader
+# of the map is `BOARD::ResolveTextVar`, which substitutes `${KEY}` -- and substitution has real
+# termini.  Six were found, and the research note says plainly that six is what a sweep of the
+# `ResolveTextVar`/`ExpandTextVars` call sites found rather than a proof of completeness:
+# `PCB_TEXT`, `PCB_TEXTBOX` and `PCB_TABLECELL` all resolve `GetShownText` through it, so text on
+# a copper layer is plotted copper whose glyphs depend on a property value; `PCB_BARCODE`
+# assembles its module pattern from the shown text; `DRC_ENGINE::loadRules` expands the same
+# tokens over a `.kicad_dru` file, so a property can supply a clearance to a custom rule; and the
+# IPC `ExpandTextVariables` endpoint hands an expanded value straight to a client.  The accept is
+# sound because **this adapter already refuses or already excludes every one of those termini, for
+# its own reasons and independently of any property**: a root graphic on a copper layer refuses, a
+# footprint graphic on a copper layer refuses, `barcode` and `table` are not in the root
+# vocabulary, and `.kicad_dru` is a separate file this adapter has never parsed (ADR-0005) -- while
+# the
+# authoritative DRC surface hands the real `.kicad_dru` and `.kicad_pro` to KiCad itself over
+# source bytes that the write-back path preserves verbatim.  So no substitution can reach Board IR
+# content, no obstacle shrinks and no connectivity or outline grows.  Board IR carries no text at
+# all: a `Footprint` has an id, an origin, a rotation, a side, pads and courtyards, and no string
+# from the document but a layer name.
+#
+# Every key is accepted, and that is a decision rather than an omission.  The question ADR-0090 had
+# to answer for a group -- is there a value that changes what the board *is* rather than what it is
+# *called*? -- is asked here over the key, and the answer is that no key is special-cased anywhere
+# in KiCad's board-properties code: the format's only reserved property keys (`ki_keywords`,
+# `ki_description`, `ki_locked`, `ki_fp_filters`) are *symbol* properties, and a key colliding with
+# a built-in text-variable token is shadowed by the resolver rather than given any new power.
+# Refusing a *specific* key would therefore be a rule with no domain behind it.
+_ROOT_PROPERTY_HEAD = "property"
+# Pad kinds the KiCad board format defines (`PAD_ATTR_T`: PTH, SMD, CONN, NPTH) and Board IR
+# v0.2 does not model, under exactly the rule `_UNMODELLED_ROOT_HEADS` documents above: the
+# message is a *value from this table*, selected by an equality test against the source token
+# and never built from it, so the refusal names the construct without echoing one byte of the
+# board.  A token absent from this table is not a documented pad kind at all and refuses
+# unnamed, with the indexed locator still saying which pad.
 #
 # The mapping is a module constant rather than a dict rebuilt inside the pad loop so that a test
 # can assert its *whole domain* against KiCad's four tokens. That is the partition test ADR-0091
@@ -387,6 +427,9 @@ class _Converter:
         # reason ``root_group_count`` is: the conversion discards a distinction the source made,
         # and a count is the only way to say so without a diagnostic that would refuse the board.
         self.edge_connector_pad_count = 0
+        # Root ``(property ...)`` expressions accepted as board metadata and not modelled, on the
+        # same measured-and-reported footing as the group count above.
+        self.root_board_property_count = 0
         if self.root.head != KICAD_PCB_ROOT_HEAD:
             self.fail(
                 FOREIGN_ROOT_DIAGNOSTIC_CODE,
@@ -525,6 +568,75 @@ class _Converter:
             )
         return values[0]
 
+    def _check_root_property(self, expression: SExpr, locator: str) -> None:
+        """Accept one root ``(property "<key>" "<value>")`` as board metadata, on a closed shape.
+
+        The accepted subset is stated as a **closed field table** rather than as prose, because
+        ADR-0092's prose subset admitted two forms it did not mean and neither was found by
+        reading it. Exactly this and nothing else is accepted:
+
+        =========================  ========  ====================================================
+        Field                      Required  Permitted
+        =========================  ========  ====================================================
+        positional atom 0 (key)    yes       exactly one atom, quoted in the source
+        positional atom 1 (value)  yes       exactly one atom, quoted in the source
+        further positional atoms   --        none; any third direct atom refuses
+        child expressions          --        none; any ``(...)`` child refuses
+        =========================  ========  ====================================================
+
+        Every form outside that table is one KiCad's own parser rejects: ``parseBoardProperty`` is
+        ``NeedSYMBOL(); NeedSYMBOL(); NeedRIGHT();``, so a third atom or a nested expression is a
+        hard parse error there too. The one place this is *narrower* than KiCad is quoting --
+        ``NeedSYMBOL`` accepts a bare token, while ``formatProperties`` writes both halves through
+        ``Quotew``, which quotes unconditionally. An unquoted atom is therefore a form KiCad's
+        writer cannot emit, it appears nowhere in the surveyed corpus, and refusing it is the
+        conservative direction, so it refuses rather than being assumed equivalent.
+
+        The safety argument is not the with/without equality -- that equality measures schema
+        stability and would hold for an unsafe value too (D-178, and ADR-0090 for the case where it
+        hid a real defect). It is KiCad's own model, and the honest version of that model is *not*
+        "a property is cosmetic". ``BOARD::ResolveTextVar`` substitutes ``${KEY}``, and substitution
+        has termini that are real board content: text on a copper layer is plotted copper,
+        ``PCB_BARCODE`` builds its pattern from shown text, and ``DRC_ENGINE::loadRules`` expands
+        the same tokens over a ``.kicad_dru``, so a property can supply a clearance to a custom
+        rule. What makes the accept sound is that **every one of those termini is already refused
+        or already outside this adapter, independently of any property**: a root graphic on copper
+        refuses, a footprint graphic on copper refuses, ``barcode`` is not in the root vocabulary,
+        and ``.kicad_dru`` is a file this adapter has never parsed -- while the authoritative DRC
+        surface hands that file to KiCad itself, over source bytes the write-back path preserves
+        verbatim. Nothing reachable from a property reaches Board IR content, so neither the
+        over-approximated obstacle set nor the under-approximated connectivity and outline moves.
+
+        There is no reserved key, which is ADR-0090's locked-group question asked over the key
+        rather than skipped: no board property key is special-cased anywhere in KiCad, the format's
+        reserved property keys are *symbol* properties, and a key colliding with a built-in
+        text-variable token is shadowed by the resolver rather than empowered. The key and the
+        value are board bytes and are read past without being echoed into a diagnostic, an identity
+        or a snapshot.
+
+        What is *not* claimed is that the map survives a round trip through Board IR. A caller that
+        rebuilt a board from a snapshot alone would lose it, and a caller that rendered board text
+        would render ``${KEY}`` unexpanded. That is a modelling gap, so it is recorded --
+        ``ConversionResult.unmodelled_board_property_count`` -- rather than dropped in silence.
+        See R-139 and ADR-0094.
+        """
+
+        self._reject_unknown_children(expression, frozenset(), locator)
+        self._validate_direct_atoms(
+            expression,
+            positional_atoms=2,
+            allowed=frozenset(),
+            locator=locator,
+        )
+        direct_atoms = tuple(item for item in expression.items[1:] if isinstance(item, str))
+        if not all(is_quoted_atom(atom) for atom in direct_atoms[:2]):
+            self.fail(
+                "unsupported.construct",
+                "a root board property must be two quoted strings",
+                locator,
+                object_kind="property",
+            )
+
     def _check_root_group(self, expression: SExpr, locator: str) -> None:
         """Accept one *unlocked* root ``(group ...)`` as editor organisation, on a closed shape.
 
@@ -588,6 +700,7 @@ class _Converter:
         """Reject physical semantics that the v0.2 model cannot preserve."""
 
         groups = 0
+        board_properties = 0
         for index, item in enumerate(self.root.items[1:]):
             # The index is computed here, not read from the board, so it names the position of the
             # offending child without echoing anything the board author controls.  Before this,
@@ -604,6 +717,10 @@ class _Converter:
             if head == _ROOT_GROUP_HEAD:
                 self._check_root_group(item, root_locator)
                 groups += 1
+                continue
+            if head == _ROOT_PROPERTY_HEAD:
+                self._check_root_property(item, root_locator)
+                board_properties += 1
                 continue
             if head.startswith("gr_"):
                 layer = self._graphic_layer(item, "kicad_pcb.graphic")
@@ -637,6 +754,7 @@ class _Converter:
                 root_locator,
             )
         self.root_group_count = groups
+        self.root_board_property_count = board_properties
 
         general = self._one(self.root, "general", "kicad_pcb", required=False)
         if general is not None:
@@ -3112,6 +3230,7 @@ class _Converter:
             max_roundrect_rounding_nm=self.max_roundrect_rounding_nm,
             unmodelled_group_count=self.root_group_count,
             edge_connector_pad_count=self.edge_connector_pad_count,
+            unmodelled_board_property_count=self.root_board_property_count,
         )
 
 

@@ -810,7 +810,7 @@ class SceneAnnotationContract(_ClosedContract):
         str, Field(pattern=r"^annotation:[0-9A-Za-z_]+:[0-9]{4}:[0-9]+:[0-9a-f]{16}$")
     ]
     layer_id: LayerId | None
-    origin: Literal["board_text", "silkscreen", "footprint_property"]
+    origin: Literal["board_text", "silkscreen", "footprint_property", "board_property"]
     trust: Literal["untrusted_board_author"]
     text: Annotated[str, Field(max_length=4096)]
 

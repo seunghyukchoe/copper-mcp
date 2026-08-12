@@ -75,6 +75,18 @@ class ConversionResult:
     the two above are -- every caller of ``parse_kicad_bytes`` treats a non-empty ``diagnostics``
     tuple as a refusal -- and it counts converted pads only, so an aperture-skipped or refused pad
     never appears in it. See ADR-0096 and R-141.
+    ``unmodelled_board_property_count`` counts the root ``(property "<key>" "<value>")``
+    expressions the KiCad adapter accepted and did not model.  A root board property is one entry
+    of ``BOARD::m_properties``, the board's text-variable map: two strings, read only by
+    ``BOARD::ResolveTextVar`` to substitute ``${KEY}``.  Every terminus of that substitution which
+    could become board content -- copper text, a barcode pattern, a custom DRC rule -- is already
+    refused by or already outside this adapter, so nothing a property could reach is modelled here
+    and the pair is inert on the read side.  What is lost is the map itself: a caller that rebuilt
+    a board from a snapshot alone would drop it, and text rendered from Board IR would leave
+    ``${KEY}`` unexpanded.  It counts *expressions*, not KiCad map entries -- ``std::map::insert``
+    silently keeps the first value for a repeated key, so a document with a duplicate has more
+    expressions than entries.  It is a count for the same reason the two fields above are: a
+    diagnostic would refuse the board.  See ADR-0094 and R-139.
     """
 
     snapshot: BoardIRSnapshot | None
@@ -82,6 +94,7 @@ class ConversionResult:
     max_roundrect_rounding_nm: int = 0
     unmodelled_group_count: int = 0
     edge_connector_pad_count: int = 0
+    unmodelled_board_property_count: int = 0
 
     def __post_init__(self) -> None:
         if self.snapshot is not None and not isinstance(self.snapshot, BoardIRSnapshot):
@@ -108,6 +121,12 @@ class ConversionResult:
             or self.edge_connector_pad_count < 0
         ):
             raise ValueError("conversion edge-connector pad count must be a non-negative integer")
+        if (
+            isinstance(self.unmodelled_board_property_count, bool)
+            or not isinstance(self.unmodelled_board_property_count, int)
+            or self.unmodelled_board_property_count < 0
+        ):
+            raise ValueError("conversion board property count must be a non-negative integer")
         has_error = any(item.severity is Severity.ERROR for item in self.diagnostics)
         if has_error and self.snapshot is not None:
             raise ValueError("conversion errors cannot accompany a snapshot")
@@ -119,3 +138,5 @@ class ConversionResult:
             raise ValueError("a failed conversion cannot report a group count")
         if self.snapshot is None and self.edge_connector_pad_count:
             raise ValueError("a failed conversion cannot report an edge-connector pad count")
+        if self.snapshot is None and self.unmodelled_board_property_count:
+            raise ValueError("a failed conversion cannot report a board property count")

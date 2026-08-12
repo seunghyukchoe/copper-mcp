@@ -176,6 +176,7 @@ never silently widens it.
 | [0092](0092-net-tie-copper-as-netless-obstacle.md) | Net-tie copper is a netless obstacle, and the tie is never a connectivity claim | Accepted |
 | [0093](0093-actionable-off-grid-refusals.md) | An off-grid refusal carries the pad, the pitch and the exact miss | Accepted |
 | — | *0094 is a live claim on an open branch, not a gap; see **Known gaps** above.* | — |
+| [0094](0094-root-board-properties-as-metadata.md) | A root board property is a text variable, accepted and counted rather than modelled | Accepted |
 | [0095](0095-copper-text-has-no-derivable-envelope.md) | Copper text has no envelope derivable from the board, and refuses under its own name | Accepted |
 | [0096](0096-edge-connector-pads-convert-as-smd.md) | An edge-connector pad converts as an SMD pad, and the discarded token is counted | Accepted |
 
@@ -274,5 +275,6 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0091: Accept the pad zone-connection overrides that attach, refuse the one that detaches](0091-attaching-pad-zone-connect-overrides.md)
 - [ADR-0092: Net-tie copper is a netless obstacle, and the tie is never a connectivity claim](0092-net-tie-copper-as-netless-obstacle.md)
 - [ADR-0093: An off-grid refusal carries the pad, the pitch and the exact miss](0093-actionable-off-grid-refusals.md)
+- [ADR-0094: A root board property is a text variable, accepted and counted rather than modelled](0094-root-board-properties-as-metadata.md)
 - [ADR-0095: Copper text has no envelope derivable from the board, and refuses under its own name](0095-copper-text-has-no-derivable-envelope.md)
 - [ADR-0096: An edge-connector pad converts as an SMD pad, and the discarded token is counted](0096-edge-connector-pads-convert-as-smd.md)
