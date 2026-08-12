@@ -44,9 +44,19 @@ Every occurrence in the tree has exactly the same shape: a single line, one head
 double-quoted atoms, no children, no third atom. Nothing in the tree carries a root property with
 a nested expression, an unquoted atom, or a repeated key.
 
-**No surveyed board references a board-level text variable in its own text.** Every one of the
-454 `${…}` occurrences across that lineage's saves is the built-in per-footprint reference token,
-which resolves from the footprint rather than from the properties map. So on this corpus
+**No surveyed board references a board-level text variable anywhere.** The counting rule, stated
+because the first version of this sentence carried a figure from a narrower file set and a regex
+that silently dropped tokens containing digits: every `${…}` token, matched as `\$\{[^}]*\}`, in
+exactly the four `.kicad_pcb` saves the capability corpus measures for this lineage — the corpus
+excludes `.history/`, `.backup-*` and derived stems, so a wider glob gives a much larger number
+that answers a different question. On that set there are exactly two distinct tokens:
+
+| Token | Occurrences | Where | Resolves from |
+|---|---:|---|---|
+| `${REFERENCE}` | 898 | every one inside an `fp_text` node | the footprint, a built-in — never the properties map |
+| `${KICAD10_3DMODEL_DIR}` | 864 | every one inside a `(model …)` path | KiCad's path configuration; a filesystem path, not board text |
+
+**Zero tokens name a board-level key.** So on this corpus
 the properties are not merely unmodelled — they are unreferenced. That is a fact about today's
 tree and not a property of the construct, and nothing below leans on it.
 
@@ -154,18 +164,30 @@ powerful.
 ## 6 — The load-bearing question, and the honest answer
 
 **A root board property is not unconditionally cosmetic, and any decision that assumes it is, is
-wrong.** `ResolveTextVar` is a substitution, and three of its termini are real board content:
+wrong.** `ResolveTextVar` is a substitution, and **six** of its termini reach something real. The
+list below is **an enumeration of what this survey found, not a proof of completeness** — it was
+built by following `ResolveTextVar` and `ExpandTextVars` call sites, and a terminus reached by some
+path neither name appears on would not be in it. Adding one is expected to be a correction rather
+than a surprise.
 
 1. **Text on a copper layer.** `PCB_TEXT::GetShownText` (`pcbnew/pcb_text.cpp:170-196`) resolves
    through `board->ResolveTextVar`. Glyphs on a copper layer are plotted copper and are
    DRC-checked, so a property value can change copper geometry.
-2. **Barcodes.** `PCB_BARCODE::AssembleBarcode` builds the Zint symbol from `GetShownText()`
+2. **Text boxes.** `PCB_TEXTBOX::GetShownText` resolves through the same call, so a
+   `gr_text_box` on copper carries the same consequence as a `gr_text`.
+3. **Table cells.** `PCB_TABLECELL::GetShownText` — the root `(table …)` construct KiCad 9 and 10
+   write — resolves the same way, one more container whose rendered glyphs vary with the value.
+4. **Barcodes.** `PCB_BARCODE::AssembleBarcode` builds the Zint symbol from `GetShownText()`
    (`pcbnew/pcb_barcode.cpp:155,556`), so the module pattern itself varies with the value.
-3. **Custom DRC rules.** `DRC_ENGINE::loadRules` (`pcbnew/drc/drc_engine.cpp:664-694`) runs every
+5. **Custom DRC rules.** `DRC_ENGINE::loadRules` (`pcbnew/drc/drc_engine.cpp:664-694`) runs every
    line of the `.kicad_dru` through `ExpandTextVars` with `m_board->ResolveTextVar` *before*
    `DRC_RULES_PARSER::Parse`. A rule reading `(constraint clearance (min ${MIN_CLR}))` therefore
    takes its clearance from a board property. This is the strongest counterexample to the cosmetic
    reading and the reason this note exists.
+6. **The IPC API.** `api_handler_board.cpp:909` exposes an `ExpandTextVariables` endpoint, so an
+   IPC client can read an expanded value directly rather than through any board object. It changes
+   no geometry; it is listed because it makes the map *reachable* by something other than a
+   renderer, which matters to anyone reasoning about disclosure.
 
 Also side-effectful but outside any board model: plot, drill, position and STEP **output
 directories** are expanded through `ResolveTextVar` (`dialog_plot.cpp:820,1251,1369`,
@@ -181,12 +203,21 @@ The argument is *not* that the construct is inert. It is that **every terminus a
 refused by, or already outside, this adapter — for its own reasons, and independently of whether
 any property is present**:
 
-| Terminus | This adapter's existing behaviour |
-|---|---|
-| Root text on a copper layer | refused: "root graphic on copper is unsupported" (the `gr_*` branch; issue #141) |
-| Footprint text on a copper layer | refused: "footprint graphic on a copper layer is unmodelled copper" |
-| `(barcode …)` | not in the root vocabulary; refused without being named |
-| `.kicad_dru` custom rules | never parsed by this adapter — stated in ADR-0005 and in [the Board IR contract](../architecture/board-ir.md) |
+| Terminus | This adapter's existing behaviour | Pinned by a property-coupled test? |
+|---|---|---|
+| Root text on a copper layer (`gr_text`, `gr_text_box`) | refused by the `gr_*` branch on any copper layer (issue #141 owns the sentence) | yes |
+| Footprint text on a copper layer (`fp_text`, footprint field) | refused: a footprint graphic on a copper layer is unmodelled copper | yes |
+| `(barcode …)` | not in the root vocabulary; refused without being named | yes |
+| `(table …)` | not in the root vocabulary; refused without being named | no — same mechanism as `barcode`, not separately pinned |
+| `.kicad_dru` custom rules | never parsed by this adapter — stated in ADR-0005 and in [the Board IR contract](../architecture/board-ir.md) | **no, and by design** |
+| IPC `ExpandTextVariables` | a KiCad-side endpoint; CopperMCP's observer never calls it | not applicable |
+
+Two rows deserve their own sentence rather than a tick. **The `.kicad_dru` leg is pinned by
+nothing**, because it is the absence of a parsing path: a test asserting that a file is never
+opened pins an implementation detail, not the property, and would pass just as happily if the rules
+were read somewhere else. It rests on the architecture statement and on review. The `(table …)` row
+is unpinned for a weaker reason — it refuses through exactly the mechanism `barcode` does, an
+unknown root head, so the `barcode` pin covers the mechanism if not the spelling.
 
 and because Board IR **carries no text of any kind**. A `Footprint` is an id, an origin, a
 rotation, a side, pad ids and courtyards; no reference designator, value string, field or title

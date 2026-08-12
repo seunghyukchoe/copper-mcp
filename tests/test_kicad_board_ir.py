@@ -3781,6 +3781,12 @@ def test_accepting_a_board_property_does_not_admit_the_text_that_expands_it() ->
 
     This pins that the accept did not quietly widen any of them. If a future change ever models
     copper text, this test fails, and the property accept has to be re-argued rather than inherited.
+
+    **What is asserted, and what deliberately is not.** The contract is that the board *refuses*,
+    under a typed code. The refusal *sentence* is documentation of that contract and is owned by
+    whichever decision defines the construct — #141 is renaming this exact sentence, and pinning it
+    here would have made two independently correct branches fail on merge without either diff
+    touching the other's lines. A pin on prose is a pin on the wrong thing.
     """
 
     source = _insert_root(SUBSET_BOARD.read_bytes(), b'(property "FAB" "two-layer")')
@@ -3792,7 +3798,19 @@ def test_accepting_a_board_property_does_not_admit_the_text_that_expands_it() ->
         _insert_root(source, b'(gr_text "${FAB}" (at 10 10) (layer "F.Cu"))'), profile
     )
     assert on_copper.snapshot is None
-    assert on_copper.diagnostics[0].message == "root graphic on copper is unsupported"
+    assert on_copper.diagnostics[0].code == "unsupported.construct"
+    assert on_copper.diagnostics[0].object_kind == "graphic"
+
+    in_footprint = parse_kicad_bytes(
+        _insert_before(
+            source,
+            b"    (pad ",
+            b'    (fp_text user "${FAB}" (at 0 0) (layer "F.Cu"))\n',
+        ),
+        profile,
+    )
+    assert in_footprint.snapshot is None
+    assert in_footprint.diagnostics[0].code == "unsupported.construct"
 
     barcode = parse_kicad_bytes(_insert_root(source, b"(barcode (at 10 10))"), profile)
     assert barcode.snapshot is None

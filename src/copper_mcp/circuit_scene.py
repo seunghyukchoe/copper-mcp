@@ -1011,9 +1011,16 @@ def _read_annotations(
     for head in _ANNOTATION_HEADS:
         for node in children(root, head):
             add(node, "board_text", head)
-    # Root-level (property ...) nodes are deliberately not read. The Board IR adapter rejects
-    # any board that carries them, so this reader — which only ever runs on a supported board —
-    # could never see one, and advertising the origin would describe an unreachable branch.
+    # Root-level (property ...) nodes are board text variables, and both halves are as
+    # author-controlled as a footprint property's. They used to be skipped on the ground that
+    # "the adapter rejects any board that carries them, so the branch is unreachable" -- which
+    # was true until ADR-0094 accepted the construct, and then silently false: a supported board
+    # carrying one returned the string in no annotation and in no omitted count, invisible on the
+    # one surface whose whole job is to disclose every board-author-controlled string. They are
+    # collected here, charged against the same ceiling, under their own `board_property` origin.
+    # See ADR-0094 and the ADR-0022 amendment.
+    for node in children(root, "property"):
+        add(node, "board_property", "property")
     for footprint_index, footprint in enumerate(children(root, "footprint")):
         for node in children(footprint, "fp_text"):
             add(node, "silkscreen", f"fp{footprint_index}")

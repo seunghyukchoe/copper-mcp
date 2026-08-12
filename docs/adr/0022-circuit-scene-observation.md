@@ -72,7 +72,14 @@ quarantined.
   starts to.
 - `origin` distinguishes `board_text`, `silkscreen` and `footprint_property`. Root-level
   `(property ...)` is *not* read, because the adapter rejects any board carrying one, so the branch
-  would be unreachable. The extraction is deliberately over-inclusive within a node — a structural
+  would be unreachable. **Amended 2026-08-12 by [ADR-0094](0094-root-board-properties-as-metadata.md):
+  that premise no longer holds.** The adapter now accepts a root board property, so the branch is
+  reachable, and leaving it unread made a board-author-controlled string invisible *and* uncounted
+  on the surface whose purpose is to disclose exactly those. A fourth origin, `board_property`, is
+  added and root properties are collected under it, charged against the same annotation ceiling as
+  every other string. The sentence above is left as written because this record is published; this
+  amendment supersedes it and nothing else in this ADR changes. The extraction is deliberately
+  over-inclusive within a node — a structural
   keyword such as `fp_text`'s `user` is quarantined alongside the payload — because the dangerous
   error is treating author text as structure, not the reverse.
 - The tool is exposed over **both** transports, unlike `render_circuit_schematic`. That tool is

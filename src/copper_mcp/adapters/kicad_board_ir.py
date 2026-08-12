@@ -144,14 +144,18 @@ _UNMODELLED_ROOT_HEADS: dict[str, str] = {
 #
 # The accept is NOT "a property is cosmetic", and that claim would be false.  KiCad's only reader
 # of the map is `BOARD::ResolveTextVar`, which substitutes `${KEY}` -- and substitution has real
-# termini: `PCB_TEXT::GetShownText` resolves through it, so text on a copper layer is plotted
-# copper whose glyphs depend on a property value; `PCB_BARCODE::AssembleBarcode` builds its module
-# pattern from the shown text; and `DRC_ENGINE::loadRules` expands the same tokens over a
-# `.kicad_dru` file, so a property can supply a clearance to a custom rule.  The accept is sound
-# because **this adapter already refuses or already excludes every one of those termini, for its
-# own reasons and independently of any property**: a root graphic on a copper layer refuses, a
-# footprint graphic on a copper layer refuses, `barcode` is not in the root vocabulary, and
-# `.kicad_dru` is a separate file this adapter has never parsed (ADR-0005) -- while the
+# termini.  Six were found, and the research note says plainly that six is what a sweep of the
+# `ResolveTextVar`/`ExpandTextVars` call sites found rather than a proof of completeness:
+# `PCB_TEXT`, `PCB_TEXTBOX` and `PCB_TABLECELL` all resolve `GetShownText` through it, so text on
+# a copper layer is plotted copper whose glyphs depend on a property value; `PCB_BARCODE`
+# assembles its module pattern from the shown text; `DRC_ENGINE::loadRules` expands the same
+# tokens over a `.kicad_dru` file, so a property can supply a clearance to a custom rule; and the
+# IPC `ExpandTextVariables` endpoint hands an expanded value straight to a client.  The accept is
+# sound because **this adapter already refuses or already excludes every one of those termini, for
+# its own reasons and independently of any property**: a root graphic on a copper layer refuses, a
+# footprint graphic on a copper layer refuses, `barcode` and `table` are not in the root
+# vocabulary, and `.kicad_dru` is a separate file this adapter has never parsed (ADR-0005) -- while
+# the
 # authoritative DRC surface hands the real `.kicad_dru` and `.kicad_pro` to KiCad itself over
 # source bytes that the write-back path preserves verbatim.  So no substitution can reach Board IR
 # content, no obstacle shrinks and no connectivity or outline grows.  Board IR carries no text at

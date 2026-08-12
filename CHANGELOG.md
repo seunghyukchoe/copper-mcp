@@ -33,7 +33,17 @@ All notable changes are documented here. The format follows
   and decline instead of being told nothing. It counts expressions rather than KiCad map entries,
   because KiCad silently keeps the first value for a repeated key. No Board IR schema version,
   field, digest or golden identity changes, and a board carrying no root property converts exactly
-  as before. ([ADR-0094](docs/adr/0094-root-board-properties-as-metadata.md),
+  as before.
+  **Circuit Scene gains a fourth annotation origin, `board_property`.** The scene deliberately
+  skipped root properties because no board carrying one could ever convert; accepting the construct
+  made that reasoning false and left an author-controlled string invisible *and* uncounted on the
+  surface whose job is to disclose exactly those. Both halves of each pair are now returned under
+  the new origin, charged against the same annotation ceiling, with the same
+  `trust: untrusted_board_author` as every other annotation. A client that pins
+  `SceneAnnotation.origin` to the previous three values needs to widen it — no board could have
+  produced the new value before this release, because every such board was refused.
+  ([ADR-0094](docs/adr/0094-root-board-properties-as-metadata.md),
+  [ADR-0022 amendment](docs/adr/0022-circuit-scene-observation.md),
   [D-184](docs/ledgers/decision-ledger.md), [R-139](docs/ledgers/risk-register.md),
   [SEC-135](docs/ledgers/security-ledger.md),
   [#140](https://github.com/seunghyukchoe/copper-mcp/issues/140))

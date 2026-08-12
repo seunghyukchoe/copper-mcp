@@ -36,15 +36,21 @@ property key that changes what the board *is* rather than what it is *called*?**
 
 **The answer is not the comfortable one, and the first draft of this decision had it wrong.** A
 root board property is *not* unconditionally cosmetic. It is one entry of `BOARD::m_properties`,
-whose reader is `BOARD::ResolveTextVar`, and substitution has termini that are real board content:
+whose reader is `BOARD::ResolveTextVar`, and **six** of its termini reach something real. The
+research note enumerates them and says plainly that six is *what the survey found* by following
+`ResolveTextVar` and `ExpandTextVars` call sites, **not a proof of completeness**:
 
-- `PCB_TEXT::GetShownText` resolves through it, and **text on a copper layer is plotted copper**
-  whose glyphs depend on the value.
+- `PCB_TEXT::GetShownText`, `PCB_TEXTBOX::GetShownText` and `PCB_TABLECELL::GetShownText` all
+  resolve through it, and **text on a copper layer is plotted copper** whose glyphs depend on the
+  value.
 - `PCB_BARCODE::AssembleBarcode` builds its module pattern from the shown text.
 - `DRC_ENGINE::loadRules` expands the same tokens over a `.kicad_dru` **before** parsing it, so a
   rule reading `(constraint clearance (min ${MIN_CLR}))` **takes its clearance from a board
   property**. That is a constraint, and it is the counterexample any "metadata is inert" argument
   has to survive.
+- The IPC `ExpandTextVariables` endpoint (`api_handler_board.cpp:909`) hands an expanded value to a
+  client directly. It makes no geometry; it is listed because it makes the map reachable by
+  something other than a renderer, which matters to anyone reasoning about disclosure.
 
 So "it is metadata, therefore it is safe" is not available. What is available is narrower and
 checkable: **every one of those termini is already refused by, or already outside, this adapter —
@@ -52,10 +58,11 @@ for its own reasons, and independently of whether any property is present.**
 
 | Terminus | Existing behaviour, unchanged by this decision |
 |---|---|
-| Root text on a copper layer | refused — "root graphic on copper is unsupported" (issue #141) |
-| Footprint text on a copper layer | refused — "footprint graphic on a copper layer is unmodelled copper" |
-| `(barcode …)` | not in the root vocabulary; refused without being named |
+| Root text on a copper layer (`gr_text`, `gr_text_box`) | refused by the `gr_*` branch on any copper layer (issue #141 owns the sentence) |
+| Footprint text on a copper layer (`fp_text`, footprint field) | refused — a footprint graphic on a copper layer is unmodelled copper |
+| `(barcode …)`, `(table …)` | not in the root vocabulary; refused without being named |
 | `.kicad_dru` custom rules | never parsed by this adapter (ADR-0005, and the Board IR contract) |
+| IPC `ExpandTextVariables` | a KiCad-side endpoint; CopperMCP's observer never calls it |
 
 and Board IR **carries no text at all**. A `Footprint` is an id, an origin, a rotation, a side, pad
 ids and courtyards; no reference designator, field, or title block is modelled, and the only
@@ -159,21 +166,52 @@ in KiCad. D-178 recorded that trap once and ADR-0090 recorded the case where it 
 this record does not repeat either. Safety rests on section "Context" above: the format's real
 semantics plus the fact that every substitution terminus is already closed.
 
-**A test pins that the accept did not open the path it depends on.** A board carrying a property
-*and* `${KEY}` text on a copper layer still refuses, and `(barcode …)` still refuses. If a future
-change ever models copper text, that test fails and this accept must be re-argued rather than
-inherited.
+**A test pins the closures the accept depends on — three of four, and the fourth is named as
+unpinned.** A board carrying a property *and* `${KEY}` text on a copper layer still refuses, at the
+root and inside a footprint, and `(barcode …)` still refuses. If a future change models copper text
+at either level — and ADR-0072 explicitly contemplates an envelope for footprint copper text — that
+test fails and this accept must be re-argued rather than inherited. **The `.kicad_dru` closure is
+pinned by nothing**, and saying so is the point: it is the absence of a whole parsing path, and a
+test that asserts a file is never opened would pin an implementation detail rather than the
+property. A reader should treat that leg as resting on the architecture statement in ADR-0005 and
+[the Board IR contract](../architecture/board-ir.md), re-checked by review, not by CI.
+
+The pins assert the **typed code**, never the refusal sentence. A sentence is documentation of a
+contract owned by whichever decision defines the construct — #141 renames the root-copper-text
+sentence in a branch that merges cleanly with this one — so pinning prose here would have broken two
+independently correct changes at the point where neither diff touches the other's lines.
+
+**Root board properties become Circuit Scene annotations, and that is a decision rather than a side
+effect.** `circuit_scene.py` skipped root `(property …)` on the recorded ground that "the Board IR
+adapter rejects any board that carries them, so this reader could never see one". This decision
+makes that false, and the failure mode was silent: a supported board carrying one returned the
+string in **no annotation and no omitted count** — invisible on the surface whose stated job is to
+collect every board-author-controlled string. Two repairs were possible and they are not
+equivalent. Counting them as excluded was rejected because `annotations_omitted` is defined as a
+*ceiling* omission and drives `ceiling_hit: "max_scene_annotations"`; reporting a non-ceiling
+exclusion there would make the response state a false reason for the absence, which is worse than
+the gap. So they are **collected**, under a fourth `origin` value `board_property`, charged against
+the same annotation ceiling, with the key emitted separately from the value because the key is as
+author-controlled as the value. This parallels `footprint_property`, which is the same construct one
+level down and was always read. ADR-0022 is amended rather than rewritten, and
+`SceneAnnotationContract.origin` gains one literal — a widening of what the server may emit, which
+no board could previously have triggered, because every board carrying the construct was refused.
 
 **Write-back is verified rather than assumed.** A placement splice over a board carrying a root
 property leaves its bytes, and the whole document tail from it onward, byte-identical. That is what
 keeps the authoritative-DRC argument true in practice: the `.kicad_dru` expansion KiCad performs on
 the patched board sees the same value the designer wrote.
 
-**No content address moves.** A board with no root property converts identically; a board with one
-previously produced no snapshot at all, so there is nothing whose digest could change. No Board IR
-schema version, field, or golden identity is affected — `ConversionResult` is an adapter result,
-not part of the canonical content that is digested, and `tests/test_golden_identities.py` passes
-unmodified with every pinned digest unchanged.
+**No content address moves, and no golden was re-pinned to keep it that way.** A board with no root
+property converts identically; a board with one previously produced no snapshot at all, so there is
+nothing whose digest could change. No Board IR schema version, field, or golden identity is
+affected — `ConversionResult` is an adapter result, not part of the canonical content that is
+digested, and `tests/test_golden_identities.py` passes unmodified with every pinned digest
+unchanged. That last clause cost a design choice worth recording: the natural way to pin the scene
+disclosure was to add the construct to the committed hostile-text fixture, and doing so moves that
+fixture's pinned snapshot digest, annotation count and leading annotation reference IDs. The test
+splices the construct into a *copy* instead. A golden that moves because a test wanted a new case
+has stopped being a golden, and re-pinning it would have been the cheaper and worse repair.
 
 **The residual is a modelling gap, and it is stated.** Board IR has no text-variable map, so a
 caller that rebuilt a board from a snapshot alone would lose it, and text rendered from Board IR
