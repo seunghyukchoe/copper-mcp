@@ -433,3 +433,33 @@ def test_a_placement_splice_leaves_a_root_group_byte_identical() -> None:
     moved = next(item for item in patched.snapshot.content.footprints if item.id == subject)
     assert moved.origin.x == 47_250_000
     assert moved.origin.y == 15_500_000
+
+
+def test_a_placement_splice_leaves_an_edge_connector_pad_token_intact() -> None:
+    """The `connect` token a conversion discards must survive write-back byte-for-byte.
+
+    ADR-0096 maps `connect` onto `PadKind.SMD`, so Board IR no longer records which pads were
+    edge connectors. That is only tolerable because the *file* still does, and this is the
+    evidence rather than the assertion: the splice rewrites the moved footprint's own `at` and
+    every one of its pads' `at` expressions, so a pad in the moved footprint is the hardest case
+    the write-back path offers. If a future splice ever re-emitted a pad header from Board IR, it
+    would write `smd` over `connect`, silently adding solder paste to an edge-connector finger and
+    changing KiCad's own DRC and fabrication output. This fails first.
+    """
+
+    source = FIXTURE.read_bytes().replace(b'(pad "2" smd rect', b'(pad "2" connect rect')
+    assert source.count(b"connect") == 4
+
+    source, snapshot, profile, candidate, subject = _candidate(source)
+    rendered = render_kicad_placement_candidate_board(source, snapshot, candidate, profile)
+
+    assert rendered != source
+    # Every token survives, including the one on the footprint the splice actually moved.
+    assert rendered.count(b'(pad "2" connect rect') == 4
+
+    patched = parse_kicad_bytes(rendered, profile)
+    assert patched.diagnostics == ()
+    assert patched.snapshot is not None
+    assert patched.edge_connector_pad_count == 4
+    moved = next(item for item in patched.snapshot.content.footprints if item.id == subject)
+    assert (moved.origin.x, moved.origin.y) != (0, 0)

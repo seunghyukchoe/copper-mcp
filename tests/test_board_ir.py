@@ -918,3 +918,48 @@ def test_a_refused_conversion_cannot_report_a_group_count() -> None:
     assert ConversionResult(snapshot=None, diagnostics=refusal).unmodelled_group_count == 0
     with pytest.raises(ValueError, match="cannot report a group count"):
         ConversionResult(snapshot=None, diagnostics=refusal, unmodelled_group_count=1)
+
+
+def test_a_conversion_edge_connector_pad_count_must_be_a_non_negative_integer() -> None:
+    """The edge-connector count is a count, and a bool is not one.
+
+    ``isinstance(True, int)`` is true in Python, so a validator testing only ``int`` would accept
+    ``True`` as "one edge-connector pad". Same trap as the two counts beside it.
+    """
+
+    snapshot = make_snapshot(sample_content())
+
+    assert (
+        ConversionResult(snapshot=snapshot, edge_connector_pad_count=0).edge_connector_pad_count
+        == 0
+    )
+    assert (
+        ConversionResult(snapshot=snapshot, edge_connector_pad_count=2).edge_connector_pad_count
+        == 2
+    )
+    for bad in (True, False, -1, 1.0, "1", None):
+        with pytest.raises(ValueError, match="edge-connector pad count"):
+            ConversionResult(snapshot=snapshot, edge_connector_pad_count=bad)  # type: ignore[arg-type]
+
+
+def test_a_refused_conversion_cannot_report_an_edge_connector_pad_count() -> None:
+    """A refusal converted no pad, so it discarded no distinction and must not claim one.
+
+    The count exists to disclose that ``connect`` was mapped onto ``PadKind.SMD`` (ADR-0096). On a
+    refused document nothing was mapped, so a non-zero count would be a disclosure about copper
+    that was never converted.
+    """
+
+    refusal = (
+        Diagnostic(
+            code="unsupported.construct",
+            severity=Severity.ERROR,
+            message="pad shape is unsupported",
+            source_locator="kicad_pcb.footprint[0].pad[1]",
+            object_kind="pad",
+        ),
+    )
+
+    assert ConversionResult(snapshot=None, diagnostics=refusal).edge_connector_pad_count == 0
+    with pytest.raises(ValueError, match="cannot report an edge-connector pad count"):
+        ConversionResult(snapshot=None, diagnostics=refusal, edge_connector_pad_count=1)
