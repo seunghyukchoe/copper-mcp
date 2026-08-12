@@ -35,6 +35,118 @@ All notable changes are documented here. The format follows
   [D-185](docs/ledgers/decision-ledger.md), [R-140](docs/ledgers/risk-register.md),
   [SEC-136](docs/ledgers/security-ledger.md),
   [KiCad copper text envelope research](docs/research/kicad-copper-text-envelope-v1.md), #141)
+### Added
+
+- **A `connect` pad — KiCad's edge-card connector finger — now converts, as an SMD pad.** It was
+  the last construct blocking `phono-preamp/tier1-rev-a`, and it is deliberately not a one-line
+  map entry: `PadKind` is published into every Board IR snapshot digest and enumerated as a closed
+  `enum` in the published `schemas/board-ir/0.2.0.schema.json`, so what to do with a fourth kind is
+  a contract decision.
+
+  What `connect` is was established by two sweeps of KiCad's source outside the foreign-format
+  import plug-ins: every occurrence of `PAD_ATTRIB::CONN` — 35 across 17 files — and, because
+  that is structurally blind to sites testing `== PAD_ATTRIB::SMD` alone where a `CONN` pad
+  silently takes the other branch, every occurrence of `PAD_ATTRIB::SMD` too. KiCad's own model
+  makes it the same pad as `smd` wherever copper is at stake: the connectivity engine puts `SMD`,
+  `NPTH` and `CONN` in one case pinning the item to a single copper layer; the push-and-shove
+  router gives `CONN` and `SMD` one shared case; layer trimming and hole suppression treat them
+  identically; the pad-properties dialog says so in its own comment. **At least ten** things do
+  differ — a lower bound, not an enumeration — and every one sits outside what a Board IR `Pad`
+  claims: solder paste, the Gerber aperture attribute, pick-and-place "exclude all TH", the
+  Edge.Cuts clearance DRC exemption, a distinct property-system value that user-authored DRC rules
+  can name, and four reporting surfaces. Plating is not a pad attribute in KiCad at all: the only
+  plated/unplated distinction is `PTH` versus `NPTH`, which is about the hole.
+
+  **`PadKind` gains no member and no published schema changes.** Nothing in this repository would
+  read a fourth member, and widening the published `0.2.0` enum in place would silently break a
+  consumer promised a closed three-value domain. Bumping to `0.3.0` instead is *cheaper* than this
+  entry first claimed — measured, the snapshot digest and its byte count do not move at all — but
+  it still refuses every persisted `0.2.0` envelope at `codec.py`, for a member nothing reads.
+  **No pinned identity in `tests/test_golden_identities.py` moves**, and no board that converted
+  before converts differently.
+
+  The token is discarded, and the count is the disclosure —
+  `ConversionResult.edge_connector_pad_count`, the same measured-field pattern as
+  `unmodelled_group_count`. Be clear about its reach: it is an **in-process** value on
+  `ConversionResult` and reaches no MCP contract, CLI output or scene, so from an MCP client the
+  discard is silent. That is true of `unmodelled_group_count` and `max_roundrect_rounding_nm` too
+  — a pre-existing property of the measured-field pattern rather than something this change
+  introduces, and named here so it does not have to be rediscovered a fourth time. What bounds the loss is the write path — both patch adapters are
+  source-preserving splices, so the `connect` token survives in the `.kicad_pcb` byte-for-byte and
+  KiCad's own DRC, position file and Gerbers still see an edge connector. One form still refuses:
+  a `connect` pad with **no copper layer at all**, because the paste/mask aperture skip tests the
+  source token and requires literally `smd`. That is unchanged behaviour, since every `connect`
+  pad refused before.
+
+  `_UNMODELLED_PAD_KINDS` is deleted rather than emptied. Its one entry was `connect`; KiCad's pad
+  attribute is closed at four tokens and all four are now modelled, so a lookup that can never
+  miss its default would be exactly the dead code ADR-0091 found behind the pad-field allowlist. A
+  token reaching the refusal today is not a documented pad kind at all: it refuses unnamed, echoes
+  no board bytes, and still carries an indexed locator saying which pad.
+
+  Measured before and after on the same private corpus, back to back: conversion moves from **11
+  of 17 to 12 of 17** boards as saved today, which is **12 of the 12 boards in the #116 survey
+  set**. The board gained carries two edge-connector pads. **No "converts every board" result is
+  claimed** — five corpus saves still refuse, for the two constructs tracked as #140 and #141 —
+  and conversion is not appliability: the newly converted board refuses both write-back gates for
+  the pre-existing revision-derived-identity reason B-099 recorded.
+  ([ADR-0096](docs/adr/0096-edge-connector-pads-convert-as-smd.md),
+  [#138](https://github.com/seunghyukchoe/copper-mcp/issues/138))
+
+- **A placement splice is now proved to leave an edge-connector pad's token intact.** The mapping
+  above is only tolerable because the *file* still records what Board IR no longer does, and that
+  was an assertion. `test_a_placement_splice_leaves_an_edge_connector_pad_token_intact` renders a
+  real placement move over a board whose *moved* footprint carries `connect` pads — the hardest
+  case the write-back path offers, since the splice rewrites that footprint's own `at` and every
+  one of its pads' — and asserts the tokens survive byte-for-byte. If a future splice ever
+  re-emitted a pad header from Board IR it would write `smd` over `connect`, silently adding
+  solder paste to an edge-connector finger; this fails first.
+
+### Changed
+
+- `ConversionResult` gains `edge_connector_pad_count`. It is keyword-defaulted and appended last,
+  so a caller constructing one is unaffected; a caller exhaustively destructuring one should
+  expect the extra field. No pinned identity moves and no published schema changes — the count
+  lives on the conversion *result*, not in the snapshot.
+- **A root board `(property "<key>" "<value>")` no longer refuses the board.** KiCad writes board
+  text variables as root property pairs, and two of them refused four whole boards in the private
+  survey corpus. They are now read past and counted.
+  **Measured before and after with the same runner, this converts no additional board: 11 of 17,
+  then 11 of 17.** Issue #140 expected four boards to convert and none do — conversion refuses on
+  the first error, so the refusal named the first blocker in document order and said nothing about
+  what stood behind it. All four now refuse for a construct further in: three for a courtyard whose
+  layer disagrees with its footprint's side, one for an unsupported field inside a pad. Deleting the
+  property expressions from those boards' own bytes on the previous release reproduces exactly those
+  refusals, so the constructs were always there. The refusal advances rather than clearing, which is
+  how a stack of blockers gets measured, and it is deliberately not reported as a conversion win.
+  **The accepted shape is closed and exact**: two positional atoms, both quoted in the source, no
+  third atom, no child expressions. Anything else is a typed refusal with an indexed locator —
+  which also matches KiCad, whose own parser rejects a third atom or a nested expression outright.
+  **The reason this is safe is not "a property is metadata", and that claim would be false**: KiCad
+  substitutes `${KEY}` into text, and text on a copper layer is plotted copper, a barcode's module
+  pattern is built from shown text, and a `.kicad_dru` custom rule can take a clearance from a
+  property value. It is safe because every one of those termini is already refused by, or already
+  outside, this adapter — copper text refuses, `barcode` refuses, `.kicad_dru` is never parsed here
+  — while the authoritative DRC surface hands the real files to KiCad over bytes the write-back
+  path preserves verbatim. **The map is not modelled**, so `ConversionResult` gains
+  `unmodelled_board_property_count`: a caller that needs board text variables can read the count
+  and decline instead of being told nothing. It counts expressions rather than KiCad map entries,
+  because KiCad silently keeps the first value for a repeated key. No Board IR schema version,
+  field, digest or golden identity changes, and a board carrying no root property converts exactly
+  as before.
+  **Circuit Scene gains a fourth annotation origin, `board_property`.** The scene deliberately
+  skipped root properties because no board carrying one could ever convert; accepting the construct
+  made that reasoning false and left an author-controlled string invisible *and* uncounted on the
+  surface whose job is to disclose exactly those. Both halves of each pair are now returned under
+  the new origin, charged against the same annotation ceiling, with the same
+  `trust: untrusted_board_author` as every other annotation. A client that pins
+  `SceneAnnotation.origin` to the previous three values needs to widen it — no board could have
+  produced the new value before this release, because every such board was refused.
+  ([ADR-0094](docs/adr/0094-root-board-properties-as-metadata.md),
+  [ADR-0022 amendment](docs/adr/0022-circuit-scene-observation.md),
+  [D-184](docs/ledgers/decision-ledger.md), [R-139](docs/ledgers/risk-register.md),
+  [SEC-135](docs/ledgers/security-ledger.md),
+  [#140](https://github.com/seunghyukchoe/copper-mcp/issues/140))
 
 ### Fixed
 

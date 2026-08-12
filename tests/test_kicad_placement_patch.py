@@ -433,3 +433,70 @@ def test_a_placement_splice_leaves_a_root_group_byte_identical() -> None:
     moved = next(item for item in patched.snapshot.content.footprints if item.id == subject)
     assert moved.origin.x == 47_250_000
     assert moved.origin.y == 15_500_000
+
+
+def test_a_placement_splice_leaves_an_edge_connector_pad_token_intact() -> None:
+    """The `connect` token a conversion discards must survive write-back byte-for-byte.
+
+    ADR-0096 maps `connect` onto `PadKind.SMD`, so Board IR no longer records which pads were
+    edge connectors. That is only tolerable because the *file* still does, and this is the
+    evidence rather than the assertion: the splice rewrites the moved footprint's own `at` and
+    every one of its pads' `at` expressions, so a pad in the moved footprint is the hardest case
+    the write-back path offers. If a future splice ever re-emitted a pad header from Board IR, it
+    would write `smd` over `connect`, silently adding solder paste to an edge-connector finger and
+    changing KiCad's own DRC and fabrication output. This fails first.
+    """
+
+    source = FIXTURE.read_bytes().replace(b'(pad "2" smd rect', b'(pad "2" connect rect')
+    assert source.count(b"connect") == 4
+
+    source, snapshot, profile, candidate, subject = _candidate(source)
+    rendered = render_kicad_placement_candidate_board(source, snapshot, candidate, profile)
+
+    assert rendered != source
+    # Every token survives, including the one on the footprint the splice actually moved.
+    assert rendered.count(b'(pad "2" connect rect') == 4
+
+    patched = parse_kicad_bytes(rendered, profile)
+    assert patched.diagnostics == ()
+    assert patched.snapshot is not None
+    assert patched.edge_connector_pad_count == 4
+    moved = next(item for item in patched.snapshot.content.footprints if item.id == subject)
+    assert (moved.origin.x, moved.origin.y) != (0, 0)
+
+
+_ROOT_BOARD_PROPERTY = b'(property "Fabricator" "two-layer, 1.6 mm, lead-free")'
+
+
+def test_a_placement_splice_leaves_a_root_board_property_byte_identical() -> None:
+    """The board's text-variable map is not modelled, so a write-back must carry it verbatim.
+
+    Board IR holds no text-variable map, so a splice that rebuilt the document from the snapshot
+    would silently delete one. The patch path is byte-preserving outside the moved footprint's own
+    expressions, which is what makes accepting the construct safe on the *write* side as well --
+    but "should" is not evidence, so this renders a real move over a board carrying a property and
+    asserts its bytes, and the whole document tail from it onward, are unchanged.
+    """
+
+    source = FIXTURE.read_bytes()
+    closing = source.rfind(b"\n)")
+    assert closing > 0
+    source = source[:closing] + b"\n  " + _ROOT_BOARD_PROPERTY + source[closing:]
+    source, snapshot, profile, candidate, subject = _candidate(source)
+
+    rendered = render_kicad_placement_candidate_board(source, snapshot, candidate, profile)
+
+    assert rendered != source
+    assert rendered.count(_ROOT_BOARD_PROPERTY) == 1
+    assert (
+        rendered[rendered.index(_ROOT_BOARD_PROPERTY) :]
+        == source[source.index(_ROOT_BOARD_PROPERTY) :]
+    )
+
+    patched = parse_kicad_bytes(rendered, profile)
+    assert patched.diagnostics == ()
+    assert patched.snapshot is not None
+    assert patched.unmodelled_board_property_count == 1
+    moved = next(item for item in patched.snapshot.content.footprints if item.id == subject)
+    assert moved.origin.x == 47_250_000
+    assert moved.origin.y == 15_500_000

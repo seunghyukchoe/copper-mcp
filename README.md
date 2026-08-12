@@ -222,15 +222,20 @@ modelled as a one-value literal (`not_run`, `not_modelled`, `inconclusive`) rath
 **Board conversion.**
 
 - **Not every real KiCad board converts to Board IR.** The converter is a documented subset and
-  fails closed on everything outside it. As measured on the private working corpus on 2026-08-11:
-  **11 of the 12 boards in the [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116)
-  survey set convert, which is 11 of all 17 boards in the corpus as saved today.** The six that do
-  not each refuse for exactly one named construct — `connect`-kind (edge-connector) pads on one
-  board ([#138](https://github.com/seunghyukchoe/copper-mcp/issues/138)), root board properties on
-  four saves ([#140](https://github.com/seunghyukchoe/copper-mcp/issues/140)), and a root copper
-  graphic on one ([#141](https://github.com/seunghyukchoe/copper-mcp/issues/141)). Each is a typed
-  refusal naming the construct, never a partial or repaired board. **No "converts every board"
-  result is claimed at any count**, and the counts above supersede any earlier survey figure.
+  fails closed on everything outside it. Re-measured on the private working corpus on 2026-08-12,
+  after root board properties were accepted
+  ([#140](https://github.com/seunghyukchoe/copper-mcp/issues/140)): **11 of the 17 boards in the
+  corpus as saved today convert — unchanged by that acceptance**, which the same runner measured at
+  11 of 17 immediately before it. Six saves refuse, each with a typed refusal naming one construct,
+  never a partial or repaired board: `connect`-kind (edge-connector) pads on one board
+  ([#138](https://github.com/seunghyukchoe/copper-mcp/issues/138)), copper text on one
+  ([#141](https://github.com/seunghyukchoe/copper-mcp/issues/141)), a courtyard whose layer
+  disagrees with its footprint's side on three, and an unsupported field inside a pad on one. **A
+  refusal names the first blocker in document order and nothing more**: the four boards that
+  refused for root board properties turned out to carry a further blocker each, so removing one
+  advanced the refusal instead of converting the board. **No "converts every board" result is
+  claimed at any count**, converting is not routing, placing or passing DRC, and the counts above
+  supersede any earlier survey figure.
 - A refusal is not a verdict on the board. It says the construct is outside the documented subset,
   which is the conservative direction — the converter over-refuses rather than guess at geometry.
 
