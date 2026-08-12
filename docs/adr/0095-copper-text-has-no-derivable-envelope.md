@@ -1,0 +1,291 @@
+# ADR-0095: Copper text has no envelope derivable from the board, and refuses under its own name
+
+- Status: Accepted
+- Date: 2026-08-12
+- Owners: `@seunghyukchoe`
+- Related: [Issue #141](https://github.com/seunghyukchoe/copper-mcp/issues/141),
+  [Issue #116](https://github.com/seunghyukchoe/copper-mcp/issues/116), ADR-0011, ADR-0013,
+  ADR-0070, ADR-0072, ADR-0090, ADR-0092,
+  [KiCad copper text envelope research](../research/kicad-copper-text-envelope-v1.md)
+
+## Context
+
+One real KiCad 10 board refuses for a root `(gr_text …)` on `F.Cu` and for nothing else. It is the
+last uncategorised conversion gap in the issue #116 corpus, and unlike the other two open gaps it
+is not about metadata. Copper lettering is real copper.
+
+That makes the direction-of-error rule decide the shape of the answer before any code is written.
+An obstacle may only be **over**-approximated (ADR-0011, ADR-0013, ADR-0072). Ignoring the text is
+therefore the one forbidden outcome: a router would propose a track straight through a letter and
+carry it downstream into apply. Refusing is safe. Modelling it is safe **if and only if** the region
+modelled provably contains every glyph KiCad plots.
+
+So the question this record answers is narrow and it is not "how do we render text". It is:
+**is there a region, derivable from the board document, that provably contains the plotted
+copper?** ADR-0013 is the precedent for the shape of a yes — it does not model a zone's fill, it
+models a region the fill cannot leave — and this record is what happens when the same question gets
+a no.
+
+It gets a no four times over, for reasons that are independent, and all four are measured against
+`kicad-cli` 10.0.5 in the [research note](../research/kicad-copper-text-envelope-v1.md).
+
+**1. The rendered string is not a function of the board document.** `PCB_TEXT::GetShownText`
+resolves `${…}` through `BOARD::ResolveTextVar`, which reaches the **project** file's
+`text_variables` — a second document CopperMCP neither reads nor digests. Measured: one
+byte-identical `.kicad_pcb` carrying `gr_text "${MYVAR}"` plots 8.5650 mm of ink with no sibling
+`.kicad_pro` and 28.4012 mm with one, **3.3× the copper from the same bytes**. Worse, `${FILENAME}`
+resolves from the board's own path, `${PROJECTNAME}` from the enclosing project, and
+`${CURRENT_DATE}` from the clock — quantities that are in no document at all. Board IR binds every
+snapshot to `source.revision`, the digest of the board bytes; a quantity outside that digest cannot
+be bounded by anything derived from it. Not tightly, and not loosely either, because the character
+count itself is unknown.
+
+**2. With `(face "…")`, the copper is a function of the rendering machine.** An outline font is
+resolved through fontconfig, which *substitutes* when the face is missing rather than failing:
+`"Font '%s' not found; substituting '%s'."` Measured: `mmmm` at 1.27 mm plots 5.6916 mm wide with
+an installed `Helvetica` and 6.5992 mm — 16 % wider — with a face this machine does not have. The
+document carries neither the outlines nor a digest of the font it means.
+
+**3. For the built-in stroke font, KiCad's own bounding box is not a containing box.**
+`STROKE_FONT::GetTextAsGlyphs` sets the box end to `cursor.y - glyphSize.y`, so the box is
+exactly `size.y` tall from the baseline and descenders and overbars fall outside it *by
+construction*. Measured at 1.27 mm with `justify left bottom`, which puts KiCad's *own* box
+bottom at the anchor, `(g)pqy` plots **0.3995 mm below it** and `~{ABC}` **0.5957 mm above the
+box top** — up to 0.47 × the text size outside. That disposes of the most obvious candidate:
+even a perfect reproduction of KiCad's own box would under-approximate, which is the forbidden
+direction.
+
+The only remaining candidate is a per-glyph bound, and Newstroke's extents live in a C array
+compiled into KiCad (`#include <newstroke_font.h>`, decoded as `(coordinate[0] - 'R') / 21`), not
+in the board and not in the format. Measuring them is possible; *bounding* them is not. The
+exhaustive ASCII maxima at 1.27 mm — advance 1.5083 × size, 0.7493 × size above the anchor,
+0.8996 × size below — are sample maxima over one repertoire in one build, and they are already
+known to be false ceilings one step outside the sample: `Ж` advances 1.6988 × size and `漢`
+1.6512 × size, the first 12.6 % over the ASCII ceiling, and an overbar run reaches 0.884 × size
+above the anchor against an ASCII ceiling of 0.7493. Nothing in the board, the format, or
+CopperMCP declares which font build will plot the gerbers, so a glyph widened in a later
+Newstroke would silently turn every emitted envelope into an under-approximation. The one bound
+that *is* structural — a coordinate byte read as `c - 'R'` spans at most ~12 × size — turns
+`mmmm` at 1.27 mm into a 61 mm box against 6.3274 mm of measured
+ink, and still does not survive reason 1.
+
+**4. `gr_text_box` carries its own corners, and they bound neither axis.** This is the strongest
+objection to the decision and it is answered by measurement rather than by analogy, because a text
+box *does* put two exact nanometre corners in the document — if the copper stayed inside them,
+refusing both heads identically would be wrong. It does not. Declared box `(start 20 30)
+(end 60 32)` at 1.27 mm, measuring the glyph strokes alone with the plotted border excluded:
+`(g)pqy` overflows **0.1425 mm below** the bottom edge and `~{ABC}` **0.1227 mm above** the top;
+`word` × 30 overflows **3.8594 mm above and 3.7479 mm below**, because the box wraps and grows in
+both vertical directions; and a single unbreakable 52-character word, which cannot wrap at all,
+overflows **11.1037 mm left and 11.0432 mm right**. Both overflows scale linearly and without
+bound with the string — a 208-character word leaves a 40 mm box by more than 104 mm on each side —
+and the string is exactly what reason 1 shows is not derivable. The corners are a layout hint, not
+an envelope.
+
+Two of the four inputs are *not* where the problem is, and saying which makes the gap precise
+rather than vague. The plotted pen width has a bound whatever `(thickness …)` claims:
+`GetEffectiveTextPenWidth` ends in `ClampTextPenSize`, which caps it at a quarter of
+`min(|size.x|, |size.y|)` — measured, a declared thickness of 0.5 mm and one of 2.0 mm both plot at
+0.3175 mm on a 1.27 mm text. And `at`, rotation and `justify` place the box predictably. The gap is
+entirely in *which glyphs, and how far each reaches*.
+
+That pen bound is deliberately **not** called settled, and the distinction is the decision's own
+logic applied to itself. "The clamp only lowers" is a read of KiCad 10.0.5's source — the same
+class of fact as "no Newstroke glyph advances more than 1.5083 × size", which condition 4 below
+refuses to rely on without a mechanism that makes a build mismatch refuse. Claiming more for one
+than for the other would be exactly the inconsistency this record exists to avoid. Nothing rests
+on it: the construct refuses whatever the pen does, and the bound is recorded only so a reader can
+see which inputs are and are not the reason. If the construct were ever accepted, the clamp would
+need condition 4 too.
+
+## Decision
+
+**1. A root `gr_text` or `gr_text_box` on a copper layer stays refused, and the refusal is not
+provisional.** It is not "unmodelled pending effort"; it is the correct answer to a question whose
+inputs are not in the document. Over-refusal is the conservative direction and it costs exactly one
+board in the surveyed corpus.
+
+**2. The refusal names the construct, from a closed table.** `_UNMODELLED_COPPER_GRAPHIC_HEADS`
+maps `gr_text` and `gr_text_box` to `copper text has no envelope derivable from the board and is
+unsupported`, with `object_kind: text`; every other graphic head on copper keeps `root graphic on
+copper is unsupported` with `object_kind: graphic`. The sentence emitted is a **value from that
+table**, selected by an equality test against the source token and never built from it, exactly as
+ADR-0090 rule 4 requires — the board's own text is untrusted data and both a head and a text string
+are board bytes. A head absent from the table is refused without being named.
+
+The split matters because the two refusals are not the same fact. A drawn `gr_line` on copper
+carries its own geometry, so ADR-0013's envelope is at least *available* to it and the refusal is a
+statement about effort. A `gr_text` carries a *reference* to geometry KiCad owns, and the refusal is
+a statement about information. An operator reading one sentence for both cannot tell which of those
+they are looking at, and only one of them is answerable by drawing the shape differently. This is
+D-162's move — "splitting one message into three" — applied to the root path.
+
+**3. Text on a non-copper layer keeps converting, and the accepted subset is a closed field table,
+not a sentence.** ADR-0092's prose subset admitted two things it did not mean; this one is a table.
+A root text expression is read past **only** when every row holds:
+
+| Field | Requirement |
+|---|---|
+| head | exactly `gr_text` or `gr_text_box` |
+| `(layer …)` | present, exactly one value |
+| that layer value | **not** `Edge.Cuts`, **not** `*.Cu`, **not** `F&B.Cu`, and **not** any name ending in `.Cu` |
+| every other field — `at`, `start`, `end`, `effects`, `font`, `size`, `thickness`, `face`, `justify`, `knockout`, `margins`, `uuid`, `render_cache`, the string itself | unread, unconstrained, and contributing nothing |
+
+The table is scoped to text because this record is about text, and that scoping is a presentational
+choice rather than a claim about the code: the adapter's ignore path is keyed on the layer for
+**every** `gr_*` head, so a `gr_circle` on `F.SilkS` is read past on exactly the same test and the
+same argument. That behaviour predates this decision and is unchanged by it; the table above is its
+text-shaped instance, not a narrower rule. Anyone widening the *copper* refusal should read it as
+"the layer decides, for all graphics" and not as "two heads are special".
+
+The last row is the load-bearing one and it is a claim, so it is stated as one: the **layer**
+decides, and nothing else can. A layer outside that copper test carries no copper in any KiCad
+stack, so the text is not an obstacle; it holds no net, so it cannot enter connectivity; it is not
+`Edge.Cuts`, so it is not routing room. Given that, no other field can change any quantity Board IR
+models — which is why the table has no other rows, and why widening it is a decision rather than an
+edit. The claim is exercised rather than only asserted:
+`test_the_hard_text_cases_are_still_ignored_on_a_documentation_layer` puts each of the four
+constructs that make a copper envelope underivable — a project text variable, a path-derived one,
+overbar and sub/superscript markup, and a non-ASCII code point — on `F.SilkS` and requires the
+board to convert. If some other field had crept into the decision, one of them would refuse and
+name itself.
+
+The copper test is exact rather than merely conservative on every board that converts, and that is
+a property of `_layers`, not of this table: a board whose copper layers are not exactly `F.Cu`,
+`In{n}.Cu` and `B.Cu` at KiCad's own IDs is refused wholesale with `object_kind: layer`, so no
+converted board can carry copper under a name this test misses. The test is over-inclusive in the
+other direction — it catches `In1.Cu` on a two-layer board and the `*.Cu` wildcard — which refuses
+more, not less.
+
+**4. No count, and no `render_cache`.** ADR-0090 accepted-and-counted a root group because it was
+*accepted*; this construct is refused, so there is nothing to count. KiCad's `render_cache` is not
+an escape either: it is a cache with no freshness binding to the string or the font that produced
+it, and ADR-0070 refuses stale zone fill for exactly that reason.
+
+## Consequences
+
+**The corpus count does not move, and that is the honest result.** 11 of 17 boards convert before
+this change and 11 of 17 after, on the five-surface harness
+(`scripts/benchmark_real_board_capability.py`), with **every recorded total equal** — conversion,
+DRC, scene, placement, route verdicts and appliability alike. The one board this construct blocks
+stays blocked; what changes is that its refusal now says which construct and why. A change that
+moved the count here would have had to invent the envelope section 4 of the research note shows
+cannot be derived.
+
+**That harness pair is not on byte-identical sources, and the exception is named rather than
+smoothed over.** Each run takes about an hour against a live working tree, and between them the
+designer re-saved exactly one board — `phono-v3`, the board this construct blocks, which grew by
+1,381 bytes. Its refusal is unchanged in kind (still `unsupported.construct`, still one
+diagnostic, still the root copper text) and every total still compares equal, but B-100 discarded a
+pair taken hours apart for this reason and this one deserves the same scepticism. So a second,
+tighter measurement was taken: **conversion only**, through the harness's own board selection,
+constraint profile and adapter entry point, three runs back to back in before/after/before order.
+All 17 digests are identical across all three runs, the before pair reproduces itself exactly, and
+**11 of 17 convert both ways**. Exactly one row differs anywhere, and only in two fields:
+
+```text
+phono-v3   before: unsupported.construct | root graphic on copper is unsupported | graphic
+           after : unsupported.construct | copper text has no envelope derivable … | text
+```
+
+The other five refusals are unchanged: four `root board properties are unsupported` (#140) and one
+`edge-connector pads are unsupported` (#138).
+
+**No content address moves, and no schema changes.** A board carrying copper text produced no
+snapshot before this change and produces none after. `object_kind: text` is a new value in an
+existing free-form diagnostic field — the same widening ADR-0090 made with `group` — and no Board
+IR field, JSON schema, or golden digest is touched.
+
+**A refusal that names a construct is the point where board bytes get closest to an
+instruction-bearing field, and copper lettering is the worst case.** The unmodelled thing *is* the
+string, so interpolating it is maximally tempting and would be maximally harmful. The sentence
+comes from a closed table and `test_the_copper_text_refusal_never_echoes_the_string_it_refuses`
+puts a bearer-token canary in the string and asserts it does not come back. SEC-136 records the
+review.
+
+**The refusal is mutation-checked in the direction that matters.** Six single-edit mutants were
+applied and all six are killed: dropping `gr_text` from the table, widening the table to a drawn
+head, collapsing `object_kind` back to `graphic`, **skipping the refusal so copper text is silently
+ignored**, dropping the copper-layer guard so silkscreen starts refusing, and interpolating the
+refused text atom into the sentence. The fourth is the one the direction-of-error rule cares about,
+and the fifth is why the accepted subset is pinned by a test rather than described in prose. Each
+mutant's anchor was verified to match exactly once, so a mutant that had silently stopped applying
+would have been reported rather than counted as killed.
+
+**No differential is offered as a safety argument, deliberately.** It would be easy to convert the
+corpus board with the `gr_text` deleted, observe that everything but `source.revision` is equal,
+and call that evidence. It is not. ADR-0090 records why: an equality between two outputs of the
+same reader bounds what an adapter *adds*, never what it *fails to read*, and it holds by
+construction whether the dropped construct is inert or catastrophic. Here the construct is copper,
+so the differential would have been maximally reassuring and exactly wrong. The argument in this
+record is entirely about what the document does and does not determine.
+
+**A code-symbol citation in this repository is checked by review and by nothing else, and this
+record is the proof.** Adversarial review found that the bounding-box line quoted above was
+attributed five times to `STROKE_FONT::drawSingleLineText`, a KiCad-6-era name that does not exist
+at 10.0.5; the line is real and lives in `STROKE_FONT::GetTextAsGlyphs`. Right target, wrong label
+— the D-182 class exactly, and `scripts/check_doc_links.py` **structurally cannot** catch it: it
+asks whether a relative Markdown link resolves and whether a label naming a record agrees with its
+target, and a code-symbol label is neither. Every other symbol this record cites was then re-read
+from the tagged source and confirmed (§5.1 of the research note lists the check). Nothing
+structural moved, because every number here comes from the oracle rather than from the labels — but
+the useful part is the limitation, not the correction: **treat a code-symbol citation here as
+verified by its author and its reviewer, and by no gate.**
+
+**What would have to become true is written down, so this can be revisited on evidence rather than
+on appetite.** Section 5 of the research note lists four conditions, and all four are required:
+the project's `text_variables` digested into the source set with path- and clock-derived variables
+refused; `(face …)` refused or carrying trusted, freshness-bound outlines; the glyph extents a read
+value pinned by digest rather than a measured constant; and a font-build mismatch that refuses
+rather than passing. Item four is the one that is easy to skip and fatal to skip: without it, item
+three is sound only for the build it was measured against. A fifth condition applies to
+`gr_text_box` alone — its corners would have to bound its copper, which today they do not in either
+axis — so the two heads cannot be split apart even if the first four were met.
+
+## Alternatives considered
+
+**Model the text as its own KiCad-computed bounding box.** Rejected on measurement, not on
+principle. The box KiCad computes is `size.y` tall from the baseline and the plotted copper leaves
+it by up to 0.47 × the text size at 1.27 mm. It is not a containing box, so deriving it exactly
+would produce an under-approximation — the one forbidden direction — with the extra hazard of
+looking rigorous.
+
+**A deliberately generous envelope from `at`, `size`, `thickness` and the string length.**
+Rejected, and this is the alternative that had to be taken seriously, because over-approximation is
+the *safe* direction and a loose box is admissible where a tight one is not derivable. It fails on
+information, not on looseness. `${…}` makes the string length itself underivable (reason 1), so
+there is no `n` to multiply by; `(face …)` makes the per-glyph factor a property of the plotting
+machine (reason 2); and for the stroke font the factor is a measurement of one font build with no
+mechanism to detect a change (reason 3). A constant fitted to KiCad 10.0.5 and applied to KiCad 11
+is not an over-approximation, it is an unverified guess that happens to be large. The project's
+standing has been that an envelope is *derived and then oracle-checked* (ADR-0072, ADR-0075); an
+oracle-*fitted* constant inverts that.
+
+**Restrict acceptance to a closed subset — stroke font, literal ASCII, no markup, angle in
+quarter-turns — and bound the glyphs exhaustively over that repertoire.** Rejected, and it is the
+strongest alternative: it would have converted the corpus board and taken the count to 12 of 17,
+because that board's text is a literal ASCII dimension string with a default thickness. Exhaustive
+measurement over a closed repertoire really is stronger than sampling. It is still a measurement of
+one build, and the failure it admits is silent: nothing in the board or in CopperMCP observes which
+Newstroke plots the gerbers, so a widened glyph turns a shipped envelope into an
+under-approximation with no signal anywhere. One board is not worth a soundness argument whose
+refutation is invisible. Condition 4 above is precisely what this alternative is missing, and it is
+what would make it acceptable.
+
+**Accept only where it cannot matter — copper text already inside a keepout or a knockout.**
+Rejected as surface without payoff. It is a conditional acceptance whose condition needs its own
+containment proof between two regions, one of which is the region that cannot be derived. The
+corpus carries no such case.
+
+**Ask KiCad for the box through `kicad-cli` or the IPC plugin.** Rejected for Board IR, though it
+is what the *research* here is built on. Conversion is offline, deterministic and pure: it maps
+bytes to a snapshot with no subprocess, no host font cache and no clock. Binding the accepted
+document set to an external renderer would make the same bytes convertible on one machine and not
+another — the property reason 2 identifies as the defect. An oracle is the right instrument for
+establishing a fact about KiCad and the wrong dependency for a reader that must be reproducible.
+
+**Refuse `gr_text` on non-copper layers too, for symmetry.** Rejected without hesitation.
+Silkscreen lettering is ink; it is not an obstacle, holds no net, and cannot affect any claim. 69
+of the 71 root texts in the surveyed corpus are on `F.SilkS`, so refusing them would cost most of
+the corpus to buy nothing. The layer decides, and pinning that boundary with a test is why mutant
+five is killed.
