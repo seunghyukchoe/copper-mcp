@@ -1507,36 +1507,70 @@ class _Converter:
         origin: PointNM,
         turn: int,
         side: FootprintSide,
-    ) -> tuple[tuple[Ring, ...], tuple[CourtyardCircle, ...]]:
-        """Import exact closed courtyard centerlines and circles in the board frame.
+    ) -> tuple[
+        tuple[Ring, ...],
+        tuple[CourtyardCircle, ...],
+        tuple[Ring, ...],
+        tuple[CourtyardCircle, ...],
+    ]:
+        """Import exact closed courtyard centerlines and circles, grouped by courtyard layer.
 
-        KiCad treats every closed shape on the matching courtyard layer as part of the footprint
-        envelope.  The bounded Board-IR subset accepts unfilled rectangles and polygons plus
-        complete ``fp_line`` cycles - with every edge horizontal, vertical, or an exact
-        45-degree chamfer - and unfilled ``fp_circle`` outlines whose radius is an exact
-        integer nanometre.  Empty still means that no courtyard was present; a malformed or
-        unsupported shape is never silently omitted.
+        KiCad treats every closed shape on a courtyard layer as part of the footprint envelope
+        **for the side that layer names**, and never consults the footprint's own side to decide
+        it: ``FOOTPRINT::BuildCourtyardCaches`` files each shape by its own ``F_CrtYd`` /
+        ``B_CrtYd`` layer into a front or back cache, and the DRC provider compares front against
+        front and back against back.  A footprint on ``F.Cu`` may therefore legitimately carry
+        ``B.CrtYd`` geometry, and the stock KiCad library ships exactly that for feed-through
+        parts: `Connector_Wire:SolderWire-*_Relief` draws its full envelope on ``F.CrtYd`` and the
+        strain-relief slot that passes through the board on ``B.CrtYd``.  Measured against real
+        ``kicad-cli`` 10.0.5, that back rectangle collides with a *back-side* footprint's back
+        courtyard and does not collide with any front courtyard, whichever side either footprint
+        sits on (ADR-0097).
+
+        The two layers are therefore returned as two separate sets and are never pooled: they are
+        distinct even-odd regions on distinct physical layers.  Returned as
+        ``(near_rings, near_circles, far_rings, far_circles)``, where *near* is the layer matching
+        ``side``.
+
+        The bounded Board-IR shape subset is unchanged and identical on both layers: unfilled
+        rectangles and polygons plus complete ``fp_line`` cycles - with every edge horizontal,
+        vertical, or an exact 45-degree chamfer - and unfilled ``fp_circle`` outlines whose radius
+        is an exact integer nanometre.  Empty still means that no courtyard was present; a
+        malformed or unsupported shape is never silently omitted.
         """
 
-        expected_layer = "F.CrtYd" if side is FootprintSide.FRONT else "B.CrtYd"
-        result: list[Ring] = []
-        circles: list[CourtyardCircle] = []
-        line_segments: list[tuple[PointNM, PointNM, str]] = []
+        near_layer = "F.CrtYd" if side is FootprintSide.FRONT else "B.CrtYd"
+        far_layer = "B.CrtYd" if side is FootprintSide.FRONT else "F.CrtYd"
+        rings: dict[str, list[Ring]] = {near_layer: [], far_layer: []}
+        circles: dict[str, list[CourtyardCircle]] = {near_layer: [], far_layer: []}
+        line_segments: dict[str, list[tuple[PointNM, PointNM, str]]] = {
+            near_layer: [],
+            far_layer: [],
+        }
 
-        def append(local_points: tuple[PointNM, ...], locator: str) -> None:
-            if len(result) + len(circles) >= 64:
+        def accepted() -> int:
+            return sum(len(value) for value in rings.values()) + sum(
+                len(value) for value in circles.values()
+            )
+
+        def require_room(locator: str) -> None:
+            if accepted() >= 64:
                 # A fixed schema ceiling, not an operator budget: the Board IR decoder refuses the
                 # very same 64-courtyard rule under `schema.limit`, and the two paths disagreeing
                 # about the code for one rule was a defect. Every `budget.exceeded.*` code now
-                # names a `ParseLimits` field an operator can actually move; this is not one.
+                # names a `ParseLimits` field an operator can actually move; this is not one. It
+                # counts both courtyard layers against one ceiling, matching the decoder.
                 self.fail(
                     "schema.limit",
                     "footprint courtyard limit exceeded",
                     locator,
                     object_kind="footprint",
                 )
+
+        def append(local_points: tuple[PointNM, ...], locator: str, layer: str) -> None:
+            require_room(locator)
             try:
-                result.append(
+                rings[layer].append(
                     Ring(
                         tuple(
                             self._transform(point, origin, turn, locator) for point in local_points
@@ -1560,13 +1594,6 @@ class _Converter:
             layer = self._graphic_layer(item, locator)
             if layer not in _COURTYARD_LAYERS:
                 continue
-            if layer != expected_layer:
-                self.fail(
-                    "unsupported.transform",
-                    "courtyard layer does not match its footprint side",
-                    locator,
-                    object_kind="footprint",
-                )
             if item.head == "fp_rect":
                 self._reject_unknown_children(
                     item,
@@ -1598,31 +1625,39 @@ class _Converter:
                         locator,
                         object_kind="footprint",
                     )
-                append((start, PointNM(end.x, start.y), end, PointNM(start.x, end.y)), locator)
+                append(
+                    (start, PointNM(end.x, start.y), end, PointNM(start.x, end.y)), locator, layer
+                )
             elif item.head == "fp_poly":
-                append(self._courtyard_polygon_points(item, locator), locator)
+                append(self._courtyard_polygon_points(item, locator), locator, layer)
             elif item.head == "fp_circle":
-                if len(result) + len(circles) >= 64:
-                    self.fail(
-                        # The same fixed 64-courtyard schema ceiling the ring path above
-                        # refuses under, and the Board IR decoder enforces. It is not an
-                        # operator budget -- no `ParseLimits` field moves it -- so it keeps
-                        # `schema.limit` rather than a `budget.exceeded.*` code.
-                        "schema.limit",
-                        "footprint courtyard limit exceeded",
-                        locator,
-                        object_kind="footprint",
-                    )
-                circles.append(self._courtyard_circle(item, locator, origin=origin, turn=turn))
+                require_room(locator)
+                circles[layer].append(
+                    self._courtyard_circle(item, locator, origin=origin, turn=turn)
+                )
             else:
-                line_segments.append(self._courtyard_line_segment(item, locator))
+                line_segments[layer].append(self._courtyard_line_segment(item, locator))
 
-        for index, ring in enumerate(
-            self._closed_courtyard_line_rings(line_segments, footprint_locator)
-        ):
-            append(ring, f"{footprint_locator}.line_chain[{index}]")
-        self._require_disjoint_courtyard_circles(tuple(result), tuple(circles), footprint_locator)
-        return tuple(result), tuple(circles)
+        # Chains are assembled per courtyard layer.  Pooling the segments would let a front edge
+        # and a back edge meeting at a shared vertex join into one ring that exists on neither
+        # layer, or make a legitimately closed front loop look like a branching chain because a
+        # back segment touches it.  The near layer is walked first so the `line_chain[N]` locators
+        # of a board whose courtyards all match its footprint sides are unchanged.
+        chain_index = 0
+        for layer in (near_layer, far_layer):
+            for ring in self._closed_courtyard_line_rings(line_segments[layer], footprint_locator):
+                append(ring, f"{footprint_locator}.line_chain[{chain_index}]", layer)
+                chain_index += 1
+        for layer in (near_layer, far_layer):
+            self._require_disjoint_courtyard_circles(
+                tuple(rings[layer]), tuple(circles[layer]), footprint_locator
+            )
+        return (
+            tuple(rings[near_layer]),
+            tuple(circles[near_layer]),
+            tuple(rings[far_layer]),
+            tuple(circles[far_layer]),
+        )
 
     def _courtyard_polygon_points(self, polygon: SExpr, locator: str) -> tuple[PointNM, ...]:
         """Read one unfilled orthogonal ``fp_poly`` without inventing a closing point."""
@@ -2240,7 +2275,12 @@ class _Converter:
                         ),
                     )
                 )
-            courtyards, courtyard_circles = self._courtyards(
+            (
+                courtyards,
+                courtyard_circles,
+                far_side_courtyards,
+                far_side_courtyard_circles,
+            ) = self._courtyards(
                 footprint,
                 footprint_locator=footprint_locator,
                 origin=origin,
@@ -2257,6 +2297,8 @@ class _Converter:
                     courtyards=courtyards,
                     courtyard_circles=courtyard_circles,
                     locked=footprint_locked,
+                    far_side_courtyards=far_side_courtyards,
+                    far_side_courtyard_circles=far_side_courtyard_circles,
                 )
             )
         return tuple(footprints), tuple(pads), tuple(tie_segments)

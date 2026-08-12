@@ -113,7 +113,12 @@ _SCHEMA_COVERAGE: dict[str, _Proof] = {
         module="tests/test_board_ir_schema.py",
         test="test_adapter_output_matches_golden_fixture_and_schema",
         kind=_EMITTED,
-        note="encode_snapshot(parse_kicad_bytes(...)) validated against the schema file",
+        note=(
+            "encode_snapshot(parse_kicad_bytes(...)) validated against the schema file; the "
+            "optional far-side courtyard keys are additionally proved by "
+            "test_schema_accepts_an_emitted_far_side_courtyard_payload_and_closes_it in the "
+            "same module, which the subset board cannot exercise"
+        ),
     ),
     "board-ir/0.1.0.schema.json": _Proof(
         module="tests/test_board_ir_schema.py",

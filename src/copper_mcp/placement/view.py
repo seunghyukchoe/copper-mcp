@@ -37,10 +37,16 @@ class FootprintView:
     locked: bool
     #: Union of the footprint's pad bounds in the board frame, as currently placed.
     hull: Rect
-    #: Exact simple octilinear courtyard rings in the current Board IR board frame.
+    #: Exact simple octilinear courtyard rings on the layer matching ``side``, in the current
+    #: Board IR board frame.
     courtyards: tuple[Ring, ...]
-    #: Exact circular courtyard keep-outs in the current Board IR board frame.
+    #: Exact circular courtyard keep-outs on the layer matching ``side``.
     courtyard_circles: tuple[CourtyardCircle, ...] = ()
+    #: Courtyard rings on the layer *opposite* ``side``. Non-empty for feed-through parts whose
+    #: envelope keeps out on both faces of the board (ADR-0097); never pooled with ``courtyards``.
+    far_side_courtyards: tuple[Ring, ...] = ()
+    #: Circular courtyard keep-outs on the layer opposite ``side``.
+    far_side_courtyard_circles: tuple[CourtyardCircle, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.ref_id.startswith("footprint:"):
@@ -51,14 +57,14 @@ class FootprintView:
             raise PlacementViewError("a placeable footprint must own at least one pad")
         if not isinstance(self.locked, bool):
             raise PlacementViewError("footprint locked state must be boolean")
-        if not isinstance(self.courtyards, tuple) or not all(
-            isinstance(ring, Ring) for ring in self.courtyards
-        ):
-            raise PlacementViewError("footprint courtyards must be immutable rings")
-        if not isinstance(self.courtyard_circles, tuple) or not all(
-            isinstance(circle, CourtyardCircle) for circle in self.courtyard_circles
-        ):
-            raise PlacementViewError("footprint courtyard circles must be immutable circles")
+        for rings in (self.courtyards, self.far_side_courtyards):
+            if not isinstance(rings, tuple) or not all(isinstance(ring, Ring) for ring in rings):
+                raise PlacementViewError("footprint courtyards must be immutable rings")
+        for circles in (self.courtyard_circles, self.far_side_courtyard_circles):
+            if not isinstance(circles, tuple) or not all(
+                isinstance(circle, CourtyardCircle) for circle in circles
+            ):
+                raise PlacementViewError("footprint courtyard circles must be immutable circles")
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,20 +77,35 @@ class StationaryFootprintView:
     side: str
     courtyards: tuple[Ring, ...]
     courtyard_circles: tuple[CourtyardCircle, ...] = ()
+    far_side_courtyards: tuple[Ring, ...] = ()
+    far_side_courtyard_circles: tuple[CourtyardCircle, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.ref_id.startswith("footprint:"):
             raise PlacementViewError("footprint reference must be typed")
         if self.side not in {"front", "back"}:
             raise PlacementViewError("footprint side must be front or back")
-        if not isinstance(self.courtyards, tuple) or not isinstance(self.courtyard_circles, tuple):
-            raise PlacementViewError("stationary footprint courtyards must be immutable tuples")
-        if not self.courtyards and not self.courtyard_circles:
+        for tuple_value in (
+            self.courtyards,
+            self.courtyard_circles,
+            self.far_side_courtyards,
+            self.far_side_courtyard_circles,
+        ):
+            if not isinstance(tuple_value, tuple):
+                raise PlacementViewError("stationary footprint courtyards must be immutable tuples")
+        if not (
+            self.courtyards
+            or self.courtyard_circles
+            or self.far_side_courtyards
+            or self.far_side_courtyard_circles
+        ):
             raise PlacementViewError("stationary footprint must carry a courtyard")
-        if not all(isinstance(ring, Ring) for ring in self.courtyards):
-            raise PlacementViewError("stationary footprint courtyards must be immutable rings")
-        if not all(isinstance(circle, CourtyardCircle) for circle in self.courtyard_circles):
-            raise PlacementViewError("stationary footprint circles must be immutable circles")
+        for rings in (self.courtyards, self.far_side_courtyards):
+            if not all(isinstance(ring, Ring) for ring in rings):
+                raise PlacementViewError("stationary footprint courtyards must be immutable rings")
+        for circles in (self.courtyard_circles, self.far_side_courtyard_circles):
+            if not all(isinstance(circle, CourtyardCircle) for circle in circles):
+                raise PlacementViewError("stationary footprint circles must be immutable circles")
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,7 +199,12 @@ def build_placement_view(
             # version has no copper hull with which to evaluate its pad-based rules. Its
             # identity is kept so naming it is refused as unplaceable rather than as unknown.
             padless_refs.add(footprint.id)
-            if footprint.courtyards or footprint.courtyard_circles:
+            if (
+                footprint.courtyards
+                or footprint.courtyard_circles
+                or footprint.far_side_courtyards
+                or footprint.far_side_courtyard_circles
+            ):
                 stationary[footprint.id] = StationaryFootprintView(
                     ref_id=footprint.id,
                     origin=footprint.origin,
@@ -186,6 +212,8 @@ def build_placement_view(
                     side=footprint.side.value,
                     courtyards=footprint.courtyards,
                     courtyard_circles=footprint.courtyard_circles,
+                    far_side_courtyards=footprint.far_side_courtyards,
+                    far_side_courtyard_circles=footprint.far_side_courtyard_circles,
                 )
             continue
         footprints[footprint.id] = FootprintView(
@@ -198,6 +226,8 @@ def build_placement_view(
             hull=hull,
             courtyards=footprint.courtyards,
             courtyard_circles=footprint.courtyard_circles,
+            far_side_courtyards=footprint.far_side_courtyards,
+            far_side_courtyard_circles=footprint.far_side_courtyard_circles,
         )
 
     unowned = set(pads_by_id) - set(owner_by_pad)

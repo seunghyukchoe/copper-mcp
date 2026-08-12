@@ -636,19 +636,38 @@ def test_v02_back_side_footprints_preserve_authored_pose_and_matching_courtyard(
     ]
 
 
-def test_v02_back_side_requires_a_matching_back_courtyard_layer() -> None:
+def test_v02_back_side_footprint_reads_a_front_courtyard_as_far_side() -> None:
+    """A courtyard belongs to the layer it is drawn on, not to the footprint's side.
+
+    Substituting `F.CrtYd` for the back-side footprint's own `B.CrtYd` leaves it with a courtyard
+    on the opposite layer. That used to refuse the whole board as an `unsupported.transform`
+    mismatch; KiCad files it in the front cache and collides it with front courtyards, so it now
+    converts into `far_side_courtyards` with the identical geometry (ADR-0097).
+    """
+
     source = _replace(
         FRONT_BACK_FOOTPRINT_V02_BOARD.read_bytes(),
         b'(layer "B.CrtYd")',
         b'(layer "F.CrtYd")',
     )
 
-    result = parse_kicad_bytes(source, constraint_profile())
+    snapshot = parse_success(source, constraint_profile())
+    front, back = snapshot.content.footprints
 
-    assert result.snapshot is None
-    assert len(result.diagnostics) == 1
-    assert result.diagnostics[0].code == "unsupported.transform"
-    assert "does not match its footprint side" in result.diagnostics[0].message
+    assert (front.side, back.side) == (FootprintSide.FRONT, FootprintSide.BACK)
+    assert len(front.courtyards) == 1 and front.far_side_courtyards == ()
+    # The back footprint's only courtyard now sits on the front layer, so it is the far set that
+    # carries it and the near set that is empty -- the exact inverse of the untouched fixture.
+    assert back.courtyards == ()
+    assert len(back.far_side_courtyards) == 1
+    assert back.far_side_courtyards[0].points == (
+        PointNM(57_000_000, 18_000_000),
+        PointNM(64_000_000, 18_000_000),
+        PointNM(64_000_000, 23_000_000),
+        PointNM(57_000_000, 23_000_000),
+    )
+    assert back.front_courtyards == (back.far_side_courtyards, ())
+    assert back.back_courtyards == ((), ())
 
 
 def test_v02_footprint_without_a_courtyard_has_an_explicit_empty_state() -> None:
@@ -719,19 +738,165 @@ def test_reused_kicad_uuid_board_is_refused_by_source_preserving_write_back() ->
         _require_native_geometry_identities(snapshot)
 
 
-def test_v02_mismatched_courtyard_layer_fails_closed() -> None:
-    source = _replace(
-        FOOTPRINT_V02_BOARD.read_bytes(),
-        b'(layer "F.CrtYd")',
-        b'(layer "B.CrtYd")',
+def test_v02_opposite_layer_courtyard_converts_with_identical_geometry() -> None:
+    """Moving every courtyard to the opposite layer moves the rings, and changes nothing else.
+
+    This is the differential that shows the far-side set is a *relabelling* and not a second
+    transform: the substituted board's `far_side_courtyards` equal the original's `courtyards`
+    ring for ring, so no mirror, offset or re-rotation was applied on the way in.
+    """
+
+    source = FOOTPRINT_V02_BOARD.read_bytes()
+    relabelled = source.replace(b'(layer "F.CrtYd")', b'(layer "B.CrtYd")')
+    assert source.count(b'(layer "F.CrtYd")') == 4
+    assert relabelled.count(b'(layer "F.CrtYd")') == 0
+
+    original = parse_success(source, constraint_profile())
+    flipped = parse_success(relabelled, constraint_profile())
+
+    assert [item.side for item in flipped.content.footprints] == [
+        item.side for item in original.content.footprints
+    ]
+    for before, after in zip(original.content.footprints, flipped.content.footprints, strict=True):
+        assert before.courtyards  # the fixture is only meaningful while it carries courtyards
+        assert after.courtyards == ()
+        assert after.far_side_courtyards == before.courtyards
+        assert after.far_side_courtyard_circles == before.courtyard_circles
+
+
+def _two_layer_line_chain_board(second_layer: str) -> bytes:
+    """One footprint with two four-line courtyard squares meeting at exactly one corner.
+
+    The front square is ``(0,0)-(4,4)`` and the second is ``(4,4)-(8,8)``, so they share the
+    single vertex ``(4,4)`` in the footprint frame. ``second_layer`` decides which courtyard
+    layer the second square is drawn on.
+    """
+
+    def square(x0: int, y0: int, x1: int, y1: int, layer: str, seed: int) -> str:
+        corners = ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
+        lines = []
+        for index in range(4):
+            start = corners[index]
+            end = corners[(index + 1) % 4]
+            lines.append(
+                f"""    (fp_line
+      (start {start[0]} {start[1]})
+      (end {end[0]} {end[1]})
+      (stroke (width 0.05) (type default))
+      (layer "{layer}")
+      (uuid "9b000000-0000-0000-0000-0000000{seed + index:05d}")
+    )"""
+            )
+        return "\n".join(lines)
+
+    return f"""(kicad_pcb
+  (version 20260206)
+  (generator "copper-mcp")
+  (generator_version "0.2.0")
+  (layers
+    (0 "F.Cu" signal)
+    (2 "B.Cu" signal)
+    (25 "Edge.Cuts" user)
+  )
+  (footprint "CopperMCP_TwoChains"
+    (layer "F.Cu")
+    (uuid "9b000000-0000-0000-0000-000000000001")
+    (at 10 10 0)
+{square(0, 0, 4, 4, "F.CrtYd", 100)}
+{square(4, 4, 8, 8, second_layer, 200)}
+    (pad "1" smd rect
+      (at 1 1 0)
+      (size 0.5 0.5)
+      (layers "F.Cu" "F.Mask" "F.Paste")
+      (uuid "9b000000-0000-0000-0000-000000000002")
+    )
+  )
+  (gr_rect
+    (start 0 0)
+    (end 40 40)
+    (stroke (width 0.1) (type default))
+    (fill no)
+    (layer "Edge.Cuts")
+    (uuid "9b000000-0000-0000-0000-000000000099")
+  )
+)
+""".encode()
+
+
+def test_v02_courtyard_line_chains_are_assembled_per_layer() -> None:
+    """A front chain and a back chain sharing a vertex are two rings, not one branch failure.
+
+    `_closed_courtyard_line_rings` refuses any vertex whose degree is not two. Pooling both
+    courtyard layers into one segment list would give the shared corner degree four and refuse a
+    board KiCad reads without complaint, so the chains are walked one layer at a time. The
+    same-layer board is the control: there the shared corner really *is* degree four, and it must
+    still be refused.
+    """
+
+    snapshot = parse_success(_two_layer_line_chain_board("B.CrtYd"), constraint_profile())
+    (footprint,) = snapshot.content.footprints
+
+    assert len(footprint.courtyards) == 1
+    assert len(footprint.far_side_courtyards) == 1
+    assert set(footprint.courtyards[0].points) == {
+        PointNM(10_000_000, 10_000_000),
+        PointNM(14_000_000, 10_000_000),
+        PointNM(14_000_000, 14_000_000),
+        PointNM(10_000_000, 14_000_000),
+    }
+    assert set(footprint.far_side_courtyards[0].points) == {
+        PointNM(14_000_000, 14_000_000),
+        PointNM(18_000_000, 14_000_000),
+        PointNM(18_000_000, 18_000_000),
+        PointNM(14_000_000, 18_000_000),
+    }
+
+    same_layer = parse_kicad_bytes(_two_layer_line_chain_board("F.CrtYd"), constraint_profile())
+    assert same_layer.snapshot is None
+    assert same_layer.diagnostics[0].code == "geometry.invalid"
+    assert "closed non-branching loops" in same_layer.diagnostics[0].message
+
+
+def test_v02_courtyard_circle_disjointness_is_checked_per_layer() -> None:
+    """A back circle inside a front ring flips no parity, so it is not refused.
+
+    The even-odd pooling the disjointness rule protects happens within one courtyard layer.
+    Checking across layers would refuse the stock KiCad feed-through footprints, whose back
+    courtyard is drawn *inside* their front one, for a hazard that cannot occur.
+    """
+
+    cross_layer = _two_layer_line_chain_board("B.CrtYd").replace(
+        b'    (pad "1" smd rect',
+        b"""    (fp_circle
+      (center 2 2)
+      (end 3 2)
+      (stroke (width 0.05) (type default))
+      (fill none)
+      (layer "B.CrtYd")
+      (uuid "9b000000-0000-0000-0000-000000000300")
+    )
+    (pad "1" smd rect""",
     )
 
-    result = parse_kicad_bytes(source, constraint_profile())
+    snapshot = parse_success(cross_layer, constraint_profile())
+    (footprint,) = snapshot.content.footprints
 
-    assert result.snapshot is None
-    assert len(result.diagnostics) == 1
-    assert result.diagnostics[0].code == "unsupported.transform"
-    assert "does not match its footprint side" in result.diagnostics[0].message
+    # The circle's box sits wholly inside the front square and touches nothing on its own layer.
+    assert footprint.far_side_courtyard_circles[0].center == PointNM(12_000_000, 12_000_000)
+    assert footprint.far_side_courtyard_circles[0].radius_nm == 1_000_000
+    assert footprint.courtyard_circles == ()
+
+    # Control: the same circle drawn on the *front* layer does meet the front square, and the
+    # even-odd hazard is real there, so it is still refused.
+    same_layer = parse_kicad_bytes(
+        cross_layer.replace(
+            b'(layer "B.CrtYd")\n      (uuid "9b000000-0000-0000-0000-000000000300")',
+            b'(layer "F.CrtYd")\n      (uuid "9b000000-0000-0000-0000-000000000300")',
+        ),
+        constraint_profile(),
+    )
+    assert same_layer.snapshot is None
+    assert same_layer.diagnostics[0].code == "unsupported.topology"
 
 
 def test_v02_malformed_courtyard_line_fails_closed() -> None:

@@ -522,16 +522,36 @@ def _decode_content(value: object) -> BoardIRContent:
                 "courtyards",
                 "locked",
             },
-            # The canonical encoder omits the key entirely when a footprint has no circular
-            # courtyard, so pre-existing snapshots decode unchanged and their digests hold.
-            optional={"courtyard_circles"},
+            # The canonical encoder omits each key entirely when the footprint has nothing to
+            # put in it, so pre-existing snapshots decode unchanged and their digests hold.
+            optional={
+                "courtyard_circles",
+                "far_side_courtyards",
+                "far_side_courtyard_circles",
+            },
             path=entry_path,
         )
         courtyard_values = _array(entry["courtyards"], f"{entry_path}.courtyards")
         circle_values = _array(
             entry.get("courtyard_circles", []), f"{entry_path}.courtyard_circles"
         )
-        if len(courtyard_values) + len(circle_values) > 64:
+        far_courtyard_values = _array(
+            entry.get("far_side_courtyards", []), f"{entry_path}.far_side_courtyards"
+        )
+        far_circle_values = _array(
+            entry.get("far_side_courtyard_circles", []),
+            f"{entry_path}.far_side_courtyard_circles",
+        )
+        # One ceiling for the footprint, not one per courtyard layer: the adapter counts every
+        # accepted shape against the same 64, and the two paths disagreeing about one rule was
+        # the defect `schema.limit` was introduced to close.
+        if (
+            len(courtyard_values)
+            + len(circle_values)
+            + len(far_courtyard_values)
+            + len(far_circle_values)
+            > 64
+        ):
             raise BoardIRValidationError(
                 "schema.limit",
                 "footprint courtyard limit exceeded",
@@ -557,6 +577,16 @@ def _decode_content(value: object) -> BoardIRContent:
                 for circle_index, circle in enumerate(circle_values)
             ),
             locked=_boolean(entry["locked"], f"{entry_path}.locked"),
+            far_side_courtyards=tuple(
+                _ring(courtyard, f"{entry_path}.far_side_courtyards[{courtyard_index}]")
+                for courtyard_index, courtyard in enumerate(far_courtyard_values)
+            ),
+            far_side_courtyard_circles=tuple(
+                decode_courtyard_circle(
+                    circle, f"{entry_path}.far_side_courtyard_circles[{circle_index}]"
+                )
+                for circle_index, circle in enumerate(far_circle_values)
+            ),
         )
 
     footprints = tuple(

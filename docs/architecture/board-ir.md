@@ -143,7 +143,7 @@ board. The schema is the field-level reference.
 | Stack | Ordered copper layers of kind `signal`, `plane`, or `mixed`. |
 | Connectivity | Stable net IDs with UTF-8 display names. |
 | Constraints | Net classes, one assignment per net, differential-pair rules, and min/max length rules. |
-| Components | Footprint identity, board-frame origin, normalized rotation, side, lock state, total pad ownership, and up to 64 exact simple courtyard shapes — rings whose every edge is horizontal, vertical, or an exact 45-degree chamfer, plus circles of exact integer radius ([ADR-0080](../adr/0080-chamfered-and-circular-courtyards.md)). The 64 ceiling is a fixed schema limit reported as `schema.limit`, not an operator budget. |
+| Components | Footprint identity, board-frame origin, normalized rotation, side, lock state, total pad ownership, and up to 64 exact simple courtyard shapes — rings whose every edge is horizontal, vertical, or an exact 45-degree chamfer, plus circles of exact integer radius ([ADR-0080](../adr/0080-chamfered-and-circular-courtyards.md)). Courtyards are held **per courtyard layer**: `courtyards`/`courtyard_circles` are the shapes on the layer matching the footprint's side and `far_side_courtyards`/`far_side_courtyard_circles` are the shapes on the opposite one, each keeping out on its own layer and never pooled with the other ([ADR-0097](../adr/0097-courtyard-layer-decides-the-side.md)). The 64 ceiling covers both layers together; it is a fixed schema limit reported as `schema.limit`, not an operator budget. |
 | Terminations | SMD, through-hole, and NPTH pads; circle, rectangle, oval, and rounded-rectangle shapes. |
 | Existing copper | Straight segments, exact three-point arcs, full-stack through vias, and solid zones with priority, pad-connection, island-removal, clearance, and thermal intent. |
 | Exclusions | Multi-layer polygonal keepouts with explicit track, via, pad, zone, and footprint prohibitions. |
@@ -190,7 +190,7 @@ contains a bounded machine-readable diagnostic and no snapshot.
 | Board metadata | Exact KiCad PCB format version `20260206`, optional `generator`, ordered copper declarations `0/F.Cu`, contiguous even-numbered inner layers, then `B.Cu`, and a narrow setup-metadata allowlist with KiCad-default front/back via tenting. |
 | Nets | Quote-aware named item-level net references and legacy numeric root declarations; quoted numeric text remains a name while bare signed numeric tokens retain legacy net-code meaning. |
 | Outline | Exactly one contour on `Edge.Cuts`, drawn either as one unfilled `gr_rect` or as `gr_line` segments that chain, by exact endpoint coincidence, into one closed simple loop. See [ADR-0076](../adr/0076-segment-assembled-edge-cuts-outline.md). |
-| Footprints/pads | Footprints on `F.Cu` or `B.Cu` with rotations in 90-degree increments, exact origin/side/lock/pad ownership, and optional unfilled `fp_rect`, `fp_poly`, or closed complete `fp_line` courtyard centerlines on the matching layer — every edge horizontal, vertical, or an exact 45-degree chamfer — plus unfilled `fp_circle` outlines whose radius is an exact integer nanometre; all four KiCad pad kinds, `smd`, `thru_hole`, `np_thru_hole` and `connect` — the last being the edge-connector pad, which converts as `PadKind.SMD` and is counted in `ConversionResult.edge_connector_pad_count` per [ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md); circle, rect, oval, and roundrect shapes; round or oval drills; copper layer names, `*.Cu`, and `F&B.Cu`; and a pad `zone_connect` override of `1`, `2` or `3` — the three that attach the pad to a same-net pour — accepted as a proven no-op and modelled as nothing, per [ADR-0091](../adr/0091-attaching-pad-zone-connect-overrides.md). |
+| Footprints/pads | Footprints on `F.Cu` or `B.Cu` with rotations in 90-degree increments, exact origin/side/lock/pad ownership, and optional unfilled `fp_rect`, `fp_poly`, or closed complete `fp_line` courtyard centerlines on **either** courtyard layer — every edge horizontal, vertical, or an exact 45-degree chamfer, with `fp_line` cycles closed within their own layer — plus unfilled `fp_circle` outlines whose radius is an exact integer nanometre; all four KiCad pad kinds, `smd`, `thru_hole`, `np_thru_hole` and `connect` — the last being the edge-connector pad, which converts as `PadKind.SMD` and is counted in `ConversionResult.edge_connector_pad_count` per [ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md); circle, rect, oval, and roundrect shapes; round or oval drills; copper layer names, `*.Cu`, and `F&B.Cu`; and a pad `zone_connect` override of `1`, `2` or `3` — the three that attach the pad to a same-net pour — accepted as a proven no-op and modelled as nothing, per [ADR-0091](../adr/0091-attaching-pad-zone-connect-overrides.md). |
 | Routed copper | Straight `segment` items, exact start/mid/end `arc` items, and through vias spanning the declared copper stack. Copper carrying no routable net converts as an obstacle with `net_id` `None` rather than refusing the board, per [ADR-0078](../adr/0078-netless-copper-as-obstacle.md); it is an obstacle only and contributes nothing to connectivity. |
 | Net-tie copper | A footprint declaring `net_tie_pad_groups` may draw its deliberate short as an `fp_poly` on `F.Cu`/`B.Cu`. That polygon converts to netless obstacle copper under the same `net_id` `None` contract, so the short is modelled as something to route around and never as a connection. Every other primitive a net-tie footprint could draw the short with — `fp_line`, `fp_arc`, `fp_rect`, `fp_circle` — is refused by name. See [ADR-0092](../adr/0092-net-tie-copper-as-netless-obstacle.md). |
 | Zones | Net-bound, single-copper-layer, solid zones with one polygon loop; explicit priority, thermal/through-hole-thermal/solid/none pad connection, always/never island removal, clearance, and conditionally required thermal dimensions. |
@@ -248,10 +248,13 @@ including:
   whose bounding box meets any sibling courtyard shape's bounding box — a circle cannot join the
   even-odd ring-nesting hierarchy, so an overlap there would silently subtract keep-out area, and
   the box test is deliberately conservative (it may refuse an exotic legal arrangement, never admit
-  an unsound one); `fp_arc` courtyards; and filled, open, branching,
-  duplicate-edge, mixed-layer, or otherwise unsupported courtyard topology, a courtyard layer that
-  disagrees with the supported front/back footprint, and more than 64 courtyard shapes on one
-  footprint;
+  an unsound one — and it is applied **per courtyard layer**, because two shapes on different
+  layers share no even-odd region); `fp_arc` courtyards; and filled, open, branching,
+  duplicate-edge, or otherwise unsupported courtyard topology, a courtyard layer that is neither
+  `F.CrtYd` nor `B.CrtYd`, and more than 64 courtyard shapes on one footprint counted across both
+  courtyard layers. A courtyard on the layer *opposite* the footprint's side is no longer refused:
+  it is modelled as the footprint's far-side keep-out and constrains that layer
+  ([ADR-0097](../adr/0097-courtyard-layer-decides-the-side.md));
 - custom or other unmodeled pad shapes and custom pad primitives. Pad **kind** and pad **shape**
   are two separate refusals, because one message covering both positional tokens of a pad header
   named neither. All four of KiCad's documented kinds (`PAD_ATTRIB`: PTH, SMD, CONN, NPTH) are now
@@ -327,6 +330,11 @@ treat `snapshot is None` as a hard failure rather than attempting partial routin
   exercises the bounded `F.Cu`/`B.Cu` observation path, board-frame pad/courtyard coordinates,
   native identities, and KiCad CLI DRC. It is a source-format/CLI oracle, not evidence from a
   GUI flip-save round trip.
+- [`courtyard-far-side.kicad_pcb`](../../tests/fixtures/board-ir-v0.2/courtyard-far-side.kicad_pcb)
+  pins the feed-through case: a front-side footprint drawing a `B.CrtYd` rectangle over a back-side
+  footprint's own courtyard. Real KiCad 10.0.5 reports `courtyards_overlap` on it, so the model
+  must too; substituting one courtyard layer in the fixture produces the cross-layer control that
+  must stay clear.
 - [`courtyard-orthogonal-chains.kicad_pcb`](../../tests/fixtures/board-ir-v0.2/courtyard-orthogonal-chains.kicad_pcb)
   was resaved by KiCad 10.0.5 and pins one concave orthogonal polygon plus an unordered closed
   line chain, exact board-frame conversion, fail-closed malformed-chain cases, and a clean CLI

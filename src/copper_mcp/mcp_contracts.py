@@ -674,10 +674,19 @@ class FootprintGeometryContract(_ClosedContract):
     rotation_udeg: Annotated[int, Field(ge=0, lt=360_000_000)]
     side: Literal["front", "back"]
     pad_ids: Annotated[list[PadRefId], Field(max_length=100_000)]
+    #: Courtyard rings on the layer matching ``side``.
     courtyards_nm: Annotated[list[Ring], Field(max_length=64)]
     # Emitted only when the footprint carries a circular courtyard, so scenes observed
     # before circles were representable keep validating and keep their revisions.
     courtyard_circles_nm: (
+        Annotated[list[CircleArray], Field(min_length=1, max_length=64)] | None
+    ) = None
+    #: Courtyard geometry on the layer *opposite* ``side``, emitted only when the footprint
+    #: carries any. A feed-through part keeps out on both faces of the board and KiCad keys each
+    #: shape to the layer it is drawn on, so these keep out on the other side and must not be
+    #: unioned with ``courtyards_nm`` (ADR-0097).
+    far_side_courtyards_nm: Annotated[list[Ring], Field(min_length=1, max_length=64)] | None = None
+    far_side_courtyard_circles_nm: (
         Annotated[list[CircleArray], Field(min_length=1, max_length=64)] | None
     ) = None
 

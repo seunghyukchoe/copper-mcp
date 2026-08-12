@@ -369,6 +369,22 @@
             "$ref": "#/$defs/courtyard_circle"
           }
         },
+        "far_side_courtyards": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/ring"
+          }
+        },
+        "far_side_courtyard_circles": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/courtyard_circle"
+          }
+        },
         "locked": {
           "type": "boolean"
         }

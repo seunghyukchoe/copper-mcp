@@ -148,6 +148,44 @@ All notable changes are documented here. The format follows
   [SEC-135](docs/ledgers/security-ledger.md),
   [#140](https://github.com/seunghyukchoe/copper-mcp/issues/140))
 
+### Fixed
+
+- **A courtyard now keeps out on the layer it is drawn on, whichever side its footprint is
+  mounted.** Board IR refused every board on which a footprint carried a courtyard on the opposite
+  courtyard layer — `unsupported.transform`, "courtyard layer does not match its footprint side".
+  That refusal described a mismatch KiCad does not recognise: `FOOTPRINT::BuildCourtyardCaches`
+  files each shape by the shape's own `F.CrtYd`/`B.CrtYd` layer and never reads the footprint's
+  side, and the courtyard DRC provider compares front against front and back against back with no
+  side test at all. The stock KiCad library ships parts that depend on it — a feed-through
+  solder-wire connector is declared on `F.Cu` and draws its strain-relief slot on `B.CrtYd`,
+  because the wire passes through the board — and KiCad's library convention F5.3 *requires* a back
+  courtyard where a part needs back-side clearance. Such a footprint now converts, with its
+  opposite-layer shapes in new `far_side_courtyards` and `far_side_courtyard_circles` fields;
+  `courtyards` keeps its exact previous meaning of "the shapes on the layer matching the
+  footprint's side".
+  **This tightens a published verdict rather than loosening one.** Placement legality now pairs
+  courtyards by layer instead of by footprint side, so two coincident `B.CrtYd` rectangles collide
+  whether their footprints sit on opposite sides or both on the front — which is what real
+  `kicad-cli` 10.0.5 reports, and which the previous same-side pairing published as
+  `proven_clear`. Cross-layer contact is still not a collision. Measured against the tool on 13
+  boards with courtyard layer and footprint side varied independently: 12 exact parity, 1 conceded
+  `inconclusive` in the known sub-threshold band, 0 contradictions, and the same 10,000 nm
+  collision threshold on both courtyard layers.
+  **No stored artifact changes.** Both new keys are omitted from the canonical payload when empty,
+  so every board representable before this release encodes byte-for-byte as it did: no snapshot
+  digest, scene revision, candidate identity or published schema version moves, and a Circuit Scene
+  consumer that ignores the new `far_side_courtyards_nm` and `far_side_courtyard_circles_nm`
+  geometry keys keeps working. Do not union those keys with `courtyards_nm` — they keep out on the
+  other side of the board. Write-back is unchanged: the source-preserving placement serializer
+  still refuses any board carrying a far-side courtyard rectangle, so such a footprint is
+  previewable and not movable through it.
+  **It converts no additional board today.** Conversion stops at the first error, and the three
+  corpus boards this unblocks stop again one construct later, on a custom-shape SMD pad (#153).
+  Re-measured against current `main`, the survey corpus reads **12 of 18 before and 12 of 18
+  after**; the only rows that differ anywhere are those three boards' refusal messages.
+  ([ADR-0097](docs/adr/0097-courtyard-layer-decides-the-side.md),
+  [D-187](docs/ledgers/decision-ledger.md), [B-101](docs/ledgers/benchmark-ledger.md),
+  [R-142](docs/ledgers/risk-register.md), issue #151)
 ### Added
 
 - **Mutation claims are now reproducible from the repository, and every prior one is honestly

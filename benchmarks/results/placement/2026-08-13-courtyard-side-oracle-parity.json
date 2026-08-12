@@ -1,0 +1,116 @@
+{
+  "date_utc": "2026-08-13",
+  "environment": {
+    "kicad_cli": "10.0.5",
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "fixtures": [
+    "generated in-process; no board is written to the repository"
+  ],
+  "metrics": {
+    "case_count": 13,
+    "cases": [
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "violated",
+        "name": "far_far__opposite_sides"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "proven_clear",
+        "name": "far_near__opposite_sides"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "violated",
+        "name": "far_far__both_front"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "proven_clear",
+        "name": "far_near__both_front"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "violated",
+        "name": "near_near__both_front"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "violated",
+        "name": "near_near__opposite_sides"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "proven_clear",
+        "name": "far_side_penetration_-1000000_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "proven_clear",
+        "name": "far_side_penetration_-1_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "proven_clear",
+        "name": "far_side_penetration_0_nm"
+      },
+      {
+        "agreement": "conceded",
+        "kicad_courtyards_overlap": false,
+        "model_courtyard_overlap": "inconclusive",
+        "name": "far_side_penetration_9999_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "violated",
+        "name": "far_side_penetration_10000_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "violated",
+        "name": "far_side_penetration_10001_nm"
+      },
+      {
+        "agreement": "exact_parity",
+        "kicad_courtyards_overlap": true,
+        "model_courtyard_overlap": "violated",
+        "name": "far_side_penetration_1000000_nm"
+      }
+    ],
+    "conceded_inconclusive": 1,
+    "contradictions": [],
+    "courtyard_cache_inset_nm": 5000,
+    "courtyard_collision_threshold_nm": 10000,
+    "exact_parity": 12,
+    "exact_parity_rate": "12/13",
+    "false_negative_clears": [],
+    "false_positive_violations": [],
+    "kicad_invoked": true,
+    "non_contradiction_rate": "13/13",
+    "workspace_mutations": 0
+  },
+  "not_claimed": [
+    "that any real board in any corpus is DRC-clean",
+    "configurable nonzero courtyard clearance",
+    "arc, curved, or non-orthogonal courtyard geometry on either courtyard layer",
+    "the pth_inside_courtyard rule, which KiCad also reports and this model does not evaluate",
+    "placement apply or write-back of a footprint carrying a far-side courtyard, which the source-preserving serializer still refuses"
+  ],
+  "run_id": "sha256:4edf71ca94773b62d30890bd3900224557a72b9a0d17809fafe04b05a83a1bfa",
+  "schema": "copper-mcp/benchmark/courtyard-side-oracle-parity/v1",
+  "source_commit": "df9e9348b91693d801daf66bdd865aed52526589",
+  "source_dirty": false
+}
