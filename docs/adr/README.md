@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0094**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0098**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -22,7 +22,12 @@ allocated plus one. Gaps are reported as information and never fail. Keeping the
 line is deliberate: two branches that both allocate it now conflict textually, so Git refuses the
 merge instead of accepting it.
 
-**Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086.
+**Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, ADR-0086, ADR-0094,
+ADR-0095, or ADR-0096. The 0094–0096 block is the same live-claim case as 0081–0083: three
+branches held those numbers when ADR-0097 was allocated, so this record took a number above all
+of them rather than racing them. They are live claims and not yet gaps; if any lands from its
+own branch it stops being listed here, and if any is abandoned its number is spent like every
+other.
 ADR-0089 was listed here until this line was corrected: it landed from its own branch as the
 region-scoped obstacle model and is not a gap. ADR-0092 was listed too, and has since landed from
 its own branch as the net-tie netless-obstacle model; this sentence is that correction, exactly as
@@ -170,6 +175,7 @@ never silently widens it.
 | [0091](0091-attaching-pad-zone-connect-overrides.md) | Accept the pad zone-connection overrides that attach, refuse the one that detaches | Accepted |
 | [0092](0092-net-tie-copper-as-netless-obstacle.md) | Net-tie copper is a netless obstacle, and the tie is never a connectivity claim | Accepted |
 | [0093](0093-actionable-off-grid-refusals.md) | An off-grid refusal carries the pad, the pitch and the exact miss | Accepted |
+| [0097](0097-courtyard-layer-decides-the-side.md) | A courtyard keeps out on the layer it is drawn on, not on its footprint's side | Accepted |
 
 Ninety-three numbers, eighty-eight records, no duplicates — and `scripts/check_adr_numbers.py`
 now proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and
@@ -182,12 +188,12 @@ three different rewrites of one paragraph because they did not overlap textually
 The ADRs are chronological, not thematic. To follow one arc, read it in this order:
 
 - **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070, 0076, 0087,
-  0091, 0092.
+  0091, 0092, 0097.
 - **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
   0066, 0070, 0073, 0075, 0089, 0093.
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060, 0075.
 - **Circuit Intent and schematic verification** — 0014, 0015, 0056, 0070.
-- **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065, 0075.
+- **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065, 0075, 0097.
 - **Circuit Scene and rendering** — 0010, 0022, 0023, 0028, 0056.
 - **Live KiCad IPC** — 0029, 0030, 0031, 0032, 0033, 0044, 0063, 0069, 0074.
 - **Durable jobs and persistence** — 0043, 0046, 0047, 0048.
@@ -265,3 +271,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0091: Accept the pad zone-connection overrides that attach, refuse the one that detaches](0091-attaching-pad-zone-connect-overrides.md)
 - [ADR-0092: Net-tie copper is a netless obstacle, and the tie is never a connectivity claim](0092-net-tie-copper-as-netless-obstacle.md)
 - [ADR-0093: An off-grid refusal carries the pad, the pitch and the exact miss](0093-actionable-off-grid-refusals.md)
+- [ADR-0097: A courtyard keeps out on the layer it is drawn on, not on its footprint's side](0097-courtyard-layer-decides-the-side.md)

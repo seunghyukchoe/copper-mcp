@@ -27,6 +27,8 @@ to the tool, and these tests pin the model side of it deterministically.
 from __future__ import annotations
 
 import json
+import re
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -34,6 +36,7 @@ import pytest
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.adapters.kicad_placement_patch import KiCadPlacementPatchError
 from copper_mcp.board_ir import (
+    BoardIRValidationError,
     FootprintSide,
     NetClass,
     ParseLimits,
@@ -197,16 +200,19 @@ def test_the_old_side_gate_would_have_published_a_false_clearance() -> None:
 def test_a_moved_feed_through_carries_its_far_side_courtyard_with_it() -> None:
     """The far-side ring is part of the same rigid body, so a proposal moves both or neither.
 
-    Moving the back part 10 mm clear in x must clear the collision; leaving the far-side ring
-    behind would report the overlap anyway, and dropping it would report clear at any offset.
+    Moving the feed-through 10 mm clear in x must clear the collision. Leaving its far-side ring
+    behind at the saved pose reports the overlap anyway, and dropping the ring reports clear at
+    every offset including zero, so both failure directions are caught by this test together with
+    the unmoved case above.
     """
 
     source = FIXTURE.read_bytes()
     snapshot = _snapshot(source)
     view = build_placement_view(source, snapshot)
-    under_part = next(
-        item for item in snapshot.content.footprints if item.side is FootprintSide.BACK
-    )
+    # The *feed-through* is the footprint carrying the far-side ring, so it is the one whose move
+    # this has to follow. Moving the back part instead would pass whether or not far-side rings
+    # travel with their footprint, and did.
+    feed_through = next(item for item in snapshot.content.footprints if item.far_side_courtyards)
     intent = parse_placement_intent(
         {
             "board": "courtyard-far-side.kicad_pcb",
@@ -217,7 +223,7 @@ def test_a_moved_feed_through_carries_its_far_side_courtyard_with_it() -> None:
                 "via_drill_nm": 300_000,
             },
             "subjects": sorted(view.footprints),
-            "proposals": [{"subject": under_part.id, "offset_x_nm": 10_000_000}],
+            "proposals": [{"subject": feed_through.id, "offset_x_nm": 10_000_000}],
         }
     )
     result = evaluate_placement(intent, snapshot, view)
@@ -329,5 +335,231 @@ def test_write_back_still_refuses_a_board_carrying_a_far_side_courtyard_rectangl
     root = parse_sexpr(FIXTURE.read_bytes(), ParseLimits())
     feed_through = children(root, "footprint")[0]
 
-    with pytest.raises(KiCadPlacementPatchError, match="only matching F.CrtYd rectangles"):
+    with pytest.raises(
+        KiCadPlacementPatchError, match=re.escape("only matching F.CrtYd rectangles")
+    ):
         _validate_footprint_expression(feed_through, "kicad_pcb.footprint[0]")
+
+
+def test_far_side_courtyard_geometry_is_validated_exactly_as_the_near_side_is() -> None:
+    """The accepted shape subset is one subset, applied to both layers.
+
+    A far-side ring reaching Board IR without going through the octilinear check would let an
+    arbitrary-slope edge into the keep-out region the legality brackets assume is octilinear.
+    """
+
+    sloped = _replace_once(
+        FIXTURE.read_bytes(),
+        b"""    (fp_rect
+      (start -2 8)
+      (end 2 12)""",
+        b"""    (fp_poly
+      (pts (xy -2 8) (xy 2 9) (xy 2 12) (xy -2 12))""",
+    ).replace(b"(end 2 12)\n      (stroke", b"(stroke", 1)
+
+    result = parse_kicad_bytes(sloped, _profile(), ParseLimits())
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.topology"
+    assert "45-degree chamfers" in result.diagnostics[0].message
+
+
+def test_far_side_courtyard_vertices_cost_the_scene_vertex_budget() -> None:
+    """Geometry the scene emits is geometry the scene must charge for.
+
+    Omitting the far-side vertices from the detail count would let a feed-through footprint emit
+    more vertices than the declared ceiling admits, which is the ceiling ADR-0088 makes a scene
+    withhold a whole kind rather than quietly overrun.
+    """
+
+    from copper_mcp.circuit_scene import _footprint_detail_units
+
+    feed_through, under_part = _snapshot(FIXTURE.read_bytes()).content.footprints
+
+    # 1 origin + 2 pads + 4 near vertices + 4 far vertices.
+    assert _footprint_detail_units(feed_through) == 11
+    # 1 origin + 1 pad + 4 near vertices, and nothing on the far layer.
+    assert _footprint_detail_units(under_part) == 6
+
+
+def test_the_sixty_four_courtyard_ceiling_counts_both_layers_together() -> None:
+    """One ceiling per footprint, enforced identically by the adapter and by the decoder.
+
+    Counting each layer separately would let a footprint carry 128 shapes through a rule whose
+    schema says 64, and the two paths disagreeing about one rule is the defect `schema.limit`
+    exists to prevent.
+    """
+
+    def board(front: int, back: int) -> bytes:
+        rectangles = "".join(
+            f"""    (fp_rect
+      (start {index} {index})
+      (end {index + 0.5} {index + 0.5})
+      (stroke (width 0.05) (type default))
+      (fill none)
+      (layer "{layer}")
+      (uuid "9e000000-0000-0000-0000-{serial:012d}")
+    )
+"""
+            for serial, (index, layer) in enumerate(
+                [(n, "F.CrtYd") for n in range(front)] + [(n, "B.CrtYd") for n in range(back)]
+            )
+        )
+        return f"""(kicad_pcb
+  (version 20260206)
+  (generator "copper-mcp")
+  (generator_version "0.2.0")
+  (layers
+    (0 "F.Cu" signal)
+    (2 "B.Cu" signal)
+    (25 "Edge.Cuts" user)
+  )
+  (footprint "CopperMCP_Many"
+    (layer "F.Cu")
+    (uuid "9e000000-0000-0000-0000-000000009001")
+    (at 0 0 0)
+{rectangles}    (pad "1" smd rect
+      (at 90 90 0)
+      (size 0.5 0.5)
+      (layers "F.Cu" "F.Mask" "F.Paste")
+      (uuid "9e000000-0000-0000-0000-000000009002")
+    )
+  )
+  (gr_rect
+    (start -10 -10)
+    (end 100 100)
+    (stroke (width 0.1) (type default))
+    (fill no)
+    (layer "Edge.Cuts")
+    (uuid "9e000000-0000-0000-0000-000000009099")
+  )
+)
+""".encode()
+
+    at_ceiling = parse_kicad_bytes(board(32, 32), _profile(), ParseLimits())
+    assert at_ceiling.snapshot is not None, at_ceiling.diagnostics
+
+    over_ceiling = parse_kicad_bytes(board(33, 32), _profile(), ParseLimits())
+    assert over_ceiling.snapshot is None
+    assert over_ceiling.diagnostics[0].code == "schema.limit"
+    assert "courtyard limit exceeded" in over_ceiling.diagnostics[0].message
+    # The locator is asserted because three layers of the stack enforce this one rule, and only
+    # the adapter's refusal names a courtyard index. An adapter counting each layer separately
+    # would pass 65 shapes down and be caught by content validation instead, under the same code
+    # and the same message but at the footprint locator - a silently weaker adapter.
+    assert over_ceiling.diagnostics[0].source_locator.startswith(
+        "kicad_pcb.footprint[0].courtyard["
+    )
+
+
+def test_a_decoded_far_side_ring_is_held_to_the_same_octilinear_rule() -> None:
+    """Defence in depth: the untrusted-JSON path validates the far layer too.
+
+    The adapter refuses an arbitrary-slope courtyard before it can reach either set, so this
+    covers the other entry point - a caller-supplied Board IR envelope, which never passed
+    through the adapter at all.
+    """
+
+    payload = json.loads(encode_snapshot(_snapshot(FIXTURE.read_bytes())))
+    carrier = next(
+        item for item in payload["content"]["items"]["footprints"] if "far_side_courtyards" in item
+    )
+    points = carrier["far_side_courtyards"][0]["points"]
+    # Shear one vertex so an edge has |dx| != |dy| and is neither horizontal nor vertical.
+    points[1]["y_nm"] += 1_000_001
+
+    with pytest.raises(BoardIRValidationError) as raised:
+        decode_snapshot_json(json.dumps(payload).encode())
+
+    assert raised.value.code == "unsupported.topology"
+    # Control: the unsheared payload decodes, so the refusal is the slope and not the edit.
+    assert decode_snapshot_json(encode_snapshot(_snapshot(FIXTURE.read_bytes()))) is not None
+
+
+def test_the_by_layer_accessors_name_the_courtyard_layer_and_not_the_storage_slot() -> None:
+    """The accessors R-142 points future consumers at, tested for what they promise.
+
+    `on_layer(True)` is `F.CrtYd` and `on_layer(False)` is `B.CrtYd` for both footprints, which is
+    the whole contract: the footprint's side chooses which stored tuple answers, never whether the
+    footprint occupies the layer. Nothing else in the tree can observe an inversion here, because
+    `_courtyard_overlap` visits both values of the flag and an inverted mapping would merely
+    reorder its two comparisons - so the accessor is pinned directly rather than through it.
+    """
+
+    from copper_mcp.placement.legalizer import _Budget, _place
+
+    source = FIXTURE.read_bytes()
+    snapshot = _snapshot(source)
+    view = build_placement_view(source, snapshot)
+    intent = parse_placement_intent(
+        {
+            "board": "courtyard-far-side.kicad_pcb",
+            "constraints": {
+                "clearance_nm": 200_000,
+                "track_width_nm": 250_000,
+                "via_diameter_nm": 600_000,
+                "via_drill_nm": 300_000,
+            },
+            "subjects": sorted(view.footprints),
+        }
+    )
+    placed = _place(view, snapshot, intent, _Budget(max_checks=100_000, deadline_seconds=30.0))
+    feed_through = next(item for item in placed if item.side == "front")
+    under_part = next(item for item in placed if item.side == "back")
+
+    # The front footprint: its own layer is the front, so `on_layer(True)` is its near set.
+    assert feed_through.on_layer(True) == (feed_through.courtyards, feed_through.courtyard_circles)
+    assert feed_through.on_layer(False) == (
+        feed_through.far_side_courtyards,
+        feed_through.far_side_courtyard_circles,
+    )
+    # The back footprint: the mapping is the mirror, which is what makes the flag mean the layer.
+    assert under_part.on_layer(False) == (under_part.courtyards, under_part.courtyard_circles)
+    assert under_part.on_layer(True) == (
+        under_part.far_side_courtyards,
+        under_part.far_side_courtyard_circles,
+    )
+    # And the two footprints meet on the back layer, which is the collision the fixture exists for.
+    assert feed_through.on_layer(False)[0] and under_part.on_layer(False)[0]
+    assert not under_part.on_layer(True)[0]
+
+
+def test_content_validation_enforces_the_shared_ceiling_on_a_hand_built_footprint() -> None:
+    """The rule is enforced three times, so each layer of it is checked where it can be reached.
+
+    A `BoardIRContent` assembled in memory never passes the adapter or the JSON decoder, and both
+    of those carry their own copy of the 64-shape ceiling. This exercises the third copy, in
+    content validation, which is the only one a directly constructed snapshot meets.
+    """
+
+    from copper_mcp.board_ir import BoardIRValidationError as _Error
+    from copper_mcp.board_ir.validation import validate_content
+
+    content = _snapshot(FIXTURE.read_bytes()).content
+    feed_through = next(item for item in content.footprints if item.far_side_courtyards)
+    near = feed_through.courtyards[0]
+    far = feed_through.far_side_courtyards[0]
+
+    at_ceiling = replace(
+        content,
+        footprints=tuple(
+            replace(item, courtyards=(near,) * 32, far_side_courtyards=(far,) * 32)
+            if item is feed_through
+            else item
+            for item in content.footprints
+        ),
+    )
+    validate_content(at_ceiling, ParseLimits())
+
+    over_ceiling = replace(
+        content,
+        footprints=tuple(
+            replace(item, courtyards=(near,) * 33, far_side_courtyards=(far,) * 32)
+            if item is feed_through
+            else item
+            for item in content.footprints
+        ),
+    )
+    with pytest.raises(_Error) as raised:
+        validate_content(over_ceiling, ParseLimits())
+    assert raised.value.code == "schema.limit"

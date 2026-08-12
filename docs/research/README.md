@@ -113,6 +113,16 @@ When adding a document, add it to the list below in the same sentence form — *
   `kicad-cli`, and restates ADR-0072's outward-envelope direction for a keep-out on an
   evidence-publishing surface: outer bounds may only prove clearance, inner bounds may only prove
   violation, and everything between is a declared concession.
+- [KiCad courtyard layer versus footprint side](./kicad-courtyard-layer-vs-footprint-side-v1.md)
+  settles which side a courtyard drawn on the "wrong" layer constrains, grounding ADR-0097. It reads
+  KiCad 10.0.5's cache build and courtyard-DRC provider in both directions — sites keyed on a
+  shape's own layer and sites keyed on `IsFlipped()` — finds the overlap rule in the first group and
+  the DRC rule language in the second, and measures seven arrangements against the real `kicad-cli`
+  in which the verdict tracks the courtyard layer and never the footprint's side. It records that
+  the offending corpus footprint is one unmodified stock KiCad library part, so neither a board
+  defect nor an adapter bug. It claims nothing about arcs or curved chains on either layer, about
+  the `pth_inside_courtyard` rule KiCad also reports on those fixtures, about non-zero configured
+  courtyard clearance, or about any board being DRC-clean.
 - [Source-to-board parity with `kicad-cli` 10.0.5](./source-to-board-parity-v1.md) corrects the
   recorded assumption that a board-side parity verdict needs a project context — it does not, for
   the CLI — and then documents the four distinct ways the resulting check yields a *silent* false
