@@ -62,9 +62,17 @@ remote transport remain future work, not current properties.
 
 ## Current controls
 
-The `0.4.x` board-facing surface remains non-mutating, including route preview, scene observation
-and placement preview. The only durable writes are two explicitly named, create-new exports - a
-schematic and a board render - each refused if its path already exists, and neither able to
+Almost the whole board-facing surface is non-mutating — route preview, scene observation, placement
+preview, DRC, parity, and every live tool read and never write. **Two operations write to a board
+file: `apply_candidate` and `apply_placement_candidate`.** Both are off unless the operator sets the
+exact `COPPER_MCP_ALLOW_APPLY=1`, and over MCP each additionally requires its own single-use token,
+minted by that operation's preview, bound to the exact candidate, board revision and path, and
+verified against a key that exists only inside the running process. The token domains do not cross:
+a route token can never authorize a placement write, or the reverse. A model can produce neither the
+flag nor a token. A third flag, `COPPER_MCP_ALLOW_LIVE_APPLY`, gates `apply_live_candidate`, which
+verifies every precondition and then refuses with `capability_not_implemented` — no live mutation
+exists. Beyond those, the only durable writes are two explicitly named, create-new exports — a
+schematic and a board render — each refused if its path already exists, and neither able to
 overwrite a board. Board rendering additionally runs KiCad against a **read-only** private snapshot,
 so the exporter cannot write even the `.kicad_prl` it drops beside a writable input. Workspace files are captured through descriptor-anchored, no-follow path walks; the
 same final descriptor supplies type/size validation, bytes, and before/after mutation checks, so a
@@ -198,7 +206,7 @@ affected items carry UUIDs and coordinates, none of which crosses the boundary. 
 written, so no user project can weaken the verdict, and equally the verdict is not necessarily what
 that user's project would report.
 
-Circuit Scene IR `0.2.0` is a current disclosure boundary: structured observation and its optional
+Circuit Scene IR `0.3.0` is a current disclosure boundary: structured observation and its optional
 render can reveal placement and connectivity without returning source files. Scene requests are
 region-scoped and revision-bound; objects and footprint pad relationships/courtyard vertices consume
 explicit object/detail ceilings, reference durability is typed, and board-author text is quarantined

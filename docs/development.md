@@ -28,6 +28,32 @@ pre-commit install --install-hooks
 | `make build` | Wheel and source distribution. |
 | `make check` | Full pre-release gate. |
 
+### Running pytest directly: `PYTHONPATH=src:.`
+
+`make test` runs `PYTHONPATH=src $(PYTHON) -m pytest`, and that works. **Invoking the `pytest`
+console script yourself does not, with `PYTHONPATH=src` alone:**
+
+```console
+$ PYTHONPATH=src .venv/bin/pytest -q tests/test_audio_routing_gap.py
+ERROR collecting tests/test_audio_routing_gap.py
+E   ModuleNotFoundError: No module named 'scripts'
+```
+
+The difference is not pytest configuration. `python -m pytest` prepends the current directory to
+`sys.path`; the `pytest` entry point does not. `tests/test_audio_routing_gap.py` imports
+`scripts.benchmark_audio_routing_gap`, so it needs the repository root importable, and `src` alone
+does not supply it. A collection error in one module aborts the whole run, so the symptom is a
+suite that collects nothing rather than one failing test.
+
+Use both entries whenever you invoke pytest yourself:
+
+```bash
+PYTHONPATH=src:. .venv/bin/pytest -q
+```
+
+`src` makes `copper_mcp` importable from a non-editable checkout; `.` makes `scripts` importable.
+Both forms are equivalent to `make test` once `.` is present.
+
 Tests should not require network access or proprietary boards. GPU and KiCad integration tests must
 be separately marked and have deterministic CPU or fixture-based coverage where practical.
 
@@ -79,10 +105,12 @@ that.
 
 ## Board IR development
 
-Board IR `0.1.0` is a strict public contract. Start with
+Board IR `0.2.0` is the active strict public contract; `0.1.0` is retained only as immutable
+compatibility evidence and is never edited. Start with
 [`docs/architecture/board-ir.md`](architecture/board-ir.md),
-[`ADR-0005`](adr/0005-canonical-board-ir.md), and the
-[`0.1.0` JSON Schema](../schemas/board-ir/0.1.0.schema.json).
+[`ADR-0005`](adr/0005-canonical-board-ir.md) for the original integer/digest contract,
+[`ADR-0026`](adr/0026-first-class-footprints-in-board-ir.md) for the 0.2 footprint model, and the
+[`0.2.0` JSON Schema](../schemas/board-ir/0.2.0.schema.json).
 
 The pure domain API is exported by `copper_mcp.board_ir`. Use `make_content` and `make_snapshot` for
 programmatic construction, `encode_snapshot` for byte-stable JSON, and `decode_snapshot_json` for
@@ -94,7 +122,8 @@ bytes and a separate typed `KiCadConstraintProfile`, then returns a fail-closed 
 It is intentionally not a filesystem writer or a route/apply service. A missing snapshot or error
 diagnostic must stop downstream work; never continue with a partial board.
 
-The v0.1 adapter is pinned to KiCad PCB format `20260206`. Treat every newly accepted S-expression
+The adapter is pinned to KiCad PCB format `20260206` (`_SUPPORTED_KICAD_PCB_VERSIONS` in
+`adapters/kicad_board_ir.py`). Treat every newly accepted S-expression
 head, positional atom, graphics layer, zone option, or via treatment as a semantic change requiring
 an explicit allowlist decision and a fail-closed regression. Cached `filled_polygon` geometry is not
 authoritative Board IR content. Preserve quoted-versus-bare atom meaning, reject ambiguous native
@@ -106,7 +135,7 @@ CopperMCP writers must remain readable with the default limits.
 When extending the model or adapter:
 
 1. Decide whether canonical meaning changes. If it does, follow the versioning process in ADR-0005
-   rather than changing `0.1.0` in place.
+   rather than changing `0.2.0` in place.
 2. Preserve exact integer conversion and reject geometry that cannot be represented without an
    explicit, reviewed rule.
 3. Add valid and invalid fixtures for the construct, including budget, graphics-layer,

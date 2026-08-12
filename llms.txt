@@ -5,7 +5,8 @@
 > authoritative KiCad DRC — without ever letting the model write copper. Every generated result is
 > an immutable candidate bound to an exact board revision until a human explicitly applies it.
 
-CopperMCP is an MCP server (26 tools) plus a CLI over the same application services. The
+CopperMCP is an MCP server (28 tools over stdio, 27 over streamable-http) plus a CLI over the same
+application services. The
 non-negotiable boundary: AI may interpret constraints and propose net ordering, corridors, cost
 weights, and repairs; deterministic code owns geometry, connectivity, DRC, provenance, and file
 mutation. Exactly two operations modify a file, both off by default behind an operator environment
