@@ -6,6 +6,62 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A `connect` pad — KiCad's edge-card connector finger — now converts, as an SMD pad.** It was
+  the last construct blocking `phono-preamp/tier1-rev-a`, and it is deliberately not a one-line
+  map entry: `PadKind` is published into every Board IR snapshot digest and enumerated as a closed
+  `enum` in the published `schemas/board-ir/0.2.0.schema.json`, so what to do with a fourth kind is
+  a contract decision.
+
+  What `connect` is was established by enumerating and reading **every** occurrence of
+  `PAD_ATTRIB::CONN` in KiCad's source outside the foreign-format import plug-ins — 35 occurrences
+  across 17 files. KiCad's own model makes it the same pad as `smd`: the connectivity engine puts
+  `SMD`, `NPTH` and `CONN` in one case that pins the item to a single copper layer; the
+  push-and-shove router gives `CONN` and `SMD` one shared case; layer trimming and hole
+  suppression treat them identically; and the pad-properties dialog says so in its own comment.
+  Exactly three things differ, and all three sit outside what a Board IR `Pad` claims — no solder
+  paste, a distinct Gerber aperture attribute, and an exemption from the Edge.Cuts clearance DRC
+  test. Plating is not a pad attribute in KiCad at all: the only plated/unplated distinction is
+  `PTH` versus `NPTH`, which is about the hole, and a `connect` pad has none.
+
+  **`PadKind` gains no member and no published schema changes.** Nothing in this repository would
+  read a fourth member, and `BOARD_IR_SCHEMA_VERSION` sits inside the canonical payload — so
+  widening the enum would either corrupt the published `0.2.0` contract in place, promising a
+  closed three-value domain and then breaking it silently, or bump to `0.3.0` and move every
+  content address in the project for a distinction with no consumer. **No pinned identity in
+  `tests/test_golden_identities.py` moves**, and no board that converted before converts
+  differently.
+
+  The token is discarded, and discarded loudly: `ConversionResult.edge_connector_pad_count`
+  reports how many pads it happened to, the same measured-field pattern as
+  `unmodelled_group_count`. One form still refuses — a `connect` pad with **no copper layer at
+  all**: the paste/mask aperture skip tests the source token and requires literally `smd`, so an
+  aperture-shaped edge-connector pad is refused rather than read past. That is unchanged
+  behaviour, since every `connect` pad refused before.
+
+  `_UNMODELLED_PAD_KINDS` is deleted rather than emptied. Its one entry was `connect`; KiCad's pad
+  attribute is closed at four tokens and all four are now modelled, so a lookup that can never
+  miss its default would be exactly the dead code ADR-0091 found behind the pad-field allowlist. A
+  token reaching the refusal today is not a documented pad kind at all: it refuses unnamed, echoes
+  no board bytes, and still carries an indexed locator saying which pad.
+
+  Measured before and after on the same private corpus, back to back: conversion moves from **11
+  of 17 to 12 of 17** boards as saved today, which is **12 of the 12 boards in the #116 survey
+  set**. The board gained carries two edge-connector pads. **No "converts every board" result is
+  claimed** — five corpus saves still refuse, for the two constructs tracked as #140 and #141 —
+  and conversion is not appliability: the newly converted board refuses both write-back gates for
+  the pre-existing revision-derived-identity reason B-099 recorded.
+  ([ADR-0096](docs/adr/0096-edge-connector-pads-convert-as-smd.md),
+  [#138](https://github.com/seunghyukchoe/copper-mcp/issues/138))
+
+### Changed
+
+- `ConversionResult` gains `edge_connector_pad_count`. It is keyword-defaulted and appended last,
+  so a caller constructing one is unaffected; a caller exhaustively destructuring one should
+  expect the extra field. No pinned identity moves and no published schema changes — the count
+  lives on the conversion *result*, not in the snapshot.
+
 ## [0.7.0] - 2026-08-12
 
 Upgrading from 0.6.0: see the [0.7.0 migration notes](docs/migrations/copper-mcp-0.7.0.md).

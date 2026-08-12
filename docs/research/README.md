@@ -128,6 +128,15 @@ When adding a document, add it to the list below in the same sentence form — *
   the three CopperMCP can discard from the one it may not. It grounds ADR-0091 and claims nothing
   about how the override should eventually be modelled, nothing about thermal spoke geometry, and
   nothing about the population of boards that carry it.
+- [KiCad `connect` pads](./kicad-connect-pad-attribute-v1.md) establishes what
+  `PAD_ATTRIB::CONN` is by enumerating and reading **every** occurrence of it in KiCad's source
+  outside the foreign-format import plug-ins — 35 across 17 files. Its central finding is that the
+  connectivity engine, the push-and-shove router, layer trimming and hole suppression all put
+  `CONN` and `SMD` in one shared case body, so exactly three things differ: solder paste, the
+  Gerber aperture attribute, and an exemption from the Edge.Cuts clearance DRC test. It also
+  disposes of the plating hypothesis — plating is not a pad attribute in KiCad at all. It grounds
+  ADR-0096, and claims nothing about castellated pads, per-layer padstacks, or the population of
+  boards that carry an edge connector.
 - [KiCad arc tracks as routing obstacles](./kicad-arc-track-obstacles-v1.md) grounds ADR-0070's
   conservative arc envelope in the official S-expression arc grammar and the inscribed-angle
   theorem, and states plainly that the envelope is loose for a near-semicircular arc and claims

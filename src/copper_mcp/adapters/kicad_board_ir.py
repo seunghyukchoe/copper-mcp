@@ -136,19 +136,30 @@ _UNMODELLED_ROOT_HEADS: dict[str, str] = {
     "image": "root embedded images are unsupported",
     "property": "root board properties are unsupported",
 }
-# Pad kinds the KiCad board format defines (`PAD_ATTR_T`: PTH, SMD, CONN, NPTH) and Board IR
-# v0.2 does not model, under exactly the rule `_UNMODELLED_ROOT_HEADS` documents above: the
-# message is a *value from this table*, selected by an equality test against the source token
-# and never built from it, so the refusal names the construct without echoing one byte of the
-# board.  A token absent from this table is not a documented pad kind at all and refuses
-# unnamed, with the indexed locator still saying which pad.
+# There is deliberately no `_UNMODELLED_PAD_KINDS` table any more, and its absence is the
+# statement.  KiCad's pad attribute is a *closed* four-token vocabulary: `parsePAD` switches on
+# exactly `thru_hole`, `smd`, `connect` and `np_thru_hole` and calls `Expecting(...)` on anything
+# else (`pcbnew/pcb_io/kicad_sexpr/pcb_io_kicad_sexpr_parser.cpp:6411-6444`), and the writer emits
+# exactly those four (`…/pcb_io_kicad_sexpr.cpp:1875-1882`).  ADR-0096 mapped the fourth,
+# `connect`, so all four documented kinds are now modelled and no documented-but-unmodelled kind
+# remains.  A one-entry table with nothing left to name would have been the same dead code
+# ADR-0091 found behind the pad-field allowlist -- a lookup that can never miss the default -- so
+# it is deleted rather than kept empty.  A token that reaches the refusal below is not a
+# documented pad kind at all: it refuses unnamed, without echoing one byte of the board, and the
+# indexed locator still says which pad.
 #
-# `connect` is KiCad's edge-connector pad -- copper like an SMD pad but deliberately left out
-# of the paste layer.  Modelling it is a contract decision (it is real copper, so it is an
-# obstacle, but its attachment and plating semantics differ from SMD) and is deliberately not
-# taken here; this table only makes the refusal say which construct it is.
-_UNMODELLED_PAD_KINDS: dict[str, str] = {
-    "connect": "edge-connector pads are unsupported",
+# The mapping is a module constant rather than a dict rebuilt inside the pad loop so that a test
+# can assert its *whole domain* against KiCad's four tokens. That is the partition test ADR-0091
+# needed for `zone_connect`: a behavioural test can only probe tokens someone thought to write
+# down, and a fifth key quietly added here would change no board that exists. Mutation found
+# exactly that survivor.
+_PAD_KIND_BY_TOKEN: dict[str, PadKind] = {
+    "smd": PadKind.SMD,
+    # KiCad's `PAD_ATTRIB::CONN`, the edge-card connector finger. See ADR-0096 and the comment at
+    # the mapping's use site for why this is `SMD` and not a member of its own.
+    "connect": PadKind.SMD,
+    "thru_hole": PadKind.THROUGH_HOLE,
+    "np_thru_hole": PadKind.NPTH,
 }
 # The only root graphics that may sit on ``Edge.Cuts``: one unfilled rectangle, or straight
 # segments that chain into exactly one closed simple loop.  Both carry the board outline as an
@@ -322,6 +333,10 @@ class _Converter:
         # Root ``(group ...)`` expressions accepted as editor organisation and not modelled.
         # Measured in the preflight and reported rather than dropped in silence.
         self.root_group_count = 0
+        # ``connect``-token pads converted as ``PadKind.SMD`` (ADR-0096).  Counted for the same
+        # reason ``root_group_count`` is: the conversion discards a distinction the source made,
+        # and a count is the only way to say so without a diagnostic that would refuse the board.
+        self.edge_connector_pad_count = 0
         if self.root.head != KICAD_PCB_ROOT_HEAD:
             self.fail(
                 FOREIGN_ROOT_DIAGNOSTIC_CODE,
@@ -1063,7 +1078,7 @@ class _Converter:
             self.fail("unknown.layer", "item has no copper-layer reference", locator)
         return tuple(dict.fromkeys(result))
 
-    def _is_aperture_pad(self, pad: SExpr, number: str, kind: PadKind, locator: str) -> bool:
+    def _is_aperture_pad(self, pad: SExpr, number: str, raw_kind: str, locator: str) -> bool:
         """Report whether a `pad` expression is a KiCad *aperture* pad, and refuse if it is not.
 
         KiCad defines an aperture pad as a pad **with no copper layer assigned**: a solder-paste
@@ -1087,8 +1102,14 @@ class _Converter:
         - no declared layer is copper, so there is nothing to lose;
         - every declared layer is a paste or mask layer, so this is a stencil or mask opening and
           not, say, a stray pad on a courtyard layer whose meaning we have not established;
-        - the pad kind is `smd`, since a drilled pad is a hole through copper whatever its layers
-          claim;
+        - the **source token** is literally `smd`, since a drilled pad is a hole through copper
+          whatever its layers claim. This tests the token and not the resolved `PadKind`, and the
+          difference is load-bearing after ADR-0096: `connect` now resolves to `PadKind.SMD` too,
+          and a paste-bearing `connect` pad is a construct KiCad's own padstack test calls an
+          error (`pad.cpp:3252-3257`, `DRCE_PADSTACK`). Its meaning is not established, so it
+          keeps refusing here rather than being read past as an aperture. Nothing measurable is
+          lost -- no board in the surveyed corpus carries one -- and over-refusal is the
+          conservative direction;
         - it declares no net, so no routable attachment is being discarded; and
         - it carries no pad number, matching KiCad's own rule for an aperture.
 
@@ -1099,7 +1120,7 @@ class _Converter:
         if any(name.endswith(".Cu") or name in {"*.Cu", "F&B.Cu"} for name in names):
             return False
         if (
-            kind is PadKind.SMD
+            raw_kind == "smd"
             and not number
             and all(name in _APERTURE_PAD_LAYERS for name in names)
             and not children(pad, "net")
@@ -1857,24 +1878,41 @@ class _Converter:
                 number, raw_kind, raw_shape = header
                 # Kind and shape refuse separately. One message covering both named neither, so
                 # a caller reading it could not tell which of the two positional tokens was the
-                # problem -- and on the one real board that reaches this, the answer (a
+                # problem -- and on the one real board that then reached it, the answer (a
                 # `connect` pad) was recoverable only by reading the file. Same defect class as
                 # the seven pad refusals D-178 made reachable, in the message rather than in the
-                # control flow. Neither refusal changes: same code, same locator, same set of
-                # boards refused.
-                pad_kind_by_token = {
-                    "smd": PadKind.SMD,
-                    "thru_hole": PadKind.THROUGH_HOLE,
-                    "np_thru_hole": PadKind.NPTH,
-                }
-                if raw_kind not in pad_kind_by_token:
+                # control flow. That board no longer reaches it; see below.
+                #
+                # `connect` is KiCad's `PAD_ATTRIB::CONN`, and it converts as `PadKind.SMD`
+                # because that is what KiCad's own model says it is, not as a convenience. Every
+                # branch in KiCad 10 that mentions `CONN` either groups it with `SMD` in the same
+                # case body or concerns fabrication output Board IR does not model; there is no
+                # branch anywhere that gives it different copper, a different layer span, a
+                # different hole, or different connectivity. `connectivity_items.cpp:164-176`
+                # puts `SMD`, `CONN` and `NPTH` in one case that pins the item to the front of
+                # its copper stack; `pns_kicad_iface.cpp:1631-1648` gives `CONN` and `SMD` one
+                # shared case; `pad.cpp:1626-1641` trims both to at most one copper layer;
+                # `pad.cpp:2886-2891` and the parser at `…_sexpr_parser.cpp:6433-6437` force the
+                # drill to zero for both. What differs is solder paste (`pad.cpp:3252-3257`
+                # raises `DRCE_PADSTACK` when a `CONN` pad carries a paste layer), the Gerber
+                # aperture attribute (`plot_brditems_plotter.cpp:206-227`), and an exemption from
+                # the Edge.Cuts clearance DRC test (`drc_test_provider_edge_clearance.cpp:431-
+                # 439`, where it is grouped with `PAD_PROP::CASTELLATED`) -- a finger is meant to
+                # run to the board edge. Board IR models no paste layer, emits no Gerber, and
+                # derives no edge clearance of its own (ADR-0004 delegates DRC to KiCad, which
+                # applies that exemption itself), so all three are outside what a `Pad` claims.
+                #
+                # The distinction is therefore *discarded*, not preserved, and it is counted
+                # rather than dropped in silence: see `edge_connector_pad_count` below and
+                # ADR-0096, which also records why a new `PadKind` member was rejected.
+                if raw_kind not in _PAD_KIND_BY_TOKEN:
                     self.fail(
                         "unsupported.construct",
-                        _UNMODELLED_PAD_KINDS.get(raw_kind, "pad kind is unsupported"),
+                        "pad kind is unsupported",
                         locator,
                         object_kind="pad",
                     )
-                kind = pad_kind_by_token[raw_kind]
+                kind = _PAD_KIND_BY_TOKEN[raw_kind]
                 try:
                     shape = PadShape(raw_shape)
                 except ValueError:
@@ -1893,8 +1931,14 @@ class _Converter:
                 # or must avoid. It is skipped only once every condition in `_is_aperture_pad`
                 # holds; anything else with no copper layer refuses there. The skip sits after the
                 # structural checks above, so a malformed aperture is still a typed refusal.
-                if self._is_aperture_pad(pad, number, kind, locator):
+                if self._is_aperture_pad(pad, number, raw_kind, locator):
                     continue
+                # Counted only once the pad is known to be real copper this board actually
+                # carries: after the aperture skip, and after every refusal above. The count is a
+                # disclosure that a distinction was discarded, so it must not report a pad that
+                # was never converted.
+                if raw_kind == "connect":
+                    self.edge_connector_pad_count += 1
                 pad_at = self._values(pad, "at", locator, minimum=2, maximum=3)
                 local = PointNM(
                     self._mm(pad_at[0], f"{locator}.at.x"),
@@ -3003,6 +3047,7 @@ class _Converter:
             snapshot=make_snapshot(content),
             max_roundrect_rounding_nm=self.max_roundrect_rounding_nm,
             unmodelled_group_count=self.root_group_count,
+            edge_connector_pad_count=self.edge_connector_pad_count,
         )
 
 

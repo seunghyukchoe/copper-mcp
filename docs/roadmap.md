@@ -51,14 +51,15 @@ Two cautions about this table, because both have misled a reader before:
 ### What does not convert
 
 The one open M1 issue is the real-board conversion survey. Measured on the private working corpus
-on 2026-08-11: **11 of the 12 boards in the
+on 2026-08-12, before and after ADR-0096 back to back: **12 of the 12 boards in the
 [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116)
-survey set convert, which is 11 of all 17 boards in that corpus as saved today.** Six refuse, each
-for exactly one named construct:
+survey set convert, which is 12 of all 17 boards in that corpus as saved today** — up from 11 and
+11, the one board gained being the phono-preamp save that carried `connect`-kind pads
+([#138](https://github.com/seunghyukchoe/copper-mcp/issues/138), resolved by [ADR-0096](adr/0096-edge-connector-pads-convert-as-smd.md)). Five saves still
+refuse, each for exactly one named construct:
 
 | Refusing saves | Construct | Issue |
 |---|---|---|
-| 1 | `connect`-kind (edge-connector) pads | [#138](https://github.com/seunghyukchoe/copper-mcp/issues/138) |
 | 4 | root board `property` text variables | [#140](https://github.com/seunghyukchoe/copper-mcp/issues/140) |
 | 1 | a root copper graphic (`gr_text` on `F.Cu`) | [#141](https://github.com/seunghyukchoe/copper-mcp/issues/141) |
 
