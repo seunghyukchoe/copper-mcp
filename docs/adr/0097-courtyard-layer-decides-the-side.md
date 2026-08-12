@@ -118,16 +118,29 @@ the existing per-ring vertex budget applies to a far-side ring exactly as to a n
   side-gated model would have called `proven_clear` is now `violated`, matching the tool.
 - **The measured conversion count did not move, and this change does not claim it did.**
   Conversion stops at the first error, so a refusal names the frontier and never the stack behind
-  it. On `main` the courtyard refusal is not reachable at all: the same three boards stop earlier,
-  on root board properties (#150, still open). With #150 applied the courtyard refusal appears,
-  this change removes it, and all three boards then stop on a *further* blocker —
-  `pad field 'options' is unsupported`, a custom-shape SMD pad, filed as #153. The survey corpus
-  reads **11 of 18 before and 11 of 18 after**, on `main` and on `main` + #150 alike, with all 18
-  board digests identical across every run. (The corpus is a live tree and grew from 17 boards to
-  18 during this work; the added board is refused by an unrelated construct both before and after,
-  and the before→after→before triple reproduces itself exactly, so the growth is recorded rather
-  than averaged over.) The frontier moved; the count did not. That is the expected outcome of
-  removing one blocker from a stack, and this is the fourth instance of it in this project.
+  it. #150 has since merged, so the courtyard refusal is now reachable on `main` itself: the same
+  three boards stopped earlier, on root board properties, until that landed. This change removes
+  the courtyard refusal, and all three boards then stop on a *further* blocker —
+  `pad field 'options' is unsupported`, a custom-shape SMD pad, filed as #153. **Re-measured
+  against `main` at `9ee073e` rather than quoted from the earlier run, the survey corpus reads
+  12 of 18 before and 12 of 18 after.** (An earlier version of this record said 11 of 18 both
+  ways. That was the true count when it was written and was made false by #149 and #150 landing,
+  not by this change; the direction of the finding is untouched, since both numbers are equal
+  either way.) Exactly three rows differ anywhere in the comparison, and only in their refusal:
+  those three boards move from `unsupported.transform` / "courtyard layer does not match its
+  footprint side" to `unsupported.construct` / "pad field 'options' is unsupported".
+  The measurement was taken conversion-only, before→after→before back to back, through the
+  survey runner's own board selection and adapter entry point, with every board's source bytes
+  digested as they were read. **The corpus is a live tree the designer edits during a run, and
+  it moved during this one**: 17 of the 18 boards were byte-identical across all three runs, and
+  one — refused both before and after by an unrelated construct, copper text (#141/ADR-0095) —
+  was edited between the second and third run, growing from 2,816,954 to 2,822,207 bytes. It
+  cannot move the count in either direction, and the two `before` runs agree refusal-for-refusal
+  regardless, but it is recorded rather than smoothed over. (The corpus also grew from 17 boards
+  to 18 during this work, and two of the 18 saves are byte-identical to each other, so the three
+  advancing boards are three saves over two distinct byte streams.) The frontier moved; the count
+  did not. That is the expected outcome of removing one blocker from a stack, and this is the
+  fourth instance of it in this project.
 - **Write-back is unchanged and still refuses.** The source-preserving placement serializer accepts
   only front-side footprints whose courtyard rectangles are on `F.CrtYd`, so a feed-through part is
   previewable and not movable through it — the same asymmetry ADR-0080 recorded for chamfered and

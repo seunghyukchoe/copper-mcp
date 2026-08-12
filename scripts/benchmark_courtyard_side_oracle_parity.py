@@ -64,12 +64,26 @@ class CaseOutcome:
     agreement: str
 
 
-def _git_commit() -> str:
+def _git_commit() -> tuple[str, bool]:
+    """Return the source commit and whether the tree it was read from was dirty.
+
+    Bare ``HEAD`` is not provenance.  The first artifact this runner recorded named the
+    `v0.7.0` release commit, whose adapter *refuses* every far-side board the runner
+    generates -- so the run could not have come from that commit's tree, and the field said
+    it did.  A benchmark is a claim about the code that produced it, and a working-tree edit
+    is exactly the case where the commit alone is a false claim about the code.
+
+    ``dirty`` is reported separately rather than being folded into the commit string, so a
+    consumer reads a boolean instead of parsing a suffix, matching
+    ``benchmark_real_board_capability.py``.  Both failure paths report **dirty**: not knowing
+    whether the tree was clean is not evidence that it was.
+    """
+
     git = shutil.which("git")
     if git is None:
-        return "unknown"
+        return "unknown", True
     try:
-        return subprocess.run(  # noqa: S603 - fixed local Git argv
+        commit = subprocess.run(  # noqa: S603 - fixed local Git argv
             [git, "rev-parse", "HEAD"],
             cwd=ROOT,
             check=True,
@@ -77,8 +91,17 @@ def _git_commit() -> str:
             text=True,
             timeout=5,
         ).stdout.strip()
+        status = subprocess.run(  # noqa: S603 - fixed local Git argv
+            [git, "status", "--porcelain"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.strip()
     except (OSError, subprocess.SubprocessError):
-        return "unknown"
+        return "unknown", True
+    return commit, bool(status)
 
 
 def _profile() -> KiCadConstraintProfile:
@@ -363,7 +386,7 @@ def main() -> int:
     parser.add_argument(
         "--output",
         type=Path,
-        default=ROOT / "benchmarks/results/placement/2026-08-12-courtyard-side-oracle-parity.json",
+        default=ROOT / "benchmarks/results/placement/2026-08-13-courtyard-side-oracle-parity.json",
     )
     parser.add_argument("--kicad-cli", type=Path, default=DEFAULT_KICAD_CLI)
     args = parser.parse_args()
@@ -382,10 +405,14 @@ def main() -> int:
     if metrics["contradictions"]:
         raise RuntimeError(f"courtyard side oracle contradictions: {metrics['contradictions']}")
 
+    source_commit, source_dirty = _git_commit()
     payload: dict[str, Any] = {
         "schema": "copper-mcp/benchmark/courtyard-side-oracle-parity/v1",
-        "date_utc": "2026-08-12",
-        "source_commit": _git_commit(),
+        # The date this artifact was recorded, which the filename mirrors.
+        "date_utc": "2026-08-13",
+        "source_commit": source_commit,
+        # True means the run cannot be reproduced from `source_commit` alone.
+        "source_dirty": source_dirty,
         "environment": {
             "platform": platform.platform(),
             "python": sys.version.split()[0],

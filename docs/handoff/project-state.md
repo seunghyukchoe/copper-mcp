@@ -72,8 +72,8 @@ the source of truth over both**, so read it with
 `gh issue list -R seunghyukchoe/copper-mcp` and
 `gh api repos/seunghyukchoe/copper-mcp/milestones` rather than trusting a checkbox.
 
-**Record ranges.** ADR-0001 … ADR-0095, next unused **0096**. Ledgers: `D-185`, `R-140`, `SEC-136`,
-`B-100` are the highest allocated; allocate in the pull request that lands the entry, never before,
+**Record ranges.** ADR-0001 … ADR-0097, next unused **0098**. Ledgers: `D-187`, `R-142`, `SEC-139`,
+`B-101` are the highest allocated; allocate in the pull request that lands the entry, never before,
 per [the ID convention](../ledgers/README.md).
 
 ---
@@ -258,7 +258,7 @@ worse than none, because it will be ignored.
    does not support — and **expect a stack**: removing the blocker
    [#140](https://github.com/seunghyukchoe/copper-mcp/issues/140) named left the corpus at 11 of 17
    and exposed two further constructs (a courtyard layer disagreeing with its footprint's side on
-   three boards, an unsupported field inside a pad on one), neither yet filed. **#141 is answered
+   three boards, an unsupported field inside a pad), both since filed as #151 and #153. **#141 is answered
    and is not a gap to take**: copper text has no envelope derivable from the board document,
    measured against `kicad-cli`, so it stays refused by decision rather than by omission
    ([ADR-0095](../adr/0095-copper-text-has-no-derivable-envelope.md)) — the board it blocks stays
