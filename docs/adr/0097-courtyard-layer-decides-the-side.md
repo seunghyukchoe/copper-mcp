@@ -131,12 +131,14 @@ the existing per-ring vertex budget applies to a far-side ring exactly as to a n
   footprint side" to `unsupported.construct` / "pad field 'options' is unsupported".
   The measurement was taken conversion-only, before→after→before back to back, through the
   survey runner's own board selection and adapter entry point, with every board's source bytes
-  digested as they were read. **The corpus is a live tree the designer edits during a run, and
-  it moved during this one**: 17 of the 18 boards were byte-identical across all three runs, and
-  one — refused both before and after by an unrelated construct, copper text (#141/ADR-0095) —
-  was edited between the second and third run, growing from 2,816,954 to 2,822,207 bytes. It
-  cannot move the count in either direction, and the two `before` runs agree refusal-for-refusal
-  regardless, but it is recorded rather than smoothed over. (The corpus also grew from 17 boards
+  digested as they were read. All 18 digests are identical across all three passes of the run of
+  record, and the two `before` passes agree refusal-for-refusal. **That is a property of this
+  run and not of the corpus, which is a live tree the designer edits while a measurement is in
+  flight.** An earlier triple in the same session caught exactly that: one board — refused on
+  both sides by an unrelated construct, copper text (#141/ADR-0095) — grew from 2,816,954 to
+  2,822,207 bytes between passes. It could not move the count, and the clean run supersedes it,
+  but it is why the digests are recorded at all. A count taken without them cannot tell a real
+  before/after difference from a board that changed underneath the runner. (The corpus also grew from 17 boards
   to 18 during this work, and two of the 18 saves are byte-identical to each other, so the three
   advancing boards are three saves over two distinct byte streams.) The frontier moved; the count
   did not. That is the expected outcome of removing one blocker from a stack, and this is the
