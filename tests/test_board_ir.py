@@ -918,3 +918,42 @@ def test_a_refused_conversion_cannot_report_a_group_count() -> None:
     assert ConversionResult(snapshot=None, diagnostics=refusal).unmodelled_group_count == 0
     with pytest.raises(ValueError, match="cannot report a group count"):
         ConversionResult(snapshot=None, diagnostics=refusal, unmodelled_group_count=1)
+
+
+def test_a_conversion_board_property_count_must_be_a_non_negative_integer() -> None:
+    """The unmodelled board-property count is held to the same rule as the two counts above it."""
+
+    snapshot = make_snapshot(sample_content())
+
+    assert (
+        ConversionResult(
+            snapshot=snapshot, unmodelled_board_property_count=0
+        ).unmodelled_board_property_count
+        == 0
+    )
+    assert (
+        ConversionResult(
+            snapshot=snapshot, unmodelled_board_property_count=2
+        ).unmodelled_board_property_count
+        == 2
+    )
+    for bad in (True, False, -1, 1.0, "1", None):
+        with pytest.raises(ValueError, match="board property count"):
+            ConversionResult(snapshot=snapshot, unmodelled_board_property_count=bad)  # type: ignore[arg-type]
+
+
+def test_a_refused_conversion_cannot_report_a_board_property_count() -> None:
+    """A refusal converted nothing, so it accepted no board property and must not claim one."""
+
+    refusal = (
+        Diagnostic(
+            code="unsupported.construct",
+            severity=Severity.ERROR,
+            message="root expression contains an unsupported semantic construct",
+            source_locator="kicad_pcb.child[3]",
+        ),
+    )
+
+    assert ConversionResult(snapshot=None, diagnostics=refusal).unmodelled_board_property_count == 0
+    with pytest.raises(ValueError, match="cannot report a board property count"):
+        ConversionResult(snapshot=None, diagnostics=refusal, unmodelled_board_property_count=1)

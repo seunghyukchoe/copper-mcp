@@ -6,6 +6,38 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **A root board `(property "<key>" "<value>")` no longer refuses the board.** KiCad writes board
+  text variables as root property pairs, and two of them refused four whole boards in the private
+  survey corpus. They are now read past and counted.
+  **Measured before and after with the same runner, this converts no additional board: 11 of 17,
+  then 11 of 17.** Issue #140 expected four boards to convert and none do — conversion refuses on
+  the first error, so the refusal named the first blocker in document order and said nothing about
+  what stood behind it. All four now refuse for a construct further in: three for a courtyard whose
+  layer disagrees with its footprint's side, one for an unsupported field inside a pad. Deleting the
+  property expressions from those boards' own bytes on the previous release reproduces exactly those
+  refusals, so the constructs were always there. The refusal advances rather than clearing, which is
+  how a stack of blockers gets measured, and it is deliberately not reported as a conversion win.
+  **The accepted shape is closed and exact**: two positional atoms, both quoted in the source, no
+  third atom, no child expressions. Anything else is a typed refusal with an indexed locator —
+  which also matches KiCad, whose own parser rejects a third atom or a nested expression outright.
+  **The reason this is safe is not "a property is metadata", and that claim would be false**: KiCad
+  substitutes `${KEY}` into text, and text on a copper layer is plotted copper, a barcode's module
+  pattern is built from shown text, and a `.kicad_dru` custom rule can take a clearance from a
+  property value. It is safe because every one of those termini is already refused by, or already
+  outside, this adapter — copper text refuses, `barcode` refuses, `.kicad_dru` is never parsed here
+  — while the authoritative DRC surface hands the real files to KiCad over bytes the write-back
+  path preserves verbatim. **The map is not modelled**, so `ConversionResult` gains
+  `unmodelled_board_property_count`: a caller that needs board text variables can read the count
+  and decline instead of being told nothing. It counts expressions rather than KiCad map entries,
+  because KiCad silently keeps the first value for a repeated key. No Board IR schema version,
+  field, digest or golden identity changes, and a board carrying no root property converts exactly
+  as before. ([ADR-0094](docs/adr/0094-root-board-properties-as-metadata.md),
+  [D-184](docs/ledgers/decision-ledger.md), [R-139](docs/ledgers/risk-register.md),
+  [SEC-135](docs/ledgers/security-ledger.md),
+  [#140](https://github.com/seunghyukchoe/copper-mcp/issues/140))
+
 ## [0.7.0] - 2026-08-12
 
 Upgrading from 0.6.0: see the [0.7.0 migration notes](docs/migrations/copper-mcp-0.7.0.md).

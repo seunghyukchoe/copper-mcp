@@ -98,6 +98,15 @@ board. The schema is the field-level reference.
   otherwise convert those members as unlocked; lock is an authorization gate, not a hint. A group
   carrying any child head outside KiCad's own writer vocabulary is refused rather than assumed
   inert. See [ADR-0090](../adr/0090-root-level-board-groups.md).
+- A root `(property "<key>" "<value>")` is one entry of the board's text-variable map and is read
+  past rather than refused. KiCad's only consumer of that map is `BOARD::ResolveTextVar`, which
+  expands `${KEY}` while rendering text, and Board IR models no text — so the pair carries no
+  coordinate, layer, net, clearance or lock, and changes what part of a board is *called* rather
+  than what it *is*. The accepted shape is closed and exact: **two quoted positional atoms, no
+  third atom, no child expressions**; anything else is a typed refusal. The map is not modelled, so
+  the number accepted is reported as `ConversionResult.unmodelled_board_property_count` — a
+  round-trip through Board IR alone loses it, and text rendered from Board IR would leave `${KEY}`
+  unexpanded. See [ADR-0094](../adr/0094-root-board-properties-as-metadata.md).
 - IDs use type prefixes such as `layer:`, `net:`, `class:`, `footprint:`, `pad:`, `via:`,
   `segment:`, `arc:`, `zone:`, `keepout:`, `contour:`, and `rule:`. IDs and display names have
   different roles.

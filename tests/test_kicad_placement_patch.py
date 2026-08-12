@@ -433,3 +433,40 @@ def test_a_placement_splice_leaves_a_root_group_byte_identical() -> None:
     moved = next(item for item in patched.snapshot.content.footprints if item.id == subject)
     assert moved.origin.x == 47_250_000
     assert moved.origin.y == 15_500_000
+
+
+_ROOT_BOARD_PROPERTY = b'(property "Fabricator" "two-layer, 1.6 mm, lead-free")'
+
+
+def test_a_placement_splice_leaves_a_root_board_property_byte_identical() -> None:
+    """The board's text-variable map is not modelled, so a write-back must carry it verbatim.
+
+    Board IR holds no text-variable map, so a splice that rebuilt the document from the snapshot
+    would silently delete one. The patch path is byte-preserving outside the moved footprint's own
+    expressions, which is what makes accepting the construct safe on the *write* side as well --
+    but "should" is not evidence, so this renders a real move over a board carrying a property and
+    asserts its bytes, and the whole document tail from it onward, are unchanged.
+    """
+
+    source = FIXTURE.read_bytes()
+    closing = source.rfind(b"\n)")
+    assert closing > 0
+    source = source[:closing] + b"\n  " + _ROOT_BOARD_PROPERTY + source[closing:]
+    source, snapshot, profile, candidate, subject = _candidate(source)
+
+    rendered = render_kicad_placement_candidate_board(source, snapshot, candidate, profile)
+
+    assert rendered != source
+    assert rendered.count(_ROOT_BOARD_PROPERTY) == 1
+    assert (
+        rendered[rendered.index(_ROOT_BOARD_PROPERTY) :]
+        == source[source.index(_ROOT_BOARD_PROPERTY) :]
+    )
+
+    patched = parse_kicad_bytes(rendered, profile)
+    assert patched.diagnostics == ()
+    assert patched.snapshot is not None
+    assert patched.unmodelled_board_property_count == 1
+    moved = next(item for item in patched.snapshot.content.footprints if item.id == subject)
+    assert moved.origin.x == 47_250_000
+    assert moved.origin.y == 15_500_000

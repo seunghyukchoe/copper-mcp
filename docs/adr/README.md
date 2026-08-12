@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0094**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0095**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -170,6 +170,7 @@ never silently widens it.
 | [0091](0091-attaching-pad-zone-connect-overrides.md) | Accept the pad zone-connection overrides that attach, refuse the one that detaches | Accepted |
 | [0092](0092-net-tie-copper-as-netless-obstacle.md) | Net-tie copper is a netless obstacle, and the tie is never a connectivity claim | Accepted |
 | [0093](0093-actionable-off-grid-refusals.md) | An off-grid refusal carries the pad, the pitch and the exact miss | Accepted |
+| [0094](0094-root-board-properties-as-metadata.md) | A root board property is a text variable, accepted and counted rather than modelled | Accepted |
 
 Ninety-three numbers, eighty-eight records, no duplicates — and `scripts/check_adr_numbers.py`
 now proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and
@@ -265,3 +266,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0091: Accept the pad zone-connection overrides that attach, refuse the one that detaches](0091-attaching-pad-zone-connect-overrides.md)
 - [ADR-0092: Net-tie copper is a netless obstacle, and the tie is never a connectivity claim](0092-net-tie-copper-as-netless-obstacle.md)
 - [ADR-0093: An off-grid refusal carries the pad, the pitch and the exact miss](0093-actionable-off-grid-refusals.md)
+- [ADR-0094: A root board property is a text variable, accepted and counted rather than modelled](0094-root-board-properties-as-metadata.md)
