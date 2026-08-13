@@ -393,8 +393,15 @@ For a foreign net, a matching fresh island set replaces that zone's conservative
 selected layer; each island is then an exact polygon obstacle with the strictest governing
 zone/net clearance plus the candidate track half-width. When multiple zones share a net/layer, the
 strictest zone clearance is used because island records do not carry a zone identifier. A fill
-island without a matching Board IR zone, or with a different source revision, is refused before
-search.
+island without a matching Board IR zone, with a different source revision, with fewer than three
+vertices, or whose bounding box escapes the bounding box of a backing zone of the same net and
+layer, is refused before search. The last of those is the gate ADR-0070 added to the ordered-layer
+adapter, applied here by [ADR-0101](../adr/0101-fill-currency-is-not-in-the-document.md) so both
+routers refuse the same evidence. It is a consistency cross-check, not the soundness proof: the
+shrink is sound because `run_zone_fill_authority` returns a **board-complete** island set that
+KiCad has just recomputed, and containment cannot detect a caller that omits an island. That is
+also why the single-layer router still performs no shape validation of evidence supplied at its
+typed in-process seam, where the layered adapter does — recorded as `R-147`, not closed.
 
 Once freshness-bound, the pour is KiCad's own authority on where that copper is, so contact testing
 uses the polygon itself with exact integer geometry. Pad and track cores stay under-approximating;
