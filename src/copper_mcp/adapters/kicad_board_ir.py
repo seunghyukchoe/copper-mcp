@@ -316,19 +316,113 @@ _FOOTPRINT_METADATA_HEADS = frozenset(
 # docs/research/kicad-aperture-pads-and-net-ties-v1.md.
 _APERTURE_PAD_LAYERS = frozenset({"B.Mask", "B.Paste", "F.Mask", "F.Paste"})
 
-# Pad fields that change the pad's own copper, its clearance, or its thermal-relief geometry.
-# Each one would make Board IR describe copper it cannot derive, so each refuses by name.
+# Every pad field KiCad's own `parsePAD` accepts that Board IR does not model, so that a pad
+# refusal names the field it refused instead of saying that *some* field was unsupported.
+#
+# ADR-0091 made seven of these reachable by running this loop ahead of the pad allowlist, and left
+# the other nineteen behind the allowlist's field-less sentence -- which is the defect issue #152
+# reported again, one head further along.  The table is now the whole top-level switch of
+# `PCB_IO_KICAD_SEXPR_PARSER::parsePAD` (`pcb_io_kicad_sexpr_parser.cpp:6397-7114`, 39 heads on
+# KiCad master) minus the thirteen this adapter models and minus `property`, which ADR-0099
+# decides on a closed value table of its own.  `offset` is the one entry KiCad master's pad
+# grammar no longer has -- modern KiCad parses `(offset …)` inside `(drill …)` -- and it is kept
+# because ADR-0091 pinned its sentence and an older file can still carry it.
+#
+# **Adding a head here changes a message and never a verdict.**  Every one of these already
+# refused through `_reject_unknown_children`; the loop only reaches them earlier and names them.
+# That is why this table needs no direction-of-error argument, and why no board's conversion
+# outcome moves with it.  A head absent from the table is one KiCad cannot write: it still
+# refuses, unnamed, through the allowlist, and no board byte is ever interpolated into a message.
+#
 # `zone_connect` deliberately is *not* in this tuple; see ADR-0091 and
 # `_require_attaching_pad_zone_connection`.
 _UNSUPPORTED_PAD_FIELDS = (
+    "back_post_machining",
+    "backdrill",
+    "chamfer",
+    "chamfer_ratio",
     "clearance",
+    "die_delay",
+    "die_length",
+    "front_post_machining",
+    "keep_end_layers",
     "offset",
     "options",
+    "padstack",
     "primitives",
+    "rect_delta",
+    "sim_electrical_type",
+    "solder_mask_margin",
+    "solder_paste_margin",
+    "solder_paste_margin_ratio",
+    "teardrops",
+    "tenting",
+    "tertiary_drill",
     "thermal_bridge_angle",
     "thermal_bridge_width",
     "thermal_gap",
+    "thermal_width",
+    "zone_layer_connections",
 )
+
+# KiCad's `PAD_PROP` fabrication property, written as `(property <bare token>)` by
+# `PCB_IO_KICAD_SEXPR::format( const PAD* )` (`pcb_io_kicad_sexpr.cpp:1886-1901, 2015-2016`) and
+# read by `parsePAD`'s `T_property` arm.  The two sets below partition the eight tokens the writer
+# can emit; `none` is in neither, because the writer emits the token only for a non-`NONE` value
+# and `(property none)` is a form KiCad's reader accepts but its writer cannot produce.
+#
+# Not one of the eight changes a pad's copper, its hole, its layer span, its clearance or its
+# connectivity.  A complete sweep of `PAD_PROP` over KiCad master -- every enumerator literal and
+# every `GetProperty()` call site, swept in both directions so a site testing `== NONE` is not
+# invisible -- finds fabrication-file attributes (Gerber apertures, drill files), padstack
+# advisories, a footprint type hint, board statistics, the 3D exporter and the property manager.
+# `CASTELLATED` is the single exception and it is exactly the exception this project must refuse:
+# `PNS_KICAD_IFACE::syncWorld` turns a castellated pad's hole into `AddEdgeExclusion`
+# (`pns_kicad_iface.cpp:2366-2371`), and `DRC_TEST_PROVIDER_EDGE_CLEARANCE` exempts the pad from
+# edge clearance (`drc_test_provider_edge_clearance.cpp:395-396, 434-438`).  Board IR's outline
+# UNDER-approximates, and discarding a region KiCad's own router excludes would make CopperMCP
+# offer routing space the board does not have -- the forbidden direction.  See ADR-0099 and
+# docs/research/kicad-pad-fabrication-property-v1.md.
+_ACCEPTED_PAD_PROPERTIES = frozenset(
+    {
+        "pad_prop_bga",
+        "pad_prop_fiducial_glob",
+        "pad_prop_fiducial_loc",
+        "pad_prop_heatsink",
+        "pad_prop_mechanical",
+        "pad_prop_pressfit",
+        "pad_prop_testpoint",
+    }
+)
+# The closed pad allowlist, hoisted out of the conversion loop so that the property it and
+# `_UNSUPPORTED_PAD_FIELDS` hold jointly -- together they cover every head KiCad's `parsePAD`
+# accepts -- is a testable statement rather than two lists a reader has to diff by eye.  `layer` is
+# the one entry outside that grammar: KiCad master writes `(layers …)`, and the singular is kept
+# for older files.
+_SUPPORTED_PAD_FIELDS = frozenset(
+    {
+        "at",
+        "drill",
+        "layer",
+        "layers",
+        "locked",
+        "net",
+        "pinfunction",
+        "pintype",
+        "property",
+        "remove_unused_layers",
+        "roundrect_rratio",
+        "size",
+        "tstamp",
+        "uuid",
+        "zone_connect",
+    }
+)
+
+#: The one writable token that is refused, and the literal the refusal names it by.  The message
+#: emits *this* constant after an equality test, never the source atom, so a board cannot steer one
+#: byte into a diagnostic -- SEC-133 and SEC-136, same mechanism.
+_REFUSED_PAD_PROPERTY = "pad_prop_castellated"
 
 # KiCad's `ZONE_CONNECTION` enum as a pad writes it: 0 NONE, 1 THERMAL, 2 FULL, 3 THT_THERMAL.
 # `INHERITED` (-1) is never written -- an absent token *is* inheritance. 1, 2 and 3 all attach the
@@ -427,6 +521,7 @@ class _Converter:
         # reason ``root_group_count`` is: the conversion discards a distinction the source made,
         # and a count is the only way to say so without a diagnostic that would refuse the board.
         self.edge_connector_pad_count = 0
+        self.unmodelled_pad_property_count = 0
         # Root ``(property ...)`` expressions accepted as board metadata and not modelled, on the
         # same measured-and-reported footing as the group count above.
         self.root_board_property_count = 0
@@ -1380,6 +1475,106 @@ class _Converter:
                 object_kind="pad",
             )
 
+    def _require_supported_pad_property(self, pad: SExpr, locator: str) -> bool:
+        """Accept a pad fabrication property only in the closed shape and value table below.
+
+        `(property <token>)` is KiCad's `PAD_PROP`: a fabrication-file annotation on one pad. The
+        accepted subset is a table, not a sentence, because ADR-0092's prose subset admitted two
+        forms it did not mean:
+
+        - exactly one positional atom, and
+        - that atom is **bare**, because `format( const PAD* )` prints `(property %s)` from a
+          `const char*` table and can emit nothing quoted, and
+        - no child expression, and
+        - the atom is in `_ACCEPTED_PAD_PROPERTIES`.
+
+        Everything else refuses, including three forms KiCad's own reader tolerates. Its
+        `T_property` arm loops `while( token != T_RIGHT )` with the `Expecting(...)` compiled out,
+        so it silently accepts `(property)`, accepts an unknown token, and accepts several tokens
+        with the *last* one winning. That last one matters here rather than being pedantry: a
+        `(property pad_prop_heatsink pad_prop_castellated)` resolves in KiCad to the one value this
+        adapter must not discard, so admitting multi-atom forms would have been a way to smuggle a
+        castellated pad past an equality test on the first atom.
+
+        **What acceptance discards, and why the discard is safe.** Nothing here is modelled: no
+        `Pad` field, no `canonical._pad()` field, no schema bump. The seven accepted tokens reach
+        Gerber aperture attributes, drill-file attributes, KiCad's padstack advisories, the
+        footprint type hint `FOOTPRINT::GetLikelyAttribute`, board statistics and the property
+        manager -- and not one of them reaches a pad's copper, hole, layer span, clearance or
+        connectivity. Board IR emits no Gerber, no drill file and no position file, and ADR-0004
+        delegates DRC to KiCad, which runs over the original board bytes where the token survives.
+
+        Two consequences are worth naming rather than leaving implied, because both are constraints
+        and a reading of "fabrication annotations are inert" has to survive them:
+
+        - `HEATSINK` makes `DRC_TEST_PROVIDER_COURTYARD_CLEARANCE` skip a holed pad's
+          PTH/NPTH-in-courtyard test (`drc_test_provider_courtyard_clearance.cpp:324-325`). That is
+          a DRC verdict, produced by KiCad from the unmodified file, and courtyards convert here as
+          OVER-approximating obstacles either way, so nothing this adapter claims moves.
+        - The property is a *named* term in KiCad's rule language -- `A.Fabrication_Property`, and
+          KiCad's own rule help ships `(constraint zone_connection solid)` conditioned on
+          `'Heatsink pad'`. This is D-184's custom-rule problem again and it takes D-184's answer:
+          `.kicad_dru` has never been parsed here (ADR-0005), no expression is evaluated, and the
+          one surface that honours a custom rule hands the original bytes to KiCad itself.
+
+        `CASTELLATED` is refused, and it is refused on geometry rather than on caution. See the
+        `_REFUSED_PAD_PROPERTY` comment, ADR-0099 and
+        docs/research/kicad-pad-fabrication-property-v1.md.
+
+        Returns whether an accepted property was present, so the caller can count it *after* the
+        aperture skip while this check still runs before it. Validating and counting at one point
+        would either let a stencil opening smuggle an unvalidated token through or make
+        `ConversionResult.unmodelled_pad_property_count` report a pad that never converted.
+        """
+
+        declarations = children(pad, "property")
+        if not declarations:
+            return False
+        if len(declarations) > 1:
+            self.fail(
+                "unsupported.construct",
+                "pad declares more than one fabrication property",
+                locator,
+                object_kind="pad",
+            )
+        declaration = declarations[0]
+        # Shape before value, and the child test before `_values`: `atoms()` raises on a nested
+        # expression with a byte locator, which would refuse the board without saying which pad.
+        payload = declaration.items[1:]
+        if len(payload) != 1:
+            self.fail(
+                "unsupported.construct",
+                "pad fabrication property is not a single bare token",
+                locator,
+                object_kind="pad",
+            )
+        value = payload[0]
+        if not isinstance(value, str) or is_quoted_atom(value):
+            self.fail(
+                "unsupported.construct",
+                "pad fabrication property is not a single bare token",
+                locator,
+                object_kind="pad",
+            )
+        if value == _REFUSED_PAD_PROPERTY:
+            self.fail(
+                "unsupported.construct",
+                (
+                    f"pad fabrication property {_REFUSED_PAD_PROPERTY!r} excludes board edge the "
+                    "outline does not and is unsupported"
+                ),
+                locator,
+                object_kind="pad",
+            )
+        if value not in _ACCEPTED_PAD_PROPERTIES:
+            self.fail(
+                "unsupported.construct",
+                "pad fabrication property is unsupported",
+                locator,
+                object_kind="pad",
+            )
+        return True
+
     def _quarter_turn(self, rotation_udeg: int, locator: str) -> int:
         quarter = 90_000_000
         if rotation_udeg % quarter:
@@ -2050,24 +2245,7 @@ class _Converter:
                         )
                 self._reject_unknown_children(
                     pad,
-                    frozenset(
-                        {
-                            "at",
-                            "drill",
-                            "layer",
-                            "layers",
-                            "locked",
-                            "net",
-                            "pinfunction",
-                            "pintype",
-                            "remove_unused_layers",
-                            "roundrect_rratio",
-                            "size",
-                            "tstamp",
-                            "uuid",
-                            "zone_connect",
-                        }
-                    ),
+                    _SUPPORTED_PAD_FIELDS,
                     locator,
                 )
                 self._validate_direct_atoms(
@@ -2144,6 +2322,12 @@ class _Converter:
                 # The value is inert on an aperture, which has no copper for a pour to reach --
                 # but skipping a pad must not become a way to smuggle an unvalidated token in.
                 self._require_attaching_pad_zone_connection(pad, locator)
+                # Validated before the aperture skip for the same reason `zone_connect` is: the
+                # head is on the pad allowlist now, so a skipped aperture pad would otherwise
+                # carry an unvalidated -- possibly castellated -- token past every check.  It is
+                # *counted* after the skip, below, which is why validation and counting are two
+                # steps rather than one.
+                has_fabrication_property = self._require_supported_pad_property(pad, locator)
                 # A pad with no copper is a stencil aperture, not copper the router may attach to
                 # or must avoid. It is skipped only once every condition in `_is_aperture_pad`
                 # holds; anything else with no copper layer refuses there. The skip sits after the
@@ -2156,6 +2340,17 @@ class _Converter:
                 # was never converted.
                 if raw_kind == "connect":
                     self.edge_connector_pad_count += 1
+                # Counted, not dropped in silence: ADR-0096 counted the discarded `connect` token
+                # and ADR-0094 the discarded root property, and a fabrication annotation is the
+                # same kind of loss -- the value is validated and then thrown away, so a caller
+                # reading a `Pad` cannot tell the designer marked it a heatsink.  Counted here, at
+                # the same point and for the same reason as the line above: after the aperture
+                # skip and after every refusal, so it reports copper pads this board actually
+                # carries and never a pad that was skipped or refused.  R-141 applies to it too --
+                # the count is in-process and reaches no MCP contract, so from a client the
+                # discard is still silent.
+                if has_fabrication_property:
+                    self.unmodelled_pad_property_count += 1
                 pad_at = self._values(pad, "at", locator, minimum=2, maximum=3)
                 local = PointNM(
                     self._mm(pad_at[0], f"{locator}.at.x"),
@@ -3273,6 +3468,7 @@ class _Converter:
             unmodelled_group_count=self.root_group_count,
             edge_connector_pad_count=self.edge_connector_pad_count,
             unmodelled_board_property_count=self.root_board_property_count,
+            unmodelled_pad_property_count=self.unmodelled_pad_property_count,
         )
 
 

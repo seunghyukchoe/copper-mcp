@@ -123,6 +123,18 @@ When adding a document, add it to the list below in the same sentence form — *
   defect nor an adapter bug. It claims nothing about arcs or curved chains on either layer, about
   the `pth_inside_courtyard` rule KiCad also reports on those fixtures, about non-zero configured
   courtyard clearance, or about any board being DRC-clean.
+- [KiCad pad fabrication property](./kicad-pad-fabrication-property-v1.md) establishes what a pad's
+  `(property <token>)` does, grounding ADR-0099. It pins the eight tokens KiCad's writer can emit
+  and the single bare-token shape it emits them in, records that KiCad's *reader* is looser in three
+  ways the writer never produces — an empty property, a silently skipped unknown token, and a
+  multi-token form in which the **last** token wins — and sweeps every consumer in both directions,
+  enumerator literals and the bare accessor alike. Its central finding is that exactly one value,
+  `pad_prop_castellated`, reaches routable space: KiCad's own router adds a castellated pad's hole
+  to the world as an edge exclusion, and `Edge.Cuts` does not carry it. It also records the
+  rule-language route — the value is nameable as `A.Fabrication_Property` in a `.kicad_dru`, where
+  KiCad's shipped examples use it to set a `zone_connection`. It claims nothing about what the
+  exclusion region actually is, nothing about round trips through non-KiCad tools, and nothing about
+  which KiCad release added `pad_prop_pressfit`.
 - [Source-to-board parity with `kicad-cli` 10.0.5](./source-to-board-parity-v1.md) corrects the
   recorded assumption that a board-side parity verdict needs a project context — it does not, for
   the CLI — and then documents the four distinct ways the resulting check yields a *silent* false

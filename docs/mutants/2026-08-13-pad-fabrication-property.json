@@ -1,0 +1,206 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "PP01-castellated-admitted",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        \"pad_prop_bga\",\n        \"pad_prop_fiducial_glob\",",
+      "replacement": "        \"pad_prop_bga\",\n        \"pad_prop_castellated\",\n        \"pad_prop_fiducial_glob\",",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_the_pad_property_constants_partition_what_kicad_can_write"
+      ]
+    },
+    {
+      "id": "PP02-refused-sentinel-moved",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "_REFUSED_PAD_PROPERTY = \"pad_prop_castellated\"",
+      "replacement": "_REFUSED_PAD_PROPERTY = \"pad_prop_mechanical\"",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_the_pad_property_constants_partition_what_kicad_can_write",
+        "tests/test_kicad_board_ir.py::test_a_castellated_pad_property_is_refused_and_named"
+      ]
+    },
+    {
+      "id": "PP03-castellated-branch-deleted",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        if value == _REFUSED_PAD_PROPERTY:\n            self.fail(\n                \"unsupported.construct\",\n                (\n                    f\"pad fabrication property {_REFUSED_PAD_PROPERTY!r} excludes board edge the \"\n                    \"outline does not and is unsupported\"\n                ),\n                locator,\n                object_kind=\"pad\",\n            )\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_castellated_pad_property_is_refused_and_named"
+      ]
+    },
+    {
+      "id": "PP04-domain-check-deleted",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        if value not in _ACCEPTED_PAD_PROPERTIES:\n            self.fail(\n                \"unsupported.construct\",\n                \"pad fabrication property is unsupported\",\n                locator,\n                object_kind=\"pad\",\n            )",
+      "replacement": "        return True",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_pad_property_outside_the_writer_shape_is_refused"
+      ]
+    },
+    {
+      "id": "PP05-none-admitted",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        \"pad_prop_testpoint\",\n    }\n)",
+      "replacement": "        \"pad_prop_testpoint\",\n        \"none\",\n    }\n)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_the_pad_property_constants_partition_what_kicad_can_write",
+        "tests/test_kicad_board_ir.py::test_a_pad_property_outside_the_writer_shape_is_refused"
+      ]
+    },
+    {
+      "id": "PP06-arity-bound-removed",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        payload = declaration.items[1:]\n        if len(payload) != 1:",
+      "replacement": "        payload = declaration.items[1:]\n        if not payload:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_pad_property_outside_the_writer_shape_is_refused"
+      ]
+    },
+    {
+      "id": "PP07-first-atom-wins",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        value = payload[0]\n        if not isinstance(value, str) or is_quoted_atom(value):",
+      "replacement": "        value = payload[0]\n        if not isinstance(value, str):",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_pad_property_outside_the_writer_shape_is_refused"
+      ]
+    },
+    {
+      "id": "PP08-duplicate-property-allowed",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        if len(declarations) > 1:\n            self.fail(\n                \"unsupported.construct\",\n                \"pad declares more than one fabrication property\",\n                locator,\n                object_kind=\"pad\",\n            )\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_two_pad_properties_are_refused"
+      ]
+    },
+    {
+      "id": "PP09-check-never-called",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                has_fabrication_property = self._require_supported_pad_property(pad, locator)",
+      "replacement": "                has_fabrication_property = False",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_castellated_pad_property_is_refused_and_named",
+        "tests/test_kicad_board_ir.py::test_a_refused_pad_property_never_echoes_the_token_it_refused"
+      ]
+    },
+    {
+      "id": "PP10-check-after-the-aperture-skip",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                has_fabrication_property = self._require_supported_pad_property(pad, locator)\n                # A pad with no copper is a stencil aperture, not copper the router may attach to\n                # or must avoid. It is skipped only once every condition in `_is_aperture_pad`\n                # holds; anything else with no copper layer refuses there. The skip sits after the\n                # structural checks above, so a malformed aperture is still a typed refusal.\n                if self._is_aperture_pad(pad, number, raw_kind, locator):\n                    continue\n",
+      "replacement": "                if self._is_aperture_pad(pad, number, raw_kind, locator):\n                    continue\n                has_fabrication_property = self._require_supported_pad_property(pad, locator)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_skipped_aperture_pad_cannot_smuggle_a_castellated_property"
+      ]
+    },
+    {
+      "id": "PP11-message-echoes-the-board",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                \"pad fabrication property is unsupported\",\n                locator,\n                object_kind=\"pad\",",
+      "replacement": "                f\"pad fabrication property {value} is unsupported\",\n                locator,\n                object_kind=\"pad\",",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_refused_pad_property_never_echoes_the_token_it_refused"
+      ]
+    },
+    {
+      "id": "PP12-allowlist-closed-against-property",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        \"pintype\",\n        \"property\",\n        \"remove_unused_layers\",",
+      "replacement": "        \"pintype\",\n        \"remove_unused_layers\",",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_an_accepted_pad_property_converts_to_an_identical_board",
+        "tests/test_kicad_board_ir.py::test_the_pad_field_tables_cover_kicads_whole_pad_grammar"
+      ]
+    },
+    {
+      "id": "PP13-named-refusal-loop-deleted",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                for unsupported_head in _UNSUPPORTED_PAD_FIELDS:\n                    if children(pad, unsupported_head):\n                        self.fail(\n                            \"unsupported.construct\",\n                            f\"pad field {unsupported_head!r} is unsupported\",\n                            locator,\n                            object_kind=\"pad\",\n                        )\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_every_unsupported_pad_field_refuses_by_name",
+        "tests/test_kicad_board_ir.py::test_the_other_overriding_pad_fields_still_refuse_and_name_themselves"
+      ]
+    },
+    {
+      "id": "PP14-named-table-loses-a-new-head",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "    \"zone_layer_connections\",\n)",
+      "replacement": ")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_every_unsupported_pad_field_refuses_by_name",
+        "tests/test_kicad_board_ir.py::test_the_pad_field_tables_cover_kicads_whole_pad_grammar"
+      ]
+    },
+    {
+      "id": "PP15-named-table-loses-an-adr-0091-head",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "    \"primitives\",\n    \"rect_delta\",",
+      "replacement": "    \"rect_delta\",",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_the_other_overriding_pad_fields_still_refuse_and_name_themselves",
+        "tests/test_kicad_board_ir.py::test_the_pad_field_tables_cover_kicads_whole_pad_grammar"
+      ]
+    },
+    {
+      "id": "PP16-named-table-collides-with-the-allowlist",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "    \"back_post_machining\",\n    \"backdrill\",",
+      "replacement": "    \"back_post_machining\",\n    \"backdrill\",\n    \"drill\",",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_the_pad_field_tables_cover_kicads_whole_pad_grammar"
+      ]
+    },
+    {
+      "id": "PP17-pad-allowlist-opened",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                self._reject_unknown_children(\n                    pad,\n                    _SUPPORTED_PAD_FIELDS,\n                    locator,\n                )",
+      "replacement": "                pass",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_an_unknown_pad_field_is_still_refused"
+      ]
+    },
+    {
+      "id": "PP18-counter-never-increments",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                if has_fabrication_property:\n                    self.unmodelled_pad_property_count += 1",
+      "replacement": "                if False:\n                    self.unmodelled_pad_property_count += 1",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_an_accepted_pad_property_is_counted_rather_than_dropped_in_silence"
+      ]
+    },
+    {
+      "id": "PP19-aperture-pad-counted",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                has_fabrication_property = self._require_supported_pad_property(pad, locator)",
+      "replacement": "                has_fabrication_property = self._require_supported_pad_property(pad, locator)\n                self.unmodelled_pad_property_count += int(has_fabrication_property)\n                has_fabrication_property = False",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_an_aperture_pads_property_is_validated_but_not_counted"
+      ]
+    }
+  ]
+}

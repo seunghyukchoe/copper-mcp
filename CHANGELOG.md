@@ -35,8 +35,51 @@ All notable changes are documented here. The format follows
   [D-185](docs/ledgers/decision-ledger.md), [R-140](docs/ledgers/risk-register.md),
   [SEC-136](docs/ledgers/security-ledger.md),
   [KiCad copper text envelope research](docs/research/kicad-copper-text-envelope-v1.md), #141)
+- **A pad refusal now names the field it refused, for every pad field KiCad can write.** 0.7.0 made
+  seven pad fields refuse under their own sentence and left nineteen others behind the generic
+  `expression contains an unsupported semantic field`, which names nothing an operator can act on —
+  and a real board promptly refused on one of the nineteen. The named table is now KiCad's whole
+  top-level pad grammar minus what the adapter models: `back_post_machining`, `backdrill`,
+  `chamfer`, `chamfer_ratio`, `die_delay`, `die_length`, `front_post_machining`, `keep_end_layers`,
+  `padstack`, `rect_delta`, `sim_electrical_type`, `solder_mask_margin`, `solder_paste_margin`,
+  `solder_paste_margin_ratio`, `teardrops`, `tenting`, `tertiary_drill`, `thermal_width` and
+  `zone_layer_connections` join the seven and each reports `pad field '<name>' is unsupported`.
+  **Callers matching the exact string `expression contains an unsupported semantic field` to detect
+  one of these nineteen stop matching**, exactly as 0.7.0 warned for the first seven; the code stays
+  `unsupported.construct` and `object_kind` stays `pad`. **No board's outcome changes for any of the
+  nineteen** — every one already refused, only the sentence moved. The generic message survives for a
+  head KiCad itself cannot write, and a test now states that the named and supported tables jointly
+  cover `parsePAD`'s whole switch, so the next head cannot quietly fall back to it.
+  ([ADR-0099](docs/adr/0099-pad-fabrication-properties-and-named-pad-refusals.md),
+  [D-189](docs/ledgers/decision-ledger.md), [SEC-140](docs/ledgers/security-ledger.md), #152)
+
 ### Added
 
+- **A pad fabrication property now converts, for seven of the eight values KiCad can write.**
+  `(property pad_prop_bga | pad_prop_fiducial_glob | pad_prop_fiducial_loc | pad_prop_heatsink |
+  pad_prop_mechanical | pad_prop_pressfit | pad_prop_testpoint)` is accepted; the accepted subset is
+  a closed table and not a sentence — exactly one **bare** positional atom, no child expression, at
+  most one `property` per pad — so the three looser forms KiCad's own reader tolerates all refuse.
+  The multi-token form is refused for a reason rather than for tidiness: KiCad's reader loops and
+  lets the **last** token win, so `(property pad_prop_heatsink pad_prop_castellated)` resolves in
+  KiCad to the one value that must not be discarded. **`pad_prop_castellated` is refused, on
+  geometry:** KiCad's own router adds a castellated pad's hole to the world as an edge exclusion and
+  the edge-clearance test exempts the pad, neither region appears in `Edge.Cuts`, and Board IR's
+  outline under-approximates — accepting it would offer routing space the board does not have. The
+  seven are safe by a complete sweep of `PAD_PROP` over KiCad master, which finds only
+  fabrication-file attributes, DRC advisories, a footprint type hint, statistics, the 3D exporter
+  and the editor. Nothing is modelled: no `Pad` field, no schema version, no pinned identity moves.
+  The discarded token is disclosed as `ConversionResult.unmodelled_pad_property_count`, following
+  `edge_connector_pad_count`; like that one it is in-process and reaches no MCP contract. On the
+  real-board corpus this takes conversion from 12 of 18 saves to 13 of 18 — 12 of 17 to 13 of 17 by
+  distinct board content, two of the saves being byte-identical — measured before→after→before with
+  per-board digests. **The construct blocks two saves, not the one the issue records**; one
+  converts, and the other did **not** and instead advanced to `pad field 'options' is unsupported`,
+  which is reported as an advance, counted as nothing, and already filed as #153. ([ADR-0099](docs/adr/0099-pad-fabrication-properties-and-named-pad-refusals.md),
+  [D-189](docs/ledgers/decision-ledger.md), [R-144](docs/ledgers/risk-register.md),
+  [B-103](docs/ledgers/benchmark-ledger.md),
+  [KiCad pad fabrication property research](docs/research/kicad-pad-fabrication-property-v1.md),
+  #152)
 - **A `connect` pad — KiCad's edge-card connector finger — now converts, as an SMD pad.** It was
   the last construct blocking `phono-preamp/tier1-rev-a`, and it is deliberately not a one-line
   map entry: `PadKind` is published into every Board IR snapshot digest and enumerated as a closed
