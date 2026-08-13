@@ -87,6 +87,11 @@ contract.
 - [CopperMCP 0.7.0 migration](migrations/copper-mcp-0.7.0.md) — the `ROUTER_VERSION` bump that
   invalidates every stored candidate identity, two families of discriminated diagnostic codes, the
   raised parser and router defaults, and what does *not* require migration.
+- [CopperMCP 0.8.0 migration](migrations/copper-mcp-0.8.0.md) — the fill-vertex budget raised as a
+  denial-of-service posture decision with its price measured, three refusal messages that disappear
+  from the source entirely, nineteen pad fields that stop matching the generic sentence, courtyard
+  overlap now paired by drawn layer, the new `FILL_EVIDENCE_MISMATCH` code, and a published schema
+  widened in place under an unchanged version.
 - [Public media assets](assets/README.md) — project media, with provenance; not routing or
   benchmark evidence.
 
