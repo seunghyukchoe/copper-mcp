@@ -30,6 +30,15 @@ decision — this sentence is the correction the earlier note anticipated, and 0
 ADR-0097 went the same way: it was a live claim held by open PR #154 when ADR-0098 was allocated,
 so ADR-0098 stepped over it, and it has since landed as the courtyard-layer decision. Neither is a
 gap; both notes are corrections that came due exactly as written.
+**ADR-0099 is a live claim contested by two open branches at the time of writing, and this note is
+the acknowledgement the convention asks for.** This branch (issue #152, `D-189`/`R-144`) and PR #158
+(issue #153, `D-190`/`R-145`) both write `docs/adr/0099-*.md`. Neither stepped over the other
+because neither could see the other when its number was assigned — the pre-assignment happened
+off-branch. The tie-break is the ledger numbers, which do not collide and do order: `D-189` is lower
+than `D-190`, so this branch lands first and keeps 0099, and #158 renumbers to 0100. Whichever lands
+second resolves the textual conflict on the next-unused line above, which is exactly the safety net
+rule 1 describes. If this branch is abandoned instead, 0099 is spent and #158 should still take
+0100 rather than filling it.
 ADR-0089 was listed here until this line was corrected: it landed from its own branch as the
 region-scoped obstacle model and is not a gap. ADR-0092 was listed too, and has since landed from
 its own branch as the net-tie netless-obstacle model; this sentence is that correction, exactly as

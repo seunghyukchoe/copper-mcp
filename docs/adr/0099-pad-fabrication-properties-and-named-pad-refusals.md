@@ -27,6 +27,13 @@ was widen the named table: KiCad's `parsePAD` accepts 39 top-level heads, the ad
 thirteen and named seven, and the other **nineteen** kept emitting the field-less sentence. Issue
 #152 is one of those nineteen surfacing on a real board.
 
+**Every head count in this ADR is a `master` figure and is stated as one**, because it is not
+version-stable: shipping **KiCad 10.0.5 has 38**, not 39, the difference being exactly
+`sim_electrical_type`. Read against 10.0.5 the named table would be 25 rather than 26 and the
+newly-named count 18 rather than 19. Nothing behaves differently — a head the running KiCad cannot
+write simply never arrives — but a bare "39" would go stale at the next release, so the tree is
+named wherever the number is.
+
 So the first question was not "how should this construct convert" but "which field is it, and is
 this preemption again". The answers, measured on the corpus with a conversion-only probe:
 
@@ -111,14 +118,32 @@ consumer is a fabrication-file attribute, a DRC advisory, a footprint type hint,
 export or the editor. Board IR emits no Gerber, no drill file and no position file; ADR-0004
 delegates DRC to KiCad, which runs over the original bytes where the token survives.
 
-`CASTELLATED` is the exception, and it is exactly the exception this project forbids losing.
-`PNS_KICAD_IFACE::syncWorld` (`pns_kicad_iface.cpp:2366-2371`) adds a castellated pad's hole to
-KiCad's router world as an **`AddEdgeExclusion`** — a region routing may not enter — and
-`DRC_TEST_PROVIDER_EDGE_CLEARANCE` exempts the pad because it is meant to straddle the boundary.
-Neither region is in `Edge.Cuts`. Board IR's outline UNDER-approximates by convention; discarding a
-region KiCad's own router excludes would make CopperMCP offer routing space the board does not have,
-which is the forbidden direction. It is refused rather than approximated, because nothing here
-measured what the exclusion region actually is.
+`CASTELLATED` is the exception, and **the reason is not the one the first revision of this ADR
+gave.** That revision said KiCad's `AddEdgeExclusion` marks a region routing may not enter, so
+discarding the token would offer routing space the board lacks. That is backwards, adversarial
+review of PR #157 caught it, and it is corrected here rather than quietly reworded, because the
+error ran in the direction that flattered the conclusion.
+
+**What the exclusion actually does.** `Edge.Cuts` is itself the obstacle: `syncGraphicalItem`
+(`pns_kicad_iface.cpp:2044-2076`) syncs every `Edge_Cuts` shape as a `PNS::SOLID` across all copper
+layers with `SetRoutable( false )`. The castellated pad's hole is then registered as a
+**forgiveness** region — `ITEM::collideSimple` (`pns_item.cpp:226-252`) waives a collision with an
+`Edge_Cuts`-parented obstacle when the collision point falls inside one, via the point-in-shape scan
+at `pns_node.cpp:797-806`, and the DRC provider waives it twice more
+(`drc_test_provider_edge_clearance.cpp:209-215` for a track, `:434-438` for the pad), under a
+comment reading "Edge collisions are allowed inside the holes of castellated pads".
+
+So the token **grants** routing space near the edge. **Discarding it leaves CopperMCP stricter than
+KiCad — over-refusal, which is the allowed direction.** The direction-of-error invariant therefore
+does *not* require this refusal, and claiming it did was the error.
+
+**The refusal stands on a weaker and narrower argument, stated as the caution it is.** Fabrication
+routes the half-holes out of the physical board; `Edge.Cuts` keeps them. Board IR's outline
+therefore claims board area that will not exist once the panel is cut — and KiCad's DRC is *more
+permissive* exactly there, so ADR-0004's authoritative-DRC backstop is at its weakest precisely
+where Board IR would over-claim. That is a reason to be careful with a construct no corpus board
+carries, not a geometric necessity, and it is recorded as such so that a later change can overturn
+it on cost rather than having to overturn a false invariant claim first.
 
 Two consequences of the accept are named rather than left implied, because both are constraints and
 a reading of "fabrication annotations are inert" has to survive them:
@@ -180,9 +205,18 @@ this trap after using the argument anyway; this ADR states it up front instead.
   this repository wrote, so there is nothing a disclosure surface could reveal that the table does
   not already say. A root property's key and value are arbitrary strings, which is why that one had
   to be collected.
+- **The consumer sweep is narrower than "complete", and is now stated as what it is.** It covers
+  every `PAD_PROP` enumerator literal plus the accessor under the receiver names `pad` and `aPad`.
+  Review found a third spelling — `a->GetProperty()` at `drc_test_provider_library_parity.cpp:371`,
+  a DRC report comparing the pad against its library footprint. It is inert for Board IR, so the
+  accept survives; the completeness claim did not.
 - **No message echoes a board byte.** The one token a refusal names is emitted from the
   `_REFUSED_PAD_PROPERTY` constant after an equality test, exactly as SEC-136's copper-graphic table
   does. The standing regression is extended with a pad-property case.
+- **The refusal of `pad_prop_castellated` is a caution, not an invariant, and the record says so.**
+  Anyone reading this ADR to decide whether to accept the value should start from "it is sound and
+  deferred on cost", not from "the invariant forbids it". A first revision of this ADR said the
+  latter, in eight places including a user-facing refusal message, and every one is corrected.
 - **The acceptance is a standing risk, recorded as R-144.** It rests on a sweep of one upstream tree
   on one date. A future KiCad that gives any accepted value geometric meaning — most plausibly
   `PRESSFIT`, whose hole tolerance is the kind of thing a filler or router could one day read —
@@ -212,6 +246,12 @@ scene, render, job, manifest, export and attestation identities — a Board IR s
 a field nothing reads. `pad_prop_castellated` becomes acceptable in the same change, because a
 modelled exclusion region can be honoured rather than discarded.
 
-**Approximate a castellated pad's exclusion as its hole shape and accept it.** Rejected. It would
-put a guess about routable space into the under-approximating direction on the strength of one
-`Clone()` call, and no measurement here established what the region is.
+**Accept `pad_prop_castellated` and model its hole as an all-net obstacle.** **Deferred on cost, and
+explicitly not rejected on soundness** — the first revision of this ADR rejected it, and that
+rejection inherited the inverted mechanism above. An all-net obstacle over the hole is an
+*over-approximating* obstacle, which is the safe direction by this project's own convention, so the
+narrower accept is sound. What it costs is a `Pad`-adjacent obstacle surface and its identity
+cascade, spent on a construct **no board in the corpus carries** — so it would ship untested against
+real hardware, which is the same reason ADR-0091 gave for deferring `PadZoneConnection`. It becomes
+the obvious change the moment a real board carries one, and it does not need this ADR overturned
+first.

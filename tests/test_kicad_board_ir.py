@@ -3718,17 +3718,24 @@ def test_an_accepted_pad_property_converts_to_an_identical_board(token: str) -> 
     assert len(baseline.content.pads) == 2
 
 
-def test_an_accepted_pad_property_is_counted_rather_than_dropped_in_silence() -> None:
+@pytest.mark.parametrize("token", sorted(_ACCEPTED_PAD_PROPERTIES))
+def test_every_accepted_pad_property_is_counted_rather_than_dropped_in_silence(token: str) -> None:
     """The token is discarded, so it is disclosed as a count -- ADR-0096's pattern exactly.
 
     `ConversionResult.unmodelled_pad_property_count` is a count and not a diagnostic because every
     caller of `parse_kicad_bytes` reads a non-empty `diagnostics` tuple as a refusal, so a
     diagnostic would refuse the board it exists to admit.
+
+    **Parametrized over all seven for a reason found by adversarial review.** Every read of this
+    counter used `pad_prop_heatsink` and nothing else, so a reviewer's mutant returning
+    `value == "pad_prop_heatsink"` from the validator passed the whole suite: six of the seven
+    accepted tokens could be silently un-counted with no test noticing. One example of a counted
+    thing is not evidence that the counter counts the *class*.
     """
 
     baseline = parse_kicad_bytes(SUBSET_BOARD.read_bytes(), constraint_profile(assign_signal=True))
     one = parse_kicad_bytes(
-        _with_pad_property(b"pad_prop_heatsink"), constraint_profile(assign_signal=True)
+        _with_pad_property(token.encode()), constraint_profile(assign_signal=True)
     )
 
     assert baseline.unmodelled_pad_property_count == 0
@@ -3755,10 +3762,13 @@ def test_an_aperture_pads_property_is_validated_but_not_counted() -> None:
 def test_a_castellated_pad_property_is_refused_and_named() -> None:
     """The one writable token that must not convert, refused with the field named.
 
-    It is refused on geometry, not on caution. `PNS_KICAD_IFACE::syncWorld` turns a castellated
-    pad's hole into an `AddEdgeExclusion` in KiCad's own router, and the edge-clearance provider
-    exempts the pad. Board IR's outline UNDER-approximates; discarding a region KiCad excludes
-    would offer routing space the board does not have, which is the forbidden direction.
+    It is refused as a caution, **not** because the direction-of-error invariant demands it. KiCad's
+    `AddEdgeExclusion` is a forgiveness region -- a collision with the `Edge_Cuts` obstacle is
+    *waived* inside a castellated hole -- so the token grants routing space and discarding it leaves
+    this adapter stricter than KiCad, which is allowed. The refusal stands on a weaker footing:
+    fabrication routes the half-holes out of the board while `Edge.Cuts` keeps them, so the outline
+    claims board that will not exist, and KiCad's DRC waives that very region, so the
+    authoritative-DRC backstop is weakest exactly where the over-claim would be.
     """
 
     result = parse_kicad_bytes(
@@ -3769,8 +3779,8 @@ def test_a_castellated_pad_property_is_refused_and_named() -> None:
     diagnostic = result.diagnostics[0]
     assert diagnostic.code == "unsupported.construct"
     assert diagnostic.message == (
-        "pad fabrication property 'pad_prop_castellated' excludes board edge the outline does "
-        "not and is unsupported"
+        "pad fabrication property 'pad_prop_castellated' removes board area the outline still "
+        "claims and is unsupported"
     )
     assert diagnostic.object_kind == "pad"
 

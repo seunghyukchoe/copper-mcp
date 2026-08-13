@@ -376,13 +376,22 @@ _UNSUPPORTED_PAD_FIELDS = (
 # every `GetProperty()` call site, swept in both directions so a site testing `== NONE` is not
 # invisible -- finds fabrication-file attributes (Gerber apertures, drill files), padstack
 # advisories, a footprint type hint, board statistics, the 3D exporter and the property manager.
-# `CASTELLATED` is the single exception and it is exactly the exception this project must refuse:
-# `PNS_KICAD_IFACE::syncWorld` turns a castellated pad's hole into `AddEdgeExclusion`
-# (`pns_kicad_iface.cpp:2366-2371`), and `DRC_TEST_PROVIDER_EDGE_CLEARANCE` exempts the pad from
-# edge clearance (`drc_test_provider_edge_clearance.cpp:395-396, 434-438`).  Board IR's outline
-# UNDER-approximates, and discarding a region KiCad's own router excludes would make CopperMCP
-# offer routing space the board does not have -- the forbidden direction.  See ADR-0099 and
-# docs/research/kicad-pad-fabrication-property-v1.md.
+# `CASTELLATED` is the single exception, and the reason is **not** the one an earlier revision of
+# this comment gave.  `PNS_KICAD_IFACE::syncWorld` registers a castellated pad's hole with
+# `AddEdgeExclusion` (`pns_kicad_iface.cpp:2366-2371`), and that is a *forgiveness* region, not an
+# obstacle: `Edge.Cuts` itself syncs as a non-routable solid (`:2044-2076`), and
+# `ITEM::collideSimple` waives a collision with an `Edge_Cuts`-parented obstacle when the collision
+# point lands inside one of those shapes (`pns_item.cpp:226-252`, via the point-in-shape scan at
+# `pns_node.cpp:797-806`).  The DRC provider waives it twice over
+# (`drc_test_provider_edge_clearance.cpp:209-215` for a track, `:434-438` for the pad).  So the
+# token **grants** routing space near the edge, and discarding it leaves CopperMCP *stricter* than
+# KiCad -- over-refusal, the allowed direction.
+#
+# It is refused anyway, on a different and weaker argument, stated as the caution it is: fabrication
+# routes the half-holes out of the physical board and `Edge.Cuts` does not, so Board IR's outline
+# claims board area that will not exist -- and KiCad's DRC is *more permissive* exactly there, so
+# ADR-0004's authoritative-DRC backstop is at its weakest precisely where Board IR would over-claim.
+# See ADR-0099 and docs/research/kicad-pad-fabrication-property-v1.md.
 _ACCEPTED_PAD_PROPERTIES = frozenset(
     {
         "pad_prop_bga",
@@ -1517,8 +1526,14 @@ class _Converter:
           `.kicad_dru` has never been parsed here (ADR-0005), no expression is evaluated, and the
           one surface that honours a custom rule hands the original bytes to KiCad itself.
 
-        `CASTELLATED` is refused, and it is refused on geometry rather than on caution. See the
-        `_REFUSED_PAD_PROPERTY` comment, ADR-0099 and
+        `CASTELLATED` is refused as a **caution and not as a geometry requirement**, and the
+        distinction is recorded because an earlier revision of this docstring had the mechanism
+        backwards. KiCad's edge exclusion forgives collisions rather than forbidding them, so
+        discarding the token leaves this adapter stricter than KiCad, which is the allowed
+        direction. What justifies the refusal is that fabrication removes the half-holes from the
+        physical board while `Edge.Cuts` keeps them, so the outline claims board that will not
+        exist, and KiCad's DRC waives exactly that region -- the backstop is weakest where the
+        over-claim is. See the `_REFUSED_PAD_PROPERTY` comment, ADR-0099 and
         docs/research/kicad-pad-fabrication-property-v1.md.
 
         Returns whether an accepted property was present, so the caller can count it *after* the
@@ -1560,8 +1575,8 @@ class _Converter:
             self.fail(
                 "unsupported.construct",
                 (
-                    f"pad fabrication property {_REFUSED_PAD_PROPERTY!r} excludes board edge the "
-                    "outline does not and is unsupported"
+                    f"pad fabrication property {_REFUSED_PAD_PROPERTY!r} removes board area the "
+                    "outline still claims and is unsupported"
                 ),
                 locator,
                 object_kind="pad",

@@ -228,7 +228,12 @@ When adding a document, add it to the list below in the same sentence form — *
   refuse the source-preserving render; route preview routed 0 of 345 nets. It claims nothing
   electrical, thermal or manufacturable, does not claim an apply would have succeeded had the gate
   passed, is not a whole-board routing completion result, and does not treat one designer's
-  project family as a sample of KiCad boards generally.
+  project family as a sample of KiCad boards generally. **Its conversion figure is superseded and
+  its note is not edited**: that note and its ledger row are point-in-time records of 2026-08-07,
+  and the corpus has both been deduplicated and grown since. For the current figure read the
+  `B-099` survey close-out replay in the
+  [benchmark ledger](../ledgers/benchmark-ledger.md) — 12 of 18 saves, 17 of them distinct — and
+  [D-191](../ledgers/decision-ledger.md) for why no count from this live tree stays true for long.
 
 ## Terms used in this review
 

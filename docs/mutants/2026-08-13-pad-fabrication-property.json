@@ -29,7 +29,7 @@
     {
       "id": "PP03-castellated-branch-deleted",
       "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "        if value == _REFUSED_PAD_PROPERTY:\n            self.fail(\n                \"unsupported.construct\",\n                (\n                    f\"pad fabrication property {_REFUSED_PAD_PROPERTY!r} excludes board edge the \"\n                    \"outline does not and is unsupported\"\n                ),\n                locator,\n                object_kind=\"pad\",\n            )\n",
+      "anchor": "        if value == _REFUSED_PAD_PROPERTY:\n            self.fail(\n                \"unsupported.construct\",\n                (\n                    f\"pad fabrication property {_REFUSED_PAD_PROPERTY!r} removes board area the \"\n                    \"outline still claims and is unsupported\"\n                ),\n                locator,\n                object_kind=\"pad\",\n            )\n",
       "replacement": "",
       "expectation": "killed",
       "killing_tests": [
@@ -189,7 +189,7 @@
       "replacement": "                if False:\n                    self.unmodelled_pad_property_count += 1",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_kicad_board_ir.py::test_an_accepted_pad_property_is_counted_rather_than_dropped_in_silence"
+        "tests/test_kicad_board_ir.py::test_every_accepted_pad_property_is_counted_rather_than_dropped_in_silence"
       ]
     },
     {
@@ -200,6 +200,16 @@
       "expectation": "killed",
       "killing_tests": [
         "tests/test_kicad_board_ir.py::test_an_aperture_pads_property_is_validated_but_not_counted"
+      ]
+    },
+    {
+      "id": "RV03-counter-narrowed-to-one-token",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                object_kind=\"pad\",\n            )\n        return True\n",
+      "replacement": "                object_kind=\"pad\",\n            )\n        return value == \"pad_prop_heatsink\"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_every_accepted_pad_property_is_counted_rather_than_dropped_in_silence"
       ]
     }
   ]
