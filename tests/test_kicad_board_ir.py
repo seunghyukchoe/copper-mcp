@@ -16,10 +16,14 @@ from hypothesis import strategies as st
 
 from copper_mcp.adapters import KiCadConstraintProfile, net_id_for_name, parse_kicad_bytes
 from copper_mcp.adapters.kicad_board_ir import (
+    _ACCEPTED_PAD_PROPERTIES,
     _ATTACHING_PAD_ZONE_CONNECTIONS,
     _DETACHING_PAD_ZONE_CONNECTION,
     _PAD_KIND_BY_TOKEN,
+    _REFUSED_PAD_PROPERTY,
     _ROOT_GROUP_HEADS,
+    _SUPPORTED_PAD_FIELDS,
+    _UNSUPPORTED_PAD_FIELDS,
 )
 from copper_mcp.adapters.kicad_placement_patch import (
     KiCadPlacementPatchError,
@@ -3553,6 +3557,335 @@ def test_an_unknown_pad_field_is_still_refused() -> None:
     assert result.snapshot is None
     assert result.diagnostics[0].code == "unsupported.construct"
     assert result.diagnostics[0].message == "expression contains an unsupported semantic field"
+
+
+@pytest.mark.parametrize("head", _UNSUPPORTED_PAD_FIELDS)
+def test_every_unsupported_pad_field_refuses_by_name(head: str) -> None:
+    """Every sentence the named-refusal loop can emit is reachable, and is pinned here.
+
+    ADR-0091 made seven of these reachable and pinned seven. Nineteen more heads stayed behind the
+    allowlist's field-less sentence, which is exactly the defect issue #152 reported one head
+    further along -- so the pin is now over the whole table, and a head added to it without a row
+    here is a message no test has ever seen the adapter emit.
+
+    The payload is deliberately `0` for every head rather than something format-plausible: the
+    check is on the head alone, and using a realistic value would let a mutant that reads the
+    payload pass. The seven ADR-0091 named still carry realistic values in the test above, which
+    is where the format documentation belongs.
+    """
+
+    result = parse_kicad_bytes(
+        _with_pad_zone_connect(b"(" + head.encode() + b" 0)"),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.code == "unsupported.construct"
+    assert diagnostic.message == f"pad field {head!r} is unsupported"
+    assert diagnostic.object_kind == "pad"
+
+
+def test_the_pad_field_tables_cover_kicads_whole_pad_grammar() -> None:
+    """Named-refused and supported must jointly cover every head `parsePAD` accepts.
+
+    This is the property that makes issue #152 closable as a class rather than as one head. The
+    generic "expression contains an unsupported semantic field" is not wrong -- it is unactionable
+    -- and it stays reachable only for a head KiCad itself cannot write. Dropping a head from the
+    named table is otherwise invisible: the board still refuses, just without saying what for.
+
+    The right-hand side is KiCad master's `parsePAD` top-level switch, transcribed once. It is a
+    literal on purpose: reading it out of the adapter's own constants would make the assertion
+    compare the code against itself.
+    """
+
+    kicad_pad_heads = frozenset(
+        {
+            "at",
+            "back_post_machining",
+            "backdrill",
+            "chamfer",
+            "chamfer_ratio",
+            "clearance",
+            "die_delay",
+            "die_length",
+            "drill",
+            "front_post_machining",
+            "keep_end_layers",
+            "layers",
+            "locked",
+            "net",
+            "options",
+            "padstack",
+            "pinfunction",
+            "pintype",
+            "primitives",
+            "property",
+            "rect_delta",
+            "remove_unused_layers",
+            "roundrect_rratio",
+            "sim_electrical_type",
+            "size",
+            "solder_mask_margin",
+            "solder_paste_margin",
+            "solder_paste_margin_ratio",
+            "teardrops",
+            "tenting",
+            "tertiary_drill",
+            "thermal_bridge_angle",
+            "thermal_bridge_width",
+            "thermal_gap",
+            "thermal_width",
+            "tstamp",
+            "uuid",
+            "zone_connect",
+            "zone_layer_connections",
+        }
+    )
+    named = frozenset(_UNSUPPORTED_PAD_FIELDS)
+
+    assert len(_UNSUPPORTED_PAD_FIELDS) == len(named), "the named table repeats a head"
+    assert not named & _SUPPORTED_PAD_FIELDS, "a head is both supported and refused by name"
+    assert kicad_pad_heads <= named | _SUPPORTED_PAD_FIELDS
+    # The two entries outside KiCad master's pad grammar, both deliberate: `layer` is the legacy
+    # singular an older file can still carry, and `offset` moved inside `(drill …)` but keeps the
+    # sentence ADR-0091 pinned.
+    assert (named | _SUPPORTED_PAD_FIELDS) - kicad_pad_heads == {"layer", "offset"}
+
+
+def _with_pad_property(token: bytes) -> bytes:
+    """Put one fabrication property on the fixture's GND through-hole pad."""
+
+    return _insert_before(
+        SUBSET_BOARD.read_bytes(), b"      (drill 1)", b"      (property " + token + b")\n"
+    )
+
+
+def test_the_pad_property_constants_partition_what_kicad_can_write() -> None:
+    """Accepted and refused must partition the eight tokens the writer emits, exactly.
+
+    The behavioural tests below cannot see the mutation that matters most -- moving
+    `pad_prop_castellated` into the accepted set changes nothing observable, because it is refused
+    by its own named branch either way. Stating the partition makes that visible, and it states a
+    property rather than pinning a literal.
+
+    `none` is in neither set on purpose. `parsePAD` accepts `(property none)`, but
+    `format( const PAD* )` emits the token only for a non-`NONE` value, so it is a form KiCad's
+    reader tolerates and its writer cannot produce -- the same asymmetry ADR-0091 recorded for
+    `zone_connect`'s unwritten `-1`, resolved the same way.
+    """
+
+    writable = frozenset(
+        {
+            "pad_prop_bga",
+            "pad_prop_castellated",
+            "pad_prop_fiducial_glob",
+            "pad_prop_fiducial_loc",
+            "pad_prop_heatsink",
+            "pad_prop_mechanical",
+            "pad_prop_pressfit",
+            "pad_prop_testpoint",
+        }
+    )
+
+    assert _REFUSED_PAD_PROPERTY not in _ACCEPTED_PAD_PROPERTIES
+    assert _ACCEPTED_PAD_PROPERTIES | {_REFUSED_PAD_PROPERTY} == writable
+    assert "none" not in _ACCEPTED_PAD_PROPERTIES
+
+
+@pytest.mark.parametrize("token", sorted(_ACCEPTED_PAD_PROPERTIES))
+def test_an_accepted_pad_property_converts_to_an_identical_board(token: str) -> None:
+    """Each accepted fabrication property converts, and converts to the very same content.
+
+    **This equality is not the safety argument and must not be read as one.** The converter reads
+    the token and propagates nothing, so the equality holds by construction for *any* accepted
+    value -- it would hold identically if `pad_prop_castellated` were admitted. Two earlier
+    with/without proofs in this repository failed for exactly that reason (D-178, D-184). What it
+    establishes is three things and no more: acceptance changes no modelled geometry, the schema is
+    untouched, and every pinned golden identity is frozen.
+
+    Soundness rests on the KiCad sweep in ADR-0099: none of the seven reaches a pad's copper, hole,
+    layer span, clearance or connectivity.
+    """
+
+    baseline = parse_success(SUBSET_BOARD.read_bytes(), constraint_profile(assign_signal=True))
+    accepted = parse_success(
+        _with_pad_property(token.encode()), constraint_profile(assign_signal=True)
+    )
+
+    assert replace(accepted.content, source=baseline.content.source) == baseline.content
+    # And the pads really are there: an equality between two empty tuples would pass as well.
+    assert len(baseline.content.pads) == 2
+
+
+@pytest.mark.parametrize("token", sorted(_ACCEPTED_PAD_PROPERTIES))
+def test_every_accepted_pad_property_is_counted_rather_than_dropped_in_silence(token: str) -> None:
+    """The token is discarded, so it is disclosed as a count -- ADR-0096's pattern exactly.
+
+    `ConversionResult.unmodelled_pad_property_count` is a count and not a diagnostic because every
+    caller of `parse_kicad_bytes` reads a non-empty `diagnostics` tuple as a refusal, so a
+    diagnostic would refuse the board it exists to admit.
+
+    **Parametrized over all seven for a reason found by adversarial review.** Every read of this
+    counter used `pad_prop_heatsink` and nothing else, so a reviewer's mutant returning
+    `value == "pad_prop_heatsink"` from the validator passed the whole suite: six of the seven
+    accepted tokens could be silently un-counted with no test noticing. One example of a counted
+    thing is not evidence that the counter counts the *class*.
+    """
+
+    baseline = parse_kicad_bytes(SUBSET_BOARD.read_bytes(), constraint_profile(assign_signal=True))
+    one = parse_kicad_bytes(
+        _with_pad_property(token.encode()), constraint_profile(assign_signal=True)
+    )
+
+    assert baseline.unmodelled_pad_property_count == 0
+    assert one.unmodelled_pad_property_count == 1
+
+
+def test_an_aperture_pads_property_is_validated_but_not_counted() -> None:
+    """Validation runs before the aperture skip; counting runs after it, and the two differ.
+
+    A stencil opening is not copper this board carries, so counting one would make the disclosure
+    claim a converted pad that does not exist. Collapsing the two steps into one would have to
+    break either this or `test_a_skipped_aperture_pad_cannot_smuggle_a_castellated_property`.
+    """
+
+    result = parse_kicad_bytes(
+        _with_pad(_aperture_pad(extra=b"      (property pad_prop_heatsink)\n")),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.diagnostics == ()
+    assert result.unmodelled_pad_property_count == 0
+
+
+def test_a_castellated_pad_property_is_refused_and_named() -> None:
+    """The one writable token that must not convert, refused with the field named.
+
+    It is refused as a caution, **not** because the direction-of-error invariant demands it. KiCad's
+    `AddEdgeExclusion` is a forgiveness region -- a collision with the `Edge_Cuts` obstacle is
+    *waived* inside a castellated hole -- so the token grants routing space and discarding it leaves
+    this adapter stricter than KiCad, which is allowed. The refusal stands on a weaker footing:
+    fabrication routes the half-holes out of the board while `Edge.Cuts` keeps them, so the outline
+    claims board that will not exist, and KiCad's DRC waives that very region, so the
+    authoritative-DRC backstop is weakest exactly where the over-claim would be.
+    """
+
+    result = parse_kicad_bytes(
+        _with_pad_property(b"pad_prop_castellated"), constraint_profile(assign_signal=True)
+    )
+
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.code == "unsupported.construct"
+    assert diagnostic.message == (
+        "pad fabrication property 'pad_prop_castellated' removes board area the outline still "
+        "claims and is unsupported"
+    )
+    assert diagnostic.object_kind == "pad"
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        pytest.param(b"(property)", id="no-token"),
+        pytest.param(b"(property none)", id="unwritable-none"),
+        pytest.param(b'(property "pad_prop_heatsink")', id="quoted-token"),
+        pytest.param(b"(property pad_prop_heatsink pad_prop_castellated)", id="two-tokens"),
+        pytest.param(b"(property pad_prop_bga (at 0 0))", id="child-expression"),
+        pytest.param(b"(property (at 0 0))", id="child-instead-of-token"),
+        pytest.param(b"(property pad_prop_solderable)", id="off-table-token"),
+        pytest.param(b"(property Pad_Prop_Heatsink)", id="wrong-case"),
+    ],
+)
+def test_a_pad_property_outside_the_writer_shape_is_refused(expression: bytes) -> None:
+    """The accepted subset is a closed table, and every form outside it refuses.
+
+    Three of these are forms KiCad's *reader* tolerates: its `T_property` arm loops
+    `while( token != T_RIGHT )` with the `Expecting(...)` compiled out, so it silently accepts an
+    empty property, an unknown token, and several tokens with the last one winning. The
+    `two-tokens` row is why that last one is refused rather than tolerated -- KiCad resolves it to
+    `pad_prop_castellated`, so admitting multi-atom forms would be a way past the equality test.
+
+    Every sentence below is an adapter literal chosen before the parse. The closed set is the whole
+    vocabulary this path can emit.
+    """
+
+    result = parse_kicad_bytes(
+        _insert_before(
+            SUBSET_BOARD.read_bytes(), b"      (drill 1)", b"      " + expression + b"\n"
+        ),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].source_locator.startswith("kicad_pcb.footprint[")
+    assert result.diagnostics[0].message in {
+        "pad fabrication property is not a single bare token",
+        "pad fabrication property is unsupported",
+    }
+
+
+def test_two_pad_properties_are_refused() -> None:
+    """KiCad's writer emits at most one, and two would make "the value" ambiguous."""
+
+    result = parse_kicad_bytes(
+        _insert_before(
+            SUBSET_BOARD.read_bytes(),
+            b"      (drill 1)",
+            b"      (property pad_prop_heatsink)\n      (property pad_prop_castellated)\n",
+        ),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].message == "pad declares more than one fabrication property"
+
+
+def test_a_refused_pad_property_never_echoes_the_token_it_refused() -> None:
+    """The refusal names the field from a closed table, never from the board's bytes.
+
+    Same invariant as SEC-133 and SEC-136: a construct name in a diagnostic is an adapter literal
+    selected by an equality test. The one token this path does name -- `pad_prop_castellated` --
+    is emitted from `_REFUSED_PAD_PROPERTY`, so a board can steer *which* fixed sentence comes
+    back and not one byte of what it contains.
+    """
+
+    result = parse_kicad_bytes(
+        _with_pad_property(b"SECRET_BEARER_TOKEN_disclose_the_workspace"),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.message == "pad fabrication property is unsupported"
+    for field in (
+        diagnostic.message,
+        diagnostic.source_locator,
+        diagnostic.object_kind or "",
+        diagnostic.object_id or "",
+    ):
+        assert "SECRET" not in field
+        assert "disclose" not in field
+
+
+def test_a_skipped_aperture_pad_cannot_smuggle_a_castellated_property() -> None:
+    """`property` joins the pad allowlist, so the aperture skip must not run before its check.
+
+    The token is inert on a stencil opening, and so was `zone_connect` -- skipping a pad is not a
+    licence to stop validating what it carries.
+    """
+
+    result = parse_kicad_bytes(
+        _with_pad(_aperture_pad(extra=b"      (property pad_prop_castellated)\n")),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].object_kind == "pad"
 
 
 def test_an_unknown_footprint_field_is_still_refused() -> None:
