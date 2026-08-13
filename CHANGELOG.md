@@ -8,6 +8,44 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- **The real-board conversion survey is closed out, and every count it published is superseded by a
+  measured one.** Issue #116's title — "5 named gaps block 22 of 23 boards" — was wrong in every
+  number: the **23** counted `.history/` editor backups and derived stems and was publicly corrected
+  to 12 at the time, and the corpus has since grown twice. Re-measured on 2026-08-13 with the
+  unchanged runner over the private working tree: **12 of 18 saves convert**, and those 18 files
+  hold **17 distinct board contents** (one pair is byte-identical across two save directories), so
+  say which denominator you mean. Because the corpus is a live tree the designer edits during long
+  runs — three measurements this week were invalidated by a mid-run save — the run is bracketed by
+  three conversion-only sweeps recording a sha256 per board; **all three agree on all 18 digests**,
+  so no edit landed. **All five gaps the survey named are closed, each attributable to its own
+  decision and none assumed from a merged pull request**: chamfered and circular courtyards
+  ([ADR-0080](docs/adr/0080-chamfered-and-circular-courtyards.md)) closed causes 1 and 3, roundrect
+  radius rounding ([ADR-0077](docs/adr/0077-roundrect-corner-radius-rounding.md)) cause 2, net-0
+  copper as an obstacle ([ADR-0078](docs/adr/0078-netless-copper-as-obstacle.md)) cause 4, and
+  dropping the KiCad-`uuid`-to-identity projection (`D-158`) cause 5 — and none of those closures is
+  vacuous, because all five constructs are still present in the corpus on saves that convert today
+  (1,362 fractional roundrect radii, 38 chamfer courtyard edges, 192 circular courtyards, 65 vias
+  and 1,539 segments at net 0, 2,877 objects sharing a reused `uuid`). Six saves still refuse, each
+  with one typed first-error refusal: a pad `property` field on two
+  ([#152](https://github.com/seunghyukchoe/copper-mcp/issues/152)), a custom-shape SMD pad's
+  `options` field on three ([#153](https://github.com/seunghyukchoe/copper-mcp/issues/153)), and
+  copper text on one, refused **by decision**
+  ([#141](https://github.com/seunghyukchoe/copper-mcp/issues/141),
+  [ADR-0095](docs/adr/0095-copper-text-has-no-derivable-envelope.md)). **#116 stays open and is
+  retitled** to the M1 conversion tracker it had become: it is the only issue carrying the
+  milestone, and all three remaining gaps carry none, so closing it would report M1 complete while
+  two live gaps are untracked. Two other published figures expired with the corpus and are
+  superseded rather than edited where they were written: real-board route preview is **0 of 425**
+  today against B-096's 14 of 385, because 320 previews now report `already_connected` — the
+  designer routed those nets — and placement preview's supported subset, which B-099 recorded as
+  never binding on this corpus, now yields **156 `refused/illegal_placement`** verdicts on one
+  board, which is the widened courtyard model finding overlaps that were always there. Route
+  preview still runs **one net at a time on `F.Cu` against the unrouted snapshot**, so its
+  candidates are not mutually compatible and it is not a whole-board result; placement preview still
+  runs **without rules**, so clean means legal-as-found and never placement quality.
+  ([D-191](docs/ledgers/decision-ledger.md), [R-146](docs/ledgers/risk-register.md),
+  `B-099` survey close-out replay in the [benchmark ledger](docs/ledgers/benchmark-ledger.md), #116)
+
 - **Copper lettering now refuses under its own name, and the refusal is a finding rather than a
   to-do.** A root `gr_text` or `gr_text_box` on a copper layer reported the same sentence as a stray
   `gr_line` — `root graphic on copper is unsupported` — and the two do not fail for the same reason.

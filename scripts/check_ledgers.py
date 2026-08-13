@@ -174,6 +174,18 @@ REPLAY_SUB_ENTRIES: dict[tuple[str, str], str] = {
         "B-099 replayed before and after accepting root board properties: the converting count "
         "is unchanged at 11 of 17 and four refusals advance to the next construct"
     ),
+    # B-099's runner and corpus once more, for the issue #116 close-out (D-191). Same question,
+    # same method, no change under test -- it establishes what the corpus does today so the
+    # survey's stale counts can be superseded, so it reuses the parent number under rule 4. The
+    # corpus has grown again, from 17 saves to 18, and the run is bracketed by conversion-only
+    # digest sweeps because it is a live tree the designer edits during long runs.
+    (
+        "docs/ledgers/benchmark-ledger.md",
+        "#### B-099 — survey close-out conversion replay",
+    ): (
+        "B-099 replayed for the issue #116 close-out: 12 of 18 saves convert, 17 of them "
+        "distinct, with every board digest recorded before and after the run"
+    ),
 }
 
 # Historical double-allocations that predate this checker. Ledgers are

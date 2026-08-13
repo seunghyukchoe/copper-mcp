@@ -62,18 +62,20 @@ apply tool requires its own single-use token in addition to its operator gate, a
 `COPPER_MCP_ALLOW_LIVE_IPC=1`; neither is implied by `COPPER_MCP_ALLOW_APPLY`.
 
 **Milestone state.** M1 is still open and its **sole remaining tracked issue is
-[#116](https://github.com/seunghyukchoe/copper-mcp/issues/116)**, the real-board conversion survey.
-Three conversion gaps filed after that survey —
-[#138](https://github.com/seunghyukchoe/copper-mcp/issues/138),
-[#140](https://github.com/seunghyukchoe/copper-mcp/issues/140), and
-[#141](https://github.com/seunghyukchoe/copper-mcp/issues/141) — carry no milestone and so appear in
-no milestone count. [The roadmap](../roadmap.md) describes each milestone as outcomes; **GitHub is
+[#116](https://github.com/seunghyukchoe/copper-mcp/issues/116)**, retitled from the original
+real-board conversion survey to the M1 conversion tracker it had become
+([D-191](../ledgers/decision-ledger.md)). The conversion gaps filed after that survey —
+[#141](https://github.com/seunghyukchoe/copper-mcp/issues/141) (answered by decision),
+[#152](https://github.com/seunghyukchoe/copper-mcp/issues/152), and
+[#153](https://github.com/seunghyukchoe/copper-mcp/issues/153) — carry no milestone and so appear in
+no milestone count, which is precisely why #116 was not closed.
+[The roadmap](../roadmap.md) describes each milestone as outcomes; **GitHub is
 the source of truth over both**, so read it with
 `gh issue list -R seunghyukchoe/copper-mcp` and
 `gh api repos/seunghyukchoe/copper-mcp/milestones` rather than trusting a checkbox.
 
-**Record ranges.** ADR-0001 … ADR-0097, next unused **0098**. Ledgers: `D-187`, `R-142`, `SEC-139`,
-`B-101` are the highest allocated; allocate in the pull request that lands the entry, never before,
+**Record ranges.** ADR-0001 … ADR-0098, next unused **0099**. Ledgers: `D-191`, `R-143`, `SEC-139`,
+`B-102` are the highest allocated; allocate in the pull request that lands the entry, never before,
 per [the ID convention](../ledgers/README.md).
 
 ---
@@ -180,47 +182,43 @@ worse than none, because it will be ignored.
 
 ## 5. Known limitations, stated plainly
 
-- **Not every real board converts.** Measured on the private working corpus on 2026-08-12, before
-  and after ADR-0096 back to back, **12 of the 12 boards in the
-  [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116) survey set convert, which is 12 of
-  all 17 boards in that corpus as saved today** — up from 11 and 11. Five saves refuse, each for
-  exactly one named construct: root board `property` text variables on four phono saves
-  ([#140](https://github.com/seunghyukchoe/copper-mcp/issues/140)) and a root copper graphic on one
-  ([#141](https://github.com/seunghyukchoe/copper-mcp/issues/141)). The board gained is the
-  phono-preamp save that carried `connect`-kind (edge-connector) pads, which now convert as SMD
-  pads and are counted in `ConversionResult.edge_connector_pad_count`
-  ([#138](https://github.com/seunghyukchoe/copper-mcp/issues/138),
-  [ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md)). **No "converts every board"
-  result is claimed at any count** — five corpus saves still refuse — and none should be stated
-  until a re-measured survey supports it. Conversion is also not appliability: the newly converted
-  board refuses both write-back gates for the pre-existing revision-derived-identity reason B-099
-  recorded.
 - **Not every real board converts, and a refusal names only the *first* blocker.** Re-measured on
-  the private working corpus on 2026-08-12, after root board `property` text variables were accepted
-  (D-184, ADR-0094): **11 of the 17 boards in that corpus as saved today convert — the same count
-  the runner measured immediately before that change.** Accepting the construct converted none of
-  the four boards issue #140 said refused "for this and nothing else"; each carried a further
-  blocker behind it. Six saves refuse: `connect`-kind (edge-connector) pads on one
-  ([#138](https://github.com/seunghyukchoe/copper-mcp/issues/138)), copper text on one
-  ([#141](https://github.com/seunghyukchoe/copper-mcp/issues/141), answered by
-  [ADR-0095](../adr/0095-copper-text-has-no-derivable-envelope.md) and refused by decision), a
-  courtyard whose layer
-  disagrees with its footprint's side on three, and an unsupported field inside a pad on one — the
-  last two newly visible and not yet filed. **Read a refusal as an existential, never a universal**:
-  conversion stops at the first error, so "and nothing else" cannot be inferred from one diagnostic.
-  **No "converts every board" result is claimed at any count**, converting is not routing or
-  placing, and no further count should be stated until a re-measured survey supports it.
-- **Real-board routing is a small, candidate-only result, not a product claim.** After the
-  region-scoped obstacle model and re-derived budgets, the same 385 first-40-net previews across 11
-  real project boards moved from **0 routed to 14 routed** (`B-096`), with most of the rest
-  correctly reported `already_connected`. Every one of those previews ran **one net at a time on
-  `F.Cu` against the unrouted snapshot**, so the candidates are **not mutually compatible** and
-  this is **not** a whole-board completion result. Nothing was DRC-checked, applied, or written.
-  Wider evidence comes from imported external geometry (LLM-generated two-layer tscircuit boards),
-  which does not generalise to production PCB design.
+  the private working corpus on 2026-08-13 for the [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116)
+  close-out (`B-099` survey close-out replay): **12 of the 18 saves in that corpus convert.** The 18
+  files hold **17 distinct board contents** — one pair is byte-identical across two save directories
+  — so the same result is 12 of 17 distinct boards; state which denominator you mean. Neither is the
+  frozen 12-board set the survey measured, and **no count from this corpus is stable**: it is a live
+  tree the designer edits during long runs, so every measurement is bracketed by a conversion-only
+  digest sweep and reported with the digests. Six saves refuse, each with one typed refusal: an
+  unmodelled `property` field inside a pad on two
+  ([#152](https://github.com/seunghyukchoe/copper-mcp/issues/152)), a custom-shape SMD pad's
+  `options` field on three ([#153](https://github.com/seunghyukchoe/copper-mcp/issues/153)), and
+  copper text on one ([#141](https://github.com/seunghyukchoe/copper-mcp/issues/141), answered by
+  [ADR-0095](../adr/0095-copper-text-has-no-derivable-envelope.md) and refused **by decision**, not
+  by omission). **Read a refusal as an existential, never a universal**: conversion stops at the
+  first error, so "and nothing else" cannot be inferred from one diagnostic — every gap closed since
+  the survey advanced a refusal on at least one board rather than converting it. **No "converts
+  every board" result is claimed at any count**, converting is not routing, placing or appliability,
+  and no further count should be stated until a re-measured survey supports it.
+- **Real-board routing is a small, candidate-only result, not a product claim — and the last good
+  number has expired.** After the region-scoped obstacle model and re-derived budgets, 385
+  first-40-net previews across 11 real project boards moved from 0 routed to **14 routed**
+  (`B-096`). Re-measured on 2026-08-13 over the current 18-save tree, the same runner at the same
+  defaults routes **0 of 425** (`B-099` survey close-out replay), with **320 `already_connected`**:
+  the designer has since routed those nets, and a preview cannot route what is already routed.
+  Read that as the corpus moving, not as a regression, and **cite neither figure as a capability**.
+  Every one of these previews runs **one net at a time on `F.Cu` against the unrouted snapshot**,
+  so the candidates are **not mutually compatible** and this is **not** a whole-board completion
+  result. Nothing was DRC-checked, applied, or written. Wider evidence comes from imported external
+  geometry (LLM-generated two-layer tscircuit boards), which does not generalise to production PCB
+  design.
 - **Placement preview measures legality-as-found, not quality.** The real-board sweep ran without
   rules, so a clean verdict means *legal as the board already is* and says nothing about whether
-  the placement is any good.
+  the placement is any good. B-099's headline that the supported subset "never binds on this
+  corpus" (991 of 991 previewed, 0 refusals) no longer holds either: the 2026-08-13 replay records
+  1,127 previewed and **156 `refused/illegal_placement`** on one board — 156 courtyard overlaps
+  already present in the board, surfaced by the widened courtyard model (ADR-0080, ADR-0097), not
+  156 bad candidates.
 - **Every real board is unappliable through the file apply gates** where its `Edge.Cuts` outline is
   assembled from `gr_line` segments and any member lacks a single distinct native identity; the
   composite native identity in [ADR-0087](../adr/0087-composite-native-identity-for-assembled-outlines.md)
@@ -252,28 +250,28 @@ worse than none, because it will be ignored.
 
 ## 6. What to do next, in priority order
 
-1. **Close [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116)** — the sole remaining M1
-   issue — by taking the named conversion gaps one construct at a time, each with source-oracle
-   fixtures and a re-measured survey. Do not report a conversion count that a fresh measurement
-   does not support — and **expect a stack**: removing the blocker
-   [#140](https://github.com/seunghyukchoe/copper-mcp/issues/140) named left the corpus at 11 of 17
-   and exposed two further constructs (a courtyard layer disagreeing with its footprint's side on
-   three boards, an unsupported field inside a pad), both since filed as #151 and #153. **#141 is answered
-   and is not a gap to take**: copper text has no envelope derivable from the board document,
-   measured against `kicad-cli`, so it stays refused by decision rather than by omission
-   ([ADR-0095](../adr/0095-copper-text-has-no-derivable-envelope.md)) — the board it blocks stays
-   blocked and the count is unchanged.
-   [#138](https://github.com/seunghyukchoe/copper-mcp/issues/138) is closed — the edge-connector
-   pad converts as SMD ([ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md)) — and
-   **#151 is answered and also moved no count**: a courtyard keys to the layer it is drawn on and
-   not to its footprint's side, so the three phono saves that stopped there now stop one blocker
-   later, on a custom-shape SMD pad
-   ([#153](https://github.com/seunghyukchoe/copper-mcp/issues/153),
-   [ADR-0097](../adr/0097-courtyard-layer-decides-the-side.md)). That is the fourth time removing a
-   refusal has exposed the next one rather than converting a board; treat a stack of blockers as
-   the default and measure after each, never before.
-2. **Make the real-board routing result mean something.** 14 of 385 is a floor, not a capability.
-   The next step is DRC evidence and cross-net compatibility on a real board, not a larger sweep.
+1. **Finish M1 by closing [#152](https://github.com/seunghyukchoe/copper-mcp/issues/152) and
+   [#153](https://github.com/seunghyukchoe/copper-mcp/issues/153), not by closing
+   [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116).** All five gaps #116 named are
+   closed and every number in its original title is wrong, but it stays open as the **M1 real-board
+   conversion tracker** ([D-191](../ledgers/decision-ledger.md)) because it is the only issue
+   carrying the milestone: closing it would mark M1 complete while two live conversion gaps carry no
+   milestone at all. It closes when #152 and #153 are answered and a fresh survey says so — not on
+   a target count, because one of the six refusals is permanent by decision. Take the remaining
+   constructs one at a time, each with source-oracle fixtures and a re-measured survey, and **do not
+   report a conversion count a fresh measurement does not support**. **Expect a stack**: every gap
+   closed since the survey advanced the refusal on at least one board instead of converting it —
+   #116's own courtyard causes, then #140, then #151, and now the pad `property` and `options`
+   fields sitting behind those. **#141 is answered and is not a gap to take**: copper text has no envelope derivable from
+   the board document, measured against `kicad-cli`, so it stays refused by decision rather than by
+   omission ([ADR-0095](../adr/0095-copper-text-has-no-derivable-envelope.md)) — the board it blocks
+   stays blocked and the count is unchanged. Treat a stack of blockers as the default and measure
+   after each, never before.
+2. **Make the real-board routing result mean something.** 14 of 385 was a floor, not a capability,
+   and it is 0 of 425 on the corpus as saved today because 320 of those previews are
+   `already_connected` — this corpus is now mostly routed, so it can no longer answer the question.
+   The next step is DRC evidence and cross-net compatibility on a real board with genuinely open
+   nets, not a larger sweep over boards the designer has finished.
 3. **Close placement data-fidelity and post-action gates.** Model and replay author text,
    fabrication graphics, library identity, properties, and 3D-model pose affected by a move, then
    add post-placement KiCad DRC/scene evidence, undo semantics, and live-editor CAS as separate
