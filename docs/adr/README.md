@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0099**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0103**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -23,6 +23,11 @@ line is deliberate: two branches that both allocate it now conflict textually, s
 merge instead of accepting it.
 
 **Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086.
+ADR-0099, ADR-0100 and ADR-0101 are **live claims**, not gaps, at the moment of writing:
+ADR-0099 is held twice by two branches that collided on it, and ADR-0101 by a sibling wave.
+ADR-0102 stepped over all three rather than racing them, which is rule 1 again. If any of those
+branches is abandoned its number becomes a permanent gap like any other spent number, and this
+sentence is what the landing branch corrects.
 ADR-0094 was a **live claim** held by an open branch (issue #140) when ADR-0095 and ADR-0096 were
 allocated. Both stepped over it rather than racing it, exactly as the ledger convention's rule 1
 prescribes, and it has since landed from its own branch (PR #150) as the root-board-properties
@@ -186,6 +191,7 @@ Ninety-seven numbers, ninety-two records, no duplicates — and `scripts/check_a
 now proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and
 0086 are unused; see **Known gaps** above. The three stray summary sentences that stood here until
 | [0098](0098-reproducible-mutation-evidence.md) | A mutation claim is evidence only if the repository can re-run it | Accepted |
+| [0102](0102-an-evaluation-must-observe-a-permit.md) | A refusal evaluation must observe a permit, and prove it kept observing one | Accepted |
 
 Ninety-eight numbers, ninety-two records, no duplicates — and `scripts/check_adr_numbers.py`
 now proves that last clause on every run rather than asserting it (the previous revision of this
@@ -289,3 +295,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0096: An edge-connector pad converts as an SMD pad, and the discarded token is counted](0096-edge-connector-pads-convert-as-smd.md)
 - [ADR-0097: A courtyard keeps out on the layer it is drawn on, not on its footprint's side](0097-courtyard-layer-decides-the-side.md)
 - [ADR-0098: A mutation claim is evidence only if the repository can re-run it](0098-reproducible-mutation-evidence.md)
+- [ADR-0102: A refusal evaluation must observe a permit, and prove it kept observing one](0102-an-evaluation-must-observe-a-permit.md)

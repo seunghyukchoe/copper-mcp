@@ -23,10 +23,10 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-191` | `D-192` |
-| [Risk register](risk-register.md) | `R-` | `R-146` | `R-147` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-139` | `SEC-140` |
-| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-102` | `B-103` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-193` | `D-194` |
+| [Risk register](risk-register.md) | `R-` | `R-148` | `R-149` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-142` | `SEC-143` |
+| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-106` | `B-107` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
 The rules:
@@ -84,6 +84,16 @@ The rules:
    like any other spent number, and this paragraph becomes the correction to make. That record also
    declined a pre-assigned `B-103` under rule 4: it re-ran an existing runner over the same corpus,
    which is a replay of `B-099` and not a new benchmark, so no `B-` number was spent.
+
+   The fifth round is the widest step-over yet, and it is the mechanism paying for itself. Issue
+   #110's record found `D-189`/`D-190`/`R-144`/`R-145`/`SEC-140`/`B-103` held by open branches, a
+   sibling wave holding `D-192`/`R-147`, and `ADR-0099` claimed **twice** by two branches that had
+   collided on it. Rather than race any of them it took `D-193`/`R-148`/`SEC-142`/`B-106` and
+   `ADR-0102`, clear above every live claim in both spaces. Every intervening number is a live
+   claim, not a gap, and the checker reports them as unallocated because it cannot see an unmerged
+   branch. The `ADR-0099` collision is the case rule 1 exists for, observed in the wild: two
+   branches that both read the same "next free" line and neither of which will conflict textually
+   with the other, because they will write the same value.
 
    **A row that has only been pushed to a branch is not yet a record, and rule 3 does not reach
    it.** Adversarial review found a false mechanism in `D-186` while its pull request was still
