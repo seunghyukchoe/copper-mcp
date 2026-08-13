@@ -170,6 +170,11 @@ def _candidate_document(candidate: RouteCandidate) -> dict[str, Any]:
         "seed": candidate.seed,
         "pad_count": candidate.pad_count,
         "ordering_policy": candidate.ordering_policy,
+        # `null` when the conservative zone envelope was the obstacle model, which is the
+        # ordinary case. The *canonical identity* payload omits the key entirely in that case
+        # (ADR-0103); this document is not content-addressed and follows the response
+        # convention of naming every field.
+        "fill_binding": candidate.fill_binding,
         "patch": {
             "net_id": candidate.patch.net_id,
             "layer_id": candidate.patch.layer_id,

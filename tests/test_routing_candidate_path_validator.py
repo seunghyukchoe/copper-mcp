@@ -623,3 +623,30 @@ def test_candidate_path_validator_rejects_tampered_width_and_non_lattice_geometr
         _validate(snapshot, request, off_grid).failure
         is CandidatePathValidationFailure.UNSUPPORTED_GEOMETRY
     )
+
+
+def test_candidate_path_validator_refuses_a_candidate_routed_under_verified_fill() -> None:
+    """This validator models zones by their envelope and holds no fill evidence (ADR-0103).
+
+    Accepting a fill-bound candidate would validate a path under an obstacle model stricter
+    than the one that produced it, and report the disagreement as the foreign candidate's
+    fault - which is issue #163 with the blame moved. The identity is recomputed over the
+    binding, so this is a refusal on the recorded model and not on a corrupted digest.
+    """
+
+    snapshot = _snapshot(foreign_segment=True)
+    request = _request(snapshot)
+    legal = (
+        PointNM(1_000_000, 5_000_000),
+        PointNM(1_000_000, 1_000_000),
+        PointNM(9_000_000, 1_000_000),
+        PointNM(9_000_000, 5_000_000),
+    )
+    accepted = _candidate(request, legal)
+    fill_bound = _with_candidate_identity(replace(accepted, fill_binding=f"sha256:{'c' * 64}"))
+
+    assert _validate(snapshot, request, accepted).accepted
+    result = _validate(snapshot, request, fill_bound)
+
+    assert not result.accepted
+    assert result.failure is CandidatePathValidationFailure.INVALID_CANDIDATE

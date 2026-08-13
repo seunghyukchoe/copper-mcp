@@ -1,0 +1,186 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "RF01-replay-drops-the-fill-again",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        return router.propose(snapshot, request, verified_fill=verified_fill)",
+      "replacement": "        return router.propose(snapshot, request)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_a_fill_routed_candidate_replays_under_the_fill_that_produced_it"
+      ]
+    },
+    {
+      "id": "RF02-binding-check-only-refuses-the-dangerous-direction",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        binding = fill_binding_for(verified_fill)\n        if binding != candidate.fill_binding:",
+      "replacement": "        binding = fill_binding_for(verified_fill)\n        if binding is not None and candidate.fill_binding is None:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_replay_without_the_producing_fill_refuses_instead_of_routing_differently",
+        "tests/test_routing_astar.py::test_replay_refuses_a_different_pour_that_would_reach_the_same_route"
+      ]
+    },
+    {
+      "id": "RF03-binding-check-only-refuses-the-safe-direction",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        if binding != candidate.fill_binding:\n            return _result_failure(",
+      "replacement": "        if binding is None and candidate.fill_binding is not None:\n            return _result_failure(",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_replay_refuses_fill_a_candidate_was_never_routed_under"
+      ]
+    },
+    {
+      "id": "RF04-binding-check-removed",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        binding = fill_binding_for(verified_fill)\n        if binding != candidate.fill_binding:\n            return _result_failure(",
+      "replacement": "        binding = fill_binding_for(verified_fill)\n        if binding == candidate.fill_binding and binding != candidate.fill_binding:\n            return _result_failure(",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_replay_without_the_producing_fill_refuses_instead_of_routing_differently",
+        "tests/test_routing_astar.py::test_replay_refuses_fill_a_candidate_was_never_routed_under"
+      ]
+    },
+    {
+      "id": "FB01-empty-fill-gets-a-binding",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "    if not verified_fill:\n        return None\n    return f\"sha256:{hashlib.sha256(canonical_fill_bytes(verified_fill)).hexdigest()}\"",
+      "replacement": "    return f\"sha256:{hashlib.sha256(canonical_fill_bytes(verified_fill)).hexdigest()}\"",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_an_empty_pour_and_no_pour_are_the_same_obstacle_model",
+        "tests/test_golden_identities.py::test_route_candidate_identity_matches_its_committed_golden_value"
+      ]
+    },
+    {
+      "id": "FB02-binding-ignores-the-pour-geometry",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "                \"points\": [{\"x_nm\": point.x, \"y_nm\": point.y} for point in island.points],",
+      "replacement": "                \"points\": [],",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_replay_refuses_a_different_pour_that_would_reach_the_same_route"
+      ]
+    },
+    {
+      "id": "FB03-binding-ignores-the-layer",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "                \"layer_id\": island.layer_id,\n                \"net_id\": island.net_id,",
+      "replacement": "                \"net_id\": island.net_id,",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_the_fill_routed_candidate_identity_matches_its_committed_golden_value"
+      ]
+    },
+    {
+      "id": "BC01-candidate-does-not-record-the-model",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        seed=problem.request.seed,\n        fill_binding=problem.fill_binding,",
+      "replacement": "        seed=problem.request.seed,",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_a_fill_routed_candidate_replays_under_the_fill_that_produced_it",
+        "tests/test_routing_astar.py::test_the_fill_routed_candidate_identity_matches_its_committed_golden_value"
+      ]
+    },
+    {
+      "id": "PC01-identity-omits-the-binding-when-there-is-one",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        {\"fill_binding\": candidate.fill_binding} if candidate.fill_binding is not None else {}",
+      "replacement": "        {} if candidate.fill_binding is not None else {\"fill_binding\": candidate.fill_binding}",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_an_envelope_candidate_carries_no_fill_key_in_its_canonical_identity"
+      ]
+    },
+    {
+      "id": "PC02-identity-always-carries-the-binding",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "    fill_binding = (\n        {\"fill_binding\": candidate.fill_binding} if candidate.fill_binding is not None else {}\n    )",
+      "replacement": "    fill_binding = {\"fill_binding\": candidate.fill_binding}",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_golden_identities.py::test_route_candidate_identity_matches_its_committed_golden_value",
+        "tests/test_routing_astar.py::test_an_envelope_candidate_carries_no_fill_key_in_its_canonical_identity"
+      ]
+    },
+    {
+      "id": "KP01-serialization-boundary-drops-the-fill",
+      "file": "src/copper_mcp/adapters/kicad_route_patch.py",
+      "anchor": "        replay = AStarRouter().replay(snapshot, candidate, verified_fill=verified_fill)",
+      "replacement": "        replay = AStarRouter().replay(snapshot, candidate)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_route_patch.py::test_a_fill_routed_candidate_serializes_when_its_own_fill_is_supplied"
+      ]
+    },
+    {
+      "id": "KP02-render-does-not-forward-the-fill",
+      "file": "src/copper_mcp/adapters/kicad_route_patch.py",
+      "anchor": "    _replay_candidate(snapshot, candidate, verified_fill)",
+      "replacement": "    _replay_candidate(snapshot, candidate)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_route_patch.py::test_a_fill_routed_candidate_serializes_when_its_own_fill_is_supplied"
+      ]
+    },
+    {
+      "id": "KP03-fill-mismatch-blames-the-candidate-again",
+      "file": "src/copper_mcp/adapters/kicad_route_patch.py",
+      "anchor": "        raise KiCadRoutePatchError(\n            \"candidate was routed under verified zone fill that was not supplied for replay\"\n        )",
+      "replacement": "        raise KiCadRoutePatchError(\"candidate does not match a deterministic router replay\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_route_patch.py::test_serializing_a_fill_routed_candidate_without_its_fill_names_the_missing_evidence",
+        "tests/test_kicad_route_patch.py::test_serializing_an_envelope_candidate_with_fill_it_never_saw_refuses"
+      ]
+    },
+    {
+      "id": "PV01-preview-does-not-forward-the-fill-to-drc",
+      "file": "src/copper_mcp/route_preview.py",
+      "anchor": "            _drc_settings(settings, deadline),\n            verified_fill=verified_fill,",
+      "replacement": "            _drc_settings(settings, deadline),",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_route_preview.py::test_candidate_drc_receives_the_fill_the_candidate_was_routed_under"
+      ]
+    },
+    {
+      "id": "TK01-token-minted-for-a-fill-routed-candidate",
+      "file": "src/copper_mcp/route_preview.py",
+      "anchor": "        and _board_is_appliable(snapshot)\n        and result.candidate.fill_binding is None",
+      "replacement": "        and _board_is_appliable(snapshot)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_route_preview.py::test_a_fill_routed_candidate_is_returned_without_an_apply_token"
+      ]
+    },
+    {
+      "id": "CV01-foreign-validator-accepts-a-fill-bound-candidate",
+      "file": "src/copper_mcp/routing/candidate_path_validator.py",
+      "anchor": "        or candidate.fill_binding is not None",
+      "replacement": "        or candidate.fill_binding is None and candidate.fill_binding is not None",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_candidate_path_validator.py::test_candidate_path_validator_refuses_a_candidate_routed_under_verified_fill"
+      ]
+    },
+    {
+      "id": "AE01-apply-engine-drops-the-fill",
+      "file": "src/copper_mcp/apply/engine.py",
+      "anchor": "    _replay_candidate(snapshot, candidate, verified_fill)",
+      "replacement": "    _replay_candidate(snapshot, candidate)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_apply_engine.py::FillRoutedCandidateTests::test_applying_under_the_pour_that_produced_it_writes_its_segments",
+        "tests/test_apply_engine.py::FillRoutedCandidateTests::test_applying_an_envelope_candidate_under_a_pour_it_never_saw_refuses"
+      ]
+    }
+  ]
+}

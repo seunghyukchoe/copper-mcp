@@ -41,7 +41,7 @@ from copper_mcp.adapters.kicad_route_patch import (
     _source_structure,
 )
 from copper_mcp.board_ir import BoardIRSnapshot, ParseLimits, Segment
-from copper_mcp.routing.astar import verify_candidate_id
+from copper_mcp.routing.astar import VerifiedFill, verify_candidate_id
 from copper_mcp.routing.contracts import RouteCandidate
 
 
@@ -126,8 +126,15 @@ def apply_route_candidate(
     profile: KiCadConstraintProfile,
     *,
     limits: ParseLimits | None = None,
+    verified_fill: tuple[VerifiedFill, ...] = (),
 ) -> AppliedBoard:
-    """Return the board bytes that applying ``candidate`` to ``source`` would produce."""
+    """Return the board bytes that applying ``candidate`` to ``source`` would produce.
+
+    ``verified_fill`` is the freshness-bound zone fill the candidate was routed under. Nothing
+    in the shipped apply service holds it - apply runs in a later process than the preview that
+    established it - so a candidate carrying a fill binding refuses here rather than being
+    replayed under the conservative envelope and blamed for the disagreement.
+    """
 
     limits = limits or ParseLimits()
     if not isinstance(source, bytes):
@@ -155,7 +162,7 @@ def apply_route_candidate(
         verify_candidate_id(candidate)
     except ValueError as error:
         raise ApplyEngineError("candidate identity verification failed") from error
-    _replay_candidate(snapshot, candidate)
+    _replay_candidate(snapshot, candidate, verified_fill)
 
     nets = {item.id: item for item in snapshot.content.nets}
     layers = {item.id: item for item in snapshot.content.copper_layers}

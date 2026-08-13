@@ -6,6 +6,8 @@ from copper_mcp.routing.astar import (
     AStarRouter,
     VerifiedFill,
     canonical_candidate_bytes,
+    canonical_fill_bytes,
+    fill_binding_for,
     verify_candidate_id,
 )
 from copper_mcp.routing.candidate_store import (
@@ -258,7 +260,9 @@ __all__ = [
     "VerifiedFill",
     "WorkerLimits",
     "canonical_candidate_bytes",
+    "canonical_fill_bytes",
     "canonical_layered_candidate_bytes",
+    "fill_binding_for",
     "negotiate_routes",
     "route_layered",
     "verify_candidate_id",

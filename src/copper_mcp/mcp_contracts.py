@@ -981,6 +981,10 @@ class RouteCandidateContract(_ClosedContract):
     seed: NonNegativeInteger
     pad_count: Annotated[int, Field(ge=2, le=100_000)]
     ordering_policy: Literal["single-path", "component-mst-v1", "batched-1-steiner-v1"]
+    #: The obstacle model this candidate was routed under: the content address of the
+    #: freshness-verified zone fill the router was handed, or `null` when it was handed none and
+    #: searched the conservative zone envelope instead (ADR-0103). `null` is the ordinary case.
+    fill_binding: Digest | None
     patch: RoutePatchContract
     cost: RouteCostContract
     metrics: RouteMetricsContract

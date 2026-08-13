@@ -14,12 +14,17 @@ from pathlib import Path
 
 import pytest
 
-from copper_mcp.adapters import KiCadConstraintProfile, net_id_for_name, parse_kicad_bytes
+from copper_mcp.adapters import (
+    KiCadConstraintProfile,
+    KiCadRoutePatchError,
+    net_id_for_name,
+    parse_kicad_bytes,
+)
 from copper_mcp.apply import ApplyEngineError, ApplyVerification, apply_route_candidate
 from copper_mcp.board_ir import BoardIRSnapshot, NetClass, ParseLimits, PointNM
 from copper_mcp.config import Settings
 from copper_mcp.route_preview import preview_route
-from copper_mcp.routing import AStarRouter, RouteCandidate, RouteRequest
+from copper_mcp.routing import AStarRouter, RouteCandidate, RouteRequest, VerifiedFill
 from copper_mcp.routing.contracts import RoutePath
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -488,3 +493,80 @@ class CopperToneTests(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+
+
+class FillRoutedCandidateTests(unittest.TestCase):
+    """A candidate the exact pour shaped applies only under that pour (ADR-0103, issue #163).
+
+    No shipped caller reaches this: `preview_route` withholds the apply token for such a
+    candidate, so the apply service never sees one. `apply_route_candidate` is a public
+    function all the same, and the boundary has to hold for the embedder who calls it directly
+    - in both directions, since supplying fill a candidate never saw would verify it under a
+    model looser than the one that produced it.
+    """
+
+    def _fill_routed(self) -> tuple[bytes, BoardIRSnapshot, RouteCandidate, VerifiedFill]:
+        source = (CANDIDATE_FIXTURES / "blocked-zone.kicad_pcb").read_bytes()
+        conversion = parse_kicad_bytes(source, _profile(), ParseLimits())
+        assert conversion.snapshot is not None
+        assert conversion.diagnostics == ()
+        snapshot = conversion.snapshot
+        island = VerifiedFill(
+            net_id=net_id_for_name("POWER"),
+            layer_id="layer:F.Cu",
+            points=(
+                PointNM(18_000_000, 11_000_000),
+                PointNM(22_000_000, 11_000_000),
+                PointNM(22_000_000, 14_000_000),
+                PointNM(18_000_000, 14_000_000),
+            ),
+            source_revision=snapshot.content.source.revision,
+        )
+        request = RouteRequest(
+            board_revision=snapshot.snapshot_digest,
+            net_id=net_id_for_name("AUDIO"),
+            layer_id="layer:F.Cu",
+            seed=23,
+        )
+        result = AStarRouter().propose(snapshot, request, verified_fill=(island,))
+        assert result.candidate is not None
+        assert result.candidate.fill_binding is not None
+        return source, snapshot, result.candidate, island
+
+    def test_applying_under_the_pour_that_produced_it_writes_its_segments(self) -> None:
+        source, snapshot, candidate, island = self._fill_routed()
+
+        applied = apply_route_candidate(
+            source, snapshot, candidate, _profile(), verified_fill=(island,)
+        )
+
+        self.assertGreater(applied.segments_added, 0)
+
+    def test_applying_without_the_pour_names_the_missing_evidence(self) -> None:
+        source, snapshot, candidate, _ = self._fill_routed()
+
+        with self.assertRaises(KiCadRoutePatchError) as raised:
+            apply_route_candidate(source, snapshot, candidate, _profile())
+
+        self.assertIn("was not supplied for replay", str(raised.exception))
+
+    def test_applying_an_envelope_candidate_under_a_pour_it_never_saw_refuses(self) -> None:
+        source, snapshot, _, island = self._fill_routed()
+        envelope = (
+            AStarRouter()
+            .propose(
+                snapshot,
+                RouteRequest(
+                    board_revision=snapshot.snapshot_digest,
+                    net_id=net_id_for_name("AUDIO"),
+                    layer_id="layer:F.Cu",
+                    seed=23,
+                ),
+            )
+            .candidate
+        )
+        assert envelope is not None
+        self.assertIsNone(envelope.fill_binding)
+
+        with self.assertRaises(KiCadRoutePatchError):
+            apply_route_candidate(source, snapshot, envelope, _profile(), verified_fill=(island,))

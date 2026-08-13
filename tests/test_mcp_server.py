@@ -1105,6 +1105,7 @@ class RouteToolSurfaceTests(unittest.TestCase):
                 "seed",
                 "pad_count",
                 "ordering_policy",
+                "fill_binding",
                 "patch",
                 "cost",
                 "metrics",
