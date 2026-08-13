@@ -113,6 +113,20 @@ board. The schema is the field-level reference.
   source-preserving splices, so the `connect` token survives in the `.kicad_pcb` and KiCad's own
   DRC and fabrication output still see an edge connector. See
   [ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md) and R-141.
+- A pad `(property <token>)` is KiCad's `PAD_PROP` fabrication annotation, and seven of the eight
+  tokens its writer can emit are accepted and discarded: `pad_prop_bga`, `pad_prop_fiducial_glob`,
+  `pad_prop_fiducial_loc`, `pad_prop_heatsink`, `pad_prop_mechanical`, `pad_prop_pressfit` and
+  `pad_prop_testpoint`. None changes the pad's copper, hole, layer span, clearance or connectivity.
+  `pad_prop_castellated` is **refused by name**, as a stated caution rather than a direction-of-error
+  invariant: fabrication routes the half-holes out of the physical board while `Edge.Cuts` does not,
+  so Board IR's outline would claim board area that will not exist, and KiCad's own DRC is *more*
+  permissive exactly there. The accepted shape is closed: **one bare positional atom, never quoted,
+  no child expressions, at most one `property` per pad**; anything else is a typed refusal, and the
+  value is validated *before* the paste/mask aperture skip so a stencil opening cannot carry an
+  unvalidated token past every check. The annotation is not modelled, so the number accepted is
+  reported as `ConversionResult.unmodelled_pad_property_count` — an **in-process** count, like the
+  group and edge-connector counts above. See
+  [ADR-0099](../adr/0099-pad-fabrication-properties-and-named-pad-refusals.md).
 - A root `(property "<key>" "<value>")` is one entry of the board's text-variable map and is read
   past rather than refused. KiCad's only consumer of that map is `BOARD::ResolveTextVar`, which
   expands `${KEY}` while rendering text, and Board IR models no text — so the pair carries no
@@ -190,7 +204,7 @@ contains a bounded machine-readable diagnostic and no snapshot.
 | Board metadata | Exact KiCad PCB format version `20260206`, optional `generator`, ordered copper declarations `0/F.Cu`, contiguous even-numbered inner layers, then `B.Cu`, and a narrow setup-metadata allowlist with KiCad-default front/back via tenting. |
 | Nets | Quote-aware named item-level net references and legacy numeric root declarations; quoted numeric text remains a name while bare signed numeric tokens retain legacy net-code meaning. |
 | Outline | Exactly one contour on `Edge.Cuts`, drawn either as one unfilled `gr_rect` or as `gr_line` segments that chain, by exact endpoint coincidence, into one closed simple loop. See [ADR-0076](../adr/0076-segment-assembled-edge-cuts-outline.md). |
-| Footprints/pads | Footprints on `F.Cu` or `B.Cu` with rotations in 90-degree increments, exact origin/side/lock/pad ownership, and optional unfilled `fp_rect`, `fp_poly`, or closed complete `fp_line` courtyard centerlines on **either** courtyard layer — every edge horizontal, vertical, or an exact 45-degree chamfer, with `fp_line` cycles closed within their own layer — plus unfilled `fp_circle` outlines whose radius is an exact integer nanometre; all four KiCad pad kinds, `smd`, `thru_hole`, `np_thru_hole` and `connect` — the last being the edge-connector pad, which converts as `PadKind.SMD` and is counted in `ConversionResult.edge_connector_pad_count` per [ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md); circle, rect, oval, and roundrect shapes; round or oval drills; copper layer names, `*.Cu`, and `F&B.Cu`; and a pad `zone_connect` override of `1`, `2` or `3` — the three that attach the pad to a same-net pour — accepted as a proven no-op and modelled as nothing, per [ADR-0091](../adr/0091-attaching-pad-zone-connect-overrides.md). |
+| Footprints/pads | Footprints on `F.Cu` or `B.Cu` with rotations in 90-degree increments, exact origin/side/lock/pad ownership, and optional unfilled `fp_rect`, `fp_poly`, or closed complete `fp_line` courtyard centerlines on **either** courtyard layer — every edge horizontal, vertical, or an exact 45-degree chamfer, with `fp_line` cycles closed within their own layer — plus unfilled `fp_circle` outlines whose radius is an exact integer nanometre; all four KiCad pad kinds, `smd`, `thru_hole`, `np_thru_hole` and `connect` — the last being the edge-connector pad, which converts as `PadKind.SMD` and is counted in `ConversionResult.edge_connector_pad_count` per [ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md); circle, rect, oval, and roundrect shapes; round or oval drills; copper layer names, `*.Cu`, and `F&B.Cu`; and a pad `zone_connect` override of `1`, `2` or `3` — the three that attach the pad to a same-net pour — accepted as a proven no-op and modelled as nothing, per [ADR-0091](../adr/0091-attaching-pad-zone-connect-overrides.md); and a pad `(property <token>)` fabrication annotation restricted to the seven `PAD_PROP` tokens that change no copper, counted in `ConversionResult.unmodelled_pad_property_count` per [ADR-0099](../adr/0099-pad-fabrication-properties-and-named-pad-refusals.md). |
 | Routed copper | Straight `segment` items, exact start/mid/end `arc` items, and through vias spanning the declared copper stack. Copper carrying no routable net converts as an obstacle with `net_id` `None` rather than refusing the board, per [ADR-0078](../adr/0078-netless-copper-as-obstacle.md); it is an obstacle only and contributes nothing to connectivity. |
 | Net-tie copper | A footprint declaring `net_tie_pad_groups` may draw its deliberate short as an `fp_poly` on `F.Cu`/`B.Cu`. That polygon converts to netless obstacle copper under the same `net_id` `None` contract, so the short is modelled as something to route around and never as a connection. Every other primitive a net-tie footprint could draw the short with — `fp_line`, `fp_arc`, `fp_rect`, `fp_circle` — is refused by name. See [ADR-0092](../adr/0092-net-tie-copper-as-netless-obstacle.md). |
 | Zones | Net-bound, single-copper-layer, solid zones with one polygon loop; explicit priority, thermal/through-hole-thermal/solid/none pad connection, always/never island removal, clearance, and conditionally required thermal dimensions. |
@@ -283,11 +297,20 @@ including:
 - non-neutral capping/filling/covering/plugging, non-default board via tenting, per-via tenting
   overrides, and pad/via copper-removal or custom-connectivity options;
 - a pad `zone_connect` of `0`, which detaches the pad from its pour, and any value outside
-  KiCad's `ZONE_CONNECTION` enum; and pad-level `clearance`, `offset`, `options`, `primitives`,
-  `thermal_bridge_angle`, `thermal_bridge_width` and `thermal_gap`, each refused by name. `options`
-  and `primitives` are reached only on a pad whose shape is *modelled*, because KiCad's writer
-  emits them only for a `custom` pad while its parser accepts them on any shape — a hand-edited or
-  third-party file is the case they still guard;
+  KiCad's `ZONE_CONNECTION` enum; a pad `(property pad_prop_castellated)` or any other fabrication
+  token outside the seven accepted above; and **every other pad head KiCad's own `parsePAD`
+  accepts**, each refused by name as `pad field '<head>' is unsupported`. That table is KiCad's
+  whole pad grammar minus the heads this adapter models and minus `property`, which is decided on
+  the closed value table above, plus the legacy `offset` a modern KiCad parses inside `(drill …)`:
+  **26 named sentences**, all pinned, read against KiCad master's 39-head switch — 25 against
+  shipping 10.0.5's 38, the difference being exactly `sim_electrical_type`
+  ([ADR-0099](../adr/0099-pad-fabrication-properties-and-named-pad-refusals.md)). It includes
+  `clearance`, `offset`, `options`, `primitives`, `thermal_bridge_angle`, `thermal_bridge_width`
+  and `thermal_gap`, the seven ADR-0091 first made reachable. `options` and `primitives` are
+  reached only on a pad whose shape is *modelled*, because KiCad's writer emits them only for a
+  `custom` pad while its parser accepts them on any shape — a hand-edited or third-party file is
+  the case they still guard. A head absent from the table is one KiCad cannot write; it still
+  refuses, unnamed, through the allowlist;
 - setup defaults, stackup/routing-rule constructs, and other setup fields outside the documented
   non-routing metadata allowlist;
 - simultaneous UUID/tstamp identities and malformed, unresolved, or unconnected legacy net codes;
@@ -361,6 +384,21 @@ Breaking canonical changes require a new schema version, fixtures, compatibility
 guidance, ADR review, and changelog entry. Source-adapter coverage may expand under `0.2.0` only when
 the resulting canonical meaning is unchanged and the accepted/rejected matrix plus fixtures are
 updated. Unknown Board IR versions and unknown fields remain errors.
+
+> **`0.2.0.schema.json` was widened in place, and this rule did not stop it.** ADR-0097 added
+> `far_side_courtyards` and `far_side_courtyard_circles` to `$defs/footprint`, whose
+> `additionalProperties` is `false`, under the same filename, `$id` and version. A consumer holding
+> the copy of `0.2.0.schema.json` shipped before that change will **reject a valid snapshot of any
+> board carrying a far-side courtyard**; re-download the schema. Nothing caught it because the keys
+> are emitted only when non-empty, so no golden digest and no version constant moved, and no gate
+> has an opinion about a published schema's accepted set. This is not a claim that any emitted
+> payload was ever invalid against the schema shipped beside it — the break is between *versions of
+> the schema file*. Whether `0.2.0` is corrected retroactively or the next widening bumps to
+> `0.3.0`, and whether a mechanical gate should exist for this class at all, are open in
+> [#172](https://github.com/seunghyukchoe/copper-mcp/issues/172) and are deliberately not decided
+> here. Note the measured cost recorded in ADR-0096: bumping `BOARD_IR_SCHEMA_VERSION` does **not**
+> move a snapshot digest, because the version lives in the envelope rather than in the content
+> payload.
 
 Serialized 0.1 snapshots cannot be upgraded by inventing missing parents. Preserve them against the
 legacy schema and re-convert the original source as described in the

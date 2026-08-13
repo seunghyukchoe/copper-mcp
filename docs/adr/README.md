@@ -22,82 +22,38 @@ allocated plus one. Gaps are reported as information and never fail. Keeping the
 line is deliberate: two branches that both allocate it now conflict textually, so Git refuses the
 merge instead of accepting it.
 
-**Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086.
-**ADR-0103 is a live claim, not a gap, at the time of writing; ADR-0101 and ADR-0102 are not
-gaps either.** This record (issue #165, `D-195`/`R-150`/`SEC-144`/`B-108`) took ADR-0104 above all
-three rather than racing any of them: 0101 and 0102 were held by open branches and 0103 by a
-sibling working issue #163 in the routing path. Both have since landed while this branch was open
-— 0101 from PR #162 as the fill-currency decision, 0102 from PR #160 as the permit-observing
-evaluation — so the correction this sentence anticipated came due twice, and both times before the
-paragraph was ever published, which is the whole point of rule 1's textual safety net. Only 0103
-remains a live claim, reported as unallocated because the checker cannot see an unmerged branch;
-if that branch is abandoned its number becomes a permanent gap like every other spent number.
-ADR-0099 and ADR-0100 are **live claims, not gaps**, at the time of writing: two branches (PRs #157
-and #158) were open on this same base and had both allocated ADR-0099, so one of them renumbers to
-ADR-0100 and ADR-0101 stepped over both rather than joining the race. If either branch is abandoned
-its number becomes a permanent spent number like any other; whichever lands resolves this line's
-textual conflict, which is the whole point of keeping the next number on one line.
-ADR-0099, ADR-0100 and ADR-0101 are **live claims**, not gaps, at the moment of writing:
-ADR-0099 is held twice by two branches that collided on it, and ADR-0101 by a sibling wave.
-ADR-0102 stepped over all three rather than racing them, which is rule 1 again. If any of those
-branches is abandoned its number becomes a permanent gap like any other spent number, and this
-sentence is what the landing branch corrects.
-ADR-0094 was a **live claim** held by an open branch (issue #140) when ADR-0095 and ADR-0096 were
-allocated. Both stepped over it rather than racing it, exactly as the ledger convention's rule 1
-prescribes, and it has since landed from its own branch (PR #150) as the root-board-properties
-decision — this sentence is the correction the earlier note anticipated, and 0094 is not a gap.
-ADR-0097 went the same way: it was a live claim held by open PR #154 when ADR-0098 was allocated,
-so ADR-0098 stepped over it, and it has since landed as the courtyard-layer decision. Neither is a
-gap; both notes are corrections that came due exactly as written.
-**ADR-0101 and ADR-0102 were live claims held by open branches when ADR-0103 was allocated, and
-this note is the acknowledgement the convention asks for.** PR #160 and PR #162 each wrote one of
-them, off-branch pre-assignment again, so neither could be seen from here; ADR-0103 (issue #163)
-stepped over both rather than racing either, exactly as rule 1 prescribes. Both have since landed — ADR-0101
-from PR #162 as the fill-currency decision and ADR-0102 from PR #160 as the permit-observing
-evaluation — so neither is a gap, and this sentence is the correction the note anticipated.
-**ADR-0099 was a live claim contested by two open branches, and this note is
-the acknowledgement the convention asked for.** This branch (issue #152, `D-189`/`R-144`) and PR #158
-(issue #153, `D-190`/`R-145`) both write `docs/adr/0099-*.md`. Neither stepped over the other
-because neither could see the other when its number was assigned — the pre-assignment happened
-off-branch. The tie-break is the ledger numbers, which do not collide and do order: `D-189` is lower
-than `D-190`, so this branch lands first and keeps 0099, and #158 renumbers to 0100. Whichever lands
-second resolves the textual conflict on the next-unused line above, which is exactly the safety net
-rule 1 describes. If this branch is abandoned instead, 0099 is spent and #158 should still take
-0100 rather than filling it.
-ADR-0089 was listed here until this line was corrected: it landed from its own branch as the
-region-scoped obstacle model and is not a gap. ADR-0092 was listed too, and has since landed from
-its own branch as the net-tie netless-obstacle model; this sentence is that correction, exactly as
-the note anticipated.
-ADR-0027 was allocated on a branch whose ADR never landed. The 0081–0083 block was allocated by
-concurrent branches that were still open when ADR-0084 landed: that branch took a number above all
-of them rather than the next one, which is the rule the collision that produced 0066–0068 exists to
-enforce. ADR-0081 has since landed from its own branch and is no longer a gap; 0082 and 0083 remain
-spent. 0085 and 0086 went the same way — two branches were open alongside ADR-0088 when it landed, so
-it took a number above both rather than the next one. 0090 was claimed the same way by a branch
-still open when ADR-0091 (issue #124) landed, so that record took the number above it — but
-ADR-0090 has since landed from its own branch and is no longer a gap, and ADR-0092 then took the
-next number cleanly above both. Every unused number is deliberately left unused rather than
-recycled, so that an external reference resolves to nothing rather than to an unrelated decision.
-If a later branch lands its own record in one of these gaps, this note is what it corrects, exactly
-as it just did for 0090.
+**Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086. Every one of them
+is **spent, not free**. Recycling a number would silently repoint every external citation of the
+draft that reserved it at an unrelated decision, which is the exact failure the never-reuse rule
+exists to prevent.
 
-Two corrections are folded into the list above rather than left standing, and this paragraph is
-the **only** account of them — a second overlapping one was written while resolving this branch's
-merge and is removed rather than left to become a fourth copy. ADR-0089 was named as a gap while
-the record existed and was indexed two lines below. And three overlapping revisions of this
-paragraph stood here until ADR-0091 landed, one truncated mid-sentence and one contradicting the
-next line about ADR-0081; the surviving text above is the union of their facts, with every
-contradiction resolved against the files actually present in this directory. Both were merge
-residue from the concurrent-branch period the paragraph describes.
+- **0027** was allocated on a branch whose ADR never landed.
+- **0082** was allocated by the branch that first wrote the net-tie copper decision. That branch sat
+  ungated while ADR-0084 and later ADR-0087 each took a number above it, and when the work finally
+  landed it landed as [ADR-0092](0092-net-tie-copper-as-netless-obstacle.md) — a new number, not the
+  one it had reserved. **0083** was claimed by a branch that has not landed, and is spent on the
+  same terms whether or not it ever does.
+- **0085** and **0086** were claimed by two branches still open when ADR-0088 landed, so ADR-0088
+  took a number above both rather than the next one.
 
-**ADR-0082 is now permanently spent rather than merely claimed.** It was allocated by the branch
-that first wrote the net-tie copper decision. That branch sat ungated while ADR-0084 and later
-ADR-0087 each took a number above it, and when the work finally landed it landed as
-[ADR-0092](0092-net-tie-copper-as-netless-obstacle.md) -- a new number, not the one it had reserved.
-Nothing will ever occupy 0082: recycling it would silently repoint every external citation of the
-abandoned draft at a record it never described, which is the exact failure the never-reuse rule
-exists to prevent. ADR-0083 remains claimed by a branch that has not landed and is spent on the same
-terms whether or not it ever does.
+**No other number is a gap.** This section has repeatedly carried notes recording a number as a
+"live claim" held by an open branch — 0081, 0089, 0090, 0092, 0094, 0097, and 0099 through 0103 all
+appeared here that way, several of them contested by two branches at once. Every one has since
+landed from its own branch, and this sentence is the correction those notes anticipated. The
+convention that produced them is rule 1 of the
+[ledger ID convention](../ledgers/README.md#allocating-ids): a branch that cannot see another
+branch's pre-assigned number steps **over** it rather than racing it, and records that it did.
+Keeping the next-unused number on one line above is the textual safety net — two branches that both
+allocate it conflict in Git rather than merging cleanly into a duplicate.
+
+That safety net is not hypothetical, and this file is the evidence. Between 2026-08-08 and
+2026-08-13 the notes above accumulated as five overlapping rewrites of one paragraph, each landing
+without a textual conflict because they did not overlap line-for-line: one truncated mid-sentence,
+one contradicted the next line about ADR-0081, one named ADR-0089 as a gap while the record existed
+and was indexed two lines below, and three separate summary sentences stood under the index at
+once, disagreeing about the record count. The text above is the union of their facts with every
+contradiction resolved against the files actually present in this directory.
+**`scripts/check_adr_numbers.py` is the count to trust, not a sentence here.**
 
 **How 0066 through 0068 came to be three records:** three concurrent branches each created an
 `ADR-0066` — the atomic route bundle preview, ordered-layer routing, and route-aware placement
@@ -215,49 +171,36 @@ never silently widens it.
 | [0095](0095-copper-text-has-no-derivable-envelope.md) | Copper text has no envelope derivable from the board, and refuses under its own name | Accepted |
 | [0096](0096-edge-connector-pads-convert-as-smd.md) | An edge-connector pad converts as an SMD pad, and the discarded token is counted | Accepted |
 | [0097](0097-courtyard-layer-decides-the-side.md) | A courtyard keeps out on the layer it is drawn on, not on its footprint's side | Accepted |
-
-Ninety-seven numbers, ninety-two records, no duplicates — and `scripts/check_adr_numbers.py`
-now proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and
-0086 are unused; see **Known gaps** above. The three stray summary sentences that stood here until
 | [0098](0098-reproducible-mutation-evidence.md) | A mutation claim is evidence only if the repository can re-run it | Accepted |
 | [0099](0099-pad-fabrication-properties-and-named-pad-refusals.md) | A pad refusal names the field it refused, and seven of eight fabrication properties convert | Accepted |
 | [0100](0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md) | A custom pad has a derivable envelope and nowhere in Board IR to put it | Accepted |
 | [0101](0101-fill-currency-is-not-in-the-document.md) | Fill currency is not in the board file, so keep the model and gate the shrink | Accepted |
 | [0102](0102-an-evaluation-must-observe-a-permit.md) | A refusal evaluation must observe a permit, and prove it kept observing one | Accepted |
 | [0103](0103-a-candidate-records-the-model-that-produced-it.md) | A candidate records the obstacle model that produced it, and a replay refuses every other one | Accepted |
-
-One hundred and one numbers, ninety-five records, no duplicates. ADR-0099 has since landed
-from its own branch (PR #157); ADR-0100 remains a live claim on open PR #158 at the time of
-writing, not a gap. The checker's output, not this sentence, is the count to trust.
-
-Ninety-nine numbers, ninety-four records, no duplicates — and `scripts/check_adr_numbers.py`
-
 | [0104](0104-fill-vertex-budget-behind-a-parse.md) | The fill-vertex budget sits behind a parse, and is calibrated as what it is | Accepted |
-now proves that last clause on every run rather than asserting it (the previous revision of this
-sentence said "ninety-six numbers, ninety records", stale by two landings at the time it was
-read; the checker's own output is the count to trust). 0027, 0082, 0083, 0085 and
-0086 are unused; 0097 was a live claim on an open branch when the sentence above it was written and
-has since landed, so it is not a gap either. See
-**Known gaps** above. The three stray summary sentences that stood here until
-ADR-0088 landed were merge residue from the concurrent branches described above: Git accepted
-three different rewrites of one paragraph because they did not overlap textually.
+
+One hundred and four numbers allocated, ninety-nine records, no duplicates — and
+`scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
+its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
+the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
+and 0086 are unused; see **Known gaps** above.
 
 ## Reading order
 
 The ADRs are chronological, not thematic. To follow one arc, read it in this order:
 
-- **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070, 0076, 0087,
-  0091, 0092, 0095, 0096, 0097, 0099.
+- **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070, 0076, 0077,
+  0078, 0079, 0080, 0087, 0090, 0091, 0092, 0094, 0095, 0096, 0097, 0099, 0100.
 - **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
-  0066, 0070, 0073, 0075, 0089, 0093, 0104.
-  0066, 0070, 0073, 0075, 0089, 0093, 0101, 0103.
+  0066, 0068, 0070, 0072, 0073, 0075, 0081, 0089, 0093, 0101, 0103, 0104.
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060, 0075.
-- **Circuit Intent and schematic verification** — 0014, 0015, 0056, 0070.
-- **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065, 0075, 0097.
-- **Circuit Scene and rendering** — 0010, 0022, 0023, 0028, 0056.
+- **Circuit Intent and schematic verification** — 0014, 0015, 0056, 0071, 0084.
+- **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065, 0067, 0075, 0097.
+- **Circuit Scene and rendering** — 0010, 0022, 0023, 0028, 0088.
 - **Live KiCad IPC** — 0029, 0030, 0031, 0032, 0033, 0044, 0063, 0069, 0074.
 - **Durable jobs and persistence** — 0043, 0046, 0047, 0048.
 - **Mutation and authorization** — 0001, 0025, 0059, 0074.
+- **Evidence, evaluation, and review boundaries** — 0041, 0052, 0054, 0098, 0102.
 
 - [ADR-0001: Candidate-first mutation model](0001-candidate-first.md)
 - [ADR-0002: MCP is an external adapter](0002-mcp-adapter.md)
@@ -293,6 +236,18 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0033: Keep live editor context read-only and revision-bound](0033-live-editor-context.md)
 - [ADR-0034: Keep placement candidate rendering source-preserving and subset-bound](0034-source-preserving-placement-candidates.md)
 - [ADR-0035: Keep the layered A* search seam internal until board fidelity exists](0035-internal-layered-search-oracle.md)
+- [ADR-0036: Bind the layered search oracle to a narrow Board IR proposal contract](0036-board-ir-layered-proposal-adapter.md)
+- [ADR-0037: Render layered route proposals into disposable KiCad bytes](0037-layered-kicad-serialization.md)
+- [ADR-0038: Candidate-bound KiCad DRC for layered proposals](0038-layered-candidate-drc-evidence.md)
+- [ADR-0039: Freshness-bound fill islands as routing obstacles](0039-fill-aware-routing-obstacles.md)
+- [ADR-0040: Advertise freshness-bound fill provenance on routed previews](0040-public-fill-routing-provenance.md)
+- [ADR-0041: Close layered and freshness-bound routing safety gaps](0041-routing-safety-remediation.md)
+- [ADR-0042: Public, candidate-only layered route preview](0042-public-layered-route-preview.md)
+- [ADR-0043: Durable routing-job ledger before protocol tasks](0043-durable-routing-job-ledger.md)
+- [ADR-0044: Live layered route proposals are session- and snapshot-bound](0044-live-layered-route-proposal.md)
+- [ADR-0045: Verify layered candidate topology before serialization](0045-layered-candidate-topology-verifier.md)
+- [ADR-0046: Execute durable routing jobs with bounded leases; defer MCP Tasks](0046-routing-worker-leases-and-tasks-deferral.md)
+- [ADR-0047: Persist redacted candidate manifests, not route geometry](0047-redacted-candidate-manifest-persistence.md)
 - [ADR-0048: Durable layered routing request, result, and export boundary](0048-durable-routing-request-result-export.md)
 - [ADR-0049: Add a bounded one-Steiner topology ordering policy](0049-batched-one-steiner-ordering.md)
 - [ADR-0050: Expose opt-in DRC evidence for file-backed layered proposals](0050-public-layered-route-drc-evidence.md)
@@ -305,6 +260,10 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0057: Observe bounded front/back footprint poses](0057-front-back-footprint-observation.md)
 - [ADR-0058: Check same-side rectangular courtyard legality](0058-rectangular-courtyard-legality.md)
 - [ADR-0059: Separately authorize bounded placement application](0059-separately-authorized-placement-apply.md)
+- [ADR-0060: Expose opt-in placement DRC evidence through the file-backed preview](0060-public-placement-drc-evidence.md)
+- [ADR-0061: Observe post-placement state through one captured scene and DRC context](0061-post-placement-observation.md)
+- [ADR-0062: Keep padless courtyards in placement collision evidence](0062-stationary-padless-courtyard-envelope.md)
+- [ADR-0063: Carry live IPC deadlines into bounded board parsing](0063-ipc-parser-deadline.md)
 - [ADR-0064: Bind a closed routing-policy decision to the initial negotiated order](0064-policy-bound-initial-negotiated-order.md)
 - [ADR-0065: Observe and legalize bounded orthogonal courtyard chains](0065-orthogonal-courtyard-chains.md)
 - [ADR-0066: Publish a composed route bundle only as one all-or-nothing read-only plan](0066-atomic-route-bundle-preview.md)
@@ -340,5 +299,5 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0100: A custom pad has a derivable envelope and nowhere in Board IR to put it](0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md)
 - [ADR-0101: Fill currency is not in the board file, so keep the model and gate the shrink](0101-fill-currency-is-not-in-the-document.md)
 - [ADR-0102: A refusal evaluation must observe a permit, and prove it kept observing one](0102-an-evaluation-must-observe-a-permit.md)
-- [ADR-0104: The fill-vertex budget sits behind a parse, and is calibrated as what it is](0104-fill-vertex-budget-behind-a-parse.md)
 - [ADR-0103: A candidate records the obstacle model that produced it, and a replay refuses every other one](0103-a-candidate-records-the-model-that-produced-it.md)
+- [ADR-0104: The fill-vertex budget sits behind a parse, and is calibrated as what it is](0104-fill-vertex-budget-behind-a-parse.md)
