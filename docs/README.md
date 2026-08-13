@@ -50,9 +50,16 @@ contract.
   release records, including the ID-allocation convention.
 - [Research surveys](research/README.md) — the dated literature and licensing passes that ground
   each engineering arc.
-- [Excessive-agency evaluation v1](research/excessive-agency-eval-v1.md) — the adversarial suite
-  that attacks CopperMCP's central safety claim, its per-project-family results including every
-  scenario that did **not** run, and the list of things a passing run does not prove.
+- [Committed mutation specs](mutants/README.md) — the anchors, replacements and mutant→killing-test
+  mappings behind every mutation claim made after
+  [ADR-0098](adr/0098-reproducible-mutation-evidence.md). A kill count with no spec here is prose,
+  not evidence, and no count bounds the mutation space — only the mutants that were chosen.
+- [Excessive-agency evaluation v1](research/excessive-agency-eval-v1.md) — the suite that attacks
+  CopperMCP's central safety claim, its per-project-family results including every scenario that did
+  **not** run, and the list of things a passing run does not prove. Since
+  [ADR-0102](adr/0102-an-evaluation-must-observe-a-permit.md) not every row is an attack: one
+  predeclared outcome is an `authorized_write` the server is supposed to permit, because a suite
+  whose every row requires a refusal cannot tell correct refusal from blanket refusal.
 
 ## Operations
 

@@ -232,12 +232,15 @@ collision could be proven. `courtyard_overlap` is **three-valued** for the same 
 courtyard subset: `proven_clear` when the regions share no area, `violated` at exact parity with
 KiCad's contracted courtyard cache, and `inconclusive` in the penetration band below its 10,000 nm
 collision threshold, where raw geometry and KiCad disagree. A footprint's rings form one even-odd
-region, so a ring nested inside another is a hole. Only footprints on the same physical side are
-compared, and edge contact is not overlap. A Board IR conversion rejects unsupported courtyard
+region, so a ring nested inside another is a hole. Shapes are compared **per courtyard layer, not
+per footprint side**: `F.CrtYd` and `B.CrtYd` remain independent, but a footprint may draw on the
+layer opposite its own side and that keep-out is compared on the layer it was drawn on
+([ADR-0097](../adr/0097-courtyard-layer-decides-the-side.md)). Edge contact is not overlap. A Board
+IR conversion rejects unsupported courtyard
 topology before a placement view exists, so the result cannot silently claim fidelity outside that
 subset.
 Padless/graphics-only footprints remain unavailable as subjects and anchors, but their supported
-courtyards remain stationary collision envelopes and are included in this same-side check; they are
+courtyards remain stationary collision envelopes and are included in this per-layer check; they are
 not emitted in the candidate manifest.
 
 A `refused` response carries a typed code: `unresolved_ref`, `infeasible_constraints`,

@@ -93,8 +93,10 @@ and versioned JSON schemas throughout.
 
 **Represent a board exactly.** Immutable Board IR `0.2.0` with exact integer units, typed
 constraints, canonical digests, first-class footprint pose/side/lock/pad ownership, simple closed
-octilinear courtyard rings and exact-integer-radius courtyard circles, and a bounded fail-closed
-converter for a documented KiCad subset. The 0.1 schema
+octilinear courtyard rings and exact-integer-radius courtyard circles held **per courtyard layer**
+— a footprint may draw on the layer opposite its own side, and that geometry keeps out on the layer
+it is drawn on ([ADR-0097](docs/adr/0097-courtyard-layer-decides-the-side.md)) — and a bounded
+fail-closed converter for a documented KiCad subset. The 0.1 schema
 remains available as immutable compatibility evidence; [migration](docs/migrations/board-ir-0.2.md)
 re-converts the original board rather than inventing parents.
 
@@ -127,7 +129,10 @@ than a refusal, so a partly routed net completes from what is already there.
 pad count, through same-net through vias between layers, and — behind the opt-in
 `include_fill_authority` flag — through poured zone copper, admitted only when a fresh KiCad refill
 on a private disposable copy reproduces the board's cached fill exactly. A stale cache is refused
-rather than answered from.
+rather than answered from. A candidate records the obstacle model that produced it: a fill-shaped
+candidate carries a `fill_binding`, and a replay handed any other fill — including none — refuses
+`fill_evidence_mismatch` rather than verifying a route against a model it was never searched under
+([ADR-0103](docs/adr/0103-a-candidate-records-the-model-that-produced-it.md)).
 
 **Validate with real KiCad.** Fixed-argument KiCad CLI DRC with source, time, size, schema, and
 stale-context guards. Internal candidate-bound DRC evidence ties an exact replayed candidate to its
@@ -138,8 +143,8 @@ context, without writing a candidate file into the source workspace.
 non-mutating preview. Seven rule kinds name objects only by scene references and carry exact integer
 parameters; the language has no way to state an absolute coordinate or to permit an overlap. A
 candidate proves exactly four things: pad overlap, board-outline containment, keepout respect, and —
-for Board IR `0.2`'s simple closed octilinear courtyard rings and circles, between footprints on the
-same physical side — courtyard overlap.
+for Board IR `0.2`'s simple closed octilinear courtyard rings and circles, between shapes drawn on
+the **same courtyard layer** — courtyard overlap.
 
 **Build a schematic.** Immutable Circuit Intent IR `0.1.0` for bounded two-pin resistor/capacitor
 topology, with a strict codec, canonical content digest, and deterministic in-memory KiCad
@@ -214,30 +219,40 @@ modelled as a one-value literal (`not_run`, `not_modelled`, `inconclusive`) rath
   `obstacle_budget_exceeded`, `obstacle_check_budget_exceeded` and `net_object_budget_exceeded` all
   mean the work ran out. Only `no_path` is a completed search, and `no_path_in_region` is completed
   only inside a region that is a proper subset of the board.
-- Zone fill is **not** routing authority. Verified fill informs connectivity only; the routing
-  obstacle model continues to use the conservative zone envelope.
+- Zone fill is **not** trusted as saved, and it is never routing authority by default. Cached fill
+  is admitted only behind `include_fill_authority`, and only when a fresh KiCad refill on a private
+  disposable copy reproduces it exactly; verified foreign islands then replace that zone's
+  conservative envelope on the layer they were proved on, and every unproved zone keeps the
+  envelope. A candidate the pour shaped is **not appliable**: `preview_route` withholds the apply
+  token for it, because apply runs in a later process holding no fill evidence and could only
+  replay under the looser model.
 - Routing succeeds only for the documented Board IR and single-layer subset. Anything else returns a
   typed diagnostic rather than a guess.
 
 **Board conversion.**
 
 - **Not every real KiCad board converts to Board IR.** The converter is a documented subset and
-  fails closed on everything outside it. Re-measured on the private working corpus on 2026-08-13:
-  **12 of the 18 saves in that corpus convert.** Those 18 files hold 17 distinct board contents —
-  one pair is byte-identical across two save directories — so the same result reads as 12 of 17
-  distinct boards, and neither figure is the frozen 12-board set the
-  [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116) survey measured. Six saves refuse,
-  each with a typed refusal naming one construct, never a partial or repaired board: an unmodelled
-  `property` field inside a pad on two
-  ([#152](https://github.com/seunghyukchoe/copper-mcp/issues/152)), a custom-shape SMD pad's
-  `options` field on three ([#153](https://github.com/seunghyukchoe/copper-mcp/issues/153)), and
-  copper text on one, which is refused **by decision** and not by omission
+  fails closed on everything outside it. Re-measured on the private working corpus on 2026-08-13
+  (`B-107`): **13 of the 18 saves in that corpus convert.** Those 18 files hold 17 distinct board
+  contents — one pair is byte-identical across two save directories, and that pair is not among the
+  boards that moved — so the same result reads as 13 of 17 distinct boards, and neither figure is
+  the frozen 12-board set the
+  [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116) survey measured. Five saves refuse,
+  each with a typed refusal naming one construct, never a partial or repaired board: a custom-shape
+  SMD pad on four, which has a derivable envelope and nowhere in a Board IR `Pad` to put it
+  ([#153](https://github.com/seunghyukchoe/copper-mcp/issues/153),
+  [ADR-0100](docs/adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md)), and copper text
+  on one, which is refused **by decision** and not by omission
   ([#141](https://github.com/seunghyukchoe/copper-mcp/issues/141),
-  [ADR-0095](docs/adr/0095-copper-text-has-no-derivable-envelope.md)). **A refusal names the first
-  blocker in document order and nothing more**: every gap closed since that survey advanced the
-  refusal on at least one board instead of converting it, so read a refusal as an existential and
-  never as a universal. **No "converts every board" result is claimed at any count**, converting is
-  not routing, placing or passing DRC, and the counts above supersede any earlier survey figure.
+  [ADR-0095](docs/adr/0095-copper-text-has-no-derivable-envelope.md)). The pad-level `property`
+  refusal that blocked two of those saves is gone — seven of KiCad's eight `PAD_PROP` fabrication
+  tokens now convert, one save converted on it and the other advanced onto the custom pad behind it
+  ([ADR-0099](docs/adr/0099-pad-fabrication-properties-and-named-pad-refusals.md)). **A refusal
+  names the first blocker in document order and nothing more**: every gap closed since that survey
+  advanced the refusal on at least one board instead of converting it, so read a refusal as an
+  existential and never as a universal. **No "converts every board" result is claimed at any
+  count**, converting is not routing, placing or passing DRC, and the counts above supersede any
+  earlier survey figure.
 - A refusal is not a verdict on the board. It says the construct is outside the documented subset,
   which is the conservative direction — the converter over-refuses rather than guess at geometry.
 
@@ -249,11 +264,13 @@ modelled as a one-value literal (`not_run`, `not_modelled`, `inconclusive`) rath
   judged legal against the rules it was given — and a preview run with no rules proves only that
   the placement is legal as found. There is no score, no ranking, and no statement that one legal
   placement is better than another.
-- Courtyard overlap **is** evaluated, but only between footprints on the same physical side, only
-  over simple closed octilinear rings (edges horizontal, vertical, or exact 45-degree chamfers) and
-  circles of exact integer radius, and only as overlap — there is **no configurable courtyard
-  clearance**. Arcs, curves, arbitrary slopes, fills, and open or branching contours are refused
-  upstream by Board IR rather than judged here.
+- Courtyard overlap **is** evaluated, but only between shapes drawn on the same courtyard layer,
+  only over simple closed octilinear rings (edges horizontal, vertical, or exact 45-degree chamfers)
+  and circles of exact integer radius, and only as overlap — there is **no configurable courtyard
+  clearance**. The pairing is by **layer, not by footprint side**: a footprint may draw on the layer
+  opposite its own, and that keep-out is compared on the layer it was drawn on
+  ([ADR-0097](docs/adr/0097-courtyard-layer-decides-the-side.md)). Arcs, curves, arbitrary slopes,
+  fills, and open or branching contours are refused upstream by Board IR rather than judged here.
 - Courtyard overlap is **three-valued**, and bound to what KiCad 10.0.5 actually compares rather
   than to raw ring geometry: a footprint's rings form one even-odd region, so a ring nested inside
   another is a **hole** and a donut courtyard's centre is occupiable; and each region is contracted
