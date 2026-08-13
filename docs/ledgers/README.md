@@ -23,10 +23,10 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-191` | `D-192` |
-| [Risk register](risk-register.md) | `R-` | `R-146` | `R-147` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-140` | `SEC-141` |
-| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-103` | `B-104` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-195` | `D-196` |
+| [Risk register](risk-register.md) | `R-` | `R-150` | `R-151` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-144` | `SEC-145` |
+| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-108` | `B-109` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
 The rules:
@@ -75,6 +75,19 @@ The rules:
    free, took `SEC-139` and stepped over *this* record's live claim in return. Both directions
    are rule 1 working as designed; whichever lands second resolves the registry line's textual
    conflict.
+
+   The fifth round is this record stepping over **three** live claims at once, in every ID space
+   at the same time. Issue #165 (`D-195`/`R-150`/`SEC-144`/`B-108`, ADR-0104) was allocated while
+   PRs #160 and #162 were open holding `D-192`/`D-193`, `R-147`/`R-148`, `SEC-142` and
+   `B-105`/`B-106`, and a sibling branch on issue #163 held `D-194`/`R-149`/`SEC-143`/`B-107`, so
+   this record took numbers above all of them rather than racing any. `D-192` through `D-194`,
+   `R-147` through `R-149`, `SEC-141` through `SEC-143` and `B-104` through `B-107` are **live
+   claims, not gaps**, and the checker reports the unfilled ones as unallocated because it cannot
+   see an unmerged branch. `SEC-141` is the one number here with no recorded claimant, spent the
+   same way `SEC-114` was. If any of those branches is abandoned its numbers become permanent gaps
+   like every other spent number, and this paragraph becomes the correction to make. ADR-0104 was
+   allocated over ADR-0101/0102/0103 by the same rule, recorded in
+   [the ADR gap tombstones](../adr/README.md#adding-an-adr).
 
    The fourth round is the #116 close-out stepping over **two** live claims at once: two branches
    were open on this base holding `D-189`/`R-144` (issue #152) and `D-190`/`R-145` (issue #153), so

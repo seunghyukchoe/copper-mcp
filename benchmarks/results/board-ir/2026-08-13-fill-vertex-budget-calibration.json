@@ -1,0 +1,182 @@
+{
+  "benchmark": "fill-vertex-budget-calibration-v1",
+  "boards": [
+    {
+      "admitted_at_previous_default": true,
+      "full_read_peak_mib": 2.59,
+      "full_read_s": 0.4648,
+      "islands": 2,
+      "islands_over_layered_ceiling": 0,
+      "marginal_bytes_per_vertex": 159.5,
+      "marginal_s": 0.1027,
+      "marginal_share_of_full": 0.221,
+      "marginal_us_per_vertex": 23.808,
+      "max_island_vertices": 3190,
+      "median_island_vertices": 3190,
+      "origin": "repository",
+      "path": "hardware/coppertone-buffer/coppertone-buffer.kicad_pcb",
+      "refusing_read_s": 0.3621,
+      "source_bytes": 166070,
+      "source_digest12": "3bcd01ec4942",
+      "total_vertices": 4314,
+      "vertices_per_mib": 27238.9
+    },
+    {
+      "admitted_at_previous_default": true,
+      "full_read_peak_mib": 0.09,
+      "full_read_s": 0.0171,
+      "islands": 1,
+      "islands_over_layered_ceiling": 0,
+      "marginal_bytes_per_vertex": 117.0,
+      "marginal_s": 0.0027,
+      "marginal_share_of_full": 0.1561,
+      "marginal_us_per_vertex": 18.047,
+      "max_island_vertices": 148,
+      "median_island_vertices": 148,
+      "origin": "repository",
+      "path": "tests/fixtures/route-candidate/zone-fill-fresh.kicad_pcb",
+      "refusing_read_s": 0.0144,
+      "source_bytes": 7371,
+      "source_digest12": "9eb5b3f573bd",
+      "total_vertices": 148,
+      "vertices_per_mib": 21054.0
+    },
+    {
+      "admitted_at_previous_default": true,
+      "full_read_peak_mib": 0.12,
+      "full_read_s": 0.0237,
+      "islands": 2,
+      "islands_over_layered_ceiling": 0,
+      "marginal_bytes_per_vertex": 121.4,
+      "marginal_s": 0.0029,
+      "marginal_share_of_full": 0.1236,
+      "marginal_us_per_vertex": 15.752,
+      "max_island_vertices": 94,
+      "median_island_vertices": 94,
+      "origin": "repository",
+      "path": "tests/fixtures/route-candidate/zone-fill-islands.kicad_pcb",
+      "refusing_read_s": 0.0208,
+      "source_bytes": 10435,
+      "source_digest12": "a9c41ccae13e",
+      "total_vertices": 186,
+      "vertices_per_mib": 18690.5
+    },
+    {
+      "admitted_at_previous_default": true,
+      "full_read_peak_mib": 0.09,
+      "full_read_s": 0.0173,
+      "islands": 1,
+      "islands_over_layered_ceiling": 0,
+      "marginal_bytes_per_vertex": 116.9,
+      "marginal_s": 0.0025,
+      "marginal_share_of_full": 0.1442,
+      "marginal_us_per_vertex": 16.845,
+      "max_island_vertices": 148,
+      "median_island_vertices": 148,
+      "origin": "repository",
+      "path": "tests/fixtures/route-candidate/zone-fill-stale.kicad_pcb",
+      "refusing_read_s": 0.0148,
+      "source_bytes": 7504,
+      "source_digest12": "730eb1552361",
+      "total_vertices": 148,
+      "vertices_per_mib": 20680.9
+    }
+  ],
+  "boards_measured": 4,
+  "budget_cost_at_the_densest_reachable_document": [
+    {
+      "budget": 50000,
+      "document_bytes": 6094870,
+      "elapsed_s": 29.345,
+      "offered_vertices": 741375,
+      "outcome": "refused",
+      "peak_traced_mib": 146.8,
+      "refusal": "zone fill exceeds the configured vertex budget"
+    },
+    {
+      "budget": 500000,
+      "document_bytes": 6094870,
+      "elapsed_s": 37.232,
+      "offered_vertices": 741375,
+      "outcome": "refused",
+      "peak_traced_mib": 168.4,
+      "refusal": "zone fill exceeds the configured vertex budget"
+    },
+    {
+      "budget": 1000000,
+      "document_bytes": 6094870,
+      "elapsed_s": 48.348,
+      "offered_vertices": 741375,
+      "outcome": "read",
+      "peak_traced_mib": 226.7,
+      "refusal": ""
+    }
+  ],
+  "commit": "f0f7414a5105cb8e80e22287a62c47934ea17d08",
+  "configuration": {
+    "environment_range": [
+      3,
+      1000000
+    ],
+    "environment_variable": "COPPER_MCP_MAX_FILL_VERTICES",
+    "layered_per_island_ceiling": 4096,
+    "parse_limits_defaults": {
+      "max_children_per_list": 500000,
+      "max_input_bytes": 16777216,
+      "max_nodes": 3000000,
+      "max_tokens": 4000000
+    },
+    "previous_default": 50000,
+    "shipped_default": 500000
+  },
+  "density_per_mib": {
+    "max": 27238.9,
+    "median": 20867.5,
+    "min": 18690.5
+  },
+  "dirty": true,
+  "environment": {
+    "accelerator": "none (CPU-only)",
+    "machine": "arm64",
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "processor": "arm",
+    "python": "3.12.13"
+  },
+  "instrumentation": "perf_counter_ns with tracemalloc enabled",
+  "marginal_cost": {
+    "bytes_per_vertex_max": 159.5,
+    "share_of_full_read_max": 0.221,
+    "us_per_vertex_max": 23.808,
+    "us_per_vertex_min": 15.752
+  },
+  "not_claimed": [
+    "no claim that these densities generalise beyond the boards measured",
+    "no claim about refilled fill, which is a second population this budget also meters",
+    "no electrical, thermal, manufacturing or fabrication claim",
+    "the corpus, when supplied, is one designer's project family and not a random sample"
+  ],
+  "observed_maxima": {
+    "boards_over_previous_default": 0,
+    "boards_with_an_island_over_the_layered_ceiling": 0,
+    "islands": 2,
+    "max_island_vertices": 3190,
+    "total_vertices": 4314
+  },
+  "reachability": [
+    {
+      "document_bytes": 4000062,
+      "islands": 1,
+      "max_reachable_vertices": 499999,
+      "refuses_above_with": "budget.exceeded.children_per_list"
+    },
+    {
+      "document_bytes": 6094870,
+      "islands": 4096,
+      "max_reachable_vertices": 741375,
+      "refuses_above_with": "budget.exceeded.nodes"
+    }
+  ],
+  "recorded_at_utc": "2026-08-13T06:49:54+00:00",
+  "run_id": "sha256:304111dec85e9788692b65cb9f66a7a8f513517fa13227bf4eb9b75b7892033d",
+  "scope": "Cached zone-fill reading only. No KiCad process is spawned, so no board here is measured fresh or stale; that split is B-105's. Corpus rows carry counts, timings and a source-digest prefix only."
+}

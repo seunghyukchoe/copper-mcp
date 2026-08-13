@@ -8,6 +8,42 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- **`max_fill_vertices` is recalibrated from 50,000 to 500,000, and recorded as a
+  denial-of-service posture change rather than a tuning tweak.**
+  ([ADR-0104](docs/adr/0104-fill-vertex-budget-behind-a-parse.md), issue
+  [#165](https://github.com/seunghyukchoe/copper-mcp/issues/165)) The old default came from one
+  fixture — [ADR-0021](docs/adr/0021-zone-fill-authority.md) records it as "CopperTone's pour is
+  4,314 vertices across two layers" — and real pours are 12–30× that. Of 18 private-corpus boards
+  carrying a cached pour, **seven run 50,482–130,305 vertices** and one misses the old budget by
+  482. Because `run_zone_fill_authority` reads the cache before it can compare it to a refill,
+  those seven were refused with a *resource* diagnostic **before freshness was ever considered**;
+  the split moves from 9 `fresh` / 2 `stale_fill` / 7 budget-refused to **12 `fresh` / 6
+  `stale_fill` / 0 budget-refused**. **The measurement that decided the design is that this budget
+  sits behind the parse it appears to guard**: `read_fill_islands` parses the whole document before
+  counting a vertex, so refusing the largest board at a budget of 3 costs 20.9 s of the 24.2 s a
+  complete read costs, and what the budget actually meters is 22–26 µs and 113–145 B per admitted
+  vertex. The defence against an unbounded vertex list is `ParseLimits`
+  ([ADR-0079](docs/adr/0079-discriminated-configurable-parse-budgets.md)), which also caps the
+  reachable population at **741,375** vertices. The new number follows ADR-0079's rule at the
+  densest observation — 16 MiB × 29,503 vertices/MiB = 472,048, rounded up — and does not depend on
+  the private corpus: the densest in-repository board gives 435,824 and rounds to the same 500,000.
+  **The range is unchanged at 3–1,000,000**, still reachable so no accepted value is inert, and
+  deliberately below what the fixed 16 MiB byte ceiling would permit. **Priced:** against the
+  densest reachable document the change moves a refusal from 29.325 s / 146.8 MiB to 35.812 s /
+  168.4 MiB, so it buys an attacker **6.5 s and 21.6 MiB** on top of a floor the budget has never
+  been able to move. `COPPER_MCP_MAX_FILL_VERTICES=50000` restores the previous posture exactly.
+  Raising it is **answer-preserving and proved from the budget rather than from a differential**:
+  `max_vertices` reaches exactly one expression, the guard that aborts the reader, so it decides
+  whether a read happens and never what it returns — the threshold is exactly the board's vertex
+  *total*, and above it the islands, the `fill_digest` and `ZoneFillAuthority.to_dict()` are
+  identical from the vertex count to the ceiling. No content address moves and no version constant
+  advances. **No route is unlocked and none is claimed** (`B-105` measured that at zero). One
+  refusal moves rather than disappearing, which is the expected outcome of raising a gate: this
+  budget meters a board's total pour while the ordered-layer adapter refuses any single island above
+  4,096 vertices, and **14 of 18 corpus boards carry an island above it** (widest 43,889), so boards
+  that could not be read at all will now read and then be refused per-island — filed under `R-150`
+  rather than fixed in a routing path under concurrent change.
+
 - **The real-board conversion survey is closed out, and every count it published is superseded by a
   measured one.** Issue #116's title — "5 named gaps block 22 of 23 boards" — was wrong in every
   number: the **23** counted `.history/` editor backups and derived stems and was publicly corrected
@@ -90,6 +126,18 @@ All notable changes are documented here. The format follows
   cover `parsePAD`'s whole switch, so the next head cannot quietly fall back to it.
   ([ADR-0099](docs/adr/0099-pad-fabrication-properties-and-named-pad-refusals.md),
   [D-189](docs/ledgers/decision-ledger.md), [SEC-140](docs/ledgers/security-ledger.md), #152)
+
+### Fixed
+
+- **A zone-fill budget refusal no longer names a document it cannot know about.** The reader is
+  called twice per freshness proof — once on the board in the workspace, once on the copy KiCad
+  refilled — and hardcoded the word "cached", so the second call site produced the
+  self-contradicting `refilled zone fill could not be read: cached zone fill exceeds the configured
+  vertex budget`. Both call sites already name their document, so the reader no longer guesses. The
+  committed `zone-fill-stale` fixture is where this surfaced: it caches 148 vertices and KiCad
+  recomputes 186, so any budget in [148, 185] admits the operator's board and then refuses this
+  server's own recomputation of it. (issue
+  [#165](https://github.com/seunghyukchoe/copper-mcp/issues/165))
 
 ### Added
 

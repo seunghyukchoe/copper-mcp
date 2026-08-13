@@ -25,6 +25,40 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.max_drc_context_scan_seconds, 10)
         self.assertEqual(settings.max_route_preview_seconds, 30)
 
+    def test_the_fill_vertex_budget_is_calibrated_and_not_a_round_number(self) -> None:
+        """ADR-0104: 16 MiB x the densest observed pour, 29,503 vertices/MiB, rounded up.
+
+        The dataclass default and the environment default must be the same number. They are not
+        interchangeable in practice -- ``Settings`` constructed directly, as every committed
+        corpus runner does so that an ambient allow-flag cannot reach it, takes the dataclass
+        default and never consults the environment -- so a divergence between them would mean
+        this project's own measurements were taken at a budget no deployment uses.
+        """
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(os.environ, {"COPPER_MCP_WORKSPACE": directory}, clear=True):
+                from_environment = Settings.from_env()
+            constructed = Settings(workspace=Path(directory))
+
+        self.assertEqual(constructed.max_fill_vertices, 500_000)
+        self.assertEqual(from_environment.max_fill_vertices, constructed.max_fill_vertices)
+
+    def test_the_fill_vertex_budget_keeps_its_range(self) -> None:
+        """A pour needs three vertices to be a polygon; the ceiling is a DoS control (ADR-0104)."""
+
+        for value, accepted in (("2", False), ("3", True), ("1000000", True), ("1000001", False)):
+            with tempfile.TemporaryDirectory() as directory:
+                environment = {
+                    "COPPER_MCP_WORKSPACE": directory,
+                    "COPPER_MCP_MAX_FILL_VERTICES": value,
+                }
+                with patch.dict(os.environ, environment, clear=True):
+                    if accepted:
+                        self.assertEqual(Settings.from_env().max_fill_vertices, int(value))
+                    else:
+                        with self.assertRaises(ConfigurationError):
+                            Settings.from_env()
+
     def test_rejects_unknown_transport(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             with patch.dict(
