@@ -87,6 +87,20 @@ class ConversionResult:
     silently keeps the first value for a repeated key, so a document with a duplicate has more
     expressions than entries.  It is a count for the same reason the two fields above are: a
     diagnostic would refuse the board.  See ADR-0094 and R-139.
+
+    ``unmodelled_pad_property_count`` counts the pad ``(property <token>)`` expressions the KiCad
+    adapter accepted and did not model -- KiCad's ``PAD_PROP`` fabrication annotation, in the seven
+    of its eight writable values that convert.  None of the seven changes a pad's copper, hole,
+    layer span, clearance or connectivity; they reach Gerber aperture attributes, drill-file
+    attributes, KiCad's padstack advisories, its footprint type hint and its board statistics, all
+    of which KiCad itself produces from the unmodified file.  What is lost is the *token*: a caller
+    reading a ``Pad`` cannot tell that the designer marked it a heatsink, a test point or a BGA
+    ball, and one generating fabrication output from a snapshot alone would emit the wrong aperture
+    attribute.  This count is the disclosure, following ``edge_connector_pad_count`` exactly.  It
+    counts expressions on **converted** pads only, so an aperture-skipped pad never appears in it,
+    and the eighth value, ``pad_prop_castellated``, never does either -- it refuses the board.  It
+    is a count and not a diagnostic for the same reason the four above are.  See ADR-0099 and
+    R-144.
     """
 
     snapshot: BoardIRSnapshot | None
@@ -95,6 +109,7 @@ class ConversionResult:
     unmodelled_group_count: int = 0
     edge_connector_pad_count: int = 0
     unmodelled_board_property_count: int = 0
+    unmodelled_pad_property_count: int = 0
 
     def __post_init__(self) -> None:
         if self.snapshot is not None and not isinstance(self.snapshot, BoardIRSnapshot):
@@ -127,6 +142,12 @@ class ConversionResult:
             or self.unmodelled_board_property_count < 0
         ):
             raise ValueError("conversion board property count must be a non-negative integer")
+        if (
+            isinstance(self.unmodelled_pad_property_count, bool)
+            or not isinstance(self.unmodelled_pad_property_count, int)
+            or self.unmodelled_pad_property_count < 0
+        ):
+            raise ValueError("conversion pad property count must be a non-negative integer")
         has_error = any(item.severity is Severity.ERROR for item in self.diagnostics)
         if has_error and self.snapshot is not None:
             raise ValueError("conversion errors cannot accompany a snapshot")
@@ -140,3 +161,5 @@ class ConversionResult:
             raise ValueError("a failed conversion cannot report an edge-connector pad count")
         if self.snapshot is None and self.unmodelled_board_property_count:
             raise ValueError("a failed conversion cannot report a board property count")
+        if self.snapshot is None and self.unmodelled_pad_property_count:
+            raise ValueError("a failed conversion cannot report a pad property count")

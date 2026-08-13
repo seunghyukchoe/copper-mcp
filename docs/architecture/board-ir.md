@@ -268,7 +268,7 @@ including:
   an exact integer-nanometre containing box, `gr_curve` by the Bézier convex-hull property), but a
   `Pad` is read over-approximating for its obstacle and under-approximating for its attachment core
   from the same `shape`/`size_x_nm`/`size_y_nm`, and no single rectangle can be both
-  ([ADR-0099](../adr/0099-custom-pads-have-an-envelope-and-nowhere-to-put-it.md)). A shape token in
+  ([ADR-0100](../adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md)). A shape token in
   neither the table nor `PadShape` refuses without being named. A **copper-less `connect` pad** is
   the one kind form that still refuses: the paste/mask aperture skip tests the source token and
   requires literally `smd`, so an aperture-shaped edge-connector pad is refused rather than read

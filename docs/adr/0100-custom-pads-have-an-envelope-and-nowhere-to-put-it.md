@@ -1,4 +1,4 @@
-# ADR-0099: A custom pad has a derivable envelope and nowhere in Board IR to put it
+# ADR-0100: A custom pad has a derivable envelope and nowhere in Board IR to put it
 
 - Status: Accepted
 - Date: 2026-08-13

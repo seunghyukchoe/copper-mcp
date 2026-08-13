@@ -222,20 +222,22 @@ modelled as a one-value literal (`not_run`, `not_modelled`, `inconclusive`) rath
 **Board conversion.**
 
 - **Not every real KiCad board converts to Board IR.** The converter is a documented subset and
-  fails closed on everything outside it. Re-measured on the private working corpus on 2026-08-12,
-  after root board properties were accepted
-  ([#140](https://github.com/seunghyukchoe/copper-mcp/issues/140)): **11 of the 17 boards in the
-  corpus as saved today convert — unchanged by that acceptance**, which the same runner measured at
-  11 of 17 immediately before it. Six saves refuse, each with a typed refusal naming one construct,
-  never a partial or repaired board: `connect`-kind (edge-connector) pads on one board
-  ([#138](https://github.com/seunghyukchoe/copper-mcp/issues/138)), copper text on one
-  ([#141](https://github.com/seunghyukchoe/copper-mcp/issues/141)), a courtyard whose layer
-  disagrees with its footprint's side on three, and an unsupported field inside a pad on one. **A
-  refusal names the first blocker in document order and nothing more**: the four boards that
-  refused for root board properties turned out to carry a further blocker each, so removing one
-  advanced the refusal instead of converting the board. **No "converts every board" result is
-  claimed at any count**, converting is not routing, placing or passing DRC, and the counts above
-  supersede any earlier survey figure.
+  fails closed on everything outside it. Re-measured on the private working corpus on 2026-08-13:
+  **12 of the 18 saves in that corpus convert.** Those 18 files hold 17 distinct board contents —
+  one pair is byte-identical across two save directories — so the same result reads as 12 of 17
+  distinct boards, and neither figure is the frozen 12-board set the
+  [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116) survey measured. Six saves refuse,
+  each with a typed refusal naming one construct, never a partial or repaired board: an unmodelled
+  `property` field inside a pad on two
+  ([#152](https://github.com/seunghyukchoe/copper-mcp/issues/152)), a custom-shape SMD pad's
+  `options` field on three ([#153](https://github.com/seunghyukchoe/copper-mcp/issues/153)), and
+  copper text on one, which is refused **by decision** and not by omission
+  ([#141](https://github.com/seunghyukchoe/copper-mcp/issues/141),
+  [ADR-0095](docs/adr/0095-copper-text-has-no-derivable-envelope.md)). **A refusal names the first
+  blocker in document order and nothing more**: every gap closed since that survey advanced the
+  refusal on at least one board instead of converting it, so read a refusal as an existential and
+  never as a universal. **No "converts every board" result is claimed at any count**, converting is
+  not routing, placing or passing DRC, and the counts above supersede any earlier survey figure.
 - A refusal is not a verdict on the board. It says the construct is outside the documented subset,
   which is the conservative direction — the converter over-refuses rather than guess at geometry.
 

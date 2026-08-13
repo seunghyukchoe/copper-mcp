@@ -8,6 +8,44 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- **The real-board conversion survey is closed out, and every count it published is superseded by a
+  measured one.** Issue #116's title — "5 named gaps block 22 of 23 boards" — was wrong in every
+  number: the **23** counted `.history/` editor backups and derived stems and was publicly corrected
+  to 12 at the time, and the corpus has since grown twice. Re-measured on 2026-08-13 with the
+  unchanged runner over the private working tree: **12 of 18 saves convert**, and those 18 files
+  hold **17 distinct board contents** (one pair is byte-identical across two save directories), so
+  say which denominator you mean. Because the corpus is a live tree the designer edits during long
+  runs — three measurements this week were invalidated by a mid-run save — the run is bracketed by
+  three conversion-only sweeps recording a sha256 per board; **all three agree on all 18 digests**,
+  so no edit landed. **All five gaps the survey named are closed, each attributable to its own
+  decision and none assumed from a merged pull request**: chamfered and circular courtyards
+  ([ADR-0080](docs/adr/0080-chamfered-and-circular-courtyards.md)) closed causes 1 and 3, roundrect
+  radius rounding ([ADR-0077](docs/adr/0077-roundrect-corner-radius-rounding.md)) cause 2, net-0
+  copper as an obstacle ([ADR-0078](docs/adr/0078-netless-copper-as-obstacle.md)) cause 4, and
+  dropping the KiCad-`uuid`-to-identity projection (`D-158`) cause 5 — and none of those closures is
+  vacuous, because all five constructs are still present in the corpus on saves that convert today
+  (1,362 fractional roundrect radii, 38 chamfer courtyard edges, 192 circular courtyards, 65 vias
+  and 1,539 segments at net 0, 2,877 objects sharing a reused `uuid`). Six saves still refuse, each
+  with one typed first-error refusal: a pad `property` field on two
+  ([#152](https://github.com/seunghyukchoe/copper-mcp/issues/152)), a custom-shape SMD pad's
+  `options` field on three ([#153](https://github.com/seunghyukchoe/copper-mcp/issues/153)), and
+  copper text on one, refused **by decision**
+  ([#141](https://github.com/seunghyukchoe/copper-mcp/issues/141),
+  [ADR-0095](docs/adr/0095-copper-text-has-no-derivable-envelope.md)). **#116 stays open and is
+  retitled** to the M1 conversion tracker it had become: it is the only issue carrying the
+  milestone, and all three remaining gaps carry none, so closing it would report M1 complete while
+  two live gaps are untracked. Two other published figures expired with the corpus and are
+  superseded rather than edited where they were written: real-board route preview is **0 of 425**
+  today against B-096's 14 of 385, because 320 previews now report `already_connected` — the
+  designer routed those nets — and placement preview's supported subset, which B-099 recorded as
+  never binding on this corpus, now yields **156 `refused/illegal_placement`** verdicts on one
+  board, which is the widened courtyard model finding overlaps that were always there. Route
+  preview still runs **one net at a time on `F.Cu` against the unrouted snapshot**, so its
+  candidates are not mutually compatible and it is not a whole-board result; placement preview still
+  runs **without rules**, so clean means legal-as-found and never placement quality.
+  ([D-191](docs/ledgers/decision-ledger.md), [R-146](docs/ledgers/risk-register.md),
+  `B-099` survey close-out replay in the [benchmark ledger](docs/ledgers/benchmark-ledger.md), #116)
+
 - **Copper lettering now refuses under its own name, and the refusal is a finding rather than a
   to-do.** A root `gr_text` or `gr_text_box` on a copper layer reported the same sentence as a stray
   `gr_line` — `root graphic on copper is unsupported` — and the two do not fail for the same reason.
@@ -35,8 +73,54 @@ All notable changes are documented here. The format follows
   [D-185](docs/ledgers/decision-ledger.md), [R-140](docs/ledgers/risk-register.md),
   [SEC-136](docs/ledgers/security-ledger.md),
   [KiCad copper text envelope research](docs/research/kicad-copper-text-envelope-v1.md), #141)
+- **A pad refusal now names the field it refused, for every pad field KiCad can write.** 0.7.0 made
+  seven pad fields refuse under their own sentence and left nineteen others behind the generic
+  `expression contains an unsupported semantic field`, which names nothing an operator can act on —
+  and a real board promptly refused on one of the nineteen. The named table is now KiCad's whole
+  top-level pad grammar minus what the adapter models: `back_post_machining`, `backdrill`,
+  `chamfer`, `chamfer_ratio`, `die_delay`, `die_length`, `front_post_machining`, `keep_end_layers`,
+  `padstack`, `rect_delta`, `sim_electrical_type`, `solder_mask_margin`, `solder_paste_margin`,
+  `solder_paste_margin_ratio`, `teardrops`, `tenting`, `tertiary_drill`, `thermal_width` and
+  `zone_layer_connections` join the seven and each reports `pad field '<name>' is unsupported`.
+  **Callers matching the exact string `expression contains an unsupported semantic field` to detect
+  one of these nineteen stop matching**, exactly as 0.7.0 warned for the first seven; the code stays
+  `unsupported.construct` and `object_kind` stays `pad`. **No board's outcome changes for any of the
+  nineteen** — every one already refused, only the sentence moved. The generic message survives for a
+  head KiCad itself cannot write, and a test now states that the named and supported tables jointly
+  cover `parsePAD`'s whole switch, so the next head cannot quietly fall back to it.
+  ([ADR-0099](docs/adr/0099-pad-fabrication-properties-and-named-pad-refusals.md),
+  [D-189](docs/ledgers/decision-ledger.md), [SEC-140](docs/ledgers/security-ledger.md), #152)
+
 ### Added
 
+- **A pad fabrication property now converts, for seven of the eight values KiCad can write.**
+  `(property pad_prop_bga | pad_prop_fiducial_glob | pad_prop_fiducial_loc | pad_prop_heatsink |
+  pad_prop_mechanical | pad_prop_pressfit | pad_prop_testpoint)` is accepted; the accepted subset is
+  a closed table and not a sentence — exactly one **bare** positional atom, no child expression, at
+  most one `property` per pad — so the three looser forms KiCad's own reader tolerates all refuse.
+  The multi-token form is refused for a reason rather than for tidiness: KiCad's reader loops and
+  lets the **last** token win, so `(property pad_prop_heatsink pad_prop_castellated)` resolves in
+  KiCad to the one value that must not be discarded. **`pad_prop_castellated` is refused as a
+  caution:** KiCad's edge exclusion is a *forgiveness* region — a collision with the board edge is
+  waived inside a castellated hole — so the token grants routing space and discarding it leaves
+  CopperMCP stricter than KiCad, which is the safe direction. The refusal is instead about the
+  physical board: fabrication routes the half-holes away while `Edge.Cuts` keeps them, so the
+  outline claims board that will not exist, and KiCad's DRC waives exactly that region, so the
+  authoritative-DRC backstop is weakest where the over-claim would be. The
+  seven are safe by a complete sweep of `PAD_PROP` over KiCad master, which finds only
+  fabrication-file attributes, DRC advisories, a footprint type hint, statistics, the 3D exporter
+  and the editor. Nothing is modelled: no `Pad` field, no schema version, no pinned identity moves.
+  The discarded token is disclosed as `ConversionResult.unmodelled_pad_property_count`, following
+  `edge_connector_pad_count`; like that one it is in-process and reaches no MCP contract. On the
+  real-board corpus this takes conversion from 12 of 18 saves to 13 of 18 — 12 of 17 to 13 of 17 by
+  distinct board content, two of the saves being byte-identical — measured before→after→before with
+  per-board digests. **The construct blocks two saves, not the one the issue records**; one
+  converts, and the other did **not** and instead advanced to `pad field 'options' is unsupported`,
+  which is reported as an advance, counted as nothing, and already filed as #153. ([ADR-0099](docs/adr/0099-pad-fabrication-properties-and-named-pad-refusals.md),
+  [D-189](docs/ledgers/decision-ledger.md), [R-144](docs/ledgers/risk-register.md),
+  [B-103](docs/ledgers/benchmark-ledger.md),
+  [KiCad pad fabrication property research](docs/research/kicad-pad-fabrication-property-v1.md),
+  #152)
 - **A `connect` pad — KiCad's edge-card connector finger — now converts, as an SMD pad.** It was
   the last construct blocking `phono-preamp/tier1-rev-a`, and it is deliberately not a one-line
   map entry: `PadKind` is published into every Board IR snapshot digest and enumerated as a closed
@@ -266,7 +350,7 @@ All notable changes are documented here. The format follows
   confirmed refusal and no board is won by it.** The blocker behind it is now visible and reported
   rather than counted: a pad-level `(property …)`, KiCad's `PAD_PROP`, refused today with a message
   that names nothing.
-  ([ADR-0099](docs/adr/0099-custom-pads-have-an-envelope-and-nowhere-to-put-it.md),
+  ([ADR-0100](docs/adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md),
   [D-190](docs/ledgers/decision-ledger.md), [R-145](docs/ledgers/risk-register.md),
   [custom pad envelope research](docs/research/kicad-custom-pad-envelope-v1.md),
   [`docs/mutants/`](docs/mutants/README.md), issue #153)

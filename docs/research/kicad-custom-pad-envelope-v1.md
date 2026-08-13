@@ -3,7 +3,7 @@
 Research date: 2026-08-13. This note supports
 [issue #153](https://github.com/seunghyukchoe/copper-mcp/issues/153), decision
 [D-190](../ledgers/decision-ledger.md), risk [R-145](../ledgers/risk-register.md) and
-[ADR-0099](../adr/0099-custom-pads-have-an-envelope-and-nowhere-to-put-it.md).
+[ADR-0100](../adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md).
 
 A pad is copper. [ADR-0011](../adr/0011-existing-copper-obstacles.md)'s direction-of-error rule — restated
 by [ADR-0013](../adr/0013-polygon-zone-obstacles.md) and

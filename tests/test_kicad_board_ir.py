@@ -16,11 +16,15 @@ from hypothesis import strategies as st
 
 from copper_mcp.adapters import KiCadConstraintProfile, net_id_for_name, parse_kicad_bytes
 from copper_mcp.adapters.kicad_board_ir import (
+    _ACCEPTED_PAD_PROPERTIES,
     _ATTACHING_PAD_ZONE_CONNECTIONS,
     _DETACHING_PAD_ZONE_CONNECTION,
     _PAD_KIND_BY_TOKEN,
+    _REFUSED_PAD_PROPERTY,
     _ROOT_GROUP_HEADS,
+    _SUPPORTED_PAD_FIELDS,
     _UNMODELLED_PAD_SHAPES,
+    _UNSUPPORTED_PAD_FIELDS,
 )
 from copper_mcp.adapters.kicad_placement_patch import (
     KiCadPlacementPatchError,
@@ -3556,6 +3560,335 @@ def test_an_unknown_pad_field_is_still_refused() -> None:
     assert result.diagnostics[0].message == "expression contains an unsupported semantic field"
 
 
+@pytest.mark.parametrize("head", _UNSUPPORTED_PAD_FIELDS)
+def test_every_unsupported_pad_field_refuses_by_name(head: str) -> None:
+    """Every sentence the named-refusal loop can emit is reachable, and is pinned here.
+
+    ADR-0091 made seven of these reachable and pinned seven. Nineteen more heads stayed behind the
+    allowlist's field-less sentence, which is exactly the defect issue #152 reported one head
+    further along -- so the pin is now over the whole table, and a head added to it without a row
+    here is a message no test has ever seen the adapter emit.
+
+    The payload is deliberately `0` for every head rather than something format-plausible: the
+    check is on the head alone, and using a realistic value would let a mutant that reads the
+    payload pass. The seven ADR-0091 named still carry realistic values in the test above, which
+    is where the format documentation belongs.
+    """
+
+    result = parse_kicad_bytes(
+        _with_pad_zone_connect(b"(" + head.encode() + b" 0)"),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.code == "unsupported.construct"
+    assert diagnostic.message == f"pad field {head!r} is unsupported"
+    assert diagnostic.object_kind == "pad"
+
+
+def test_the_pad_field_tables_cover_kicads_whole_pad_grammar() -> None:
+    """Named-refused and supported must jointly cover every head `parsePAD` accepts.
+
+    This is the property that makes issue #152 closable as a class rather than as one head. The
+    generic "expression contains an unsupported semantic field" is not wrong -- it is unactionable
+    -- and it stays reachable only for a head KiCad itself cannot write. Dropping a head from the
+    named table is otherwise invisible: the board still refuses, just without saying what for.
+
+    The right-hand side is KiCad master's `parsePAD` top-level switch, transcribed once. It is a
+    literal on purpose: reading it out of the adapter's own constants would make the assertion
+    compare the code against itself.
+    """
+
+    kicad_pad_heads = frozenset(
+        {
+            "at",
+            "back_post_machining",
+            "backdrill",
+            "chamfer",
+            "chamfer_ratio",
+            "clearance",
+            "die_delay",
+            "die_length",
+            "drill",
+            "front_post_machining",
+            "keep_end_layers",
+            "layers",
+            "locked",
+            "net",
+            "options",
+            "padstack",
+            "pinfunction",
+            "pintype",
+            "primitives",
+            "property",
+            "rect_delta",
+            "remove_unused_layers",
+            "roundrect_rratio",
+            "sim_electrical_type",
+            "size",
+            "solder_mask_margin",
+            "solder_paste_margin",
+            "solder_paste_margin_ratio",
+            "teardrops",
+            "tenting",
+            "tertiary_drill",
+            "thermal_bridge_angle",
+            "thermal_bridge_width",
+            "thermal_gap",
+            "thermal_width",
+            "tstamp",
+            "uuid",
+            "zone_connect",
+            "zone_layer_connections",
+        }
+    )
+    named = frozenset(_UNSUPPORTED_PAD_FIELDS)
+
+    assert len(_UNSUPPORTED_PAD_FIELDS) == len(named), "the named table repeats a head"
+    assert not named & _SUPPORTED_PAD_FIELDS, "a head is both supported and refused by name"
+    assert kicad_pad_heads <= named | _SUPPORTED_PAD_FIELDS
+    # The two entries outside KiCad master's pad grammar, both deliberate: `layer` is the legacy
+    # singular an older file can still carry, and `offset` moved inside `(drill …)` but keeps the
+    # sentence ADR-0091 pinned.
+    assert (named | _SUPPORTED_PAD_FIELDS) - kicad_pad_heads == {"layer", "offset"}
+
+
+def _with_pad_property(token: bytes) -> bytes:
+    """Put one fabrication property on the fixture's GND through-hole pad."""
+
+    return _insert_before(
+        SUBSET_BOARD.read_bytes(), b"      (drill 1)", b"      (property " + token + b")\n"
+    )
+
+
+def test_the_pad_property_constants_partition_what_kicad_can_write() -> None:
+    """Accepted and refused must partition the eight tokens the writer emits, exactly.
+
+    The behavioural tests below cannot see the mutation that matters most -- moving
+    `pad_prop_castellated` into the accepted set changes nothing observable, because it is refused
+    by its own named branch either way. Stating the partition makes that visible, and it states a
+    property rather than pinning a literal.
+
+    `none` is in neither set on purpose. `parsePAD` accepts `(property none)`, but
+    `format( const PAD* )` emits the token only for a non-`NONE` value, so it is a form KiCad's
+    reader tolerates and its writer cannot produce -- the same asymmetry ADR-0091 recorded for
+    `zone_connect`'s unwritten `-1`, resolved the same way.
+    """
+
+    writable = frozenset(
+        {
+            "pad_prop_bga",
+            "pad_prop_castellated",
+            "pad_prop_fiducial_glob",
+            "pad_prop_fiducial_loc",
+            "pad_prop_heatsink",
+            "pad_prop_mechanical",
+            "pad_prop_pressfit",
+            "pad_prop_testpoint",
+        }
+    )
+
+    assert _REFUSED_PAD_PROPERTY not in _ACCEPTED_PAD_PROPERTIES
+    assert _ACCEPTED_PAD_PROPERTIES | {_REFUSED_PAD_PROPERTY} == writable
+    assert "none" not in _ACCEPTED_PAD_PROPERTIES
+
+
+@pytest.mark.parametrize("token", sorted(_ACCEPTED_PAD_PROPERTIES))
+def test_an_accepted_pad_property_converts_to_an_identical_board(token: str) -> None:
+    """Each accepted fabrication property converts, and converts to the very same content.
+
+    **This equality is not the safety argument and must not be read as one.** The converter reads
+    the token and propagates nothing, so the equality holds by construction for *any* accepted
+    value -- it would hold identically if `pad_prop_castellated` were admitted. Two earlier
+    with/without proofs in this repository failed for exactly that reason (D-178, D-184). What it
+    establishes is three things and no more: acceptance changes no modelled geometry, the schema is
+    untouched, and every pinned golden identity is frozen.
+
+    Soundness rests on the KiCad sweep in ADR-0100: none of the seven reaches a pad's copper, hole,
+    layer span, clearance or connectivity.
+    """
+
+    baseline = parse_success(SUBSET_BOARD.read_bytes(), constraint_profile(assign_signal=True))
+    accepted = parse_success(
+        _with_pad_property(token.encode()), constraint_profile(assign_signal=True)
+    )
+
+    assert replace(accepted.content, source=baseline.content.source) == baseline.content
+    # And the pads really are there: an equality between two empty tuples would pass as well.
+    assert len(baseline.content.pads) == 2
+
+
+@pytest.mark.parametrize("token", sorted(_ACCEPTED_PAD_PROPERTIES))
+def test_every_accepted_pad_property_is_counted_rather_than_dropped_in_silence(token: str) -> None:
+    """The token is discarded, so it is disclosed as a count -- ADR-0096's pattern exactly.
+
+    `ConversionResult.unmodelled_pad_property_count` is a count and not a diagnostic because every
+    caller of `parse_kicad_bytes` reads a non-empty `diagnostics` tuple as a refusal, so a
+    diagnostic would refuse the board it exists to admit.
+
+    **Parametrized over all seven for a reason found by adversarial review.** Every read of this
+    counter used `pad_prop_heatsink` and nothing else, so a reviewer's mutant returning
+    `value == "pad_prop_heatsink"` from the validator passed the whole suite: six of the seven
+    accepted tokens could be silently un-counted with no test noticing. One example of a counted
+    thing is not evidence that the counter counts the *class*.
+    """
+
+    baseline = parse_kicad_bytes(SUBSET_BOARD.read_bytes(), constraint_profile(assign_signal=True))
+    one = parse_kicad_bytes(
+        _with_pad_property(token.encode()), constraint_profile(assign_signal=True)
+    )
+
+    assert baseline.unmodelled_pad_property_count == 0
+    assert one.unmodelled_pad_property_count == 1
+
+
+def test_an_aperture_pads_property_is_validated_but_not_counted() -> None:
+    """Validation runs before the aperture skip; counting runs after it, and the two differ.
+
+    A stencil opening is not copper this board carries, so counting one would make the disclosure
+    claim a converted pad that does not exist. Collapsing the two steps into one would have to
+    break either this or `test_a_skipped_aperture_pad_cannot_smuggle_a_castellated_property`.
+    """
+
+    result = parse_kicad_bytes(
+        _with_pad(_aperture_pad(extra=b"      (property pad_prop_heatsink)\n")),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.diagnostics == ()
+    assert result.unmodelled_pad_property_count == 0
+
+
+def test_a_castellated_pad_property_is_refused_and_named() -> None:
+    """The one writable token that must not convert, refused with the field named.
+
+    It is refused as a caution, **not** because the direction-of-error invariant demands it. KiCad's
+    `AddEdgeExclusion` is a forgiveness region -- a collision with the `Edge_Cuts` obstacle is
+    *waived* inside a castellated hole -- so the token grants routing space and discarding it leaves
+    this adapter stricter than KiCad, which is allowed. The refusal stands on a weaker footing:
+    fabrication routes the half-holes out of the board while `Edge.Cuts` keeps them, so the outline
+    claims board that will not exist, and KiCad's DRC waives that very region, so the
+    authoritative-DRC backstop is weakest exactly where the over-claim would be.
+    """
+
+    result = parse_kicad_bytes(
+        _with_pad_property(b"pad_prop_castellated"), constraint_profile(assign_signal=True)
+    )
+
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.code == "unsupported.construct"
+    assert diagnostic.message == (
+        "pad fabrication property 'pad_prop_castellated' removes board area the outline still "
+        "claims and is unsupported"
+    )
+    assert diagnostic.object_kind == "pad"
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        pytest.param(b"(property)", id="no-token"),
+        pytest.param(b"(property none)", id="unwritable-none"),
+        pytest.param(b'(property "pad_prop_heatsink")', id="quoted-token"),
+        pytest.param(b"(property pad_prop_heatsink pad_prop_castellated)", id="two-tokens"),
+        pytest.param(b"(property pad_prop_bga (at 0 0))", id="child-expression"),
+        pytest.param(b"(property (at 0 0))", id="child-instead-of-token"),
+        pytest.param(b"(property pad_prop_solderable)", id="off-table-token"),
+        pytest.param(b"(property Pad_Prop_Heatsink)", id="wrong-case"),
+    ],
+)
+def test_a_pad_property_outside_the_writer_shape_is_refused(expression: bytes) -> None:
+    """The accepted subset is a closed table, and every form outside it refuses.
+
+    Three of these are forms KiCad's *reader* tolerates: its `T_property` arm loops
+    `while( token != T_RIGHT )` with the `Expecting(...)` compiled out, so it silently accepts an
+    empty property, an unknown token, and several tokens with the last one winning. The
+    `two-tokens` row is why that last one is refused rather than tolerated -- KiCad resolves it to
+    `pad_prop_castellated`, so admitting multi-atom forms would be a way past the equality test.
+
+    Every sentence below is an adapter literal chosen before the parse. The closed set is the whole
+    vocabulary this path can emit.
+    """
+
+    result = parse_kicad_bytes(
+        _insert_before(
+            SUBSET_BOARD.read_bytes(), b"      (drill 1)", b"      " + expression + b"\n"
+        ),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].source_locator.startswith("kicad_pcb.footprint[")
+    assert result.diagnostics[0].message in {
+        "pad fabrication property is not a single bare token",
+        "pad fabrication property is unsupported",
+    }
+
+
+def test_two_pad_properties_are_refused() -> None:
+    """KiCad's writer emits at most one, and two would make "the value" ambiguous."""
+
+    result = parse_kicad_bytes(
+        _insert_before(
+            SUBSET_BOARD.read_bytes(),
+            b"      (drill 1)",
+            b"      (property pad_prop_heatsink)\n      (property pad_prop_castellated)\n",
+        ),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].message == "pad declares more than one fabrication property"
+
+
+def test_a_refused_pad_property_never_echoes_the_token_it_refused() -> None:
+    """The refusal names the field from a closed table, never from the board's bytes.
+
+    Same invariant as SEC-133 and SEC-136: a construct name in a diagnostic is an adapter literal
+    selected by an equality test. The one token this path does name -- `pad_prop_castellated` --
+    is emitted from `_REFUSED_PAD_PROPERTY`, so a board can steer *which* fixed sentence comes
+    back and not one byte of what it contains.
+    """
+
+    result = parse_kicad_bytes(
+        _with_pad_property(b"SECRET_BEARER_TOKEN_disclose_the_workspace"),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.message == "pad fabrication property is unsupported"
+    for field in (
+        diagnostic.message,
+        diagnostic.source_locator,
+        diagnostic.object_kind or "",
+        diagnostic.object_id or "",
+    ):
+        assert "SECRET" not in field
+        assert "disclose" not in field
+
+
+def test_a_skipped_aperture_pad_cannot_smuggle_a_castellated_property() -> None:
+    """`property` joins the pad allowlist, so the aperture skip must not run before its check.
+
+    The token is inert on a stencil opening, and so was `zone_connect` -- skipping a pad is not a
+    licence to stop validating what it carries.
+    """
+
+    result = parse_kicad_bytes(
+        _with_pad(_aperture_pad(extra=b"      (property pad_prop_castellated)\n")),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].object_kind == "pad"
+
+
 def test_an_unknown_footprint_field_is_still_refused() -> None:
     """Accepting one status flag must not turn the footprint allowlist into an open one."""
 
@@ -4227,10 +4560,6 @@ def test_an_unsupported_pad_kind_and_shape_refuse_as_two_different_diagnostics()
     recovering that took reading the file.
 
     Neither refusal's reach changes: same code, same locator, same set of boards refused.
-
-    The shape token here is deliberately one KiCad's writer never emits. `trapezoid` used to sit
-    in this slot, and it now refuses *by name* through `_UNMODELLED_PAD_SHAPES` (ADR-0099), so it
-    no longer exercises the anonymous path this test exists to pin.
     """
 
     kind_refusal = parse_kicad_bytes(
@@ -4238,7 +4567,7 @@ def test_an_unsupported_pad_kind_and_shape_refuse_as_two_different_diagnostics()
         constraint_profile(assign_signal=True),
     )
     shape_refusal = parse_kicad_bytes(
-        _with_pad(_pad_with_header(b"smd", b"mystery_shape")),
+        _with_pad(_pad_with_header(b"smd", b"trapezoid")),
         constraint_profile(assign_signal=True),
     )
 
@@ -4311,183 +4640,6 @@ def test_the_pad_kind_table_maps_exactly_kicads_four_documented_tokens() -> None
         )
         assert refused.snapshot is None, token
         assert refused.diagnostics[0].message == "pad kind is unsupported", token
-
-
-# --- custom pad shapes (issue #153, ADR-0099) ---------------------------------------------
-
-
-def _custom_pad(primitives: bytes = b"") -> bytes:
-    """One `smd custom` pad shaped the way KiCad writes them.
-
-    `(options ...)` is not decoration here: KiCad's writer emits it under
-    `GetShape() == PAD_SHAPE::CUSTOM` and under no other condition
-    (`pcb_io_kicad_sexpr.cpp:2050-2062`), so a custom pad without it is not a pad any KiCad
-    ever wrote. That is precisely why the old refusal named `options` -- it was the first
-    mandatory sub-field of the shape that the closed field loop happened to reach.
-    """
-
-    body = primitives or (
-        b"      (primitives\n"
-        b"        (gr_poly\n"
-        b"          (pts (xy 5 1) (xy 1 1) (xy 1 -1) (xy 5 -1))\n"
-        b"          (width 0)\n"
-        b"          (fill yes)\n"
-        b"        )\n"
-        b"      )\n"
-    )
-    return (
-        b'    (pad "9" smd custom\n'
-        b"      (at 0 0)\n"
-        b"      (size 2 1)\n"
-        b'      (layers "F.Cu" "F.Mask" "F.Paste")\n'
-        b"      (options\n"
-        b"        (clearance outline)\n"
-        b"        (anchor rect)\n"
-        b"      )\n" + body + b'      (uuid "10000000-0000-0000-0000-0000000000c2")\n'
-        b"    )\n"
-    )
-
-
-def test_a_custom_pad_shape_is_refused_by_name_and_not_by_its_mandatory_sub_field() -> None:
-    """A `smd custom` pad is told its *shape* is unmodelled, not that `options` is unsupported.
-
-    This is issue #153's first question. `options` is mandatory on a custom pad -- KiCad's writer
-    emits it for that shape and no other -- so naming it sent the reader after a field they cannot
-    remove without producing a pad KiCad would not read back. The construct that cannot be
-    modelled is the shape, and the shape is what the message now names. Same correction #152 made
-    to the pad refusals, and ADR-0093 to off-grid geometry.
-
-    The reach of the refusal does not change: this board refused before and refuses now, with the
-    same typed code, the same `object_kind` and the same indexed locator. Only the sentence moves.
-    """
-
-    refused = parse_kicad_bytes(_with_pad(_custom_pad()), constraint_profile(assign_signal=True))
-
-    assert refused.snapshot is None
-    diagnostic = refused.diagnostics[0]
-    assert diagnostic.code == "unsupported.construct"
-    assert diagnostic.object_kind == "pad"
-    assert diagnostic.message == (
-        "a custom pad shape has no single region that both contains its copper and is contained "
-        "by it, and is unsupported"
-    )
-    # The old message is gone, and no sub-field of the shape is named in its place.
-    assert "options" not in diagnostic.message
-    assert "primitives" not in diagnostic.message
-    # The locator still says which pad, and the message still echoes no byte of the board:
-    # no coordinate, no net name, no anchor token, no primitive head.
-    assert diagnostic.source_locator.startswith("kicad_pcb.footprint[")
-    assert ".pad[" in diagnostic.source_locator
-    for leaked in ("anchor", "rect", "gr_poly", "2 1", "F.Cu", "outline"):
-        assert leaked not in diagnostic.message, leaked
-
-
-def test_a_custom_pad_refuses_the_same_way_whatever_primitives_it_carries() -> None:
-    """The refusal is a property of the shape, so no primitive vocabulary can steer it.
-
-    KiCad's parser accepts exactly seven primitive heads inside `(primitives ...)`:
-    `gr_line`, `gr_arc`, `gr_circle`, `gr_rect`, `gr_poly`, `gr_curve` and the proxy `gr_bbox`,
-    plus `gr_vector` (`pcb_io_kicad_sexpr_parser.cpp:6323-6358`). Every one of them admits an
-    exact integer-nanometre containing box -- that is *not* why this refuses (ADR-0099) -- so a
-    future reader must not be able to conclude from a single-primitive test that some other
-    primitive would have been accepted. Also pins the degenerate case: a custom pad with no
-    `(primitives ...)` at all is still a custom pad and still refuses.
-    """
-
-    variants = {
-        "none": b"",
-        "line": b"      (primitives (gr_line (start 0 0) (end 4 0) (width 0.3)))\n",
-        "arc": b"      (primitives (gr_arc (start 0 0) (mid 2 1) (end 4 0) (width 0.3)))\n",
-        "circle": b"      (primitives (gr_circle (center 2 0) (end 3 0) (width 0) (fill yes)))\n",
-        "rect": b"      (primitives (gr_rect (start 1 -1) (end 4 1) (width 0) (fill yes)))\n",
-        "curve": b"      (primitives (gr_curve (pts (xy 0 0) (xy 1 2) (xy 3 -2) (xy 4 0))"
-        b" (width 0.3)))\n",
-        "bbox": b"      (primitives (gr_bbox (start 0 0) (end 4 1)))\n",
-    }
-    messages = set()
-    for name, primitives in variants.items():
-        refused = parse_kicad_bytes(
-            _with_pad(_custom_pad(primitives)), constraint_profile(assign_signal=True)
-        )
-        assert refused.snapshot is None, name
-        assert refused.diagnostics[0].code == "unsupported.construct", name
-        assert refused.diagnostics[0].object_kind == "pad", name
-        messages.add(refused.diagnostics[0].message)
-
-    assert messages == {
-        "a custom pad shape has no single region that both contains its copper and is contained "
-        "by it, and is unsupported"
-    }
-
-
-def test_the_unmodelled_pad_shape_table_is_kicads_tokens_minus_board_irs() -> None:
-    """The named-refusal table's whole domain is asserted, not sampled.
-
-    KiCad's writer emits exactly six pad shape tokens -- `circle`, `rect`, `oval`, `trapezoid`,
-    `roundrect` (for both `ROUNDRECT` and `CHAMFERED_RECT`) and `custom`
-    (`pcb_io_kicad_sexpr.cpp:1643-1649`). Board IR models four of them. The table below must
-    therefore be exactly the other two, and must never intersect `PadShape`: an entry that
-    shadowed a modelled shape would refuse boards that convert today, and a missing entry is a
-    documented construct refused without a name.
-
-    This is the partition test ADR-0091 needed for `zone_connect` and ADR-0096 applied to the
-    kind table, applied here to the shape table. A behavioural test can only probe tokens someone
-    thought to write down; a seventh key quietly added here would change no board that exists.
-    """
-
-    kicad_writer_shape_tokens = frozenset(
-        {"circle", "rect", "oval", "trapezoid", "roundrect", "custom"}
-    )
-    modelled = frozenset(shape.value for shape in PadShape)
-
-    assert frozenset(_UNMODELLED_PAD_SHAPES) == kicad_writer_shape_tokens - modelled
-    assert frozenset(_UNMODELLED_PAD_SHAPES) == frozenset({"custom", "trapezoid"})
-    assert frozenset(_UNMODELLED_PAD_SHAPES) & modelled == frozenset()
-    assert modelled < kicad_writer_shape_tokens
-
-    # The two refusals say different things, because they refuse for different reasons: a
-    # trapezoid is a convex quadrilateral Board IR has not modelled, a custom pad is one Board
-    # IR's `Pad` cannot represent in both directions of error at once. ADR-0099.
-    assert len(set(_UNMODELLED_PAD_SHAPES.values())) == 2
-    assert "custom" in _UNMODELLED_PAD_SHAPES["custom"]
-    assert "trapezoid" in _UNMODELLED_PAD_SHAPES["trapezoid"]
-
-
-def test_pad_field_refusals_are_still_reachable_on_a_modelled_shape() -> None:
-    """Deciding the shape first must not turn the named field refusals into dead code.
-
-    `options` and `primitives` stay in `_UNSUPPORTED_PAD_FIELDS` even though KiCad's *writer*
-    emits `(options ...)` only for a custom pad, because KiCad's *parser* accepts `T_options` and
-    `T_primitives` on a pad of any shape (`pcb_io_kicad_sexpr_parser.cpp:6315-6323`). A
-    hand-edited or third-party file can therefore put either on a `roundrect` pad, where the
-    shape refusal above does not fire and the field loop is the only thing between that file and
-    a snapshot. This is the reachability check ADR-0091 found missing behind the pad allowlist,
-    asked before the entries can be deleted as unreachable rather than after.
-    """
-
-    roundrect = (
-        b'    (pad "9" smd roundrect\n'
-        b"      (at 0 0)\n"
-        b"      (size 2 1)\n"
-        b"      (roundrect_rratio 0.25)\n"
-        b'      (layers "F.Cu" "F.Mask")\n'
-        b"%s"
-        b'      (uuid "10000000-0000-0000-0000-0000000000c3")\n'
-        b"    )\n"
-    )
-    for head, injected in (
-        ("options", b"      (options (clearance outline) (anchor rect))\n"),
-        ("primitives", b"      (primitives (gr_rect (start 1 -1) (end 4 1) (width 0)))\n"),
-        ("clearance", b"      (clearance 0.2)\n"),
-        ("offset", b"      (offset 0.1 0)\n"),
-        ("thermal_gap", b"      (thermal_gap 0.3)\n"),
-    ):
-        refused = parse_kicad_bytes(
-            _with_pad(roundrect % injected), constraint_profile(assign_signal=True)
-        )
-        assert refused.snapshot is None, head
-        assert refused.diagnostics[0].code == "unsupported.construct", head
-        assert refused.diagnostics[0].message == f"pad field '{head}' is unsupported", head
 
 
 def test_a_connect_pad_converts_as_the_smd_pad_kicad_says_it_is() -> None:
@@ -4581,10 +4733,7 @@ def test_an_edge_connector_pad_that_never_converts_is_never_counted() -> None:
     )
 
     assert refused.snapshot is None
-    assert (
-        refused.diagnostics[0].message
-        == "trapezoid pad shapes are unsupported in Board IR adapter v0.2"
-    )
+    assert refused.diagnostics[0].message == "pad shape is unsupported"
     assert refused.edge_connector_pad_count == 0
 
 
@@ -4642,3 +4791,177 @@ def test_an_undocumented_pad_kind_is_refused_without_echoing_the_board() -> None
     assert unnamed.diagnostics[0].message == "pad kind is unsupported"
     assert "mystery_kind" not in unnamed.diagnostics[0].message
     assert unnamed.diagnostics[0].source_locator.endswith(".pad[0]")
+
+
+def _custom_pad(primitives: bytes = b"") -> bytes:
+    """One `smd custom` pad shaped the way KiCad writes them.
+
+    `(options ...)` is not decoration here: KiCad's writer emits it under
+    `GetShape() == PAD_SHAPE::CUSTOM` and under no other condition
+    (`pcb_io_kicad_sexpr.cpp:2050-2062`), so a custom pad without it is not a pad any KiCad
+    ever wrote. That is precisely why the old refusal named `options` -- it was the first
+    mandatory sub-field of the shape that the closed field loop happened to reach.
+    """
+
+    body = primitives or (
+        b"      (primitives\n"
+        b"        (gr_poly\n"
+        b"          (pts (xy 5 1) (xy 1 1) (xy 1 -1) (xy 5 -1))\n"
+        b"          (width 0)\n"
+        b"          (fill yes)\n"
+        b"        )\n"
+        b"      )\n"
+    )
+    return (
+        b'    (pad "9" smd custom\n'
+        b"      (at 0 0)\n"
+        b"      (size 2 1)\n"
+        b'      (layers "F.Cu" "F.Mask" "F.Paste")\n'
+        b"      (options\n"
+        b"        (clearance outline)\n"
+        b"        (anchor rect)\n"
+        b"      )\n" + body + b'      (uuid "10000000-0000-0000-0000-0000000000c2")\n'
+        b"    )\n"
+    )
+
+
+def test_a_custom_pad_shape_is_refused_by_name_and_not_by_its_mandatory_sub_field() -> None:
+    """A `smd custom` pad is told its *shape* is unmodelled, not that `options` is unsupported.
+
+    This is issue #153's first question. `options` is mandatory on a custom pad -- KiCad's writer
+    emits it for that shape and no other -- so naming it sent the reader after a field they cannot
+    remove without producing a pad KiCad would not read back. The construct that cannot be
+    modelled is the shape, and the shape is what the message now names. Same correction #152 made
+    to the pad refusals, and ADR-0093 to off-grid geometry.
+
+    The reach of the refusal does not change: this board refused before and refuses now, with the
+    same typed code, the same `object_kind` and the same indexed locator. Only the sentence moves.
+    """
+
+    refused = parse_kicad_bytes(_with_pad(_custom_pad()), constraint_profile(assign_signal=True))
+
+    assert refused.snapshot is None
+    diagnostic = refused.diagnostics[0]
+    assert diagnostic.code == "unsupported.construct"
+    assert diagnostic.object_kind == "pad"
+    assert diagnostic.message == (
+        "a custom pad shape has no single region that both contains its copper and is contained "
+        "by it, and is unsupported"
+    )
+    # The old message is gone, and no sub-field of the shape is named in its place.
+    assert "options" not in diagnostic.message
+    assert "primitives" not in diagnostic.message
+    # The locator still says which pad, and the message still echoes no byte of the board:
+    # no coordinate, no net name, no anchor token, no primitive head.
+    assert diagnostic.source_locator.startswith("kicad_pcb.footprint[")
+    assert ".pad[" in diagnostic.source_locator
+    for leaked in ("anchor", "rect", "gr_poly", "2 1", "F.Cu", "outline"):
+        assert leaked not in diagnostic.message, leaked
+
+
+def test_a_custom_pad_refuses_the_same_way_whatever_primitives_it_carries() -> None:
+    """The refusal is a property of the shape, so no primitive vocabulary can steer it.
+
+    KiCad's parser accepts exactly seven primitive heads inside `(primitives ...)`:
+    `gr_line`, `gr_arc`, `gr_circle`, `gr_rect`, `gr_poly`, `gr_curve` and the proxy `gr_bbox`,
+    plus `gr_vector` (`pcb_io_kicad_sexpr_parser.cpp:6323-6358`). Every one of them admits an
+    exact integer-nanometre containing box -- that is *not* why this refuses (ADR-0100) -- so a
+    future reader must not be able to conclude from a single-primitive test that some other
+    primitive would have been accepted. Also pins the degenerate case: a custom pad with no
+    `(primitives ...)` at all is still a custom pad and still refuses.
+    """
+
+    variants = {
+        "none": b"",
+        "line": b"      (primitives (gr_line (start 0 0) (end 4 0) (width 0.3)))\n",
+        "arc": b"      (primitives (gr_arc (start 0 0) (mid 2 1) (end 4 0) (width 0.3)))\n",
+        "circle": b"      (primitives (gr_circle (center 2 0) (end 3 0) (width 0) (fill yes)))\n",
+        "rect": b"      (primitives (gr_rect (start 1 -1) (end 4 1) (width 0) (fill yes)))\n",
+        "curve": b"      (primitives (gr_curve (pts (xy 0 0) (xy 1 2) (xy 3 -2) (xy 4 0))"
+        b" (width 0.3)))\n",
+        "bbox": b"      (primitives (gr_bbox (start 0 0) (end 4 1)))\n",
+    }
+    messages = set()
+    for name, primitives in variants.items():
+        refused = parse_kicad_bytes(
+            _with_pad(_custom_pad(primitives)), constraint_profile(assign_signal=True)
+        )
+        assert refused.snapshot is None, name
+        assert refused.diagnostics[0].code == "unsupported.construct", name
+        assert refused.diagnostics[0].object_kind == "pad", name
+        messages.add(refused.diagnostics[0].message)
+
+    assert messages == {
+        "a custom pad shape has no single region that both contains its copper and is contained "
+        "by it, and is unsupported"
+    }
+
+
+def test_the_unmodelled_pad_shape_table_is_kicads_tokens_minus_board_irs() -> None:
+    """The named-refusal table's whole domain is asserted, not sampled.
+
+    KiCad's writer emits exactly six pad shape tokens -- `circle`, `rect`, `oval`, `trapezoid`,
+    `roundrect` (for both `ROUNDRECT` and `CHAMFERED_RECT`) and `custom`
+    (`pcb_io_kicad_sexpr.cpp:1643-1649`). Board IR models four of them. The table below must
+    therefore be exactly the other two, and must never intersect `PadShape`: an entry that
+    shadowed a modelled shape would refuse boards that convert today, and a missing entry is a
+    documented construct refused without a name.
+
+    This is the partition test ADR-0091 needed for `zone_connect` and ADR-0096 applied to the
+    kind table, applied here to the shape table. A behavioural test can only probe tokens someone
+    thought to write down; a seventh key quietly added here would change no board that exists.
+    """
+
+    kicad_writer_shape_tokens = frozenset(
+        {"circle", "rect", "oval", "trapezoid", "roundrect", "custom"}
+    )
+    modelled = frozenset(shape.value for shape in PadShape)
+
+    assert frozenset(_UNMODELLED_PAD_SHAPES) == kicad_writer_shape_tokens - modelled
+    assert frozenset(_UNMODELLED_PAD_SHAPES) == frozenset({"custom", "trapezoid"})
+    assert frozenset(_UNMODELLED_PAD_SHAPES) & modelled == frozenset()
+    assert modelled < kicad_writer_shape_tokens
+
+    # The two refusals say different things, because they refuse for different reasons: a
+    # trapezoid is a convex quadrilateral Board IR has not modelled, a custom pad is one Board
+    # IR's `Pad` cannot represent in both directions of error at once. ADR-0100.
+    assert len(set(_UNMODELLED_PAD_SHAPES.values())) == 2
+    assert "custom" in _UNMODELLED_PAD_SHAPES["custom"]
+    assert "trapezoid" in _UNMODELLED_PAD_SHAPES["trapezoid"]
+
+
+def test_pad_field_refusals_are_still_reachable_on_a_modelled_shape() -> None:
+    """Deciding the shape first must not turn the named field refusals into dead code.
+
+    `options` and `primitives` stay in `_UNSUPPORTED_PAD_FIELDS` even though KiCad's *writer*
+    emits `(options ...)` only for a custom pad, because KiCad's *parser* accepts `T_options` and
+    `T_primitives` on a pad of any shape (`pcb_io_kicad_sexpr_parser.cpp:6315-6323`). A
+    hand-edited or third-party file can therefore put either on a `roundrect` pad, where the
+    shape refusal above does not fire and the field loop is the only thing between that file and
+    a snapshot. This is the reachability check ADR-0091 found missing behind the pad allowlist,
+    asked before the entries can be deleted as unreachable rather than after.
+    """
+
+    roundrect = (
+        b'    (pad "9" smd roundrect\n'
+        b"      (at 0 0)\n"
+        b"      (size 2 1)\n"
+        b"      (roundrect_rratio 0.25)\n"
+        b'      (layers "F.Cu" "F.Mask")\n'
+        b"%s"
+        b'      (uuid "10000000-0000-0000-0000-0000000000c3")\n'
+        b"    )\n"
+    )
+    for head, injected in (
+        ("options", b"      (options (clearance outline) (anchor rect))\n"),
+        ("primitives", b"      (primitives (gr_rect (start 1 -1) (end 4 1) (width 0)))\n"),
+        ("clearance", b"      (clearance 0.2)\n"),
+        ("offset", b"      (offset 0.1 0)\n"),
+        ("thermal_gap", b"      (thermal_gap 0.3)\n"),
+    ):
+        refused = parse_kicad_bytes(
+            _with_pad(roundrect % injected), constraint_profile(assign_signal=True)
+        )
+        assert refused.snapshot is None, head
+        assert refused.diagnostics[0].code == "unsupported.construct", head
+        assert refused.diagnostics[0].message == f"pad field '{head}' is unsupported", head

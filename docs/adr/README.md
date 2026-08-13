@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0100**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0101**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -30,6 +30,15 @@ decision — this sentence is the correction the earlier note anticipated, and 0
 ADR-0097 went the same way: it was a live claim held by open PR #154 when ADR-0098 was allocated,
 so ADR-0098 stepped over it, and it has since landed as the courtyard-layer decision. Neither is a
 gap; both notes are corrections that came due exactly as written.
+**ADR-0099 is a live claim contested by two open branches at the time of writing, and this note is
+the acknowledgement the convention asks for.** This branch (issue #152, `D-189`/`R-144`) and PR #158
+(issue #153, `D-190`/`R-145`) both write `docs/adr/0099-*.md`. Neither stepped over the other
+because neither could see the other when its number was assigned — the pre-assignment happened
+off-branch. The tie-break is the ledger numbers, which do not collide and do order: `D-189` is lower
+than `D-190`, so this branch lands first and keeps 0099, and #158 renumbers to 0100. Whichever lands
+second resolves the textual conflict on the next-unused line above, which is exactly the safety net
+rule 1 describes. If this branch is abandoned instead, 0099 is spent and #158 should still take
+0100 rather than filling it.
 ADR-0089 was listed here until this line was corrected: it landed from its own branch as the
 region-scoped obstacle model and is not a gap. ADR-0092 was listed too, and has since landed from
 its own branch as the net-tie netless-obstacle model; this sentence is that correction, exactly as
@@ -186,13 +195,15 @@ Ninety-seven numbers, ninety-two records, no duplicates — and `scripts/check_a
 now proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and
 0086 are unused; see **Known gaps** above. The three stray summary sentences that stood here until
 | [0098](0098-reproducible-mutation-evidence.md) | A mutation claim is evidence only if the repository can re-run it | Accepted |
-| [0099](0099-custom-pads-have-an-envelope-and-nowhere-to-put-it.md) | A custom pad has a derivable envelope and nowhere in Board IR to put it | Accepted |
+| [0099](0099-pad-fabrication-properties-and-named-pad-refusals.md) | A pad refusal names the field it refused, and seven of eight fabrication properties convert | Accepted |
 
-Ninety-nine numbers, ninety-three records, no duplicates — and `scripts/check_adr_numbers.py`
+Ninety-nine numbers, ninety-four records, no duplicates — and `scripts/check_adr_numbers.py`
+| [0100](0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md) | A custom pad has a derivable envelope and nowhere in Board IR to put it | Accepted |
 now proves that last clause on every run rather than asserting it (the previous revision of this
 sentence said "ninety-six numbers, ninety records", stale by two landings at the time it was
 read; the checker's own output is the count to trust). 0027, 0082, 0083, 0085 and
-0086 are unused, and 0097 is a live claim on an open branch rather than a gap; see
+0086 are unused; 0097 was a live claim on an open branch when the sentence above it was written and
+has since landed, so it is not a gap either. See
 **Known gaps** above. The three stray summary sentences that stood here until
 ADR-0088 landed were merge residue from the concurrent branches described above: Git accepted
 three different rewrites of one paragraph because they did not overlap textually.
@@ -202,7 +213,7 @@ three different rewrites of one paragraph because they did not overlap textually
 The ADRs are chronological, not thematic. To follow one arc, read it in this order:
 
 - **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070, 0076, 0087,
-  0091, 0092, 0095, 0096, 0097.
+  0091, 0092, 0095, 0096, 0097, 0099.
 - **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
   0066, 0070, 0073, 0075, 0089, 0093.
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060, 0075.
@@ -290,3 +301,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0096: An edge-connector pad converts as an SMD pad, and the discarded token is counted](0096-edge-connector-pads-convert-as-smd.md)
 - [ADR-0097: A courtyard keeps out on the layer it is drawn on, not on its footprint's side](0097-courtyard-layer-decides-the-side.md)
 - [ADR-0098: A mutation claim is evidence only if the repository can re-run it](0098-reproducible-mutation-evidence.md)
+- [ADR-0099: A pad refusal names the field it refused, and seven of eight fabrication properties convert](0099-pad-fabrication-properties-and-named-pad-refusals.md)
