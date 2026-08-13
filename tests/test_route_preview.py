@@ -17,6 +17,7 @@ import copper_mcp.kicad_cli as kicad_cli
 import copper_mcp.request_boundary as request_boundary
 import copper_mcp.route_preview as route_preview
 from copper_mcp.adapters import net_id_for_name
+from copper_mcp.apply.tokens import ApplyTokenAuthority
 from copper_mcp.board_ir import PointNM
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import KiCadCliError, RouteCandidateDrcEvidence, ZoneFillAuthority
@@ -30,7 +31,12 @@ from copper_mcp.route_preview import (
     preview_live_route,
     preview_route,
 )
-from copper_mcp.routing import RouteConnection, RouteDiagnostic, RouteFailureCode
+from copper_mcp.routing import (
+    RouteConnection,
+    RouteDiagnostic,
+    RouteFailureCode,
+    fill_binding_for,
+)
 from copper_mcp.zone_fill import FillIsland
 
 FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "two-pad.kicad_pcb"
@@ -897,7 +903,14 @@ def test_preview_clamps_the_kicad_timeout_to_the_remaining_budget(
     _, settings = _workspace(tmp_path)
     observed: dict[str, int] = {}
 
-    def capture(path: str, candidate: object, profile: object, drc_settings: Settings) -> object:
+    def capture(
+        path: str,
+        candidate: object,
+        profile: object,
+        drc_settings: Settings,
+        *,
+        verified_fill: tuple[object, ...] = (),
+    ) -> object:
         observed["timeout"] = drc_settings.kicad_timeout_seconds
         raise KiCadCliError("stop after capturing the clamped budget")
 
@@ -1749,3 +1762,127 @@ def test_real_kicad_resolves_coppertone_gnd_only_with_fill_authority(tmp_path: P
     assert with_authority.fill_authority is not None
     assert with_authority.fill_authority.fill_vertex_count == 4_314
     assert board.read_bytes() == before
+
+
+def test_a_fill_routed_candidate_is_returned_without_an_apply_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A token is a capability, and this one could only ever refuse (ADR-0103, issue #163).
+
+    Apply runs in a later process than the preview that established the fill, so it can only
+    replay against the conservative envelope - which is not the model that produced this route.
+    The preview used to mint the token anyway and the apply used to fail on it. The same board
+    routed without fill authority still gets one, so this withholds a token rather than breaking
+    the surface.
+    """
+
+    fixture = FIXTURE.parent / "blocked-zone.kicad_pcb"
+    board = tmp_path / fixture.name
+    board.write_bytes(fixture.read_bytes())
+    settings = replace(
+        Settings(workspace=tmp_path, max_drc_report_bytes=4096),
+        allow_apply=True,
+    )
+    board_revision = f"sha256:{hashlib.sha256(board.read_bytes()).hexdigest()}"
+    authority = ZoneFillAuthority(
+        source_revision=board_revision,
+        context_revision=f"sha256:{'a' * 64}",
+        source_fill_digest=f"sha256:{'b' * 64}",
+        refilled_fill_digest=f"sha256:{'b' * 64}",
+        kicad_version="10.0.5",
+        fill_polygon_count=1,
+        fill_vertex_count=4,
+    )
+    island = FillIsland(
+        net_id=net_id_for_name("POWER"),
+        layer_id="layer:F.Cu",
+        points=(
+            PointNM(18_000_000, 11_000_000),
+            PointNM(22_000_000, 11_000_000),
+            PointNM(22_000_000, 14_000_000),
+            PointNM(18_000_000, 14_000_000),
+        ),
+    )
+    monkeypatch.setattr(route_preview, "run_zone_fill_authority", lambda *_: (authority, (island,)))
+    token_authority = ApplyTokenAuthority()
+
+    fill_routed = preview_route(
+        _request(board=fixture.name, include_fill_authority=True, include_apply_token=True),
+        settings,
+        token_authority,
+    )
+    envelope = preview_route(
+        _request(board=fixture.name, include_apply_token=True),
+        settings,
+        token_authority,
+    )
+
+    assert fill_routed.status is RoutePreviewStatus.ROUTED
+    assert fill_routed.candidate is not None
+    assert fill_routed.candidate.fill_binding is not None
+    assert fill_routed.apply_token is None
+    assert fill_routed.to_dict()["candidate"]["fill_binding"] == fill_routed.candidate.fill_binding
+    # Not vacuous: the same request without fill authority still mints a token on this board,
+    # and its candidate document carries no fill key at all.
+    assert envelope.candidate is not None
+    assert envelope.candidate.fill_binding is None
+    assert envelope.apply_token is not None
+    assert envelope.to_dict()["candidate"]["fill_binding"] is None
+
+
+def test_candidate_drc_receives_the_fill_the_candidate_was_routed_under(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The preview holds the evidence, so it is the only caller that can supply it."""
+
+    fixture = FIXTURE.parent / "blocked-zone.kicad_pcb"
+    board = tmp_path / fixture.name
+    board.write_bytes(fixture.read_bytes())
+    settings = Settings(workspace=tmp_path, max_drc_report_bytes=4096)
+    board_revision = f"sha256:{hashlib.sha256(board.read_bytes()).hexdigest()}"
+    authority = ZoneFillAuthority(
+        source_revision=board_revision,
+        context_revision=f"sha256:{'a' * 64}",
+        source_fill_digest=f"sha256:{'b' * 64}",
+        refilled_fill_digest=f"sha256:{'b' * 64}",
+        kicad_version="10.0.5",
+        fill_polygon_count=1,
+        fill_vertex_count=4,
+    )
+    island = FillIsland(
+        net_id=net_id_for_name("POWER"),
+        layer_id="layer:F.Cu",
+        points=(
+            PointNM(18_000_000, 11_000_000),
+            PointNM(22_000_000, 11_000_000),
+            PointNM(22_000_000, 14_000_000),
+            PointNM(18_000_000, 14_000_000),
+        ),
+    )
+    monkeypatch.setattr(route_preview, "run_zone_fill_authority", lambda *_: (authority, (island,)))
+    observed: dict[str, Any] = {}
+
+    def capture(
+        path: str,
+        candidate: Any,
+        profile: Any,
+        drc_settings: Settings,
+        *,
+        verified_fill: tuple[Any, ...] = (),
+    ) -> Any:
+        observed["fill"] = verified_fill
+        observed["candidate"] = candidate
+        raise KiCadCliError("stop after capturing the forwarded evidence")
+
+    monkeypatch.setattr(route_preview, "run_route_candidate_drc", capture)
+
+    with pytest.raises(KiCadCliError):
+        preview_route(
+            _request(board=fixture.name, include_fill_authority=True, include_drc=True),
+            settings,
+        )
+
+    # The forwarded evidence has to be exactly what the candidate recorded, or the replay inside
+    # the serialization boundary refuses it.
+    assert observed["candidate"].fill_binding is not None
+    assert fill_binding_for(observed["fill"]) == observed["candidate"].fill_binding

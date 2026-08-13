@@ -190,6 +190,9 @@ def _candidate_from_manifest(payload: Any) -> RouteCandidate:
             seed=int(payload["seed"]),
             router_version=str(payload.get("router_version", ROUTER_VERSION)),
             ordering_policy=str(payload["ordering_policy"]),
+            fill_binding=(
+                None if payload.get("fill_binding") is None else str(payload["fill_binding"])
+            ),
         )
     except (KeyError, TypeError, ValueError, IndexError) as error:
         raise ApplyEngineError("candidate manifest is malformed") from error

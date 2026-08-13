@@ -360,6 +360,7 @@ def _canonical_candidate(value: object, stop: _StopChecks) -> RouteCandidate | N
             seed=value.seed,
             pad_count=value.pad_count,
             ordering_policy=value.ordering_policy,
+            fill_binding=value.fill_binding,
         )
         if stop.check() is not None:
             return None
@@ -392,6 +393,11 @@ def _preparation_independent_binding_failure(
         or candidate.seed != request.seed
         or candidate.pad_count != 2
         or candidate.ordering_policy != SINGLE_PATH_ORDERING
+        # This validator holds no fill evidence and models zones by their conservative
+        # envelope, so it cannot validate a path the exact pour made legal. Refusing is the
+        # only honest answer available here; validating under a different obstacle model would
+        # be the same defect as issue #163 with the blame pointed at a foreign candidate.
+        or candidate.fill_binding is not None
         or len(candidate.patch.paths) != 1
         or candidate.metrics.vias != 0
     ):

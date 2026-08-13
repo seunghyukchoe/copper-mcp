@@ -163,6 +163,10 @@ class _Problem:
     #: model covers the region rather than the whole board. An exhausted search is then a
     #: statement about the region, not about the board, and refuses under its own code.
     region_scoped: bool = False
+    #: The binding of the verified fill this problem's obstacle model was built from, which
+    #: every candidate built from it records.  ``None`` means the model is the conservative
+    #: zone envelope.
+    fill_binding: str | None = None
     congestion_penalty: CongestionPenalty | None = None
 
 
@@ -1109,6 +1113,44 @@ class VerifiedFill:
     source_revision: str
 
 
+def canonical_fill_bytes(verified_fill: tuple[VerifiedFill, ...]) -> bytes:
+    """Return stable identity bytes for one exact sequence of verified fill islands."""
+
+    rendered = json.dumps(
+        [
+            {
+                "layer_id": island.layer_id,
+                "net_id": island.net_id,
+                "points": [{"x_nm": point.x, "y_nm": point.y} for point in island.points],
+                "source_revision": island.source_revision,
+            }
+            for island in verified_fill
+        ],
+        ensure_ascii=False,
+        allow_nan=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return rendered.encode("utf-8", errors="strict") + b"\n"
+
+
+def fill_binding_for(verified_fill: tuple[VerifiedFill, ...]) -> str | None:
+    """Return the binding a candidate records for the fill it was routed under.
+
+    ``None`` for no fill is not an encoding convenience: a candidate routed under the
+    conservative envelope and a candidate routed under an empty pour are the same candidate,
+    because an empty pour and no pour give the router the same obstacle model.  Islands are
+    bound in the order the caller supplied them, and every field of every island is covered,
+    so any difference at all in the evidence - including its order - changes the binding and
+    makes a replay refuse.  That is the over-approximating side of the choice, which is the
+    side this repository takes for obstacles.
+    """
+
+    if not verified_fill:
+        return None
+    return f"sha256:{hashlib.sha256(canonical_fill_bytes(verified_fill)).hexdigest()}"
+
+
 @dataclass(frozen=True, slots=True)
 class _CopperObject:
     """One same-net copper object, with the layers it occupies and the shape it offers.
@@ -1984,6 +2026,7 @@ def _prepare(
         target_max_iy=max(node[1] for node in target_nodes),
         region_scoped=region_scoped,
         congestion_penalty=congestion_penalty,
+        fill_binding=fill_binding_for(verified_fill),
     )
     for obstacle in problem.rect_obstacles:
         work.obstacle_check()
@@ -2050,7 +2093,16 @@ def _compress(points: tuple[PointNM, ...]) -> tuple[PointNM, ...]:
 
 
 def _candidate_payload(candidate: RouteCandidate) -> dict[str, object]:
+    # `fill_binding` is present only when there is one.  A candidate routed under the
+    # conservative envelope is the same proposal it always was - same geometry, same cost, same
+    # recorded work - so its published content address must not move, and every persisted
+    # candidate from every earlier router version must keep verifying against its stored ID.
+    # Emitting `"fill_binding":null` would move all of them at once to record an absence.
+    fill_binding = (
+        {"fill_binding": candidate.fill_binding} if candidate.fill_binding is not None else {}
+    )
     return {
+        **fill_binding,
         "base_revision": candidate.base_revision,
         "cost": {
             "bend_cost_nm": candidate.cost.bend_cost_nm,
@@ -2189,6 +2241,7 @@ def _build_candidate(
         router_version=identity.router_version,
         policy=identity.policy,
         seed=problem.request.seed,
+        fill_binding=problem.fill_binding,
     )
     digest = f"sha256:{hashlib.sha256(canonical_candidate_bytes(candidate)).hexdigest()}"
     candidate = replace(candidate, candidate_id=digest)
@@ -2661,9 +2714,36 @@ class AStarRouter:
             raise ValueError("candidate router version and ordering policy are unsupported")
         return cls(identity)
 
-    def replay(self, snapshot: BoardIRSnapshot, candidate: RouteCandidate) -> RouteResult:
-        """Replay one immutable candidate under its own closed router identity."""
+    def replay(
+        self,
+        snapshot: BoardIRSnapshot,
+        candidate: RouteCandidate,
+        *,
+        verified_fill: tuple[VerifiedFill, ...] = (),
+    ) -> RouteResult:
+        """Replay one immutable candidate under its own closed router identity and obstacle model.
 
+        A replay that substitutes a different obstacle model is not a replay, so the fill this
+        is handed must be the fill that produced the candidate: ``fill_binding_for`` over
+        ``verified_fill`` has to equal the candidate's own recorded binding, and any difference
+        refuses instead of searching.  One equality enforces both directions.  Refusing the
+        *understated* direction - a candidate routed with fill, replayed without it - is what
+        issue #163 was: the conservative envelope over-approximates the exact pour, so the
+        replay was stricter than the route and the disagreement surfaced as the candidate's
+        fault.  Refusing the *overstated* direction - a candidate routed under the envelope,
+        replayed with fill that opens corridors the envelope closed - matters more: that replay
+        would be looser than the route, and would confirm geometry the router never proved.
+        """
+
+        binding = fill_binding_for(verified_fill)
+        if binding != candidate.fill_binding:
+            return _result_failure(
+                _fail(
+                    RouteFailureCode.FILL_EVIDENCE_MISMATCH,
+                    "the verified fill supplied for replay is not the fill this candidate "
+                    "was routed under",
+                )
+            )
         router = self.for_replay(
             router_version=candidate.router_version,
             policy=candidate.policy,
@@ -2677,7 +2757,7 @@ class AStarRouter:
             seed=candidate.seed,
             settings=candidate.settings,
         )
-        return router.propose(snapshot, request)
+        return router.propose(snapshot, request, verified_fill=verified_fill)
 
     @property
     def name(self) -> str:

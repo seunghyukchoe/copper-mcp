@@ -24,6 +24,7 @@ from copper_mcp.routing import (
     AStarRouter,
     RouteCandidate,
     RouteRequest,
+    VerifiedFill,
     canonical_candidate_bytes,
 )
 
@@ -550,3 +551,118 @@ def test_assembled_outline_render_still_refuses_a_missing_member_identity() -> N
 
     with pytest.raises(KiCadRoutePatchError, match="native uuid or tstamp"):
         render_kicad_candidate_board(source, snapshot, result.candidate, profile)
+
+
+# ---------------------------------------------------------------------------
+# The serialization boundary replays under the model that produced the candidate
+# (ADR-0103, issue #163)
+# ---------------------------------------------------------------------------
+
+BLOCKED_ZONE = FIXTURE.parent / "blocked-zone.kicad_pcb"
+
+
+def _fill_routed_board() -> tuple[bytes, KiCadConstraintProfile, RouteCandidate, VerifiedFill]:
+    """One real KiCad board where the exact pour routes a candidate the envelope cannot."""
+
+    source = BLOCKED_ZONE.read_bytes()
+    profile = _profile()
+    conversion = parse_kicad_bytes(source, profile)
+    assert conversion.diagnostics == ()
+    assert conversion.snapshot is not None
+    snapshot = conversion.snapshot
+    # The POWER zone spans x=18..22 mm, y=11..19 mm. This pour is its upper half, leaving the
+    # straight y=15 mm corridor the conservative outline blocks.
+    island = VerifiedFill(
+        net_id=net_id_for_name("POWER"),
+        layer_id="layer:F.Cu",
+        points=(
+            PointNM(18_000_000, 11_000_000),
+            PointNM(22_000_000, 11_000_000),
+            PointNM(22_000_000, 14_000_000),
+            PointNM(18_000_000, 14_000_000),
+        ),
+        source_revision=snapshot.content.source.revision,
+    )
+    request = RouteRequest(
+        board_revision=snapshot.snapshot_digest,
+        net_id=net_id_for_name("AUDIO"),
+        layer_id="layer:F.Cu",
+        seed=23,
+    )
+    result = AStarRouter().propose(snapshot, request, verified_fill=(island,))
+    assert result.diagnostic is None
+    assert result.candidate is not None
+    return source, profile, result.candidate, island
+
+
+def test_a_fill_routed_candidate_serializes_when_its_own_fill_is_supplied() -> None:
+    """`preview_route(include_fill_authority=True, include_drc=True)` refused this candidate.
+
+    `render_kicad_candidate_board` is the function candidate DRC calls, and `_replay_candidate`
+    inside it is the chokepoint that used to search the envelope model regardless.
+    """
+
+    source, profile, candidate, island = _fill_routed_board()
+    conversion = parse_kicad_bytes(source, profile)
+    assert conversion.snapshot is not None
+
+    rendered = render_kicad_candidate_board(
+        source,
+        conversion.snapshot,
+        candidate,
+        profile,
+        verified_fill=(island,),
+    )
+
+    assert candidate.fill_binding is not None
+    assert rendered != source
+    assert b"(segment" in rendered
+
+
+def test_serializing_a_fill_routed_candidate_without_its_fill_names_the_missing_evidence() -> None:
+    """The refusal is still a refusal, but it stops blaming the candidate for it."""
+
+    source, profile, candidate, _ = _fill_routed_board()
+    conversion = parse_kicad_bytes(source, profile)
+    assert conversion.snapshot is not None
+
+    with pytest.raises(KiCadRoutePatchError, match="was not supplied for replay"):
+        render_kicad_candidate_board(source, conversion.snapshot, candidate, profile)
+
+
+def test_serializing_an_envelope_candidate_with_fill_it_never_saw_refuses() -> None:
+    """The dangerous direction, at the boundary a caller actually reaches.
+
+    A verifier holding fresh fill must not use it to re-verify a candidate routed without it:
+    the pour is the looser model, so that check is weaker than the search that produced the
+    route.
+    """
+
+    source, profile, _, island = _fill_routed_board()
+    conversion = parse_kicad_bytes(source, profile)
+    assert conversion.snapshot is not None
+    snapshot = conversion.snapshot
+    envelope = (
+        AStarRouter()
+        .propose(
+            snapshot,
+            RouteRequest(
+                board_revision=snapshot.snapshot_digest,
+                net_id=net_id_for_name("AUDIO"),
+                layer_id="layer:F.Cu",
+                seed=23,
+            ),
+        )
+        .candidate
+    )
+    assert envelope is not None
+    assert envelope.fill_binding is None
+
+    with pytest.raises(KiCadRoutePatchError, match="was not supplied for replay"):
+        render_kicad_candidate_board(
+            source,
+            snapshot,
+            envelope,
+            profile,
+            verified_fill=(island,),
+        )
