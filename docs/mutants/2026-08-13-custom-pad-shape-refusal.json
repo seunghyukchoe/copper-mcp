@@ -1,6 +1,9 @@
 {
   "harness": "mutation-harness/1",
-  "pytest_args": ["-q", "--no-cov"],
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
   "mutants": [
     {
       "id": "CP1-custom-entry-deleted",
@@ -55,8 +58,8 @@
     {
       "id": "CP6-options-and-primitives-dropped-from-the-field-loop",
       "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "_UNSUPPORTED_PAD_FIELDS = (\n    \"clearance\",\n    \"offset\",\n    \"options\",\n    \"primitives\",",
-      "replacement": "_UNSUPPORTED_PAD_FIELDS = (\n    \"clearance\",\n    \"offset\",",
+      "anchor": "    \"options\",\n    \"padstack\",\n    \"primitives\",\n",
+      "replacement": "    \"padstack\",\n",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_kicad_board_ir.py::test_pad_field_refusals_are_still_reachable_on_a_modelled_shape"
