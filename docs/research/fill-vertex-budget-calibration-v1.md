@@ -268,7 +268,8 @@ with `verified fill island is not a bounded polygon`. That is a real refusal mov
 to another, not a regression, and it is filed rather than fixed here: the per-island ceiling lives
 in the routing path, its cost is the obstacle-check budget rather than this one, and B-105 already
 measured the single-layer fill shrink as a net loss on this corpus. Sizing it needs its own
-calibration against `max_obstacle_checks`, which this note does not do.
+calibration against `max_obstacle_checks`, which this note does not do. Tracked as
+[issue #167](https://github.com/seunghyukchoe/copper-mcp/issues/167) and `R-150`.
 
 ## 10. What this does not establish
 

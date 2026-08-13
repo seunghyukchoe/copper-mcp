@@ -110,7 +110,8 @@ proportional — one corpus board holds 61 % of its vertices in one ring. **14 o
 carry an island above 4,096**, the widest 43,889, and at the old default seven of them could not be
 read at all. Those will now read and then be refused per-island by the ordered-layer adapter. Sizing
 that ceiling is a separate calibration against `max_obstacle_checks` in the routing path, filed
-under `R-150` rather than ridden in on this change.
+as [issue #167](https://github.com/seunghyukchoe/copper-mcp/issues/167) under `R-150` rather than
+ridden in on this change.
 
 **No content address moves.** The budget bounds what is admitted and never what is written;
 `tests/test_golden_identities.py` is unchanged and passing. Unlike ADR-0089 there is no version
@@ -143,7 +144,7 @@ the operator's one visible control silently not apply to half of what the call r
 **Also raise `_MAX_FILL_VERTICES` in the layered adapter, so the newly reachable boards route.**
 Rejected as out of scope and unmeasured. Its cost is the obstacle-check budget rather than this
 one, `B-105` measured the single-layer fill shrink as a net loss on this corpus, and the routing
-path is under concurrent change. Filed under `R-150` so it stays visible.
+path is under concurrent change. Filed as issue #167 under `R-150` so it stays visible.
 
 **Move the ceiling per-request rather than per-server.** Deferred. Issue #165 raises it because the
 budget gates a KiCad subprocess, and it is a real question — but a per-request resource ceiling is

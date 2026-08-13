@@ -41,8 +41,9 @@ All notable changes are documented here. The format follows
   refusal moves rather than disappearing, which is the expected outcome of raising a gate: this
   budget meters a board's total pour while the ordered-layer adapter refuses any single island above
   4,096 vertices, and **14 of 18 corpus boards carry an island above it** (widest 43,889), so boards
-  that could not be read at all will now read and then be refused per-island — filed under `R-150`
-  rather than fixed in a routing path under concurrent change.
+  that could not be read at all will now read and then be refused per-island — filed as
+  [#167](https://github.com/seunghyukchoe/copper-mcp/issues/167) under `R-150` rather than fixed in
+  a routing path under concurrent change.
 
 - **The real-board conversion survey is closed out, and every count it published is superseded by a
   measured one.** Issue #116's title — "5 named gaps block 22 of 23 boards" — was wrong in every
