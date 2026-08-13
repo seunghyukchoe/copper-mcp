@@ -1,0 +1,56 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": ["-q", "--no-cov"],
+  "mutants": [
+    {
+      "id": "FC1-containment-deleted",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        if not any(\n            _rect_contains(outline, island_bounds)\n            for outline in zone_bounds_by_net_layer[(island.net_id, island.layer_id)]\n        ):",
+      "replacement": "        if False:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_verified_fill_escaping_its_zone_outline_is_refused"
+      ]
+    },
+    {
+      "id": "FC2-containment-inverted",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "            _rect_contains(outline, island_bounds)\n            for outline in zone_bounds_by_net_layer[(island.net_id, island.layer_id)]",
+      "replacement": "            _rect_contains(island_bounds, outline)\n            for outline in zone_bounds_by_net_layer[(island.net_id, island.layer_id)]",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_fresh_foreign_fill_replaces_conservative_zone_envelope"
+      ]
+    },
+    {
+      "id": "FC3-containment-made-strict",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "    return (\n        outer[0] <= inner[0]\n        and outer[1] <= inner[1]\n        and inner[2] <= outer[2]\n        and inner[3] <= outer[3]\n    )",
+      "replacement": "    return (\n        outer[0] < inner[0]\n        and outer[1] < inner[1]\n        and inner[2] < outer[2]\n        and inner[3] < outer[3]\n    )",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_fresh_fill_respects_governing_zone_clearance_and_track_half_width"
+      ]
+    },
+    {
+      "id": "FC4-ring-floor-deleted",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        if len(island.points) < 3:",
+      "replacement": "        if len(island.points) < 0:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_a_degenerate_verified_fill_island_is_refused"
+      ]
+    },
+    {
+      "id": "FC5-bounds-measured-unconditionally",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "    zone_bounds_by_net_layer: dict[tuple[str, str], list[_Rect]] = {}\n    if verified_fill:",
+      "replacement": "    zone_bounds_by_net_layer: dict[tuple[str, str], list[_Rect]] = {}\n    if True:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_the_containment_gate_leaves_an_unevidenced_route_untouched"
+      ]
+    }
+  ]
+}

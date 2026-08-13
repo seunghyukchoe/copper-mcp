@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0101**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0102**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -23,6 +23,11 @@ line is deliberate: two branches that both allocate it now conflict textually, s
 merge instead of accepting it.
 
 **Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086.
+ADR-0099 and ADR-0100 are **live claims, not gaps**, at the time of writing: two branches (PRs #157
+and #158) were open on this same base and had both allocated ADR-0099, so one of them renumbers to
+ADR-0100 and ADR-0101 stepped over both rather than joining the race. If either branch is abandoned
+its number becomes a permanent spent number like any other; whichever lands resolves this line's
+textual conflict, which is the whole point of keeping the next number on one line.
 ADR-0094 was a **live claim** held by an open branch (issue #140) when ADR-0095 and ADR-0096 were
 allocated. Both stepped over it rather than racing it, exactly as the ledger convention's rule 1
 prescribes, and it has since landed from its own branch (PR #150) as the root-board-properties
@@ -196,9 +201,14 @@ now proves that last clause on every run rather than asserting it. 0027, 0082, 0
 0086 are unused; see **Known gaps** above. The three stray summary sentences that stood here until
 | [0098](0098-reproducible-mutation-evidence.md) | A mutation claim is evidence only if the repository can re-run it | Accepted |
 | [0099](0099-pad-fabrication-properties-and-named-pad-refusals.md) | A pad refusal names the field it refused, and seven of eight fabrication properties convert | Accepted |
+| [0100](0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md) | A custom pad has a derivable envelope and nowhere in Board IR to put it | Accepted |
+
+One hundred and one numbers, ninety-five records, no duplicates. ADR-0099 has since landed
+from its own branch (PR #157); ADR-0100 remains a live claim on open PR #158 at the time of
+writing, not a gap. The checker's output, not this sentence, is the count to trust.
 
 Ninety-nine numbers, ninety-four records, no duplicates — and `scripts/check_adr_numbers.py`
-| [0100](0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md) | A custom pad has a derivable envelope and nowhere in Board IR to put it | Accepted |
+| [0101](0101-fill-currency-is-not-in-the-document.md) | Fill currency is not in the board file, so keep the model and gate the shrink | Accepted |
 now proves that last clause on every run rather than asserting it (the previous revision of this
 sentence said "ninety-six numbers, ninety records", stale by two landings at the time it was
 read; the checker's own output is the count to trust). 0027, 0082, 0083, 0085 and
@@ -302,3 +312,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0097: A courtyard keeps out on the layer it is drawn on, not on its footprint's side](0097-courtyard-layer-decides-the-side.md)
 - [ADR-0098: A mutation claim is evidence only if the repository can re-run it](0098-reproducible-mutation-evidence.md)
 - [ADR-0099: A pad refusal names the field it refused, and seven of eight fabrication properties convert](0099-pad-fabrication-properties-and-named-pad-refusals.md)
+- [ADR-0101: Fill currency is not in the board file, so keep the model and gate the shrink](0101-fill-currency-is-not-in-the-document.md)
