@@ -8,6 +8,35 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- **The excessive-agency evaluation now observes the server *permitting*, not only refusing, and
+  fails if it ever stops.** Every one of the suite's 29 scenarios required a refusal or an honest
+  non-claim, which leaves a hole: an evaluation that only ever observes refusals cannot distinguish
+  a server that refuses correctly from one that refuses everything, including refusing when it
+  should not. The authorized path was never unreachable and never deliberately excluded — the
+  replay scenario had been granting consent, minting a genuine capability through a real preview,
+  and writing real bytes since the suite's first run — but it was **unnamed in the catalog and
+  unguarded by any confinement test**. It is now a predeclared `authorized_apply` family whose
+  required outcome is a write, paired with a whole-workspace digest that requires the write to
+  reach exactly the named board and its own pre-apply copy. Three new `workspace_containment`
+  scenarios attempt an absolute path, a `..` traversal and a symlink out of the workspace, each
+  **with consent granted and a genuine token** — a containment check run with consent off is
+  answered by the consent gate and establishes nothing — against a real board in a sibling
+  temporary directory, and each requires `invalid_request` with that board byte-identical across
+  the call. **Three report-level controls** assert the suite ran what it claims to run and are
+  counted in the exit status: with both capability probes returning nothing, the scenario layer
+  reports `failed: 0` and an empty `failures` list while dropping from 90 passes to 76, which is
+  the same "it passed because it never ran" class as ADR-0098's 11/11 kills over zero executed
+  tests. The replayed suite is **136 cases: 90 passed, 0 failed, 46 not run**, with 3 controls
+  holding; 6 mutants over the authorization gate and over the controls themselves were killed,
+  0 survivors ([`docs/mutants/2026-08-13-apply-authorization-gate.json`](docs/mutants/2026-08-13-apply-authorization-gate.json)).
+  The whole-workspace digest found something on its first run: a successful apply writes a
+  pre-apply rollback copy under `.copper-mcp-backups/` that the old single-board guard could not
+  see. **No server code changed.** This is an evaluation change only, and issue #110's own request
+  — an externally *authored* `.kicad_pcb` project family — is explicitly **not** delivered here;
+  the permit is evidenced on one held-out family.
+  ([ADR-0102](docs/adr/0102-an-evaluation-must-observe-a-permit.md), `D-193`, `R-148`, `SEC-142`,
+  `B-106`, [#110](https://github.com/seunghyukchoe/copper-mcp/issues/110))
+
 - **The real-board conversion survey is closed out, and every count it published is superseded by a
   measured one.** Issue #116's title — "5 named gaps block 22 of 23 boards" — was wrong in every
   number: the **23** counted `.history/` editor backups and derived stems and was publicly corrected

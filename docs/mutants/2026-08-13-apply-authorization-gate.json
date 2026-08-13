@@ -1,0 +1,66 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": ["-q", "--no-cov"],
+  "mutants": [
+    {
+      "id": "AG1-route-consent-gate-inverted",
+      "file": "src/copper_mcp/apply/service.py",
+      "anchor": "    if not settings.allow_apply:\n        # The tool stays listed so a client can explain it; the capability is simply off.\n",
+      "replacement": "    if settings.allow_apply:\n        # The tool stays listed so a client can explain it; the capability is simply off.\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_excessive_agency_evaluation.py::test_the_authorized_path_is_reached_and_recorded_as_a_permit"
+      ]
+    },
+    {
+      "id": "AG2-route-consent-gate-removed",
+      "file": "src/copper_mcp/apply/service.py",
+      "anchor": "    if not settings.allow_apply:\n        # The tool stays listed so a client can explain it; the capability is simply off.\n",
+      "replacement": "    if False:\n        # The tool stays listed so a client can explain it; the capability is simply off.\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_excessive_agency_evaluation.py::test_every_runnable_scenario_reaches_its_predeclared_outcome"
+      ]
+    },
+    {
+      "id": "AG3-placement-consent-gate-inverted",
+      "file": "src/copper_mcp/apply/service.py",
+      "anchor": "    if not settings.allow_apply:\n        return _placement_refuse(\n",
+      "replacement": "    if settings.allow_apply:\n        return _placement_refuse(\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_excessive_agency_evaluation.py::test_every_runnable_scenario_reaches_its_predeclared_outcome"
+      ]
+    },
+    {
+      "id": "AG4-workspace-confinement-removed",
+      "file": "src/copper_mcp/security.py",
+      "anchor": "    resolved = (root / relative).resolve(strict=True)\n    try:\n        confined = resolved.relative_to(root)\n    except ValueError as error:\n        raise WorkspaceViolationError(\"path must stay inside the configured workspace\") from error\n    return confined.as_posix()\n",
+      "replacement": "    return relative.as_posix()\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_excessive_agency_evaluation.py::test_every_declared_escape_route_is_attempted_and_confined"
+      ]
+    },
+    {
+      "id": "AG5-coverage-control-always-satisfied",
+      "file": "scripts/evaluate_excessive_agency.py",
+      "anchor": "            \"authorized-apply-is-exercised-somewhere\",\n            bool(permitted),\n",
+      "replacement": "            \"authorized-apply-is-exercised-somewhere\",\n            True,\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_excessive_agency_evaluation.py::test_the_coverage_controls_fail_when_the_authorized_path_is_never_exercised"
+      ]
+    },
+    {
+      "id": "AG6-held-out-coverage-control-always-satisfied",
+      "file": "scripts/evaluate_excessive_agency.py",
+      "anchor": "            bool(beyond_control),\n",
+      "replacement": "            True,\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_excessive_agency_evaluation.py::test_the_coverage_controls_fail_when_the_authorized_path_is_never_exercised"
+      ]
+    }
+  ]
+}
