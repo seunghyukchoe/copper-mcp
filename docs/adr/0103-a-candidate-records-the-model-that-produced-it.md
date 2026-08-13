@@ -9,6 +9,7 @@
   [ADR-0025](0025-file-level-candidate-apply.md);
   [ADR-0047](0047-redacted-candidate-manifest-persistence.md);
   [ADR-0048](0048-durable-routing-request-result-export.md);
+  [ADR-0101](0101-fill-currency-is-not-in-the-document.md);
   issue #163; issue #63
 
 ## Context
@@ -51,12 +52,14 @@ replay.
 The defect is latent rather than guarded, and the reason is coverage rather than a check.
 Re-measured here on the private working corpus with a conversion-only census (B-107): **1 of 13
 converting saves carries an `F.Cu` zone at all**, a single four-vertex outline, against 21 on
-`B.Cu` and 27 across the two inner layers. So the single-layer fill shrink has at most one board
-in that tree it could engage on, and nothing in the shipped runner asks it to. Issue #163 records
-B-105's finding that the one board's pour also exceeds the shipped `max_fill_vertices`; reading a
-pour needs KiCad and that is not re-measured here. The defect stops being latent the moment the
-vertex budget is raised or the layered path gets a public contract — and neither of those is a
-guard.
+`B.Cu` and 27 across the two inner layers, which reproduces
+[B-105](../ledgers/benchmark-ledger.md)'s independent finding on the same tree. So the
+single-layer fill shrink has at most one board there it could engage on, and nothing in the
+shipped runner asks it to. B-105 further measured that seven of the twelve zoned boards carry a
+pour past the shipped `max_fill_vertices` and two more are `stale_fill`; reading a pour needs
+KiCad and that half is cited rather than re-measured here. The defect stops being latent the
+moment the vertex budget is raised or the layered path gets a public contract — and neither of
+those is a guard.
 
 ## Decision
 

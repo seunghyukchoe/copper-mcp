@@ -3449,6 +3449,76 @@ def test_verified_fill_without_a_board_ir_zone_is_refused() -> None:
     assert "matching Board IR zone" in result.diagnostic.message
 
 
+def test_verified_fill_escaping_its_zone_outline_is_refused() -> None:
+    """Retiring an envelope is the one shrink this router performs, so its precondition is checked.
+
+    KiCad clips poured copper to the zone outline, so an island that reaches past it did not come
+    from that zone's fill. Believing it would drop the zone's conservative envelope in exchange
+    for copper that never covered the same area, which is the one direction an obstacle may not
+    move. ADR-0070 already gates the ordered-layer adapter this way; this is the single-layer half.
+    """
+
+    snapshot = _snapshot(foreign_zones=(_rectangle(3_000, 3_000, 7_000, 7_000),))
+    escaping = VerifiedFill(
+        net_id=OTHER_NET_ID,
+        layer_id=LAYER_ID,
+        points=(
+            PointNM(3_000, 6_000),
+            PointNM(7_500, 6_000),
+            PointNM(7_500, 7_000),
+            PointNM(3_000, 7_000),
+        ),
+        source_revision=SOURCE_REVISION,
+    )
+
+    result = AStarRouter().propose(snapshot, _request(snapshot), verified_fill=(escaping,))
+
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert "escapes its backing" in result.diagnostic.message
+
+
+def test_a_degenerate_verified_fill_island_is_refused() -> None:
+    """The fill parser refuses a ring under three vertices; the typed seam must refuse it too."""
+
+    snapshot = _snapshot(foreign_zones=(_rectangle(3_000, 3_000, 7_000, 7_000),))
+    degenerate = VerifiedFill(
+        net_id=OTHER_NET_ID,
+        layer_id=LAYER_ID,
+        points=(PointNM(4_000, 4_000), PointNM(5_000, 5_000)),
+        source_revision=SOURCE_REVISION,
+    )
+
+    result = AStarRouter().propose(snapshot, _request(snapshot), verified_fill=(degenerate,))
+
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert "closed ring" in result.diagnostic.message
+
+
+def test_the_containment_gate_leaves_an_unevidenced_route_untouched() -> None:
+    """A board routed without fill evidence must not pay for the gate, in cost or in budget.
+
+    The gate measures zone outline bounds, which is obstacle-check work. Doing that on every
+    zoned board would move ``obstacle_budget_exceeded`` boundaries for callers who never asked
+    for fill-aware routing, so the measurement is taken only when there is evidence to check.
+    """
+
+    snapshot = _snapshot(foreign_zones=(_rectangle(3_000, 3_000, 7_000, 7_000),))
+
+    plain = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+    empty_evidence = _candidate(
+        AStarRouter().propose(snapshot, _request(snapshot), verified_fill=())
+    )
+
+    assert plain.cost.length_nm == empty_evidence.cost.length_nm
+    assert plain.metrics.obstacle_checks == empty_evidence.metrics.obstacle_checks
+    # Pinned, not merely compared: measuring the outline bounds unconditionally would charge
+    # both calls alike and slip past an equality assertion, while still moving every real
+    # board's obstacle budget. 684 is this fixture's cost before the gate existed.
+    assert plain.metrics.obstacle_checks == 684
+
+
 # ---------------------------------------------------------------------------
 # A candidate replays under the model that produced it (ADR-0103, issue #163)
 # ---------------------------------------------------------------------------
@@ -3462,8 +3532,16 @@ def test_verified_fill_without_a_board_ir_zone_is_refused() -> None:
 # and what an apply manifest carries - so it is pinned here rather than left to drift.  This
 # population is the one ADR-0103 moves, and it had no pin anywhere before, because a fill-routed
 # candidate could not survive a replay at all.
+#
+# The ID below moved once *within* the pull request that created it, when ADR-0101 (PR #162)
+# merged underneath: that change measures a foreign zone's outline bounds when fill evidence is
+# present, which charges the obstacle-check meter, and a candidate records the work its search
+# performed.  The *geometry* did not move - the same two vertices, 8,000 nm, zero bends - and
+# neither did `FILL_ROUTED_FILL_BINDING`, which is the point: the binding addresses the evidence
+# and nothing about how the search spent its budget.  Nothing published moved, because no
+# fill-routed candidate ID was published before this pin existed.
 FILL_ROUTED_FILL_BINDING = "sha256:d33c0ea288c31105338daa2b4c1fa2ab6aa80452f1febbf41b3650c7bb47aab6"
-FILL_ROUTED_CANDIDATE_ID = "sha256:94cb04b5c8cadd096b32517731109507588a03f38f5ce645c95255a5a9635e4f"
+FILL_ROUTED_CANDIDATE_ID = "sha256:878e557c6dd33959d076abf5c7cc6eb0aed5fd6d8495efffd438503fa81b7d94"
 FILL_ROUTED_PAYLOAD_BYTES = 975
 
 
@@ -3632,6 +3710,10 @@ def test_the_fill_routed_candidate_identity_matches_its_committed_golden_value()
     assert candidate.fill_binding == FILL_ROUTED_FILL_BINDING
     assert candidate.candidate_id == FILL_ROUTED_CANDIDATE_ID
     assert len(canonical_candidate_bytes(candidate)) == FILL_ROUTED_PAYLOAD_BYTES
+    # The geometry the pin is about, stated separately so a moved ID says which half moved.
+    assert candidate.cost.length_nm == 8_000
+    assert candidate.cost.bend_count == 0
+    assert candidate.patch.paths[0].vertices == (PointNM(1_000, 5_000), PointNM(9_000, 5_000))
 
 
 def test_a_candidate_carrying_an_unverifiable_binding_is_refused_at_construction() -> None:

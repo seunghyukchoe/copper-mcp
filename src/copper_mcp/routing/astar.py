@@ -512,6 +512,17 @@ def _polygon_bounds(points: tuple[PointNM, ...], work: _WorkBudget) -> _Rect:
     return min_x, min_y, max_x, max_y
 
 
+def _rect_contains(outer: _Rect, inner: _Rect) -> bool:
+    """Exact integer closed containment of one axis-aligned rectangle in another."""
+
+    return (
+        outer[0] <= inner[0]
+        and outer[1] <= inner[1]
+        and inner[2] <= outer[2]
+        and inner[3] <= outer[3]
+    )
+
+
 def _polygon_obstacle_sort_key(
     obstacle: _PolygonObstacle,
 ) -> tuple[_Rect, int, str]:
@@ -1430,6 +1441,14 @@ def _prepare(
         )
     blocking_zones: list[Zone] = []
     same_net_zone = False
+    # Zone outline bounds are only measured when there is fill to check them against, so a board
+    # routed without evidence spends exactly the obstacle-check budget it always did.
+    zone_bounds_by_net_layer: dict[tuple[str, str], list[_Rect]] = {}
+    if verified_fill:
+        for zone in content.zones:
+            zone_bounds_by_net_layer.setdefault((zone.net_id, zone.layer_id), []).append(
+                _polygon_bounds(zone.boundary.points, work)
+            )
     verified_fill_zone_keys = frozenset(
         (zone.net_id, zone.layer_id) for zone in content.zones if zone.net_id is not None
     )
@@ -1459,6 +1478,26 @@ def _prepare(
             raise _fail(
                 RouteFailureCode.UNSUPPORTED_GEOMETRY,
                 "verified zone fill is not backed by a matching Board IR zone",
+            )
+        if len(island.points) < 3:
+            # The parser's own floor, restated here because the router is also reachable from a
+            # typed in-process seam that never went through it.
+            raise _fail(
+                RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                "verified zone fill island is not a closed ring",
+            )
+        # KiCad clips poured copper to the zone outline, so honest evidence already satisfies
+        # this. Checking it is what turns "retiring the envelope only ever shrinks the obstacle"
+        # from an assumption about the filler into a verified precondition, and it is the gate
+        # ADR-0070 already applies in the ordered-layer adapter.
+        island_bounds = _polygon_bounds(island.points, work)
+        if not any(
+            _rect_contains(outline, island_bounds)
+            for outline in zone_bounds_by_net_layer[(island.net_id, island.layer_id)]
+        ):
+            raise _fail(
+                RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                "verified zone fill escapes its backing Board IR zone outline",
             )
     net_fill = tuple(island for island in verified_fill if island.net_id == request.net_id)
     if (same_net_via or net_fill) and not same_net_zone_present:
