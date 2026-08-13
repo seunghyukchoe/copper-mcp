@@ -4579,7 +4579,10 @@ def test_an_unsupported_pad_kind_and_shape_refuse_as_two_different_diagnostics()
     assert shape_refusal.snapshot is None
     assert shape_refusal.diagnostics[0].code == "unsupported.construct"
     assert shape_refusal.diagnostics[0].object_kind == "pad"
-    assert shape_refusal.diagnostics[0].message == "pad shape is unsupported"
+    assert (
+        shape_refusal.diagnostics[0].message
+        == "trapezoid pad shapes are unsupported in Board IR adapter v0.2"
+    )
 
     # The two are genuinely distinguishable, which is the whole point of the split.
     assert kind_refusal.diagnostics[0].message != shape_refusal.diagnostics[0].message
@@ -4733,7 +4736,10 @@ def test_an_edge_connector_pad_that_never_converts_is_never_counted() -> None:
     )
 
     assert refused.snapshot is None
-    assert refused.diagnostics[0].message == "pad shape is unsupported"
+    assert (
+        refused.diagnostics[0].message
+        == "trapezoid pad shapes are unsupported in Board IR adapter v0.2"
+    )
     assert refused.edge_connector_pad_count == 0
 
 
