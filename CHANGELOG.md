@@ -9,15 +9,18 @@ All notable changes are documented here. The format follows
 ## [0.8.0] - 2026-08-13
 
 Upgrading from 0.7.0: see the [0.8.0 migration notes](docs/migrations/copper-mcp-0.8.0.md).
-No content address moves — `ROUTER_VERSION`, `BOARD_IR_SCHEMA_VERSION`, `SCENE_VERSION` and every
-other version constant are unchanged, and nothing you have stored stops verifying. What does move:
-`max_fill_vertices` goes from 50,000 to 500,000, which is a denial-of-service posture change an
-operator should decide rather than accept; three whole-board refusal messages disappear because
-their constructs now reach the converter; nineteen pad fields move off
+No published content address moves — `ROUTER_VERSION`, `BOARD_IR_SCHEMA_VERSION`, `SCENE_VERSION`
+and every other version constant are unchanged, and nothing you have stored stops verifying. What
+does move: `max_fill_vertices` goes from 50,000 to 500,000, which is a denial-of-service posture
+change an operator should decide rather than accept; three whole-board refusal messages disappear
+because their constructs now reach the converter; nineteen pad fields move off
 `expression contains an unsupported semantic field`; a courtyard now keeps out on the layer it is
-drawn on, so a placement verdict recorded as `proven_clear` can become `violated`; and
+drawn on, so a placement verdict recorded as `proven_clear` can become `violated`;
+`FILL_EVIDENCE_MISMATCH` is a new route refusal code, and `include_fill_authority` with
+`include_drc` becomes a supported combination where it previously returned a false refusal; and
 `schemas/board-ir/0.2.0.schema.json` plus two closed MCP contracts widened **without their version
-strings moving**.
+strings moving** — the schema file is [issue #172](https://github.com/seunghyukchoe/copper-mcp/issues/172),
+whose agreed disposition is to ship, document and follow up.
 
 **How to read this release's counts.** The private survey corpus grew from 17 boards to 18 saves
 during this release's work, so each entry below states the before/after differential measured at
@@ -273,7 +276,10 @@ DRC-derived comparison below was taken once per board and carries no stated tole
   `include_drc` refuses it while `include_apply_token` mints a token whose apply fails — until that
   is closed, do not treat `include_fill_authority` with `include_drc` or `include_apply_token` as a
   supported combination — and the single-layer seam still performs no shape validation of fill
-  evidence where the layered adapter does.
+  evidence where the layered adapter does. (**Both defects were closed inside this same release**,
+  by the ADR-0103 entry above: `include_fill_authority` with `include_drc` is supported, and
+  `include_fill_authority` with `include_apply_token` returns the candidate and deliberately no
+  token. Read that warning as a statement about `main` between #162 and #169, not about 0.8.0.)
   ([ADR-0101](docs/adr/0101-fill-currency-is-not-in-the-document.md),
   [D-192](docs/ledgers/decision-ledger.md), [R-147](docs/ledgers/risk-register.md),
   [B-105](docs/ledgers/benchmark-ledger.md), #63)

@@ -1,19 +1,22 @@
 # Migrating a deployment to CopperMCP 0.8.0
 
-CopperMCP 0.8.0 changes four things a working 0.7.0 deployment can depend on without having
+CopperMCP 0.8.0 changes five things a working 0.7.0 deployment can depend on without having
 declared it: the default value of a denial-of-service control, the sentence more than twenty Board
-IR refusals emit, the set of placement verdicts a board with a far-side courtyard produces, and the
+IR refusals emit, the set of placement verdicts a board with a far-side courtyard produces, the
 contents of two published artifacts — `schemas/board-ir/0.2.0.schema.json` and the Circuit Scene
-annotation vocabulary — that changed **without their version strings moving**.
+annotation vocabulary — that changed **without their version strings moving**, and the route
+failure vocabulary, which gains `FILL_EVIDENCE_MISMATCH` while two previously-broken
+`preview_route` flag combinations start working.
 
-**No content address moves in this release.** `ROUTER_VERSION` stays `astar-grid/0.7.0`,
+**No published content address moves in this release.** `ROUTER_VERSION` stays `astar-grid/0.7.0`,
 `BOARD_IR_SCHEMA_VERSION` stays `0.2.0`, `SCENE_VERSION` stays `0.3.0`, and
 `tests/test_golden_identities.py` is unchanged and passing. Nothing you have stored stops
 verifying. That claim is checked against every version constant in `src/` rather than inferred
 from the absence of a release note: the [0.7.0 note](copper-mcp-0.7.0.md) carried exactly this
 claim while `ROUTER_VERSION` was in fact moving under it, and it was falsified by a re-read at
 release time rather than by any gate. A "nothing moves" sentence is worth only the sweep behind
-it.
+it. The one address that does move in 0.8.0 belongs to a population no caller can be holding, and
+§7c says why rather than leaving the word "published" to do the work silently.
 
 Read §1 first — it is the only item in this release that is a **decision** rather than a
 compatibility fix. [What does not require migration](#what-does-not-require-migration) names this
@@ -236,12 +239,20 @@ the same `BOARD_IR_SCHEMA_VERSION`.
 **A third party validating against a copy of this file downloaded before 0.8.0 will reject a
 snapshot of a board carrying a far-side courtyard.** The payload is valid; the validator is stale.
 
-Why this is not a version bump: the canonical encoder omits each key entirely when the footprint
-has nothing to put in it, so **every board representable before this release encodes byte for
-byte as it did** and no stored snapshot's digest moves. There is no payload that was valid under
-the old file and is invalid under the new one — the change is a pure widening. It is called out
-here because the file is a downloadable artifact whose name did not change, and a consumer has no
-way to notice from the version string alone.
+**Be precise about what breaks.** The break is between *versions of the schema file*, not between a
+payload and the schema shipped alongside it: no payload CopperMCP has ever emitted was invalid
+against its contemporary schema, and only boards with far-side courtyards are affected at all —
+which, before 0.8.0, was no board, because every one of them was refused. There is no payload that
+was valid under the old file and is invalid under the new one; the change is a pure widening.
+
+Why this ships rather than bumping to `0.3.0`: the canonical encoder omits each key entirely when
+the footprint has nothing to put in it, so **every board representable before this release encodes
+byte for byte as it did** and no stored snapshot's digest moves. The versioning question is real
+and is owned by [issue #172](https://github.com/seunghyukchoe/copper-mcp/issues/172) — which also
+records that ADR-0096 explicitly declined an in-place widening of a published closed set three days
+earlier, and that no gate in this repository notices when a published schema's accepted set changes
+without its version. The agreed disposition is to ship, document here, and follow up in that issue
+rather than make a versioning decision on release day.
 
 To migrate: **re-download `schemas/board-ir/0.2.0.schema.json`** if you validate Board IR snapshots
 against a vendored copy. Nothing else is required, and no re-validation of stored payloads is
@@ -306,12 +317,98 @@ A board routed *without* fill evidence spends exactly the obstacle-check budget 
 zone outline bounds are measured only when evidence is present, and a regression test pins that
 fixture's count at 684 rather than comparing two calls that would move together.
 
-Separately, and **not** introduced by this release: `include_fill_authority` combined with
-`include_drc` or with `include_apply_token` **was not a supported combination in 0.7.0 and is not
-one on this release's `main`.** `AStarRouter.replay` drops the fill evidence, so a fill-routed
-candidate does not reproduce — 8,000 nm replays as 14,000 nm on B-021's own fixture — `include_drc`
-then refuses a legitimate candidate, and `include_apply_token` mints a token whose apply is
-guaranteed to fail. Do not describe that combination as supported, and do not build on it.
+ADR-0101 also *found* two defects in the fill-routed replay path and deliberately filed rather than
+fixed them. Both are **fixed in this same release** by §7, so do not read that entry's "do not
+treat `include_fill_authority` with `include_drc` or `include_apply_token` as a supported
+combination" as a statement about 0.8.0. It described the state of `main` between #162 and #169.
+
+## 7. A candidate replays under the model that produced it, and `FILL_EVIDENCE_MISMATCH` is new
+
+`AStarRouter.replay` rebuilt a `RouteRequest` from the candidate's own fields and called `propose`
+with no `verified_fill`, so a candidate the exact pour had shaped was replayed against the
+conservative zone envelope — a different obstacle model, which makes it not a replay. A
+`RouteCandidate` carried no record of the fill it was routed under, so there was nothing to rebuild
+one from ([ADR-0103](../adr/0103-a-candidate-records-the-model-that-produced-it.md),
+[D-194](../ledgers/decision-ledger.md), [R-149](../ledgers/risk-register.md), #163).
+
+`RouteCandidate` now carries `fill_binding`, the sha256 content address of the fill the router was
+handed, `None` when it was handed none. `replay` accepts `verified_fill` and refuses unless
+`fill_binding_for(verified_fill)` equals the candidate's own binding. **One equality forbids both
+directions**, and the second is the one that matters: obstacles over-approximate and the envelope
+over-approximates the pour, so a replay under fill a candidate never saw is *looser* than the
+search that produced the route and could confirm geometry the router never proved.
+
+### 7a. Two previously-broken flag combinations change outcome
+
+| Call | 0.7.0 and this release's `main` before #169 | 0.8.0 |
+|---|---|---|
+| `preview_route(include_fill_authority=True, include_drc=True)` | **refused a legitimate candidate** with `route candidate failed replay-verified KiCad serialization` | works; `preview_route` hands the fill it already established to `run_route_candidate_drc`, which forwards it to the serialization boundary that replays the candidate |
+| `preview_route(include_fill_authority=True, include_apply_token=True)` | **minted a token whose apply was guaranteed to refuse** | returns the candidate and **no token** |
+
+**The second is a behaviour change a caller can be surprised by.** Apply runs in a later process and
+holds no fill evidence, so it could only replay against the envelope; a capability whose exercise is
+guaranteed to refuse must not be issued. Nothing in the response says *why* the token is absent, and
+the same silence already covers a non-appliable board — a caller cannot distinguish "apply is off",
+"this board cannot be applied to" and "this candidate was routed under fill" without reading
+`fill_binding` and `allow_apply` itself ([R-149](../ledgers/risk-register.md)). Applying a
+fill-routed candidate is not yet available and is filed separately.
+
+To migrate: **if you treated the apply token as unconditional whenever `allow_apply` is on, stop.**
+Branch on the token's presence, and read `candidate.fill_binding` to tell this case apart from a
+board the append-only apply engine could never accept.
+
+### 7b. `FILL_EVIDENCE_MISMATCH` is a new route refusal code
+
+`RouteFailureCode.FILL_EVIDENCE_MISMATCH` — the wire value is `fill_evidence_mismatch` — is emitted
+by `replay` when the supplied evidence does not match the candidate's binding:
+
+```text
+the verified fill supplied for replay is not the fill this candidate was routed under
+```
+
+**A caller enumerating route failure codes must widen its set**, exactly as
+[§6 of the 0.7.0 note](copper-mcp-0.7.0.md#6-one-routing-budget-becomes-three-codes-and-an-exhausted-region-refuses-no_path_in_region)
+required when `no_path_in_region` arrived. It cannot appear on a candidate you hold from 0.7.0
+being replayed the ordinary way: a candidate with no binding replayed with no evidence matches.
+
+Two verifiers that previously reported this disagreement as *the candidate's fault* now refuse
+under their own message instead, which is the honest attribution:
+
+- `render_kicad_candidate_board` raised `candidate does not match a deterministic router replay`.
+  It now raises `candidate was routed under verified zone fill that was not supplied for replay`.
+- `verify_candidate_path` refuses a foreign candidate carrying a fill binding outright
+  (`INVALID_CANDIDATE`). That validator models zones by their envelope and holds no fill evidence,
+  so validating such a path would be the same defect with the blame pointed elsewhere.
+
+### 7c. No published pin moves, and that is by construction rather than by luck
+
+`fill_binding` enters the canonical candidate payload **only when it is not `None`**. Every
+candidate this repository, its fixtures and its corpus have ever produced was routed under the
+conservative envelope, so every one is addressed by byte-identical content. `ROUTER_VERSION` stays
+at `astar-grid/0.7.0`, every pin in `tests/test_golden_identities.py` is unchanged, and the
+route-candidate test now additionally asserts `fill_binding is None` — so that pin's stability is a
+stated consequence rather than a coincidence nobody is watching.
+
+The unconditional alternative was measured and rejected, not overlooked. Emitting
+`"fill_binding":null` would have moved the two-pad candidate ID and **broken every persisted
+candidate from every earlier router version**, because `verify_candidate_id` recomputes the address
+from a rehydrated candidate's own fields.
+
+**One address does move, and no caller can be holding it.** A *fill-routed* candidate's address
+changes, because its binding is now part of its content. That population had no pinned address
+anywhere and could not survive a replay at all before this change — which is the defect §7 fixes —
+so there is no usable one in existence. It is pinned now, in `tests/test_routing_astar.py`.
+
+### 7d. The MCP `candidate` document gains a required-and-nullable field
+
+`RouteCandidateContract` declares `fill_binding: Digest | None`, **required and nullable**, matching
+every other field of that closed contract. The MCP `candidate` document and the apply manifest both
+carry it, `null` in the ordinary case.
+
+To migrate: **a caller that round-trips a candidate manifest must carry the field through**, or the
+identity it re-derives will not match. A caller that only reads the document and never rebuilds a
+candidate from it is unaffected, and a client with a closed schema over the candidate document must
+add the field.
 
 ## What does not require migration
 
@@ -355,16 +452,18 @@ reason rather than the assertion.
 - **A board that converted under 0.7.0.** Every conversion-side change in this release widens what
   is accepted or moves a message. Nothing narrows what converts: the removed refusals in §2a all
   admitted more boards, the seven pad properties and the `connect` pad are acceptances, and every
-  new refusal sentence in §2c and §2d replaces a refusal that already fired on the same board. §6
-  is the one narrowing anywhere in the release, and it is on the router rather than the converter,
-  and only through an in-process seam.
+  new refusal sentence in §2c and §2d replaces a refusal that already fired on the same board. The
+  narrowings in this release are §6 and §7, and both are on the router rather than the converter.
 - **Every Board IR diagnostic *code*.** No code was added, removed or repurposed on the
   board-reading side. What moved is message text, the set of boards refused, and one new value —
-  `text` — in the free-form `object_kind` field.
-- **Route candidate, bundle and export identities.** `ROUTER_VERSION` is unchanged at
-  `astar-grid/0.7.0`, and unlike 0.7.0 there is nothing to re-derive. `LAYERED_ROUTER_VERSION`,
+  `text` — in the free-form `object_kind` field. The **route** failure vocabulary is a different
+  set and it did gain one member; that is §7b.
+- **Route candidate, bundle and export identities you are holding.** `ROUTER_VERSION` is unchanged
+  at `astar-grid/0.7.0`, so unlike 0.7.0 there is nothing to re-derive. `LAYERED_ROUTER_VERSION`,
   `NEGOTIATED_ROUTER_VERSION`, `SCENE_VERSION`, `BOARD_IR_SCHEMA_VERSION` and every schema-version
-  constant in `src/` are byte-identical to their 0.7.0 values.
+  constant in `src/` are byte-identical to their 0.7.0 values. The single exception — a fill-routed
+  candidate's address, a population that could not survive a replay at all before this release — is
+  §7c.
 - **The reproducible mutation-evidence standard**
   ([ADR-0098](../adr/0098-reproducible-mutation-evidence.md), #155). Repository tooling and record
   keeping; no server code changed and no board behaviour moved. It does change how you should
@@ -391,9 +490,10 @@ reason rather than the assertion.
   `COPPER_MCP_MAX_FILL_VERTICES` back to `50000`.
 
 No board, snapshot, candidate or persisted artifact is rewritten by this upgrade. Nothing is
-migrated in place, nothing is destroyed, and — unlike 0.7.0 — there is nothing you must re-derive.
-The two things you must *re-read* are a vendored copy of the Board IR 0.2.0 schema file (§4a) and
-any table of refusal message text (§2).
+migrated in place, nothing is destroyed, and — unlike 0.7.0 — there is nothing you hold that you
+must re-derive. The things you must *re-read* are a vendored copy of the Board IR 0.2.0 schema file
+(§4a), any table of refusal message text (§2), any enumeration of route failure codes (§7b), and
+any code that assumes an apply token accompanies every candidate (§7a).
 
 ## How to read this release's counts
 
