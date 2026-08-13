@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -76,6 +77,66 @@ def test_reading_fill_fails_closed_past_the_vertex_budget() -> None:
 
     with pytest.raises(ZoneFillError, match="vertex budget"):
         read_fill_islands(source, max_vertices=10)
+
+
+@pytest.mark.parametrize(
+    ("name", "vertices"),
+    [("zone-fill-fresh", 148), ("zone-fill-islands", 186), ("zone-fill-stale", 148)],
+)
+def test_the_vertex_budget_binds_at_the_board_total_and_nowhere_else(
+    name: str, vertices: int
+) -> None:
+    """The budget is a board-wide total, not a per-island one.
+
+    ``zone-fill-islands`` is the case that separates them: 186 vertices across two islands, the
+    larger of which is 94. A budget of 100 admits either island alone and must still refuse the
+    board, because the cost being metered is every vertex materialised from the document rather
+    than the widest ring in it.
+    """
+
+    source = (FIXTURES / f"{name}.kicad_pcb").read_bytes()
+
+    for budget in (3, vertices // 2, vertices - 1):
+        with pytest.raises(ZoneFillError) as refusal:
+            read_fill_islands(source, max_vertices=budget)
+        # The reader is called on the cached pour and on KiCad's recomputation of it and cannot
+        # tell them apart, so it names neither. It also names the budget and never the count it
+        # observed, which would be board content (ADR-0079).
+        assert str(refusal.value) == "zone fill exceeds the configured vertex budget"
+    assert sum(len(island.points) for island in read_fill_islands(source, max_vertices=vertices))
+
+
+@pytest.mark.parametrize(
+    ("name", "vertices"),
+    [("zone-fill-fresh", 148), ("zone-fill-islands", 186), ("zone-fill-stale", 148)],
+)
+def test_raising_the_vertex_budget_can_only_turn_a_refusal_into_an_answer(
+    name: str, vertices: int
+) -> None:
+    """Issue #165's safety obligation, discharged as a property of the budget itself.
+
+    ``max_vertices`` reaches exactly one expression in this module -- the guard that aborts
+    ``_points`` -- so it can decide *whether* a read happens and never *what* it returns. The
+    consequence a caller cares about is that raising the budget is answer-preserving: every
+    board that already read at 50,000 reads the same islands and digests identically at the
+    calibrated default and at the environment ceiling, and the only outcome that can move is a
+    budget refusal becoming a real answer.
+
+    This deliberately does not argue from an equality between two runs with and without a
+    change. The claim being pinned is stronger and one-directional: the refusal threshold is
+    *exactly* the board's vertex total, and above it the value does not depend on the budget at
+    all.
+    """
+
+    source = (FIXTURES / f"{name}.kicad_pcb").read_bytes()
+    baseline = read_fill_islands(source, max_vertices=vertices)
+
+    shipped_default = Settings(workspace=FIXTURES).max_fill_vertices
+    for budget in (vertices, vertices + 1, 50_000, shipped_default, 1_000_000):
+        admitted = read_fill_islands(source, max_vertices=budget)
+        assert admitted == baseline
+        assert fill_digest(admitted) == fill_digest(baseline)
+        assert sum(len(island.points) for island in admitted) == vertices
 
 
 def test_a_stale_fill_authority_record_cannot_be_constructed() -> None:
@@ -156,6 +217,81 @@ def test_real_kicad_reports_one_node_per_island(tmp_path: Path) -> None:
     assert authority.fill_polygon_count == 2
     assert len(islands) == 2
     assert {island.layer_id for island in islands} == {"layer:F.Cu"}
+
+
+@pytest.mark.skipif(not REAL_KICAD_CLI.is_file(), reason="KiCad CLI is not installed")
+def test_the_authority_answer_is_the_same_at_every_budget_that_admits_the_board(
+    tmp_path: Path,
+) -> None:
+    """Issue #165 end to end: the budget gates a refusal and decides nothing else.
+
+    The whole path is run at a ladder of budgets that straddles the board's 148 vertices. Below
+    it every run refuses as a *resource* problem and names the cached read; at or above it every
+    run returns byte-identical evidence, including the refill KiCad recomputes each time. So the
+    default this project ships chooses which boards get an answer, never which answer they get.
+    """
+
+    settings = _workspace(tmp_path, "zone-fill-fresh")
+    board = tmp_path / "zone-fill-fresh.kicad_pcb"
+    before = board.read_bytes()
+
+    for budget in (3, 147):
+        with pytest.raises(KiCadCliError, match="cached zone fill could not be read"):
+            run_zone_fill_authority(
+                "zone-fill-fresh.kicad_pcb", replace(settings, max_fill_vertices=budget)
+            )
+
+    answers = [
+        run_zone_fill_authority(
+            "zone-fill-fresh.kicad_pcb", replace(settings, max_fill_vertices=budget)
+        )[0].to_dict()
+        for budget in (148, 50_000, settings.max_fill_vertices, 1_000_000)
+    ]
+
+    assert all(answer == answers[0] for answer in answers)
+    assert answers[0]["fill_vertex_count"] == 148
+    assert board.read_bytes() == before
+
+
+@pytest.mark.skipif(not REAL_KICAD_CLI.is_file(), reason="KiCad CLI is not installed")
+def test_one_budget_meters_the_cached_pour_and_the_recomputed_one(tmp_path: Path) -> None:
+    """`max_fill_vertices` is charged twice per proof, against two populations (#165).
+
+    A *stale* board is by definition one whose cache and refill differ, so their sizes are free
+    to differ too, and here they do: this fixture caches 148 vertices in one island and KiCad
+    recomputes 186 across two. Every budget in [148, 185] therefore admits the operator's board
+    and then refuses this server's own recomputation of it -- a resource refusal standing where
+    the honest `stale_fill` answer belongs, about a document the operator never wrote and cannot
+    inspect.
+
+    The refusal must at least say which document ran out. It did not: the reader hardcoded
+    "cached", so the refilled call site produced "refilled zone fill could not be read: cached
+    zone fill exceeds the configured vertex budget".
+
+    Calibration is what keeps the gap from binding in practice -- the shipped default is 3.8x
+    the largest pour measured on real boards -- and that is a reason to size the number well, not
+    a reason to believe one read is the same population as the other.
+    """
+
+    settings = _workspace(tmp_path, "zone-fill-stale")
+
+    with pytest.raises(KiCadCliError, match=r"^cached zone fill could not be read") as cached:
+        run_zone_fill_authority(
+            "zone-fill-stale.kicad_pcb", replace(settings, max_fill_vertices=147)
+        )
+    assert "cached zone fill exceeds" not in str(cached.value)
+
+    with pytest.raises(KiCadCliError, match=r"^refilled zone fill could not be read") as refilled:
+        run_zone_fill_authority(
+            "zone-fill-stale.kicad_pcb", replace(settings, max_fill_vertices=148)
+        )
+    assert "cached zone fill exceeds" not in str(refilled.value)
+
+    for budget in (186, 50_000, settings.max_fill_vertices):
+        with pytest.raises(ZoneFillStaleError):
+            run_zone_fill_authority(
+                "zone-fill-stale.kicad_pcb", replace(settings, max_fill_vertices=budget)
+            )
 
 
 def test_zone_fill_authority_requires_a_reachable_kicad(tmp_path: Path) -> None:

@@ -1,0 +1,97 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": ["-q", "--no-cov"],
+  "mutants": [
+    {
+      "id": "FV1-default-reverted",
+      "file": "src/copper_mcp/config.py",
+      "anchor": "    max_fill_vertices: int = 500_000",
+      "replacement": "    max_fill_vertices: int = 50_000",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_config.py::SettingsTests::test_the_fill_vertex_budget_is_calibrated_and_not_a_round_number"
+      ]
+    },
+    {
+      "id": "FV2-environment-default-drifts-from-the-dataclass",
+      "file": "src/copper_mcp/config.py",
+      "anchor": "os.environ.get(\"COPPER_MCP_MAX_FILL_VERTICES\", \"500000\")",
+      "replacement": "os.environ.get(\"COPPER_MCP_MAX_FILL_VERTICES\", \"200000\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_config.py::SettingsTests::test_the_fill_vertex_budget_is_calibrated_and_not_a_round_number"
+      ]
+    },
+    {
+      "id": "FV3-ceiling-raised-with-the-default",
+      "file": "src/copper_mcp/config.py",
+      "anchor": "            # ceiling, because raising a DoS ceiling that no measured board needs buys nothing.\n            1_000_000,",
+      "replacement": "            # ceiling, because raising a DoS ceiling that no measured board needs buys nothing.\n            2_000_000,",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_config.py::SettingsTests::test_the_fill_vertex_budget_keeps_its_range"
+      ]
+    },
+    {
+      "id": "FV4-floor-below-a-polygon",
+      "file": "src/copper_mcp/config.py",
+      "anchor": "            os.environ.get(\"COPPER_MCP_MAX_FILL_VERTICES\", \"500000\"),\n            3,",
+      "replacement": "            os.environ.get(\"COPPER_MCP_MAX_FILL_VERTICES\", \"500000\"),\n            1,",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_config.py::SettingsTests::test_the_fill_vertex_budget_keeps_its_range"
+      ]
+    },
+    {
+      "id": "FV5-guard-off-by-one",
+      "file": "src/copper_mcp/zone_fill.py",
+      "anchor": "            if len(points) >= budget:",
+      "replacement": "            if len(points) > budget:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_zone_fill.py::test_the_vertex_budget_binds_at_the_board_total_and_nowhere_else"
+      ]
+    },
+    {
+      "id": "FV6-budget-truncates-instead-of-refusing",
+      "file": "src/copper_mcp/zone_fill.py",
+      "anchor": "                raise ZoneFillError(\"zone fill exceeds the configured vertex budget\")",
+      "replacement": "                return tuple(points)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_zone_fill.py::test_the_vertex_budget_binds_at_the_board_total_and_nowhere_else",
+        "tests/test_zone_fill.py::test_raising_the_vertex_budget_can_only_turn_a_refusal_into_an_answer"
+      ]
+    },
+    {
+      "id": "FV7-budget-becomes-per-island",
+      "file": "src/copper_mcp/zone_fill.py",
+      "anchor": "            points = _points(polygon, active_limits, remaining)\n            remaining -= len(points)",
+      "replacement": "            points = _points(polygon, active_limits, remaining)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_zone_fill.py::test_the_vertex_budget_binds_at_the_board_total_and_nowhere_else"
+      ]
+    },
+    {
+      "id": "FV8-refusal-names-a-document-it-cannot-know",
+      "file": "src/copper_mcp/zone_fill.py",
+      "anchor": "raise ZoneFillError(\"zone fill exceeds the configured vertex budget\")",
+      "replacement": "raise ZoneFillError(\"cached zone fill exceeds the configured vertex budget\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_zone_fill.py::test_the_vertex_budget_binds_at_the_board_total_and_nowhere_else"
+      ]
+    },
+    {
+      "id": "FV9-refusal-echoes-the-observed-count",
+      "file": "src/copper_mcp/zone_fill.py",
+      "anchor": "                raise ZoneFillError(\"zone fill exceeds the configured vertex budget\")\n            values = atoms(point)",
+      "replacement": "                raise ZoneFillError(\n                    f\"zone fill exceeds the configured vertex budget at vertex {index}\"\n                )\n            values = atoms(point)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_zone_fill.py::test_the_vertex_budget_binds_at_the_board_total_and_nowhere_else"
+      ]
+    }
+  ]
+}

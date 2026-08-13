@@ -70,7 +70,12 @@ def _points(expression: SExpr, limits: ParseLimits, budget: int) -> tuple[PointN
     for group in children(expression, "pts"):
         for index, point in enumerate(children(group, "xy")):
             if len(points) >= budget:
-                raise ZoneFillError("cached zone fill exceeds the configured vertex budget")
+                # Deliberately not "cached": this reader is called twice per freshness proof,
+                # once on the board the operator handed us and once on the copy KiCad refilled,
+                # and it cannot tell which. Naming the wrong one produced the self-contradicting
+                # "refilled zone fill could not be read: cached zone fill exceeds ..." (#165).
+                # Which document ran out is the caller's to say, and both call sites say it.
+                raise ZoneFillError("zone fill exceeds the configured vertex budget")
             values = atoms(point)
             if len(values) != 2:
                 raise ZoneFillError(f"fill vertex {index} is malformed")

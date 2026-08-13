@@ -405,8 +405,16 @@ typed in-process seam, where the layered adapter does — recorded as `R-147`, n
 
 Once freshness-bound, the pour is KiCad's own authority on where that copper is, so contact testing
 uses the polygon itself with exact integer geometry. Pad and track cores stay under-approximating;
-only the pour is exact. Reading is bounded by `max_fill_vertices`, default 50,000; CopperTone's pour
-is 4,314 vertices across two layers. B-021 measures the narrow fill-aware routing core on a
+only the pour is exact. Reading is bounded by `max_fill_vertices`, default **500,000** — 16 MiB of
+source at the densest pour measured, 29,503 vertices per mebibyte, following ADR-0079's rule. It
+replaces the 50,000 ADR-0021 derived from CopperTone's 4,314-vertex pour, which refused seven of
+eighteen real zoned boards (50,482–130,305 vertices) before freshness could be considered. The
+budget sits *behind* the parse it appears to guard — refusing the largest board still costs 86 % of
+what reading it costs — so the defence against an unbounded vertex list is `ParseLimits`, which also
+caps the population at 741,375 vertices; ADR-0104 prices the change at 6.5 s and 21.6 MiB of
+adversarial headroom. Note that it meters a board's **total** pour while the ordered-layer adapter
+refuses any single island above 4,096 vertices, a ceiling real boards reach (widest observed 43,889)
+and R-150 tracks. B-021 measures the narrow fill-aware routing core on a
 synthetic corridor: ten deterministic replays reduce wire length from 14,000 nm to 8,000 nm. The
 public preview now carries the same freshness evidence on routed candidates when
 `include_fill_authority` is set, with a typed `routing_effect` so an AI host can distinguish exact

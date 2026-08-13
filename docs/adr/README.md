@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0104**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0105**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -23,6 +23,15 @@ line is deliberate: two branches that both allocate it now conflict textually, s
 merge instead of accepting it.
 
 **Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086.
+**ADR-0103 is a live claim, not a gap, at the time of writing; ADR-0101 and ADR-0102 are not
+gaps either.** This record (issue #165, `D-195`/`R-150`/`SEC-144`/`B-108`) took ADR-0104 above all
+three rather than racing any of them: 0101 and 0102 were held by open branches and 0103 by a
+sibling working issue #163 in the routing path. Both have since landed while this branch was open
+— 0101 from PR #162 as the fill-currency decision, 0102 from PR #160 as the permit-observing
+evaluation — so the correction this sentence anticipated came due twice, and both times before the
+paragraph was ever published, which is the whole point of rule 1's textual safety net. Only 0103
+remains a live claim, reported as unallocated because the checker cannot see an unmerged branch;
+if that branch is abandoned its number becomes a permanent gap like every other spent number.
 ADR-0099 and ADR-0100 are **live claims, not gaps**, at the time of writing: two branches (PRs #157
 and #158) were open on this same base and had both allocated ADR-0099, so one of them renumbers to
 ADR-0100 and ADR-0101 stepped over both rather than joining the race. If either branch is abandoned
@@ -213,15 +222,17 @@ now proves that last clause on every run rather than asserting it. 0027, 0082, 0
 | [0098](0098-reproducible-mutation-evidence.md) | A mutation claim is evidence only if the repository can re-run it | Accepted |
 | [0099](0099-pad-fabrication-properties-and-named-pad-refusals.md) | A pad refusal names the field it refused, and seven of eight fabrication properties convert | Accepted |
 | [0100](0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md) | A custom pad has a derivable envelope and nowhere in Board IR to put it | Accepted |
+| [0101](0101-fill-currency-is-not-in-the-document.md) | Fill currency is not in the board file, so keep the model and gate the shrink | Accepted |
+| [0102](0102-an-evaluation-must-observe-a-permit.md) | A refusal evaluation must observe a permit, and prove it kept observing one | Accepted |
+| [0103](0103-a-candidate-records-the-model-that-produced-it.md) | A candidate records the obstacle model that produced it, and a replay refuses every other one | Accepted |
 
 One hundred and one numbers, ninety-five records, no duplicates. ADR-0099 has since landed
 from its own branch (PR #157); ADR-0100 remains a live claim on open PR #158 at the time of
 writing, not a gap. The checker's output, not this sentence, is the count to trust.
 
 Ninety-nine numbers, ninety-four records, no duplicates — and `scripts/check_adr_numbers.py`
-| [0101](0101-fill-currency-is-not-in-the-document.md) | Fill currency is not in the board file, so keep the model and gate the shrink | Accepted |
-| [0102](0102-an-evaluation-must-observe-a-permit.md) | A refusal evaluation must observe a permit, and prove it kept observing one | Accepted |
-| [0103](0103-a-candidate-records-the-model-that-produced-it.md) | A candidate records the obstacle model that produced it, and a replay refuses every other one | Accepted |
+
+| [0104](0104-fill-vertex-budget-behind-a-parse.md) | The fill-vertex budget sits behind a parse, and is calibrated as what it is | Accepted |
 now proves that last clause on every run rather than asserting it (the previous revision of this
 sentence said "ninety-six numbers, ninety records", stale by two landings at the time it was
 read; the checker's own output is the count to trust). 0027, 0082, 0083, 0085 and
@@ -238,6 +249,7 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070, 0076, 0087,
   0091, 0092, 0095, 0096, 0097, 0099.
 - **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
+  0066, 0070, 0073, 0075, 0089, 0093, 0104.
   0066, 0070, 0073, 0075, 0089, 0093, 0101, 0103.
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060, 0075.
 - **Circuit Intent and schematic verification** — 0014, 0015, 0056, 0070.
@@ -328,4 +340,5 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0100: A custom pad has a derivable envelope and nowhere in Board IR to put it](0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md)
 - [ADR-0101: Fill currency is not in the board file, so keep the model and gate the shrink](0101-fill-currency-is-not-in-the-document.md)
 - [ADR-0102: A refusal evaluation must observe a permit, and prove it kept observing one](0102-an-evaluation-must-observe-a-permit.md)
+- [ADR-0104: The fill-vertex budget sits behind a parse, and is calibrated as what it is](0104-fill-vertex-budget-behind-a-parse.md)
 - [ADR-0103: A candidate records the obstacle model that produced it, and a replay refuses every other one](0103-a-candidate-records-the-model-that-produced-it.md)
