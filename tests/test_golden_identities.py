@@ -213,6 +213,16 @@ def test_net_reference_ids_are_content_addressed_over_the_net_name() -> None:
 # move — this fixture's path is the same two vertices, the same length, and the same bend
 # count as before — so the payload grew by exactly the one character that separates "256"
 # from "4096".  The migration note is in CHANGELOG.md under 0.6.1.
+#
+# **Did not move for ADR-0103** (issue #163), which added `fill_binding` to `RouteCandidate`.
+# The field is emitted into the canonical payload only when it is not `None`, so a candidate
+# routed against the conservative zone envelope — which is every candidate this fixture, the
+# corpus, and every caller has ever produced — is addressed by byte-identical content.  The
+# test below asserts `fill_binding is None` here, so this pin's stability is a stated
+# consequence rather than a coincidence, and `tests/test_routing_astar.py`'s
+# `test_an_envelope_candidate_carries_no_fill_key_in_its_canonical_identity` proves the
+# absence at the byte level.  A *fill*-routed candidate's address does move; it is
+# pinned in `tests/test_routing_astar.py` and had no pin anywhere before.
 ROUTE_CANDIDATE_ID = "sha256:7dbbc4b034238d61c9f002163a3af9a91022942785bf97eee8db37c6bf564784"
 ROUTE_CANDIDATE_PAYLOAD_BYTES = 1_043
 ROUTE_CANDIDATE_ROUTER_VERSION = "astar-grid/0.7.0"
@@ -248,6 +258,8 @@ def test_route_candidate_identity_matches_its_committed_golden_value(tmp_path: P
     assert preview.candidate is not None
     assert verify_candidate_id(preview.candidate)
     assert preview.candidate.router_version == ROUTE_CANDIDATE_ROUTER_VERSION
+    # The reason this pin did not move for ADR-0103; see the note above.
+    assert preview.candidate.fill_binding is None
     assert len(canonical_candidate_bytes(preview.candidate)) == ROUTE_CANDIDATE_PAYLOAD_BYTES
     assert preview.candidate.candidate_id == ROUTE_CANDIDATE_ID
     assert preview.board_revision == ROUTE_CANDIDATE_BOARD_REVISION

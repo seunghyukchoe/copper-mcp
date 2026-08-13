@@ -37,7 +37,12 @@ from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
 from copper_mcp.models import DrcSummary, ErcSummary
 from copper_mcp.parse_budgets import parse_limits_for
-from copper_mcp.routing import LayeredRouteCandidate, LayeredRouteRequest, RouteCandidate
+from copper_mcp.routing import (
+    LayeredRouteCandidate,
+    LayeredRouteRequest,
+    RouteCandidate,
+    VerifiedFill,
+)
 from copper_mcp.scene_render import (
     RENDER_LAYERS,
     SVG_CANONICALIZATION,
@@ -1937,8 +1942,16 @@ def run_route_candidate_drc(
     candidate: RouteCandidate,
     profile: KiCadConstraintProfile,
     settings: Settings,
+    *,
+    verified_fill: tuple[VerifiedFill, ...] = (),
 ) -> RouteCandidateDrcEvidence:
-    """Bind an exact replayed candidate to authoritative DRC without exposing board bytes."""
+    """Bind an exact replayed candidate to authoritative DRC without exposing board bytes.
+
+    ``verified_fill`` is the freshness-bound zone fill the candidate was routed under. The
+    serialization boundary replays the candidate before rendering it, and a replay under a
+    different obstacle model is not a replay, so a candidate shaped by exact fill can only be
+    bound to DRC by the caller that still holds that fill.
+    """
 
     if not isinstance(candidate, RouteCandidate):
         raise KiCadCliError("route candidate is malformed")
@@ -1974,6 +1987,7 @@ def run_route_candidate_drc(
             candidate,
             profile,
             limits=parse_limits,
+            verified_fill=verified_fill,
         )
     except KiCadRoutePatchError as error:
         raise KiCadCliError("route candidate failed replay-verified KiCad serialization") from error

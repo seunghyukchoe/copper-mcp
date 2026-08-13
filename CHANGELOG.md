@@ -6,6 +6,57 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A fill-routed candidate no longer fails its own replay**
+  ([ADR-0103](docs/adr/0103-a-candidate-records-the-model-that-produced-it.md), issue #163).
+  `AStarRouter.replay` rebuilt a request from the candidate's own fields and called `propose`
+  with no `verified_fill`, so a candidate the exact pour had shaped was replayed against the
+  conservative zone envelope. On B-021's fixture a route solving at 8,000 nm replayed at
+  14,000 nm with no diagnostic; on `tests/fixtures/route-candidate/blocked-zone.kicad_pcb` a
+  20 mm straight route replayed as a 29.5 mm two-bend detour. Two published surfaces broke:
+  `preview_route(include_fill_authority=True, include_drc=True)` **refused a legitimate
+  candidate** with "route candidate failed replay-verified KiCad serialization", and
+  `include_apply_token=True` **minted a token whose apply was guaranteed to refuse**.
+  `RouteCandidate` now records `fill_binding` — the content address of the fill it was routed
+  under, `null` when it was routed under none — and every verifier that replays a candidate
+  refuses any evidence whose binding differs. One equality forbids both directions: a candidate
+  with a binding replayed without evidence refuses, and a candidate with **no** binding replayed
+  **with** evidence refuses too. The second is the direction that matters, because the envelope
+  over-approximates the pour, so a replay under fill a candidate never saw would be *looser*
+  than the search that produced the route.
+- **`include_fill_authority` with `include_drc` is now a supported combination.** `preview_route`
+  hands the fill it already established to `run_route_candidate_drc`, which forwards it to the
+  serialization boundary that replays the candidate.
+- **`include_fill_authority` with `include_apply_token` returns the candidate and no token.**
+  Apply runs in a later process and holds no fill evidence, so it could only replay against the
+  envelope; a capability whose exercise is guaranteed to refuse must not be issued. This is the
+  same rule that already withholds a token for a board the append-only apply engine could never
+  accept. Applying a fill-routed candidate is not yet available and is filed separately.
+- `verify_candidate_path` refuses a foreign candidate carrying a fill binding. That validator
+  models zones by their envelope and holds no fill evidence, so validating such a path would be
+  the same defect with the blame pointed at a foreign candidate.
+- **Migration — no published content address moves, and this is by construction rather than
+  by luck.**
+  `fill_binding` enters the canonical candidate payload **only when it is not `null`**, so a
+  candidate routed under the conservative envelope — every candidate this repository, its
+  fixtures, and its corpus have ever produced — is addressed by byte-identical content.
+  `ROUTER_VERSION` stays at `astar-grid/0.7.0` and every pin in
+  `tests/test_golden_identities.py` is unchanged; the route-candidate test now also asserts
+  `fill_binding is None`, so that pin's stability is a stated consequence. Emitting
+  `"fill_binding":null` instead would have moved every candidate address at once *and* broken
+  every persisted candidate from every earlier router version, because `verify_candidate_id`
+  recomputes the address from a rehydrated candidate's own fields.
+- **Migration —** a **fill-routed** candidate's address does move. That population had no
+  pinned address
+  anywhere and could not survive a replay at all before this change, so no caller can be holding
+  a usable one; it is pinned now, in `tests/test_routing_astar.py`.
+- **Migration —** the MCP `candidate` document and the apply manifest gain a `fill_binding`
+  field, `null` in the
+  ordinary case. `RouteCandidateContract` declares it required-and-nullable, matching every other
+  field of that closed contract. A caller that round-trips a candidate manifest must carry the
+  field through, or the identity it re-derives will not match.
+
 ### Changed
 
 - **The real-board conversion survey is closed out, and every count it published is superseded by a

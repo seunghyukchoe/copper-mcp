@@ -301,6 +301,14 @@ class RouteCandidate:
     seed: int
     pad_count: int = 2
     ordering_policy: str = SINGLE_PATH_ORDERING
+    #: The obstacle model this candidate was routed under, as the content address of the
+    #: freshness-verified zone fill the router was handed, or ``None`` when it was handed none
+    #: and searched against the conservative zone envelope instead.  This is a *binding*, not
+    #: the evidence: it is exactly enough for a replay to establish that the fill it holds is
+    #: the fill that produced this route, and not enough to route from.  A replay handed fill
+    #: whose binding differs - in either direction, including a candidate with no binding
+    #: handed fill it never saw - refuses rather than searching under a different model.
+    fill_binding: str | None = None
 
     def __post_init__(self) -> None:
         _digest("candidate ID", self.candidate_id)
@@ -320,6 +328,8 @@ class RouteCandidate:
         _stable_name("ordering policy", self.ordering_policy)
         _integer("seed", self.seed)
         _integer("pad count", self.pad_count, minimum=2)
+        if self.fill_binding is not None:
+            _digest("fill binding", self.fill_binding)
         # A tree over N components needs exactly N - 1 merges, and every pad beyond the first
         # two can only be reached by one more path.
         if len(self.patch.paths) > self.pad_count - 1:
@@ -417,6 +427,7 @@ class RouteFailureCode(StrEnum):
     SEARCH_BUDGET_EXCEEDED = "search_budget_exceeded"
     CANCELLED = "cancelled"
     STALE_FILL = "stale_fill"
+    FILL_EVIDENCE_MISMATCH = "fill_evidence_mismatch"
     NO_PATH = "no_path"
     NO_PATH_IN_REGION = "no_path_in_region"
 

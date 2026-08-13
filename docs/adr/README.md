@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0101**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0104**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -30,8 +30,13 @@ decision — this sentence is the correction the earlier note anticipated, and 0
 ADR-0097 went the same way: it was a live claim held by open PR #154 when ADR-0098 was allocated,
 so ADR-0098 stepped over it, and it has since landed as the courtyard-layer decision. Neither is a
 gap; both notes are corrections that came due exactly as written.
-**ADR-0099 is a live claim contested by two open branches at the time of writing, and this note is
-the acknowledgement the convention asks for.** This branch (issue #152, `D-189`/`R-144`) and PR #158
+**ADR-0101 and ADR-0102 are live claims held by open branches at the time ADR-0103 was
+allocated, and this note is the acknowledgement the convention asks for.** PR #160 and PR #162
+each write one of them, off-branch pre-assignment again, so neither could be seen from here.
+ADR-0103 (issue #163) stepped over both rather than racing either, exactly as rule 1 prescribes.
+If either branch is abandoned, its number is spent and stays unused rather than being filled.
+**ADR-0099 was a live claim contested by two open branches, and this note is
+the acknowledgement the convention asked for.** This branch (issue #152, `D-189`/`R-144`) and PR #158
 (issue #153, `D-190`/`R-145`) both write `docs/adr/0099-*.md`. Neither stepped over the other
 because neither could see the other when its number was assigned — the pre-assignment happened
 off-branch. The tie-break is the ledger numbers, which do not collide and do order: `D-189` is lower
@@ -199,6 +204,7 @@ now proves that last clause on every run rather than asserting it. 0027, 0082, 0
 
 Ninety-nine numbers, ninety-four records, no duplicates — and `scripts/check_adr_numbers.py`
 | [0100](0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md) | A custom pad has a derivable envelope and nowhere in Board IR to put it | Accepted |
+| [0103](0103-a-candidate-records-the-model-that-produced-it.md) | A candidate records the obstacle model that produced it | Accepted |
 now proves that last clause on every run rather than asserting it (the previous revision of this
 sentence said "ninety-six numbers, ninety records", stale by two landings at the time it was
 read; the checker's own output is the count to trust). 0027, 0082, 0083, 0085 and
@@ -215,7 +221,7 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070, 0076, 0087,
   0091, 0092, 0095, 0096, 0097, 0099.
 - **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
-  0066, 0070, 0073, 0075, 0089, 0093.
+  0066, 0070, 0073, 0075, 0089, 0093, 0103.
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060, 0075.
 - **Circuit Intent and schematic verification** — 0014, 0015, 0056, 0070.
 - **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065, 0075, 0097.
@@ -302,3 +308,5 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0097: A courtyard keeps out on the layer it is drawn on, not on its footprint's side](0097-courtyard-layer-decides-the-side.md)
 - [ADR-0098: A mutation claim is evidence only if the repository can re-run it](0098-reproducible-mutation-evidence.md)
 - [ADR-0099: A pad refusal names the field it refused, and seven of eight fabrication properties convert](0099-pad-fabrication-properties-and-named-pad-refusals.md)
+- [ADR-0100: A custom pad has a derivable envelope and nowhere in Board IR to put it](0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md)
+- [ADR-0103: A candidate records the obstacle model that produced it, and a replay refuses every other one](0103-a-candidate-records-the-model-that-produced-it.md)

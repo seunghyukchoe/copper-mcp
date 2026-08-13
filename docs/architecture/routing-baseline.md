@@ -406,6 +406,16 @@ public preview now carries the same freshness evidence on routed candidates when
 foreign-zone obstacles from same-net connectivity evidence. This is provenance, not a DRC or
 fabrication guarantee.
 
+A fill-routed candidate records the model that produced it, as `fill_binding` — the content
+address of the fill the router was handed — and every verifier that replays a candidate refuses
+any other model (ADR-0103). Before that, `replay` dropped the fill and searched the envelope, so a
+fill-routed candidate disagreed with itself: on B-021's fixture a route solving at 8,000 nm
+replayed at 14,000 nm, and `preview_route(include_fill_authority=True, include_drc=True)` refused
+a legitimate candidate. The ordering of the two models is what made the failure benign — the
+envelope over-approximates the pour, so the replay was *stricter* than the route — and the binding
+equality now forbids the looser direction as well, which is the one that would confirm geometry the
+router never proved.
+
 ## Multi-pin trees
 
 A net with more than two pads is routed by sequential component merging. Connectivity analysis

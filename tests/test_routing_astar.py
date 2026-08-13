@@ -49,6 +49,7 @@ from copper_mcp.routing import (
     RouteResult,
     VerifiedFill,
     canonical_candidate_bytes,
+    fill_binding_for,
     verify_candidate_id,
 )
 from copper_mcp.routing.astar import (
@@ -3446,6 +3447,199 @@ def test_verified_fill_without_a_board_ir_zone_is_refused() -> None:
     _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
     assert result.diagnostic is not None
     assert "matching Board IR zone" in result.diagnostic.message
+
+
+# ---------------------------------------------------------------------------
+# A candidate replays under the model that produced it (ADR-0103, issue #163)
+# ---------------------------------------------------------------------------
+#
+# The conservative zone envelope over-approximates the exact pour, so the two obstacle models
+# are ordered: the envelope forbids everything the pour forbids, and more.  That ordering is
+# what makes the two directions of a wrong replay differ in kind rather than in degree, and
+# every test below names which direction it pins.
+
+# A fill-routed candidate ID is a published content address - it is what `preview_route` returns
+# and what an apply manifest carries - so it is pinned here rather than left to drift.  This
+# population is the one ADR-0103 moves, and it had no pin anywhere before, because a fill-routed
+# candidate could not survive a replay at all.
+FILL_ROUTED_FILL_BINDING = "sha256:d33c0ea288c31105338daa2b4c1fa2ab6aa80452f1febbf41b3650c7bb47aab6"
+FILL_ROUTED_CANDIDATE_ID = "sha256:94cb04b5c8cadd096b32517731109507588a03f38f5ce645c95255a5a9635e4f"
+FILL_ROUTED_PAYLOAD_BYTES = 975
+
+
+def _corridor_snapshot() -> BoardIRSnapshot:
+    return _snapshot(foreign_zones=(_rectangle(3_000, 3_000, 7_000, 7_000),))
+
+
+def _corridor_fill(*, low_y: int = 6_000) -> VerifiedFill:
+    """One pour that leaves the y=5,000 centreline clear inside the zone outline."""
+
+    return VerifiedFill(
+        net_id=OTHER_NET_ID,
+        layer_id=LAYER_ID,
+        points=(
+            PointNM(3_000, low_y),
+            PointNM(7_000, low_y),
+            PointNM(7_000, 7_000),
+            PointNM(3_000, 7_000),
+        ),
+        source_revision=SOURCE_REVISION,
+    )
+
+
+def test_a_fill_routed_candidate_replays_under_the_fill_that_produced_it() -> None:
+    """The assertion issue #163 found the suite made nowhere.
+
+    A candidate that cannot reproduce itself is a candidate every downstream verifier refuses:
+    `_replay_candidate` is the single chokepoint under both `render_kicad_candidate_board` and
+    the apply engine.
+    """
+
+    snapshot = _corridor_snapshot()
+    fill = _corridor_fill()
+    router = AStarRouter()
+    candidate = _candidate(router.propose(snapshot, _request(snapshot), verified_fill=(fill,)))
+
+    replay = router.replay(snapshot, candidate, verified_fill=(fill,))
+
+    assert replay.candidate == candidate
+    assert canonical_candidate_bytes(_candidate(replay)) == canonical_candidate_bytes(candidate)
+
+
+def test_replay_without_the_producing_fill_refuses_instead_of_routing_differently() -> None:
+    """Issue #163 itself: the *understated* direction, which used to be answered silently.
+
+    Losing the fill left the replay stricter than the route, so it never confirmed anything the
+    router had not proved - it produced a different, longer route, and the disagreement was
+    reported as the candidate's fault.  Refusing under its own code is what makes the message
+    true.
+    """
+
+    snapshot = _corridor_snapshot()
+    fill = _corridor_fill()
+    router = AStarRouter()
+    envelope = _candidate(router.propose(snapshot, _request(snapshot)))
+    candidate = _candidate(router.propose(snapshot, _request(snapshot), verified_fill=(fill,)))
+
+    replay = router.replay(snapshot, candidate)
+
+    # Not vacuous: without the refusal this replay reproduces the *envelope* route, which is
+    # precisely what it used to do.
+    assert envelope.cost.length_nm > candidate.cost.length_nm
+    _assert_failure(replay, RouteFailureCode.FILL_EVIDENCE_MISMATCH)
+    assert replay.diagnostic is not None
+    assert "not the fill this candidate was routed under" in replay.diagnostic.message
+
+
+def test_replay_refuses_fill_a_candidate_was_never_routed_under() -> None:
+    """The *overstated* direction, which is the dangerous one, pinned on its own.
+
+    A candidate routed against the conservative envelope, replayed against the exact pour, would
+    be verified under a model looser than the one that produced it: the pour opens corridors the
+    envelope closed, so such a replay can confirm geometry the router never proved.  Nothing in
+    the shape of issue #163 prevented this - it was unreachable only because `replay` had no way
+    to be handed fill at all.  One binding equality forbids it, in the same line that forbids the
+    understated direction above, so neither can be reintroduced without deleting the other.
+    """
+
+    snapshot = _corridor_snapshot()
+    fill = _corridor_fill()
+    router = AStarRouter()
+    envelope = _candidate(router.propose(snapshot, _request(snapshot)))
+
+    replay = router.replay(snapshot, envelope, verified_fill=(fill,))
+
+    # Not vacuous: on this fixture the pour is genuinely the looser model, so a replay that
+    # accepted it would be checking the candidate against a weaker obstacle set than its own.
+    exact = _candidate(router.propose(snapshot, _request(snapshot), verified_fill=(fill,)))
+    assert exact.cost.length_nm < envelope.cost.length_nm
+    assert envelope.fill_binding is None
+    _assert_failure(replay, RouteFailureCode.FILL_EVIDENCE_MISMATCH)
+
+
+def test_replay_refuses_a_different_pour_that_would_reach_the_same_route() -> None:
+    """Evidence that routes identically is still not the evidence that did."""
+
+    snapshot = _corridor_snapshot()
+    router = AStarRouter()
+    produced = _corridor_fill()
+    other = _corridor_fill(low_y=6_500)
+    candidate = _candidate(router.propose(snapshot, _request(snapshot), verified_fill=(produced,)))
+    alternative = _candidate(router.propose(snapshot, _request(snapshot), verified_fill=(other,)))
+
+    replay = router.replay(snapshot, candidate, verified_fill=(other,))
+
+    # Both pours leave the same centreline clear, so the geometry is identical and only the
+    # recorded model differs.  The binding still refuses, because a replay is a statement about
+    # which evidence was believed and not only about which vertices came out.
+    assert alternative.patch == candidate.patch
+    assert alternative.fill_binding != candidate.fill_binding
+    _assert_failure(replay, RouteFailureCode.FILL_EVIDENCE_MISMATCH)
+
+
+def test_an_empty_pour_and_no_pour_are_the_same_obstacle_model() -> None:
+    """An empty tuple of fill gives the router the model no fill gives it, so the same candidate."""
+
+    snapshot = _corridor_snapshot()
+    router = AStarRouter()
+
+    without = _candidate(router.propose(snapshot, _request(snapshot)))
+    empty = _candidate(router.propose(snapshot, _request(snapshot), verified_fill=()))
+
+    assert fill_binding_for(()) is None
+    assert without.fill_binding is None
+    assert without == empty
+    assert router.replay(snapshot, empty, verified_fill=()).candidate == empty
+
+
+def test_an_envelope_candidate_carries_no_fill_key_in_its_canonical_identity() -> None:
+    """The by-construction reason no pinned content address moves.
+
+    `tests/test_golden_identities.py` pins the route-candidate ID *and* its canonical payload
+    byte count, and both hold across ADR-0103 because the key is absent - not null - whenever
+    there is no fill.  Removing the recorded binding from a fill-routed candidate reproduces a
+    payload with no fill key at all, which is the same payload shape every candidate issued
+    before this change was addressed under.
+    """
+
+    snapshot = _corridor_snapshot()
+    router = AStarRouter()
+    envelope = _candidate(router.propose(snapshot, _request(snapshot)))
+    exact = _candidate(
+        router.propose(snapshot, _request(snapshot), verified_fill=(_corridor_fill(),))
+    )
+    assert exact.fill_binding is not None
+
+    assert b'"fill_binding"' not in canonical_candidate_bytes(envelope)
+    assert b'"fill_binding"' in canonical_candidate_bytes(exact)
+    assert verify_candidate_id(envelope)
+    assert verify_candidate_id(exact)
+    stripped = canonical_candidate_bytes(replace(exact, fill_binding=None))
+    assert b'"fill_binding"' not in stripped
+    # The key and its value are the whole difference: nothing else in the payload moved.
+    assert len(canonical_candidate_bytes(exact)) - len(stripped) == len(
+        b'"fill_binding":"",'
+    ) + len(exact.fill_binding)
+
+
+def test_the_fill_routed_candidate_identity_matches_its_committed_golden_value() -> None:
+    snapshot = _corridor_snapshot()
+    candidate = _candidate(
+        AStarRouter().propose(snapshot, _request(snapshot), verified_fill=(_corridor_fill(),))
+    )
+
+    assert verify_candidate_id(candidate)
+    assert candidate.fill_binding == FILL_ROUTED_FILL_BINDING
+    assert candidate.candidate_id == FILL_ROUTED_CANDIDATE_ID
+    assert len(canonical_candidate_bytes(candidate)) == FILL_ROUTED_PAYLOAD_BYTES
+
+
+def test_a_candidate_carrying_an_unverifiable_binding_is_refused_at_construction() -> None:
+    snapshot = _corridor_snapshot()
+    candidate = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    with pytest.raises(ValueError, match="fill binding"):
+        replace(candidate, fill_binding="not-a-digest")
 
 
 def test_the_multilayer_connectivity_model_charges_the_net_object_budget() -> None:

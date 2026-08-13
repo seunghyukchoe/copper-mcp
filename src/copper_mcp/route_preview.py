@@ -294,6 +294,11 @@ def _candidate_to_dict(candidate: RouteCandidate) -> dict[str, Any]:
         "seed": candidate.seed,
         "pad_count": candidate.pad_count,
         "ordering_policy": candidate.ordering_policy,
+        # `null` when the conservative zone envelope was the obstacle model, which is the
+        # ordinary case. The *canonical identity* payload omits the key entirely in that case
+        # (ADR-0103); this document is not content-addressed and follows the response
+        # convention of naming every field.
+        "fill_binding": candidate.fill_binding,
         "patch": {
             "net_id": candidate.patch.net_id,
             "layer_id": candidate.patch.layer_id,
@@ -731,11 +736,14 @@ def preview_route(
 
     evidence = None
     if request.include_drc:
+        # The fill goes with the candidate. DRC replays it at the serialization boundary, and a
+        # candidate shaped by the exact pour cannot reproduce under the conservative envelope.
         evidence = run_route_candidate_drc(
             relative_path,
             result.candidate,
             profile,
             _drc_settings(settings, deadline),
+            verified_fill=verified_fill,
         )
     apply_token = None
     if (
@@ -743,6 +751,7 @@ def preview_route(
         and token_authority is not None
         and settings.allow_apply
         and _board_is_appliable(snapshot)
+        and result.candidate.fill_binding is None
     ):
         # Issued only for a routed candidate on an *appliable* board, when apply is enabled.
         # Gating on the flag stops a library embedder minting tokens with apply off, and gating
@@ -750,6 +759,12 @@ def preview_route(
         # identities the append-only apply engine would reject - which used to surface as an
         # uncaught crash from the destructive tool. The token is bound to the four things that
         # make an apply unambiguous: which candidate, which snapshot, which bytes, which path.
+        #
+        # A candidate the exact pour shaped is withheld for the same reason (#163, ADR-0103):
+        # apply runs in a later process and holds no fill evidence, so it can only replay under
+        # the conservative envelope, which is not the model that produced the route. A token is
+        # a capability, and a capability whose exercise is guaranteed to refuse must not be
+        # issued. The candidate and its DRC evidence are still returned.
         apply_token = token_authority.issue(
             ApplyBinding(
                 candidate_id=result.candidate.candidate_id,

@@ -14,6 +14,8 @@ from copper_mcp.board_ir import BoardIRSnapshot, ParseLimits, Segment, nm_to_mm
 from copper_mcp.routing import (
     AStarRouter,
     RouteCandidate,
+    RouteFailureCode,
+    VerifiedFill,
     verify_candidate_id,
 )
 
@@ -171,11 +173,25 @@ def _render_segment(
     ).encode("utf-8", errors="strict")
 
 
-def _replay_candidate(snapshot: BoardIRSnapshot, candidate: RouteCandidate) -> None:
+def _replay_candidate(
+    snapshot: BoardIRSnapshot,
+    candidate: RouteCandidate,
+    verified_fill: tuple[VerifiedFill, ...] = (),
+) -> None:
     try:
-        replay = AStarRouter().replay(snapshot, candidate)
+        replay = AStarRouter().replay(snapshot, candidate, verified_fill=verified_fill)
     except ValueError as error:
         raise KiCadRoutePatchError("candidate router compatibility is unsupported") from error
+    if (
+        replay.diagnostic is not None
+        and replay.diagnostic.code is RouteFailureCode.FILL_EVIDENCE_MISMATCH
+    ):
+        # Not the candidate's fault, and saying so matters: the caller either has to supply the
+        # verified fill this candidate was routed under, or it is holding fill this candidate
+        # was never routed under and must not be re-verified against.
+        raise KiCadRoutePatchError(
+            "candidate was routed under verified zone fill that was not supplied for replay"
+        )
     if replay.candidate != candidate:
         raise KiCadRoutePatchError("candidate does not match a deterministic router replay")
 
@@ -187,6 +203,7 @@ def render_kicad_candidate_board(
     profile: KiCadConstraintProfile,
     *,
     limits: ParseLimits | None = None,
+    verified_fill: tuple[VerifiedFill, ...] = (),
 ) -> bytes:
     """Render a verified candidate into new bytes without mutating or writing its source board.
 
@@ -195,6 +212,10 @@ def render_kicad_candidate_board(
     candidate reproduced by the bounded reference router. The returned bytes are parsed again and
     must differ from the input Board IR solely by source revision, CopperMCP writer provenance, and
     the appended track segments.
+
+    ``verified_fill`` is the freshness-bound zone fill the candidate was routed under, which the
+    caller that routed it already holds.  The replay refuses unless it is the same evidence, so
+    supplying nothing verifies a candidate routed under nothing.
     """
 
     limits = limits or ParseLimits()
@@ -221,7 +242,7 @@ def render_kicad_candidate_board(
         verify_candidate_id(candidate)
     except ValueError as error:
         raise KiCadRoutePatchError("candidate identity verification failed") from error
-    _replay_candidate(snapshot, candidate)
+    _replay_candidate(snapshot, candidate, verified_fill)
 
     nets = {item.id: item for item in snapshot.content.nets}
     layers = {item.id: item for item in snapshot.content.copper_layers}

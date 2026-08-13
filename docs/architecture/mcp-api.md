@@ -348,6 +348,20 @@ refused with the typed `stale_fill` diagnostic rather than answering from either
 workspace board is never refilled. The flag is opt-in because it spawns KiCad, and it changes
 nothing for a board without zones on the requested layer.
 
+A candidate the exact pour shaped records that fact in `candidate.fill_binding`, the content
+address of the fill the router was handed; it is `null` when the conservative zone envelope was
+the obstacle model, which is the ordinary case. Every verifier of a routed candidate replays it,
+and a replay under a different obstacle model is not a replay, so the binding is what a replay
+has to re-establish (ADR-0103). Two consequences are visible at this surface:
+
+- `include_fill_authority` with `include_drc` is supported: the preview still holds the evidence
+  and hands it to the serialization boundary the DRC run goes through.
+- `include_fill_authority` with `include_apply_token` returns the candidate and **no token**.
+  Apply runs in a later process and holds no fill evidence, so it could only replay against the
+  envelope. A token is withheld here for the same reason it is withheld for a board whose derived
+  geometry identities the append-only apply engine would reject: a capability whose exercise is
+  guaranteed to refuse must not be issued. Applying a fill-routed candidate is not yet available.
+
 Setting `include_drc` on file-backed `preview_layered_route` binds the proposal to candidate-bound
 authoritative KiCad DRC evidence. The response returns the same aggregate, redacted summary as
 `run_board_drc` plus candidate, source, patched-board, and patched-context revisions. The call
