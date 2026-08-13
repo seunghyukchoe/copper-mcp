@@ -71,7 +71,20 @@ class Settings:
     max_drc_context_files: int = 10_000
     max_drc_context_scan_seconds: int = 10
     max_route_preview_seconds: int = 30
-    max_fill_vertices: int = 50_000
+    # Cached zone-fill vertices admitted from one board, summed across every island. Derived in
+    # docs/research/fill-vertex-budget-calibration-v1.md by ADR-0079's rule -- a board that fits
+    # inside the parser's 16 MiB input ceiling should fit inside every scale budget -- applied at
+    # the densest observed pour, 29,503 vertices per mebibyte: 16 x 29,503 = 472,048, rounded up.
+    #
+    # It is not the control it looks like, and ADR-0104 records why. `read_fill_islands` parses
+    # the whole document before it counts a single vertex, so a refusal here is paid for at full
+    # parse price: refusing a 9.1 MB board at a budget of 3 costs 20.9 s of the 24.2 s a complete
+    # read costs. What this budget meters is only the materialisation of already-parsed atoms
+    # into points, measured at ~25 us and ~113 bytes per vertex. The defence against an unbounded
+    # vertex list is `ParseLimits` (ADR-0079), which also caps how many vertices can be offered at
+    # all: at the shipped parse defaults a document cannot carry more than 741,375 of them before
+    # `budget.exceeded.nodes` refuses it.
+    max_fill_vertices: int = 500_000
     # Provisional: CopperTone's whole board is ~120 objects. Raise after measuring a genuinely
     # dense board rather than guessing upward now.
     max_scene_objects: int = 2_000
@@ -202,8 +215,15 @@ class Settings:
         )
         max_fill_vertices = _bounded_int(
             "COPPER_MCP_MAX_FILL_VERTICES",
-            os.environ.get("COPPER_MCP_MAX_FILL_VERTICES", "50000"),
+            os.environ.get("COPPER_MCP_MAX_FILL_VERTICES", "500000"),
             3,
+            # The ceiling stays at 1,000,000 rather than moving with the default. At the shipped
+            # parse budgets nothing above 741,375 is reachable, but `COPPER_MCP_MAX_PARSE_NODES`
+            # can be raised, and the shortest legal fill vertex `(xy 0 0)` is 8 bytes, so the
+            # parser's fixed 16 MiB input ceiling admits at most 2,097,152 of them under any
+            # configuration. 1,000,000 therefore is not an inert setting -- an operator who has
+            # raised the node budget can reach it -- and it is deliberately left below the byte
+            # ceiling, because raising a DoS ceiling that no measured board needs buys nothing.
             1_000_000,
         )
         max_scene_objects = _bounded_int(
