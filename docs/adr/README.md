@@ -201,9 +201,10 @@ now proves that last clause on every run rather than asserting it. 0027, 0082, 0
 0086 are unused; see **Known gaps** above. The three stray summary sentences that stood here until
 | [0098](0098-reproducible-mutation-evidence.md) | A mutation claim is evidence only if the repository can re-run it | Accepted |
 | [0099](0099-pad-fabrication-properties-and-named-pad-refusals.md) | A pad refusal names the field it refused, and seven of eight fabrication properties convert | Accepted |
-| [0102](0102-an-evaluation-must-observe-a-permit.md) | A refusal evaluation must observe a permit, and prove it kept observing one | Accepted |
+| [0100](0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md) | A custom pad has a derivable envelope and nowhere in Board IR to put it | Accepted |
 
 Ninety-nine numbers, ninety-four records, no duplicates — and `scripts/check_adr_numbers.py`
+| [0102](0102-an-evaluation-must-observe-a-permit.md) | A refusal evaluation must observe a permit, and prove it kept observing one | Accepted |
 now proves that last clause on every run rather than asserting it (the previous revision of this
 sentence said "ninety-six numbers, ninety records", stale by two landings at the time it was
 read; the checker's own output is the count to trust). 0027, 0082, 0083, 0085 and

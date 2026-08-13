@@ -1,0 +1,69 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "CP1-custom-entry-deleted",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "_UNMODELLED_PAD_SHAPES: dict[str, str] = {\n    \"custom\": (\n        \"a custom pad shape has no single region that both contains its copper and is contained \"\n        \"by it, and is unsupported\"\n    ),\n    \"trapezoid\": \"trapezoid pad shapes are unsupported in Board IR adapter v0.2\",\n}",
+      "replacement": "_UNMODELLED_PAD_SHAPES: dict[str, str] = {\n    \"trapezoid\": \"trapezoid pad shapes are unsupported in Board IR adapter v0.2\",\n}",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_the_unmodelled_pad_shape_table_is_kicads_tokens_minus_board_irs"
+      ]
+    },
+    {
+      "id": "CP2-custom-repointed-at-the-weaker-message",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "    \"custom\": (\n        \"a custom pad shape has no single region that both contains its copper and is contained \"\n        \"by it, and is unsupported\"\n    ),",
+      "replacement": "    \"custom\": \"custom pad shapes are unsupported in Board IR adapter v0.2\",",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_custom_pad_shape_is_refused_by_name_and_not_by_its_mandatory_sub_field"
+      ]
+    },
+    {
+      "id": "CP3-shape-decided-after-the-field-loop-again",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                kind = self._pad_kind(raw_kind, locator)\n                shape = self._pad_shape(raw_shape, locator)\n                for unsupported_head in _UNSUPPORTED_PAD_FIELDS:\n                    if children(pad, unsupported_head):\n                        self.fail(\n                            \"unsupported.construct\",\n                            f\"pad field {unsupported_head!r} is unsupported\",\n                            locator,\n                            object_kind=\"pad\",\n                        )",
+      "replacement": "                for unsupported_head in _UNSUPPORTED_PAD_FIELDS:\n                    if children(pad, unsupported_head):\n                        self.fail(\n                            \"unsupported.construct\",\n                            f\"pad field {unsupported_head!r} is unsupported\",\n                            locator,\n                            object_kind=\"pad\",\n                        )\n                kind = self._pad_kind(raw_kind, locator)\n                shape = self._pad_shape(raw_shape, locator)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_custom_pad_shape_is_refused_by_name_and_not_by_its_mandatory_sub_field"
+      ]
+    },
+    {
+      "id": "CP4-named-lookup-skipped",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        named = _UNMODELLED_PAD_SHAPES.get(raw_shape)\n        if named is not None:\n            self.fail(\"unsupported.construct\", named, locator, object_kind=\"pad\")",
+      "replacement": "        named = None\n        if named is not None:\n            self.fail(\"unsupported.construct\", named, locator, object_kind=\"pad\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_custom_pad_refuses_the_same_way_whatever_primitives_it_carries"
+      ]
+    },
+    {
+      "id": "CP5-custom-admitted-to-padshape",
+      "file": "src/copper_mcp/board_ir/types.py",
+      "anchor": "class PadShape(StrEnum):\n    CIRCLE = \"circle\"\n    RECT = \"rect\"\n    OVAL = \"oval\"\n    ROUNDRECT = \"roundrect\"",
+      "replacement": "class PadShape(StrEnum):\n    CIRCLE = \"circle\"\n    RECT = \"rect\"\n    OVAL = \"oval\"\n    ROUNDRECT = \"roundrect\"\n    CUSTOM = \"custom\"",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_the_unmodelled_pad_shape_table_is_kicads_tokens_minus_board_irs"
+      ]
+    },
+    {
+      "id": "CP6-options-and-primitives-dropped-from-the-field-loop",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "    \"options\",\n    \"padstack\",\n    \"primitives\",\n",
+      "replacement": "    \"padstack\",\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_pad_field_refusals_are_still_reachable_on_a_modelled_shape"
+      ]
+    }
+  ]
+}
