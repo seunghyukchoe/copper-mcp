@@ -26,7 +26,13 @@ jobs:
   verify:
     name: Verify and build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 120 minutes. The v0.7.0 release run was cancelled by its own 20-minute budget: the gate's
+    # pytest step alone had grown past 20 minutes and nobody re-measured the budget as the suite
+    # grew, so the publish job was skipped and the release shipped without provenance (D-196).
+    # Rule: when the measured gate exceeds half of any CI timeout budget, raise the budget in the
+    # same PR that grew the gate — a timeout is a calibrated ceiling like max_fill_vertices, not
+    # a constant.
+    timeout-minutes: 120
     steps:
       - name: Check out release source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
