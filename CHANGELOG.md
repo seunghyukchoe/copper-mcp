@@ -73,6 +73,41 @@ All notable changes are documented here. The format follows
   [D-185](docs/ledgers/decision-ledger.md), [R-140](docs/ledgers/risk-register.md),
   [SEC-136](docs/ledgers/security-ledger.md),
   [KiCad copper text envelope research](docs/research/kicad-copper-text-envelope-v1.md), #141)
+- **Freshness-bound zone fill is now gated the same way on both routers, and the ordered-layer
+  adapter is no longer the only one that refuses evidence it cannot relate to a zone.** The
+  single-layer A* core accepts a `verified_fill` island only if it also carries at least three
+  vertices and its bounding box lies inside the bounding box of a backing zone of the same net and
+  layer; both refusals are `unsupported_geometry`, and the containment message matches the one
+  [ADR-0070](docs/adr/0070-layered-fill-aware-obstacles.md) already emits. Both gates are
+  refusal-side: no route that is refused today becomes possible, and zone outline bounds are
+  measured **only when fill evidence is present**, so a board routed without evidence spends
+  exactly the obstacle-check budget it always did — a regression test pins that fixture's count at
+  684 rather than comparing two calls that would move together. This came out of issue #63, whose
+  premise the code had already outrun: fill-aware zone obstacles shipped in
+  [ADR-0039](docs/adr/0039-fill-aware-routing-obstacles.md),
+  [ADR-0040](docs/adr/0040-public-fill-routing-provenance.md) and ADR-0070, and the investigation
+  confirmed from KiCad 10's own source why the model must stay evidence-gated — `ZONE::m_needRefill`
+  is never written to the file and the parser clears it on load, so **fill currency cannot be proven
+  from a board document**, and KiCad's DRC has no staleness check at all: `kicad-cli pcb drc`
+  silently uses a stale pour unless `--refill-zones` is passed. No obstacle was made smaller and no
+  public contract changed. Measured on the real-board corpus (B-105): fill-aware routing unlocks
+  **zero routes**. All 12 converting boards carry zones, but the freshness proof is reachable on
+  only 3 at the shipped `max_fill_vertices` of 50,000 — seven pours run 50,482–130,305 vertices
+  against a default calibrated on a 4,314-vertex fixture, and at an adequate budget **half the
+  zoned boards report `stale_fill`**. Only one converting board has an `F.Cu` zone at all, so the
+  single-layer shrink cannot engage on the rest; where it can, all four changed verdicts went
+  `no_path` → `obstacle_check_budget_exceeded`, because thirteen exact pour polygons exhaust the
+  obstacle-check budget one boundary polygon did not. **Two defects were found and deliberately
+  filed rather than fixed here:** `AStarRouter.replay` drops the fill evidence, so a fill-routed
+  candidate does not reproduce (8,000 nm replays as 14,000 nm on B-021's own fixture) and
+  `include_drc` refuses it while `include_apply_token` mints a token whose apply fails — until that
+  is closed, do not treat `include_fill_authority` with `include_drc` or `include_apply_token` as a
+  supported combination — and the single-layer seam still performs no shape validation of fill
+  evidence where the layered adapter does.
+  ([ADR-0101](docs/adr/0101-fill-currency-is-not-in-the-document.md),
+  [D-192](docs/ledgers/decision-ledger.md), [R-147](docs/ledgers/risk-register.md),
+  [B-105](docs/ledgers/benchmark-ledger.md), #63)
+
 ### Added
 
 - **A `connect` pad — KiCad's edge-card connector finger — now converts, as an SMD pad.** It was
