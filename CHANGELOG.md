@@ -6,6 +6,32 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-13
+
+Upgrading from 0.7.0: see the [0.8.0 migration notes](docs/migrations/copper-mcp-0.8.0.md).
+No content address moves — `ROUTER_VERSION`, `BOARD_IR_SCHEMA_VERSION`, `SCENE_VERSION` and every
+other version constant are unchanged, and nothing you have stored stops verifying. What does move:
+`max_fill_vertices` goes from 50,000 to 500,000, which is a denial-of-service posture change an
+operator should decide rather than accept; three whole-board refusal messages disappear because
+their constructs now reach the converter; nineteen pad fields move off
+`expression contains an unsupported semantic field`; a courtyard now keeps out on the layer it is
+drawn on, so a placement verdict recorded as `proven_clear` can become `violated`; and
+`schemas/board-ir/0.2.0.schema.json` plus two closed MCP contracts widened **without their version
+strings moving**.
+
+**How to read this release's counts.** The private survey corpus grew from 17 boards to 18 saves
+during this release's work, so each entry below states the before/after differential measured at
+its own baseline and those figures are **not comparable across entries**. The release-level figure
+is **13 of 18 saves**, holding **17 distinct board contents** — two saves are byte-identical — set
+by the pad-fabrication-property entry, which supersedes the 12 of 18 the survey close-out entry
+records. Route preview runs one net at a time on `F.Cu` against the unrouted snapshot, so its
+candidates are **not mutually compatible** and it is not a whole-board result; placement preview
+runs **without rules**, so clean means legal-as-found and never placement quality. And an
+authoritative KiCad DRC count is **not reproducible run to run on identical bytes** — two baseline
+runs at the same commit disagreed on nine boards, entirely inside the `drc` section — so any
+DRC-derived comparison below was taken once per board and carries no stated tolerance
+([issue #170](https://github.com/seunghyukchoe/copper-mcp/issues/170)).
+
 ### Changed
 
 - **The excessive-agency evaluation now observes the server *permitting*, not only refusing, and
@@ -27,8 +53,9 @@ All notable changes are documented here. The format follows
   reports `failed: 0` and an empty `failures` list while dropping from 90 passes to 76, which is
   the same "it passed because it never ran" class as ADR-0098's 11/11 kills over zero executed
   tests. The replayed suite is **136 cases: 90 passed, 0 failed, 46 not run**, with 3 controls
-  holding; 6 mutants over the authorization gate and over the controls themselves were killed,
-  0 survivors ([`docs/mutants/2026-08-13-apply-authorization-gate.json`](docs/mutants/2026-08-13-apply-authorization-gate.json)).
+  holding; **6 chosen** mutants over the authorization gate and over the controls themselves were
+  killed, 0 survivors among those six — a claim about the mutants named in the committed spec and
+  not about the mutation space, per ADR-0098's rule ([`docs/mutants/2026-08-13-apply-authorization-gate.json`](docs/mutants/2026-08-13-apply-authorization-gate.json)).
   The whole-workspace digest found something on its first run: a successful apply writes a
   pre-apply rollback copy under `.copper-mcp-backups/` that the old single-board guard could not
   see. **No server code changed.** This is an evaluation change only, and issue #110's own request
@@ -82,7 +109,9 @@ All notable changes are documented here. The format follows
   say which denominator you mean. Because the corpus is a live tree the designer edits during long
   runs — three measurements this week were invalidated by a mid-run save — the run is bracketed by
   three conversion-only sweeps recording a sha256 per board; **all three agree on all 18 digests**,
-  so no edit landed. **All five gaps the survey named are closed, each attributable to its own
+  so no edit landed. (Superseded inside this same release: the pad-fabrication-property entry takes
+  the figure to **13 of 18 saves**, 13 of 17 by distinct content, and leaves five saves refusing
+  rather than six.) **All five gaps the survey named are closed, each attributable to its own
   decision and none assumed from a merged pull request**: chamfered and circular courtyards
   ([ADR-0080](docs/adr/0080-chamfered-and-circular-courtyards.md)) closed causes 1 and 3, roundrect
   radius rounding ([ADR-0077](docs/adr/0077-roundrect-corner-radius-rounding.md)) cause 2, net-0
@@ -161,7 +190,12 @@ All notable changes are documented here. The format follows
   vertices and its bounding box lies inside the bounding box of a backing zone of the same net and
   layer; both refusals are `unsupported_geometry`, and the containment message matches the one
   [ADR-0070](docs/adr/0070-layered-fill-aware-obstacles.md) already emits. Both gates are
-  refusal-side: no route that is refused today becomes possible, and zone outline bounds are
+  refusal-side, which cuts one way only and is stated in both directions: no route that is refused
+  today becomes possible, and **some inputs that produced a candidate before this release now
+  refuse** — an in-process caller of `AStarRouter.propose(…, verified_fill=…)` supplying a
+  degenerate ring or an island that escapes its backing zone. Honest KiCad evidence already
+  satisfies both gates, because KiCad clips poured copper to the zone outline, and nothing on the
+  published `preview_route` path changes. Zone outline bounds are
   measured **only when fill evidence is present**, so a board routed without evidence spends
   exactly the obstacle-check budget it always did — a regression test pins that fixture's count at
   684 rather than comparing two calls that would move together. This came out of issue #63, whose
@@ -174,9 +208,12 @@ All notable changes are documented here. The format follows
   silently uses a stale pour unless `--refill-zones` is passed. No obstacle was made smaller and no
   public contract changed. Measured on the real-board corpus (B-105): fill-aware routing unlocks
   **zero routes**. All 12 converting boards carry zones, but the freshness proof is reachable on
-  only 3 at the shipped `max_fill_vertices` of 50,000 — seven pours run 50,482–130,305 vertices
-  against a default calibrated on a 4,314-vertex fixture, and at an adequate budget **half the
-  zoned boards report `stale_fill`**. Only one converting board has an `F.Cu` zone at all, so the
+  only 3 at the `max_fill_vertices` default of 50,000 this was measured against — seven pours run
+  50,482–130,305 vertices against a default calibrated on a 4,314-vertex fixture, and at an
+  adequate budget **half the zoned boards report `stale_fill`**. That default is **500,000 as of
+  this release**; the recalibration entry above supersedes the 50,000 this measurement assumes, and
+  raising it is answer-preserving, so the finding stands and only the number reaching it changes.
+  Only one converting board has an `F.Cu` zone at all, so the
   single-layer shrink cannot engage on the rest; where it can, all four changed verdicts went
   `no_path` → `obstacle_check_budget_exceeded`, because thirteen exact pour polygons exhaust the
   obstacle-check budget one boundary polygon did not. **Two defects were found and deliberately
@@ -280,9 +317,12 @@ All notable changes are documented here. The format follows
   no board bytes, and still carries an indexed locator saying which pad.
 
   Measured before and after on the same private corpus, back to back: conversion moves from **11
-  of 17 to 12 of 17** boards as saved today, which is **12 of the 12 boards in the #116 survey
-  set**. The board gained carries two edge-connector pads. **No "converts every board" result is
-  claimed** — five corpus saves still refuse, for the two constructs tracked as #140 and #141 —
+  of 17 to 12 of 17** boards as saved today. The board gained carries two edge-connector pads.
+  **This is not a 12-of-12 result and no "converts every board" result is claimed.** The "12" in
+  issue #116's own framing was a denominator that has since been superseded twice — the corpus has
+  grown to 18 saves over 17 distinct board contents, and the release-level figure is 13 of 18; at
+  this entry's own baseline five corpus saves still refuse, for the two constructs tracked as #140
+  and #141 —
   and conversion is not appliability: the newly converted board refuses both write-back gates for
   the pre-existing revision-derived-identity reason B-099 recorded.
   ([ADR-0096](docs/adr/0096-edge-connector-pads-convert-as-smd.md),
@@ -362,15 +402,26 @@ All notable changes are documented here. The format follows
   courtyards by layer instead of by footprint side, so two coincident `B.CrtYd` rectangles collide
   whether their footprints sit on opposite sides or both on the front — which is what real
   `kicad-cli` 10.0.5 reports, and which the previous same-side pairing published as
-  `proven_clear`. Cross-layer contact is still not a collision. Measured against the tool on 13
-  boards with courtyard layer and footprint side varied independently: 12 exact parity, 1 conceded
-  `inconclusive` in the known sub-threshold band, 0 contradictions, and the same 10,000 nm
-  collision threshold on both courtyard layers.
+  `proven_clear`. **A `proven_clear` verdict recorded under 0.7.0 for a board carrying a far-side
+  courtyard can be `violated` under this release**; the overlap was always there and the model was
+  too narrow to see it. Cross-layer contact is still not a collision. Measured against the tool on
+  13 boards with courtyard layer and footprint side varied independently: 12 exact parity, 1
+  conceded `inconclusive` in the known sub-threshold band, 0 contradictions, and the same 10,000 nm
+  collision threshold on both courtyard layers. That parity is an authoritative-DRC comparison
+  taken once per board, and issue #170 has since recorded that KiCad DRC output is not established
+  to be reproducible run to run on identical bytes, so read it without a stated tolerance — the
+  finding is qualified rather than retracted, as #170 itself prescribes.
   **No stored artifact changes.** Both new keys are omitted from the canonical payload when empty,
   so every board representable before this release encodes byte-for-byte as it did: no snapshot
   digest, scene revision, candidate identity or published schema version moves, and a Circuit Scene
   consumer that ignores the new `far_side_courtyards_nm` and `far_side_courtyard_circles_nm`
-  geometry keys keeps working. Do not union those keys with `courtyards_nm` — they keep out on the
+  geometry keys keeps working. **The published schema *file* does change while its version string
+  does not**: `schemas/board-ir/0.2.0.schema.json` declares `"additionalProperties": false` on
+  `$defs/footprint` and gains the two optional keys in place, so a third party validating against a
+  vendored copy downloaded before this release must re-download it or it will reject a snapshot of
+  a board carrying a far-side courtyard. No payload valid under the old file is invalid under the
+  new one — the change is a pure widening — which is why no version bump is warranted and why it is
+  named here rather than left to be discovered. Do not union those keys with `courtyards_nm` — they keep out on the
   other side of the board. Write-back is unchanged: the source-preserving placement serializer
   still refuses any board carrying a far-side courtyard rectangle, so such a footprint is
   previewable and not movable through it.
