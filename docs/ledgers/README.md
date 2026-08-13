@@ -23,8 +23,8 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-188` | `D-189` |
-| [Risk register](risk-register.md) | `R-` | `R-143` | `R-144` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-191` | `D-192` |
+| [Risk register](risk-register.md) | `R-` | `R-146` | `R-147` |
 | [Security review ledger](security-ledger.md) | `SEC-` | `SEC-139` | `SEC-140` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-102` | `B-103` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
@@ -75,6 +75,15 @@ The rules:
    free, took `SEC-139` and stepped over *this* record's live claim in return. Both directions
    are rule 1 working as designed; whichever lands second resolves the registry line's textual
    conflict.
+
+   The fourth round is the #116 close-out stepping over **two** live claims at once: two branches
+   were open on this base holding `D-189`/`R-144` (issue #152) and `D-190`/`R-145` (issue #153), so
+   that record took `D-191`/`R-146` above both rather than racing either. `D-189`, `D-190`, `R-144`
+   and `R-145` are **live claims, not gaps**, and the checker reports them as unallocated because it
+   cannot see an unmerged branch; if either branch is abandoned its numbers become permanent gaps
+   like any other spent number, and this paragraph becomes the correction to make. That record also
+   declined a pre-assigned `B-103` under rule 4: it re-ran an existing runner over the same corpus,
+   which is a replay of `B-099` and not a new benchmark, so no `B-` number was spent.
 
    **A row that has only been pushed to a branch is not yet a record, and rule 3 does not reach
    it.** Adversarial review found a false mechanism in `D-186` while its pull request was still

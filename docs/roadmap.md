@@ -11,11 +11,11 @@ disagree, believe this table and file the discrepancy. Read live with
 `gh issue list -R seunghyukchoe/copper-mcp` and
 `gh api repos/seunghyukchoe/copper-mcp/milestones`.
 
-As of 2026-08-12:
+As of 2026-08-13:
 
 | Milestone | Closed | Open | State |
 |---|---|---|---|
-| M1 — KiCad inspection completion | 7 | 1 | Open. The sole remaining issue is [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116), the real-board conversion survey. |
+| M1 — KiCad inspection completion | 7 | 1 | Open. The sole remaining issue is [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116), retitled from the original real-board conversion survey to the M1 conversion tracker it had become ([D-191](ledgers/decision-ledger.md)). |
 | M2 — Routing depth | 3 | 2 | Open: [#63](https://github.com/seunghyukchoe/copper-mcp/issues/63) fill-aware zone routing obstacles and [#65](https://github.com/seunghyukchoe/copper-mcp/issues/65) benchmark comparison against open baselines. |
 | M3 — Safe application completion | 0 | 1 | Open: [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68), IPC one-undo-commit apply. |
 | M4 — Scene, policy, and evaluation | 3 | 0 | **Complete.** Every tracked issue is closed. |
@@ -28,11 +28,12 @@ Two cautions about this table, because both have misled a reader before:
   authority, solving for a placement, and the policy-plugin work — and they are untracked rather
   than done. A milestone closing is an accounting fact about the tracker.
 - Three conversion gaps filed after the M1 survey —
-  [#138](https://github.com/seunghyukchoe/copper-mcp/issues/138),
-  [#140](https://github.com/seunghyukchoe/copper-mcp/issues/140) and
-  [#141](https://github.com/seunghyukchoe/copper-mcp/issues/141) — carry **no milestone** and so
-  appear in none of the counts above. They are real open work; see
-  [what does not convert](#what-does-not-convert).
+  [#141](https://github.com/seunghyukchoe/copper-mcp/issues/141),
+  [#152](https://github.com/seunghyukchoe/copper-mcp/issues/152) and
+  [#153](https://github.com/seunghyukchoe/copper-mcp/issues/153) — carry **no milestone** and so
+  appear in none of the counts above. Two are real open work and one (#141) is answered by
+  decision; see [what does not convert](#what-does-not-convert). That gap between the tracker and
+  the work is why #116 was kept open rather than closed when its five named gaps all closed.
 
 ## M0 — Repository foundation (`0.1.x`, complete)
 
@@ -50,24 +51,32 @@ Two cautions about this table, because both have misled a reader before:
 
 ### What does not convert
 
-The one open M1 issue is the real-board conversion survey. Measured on the private working corpus
-on 2026-08-12, before and after ADR-0096 back to back: **12 of the 12 boards in the
-[#116](https://github.com/seunghyukchoe/copper-mcp/issues/116)
-survey set convert, which is 12 of all 17 boards in that corpus as saved today** — up from 11 and
-11, the one board gained being the phono-preamp save that carried `connect`-kind pads
-([#138](https://github.com/seunghyukchoe/copper-mcp/issues/138), resolved by [ADR-0096](adr/0096-edge-connector-pads-convert-as-smd.md)). Five saves still
-refuse, each for exactly one named construct:
+The one open M1 issue is [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116), the
+real-board conversion tracker. Re-measured on the private working corpus on 2026-08-13 for its
+close-out (`B-099` survey close-out replay): **12 of the 18 saves in that corpus convert.** Those 18
+files hold **17 distinct board contents** — one pair is byte-identical across two save directories —
+so the same result is 12 of 17 distinct boards. Six saves refuse, each for exactly one named
+construct:
 
 | Refusing saves | Construct | Issue |
 |---|---|---|
-| 4 | root board `property` text variables | [#140](https://github.com/seunghyukchoe/copper-mcp/issues/140) |
+| 2 | an unmodelled `property` field inside a pad | [#152](https://github.com/seunghyukchoe/copper-mcp/issues/152) |
+| 3 | a custom-shape SMD pad's `options` field | [#153](https://github.com/seunghyukchoe/copper-mcp/issues/153) |
 | 1 | a root copper graphic (`gr_text` on `F.Cu`) — **answered and staying refused**, see [ADR-0095](adr/0095-copper-text-has-no-derivable-envelope.md) | [#141](https://github.com/seunghyukchoe/copper-mcp/issues/141) |
 
+All five gaps #116 originally named are closed: chamfered and circular courtyards
+([ADR-0080](adr/0080-chamfered-and-circular-courtyards.md)) closed two of them, roundrect radius
+rounding ([ADR-0077](adr/0077-roundrect-corner-radius-rounding.md)) a third, net-0 copper as an
+obstacle ([ADR-0078](adr/0078-netless-copper-as-obstacle.md)) a fourth, and reused KiCad UUIDs
+([D-158](ledgers/decision-ledger.md)) the fifth.
+
 **No "converts every board" result is claimed at any count**, and none should be stated until a
-re-measured survey supports it. The counts above supersede earlier survey figures — including
-#116's own title, written before four of the five newer saves existed — rather than correcting
-them in place. Dated research notes and benchmark-ledger rows keep whatever they measured on the
-day they measured it.
+re-measured survey supports it — nor is a target count a completion criterion, since one of the six
+refusals is permanent by decision. The counts above supersede earlier survey figures — including
+#116's own original title, whose every number was wrong by the time it was read — rather than
+correcting them in place. Dated research notes and benchmark-ledger rows keep whatever they measured
+on the day they measured it. The corpus is a **live tree the designer edits during long runs**, so
+any count from it is only as good as the digest sweep bracketing the run that produced it.
 
 - [x] Official `kicad-python` IPC plugin and redacted live-board observer. The optional
   `inspect_live_board` MCP tool and `hardware/kicad-ipc-plugin` action use only local KiCad IPC,
