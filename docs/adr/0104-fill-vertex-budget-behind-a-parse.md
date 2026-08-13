@@ -4,7 +4,7 @@
 - Date: 2026-08-13
 - Owners: `@seunghyukchoe`
 - Related: [Issue #165](https://github.com/seunghyukchoe/copper-mcp/issues/165), ADR-0021,
-  ADR-0079, ADR-0089, ADR-0070,
+  ADR-0079, ADR-0089, ADR-0070, ADR-0101,
   [Fill-vertex budget calibration](../research/fill-vertex-budget-calibration-v1.md),
   `D-195`, `R-150`, `SEC-144`, `B-108`
 
@@ -160,5 +160,6 @@ about their board.
 - [ADR-0021](0021-zone-fill-authority.md)
 - [ADR-0079](0079-discriminated-configurable-parse-budgets.md)
 - [ADR-0089](0089-region-scoped-obstacle-model.md)
+- [ADR-0101](0101-fill-currency-is-not-in-the-document.md)
 - [Fill-vertex budget calibration](../research/fill-vertex-budget-calibration-v1.md)
 - [Parse-budget calibration and its DoS cost](../research/parse-budget-calibration-v1.md)

@@ -3448,6 +3448,76 @@ def test_verified_fill_without_a_board_ir_zone_is_refused() -> None:
     assert "matching Board IR zone" in result.diagnostic.message
 
 
+def test_verified_fill_escaping_its_zone_outline_is_refused() -> None:
+    """Retiring an envelope is the one shrink this router performs, so its precondition is checked.
+
+    KiCad clips poured copper to the zone outline, so an island that reaches past it did not come
+    from that zone's fill. Believing it would drop the zone's conservative envelope in exchange
+    for copper that never covered the same area, which is the one direction an obstacle may not
+    move. ADR-0070 already gates the ordered-layer adapter this way; this is the single-layer half.
+    """
+
+    snapshot = _snapshot(foreign_zones=(_rectangle(3_000, 3_000, 7_000, 7_000),))
+    escaping = VerifiedFill(
+        net_id=OTHER_NET_ID,
+        layer_id=LAYER_ID,
+        points=(
+            PointNM(3_000, 6_000),
+            PointNM(7_500, 6_000),
+            PointNM(7_500, 7_000),
+            PointNM(3_000, 7_000),
+        ),
+        source_revision=SOURCE_REVISION,
+    )
+
+    result = AStarRouter().propose(snapshot, _request(snapshot), verified_fill=(escaping,))
+
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert "escapes its backing" in result.diagnostic.message
+
+
+def test_a_degenerate_verified_fill_island_is_refused() -> None:
+    """The fill parser refuses a ring under three vertices; the typed seam must refuse it too."""
+
+    snapshot = _snapshot(foreign_zones=(_rectangle(3_000, 3_000, 7_000, 7_000),))
+    degenerate = VerifiedFill(
+        net_id=OTHER_NET_ID,
+        layer_id=LAYER_ID,
+        points=(PointNM(4_000, 4_000), PointNM(5_000, 5_000)),
+        source_revision=SOURCE_REVISION,
+    )
+
+    result = AStarRouter().propose(snapshot, _request(snapshot), verified_fill=(degenerate,))
+
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert "closed ring" in result.diagnostic.message
+
+
+def test_the_containment_gate_leaves_an_unevidenced_route_untouched() -> None:
+    """A board routed without fill evidence must not pay for the gate, in cost or in budget.
+
+    The gate measures zone outline bounds, which is obstacle-check work. Doing that on every
+    zoned board would move ``obstacle_budget_exceeded`` boundaries for callers who never asked
+    for fill-aware routing, so the measurement is taken only when there is evidence to check.
+    """
+
+    snapshot = _snapshot(foreign_zones=(_rectangle(3_000, 3_000, 7_000, 7_000),))
+
+    plain = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+    empty_evidence = _candidate(
+        AStarRouter().propose(snapshot, _request(snapshot), verified_fill=())
+    )
+
+    assert plain.cost.length_nm == empty_evidence.cost.length_nm
+    assert plain.metrics.obstacle_checks == empty_evidence.metrics.obstacle_checks
+    # Pinned, not merely compared: measuring the outline bounds unconditionally would charge
+    # both calls alike and slip past an equality assertion, while still moving every real
+    # board's obstacle budget. 684 is this fixture's cost before the gate existed.
+    assert plain.metrics.obstacle_checks == 684
+
+
 def test_the_multilayer_connectivity_model_charges_the_net_object_budget() -> None:
     """Same-net copper is charged to its own budget, and the refusal names that budget.
 
