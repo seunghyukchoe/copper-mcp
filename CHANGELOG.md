@@ -311,6 +311,50 @@ All notable changes are documented here. The format follows
   [SEC-138](docs/ledgers/security-ledger.md), [B-102](docs/ledgers/benchmark-ledger.md),
   [`docs/mutants/`](docs/mutants/README.md))
 
+### Changed
+
+- **A `custom` pad shape is now refused by name, and the name says why: an envelope for it *is*
+  derivable, and Board IR's `Pad` has nowhere to put one.** Three boards were being told
+  `pad field 'options' is unsupported`, which is true and useless — KiCad's writer emits
+  `(options …)` only for a custom pad, so it is a mandatory sub-field of the shape and removing it
+  produces a pad KiCad will not read back. Kind and shape are now decided before the closed field
+  loop, so the refusal names the construct instead of the token the allowlist reached first.
+
+  **The geometry was not the problem, and saying so is the point of the record.** KiCad **unions**
+  the primitives with the anchor rather than substituting for them — `MergePrimitivesAsPolygon`
+  seeds the polygon with the anchor and `BooleanAdd`s the primitives, `buildEffectiveShape` adds
+  every non-proxy primitive on top of the anchor shape, and KiCad 10.0.5's plotter draws both for a
+  pad whose primitive starts 5 mm past its anchor's edge — so an anchor-only reading drops real
+  copper. Given that, **every one of KiCad's six copper primitive heads admits an exact
+  integer-nanometre containing box derivable from the document**, `gr_curve` included: a cubic
+  Bézier is a convex combination of its four control points at every parameter value, so the
+  control polygon is a proved bound, and a curve spanning 16 mm of control points measures
+  4.8006 mm of plotted copper. **This is therefore not ADR-0095's "no envelope exists".**
+
+  **It refuses because a `Pad` is read in both directions of error from one set of fields.**
+  `_pad_extent` and `_pad_bounds` read `shape`/`size_x_nm`/`size_y_nm` over-approximating to build
+  the obstacle; `_pad_core_extent` reads the same three under-approximating to build the attachment
+  core; and for `PadShape.RECT` the two collapse to one rectangle. So an accepted `Pad` asserts the
+  copper *is* that rectangle. The union's bounding box keeps the obstacle sound and makes the
+  attachment core claim copper that is not there — which `placement/legalizer.py::_pad_overlap`
+  would publish as a `violated` verdict KiCad does not share, a false claim rather than a safe one.
+  The anchor keeps the core sound and lets the obstacle miss real metal.
+
+  `trapezoid` joins the same closed two-entry refusal table with a deliberately different sentence,
+  because it is unmodell**ed** rather than unmodell**able**, and a reader must be able to tell those
+  apart. `options` and `primitives` stay in `_UNSUPPORTED_PAD_FIELDS` with their reachability pinned
+  by a test: KiCad's *parser* accepts both on a pad of any shape, so they are not dead behind the
+  new ordering. No `PadShape` member is added, no published schema changes and no pinned digest
+  moves. **Measured conversion-only against the private corpus before, after and before again with
+  per-board digests: 12 of 18 each time, every converting board's digest unchanged — this is a
+  confirmed refusal and no board is won by it.** The blocker behind it is now visible and reported
+  rather than counted: a pad-level `(property …)`, KiCad's `PAD_PROP`, refused today with a message
+  that names nothing.
+  ([ADR-0100](docs/adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md),
+  [D-190](docs/ledgers/decision-ledger.md), [R-145](docs/ledgers/risk-register.md),
+  [custom pad envelope research](docs/research/kicad-custom-pad-envelope-v1.md),
+  [`docs/mutants/`](docs/mutants/README.md), issue #153)
+
 ## [0.7.0] - 2026-08-12
 
 Upgrading from 0.6.0: see the [0.7.0 migration notes](docs/migrations/copper-mcp-0.7.0.md).
