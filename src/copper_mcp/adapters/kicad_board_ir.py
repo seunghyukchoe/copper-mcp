@@ -330,6 +330,62 @@ _UNSUPPORTED_PAD_FIELDS = (
     "thermal_gap",
 )
 
+# Pad shape tokens KiCad's writer emits that Board IR v0.2 does not model, mapped to the refusal
+# each earns.  Same rule as `_UNMODELLED_ROOT_HEADS` and `_UNMODELLED_COPPER_GRAPHIC_HEADS`: the
+# sentence is a *value from this table*, selected by an equality test against the source token and
+# never built from it, so the refusal names the construct without echoing one byte of the board.
+# A token absent from this table and from `PadShape` is not a documented pad shape at all and
+# refuses unnamed through `PadShape(...)` below, with the indexed locator still saying which pad.
+#
+# The domain is exactly KiCad's six writer tokens minus Board IR's four `PadShape` members.
+# `pcb_io_kicad_sexpr.cpp:1643-1649` is the whole vocabulary -- `circle`, `rect`, `oval`,
+# `trapezoid`, `roundrect` (written for both `ROUNDRECT` and `CHAMFERED_RECT`) and `custom` -- so
+# the two names below are the complete unmodelled remainder, and
+# `test_the_unmodelled_pad_shape_table_is_kicads_tokens_minus_board_irs` asserts that partition
+# rather than probing tokens someone thought to write down.  This is a two-entry table with
+# something left to name, which is why it is a table and not the dead one-entry lookup ADR-0096
+# deleted from the pad-kind path.
+#
+# `custom` is the entry this table exists for, and its message says *why* rather than *that*.  A
+# KiCad custom pad is an anchor rect-or-circle of `size` **unioned** with a list of drawn
+# primitives -- established twice over in `pad.cpp:3275-3315`, where `MergePrimitivesAsPolygon`
+# seeds the polygon with the anchor at 3284-3296 and then `BooleanAdd`s the primitives at 3312,
+# and in `pad.cpp:1278-1292`, where `buildEffectiveShape` adds every non-proxy primitive on top of
+# the anchor shape it already added.  Measured against KiCad 10.0.5's own plotter, a custom pad
+# whose single primitive starts 5 mm past its anchor's edge plots **both** shapes.  So the
+# primitives do not replace the anchor, and reading the anchor alone would drop real copper.
+#
+# Unlike copper text (ADR-0095) an envelope *is* derivable: every one of KiCad's six copper
+# primitive heads carries exact millimetre geometry in the document and admits an exact integer
+# nanometre containing box, `gr_curve` included -- a cubic Bezier is a convex combination of its
+# four control points at every parameter value, so it cannot leave their bounding box.  The
+# refusal is therefore **not** ADR-0095's "no envelope exists".  It is that Board IR's `Pad` has
+# nowhere to put one: `routing/astar.py::_pad_extent` and
+# `routing/layered_board_adapter.py::_pad_bounds` read `shape`, `size_x_nm` and `size_y_nm` in the
+# **over**-approximating direction to build the obstacle, while
+# `routing/astar.py::_pad_core_extent` reads *the same three fields* in the **under**-approximating
+# direction to build the attachment core -- and for `PadShape.RECT` the two collapse to one
+# rectangle to within a nanometre.  Any `Pad` accepted for a custom pad would therefore have to
+# both contain and be contained by the pad's copper, which forces the copper to *be* that
+# axis-aligned rectangle.  Sizing it to the union's bounding box keeps the obstacle sound and makes
+# the attachment core claim copper that is not there, which is the defect `_pad_cores` already
+# names as "the one direction an attachment core may never err in"; sizing it to the anchor keeps
+# the core sound and lets the obstacle miss real metal.  See ADR-0099 and
+# docs/research/kicad-custom-pad-envelope-v1.md.
+#
+# `trapezoid` earns a different sentence for a weaker reason and the difference is deliberate:
+# a trapezoid is a convex quadrilateral derivable from `size` and `(rect_delta ...)`, so both
+# directions are available and it is unmodelled rather than unmodellable.  A reader must be able
+# to tell those two apart from the message alone, which is the whole complaint issue #153 opens
+# with.
+_UNMODELLED_PAD_SHAPES: dict[str, str] = {
+    "custom": (
+        "a custom pad shape has no single region that both contains its copper and is contained "
+        "by it, and is unsupported"
+    ),
+    "trapezoid": "trapezoid pad shapes are unsupported in Board IR adapter v0.2",
+}
+
 # KiCad's `ZONE_CONNECTION` enum as a pad writes it: 0 NONE, 1 THERMAL, 2 FULL, 3 THT_THERMAL.
 # `INHERITED` (-1) is never written -- an absent token *is* inheritance. 1, 2 and 3 all attach the
 # pad to a same-net pour (3 resolves to 1 on a plated through-hole pad and to 2 otherwise), so
@@ -1993,6 +2049,81 @@ class _Converter:
             )
         return (names[0], names[1])
 
+    def _pad_kind(self, raw_kind: str, locator: str) -> PadKind:
+        """Resolve one pad's KiCad attribute token, or refuse without naming it.
+
+        Kind and shape refuse separately, through this method and `_pad_shape`. One message
+        covering both named neither, so a caller reading it could not tell which of the two
+        positional tokens was the problem -- and on the one real board that then reached it, the
+        answer (a `connect` pad) was recoverable only by reading the file. Same defect class as
+        the seven pad refusals D-178 made reachable, in the message rather than in the control
+        flow. That board no longer reaches it.
+
+        `connect` is KiCad's `PAD_ATTRIB::CONN`, and it converts as `PadKind.SMD` because that is
+        what KiCad's own model says it is, not as a convenience. The claim that matters is
+        universal and was established by sweeping *two* literals, `PAD_ATTRIB::CONN` and
+        `PAD_ATTRIB::SMD` -- the second because a site testing `== SMD` alone contains no `CONN`
+        token and is invisible to a `CONN` grep, which is how the first version of this work
+        missed one. **No site anywhere gives a `CONN` pad different copper, a different layer
+        span, a different hole, or different connectivity from an `SMD` pad.**
+        `connectivity_items.cpp:164-176` puts `SMD`, `CONN` and `NPTH` in one case that pins the
+        item to the front of its copper stack; `pns_kicad_iface.cpp:1631-1648` gives `CONN` and
+        `SMD` one shared case; `pad.cpp:1626-1641` trims both to at most one copper layer;
+        `pad.cpp:2886-2891` and the parser at `…_sexpr_parser.cpp:6433-6437` force the drill to
+        zero for both.
+
+        At least ten things *do* differ -- a lower bound, not an enumeration -- and none is
+        geometry or connectivity: solder paste (`pad.cpp:3252-3257`), the Gerber aperture
+        attribute (`plot_brditems_plotter.cpp:206-227`), pick-and-place "exclude all TH"
+        (`footprint.cpp:4451-4460` via `place_file_exporter.cpp:145`), the Edge.Cuts clearance DRC
+        exemption (`drc_test_provider_edge_clearance.cpp:431-439`), a distinct property-system
+        value user-authored DRC rules can name (`pad.cpp:3665-3671`), and four reporting surfaces.
+        Board IR models no paste, emits no Gerber and no position file, evaluates no rule
+        expressions, and derives no edge clearance of its own (ADR-0004 delegates DRC to KiCad),
+        so every one is outside what a `Pad` claims -- and the outputs that do change are produced
+        by KiCad from a file in which the `connect` token survives, because both patch adapters
+        are source-preserving splices that never rewrite a pad header.
+
+        The distinction is therefore *discarded*, not preserved. It is counted rather than dropped
+        in silence -- see `edge_connector_pad_count` -- but that count is in-process only and
+        reaches no published surface (R-141). ADR-0096 and D-186 record why a new `PadKind` member
+        was rejected, and what that alternative actually costs.
+        """
+
+        if raw_kind not in _PAD_KIND_BY_TOKEN:
+            self.fail(
+                "unsupported.construct",
+                "pad kind is unsupported",
+                locator,
+                object_kind="pad",
+            )
+        return _PAD_KIND_BY_TOKEN[raw_kind]
+
+    def _pad_shape(self, raw_shape: str, locator: str) -> PadShape:
+        """Resolve one pad's KiCad shape token, or refuse -- by name where there is a name.
+
+        A token KiCad's writer emits but Board IR does not model is refused with the sentence
+        `_UNMODELLED_PAD_SHAPES` holds for it, so the message names the construct.  A token that
+        is in neither table is not a documented pad shape at all: it refuses through the
+        `PadShape` lookup below, unnamed and without echoing one byte of the board, with the
+        indexed locator still saying which pad.  The named lookup runs first because `PadShape`
+        would otherwise reject both cases with the same anonymous sentence, which is exactly the
+        defect issue #153 reports one level up.
+        """
+
+        named = _UNMODELLED_PAD_SHAPES.get(raw_shape)
+        if named is not None:
+            self.fail("unsupported.construct", named, locator, object_kind="pad")
+        try:
+            return PadShape(raw_shape)
+        except ValueError:
+            self.fail(
+                "unsupported.construct",
+                "pad shape is unsupported",
+                locator,
+                object_kind="pad",
+            )
+
     def _footprints_and_pads(
         self,
     ) -> tuple[tuple[Footprint, ...], tuple[Pad, ...], tuple[Segment, ...]]:
@@ -2036,10 +2167,39 @@ class _Converter:
             pad_layers_by_number: dict[str, frozenset[str]] = {}
             for pad_index, pad in enumerate(children(footprint, "pad")):
                 locator = f"{footprint_locator}.pad[{pad_index}]"
-                # The named refusals run *before* the closed allowlist below, not after it.
-                # Placed after, every one of them was unreachable: the allowlist rejected the
-                # same heads first with a message that named no field, so a board carrying an
-                # overridden pad clearance was told only that some field was unsupported.
+                # What the pad *is* is decided before what fields it carries, and the ordering is
+                # the whole of issue #153's first question.  A `custom` pad must carry `(options
+                # (anchor ...))` -- KiCad's writer emits `(options` under `GetShape() ==
+                # PAD_SHAPE::CUSTOM` and under no other condition
+                # (`pcb_io_kicad_sexpr.cpp:2050-2062`) -- so with the field loop first, every
+                # custom pad on a real board was told that `options` is unsupported.  That is a
+                # true sentence about the wrong object: `options` is a mandatory sub-field of the
+                # shape, and a reader who goes and removes it gets a malformed pad rather than a
+                # converting board.  Deciding kind and shape first means the refusal names the
+                # construct that cannot be modelled, which is the same correction #152 made to the
+                # pad refusals and the same one ADR-0093 made for off-grid geometry.
+                #
+                # The field loop stays, and `options` and `primitives` stay in it, because neither
+                # is dead: KiCad's *parser* accepts `T_options` and `T_primitives` on a pad of any
+                # shape (`pcb_io_kicad_sexpr_parser.cpp:6315-6323`), so a hand-edited or
+                # third-party file can carry either on a `roundrect` pad, where the shape refusal
+                # above does not fire and only the field loop stands between that file and a
+                # snapshot.  `test_pad_field_refusals_are_still_reachable_on_a_modelled_shape`
+                # pins that reachability so the entries are not deleted as unreachable later.
+                self._validate_direct_atoms(
+                    pad,
+                    positional_atoms=3,
+                    allowed=frozenset({"locked"}),
+                    locator=locator,
+                )
+                header = tuple(item for item in pad.items[1:4] if isinstance(item, str))
+                if len(header) != 3:
+                    self.fail(
+                        "syntax.invalid", "pad header is malformed", locator, object_kind="pad"
+                    )
+                number, raw_kind, raw_shape = header
+                kind = self._pad_kind(raw_kind, locator)
+                shape = self._pad_shape(raw_shape, locator)
                 for unsupported_head in _UNSUPPORTED_PAD_FIELDS:
                     if children(pad, unsupported_head):
                         self.fail(
@@ -2070,75 +2230,6 @@ class _Converter:
                     ),
                     locator,
                 )
-                self._validate_direct_atoms(
-                    pad,
-                    positional_atoms=3,
-                    allowed=frozenset({"locked"}),
-                    locator=locator,
-                )
-                header = tuple(item for item in pad.items[1:4] if isinstance(item, str))
-                if len(header) != 3:
-                    self.fail(
-                        "syntax.invalid", "pad header is malformed", locator, object_kind="pad"
-                    )
-                number, raw_kind, raw_shape = header
-                # Kind and shape refuse separately. One message covering both named neither, so
-                # a caller reading it could not tell which of the two positional tokens was the
-                # problem -- and on the one real board that then reached it, the answer (a
-                # `connect` pad) was recoverable only by reading the file. Same defect class as
-                # the seven pad refusals D-178 made reachable, in the message rather than in the
-                # control flow. That board no longer reaches it; see below.
-                #
-                # `connect` is KiCad's `PAD_ATTRIB::CONN`, and it converts as `PadKind.SMD`
-                # because that is what KiCad's own model says it is, not as a convenience. The
-                # claim that matters is universal and was established by sweeping *two* literals,
-                # `PAD_ATTRIB::CONN` and `PAD_ATTRIB::SMD` -- the second because a site testing
-                # `== SMD` alone contains no `CONN` token and is invisible to a `CONN` grep, which
-                # is how the first version of this work missed one. **No site anywhere gives a
-                # `CONN` pad different copper, a different layer span, a different hole, or
-                # different connectivity from an `SMD` pad.** `connectivity_items.cpp:164-176`
-                # puts `SMD`, `CONN` and `NPTH` in one case that pins the item to the front of
-                # its copper stack; `pns_kicad_iface.cpp:1631-1648` gives `CONN` and `SMD` one
-                # shared case; `pad.cpp:1626-1641` trims both to at most one copper layer;
-                # `pad.cpp:2886-2891` and the parser at `…_sexpr_parser.cpp:6433-6437` force the
-                # drill to zero for both.
-                #
-                # At least ten things *do* differ -- a lower bound, not an enumeration -- and none
-                # is geometry or connectivity: solder paste (`pad.cpp:3252-3257`), the Gerber
-                # aperture attribute (`plot_brditems_plotter.cpp:206-227`), pick-and-place
-                # "exclude all TH" (`footprint.cpp:4451-4460` via
-                # `place_file_exporter.cpp:145`), the Edge.Cuts clearance DRC exemption
-                # (`drc_test_provider_edge_clearance.cpp:431-439`), a distinct property-system
-                # value user-authored DRC rules can name (`pad.cpp:3665-3671`), and four
-                # reporting surfaces. Board IR models no paste, emits no Gerber and no position
-                # file, evaluates no rule expressions, and derives no edge clearance of its own
-                # (ADR-0004 delegates DRC to KiCad), so every one is outside what a `Pad` claims
-                # -- and the outputs that do change are produced by KiCad from a file in which
-                # the `connect` token survives, because both patch adapters are source-preserving
-                # splices that never rewrite a pad header.
-                #
-                # The distinction is therefore *discarded*, not preserved. It is counted rather
-                # than dropped in silence -- see `edge_connector_pad_count` below -- but that
-                # count is in-process only and reaches no published surface (R-141). ADR-0096 and
-                # D-186 record why a new `PadKind` member was rejected, and what that alternative
-                # actually costs.
-                if raw_kind not in _PAD_KIND_BY_TOKEN:
-                    self.fail(
-                        "unsupported.construct",
-                        "pad kind is unsupported",
-                        locator,
-                        object_kind="pad",
-                    )
-                kind = _PAD_KIND_BY_TOKEN[raw_kind]
-                try:
-                    shape = PadShape(raw_shape)
-                except ValueError:
-                    self.fail(
-                        "unsupported.construct",
-                        "pad shape is unsupported",
-                        locator,
-                        object_kind="pad",
-                    )
                 # Validated before the aperture skip below, not after it: `zone_connect` is on the
                 # pad allowlist now, so a skipped pad would otherwise carry it past every check.
                 # The value is inert on an aperture, which has no copper for a pour to reach --

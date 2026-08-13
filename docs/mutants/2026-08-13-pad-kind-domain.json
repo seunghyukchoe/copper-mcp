@@ -25,8 +25,8 @@
     {
       "id": "PK3-kind-refusal-deleted",
       "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "                if raw_kind not in _PAD_KIND_BY_TOKEN:\n                    self.fail(\n                        \"unsupported.construct\",\n                        \"pad kind is unsupported\",\n                        locator,\n                        object_kind=\"pad\",\n                    )\n                kind = _PAD_KIND_BY_TOKEN[raw_kind]",
-      "replacement": "                kind = _PAD_KIND_BY_TOKEN.get(raw_kind, PadKind.SMD)",
+      "anchor": "        if raw_kind not in _PAD_KIND_BY_TOKEN:\n            self.fail(\n                \"unsupported.construct\",\n                \"pad kind is unsupported\",\n                locator,\n                object_kind=\"pad\",\n            )\n        return _PAD_KIND_BY_TOKEN[raw_kind]",
+      "replacement": "        return _PAD_KIND_BY_TOKEN.get(raw_kind, PadKind.SMD)",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_kicad_board_ir.py::test_an_undocumented_pad_kind_is_refused_without_echoing_the_board"

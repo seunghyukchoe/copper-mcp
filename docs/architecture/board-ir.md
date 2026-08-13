@@ -257,12 +257,22 @@ including:
   ([ADR-0097](../adr/0097-courtyard-layer-decides-the-side.md));
 - custom or other unmodeled pad shapes and custom pad primitives. Pad **kind** and pad **shape**
   are two separate refusals, because one message covering both positional tokens of a pad header
-  named neither. All four of KiCad's documented kinds (`PAD_ATTRIB`: PTH, SMD, CONN, NPTH) are now
-  modelled, so a refused kind token is not a documented pad kind at all and refuses without being
-  named, with the indexed locator still saying which pad. A **copper-less `connect` pad** is the
-  one form that still refuses: the paste/mask aperture skip tests the source token and requires
-  literally `smd`, so an aperture-shaped edge-connector pad is refused rather than read past
-  ([ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md));
+  named neither, and both are decided **before** the pad's field checks so the message names the
+  construct rather than a mandatory sub-field of it. All four of KiCad's documented kinds
+  (`PAD_ATTRIB`: PTH, SMD, CONN, NPTH) are now modelled, so a refused kind token is not a
+  documented pad kind at all and refuses without being named, with the indexed locator still
+  saying which pad. Two of KiCad's six documented **shape** tokens are unmodelled, and each refuses
+  from a closed two-entry table with its own sentence: `trapezoid`, which is unmodell**ed**, and
+  `custom`, which is unmodell**able** through today's `Pad` — an envelope for a custom pad *is*
+  derivable from the document (the primitives union with the anchor, and every primitive head has
+  an exact integer-nanometre containing box, `gr_curve` by the Bézier convex-hull property), but a
+  `Pad` is read over-approximating for its obstacle and under-approximating for its attachment core
+  from the same `shape`/`size_x_nm`/`size_y_nm`, and no single rectangle can be both
+  ([ADR-0099](../adr/0099-custom-pads-have-an-envelope-and-nowhere-to-put-it.md)). A shape token in
+  neither the table nor `PadShape` refuses without being named. A **copper-less `connect` pad** is
+  the one kind form that still refuses: the paste/mask aperture skip tests the source token and
+  requires literally `smd`, so an aperture-shaped edge-connector pad is refused rather than read
+  past ([ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md));
 - root sections the KiCad format defines and Board IR v0.2 does not model, each refused by name
   from a closed table: `dimension` objects, embedded `image`s, and root board `property` text
   variables ([#140](https://github.com/seunghyukchoe/copper-mcp/issues/140)). A root head absent
@@ -274,7 +284,10 @@ including:
   overrides, and pad/via copper-removal or custom-connectivity options;
 - a pad `zone_connect` of `0`, which detaches the pad from its pour, and any value outside
   KiCad's `ZONE_CONNECTION` enum; and pad-level `clearance`, `offset`, `options`, `primitives`,
-  `thermal_bridge_angle`, `thermal_bridge_width` and `thermal_gap`, each refused by name;
+  `thermal_bridge_angle`, `thermal_bridge_width` and `thermal_gap`, each refused by name. `options`
+  and `primitives` are reached only on a pad whose shape is *modelled*, because KiCad's writer
+  emits them only for a `custom` pad while its parser accepts them on any shape — a hand-edited or
+  third-party file is the case they still guard;
 - setup defaults, stackup/routing-rule constructs, and other setup fields outside the documented
   non-routing metadata allowlist;
 - simultaneous UUID/tstamp identities and malformed, unresolved, or unconnected legacy net codes;

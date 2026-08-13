@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0099**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0100**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -186,8 +186,9 @@ Ninety-seven numbers, ninety-two records, no duplicates — and `scripts/check_a
 now proves that last clause on every run rather than asserting it. 0027, 0082, 0083, 0085 and
 0086 are unused; see **Known gaps** above. The three stray summary sentences that stood here until
 | [0098](0098-reproducible-mutation-evidence.md) | A mutation claim is evidence only if the repository can re-run it | Accepted |
+| [0099](0099-custom-pads-have-an-envelope-and-nowhere-to-put-it.md) | A custom pad has a derivable envelope and nowhere in Board IR to put it | Accepted |
 
-Ninety-eight numbers, ninety-two records, no duplicates — and `scripts/check_adr_numbers.py`
+Ninety-nine numbers, ninety-three records, no duplicates — and `scripts/check_adr_numbers.py`
 now proves that last clause on every run rather than asserting it (the previous revision of this
 sentence said "ninety-six numbers, ninety records", stale by two landings at the time it was
 read; the checker's own output is the count to trust). 0027, 0082, 0083, 0085 and
