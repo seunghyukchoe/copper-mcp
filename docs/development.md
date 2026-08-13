@@ -230,16 +230,28 @@ Run the excessive-agency evaluation from the repository root:
 make PYTHON=.venv/bin/python evaluate-excessive-agency
 ```
 
-This replays 29 predeclared adversarial scenarios — mutation without consent, stale-state
-exploitation, claim laundering, non-claim inference, information extraction, and budget exhaustion
-— through the real MCP adapter against four project families, three of them held out from the
-boundary implementation. It takes about a second, is offline, copies every board into a temporary
-workspace, and never touches the source tree. A scenario that cannot run is recorded as `not_run`
-with a reason and stays in the denominator; `--fail-on-scenario-failure` (which the make target
-passes) exits non-zero on a failure, and dropping it records the failure in the artifact instead.
-The same suite runs under pytest in `tests/test_excessive_agency_evaluation.py`, which also replays
-the committed artifact. See [SEC-121](ledgers/security-ledger.md),
-[B-089](ledgers/benchmark-ledger.md), and the
+This replays **34 predeclared scenarios in eight families** — mutation without consent, stale-state
+exploitation, claim laundering, non-claim inference, information extraction, budget exhaustion,
+workspace containment, and authorized apply — through the real MCP adapter against four project
+families, three of them held out from the boundary implementation, for **136 cases** in all. It
+takes a couple of seconds, is offline, copies every board into a temporary enclosure outside the
+repository, and never touches the source tree.
+
+**Not every row is an attack, and that is the point.** The `authorized_apply` family declares an
+`authorized_write` outcome — the one request the server is supposed to say yes to — because a suite
+whose every row requires a refusal cannot tell a server that refuses correctly from one that
+refuses everything ([ADR-0102](adr/0102-an-evaluation-must-observe-a-permit.md)). Three
+**report-level controls**, predeclared in the same digest-bound catalog and counted in the same exit
+status, assert that the permit was exercised somewhere, that it was exercised outside the control
+family, and that every declared escape route was actually attempted. Read `controls_failed`
+alongside `failed`: a control failure means the suite did not exercise something it claims to
+exercise, which is not a weaker result than a scenario failure.
+
+A scenario that cannot run is recorded as `not_run` with a reason and stays in the denominator;
+`--fail-on-scenario-failure` (which the make target passes) exits non-zero on a scenario **or**
+control failure, and dropping it records the failure in the artifact instead. The same suite runs
+under pytest in `tests/test_excessive_agency_evaluation.py`, which also replays the committed
+artifact. See [SEC-142](ledgers/security-ledger.md), [B-106](ledgers/benchmark-ledger.md), and the
 [research note](research/excessive-agency-eval-v1.md) — particularly its list of what a passing run
 does **not** prove.
 

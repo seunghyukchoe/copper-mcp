@@ -137,6 +137,19 @@ typed diagnostic or bounded conversion-code counts.
 The response contains the geometry CopperMCP generated, so hosts that must not disclose generated
 copper to a model should not enable the `preview_route` tool.
 
+**Zone fill and the apply token.** Over MCP only, `preview_route` accepts `include_fill_authority`.
+With it set, CopperMCP refills a private disposable copy of the board with KiCad and admits the
+cached pour only if the refill reproduces it exactly; verified foreign islands then replace that
+zone's conservative envelope on the layer they were proved on, and the response carries a typed
+`routing_effect` saying which role the evidence played. A cache KiCad does not reproduce refuses
+`stale_fill` rather than answering from either version. **A candidate the pour shaped cannot be
+applied**: `preview_route` returns it with no `apply_token` even when `include_apply_token` is set,
+because apply runs in a later process holding no fill evidence and could only replay under the
+looser envelope. `include_fill_authority` with `include_drc` is supported and the evidence binds;
+`include_fill_authority` with `include_apply_token` returns a candidate and no token
+([ADR-0103](adr/0103-a-candidate-records-the-model-that-produced-it.md)). The `copper-mcp
+preview-route` CLI command has no equivalent flag.
+
 ## Preview a placement
 
 Validate a proposed footprint placement without modifying the board:
@@ -162,8 +175,12 @@ movement proposals.
 `courtyard_overlap` **is evaluated** — it is three-valued, `proven_clear`, `inconclusive`, or
 `violated`, and only a violation makes the candidate illegal. Read it for exactly what it covers:
 
-- It compares rings between footprints **on the same physical side**. Front and back courtyards are
-  independent physical layers, so cross-side contact is not a collision.
+- It compares rings **per courtyard layer, not per footprint side**. `F.CrtYd` and `B.CrtYd` are
+  independent physical layers, so an `F.CrtYd` shape never collides with a `B.CrtYd` one — but a
+  footprint may draw on the layer opposite its own side, and when it does, that keep-out is compared
+  on the layer it was drawn on. Two coincident `B.CrtYd` rectangles collide whichever sides their
+  footprints sit on, which is what `kicad-cli` 10.0.5 reports
+  ([ADR-0097](adr/0097-courtyard-layer-decides-the-side.md)).
 - It covers the Board IR `0.2` courtyard subset only: simple closed orthogonal rings — unfilled
   `fp_rect`, unfilled `fp_poly`, and degree-two closed `fp_line` chains. Curves, diagonals, fills,
   and open or branching chains are refused by the Board IR contract before a placement view exists,

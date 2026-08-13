@@ -16,7 +16,7 @@ As of 2026-08-13:
 | Milestone | Closed | Open | State |
 |---|---|---|---|
 | M1 — KiCad inspection completion | 7 | 1 | Open. The sole remaining issue is [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116), retitled from the original real-board conversion survey to the M1 conversion tracker it had become ([D-191](ledgers/decision-ledger.md)). |
-| M2 — Routing depth | 3 | 2 | Open: [#63](https://github.com/seunghyukchoe/copper-mcp/issues/63) fill-aware zone routing obstacles and [#65](https://github.com/seunghyukchoe/copper-mcp/issues/65) benchmark comparison against open baselines. |
+| M2 — Routing depth | 4 | 1 | Open: [#65](https://github.com/seunghyukchoe/copper-mcp/issues/65) benchmark comparison against open baselines. [#63](https://github.com/seunghyukchoe/copper-mcp/issues/63) closed as already delivered ([ADR-0101](adr/0101-fill-currency-is-not-in-the-document.md)); its layered-seam follow-up is [#164](https://github.com/seunghyukchoe/copper-mcp/issues/164), which carries **no milestone**. |
 | M3 — Safe application completion | 0 | 1 | Open: [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68), IPC one-undo-commit apply. |
 | M4 — Scene, policy, and evaluation | 3 | 0 | **Complete.** Every tracked issue is closed. |
 | M5 — Performance and physics | 0 | 6 | Not started. |
@@ -27,13 +27,21 @@ Two cautions about this table, because both have misled a reader before:
   below has no `[~]` items left.** Several genuinely remain — broader source fidelity, editor
   authority, solving for a placement, and the policy-plugin work — and they are untracked rather
   than done. A milestone closing is an accounting fact about the tracker.
-- Three conversion gaps filed after the M1 survey —
-  [#141](https://github.com/seunghyukchoe/copper-mcp/issues/141),
+- Work filed outside a milestone appears in none of the counts above, and the M1 conversion arc is
+  the standing example. Of the three gaps filed after the M1 survey,
   [#152](https://github.com/seunghyukchoe/copper-mcp/issues/152) and
-  [#153](https://github.com/seunghyukchoe/copper-mcp/issues/153) — carry **no milestone** and so
-  appear in none of the counts above. Two are real open work and one (#141) is answered by
-  decision; see [what does not convert](#what-does-not-convert). That gap between the tracker and
-  the work is why #116 was kept open rather than closed when its five named gaps all closed.
+  [#153](https://github.com/seunghyukchoe/copper-mcp/issues/153) are now closed
+  ([ADR-0099](adr/0099-pad-fabrication-properties-and-named-pad-refusals.md),
+  [ADR-0100](adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md)) and
+  [#141](https://github.com/seunghyukchoe/copper-mcp/issues/141) is answered by decision and staying
+  refused; none of them ever carried a milestone. Neither do
+  [#164](https://github.com/seunghyukchoe/copper-mcp/issues/164),
+  [#166](https://github.com/seunghyukchoe/copper-mcp/issues/166),
+  [#167](https://github.com/seunghyukchoe/copper-mcp/issues/167),
+  [#170](https://github.com/seunghyukchoe/copper-mcp/issues/170) or
+  [#172](https://github.com/seunghyukchoe/copper-mcp/issues/172), all open. See
+  [what does not convert](#what-does-not-convert). That gap between the tracker and the work is why
+  #116 was kept open rather than closed when its five named gaps all closed.
 
 ## M0 — Repository foundation (`0.1.x`, complete)
 
@@ -52,17 +60,23 @@ Two cautions about this table, because both have misled a reader before:
 ### What does not convert
 
 The one open M1 issue is [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116), the
-real-board conversion tracker. Re-measured on the private working corpus on 2026-08-13 for its
-close-out (`B-099` survey close-out replay): **12 of the 18 saves in that corpus convert.** Those 18
-files hold **17 distinct board contents** — one pair is byte-identical across two save directories —
-so the same result is 12 of 17 distinct boards. Six saves refuse, each for exactly one named
-construct:
+real-board conversion tracker. Re-measured on the private working corpus on 2026-08-13 (`B-107`,
+reproducing `B-103`): **13 of the 18 saves in that corpus convert.** Those 18 files hold **17
+distinct board contents** — one pair is byte-identical across two save directories, and that pair is
+not among the boards that moved — so the same result is 13 of 17 distinct boards. Five saves refuse,
+each for exactly one named construct:
 
 | Refusing saves | Construct | Issue |
 |---|---|---|
-| 2 | an unmodelled `property` field inside a pad | [#152](https://github.com/seunghyukchoe/copper-mcp/issues/152) |
-| 3 | a custom-shape SMD pad's `options` field | [#153](https://github.com/seunghyukchoe/copper-mcp/issues/153) |
+| 4 | a custom-shape SMD pad — an envelope for it *is* derivable from the document, but a Board IR `Pad` is read over-approximating for its obstacle and under-approximating for its attachment core from the same three fields, and no single rectangle can be both ([ADR-0100](adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md)) | [#153](https://github.com/seunghyukchoe/copper-mcp/issues/153), closed |
 | 1 | a root copper graphic (`gr_text` on `F.Cu`) — **answered and staying refused**, see [ADR-0095](adr/0095-copper-text-has-no-derivable-envelope.md) | [#141](https://github.com/seunghyukchoe/copper-mcp/issues/141) |
+
+The count of refusing saves is measured; **the split between the two constructs is composed from two
+runs and not from one.** ADR-0100 measured three saves refusing for the custom pad, and ADR-0099
+then converted one of the two pad-`property` saves and advanced the other onto the same custom pad
+([#152](https://github.com/seunghyukchoe/copper-mcp/issues/152) and
+[#159](https://github.com/seunghyukchoe/copper-mcp/issues/159), both closed). No single run has
+measured the corpus with both landed and broken the five down by construct.
 
 All five gaps #116 originally named are closed: chamfered and circular courtyards
 ([ADR-0080](adr/0080-chamfered-and-circular-courtyards.md)) closed two of them, roundrect radius
@@ -71,7 +85,7 @@ obstacle ([ADR-0078](adr/0078-netless-copper-as-obstacle.md)) a fourth, and reus
 ([D-158](ledgers/decision-ledger.md)) the fifth.
 
 **No "converts every board" result is claimed at any count**, and none should be stated until a
-re-measured survey supports it — nor is a target count a completion criterion, since one of the six
+re-measured survey supports it — nor is a target count a completion criterion, since one of the five
 refusals is permanent by decision. The counts above supersede earlier survey figures — including
 #116's own original title, whose every number was wrong by the time it was read — rather than
 correcting them in place. Dated research notes and benchmark-ledger rows keep whatever they measured
@@ -127,10 +141,13 @@ any count from it is only as good as the digest sweep bracketing the run that pr
   net. Since the issue was written the adapter has additionally accepted oval pad drills,
   45-degree-chamfered and exact-integer-radius circular courtyards (ADR-0080), copper carrying no
   routable net as a netless obstacle (ADR-0078), net-tie `fp_poly` copper as netless obstacle
-  copper (ADR-0092), unlocked root groups (ADR-0090), and attaching pad `zone_connect` overrides
-  (ADR-0091). **Still refused:** curved board outlines (`Edge.Cuts` arcs, circles, polygons,
-  béziers), pad shapes outside `circle`/`rect`/`oval`/`roundrect` and custom pad primitives,
-  `connect`-kind pads, placement-enabled rule areas,
+  copper (ADR-0092), unlocked root groups (ADR-0090), attaching pad `zone_connect` overrides
+  (ADR-0091), root board `property` text variables (ADR-0094), `connect`-kind edge-connector pads as
+  SMD (ADR-0096), courtyards on the layer opposite a footprint's side (ADR-0097), and seven of
+  KiCad's eight `PAD_PROP` pad fabrication tokens (ADR-0099). **Still refused:** curved board
+  outlines (`Edge.Cuts` arcs, circles, polygons, béziers), pad shapes outside
+  `circle`/`rect`/`oval`/`roundrect` — `custom` and `trapezoid` each under their own sentence
+  (ADR-0100) — custom pad primitives, `pad_prop_castellated`, placement-enabled rule areas,
   `fp_arc` courtyards, outline holes, and blind/buried/microvias. The residual real-board
   conversion gaps are counted in [what does not convert](#what-does-not-convert), and the
   authoritative accepted/rejected matrix is
@@ -161,11 +178,15 @@ any count from it is only as good as the digest sweep bracketing the run that pr
 
 ## M2 — Deterministic routing baseline
 
-Tracker state: 3 closed, 2 open — [#63](https://github.com/seunghyukchoe/copper-mcp/issues/63)
-fill-aware zone routing obstacles and
-[#65](https://github.com/seunghyukchoe/copper-mcp/issues/65) benchmark comparison against open
-baselines. Note that the fill-aware routing item below is `[x]` for the single-layer A* core while
-#63 stays open for the layered seam's public contract; the two are not the same scope.
+Tracker state: 4 closed, 1 open — [#65](https://github.com/seunghyukchoe/copper-mcp/issues/65),
+benchmark comparison against open baselines.
+[#63](https://github.com/seunghyukchoe/copper-mcp/issues/63) closed on 2026-08-13 as **already
+delivered** by ADR-0039, ADR-0040 and ADR-0070 rather than by new capability: fill currency is not
+recoverable from the board document, so the model stays as it is and the single-layer core gained
+the two fail-closed shape gates the layered adapter already had
+([ADR-0101](adr/0101-fill-currency-is-not-in-the-document.md)). The layered seam's **public**
+fill-authority contract and `routing_effect` provenance are now
+[#164](https://github.com/seunghyukchoe/copper-mcp/issues/164), open and carrying no milestone.
 
 - [~] Single two-pin A* routing with exact connectivity.
   - [x] Candidate-only integer four-neighbour reference with exact revision binding, deterministic
@@ -207,7 +228,13 @@ baselines. Note that the fill-aware routing item below is `[x]` for the single-l
   envelope with freshness-verified exact fill islands, fails closed on stale/unmatched evidence,
   and the public preview advertises the evidence on routed candidates with a typed
   `routing_effect`; B-021 measures the route-quality improvement and B-022 measures the MCP
-  provenance contract.
+  provenance contract. Issue #63 closed against this item on 2026-08-13: the shrink is gated rather
+  than widened (ADR-0101), a candidate now records the fill that produced it and refuses a replay
+  under any other model (`fill_evidence_mismatch`, ADR-0103), and `preview_route` withholds the
+  apply token for a fill-shaped candidate — so a fill-routed candidate is previewable and
+  DRC-checkable but **not appliable**. `max_fill_vertices` was recalibrated 50,000 → 500,000 from a
+  measured density rather than from one board's pour (ADR-0104); the per-island ceiling behind it is
+  [#167](https://github.com/seunghyukchoe/copper-mcp/issues/167), open.
 - [~] Multi-pin nets, since most real nets have more than two pads.
   - [x] Connectivity analysis for nets of any width, so an already-connected multi-pin net
     is recognised rather than refused.
@@ -435,8 +462,9 @@ placement, and the policy-plugin work.
   every placement candidate. Grid snapping, rule residuals, three-valued pad overlap, outline
   containment, keepout respect, and dual-digest binding are implemented, including stationary
   supported courtyards from padless footprints while keeping those footprints out of candidate
-  manifests. Same-side courtyard overlap is now three-valued (`proven_clear`/`violated`/
-  `inconclusive`) and bound to what KiCad 10.0.5 actually compares — a cached `SHAPE_POLY_SET`
+  manifests. Courtyard overlap is now three-valued (`proven_clear`/`violated`/
+  `inconclusive`), paired **by courtyard layer rather than by footprint side** (ADR-0097), and bound
+  to what KiCad 10.0.5 actually compares — a cached `SHAPE_POLY_SET`
   contracted by a 5,000 nm `BuildCourtyardCaches` inset, so a collision needs 10,000 nm of nominal
   penetration, and an even-odd ring-nesting rule under which a donut courtyard's centre is
   occupiable (ADR-0075, closing issues #72 and #74). This corrects, rather than restates, an
@@ -451,10 +479,14 @@ placement, and the policy-plugin work.
   future work.
 - [~] Broaden courtyard geometry and side-aware placement safely. Bounded `F.Cu`/`B.Cu`
   observation imports simple closed orthogonal rectangles, polygons, and unordered line cycles
-  without a second mirror; malformed chains and unsupported fields fail closed. Diagonal edges,
-  curves, arcs, fills, open/branching/self-intersecting contours, holes or multi-loop contour
-  semantics, nonzero custom clearance, GUI-authored flip serialization, side-aware placement apply, and a
-  live desktop no-second-mirror oracle remain open.
+  without a second mirror; malformed chains and unsupported fields fail closed. A courtyard on the
+  layer *opposite* its footprint's side is no longer refused — it converts as the footprint's
+  far-side keep-out and constrains that layer (ADR-0097), which also means a side flip must swap a
+  footprint's two courtyard sets as well as mirror them. Diagonal edges, curves, arcs, fills,
+  open/branching/self-intersecting contours, holes or multi-loop contour semantics, nonzero custom
+  clearance, GUI-authored flip serialization, side-aware placement apply, and a live desktop
+  no-second-mirror oracle remain open; the source-preserving placement serializer still refuses
+  every board carrying a far-side courtyard rectangle.
 - [~] Separately authorized placement apply; direct AI mutation of KiCad remains prohibited. The
   bounded file-level surface is implemented and measured, and file-backed post-placement
   DRC/scene observation is revision-bound; general footprint fidelity and live-editor action CAS

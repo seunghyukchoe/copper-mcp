@@ -43,6 +43,10 @@ When adding a document, add it to the list below in the same sentence form — *
 - [Unshipped KiCad ERC containment experiment](./kicad-schematic-erc-containment.md) records why
   a real local KiCad ERC probe did not become an MCP capability: legacy sandbox and aggregate-quota
   containment did not meet the required security boundary.
+- [Authoritative KiCad schematic ERC](./kicad-schematic-erc-authority-v1.md) records the
+  fixed-argument `kicad-cli sch erc` contract, why exit code 5 counts violations rather than
+  signalling an error, and why board parity has nowhere to live in an ERC report. It claims no
+  electrical correctness and no containment.
 - [Held-out audio project-family evaluation](./heldout-audio-project-family-evaluation.md) defines
   the first hash-separated, independently authored family split and its one-family evidence limits.
 - [FreeRouting comparison boundary](./freerouting-comparison.md) documents the GPL-isolated,
@@ -57,11 +61,17 @@ When adding a document, add it to the list below in the same sentence form — *
 - [Negotiated physical-clearance acceptance](./negotiated-physical-clearance.md) defines the
   bounded exact-integer, same-layer candidate-pair gate that supplements lattice congestion
   accounting without claiming board-wide or KiCad physical verification.
+- [Route-bundle preview](./route-bundle-v1.md) records the read-only, twice-composed plan contract
+  for two to eight two-pin nets on one lattice, published only when both compositions agree. It
+  claims no multilayer capacity, no vias or zones, and no authority to apply the plan.
 - [Bounded local exact repair](./bounded-local-exact-repair.md) defines the standalone verified
   lattice operator and the gates still required before negotiated-routing integration.
 - [Exact local-repair negotiated-integration gate](./exact-local-repair-negotiated-integration-gate.md)
   records the internal exact per-edge Board-IR candidate-path acceptance prerequisite, its capped
   same-net-aware subset, and why the predeclared >=10% gain gate still declines integration.
+- [Incremental spatial indexing](./incremental-spatial-index-v1.md) surveys what TritonRoute and
+  VPR index bounded rip-up and reroute with, and argues for a deterministic uniform grid mutated
+  only between negotiation passes. It claims no R-tree comparison and no performance result.
 - [Performance profile v1](./performance-profile-v1.md) records the clean-worktree routing,
   placement, and Circuit Scene measurement prerequisite for any future acceleration work.
 - [Ordered-layer routing v1](./ordered-layer-routing-v1.md) records the 2..8 signal-layer,
@@ -150,6 +160,12 @@ When adding a document, add it to the list below in the same sentence form — *
   the three CopperMCP can discard from the one it may not. It grounds ADR-0091 and claims nothing
   about how the override should eventually be modelled, nothing about thermal spoke geometry, and
   nothing about the population of boards that carry it.
+- [KiCad custom pad envelope](./kicad-custom-pad-envelope-v1.md) answers whether an envelope for a
+  custom pad is derivable from the document — it is, since the primitives union with the anchor and
+  each primitive head admits an exact integer containing box — and then refuses anyway, because a
+  Board IR `Pad` is read over-approximating for its obstacle and under-approximating for its
+  attachment core from the same three fields, and no single rectangle can be both. It offers no
+  bounded primitive subset and no with/without differential, either of which would prove nothing here.
 - [KiCad `connect` pads](./kicad-connect-pad-attribute-v1.md) establishes what
   `PAD_ATTRIB::CONN` is from two sweeps of KiCad's source outside the foreign-format import
   plug-ins: every occurrence of `PAD_ATTRIB::CONN` (35 across 17 files) and every occurrence of
@@ -163,10 +179,32 @@ When adding a document, add it to the list below in the same sentence form — *
   hypothesis — plating is not a pad attribute in KiCad at all. It grounds ADR-0096 and D-186, and
   claims nothing about castellated pads, per-layer padstacks, behaviour reached through
   user-authored DRC rules, or the population of boards that carry an edge connector.
+- [KiCad aperture pads and net ties](./kicad-aperture-pads-and-net-ties-v1.md) grounds three
+  singleton refusals: a copper `fp_poly` that is a declared short, a paste-only pad that is a
+  stencil aperture, and `placed` as editor bookkeeping. It claims no net-tie model.
+- [KiCad net-tie modelling](./kicad-net-tie-modelling-v1.md) defines the netless-obstacle model for
+  a declared `net_tie_pad_groups` short: the copper is something to route around and never a
+  connection. It claims nothing about multi-group ties or non-rectangular tie copper.
+- [KiCad net 0 copper](./kicad-net0-copper-v1.md) establishes that net 0 is KiCad's value for
+  unconnected items on real copper — 7 of 12 surveyed boards carry it, 115 vias and 2,687 segments —
+  and that its saved spellings must resolve identically; a negative ordinal stays refused.
 - [KiCad arc tracks as routing obstacles](./kicad-arc-track-obstacles-v1.md) grounds ADR-0070's
   conservative arc envelope in the official S-expression arc grammar and the inscribed-angle
   theorem, and states plainly that the envelope is loose for a near-semicircular arc and claims
   nothing about major arcs, arcs as attachment copper, or the layered proposal adapter.
+- [KiCad copper text envelope](./kicad-copper-text-envelope-v1.md) asks whether a region provably
+  containing every plotted glyph is derivable from the board document, and answers no for four
+  measured reasons, so copper text stays refused at a cost of one board.
+- [Edge.Cuts outline assembly](./edge-cuts-outline-assembly-v1.md) records what KiCad requires of a
+  segment-drawn outline, and why the adapter chains endpoints at zero epsilon: an outline is routing
+  room and may only be under-approximated. It claims nothing about arcs, curves, or holes.
+- [KiCad UUID uniqueness](./kicad-uuid-uniqueness-v1.md) establishes that the format says a uuid
+  *should* be unique rather than must — nine of twelve surveyed boards reuse one across footprint
+  instances — so a reused value names nothing and degrades to a derived name that keeps mutation
+  refused.
+- [Assembled-outline identity](./assembled-outline-identity-v1.md) names an `Edge.Cuts` contour by
+  the sorted uuids of its member segments, and records why the revision-derived name it replaces is
+  structurally unappliable. It claims no uuid uniqueness and no curve-bearing outline.
 - [NE5532-class audio routing fixture](./ne5532-audio-routing-fixture.md) records the public
   datasheet pin roles and bypass guidance behind the CopperMCP-original Apache-2.0 fixture, which
   reproduces abstract roles rather than any third-party schematic, artwork, or values.
@@ -203,6 +241,14 @@ When adding a document, add it to the list below in the same sentence form — *
   numbering replaced a different consecutive one at KiCad 9, and that the two cannot both be
   accepted at once. It claims nothing about non-copper ordinals, the pre-4.0 legacy format, or
   KiCad 11.
+- [KiCad board groups](./kicad-board-groups-v1.md) establishes that a root `(group …)` is editor
+  organisation carrying no geometry or connectivity, and that the differential proving it bounds
+  what the adapter adds rather than what it fails to read. It models no grouping and refuses a
+  locked group.
+- [KiCad root board properties](./kicad-root-board-properties-v1.md) establishes that a root
+  `(property …)` is one entry of a text-variable map that is **not** inert: six enumerated termini
+  reach real behaviour, including copper text and custom DRC rules. An enumeration is not a
+  completeness proof, and it says so.
 - [KiCad PCM distribution](./kicad-pcm-distribution-v1.md) records the addon package format from
   the published JSON Schema and the addons-metadata CI rather than the prose guide, listing the six
   fields on which the two disagree; the archive whitelist, icon bounds, size tolerances, and
@@ -220,6 +266,23 @@ When adding a document, add it to the list below in the same sentence form — *
   because a larger radius means a smaller pad. It claims nothing about chamfered pads, per-layer
   padstacks, board format versions other than `20260206`, or that the 23-board tree is
   representative of KiCad boards generally.
+- [Parse-budget calibration](./parse-budget-calibration-v1.md) measures what one mebibyte of real
+  KiCad board costs in tokens, nodes, and vertices across 38 boards, re-derives the `ParseLimits`
+  defaults from those densities, and prices each against adversarial input. Admitting a board is not
+  converting it.
+- [Fill-vertex budget calibration](./fill-vertex-budget-calibration-v1.md) re-derives
+  `max_fill_vertices` from 50,000 to 500,000 against the pour densities real boards carry, a ceiling
+  that was refusing seven corpus boards before freshness was ever considered, and prices what the
+  raise buys an attacker. It claims no route benefit and no generalisation beyond the boards
+  measured.
+- [Route obstacle-budget calibration](./route-obstacle-budget-calibration-v1.md) splits the one
+  `max_obstacles` budget that was charging three different populations — 61 of 93 refusals were the
+  routed net's *own* copper — and re-derives it under a region-scoped obstacle model. Nothing in it
+  was DRC-checked or applied.
+- [Off-grid lattice refusals](./off-grid-lattice-refusal-v1.md) measures every `off_grid` refusal on
+  a live board tree and re-previews each at the finest lattice step its geometry permits: zero of
+  eighteen route, which refutes the hypothesis that the lattice is the binding constraint. It claims
+  no sample of KiCad boards.
 - [Tier-2 real-board capability survey](./tier2-real-board-capability-v1.md) measures what five
   read-only surfaces return on 12 real boards at default settings, now that 10 of them convert:
   authoritative KiCad DRC works on all 12 including the two Board IR refuses; a region-scoped

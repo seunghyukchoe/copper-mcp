@@ -131,6 +131,23 @@ as partial routing. This can reject a route through a real fill void, but cannot
 now accepts only the separately reviewed, source-revision-bound refill/freshness evidence and uses
 matching foreign fill islands as exact obstacles; the public preview advertises that provenance on
 routed candidates only when the caller opts into freshness authority, with a typed routing effect.
+Two fail-closed gates the ordered-layer adapter already carried now also guard the single-layer
+core: an island of fewer than three vertices, and an island whose bounding box escapes a backing
+zone of the same net and layer, each refuse `unsupported_geometry` rather than shrinking an
+envelope against evidence that does not describe the pour it claims to
+([ADR-0101](../adr/0101-fill-currency-is-not-in-the-document.md)). A candidate records the model
+that produced it: `RouteCandidate.fill_binding` is the content address of the fill the router was
+handed, a replay under any other fill — including none — refuses `fill_evidence_mismatch`, and
+`preview_route` **withholds the apply token** for a fill-shaped candidate, because apply runs in a
+later process holding no fill evidence and could only replay under the looser envelope
+([ADR-0103](../adr/0103-a-candidate-records-the-model-that-produced-it.md)). Reading a cached pour
+is bounded by `max_fill_vertices`, default 500,000 (`COPPER_MCP_MAX_FILL_VERTICES`, range
+3–1,000,000). That budget sits *behind* a full parse and is not the defence against an unbounded
+vertex list — `ParseLimits` is, and at the shipped parse defaults no document can offer more than
+741,375 fill vertices before `budget.exceeded.nodes` refuses it. Raising the default from 50,000
+was priced rather than assumed: against the densest reachable document it moves a refusal from
+29.325 s / 146.8 MiB to 35.812 s / 168.4 MiB
+([ADR-0104](../adr/0104-fill-vertex-budget-behind-a-parse.md), `B-108`).
 
 Board IR inspection discloses only object counts, digests, units, and standard KiCad copper layer
 names. Coordinates, net names, pad and net identities, UUIDs, and source bytes are excluded, and a
@@ -221,15 +238,21 @@ fresh CopperMCP process still fail closed. The process salt and token never cros
 boundary.
 
 The active KiCad adapter accepts front- or back-side footprints with orthogonal transforms and
-unfilled orthogonal `fp_rect`, `fp_poly`, or closed `fp_line` courtyard centerlines on matching
-`F.CrtYd`/`B.CrtYd`; unsupported footprint or courtyard forms fail closed before a scene or
-placement view exists. KiCad-authored
+unfilled orthogonal `fp_rect`, `fp_poly`, or closed `fp_line` courtyard centerlines on **either**
+`F.CrtYd` or `B.CrtYd` — a footprint may draw on the layer opposite its own side, and Board IR holds
+that geometry as a separate far-side set rather than pooling it with the matching-layer one
+([ADR-0097](../adr/0097-courtyard-layer-decides-the-side.md)); unsupported footprint or courtyard
+forms fail closed before a scene or placement view exists. KiCad-authored
 board-frame child coordinates are imported without a second back-side mirror. Placement subjects are
 projected from the same Board IR snapshot, and the supplied source bytes must match its source
 revision. AI output remains typed placement intent, a locked footprint cannot be moved, and
-`courtyard_overlap` is `proven_clear`, `inconclusive`, or `violated` for the same-side
-simple-orthogonal courtyard subset, matching KiCad 10.0.5's cached courtyard rather than raw ring
-geometry; front/back courtyards are independent and unsupported topology fails before evaluation. Padless footprints remain unavailable as placement subjects, but supported orthogonal courtyards
+`courtyard_overlap` is `proven_clear`, `inconclusive`, or `violated` for the simple-orthogonal
+courtyard subset, matching KiCad 10.0.5's cached courtyard rather than raw ring geometry. The
+pairing is by **courtyard layer, not by footprint side**: `F.CrtYd` and `B.CrtYd` stay independent,
+but two coincident `B.CrtYd` rectangles collide whichever sides their footprints sit on, which is
+what `kicad-cli` 10.0.5 reports and the one direction a keep-out may never err in
+([ADR-0097](../adr/0097-courtyard-layer-decides-the-side.md)). Unsupported topology fails before
+evaluation. Padless footprints remain unavailable as placement subjects, but supported orthogonal courtyards
 are retained as stationary collision envelopes and are excluded from candidate manifests.
 Direct model-generated KiCad mutation remains prohibited. The bounded file-level placement apply
 tool is separately operator-gated and placement-token-scoped; unsupported source constructs and
@@ -260,6 +283,21 @@ before evidence is accepted.
 Each schematic capability-store entry detaches and retains the exact bytes, digest, and size at
 insertion. Retrieval and aggregate accounting use that snapshot rather than a caller-owned artifact
 object, so later alias mutation cannot change identity or evade the byte ceiling.
+
+The excessive-agency evaluation (`scripts/evaluate_excessive_agency.py`, OWASP LLM06:2025) replays
+a digest-bound catalog of predeclared scenarios through the real MCP adapter. **Nothing in the
+server moved for it**: [ADR-0102](../adr/0102-an-evaluation-must-observe-a-permit.md) changed the
+evaluation only, and it is recorded here because it changes what a green artifact from that suite
+may be read as. A suite whose every row requires a refusal cannot distinguish a server that refuses
+correctly from one that refuses everything, so the catalog now predeclares an `authorized_write`
+outcome — one request the server is supposed to say yes to — alongside a `workspace_containment`
+family that attempts an absolute path, a `..` traversal and a symlink escape **with consent granted
+and a genuine token**, each requiring `invalid_request` *and* the outside board's bytes unchanged.
+Three report-level controls, counted in the same exit status, assert that the permit was exercised,
+that it was exercised outside the family the apply boundary was built on, and that every declared
+escape route was actually attempted; a control failure is not a weaker result than a scenario
+failure, because a scenario that did not run cannot fail. The suite's only authorized write lands
+in a temporary copy the harness made, outside the repository.
 
 Release authorization is also fail-closed. A release tag requires a dated changelog section for the
 same version and an append-only `Ready` release-ledger row naming the exact commit after its clean
