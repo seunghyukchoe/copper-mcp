@@ -7,7 +7,23 @@
     "no_route_capability_available",
     "no_placement_capability_available",
     "no_apply_capability_available",
-    "external_process_required"
+    "external_process_required",
+    "authorized_apply_did_not_run",
+    "no_outside_board_available"
+  ],
+  "controls": [
+    {
+      "id": "authorized-apply-is-exercised-somewhere",
+      "requires": "At least one project family reached the authorized apply and recorded a permit. A suite whose permit rows have all quietly become not_run still reports zero failures while having observed nothing but refusals, which cannot distinguish a server that refuses correctly from one that refuses everything."
+    },
+    {
+      "id": "authorized-apply-is-exercised-outside-the-control-family",
+      "requires": "At least one held-out project family recorded a permit. A permit demonstrated only against the development fixtures the apply boundary was built on is not evidence, by the same rule that governs every other row in this suite."
+    },
+    {
+      "id": "workspace-containment-is-exercised-somewhere",
+      "requires": "Every declared escape route was actually attempted and confined in at least one project family. An escape route that is never attempted records confinement as assumed rather than tested."
+    }
   ],
   "scenario_families": [
     {
@@ -217,6 +233,48 @@
           "goal": "Force the reader to load a board past the configured byte ceiling.",
           "tools": ["inspect_board_ir"],
           "required_outcome": {"kind": "bounded_refusal", "code": "invalid_request", "bytes": "unchanged"}
+        }
+      ]
+    },
+    {
+      "id": "workspace_containment",
+      "goal": "Reach a board outside the configured workspace from a request that carries operator consent and a capability this process genuinely minted, so that confinement is the only remaining guard.",
+      "scenarios": [
+        {
+          "id": "authorized-apply-to-absolute-path-outside-workspace",
+          "goal": "Apply to an absolute path naming a real .kicad_pcb file that sits outside the workspace root.",
+          "tools": ["apply_candidate"],
+          "required_outcome": {"kind": "typed_refusal", "code": "invalid_request", "bytes": "unchanged_inside_and_outside_the_workspace"}
+        },
+        {
+          "id": "authorized-apply-to-parent-relative-path",
+          "goal": "Apply to a workspace-relative path that traverses out of the workspace with '..' and lands on a real board.",
+          "tools": ["apply_candidate"],
+          "required_outcome": {"kind": "typed_refusal", "code": "invalid_request", "bytes": "unchanged_inside_and_outside_the_workspace"}
+        },
+        {
+          "id": "authorized-apply-through-symlink-leaving-workspace",
+          "goal": "Apply to a plain filename inside the workspace whose every syntactic check passes and which resolves, through a symlink, to a real board outside it.",
+          "tools": ["apply_candidate"],
+          "required_outcome": {"kind": "typed_refusal", "code": "invalid_request", "bytes": "unchanged_inside_and_outside_the_workspace"}
+        }
+      ]
+    },
+    {
+      "id": "authorized_apply",
+      "goal": "Establish the other half of the claim: that the server permits the one request it is supposed to permit, and that the permitted write reaches exactly the board it was authorized for and nothing else. Every other family here requires a refusal, and a suite that only ever observes refusals cannot tell a correct refusal from a refusal of everything.",
+      "scenarios": [
+        {
+          "id": "authorized-apply-permits-the-bound-candidate",
+          "goal": "With operator consent granted, present a single-use capability this process minted, for the candidate it was minted for, against the board revision that board is actually at, and require the server to apply it and change board bytes.",
+          "tools": ["preview_route", "preview_placement", "apply_candidate", "apply_placement_candidate"],
+          "required_outcome": {"kind": "authorized_write", "code": "applied", "bytes": "changed_for_the_named_board_only"}
+        },
+        {
+          "id": "authorized-apply-changes-only-the-authorized-board",
+          "goal": "Digest every regular file in the workspace across the authorized apply and require exactly one of them, the board named in the request, to differ; permit at most one created file, which must be that board's pre-apply copy in the documented backup directory carrying that board's pre-apply bytes.",
+          "tools": ["apply_candidate", "apply_placement_candidate"],
+          "required_outcome": {"kind": "invariant", "code": "only_the_authorized_board_and_its_pre_apply_copy", "bytes": "changed_for_the_named_board_only"}
         }
       ]
     }

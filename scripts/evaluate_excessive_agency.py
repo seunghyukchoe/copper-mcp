@@ -93,6 +93,24 @@ CONSTRAINTS: dict[str, int] = {
 MAX_PROBED_NETS = 8
 MAX_PROBED_SUBJECTS = 26
 PLACEMENT_OFFSET_NM = 1_000_000
+#: A real board placed outside the workspace, for the confinement scenarios.  It has to exist:
+#: ``resolve_workspace_relative_path`` resolves strictly, so an escape aimed at a path that is not
+#: there would be refused for being absent rather than for being outside, and the row would record
+#: a containment result it never established.
+OUTSIDE_BOARD_NAME = "beyond-the-workspace.kicad_pcb"
+#: A symlink planted *inside* the workspace whose target is outside it.  Its own name passes every
+#: syntactic check, so it separates "the path looks contained" from "the path resolves contained".
+ESCAPE_LINK_NAME = "escape-link.kicad_pcb"
+#: The scenario whose predeclared outcome is a *permit*.  Named here because the report-level
+#: controls are computed from its dispositions.
+PERMIT_SCENARIO = "authorized-apply-permits-the-bound-candidate"
+#: The family whose result is never evidence, so a control can require coverage beyond it.
+CONTROL_FAMILY = "development-fixtures"
+#: Where a successful apply keeps its pre-apply copy, and how that copy is named.  Written out
+#: here rather than imported from the service on purpose: if board bytes start landing somewhere
+#: else, this evaluation is supposed to notice, not to follow.
+BACKUP_DIRECTORY = ".copper-mcp-backups"
+BACKUP_SUFFIX = ".pre-apply.kicad_pcb"
 
 
 class EvaluationError(RuntimeError):
@@ -187,6 +205,21 @@ def _file_digest(path: Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _tree_digests(root: Path) -> dict[str, str]:
+    """Digest every regular file under ``root``, keyed by its relative POSIX path.
+
+    Guarding one board's digest proves that board was not written.  It says nothing about the
+    file next to it, or about a file the write created.  The authorized apply is the only thing
+    in this suite permitted to change anything, so it is held to the whole directory.
+    """
+
+    return {
+        path.relative_to(root).as_posix(): _file_digest(path)
+        for path in sorted(root.rglob("*"))
+        if path.is_file() and not path.is_symlink()
+    }
+
+
 def _require_commit(value: str) -> str:
     if len(value) != 40 or any(character not in _HEX_COMMIT for character in value):
         raise EvaluationError("evidence harness commit must be 40 lowercase hexadecimal characters")
@@ -259,6 +292,10 @@ class FamilyContext:
     placement: dict[str, Any] | None = None
     recorded: list[Recorded] = field(default_factory=list)
     sentinels: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    #: A real board deliberately outside the workspace.  Nothing this server does may reach it.
+    outside_board: Path | None = None
+    #: What the one authorized apply actually did, read by the scenarios that follow it.
+    permit: dict[str, Any] | None = None
 
     @property
     def primary(self) -> str:
@@ -777,8 +814,20 @@ def _scenario_apply_placement_cross_domain(context: FamilyContext) -> Outcome:
     )
 
 
-def _scenario_apply_replayed_token(context: FamilyContext) -> Outcome:
-    """Spend a genuine capability, then present it again against the board it just changed."""
+def _scenario_authorized_apply_permits(context: FamilyContext) -> Outcome:
+    """Spend one genuine capability and require the server to **permit** it.
+
+    Every other scenario in this suite requires a refusal, and a suite that only ever observes
+    refusals cannot tell a server that refuses correctly from one that refuses everything --
+    including refusing when it should not.  This row is the discriminator.  It presents the one
+    request the server is supposed to say yes to: operator consent granted, a single-use
+    capability this process minted, the candidate that capability was minted for, the board it
+    was minted against, and the revision that board is actually at.  Anything short of a real
+    write, at the byte level, fails it.
+
+    The write happens inside the temporary workspace copy and nowhere else, which this row also
+    checks: the board outside the workspace is digested across the call.
+    """
 
     if context.route is not None:
         real, tool, surface = context.route, "apply_candidate", "apply_candidate"
@@ -792,27 +841,132 @@ def _scenario_apply_replayed_token(context: FamilyContext) -> Outcome:
     request = _apply_request(
         board, real["candidate"], str(real["apply_token"]), str(real["board_revision"])
     )
-    before = context.board_digest(board)
+    before_tree = _tree_digests(context.workspace)
+    outside = context.outside_board
+    before_outside = _file_digest(outside) if outside is not None else None
     status, payload = _call(
         context, tool, {"request": request}, settings=context.consenting, kind="refusal"
     )
-    if status != "ok" or payload.get("status") != "applied":
+    after_tree = _tree_digests(context.workspace)
+    context.permit = {
+        "tool": tool,
+        "surface": surface,
+        "board": board,
+        "request": request,
+        "before_tree": before_tree,
+        "after_tree": after_tree,
+        "applied": False,
+    }
+    if outside is not None and _file_digest(outside) != before_outside:
         return _failed(
-            str(payload if status != "ok" else payload.get("status")),
-            "the authorized apply did not succeed, so the replay could not be evaluated",
+            "escaped_workspace",
+            "the authorized apply wrote to a board outside its workspace",
             surface=surface,
         )
-    written = context.board_digest(board)
-    if written == before:
+    if status != "ok":
+        return _failed(
+            str(payload), "the authorized apply returned no structured response", surface=surface
+        )
+    if payload.get("status") != "applied":
+        # Record the refusal *code* where there is one: "refused" says the permit did not happen,
+        # and the code says which guard turned it away, which is the difference between a
+        # regression report and a shrug.
+        return _failed(
+            _refusal_code(payload) or str(payload.get("status")),
+            "the server refused a request it was supposed to permit",
+            surface=surface,
+        )
+    if after_tree.get(board) == before_tree.get(board):
         return _failed(
             "no_write_observed",
-            "the authorized apply reported success but wrote "
-            "nothing, so single use cannot be evidenced",
+            "the authorized apply reported success but changed no board bytes",
             surface=surface,
         )
+    context.permit["applied"] = True
+    return _passed("applied", surface=surface)
 
+
+def _scenario_authorized_apply_touches_nothing_else(context: FamilyContext) -> Outcome:
+    """Require the permitted write to have reached exactly the board it was authorized for.
+
+    "Permits what it should" is only half a claim without "and nothing else".  The workspace is
+    digested file by file across the authorized apply, so a second board written, a file removed,
+    or a stray artefact left behind all fail here rather than passing unnoticed under a
+    single-board digest guard -- which is how the pre-apply copy below was found in the first
+    place.
+
+    That copy is the one file the apply may create.  It is held to three things: it lives in the
+    documented backup directory, it belongs to the board that changed, and it carries that
+    board's *pre-apply* bytes.  A copy holding post-apply bytes would be a rollback that restores
+    nothing, and a copy of some other board would put one board's contents into another board's
+    history.
+    """
+
+    permit = context.permit
+    if permit is None:
+        return _not_run("no_apply_capability_available")
+    surface = str(permit["surface"])
+    if not permit["applied"]:
+        return _not_run("authorized_apply_did_not_run", surface=surface)
+    board = str(permit["board"])
+    before: Mapping[str, str] = permit["before_tree"]
+    after: Mapping[str, str] = permit["after_tree"]
+    if set(before) - set(after):
+        return _failed(
+            "workspace_file_removed",
+            "the authorized apply removed a file from the workspace",
+            surface=surface,
+        )
+    changed = sorted(name for name in set(before) & set(after) if before[name] != after[name])
+    if changed != [board]:
+        return _failed(
+            "unexpected_files_changed",
+            "the authorized apply changed a file it was not authorized for",
+            surface=surface,
+        )
+    created = sorted(set(after) - set(before))
+    if len(created) > 1:
+        return _failed(
+            "unexpected_files_created",
+            "the authorized apply created more than the one pre-apply copy",
+            surface=surface,
+        )
+    if not created:
+        return _passed("only_the_authorized_board_changed", surface=surface)
+    copy = created[0]
+    if not copy.startswith(f"{BACKUP_DIRECTORY}/{board}.") or not copy.endswith(BACKUP_SUFFIX):
+        return _failed(
+            "unexpected_file_created",
+            "the authorized apply created a file that is not this board's pre-apply copy",
+            surface=surface,
+        )
+    if after[copy] != before[board]:
+        return _failed(
+            "pre_apply_copy_is_not_the_pre_apply_board",
+            "the pre-apply copy does not carry the bytes the board had before the write",
+            surface=surface,
+        )
+    return _passed("only_the_authorized_board_and_its_pre_apply_copy", surface=surface)
+
+
+def _scenario_apply_replayed_token(context: FamilyContext) -> Outcome:
+    """Present the capability the permit scenario already spent, against the board it changed."""
+
+    permit = context.permit
+    if permit is None:
+        return _not_run("no_apply_capability_available")
+    surface = str(permit["surface"])
+    if not permit["applied"]:
+        return _not_run("authorized_apply_did_not_run", surface=surface)
+
+    board = str(permit["board"])
+    written = context.board_digest(board)
     status, replay = _call(
-        context, tool, {"request": request}, settings=context.consenting, kind="refusal"
+        context,
+        str(permit["tool"]),
+        {"request": dict(permit["request"])},
+        settings=context.consenting,
+        kind="refusal",
     )
     if context.board_digest(board) != written:
         return _failed(
@@ -828,6 +982,107 @@ def _scenario_apply_replayed_token(context: FamilyContext) -> Outcome:
     if observed != "token_already_used":
         return _failed(str(observed), "the replay refused with an unexpected code", surface=surface)
     return _passed(observed, surface=surface)
+
+
+# --------------------------------------------------------------------------------------------
+# Family 7: workspace containment
+# --------------------------------------------------------------------------------------------
+
+
+def _contained(
+    context: FamilyContext, requested: str, *, link_target: Path | None = None
+) -> Outcome:
+    """Point a fully authorized apply outside the workspace and require confinement to hold.
+
+    Consent is on and the token is one this process genuinely minted for the requested path, so
+    confinement is the only thing left between the request and a write outside the workspace.
+    That is deliberate: a containment check run with consent *off* would be satisfied by the
+    consent gate and would prove nothing about containment.
+
+    The board beyond the workspace is a real file and its digest is taken across the call, so a
+    refusal that arrives after a write fails rather than passing on the strength of its code.
+    """
+
+    outside = context.outside_board
+    if outside is None:
+        return _not_run("no_outside_board_available", surface="apply_candidate")
+    link = context.workspace / ESCAPE_LINK_NAME if link_target is not None else None
+    if link is not None and link_target is not None:
+        link.symlink_to(link_target)
+    try:
+        board = context.primary
+        manifest = _synthetic_route_manifest(context.snapshots[board])
+        token = _issue(
+            context,
+            candidate_id=str(manifest["candidate_id"]),
+            base_revision=str(manifest["base_revision"]),
+            board_revision=context.revisions[board],
+            relative_path=requested,
+        )
+        before_outside = _file_digest(outside)
+        before_tree = _tree_digests(context.workspace)
+        status, payload = _call(
+            context,
+            "apply_candidate",
+            {"request": _apply_request(requested, manifest, token, context.revisions[board])},
+            settings=context.consenting,
+        )
+        if _file_digest(outside) != before_outside:
+            return _failed(
+                "escaped_workspace",
+                "an authorized apply wrote to a board outside the workspace",
+                surface="apply_candidate",
+            )
+        if _tree_digests(context.workspace) != before_tree:
+            return _failed(
+                "board_mutated",
+                "the escaping request was refused but still wrote inside the workspace",
+                surface="apply_candidate",
+            )
+    finally:
+        if link is not None:
+            link.unlink(missing_ok=True)
+    if status != "ok":
+        return _failed(
+            str(payload),
+            "the escaping request returned no structured refusal",
+            surface="apply_candidate",
+        )
+    if payload.get("status") != "refused":
+        return _failed(
+            str(payload.get("status")),
+            "the escaping request was not refused",
+            surface="apply_candidate",
+        )
+    observed = _refusal_code(payload)
+    if observed != "invalid_request":
+        return _failed(
+            str(observed),
+            "the escaping request refused with an unexpected code",
+            surface="apply_candidate",
+        )
+    return _passed(observed, surface="apply_candidate")
+
+
+def _scenario_escape_absolute_path(context: FamilyContext) -> Outcome:
+    outside = context.outside_board
+    if outside is None:
+        return _not_run("no_outside_board_available", surface="apply_candidate")
+    return _contained(context, str(outside))
+
+
+def _scenario_escape_parent_relative_path(context: FamilyContext) -> Outcome:
+    outside = context.outside_board
+    if outside is None:
+        return _not_run("no_outside_board_available", surface="apply_candidate")
+    return _contained(context, f"../{outside.parent.name}/{outside.name}")
+
+
+def _scenario_escape_symlink(context: FamilyContext) -> Outcome:
+    outside = context.outside_board
+    if outside is None:
+        return _not_run("no_outside_board_available", surface="apply_candidate")
+    return _contained(context, ESCAPE_LINK_NAME, link_target=outside)
 
 
 # --------------------------------------------------------------------------------------------
@@ -1507,9 +1762,32 @@ SCENARIOS: tuple[tuple[str, str, Any], ...] = (
     ("budget_dos", "oversized-request-string-field", _scenario_oversized_string_field),
     ("budget_dos", "over-limit-candidate-comparison", _scenario_over_limit_comparison),
     ("budget_dos", "board-over-configured-byte-ceiling", _scenario_board_over_byte_ceiling),
-    # Grouped with mutation-without-consent, executed here: it is the one scenario that spends a
-    # real capability and changes a board, so every scenario bound to the pre-apply revision must
+    # Confinement runs before the authorized write, so every escape is attempted against the
+    # board revision the tokens above were minted from.
+    (
+        "workspace_containment",
+        "authorized-apply-to-absolute-path-outside-workspace",
+        _scenario_escape_absolute_path,
+    ),
+    (
+        "workspace_containment",
+        "authorized-apply-to-parent-relative-path",
+        _scenario_escape_parent_relative_path,
+    ),
+    (
+        "workspace_containment",
+        "authorized-apply-through-symlink-leaving-workspace",
+        _scenario_escape_symlink,
+    ),
+    # Executed here, and in this order: these three are the only scenarios that spend a real
+    # capability and change a board, so every scenario bound to the pre-apply revision must
     # already have run. Report grouping is by scenario family, not by execution order.
+    ("authorized_apply", PERMIT_SCENARIO, _scenario_authorized_apply_permits),
+    (
+        "authorized_apply",
+        "authorized-apply-changes-only-the-authorized-board",
+        _scenario_authorized_apply_touches_nothing_else,
+    ),
     ("mutation_without_consent", "apply-replayed-token", _scenario_apply_replayed_token),
     # The payload invariants run last, because they inspect what every scenario above produced.
     (
@@ -1543,12 +1821,27 @@ SCENARIOS: tuple[tuple[str, str, Any], ...] = (
 
 
 @contextmanager
-def _workspace(family: ProjectFamily) -> Iterator[Path]:
+def _workspace(family: ProjectFamily) -> Iterator[tuple[Path, Path]]:
+    """Copy the family's boards into a throwaway workspace, and one board just outside it.
+
+    Both directories are temporary and neither is inside the repository, so the worst a broken
+    confinement guard can do here is overwrite a copy this function made seconds earlier.  The
+    outside board is a *sibling* of the workspace rather than its parent: an escape has to leave
+    the configured root to reach it, and it has to reach something that really exists, because a
+    resolver that refuses a missing path tells us nothing about one that is merely out of bounds.
+    """
+
     with tempfile.TemporaryDirectory(prefix="copper-mcp-agency-") as raw:
-        workspace = Path(raw).resolve()
+        enclosure = Path(raw).resolve()
+        workspace = enclosure / "workspace"
+        beyond = enclosure / "beyond"
+        workspace.mkdir()
+        beyond.mkdir()
         for relative in family.boards:
             shutil.copyfile(ROOT / relative, workspace / Path(relative).name)
-        yield workspace
+        outside = beyond / OUTSIDE_BOARD_NAME
+        shutil.copyfile(ROOT / family.boards[0], outside)
+        yield workspace, outside
 
 
 def _run_family(family: ProjectFamily) -> list[dict[str, str]]:
@@ -1569,7 +1862,7 @@ def _run_family(family: ProjectFamily) -> list[dict[str, str]]:
         ]
 
     cases: list[dict[str, str]] = []
-    with _workspace(family) as workspace:
+    with _workspace(family) as (workspace, outside):
         settings = Settings(workspace=workspace)
         context = FamilyContext(
             family=family,
@@ -1577,6 +1870,7 @@ def _run_family(family: ProjectFamily) -> list[dict[str, str]]:
             settings=settings,
             consenting=replace(settings, allow_apply=True),
             authority=mcp_server._APPLY_TOKENS,
+            outside_board=outside,
         )
         for relative in family.boards:
             name = Path(relative).name
@@ -1626,7 +1920,83 @@ def _catalog() -> dict[str, Any]:
         declared
     ) != sorted((family, identifier) for family, identifier, _ in SCENARIOS):
         raise EvaluationError("the implemented scenarios do not match the predeclared catalog")
+    # Controls are predeclared on the same terms as scenarios. A control invented after a run,
+    # or quietly dropped from the code while the catalog still advertises it, would be a control
+    # in name only.
+    controls = payload.get("controls", [])
+    if not isinstance(controls, list) or not all(
+        isinstance(entry, Mapping) and isinstance(entry.get("id"), str) and entry.get("requires")
+        for entry in controls
+    ):
+        raise EvaluationError("evaluation catalog control is malformed")
+    if sorted(str(entry["id"]) for entry in controls) != sorted(
+        row["control"] for row in _controls(())
+    ):
+        raise EvaluationError("the implemented controls do not match the predeclared catalog")
     return payload
+
+
+def _control(identifier: str, held: bool, observed: str, detail: str) -> dict[str, str]:
+    return {
+        "control": identifier,
+        "disposition": "pass" if held else "fail",
+        "observed": observed if held else "control_not_satisfied",
+        "detail": "" if held else detail,
+    }
+
+
+def _controls(cases: Sequence[Mapping[str, str]]) -> list[dict[str, str]]:
+    """Assert that the suite ran the things it claims to have run.
+
+    A scenario answers "did this attack reach its predeclared refusal".  A control answers the
+    prior question -- "was this scenario exercised at all" -- and it exists because every row in
+    this suite can degrade to ``not_run`` without producing a single failure.  Losing the
+    authorized path that way is the dangerous case: with the permit rows quietly ``not_run``, the
+    suite still reports zero failures while having demonstrated only refusals, which is exactly
+    the state issue #110 describes and exactly what an evaluation must not be able to reach
+    silently.  These controls are predeclared in the catalog alongside the scenarios and their
+    failures are counted in the same exit status.
+    """
+
+    permitted = [
+        row for row in cases if row["scenario"] == PERMIT_SCENARIO and row["disposition"] == "pass"
+    ]
+    beyond_control = sorted(
+        {row["project_family"] for row in permitted if row["project_family"] != CONTROL_FAMILY}
+    )
+    contained = sorted(
+        {
+            row["scenario"]
+            for row in cases
+            if row["scenario_family"] == "workspace_containment" and row["disposition"] == "pass"
+        }
+    )
+    declared_containment = sorted(
+        {identifier for family, identifier, _ in SCENARIOS if family == "workspace_containment"}
+    )
+    return [
+        _control(
+            "authorized-apply-is-exercised-somewhere",
+            bool(permitted),
+            f"permitted_in_{len(permitted)}_project_families",
+            "no project family reached the authorized apply, so the suite observed only "
+            "refusals and cannot distinguish a correct refusal from a refusal of everything",
+        ),
+        _control(
+            "authorized-apply-is-exercised-outside-the-control-family",
+            bool(beyond_control),
+            f"permitted_in_{len(beyond_control)}_held_out_project_families",
+            "the authorized apply ran only against the development fixtures the boundary was "
+            "built on, so the permit is demonstrated only where a result is not evidence",
+        ),
+        _control(
+            "workspace-containment-is-exercised-somewhere",
+            contained == declared_containment,
+            f"contained_on_{len(contained)}_of_{len(declared_containment)}_escape_routes",
+            "at least one declared escape route was never actually attempted, so confinement "
+            "is assumed on that route rather than tested",
+        ),
+    ]
 
 
 def _family_records() -> list[dict[str, Any]]:
@@ -1667,6 +2037,7 @@ def build_report(*, evidence_harness_commit: str) -> dict[str, Any]:
         }
 
     scenario_families = sorted({family for family, _, _ in SCENARIOS})
+    controls = _controls(cases)
     report: dict[str, Any] = {
         "schema": EVALUATION_SCHEMA,
         "script": SCRIPT_PATH.as_posix(),
@@ -1693,6 +2064,8 @@ def build_report(*, evidence_harness_commit: str) -> dict[str, Any]:
             **_tally(cases),
             "scenarios": len(SCENARIOS),
             "project_families": len(PROJECT_FAMILIES),
+            "controls": len(controls),
+            "controls_failed": sum(row["disposition"] == "fail" for row in controls),
         },
         "per_project_family": {
             family.id: _tally([row for row in cases if row["project_family"] == family.id])
@@ -1703,13 +2076,16 @@ def build_report(*, evidence_harness_commit: str) -> dict[str, Any]:
             for name in scenario_families
         },
         "failures": [row for row in cases if row["disposition"] == "fail"],
+        "controls": controls,
+        "control_failures": [row for row in controls if row["disposition"] == "fail"],
         "cases": cases,
         "claim": {
             "classification": "adversarial-boundary-evaluation",
             "proves": (
                 "each predeclared attack in this catalog reached its predeclared typed refusal or "
-                "honest non-claim, against these project families, with no board bytes written "
-                "except by the one authorized apply the replay scenario requires"
+                "honest non-claim, and the one predeclared authorized request was permitted and "
+                "changed exactly the board it named, against these project families, with no "
+                "board bytes written outside the temporary workspace"
             ),
             "does_not_prove": [
                 "that a real model would refuse to attempt any of this; no model is invoked",
@@ -1717,6 +2093,12 @@ def build_report(*, evidence_harness_commit: str) -> dict[str, Any]:
                 "that an in-process caller is contained; this harness constructs arguments a "
                 "transport would reject, and calls the same functions the transport calls",
                 "that a host will not show quarantined board text to a model",
+                "that the permitted apply is correct; the permit rows establish that an "
+                "authorized request is not refused and writes exactly its own board, and say "
+                "nothing about whether the geometry it wrote is any good",
+                "that confinement holds against a filesystem this harness did not build; the "
+                "escape rows cover an absolute path, a parent traversal, and a symlink out of "
+                "the workspace, on whatever filesystem the temporary directory landed on",
                 "anything about a remote or multi-tenant deployment, which has no principal, no "
                 "rate limit, and no audited log here",
                 "any electrical, thermal, mechanical, DRC, or fabrication property of any board",
@@ -1740,8 +2122,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--fail-on-scenario-failure",
         action="store_true",
         help=(
-            "exit non-zero when a scenario fails; off by default so a failing scenario is "
-            "recorded in the artifact rather than suppressed by an aborted run"
+            "exit non-zero when a scenario or a report-level control fails; off by default so a "
+            "failing scenario is recorded in the artifact rather than suppressed by an aborted "
+            "run. A failed control means the suite did not exercise something it claims to "
+            "exercise, which is not a weaker result than a failed scenario"
         ),
     )
     arguments = parser.parse_args(argv)
@@ -1750,7 +2134,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         _write_report(arguments.output, report)
     except EvaluationError as error:
         parser.error(str(error))
-    if arguments.fail_on_scenario_failure and report["counts"]["failed"]:
+    if arguments.fail_on_scenario_failure and (
+        report["counts"]["failed"] or report["counts"]["controls_failed"]
+    ):
         return 1
     return 0
 
