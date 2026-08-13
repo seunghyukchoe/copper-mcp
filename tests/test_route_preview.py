@@ -903,7 +903,14 @@ def test_preview_clamps_the_kicad_timeout_to_the_remaining_budget(
     _, settings = _workspace(tmp_path)
     observed: dict[str, int] = {}
 
-    def capture(path: str, candidate: object, profile: object, drc_settings: Settings) -> object:
+    def capture(
+        path: str,
+        candidate: object,
+        profile: object,
+        drc_settings: Settings,
+        *,
+        verified_fill: tuple[object, ...] = (),
+    ) -> object:
         observed["timeout"] = drc_settings.kicad_timeout_seconds
         raise KiCadCliError("stop after capturing the clamped budget")
 
