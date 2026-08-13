@@ -11,37 +11,40 @@ disagree, believe this table and file the discrepancy. Read live with
 `gh issue list -R seunghyukchoe/copper-mcp` and
 `gh api repos/seunghyukchoe/copper-mcp/milestones`.
 
-As of 2026-08-13:
+As of 2026-08-14, after the dispositions recorded in
+[the post-0.8.0 audit](audit/2026-08-14-post-0.8.0-audit.md):
 
 | Milestone | Closed | Open | State |
 |---|---|---|---|
-| M1 — KiCad inspection completion | 7 | 1 | Open. The sole remaining issue is [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116), retitled from the original real-board conversion survey to the M1 conversion tracker it had become ([D-191](ledgers/decision-ledger.md)). |
-| M2 — Routing depth | 4 | 1 | Open: [#65](https://github.com/seunghyukchoe/copper-mcp/issues/65) benchmark comparison against open baselines. [#63](https://github.com/seunghyukchoe/copper-mcp/issues/63) closed as already delivered ([ADR-0101](adr/0101-fill-currency-is-not-in-the-document.md)); its layered-seam follow-up is [#164](https://github.com/seunghyukchoe/copper-mcp/issues/164), which carries **no milestone**. |
-| M3 — Safe application completion | 0 | 1 | Open: [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68), IPC one-undo-commit apply. |
-| M4 — Scene, policy, and evaluation | 3 | 0 | **Complete.** Every tracked issue is closed. |
-| M5 — Performance and physics | 0 | 6 | Not started. |
+| M1 — KiCad inspection completion | 7 | 2 | Open: [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116), the conversion tracker retitled from the original real-board survey ([D-191](ledgers/decision-ledger.md)), and [#172](https://github.com/seunghyukchoe/copper-mcp/issues/172), the schema-versioning decision that now gates the custom-pad conversion arc. |
+| M2 — Routing depth | 4 | 3 | Open: [#65](https://github.com/seunghyukchoe/copper-mcp/issues/65) benchmark comparison against open baselines, [#164](https://github.com/seunghyukchoe/copper-mcp/issues/164) the layered fill-authority contract, and [#53](https://github.com/seunghyukchoe/copper-mcp/issues/53) parked behind an operator gate. [#63](https://github.com/seunghyukchoe/copper-mcp/issues/63) closed as already delivered ([ADR-0101](adr/0101-fill-currency-is-not-in-the-document.md)). |
+| M3 — Safe application completion | 0 | 3 | Open: [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68) IPC one-undo-commit apply, [#170](https://github.com/seunghyukchoe/copper-mcp/issues/170) DRC reproducibility, and [#52](https://github.com/seunghyukchoe/copper-mcp/issues/52) placement apply, whose file-backed half has shipped. **Entry criteria, not a start date** — see [M3](#m3--safe-candidate-application). |
+| M4 — Scene, policy, and evaluation | 3 | 1 | **No longer at zero open.** [#110](https://github.com/seunghyukchoe/copper-mcp/issues/110) — give the excessive-agency evaluation a reachable externally authored project family — was filed unmilestoned and belongs here ([R-148](ledgers/risk-register.md)). |
+| M5 — Verification and physics | 2 | 5 | Renamed from "Performance and physics". Open: [#87](https://github.com/seunghyukchoe/copper-mcp/issues/87) re-scoped to profiling, [#90](https://github.com/seunghyukchoe/copper-mcp/issues/90) and [#91](https://github.com/seunghyukchoe/copper-mcp/issues/91) parked behind [#99](https://github.com/seunghyukchoe/copper-mcp/issues/99), which is now the milestone's centre, and [#167](https://github.com/seunghyukchoe/copper-mcp/issues/167). [#88](https://github.com/seunghyukchoe/copper-mcp/issues/88) and [#89](https://github.com/seunghyukchoe/copper-mcp/issues/89) are closed by their own profiling gates. |
+| Audio Board Lab #001 — Physical validation | 0 | 1 | Open: [#8](https://github.com/seunghyukchoe/copper-mcp/issues/8). See [the Audio Board Lab gate](#audio-board-lab-001--physical-validation) — as written the issue would validate the board, and the thing that needs validating is the tool. |
 
-Two cautions about this table, because both have misled a reader before:
+Three cautions about this table, because the first two have misled a reader before:
 
-- **"M4 complete" means every issue tracked under M4 is closed. It does not mean the M4 section
-  below has no `[~]` items left.** Several genuinely remain — broader source fidelity, editor
-  authority, solving for a placement, and the policy-plugin work — and they are untracked rather
-  than done. A milestone closing is an accounting fact about the tracker.
-- Work filed outside a milestone appears in none of the counts above, and the M1 conversion arc is
-  the standing example. Of the three gaps filed after the M1 survey,
+- **A milestone's open count is an accounting fact about the tracker, not a statement about the
+  section below it.** M4 stood at zero open until #110 was filed into it on 2026-08-14, and nothing
+  about the engineering changed that day. Several M4 `[~]` items genuinely remain — broader source
+  fidelity, editor authority, solving for a placement, and the policy-plugin work — and they are
+  untracked rather than done.
+- Work filed outside a milestone appears in none of the counts above, and the M1 conversion arc was
+  the standing example. That gap is now mostly closed: of the gaps filed after the M1 survey,
   [#152](https://github.com/seunghyukchoe/copper-mcp/issues/152) and
-  [#153](https://github.com/seunghyukchoe/copper-mcp/issues/153) are now closed
+  [#153](https://github.com/seunghyukchoe/copper-mcp/issues/153) closed
   ([ADR-0099](adr/0099-pad-fabrication-properties-and-named-pad-refusals.md),
-  [ADR-0100](adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md)) and
-  [#141](https://github.com/seunghyukchoe/copper-mcp/issues/141) is answered by decision and staying
-  refused; none of them ever carried a milestone. Neither do
-  [#164](https://github.com/seunghyukchoe/copper-mcp/issues/164),
-  [#166](https://github.com/seunghyukchoe/copper-mcp/issues/166),
-  [#167](https://github.com/seunghyukchoe/copper-mcp/issues/167),
-  [#170](https://github.com/seunghyukchoe/copper-mcp/issues/170) or
-  [#172](https://github.com/seunghyukchoe/copper-mcp/issues/172), all open. See
-  [what does not convert](#what-does-not-convert). That gap between the tracker and the work is why
-  #116 was kept open rather than closed when its five named gaps all closed.
+  [ADR-0100](adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md)),
+  [#141](https://github.com/seunghyukchoe/copper-mcp/issues/141) closed with its decision label, and
+  #164, #167, #170 and #172 all now carry milestones. See
+  [what does not convert](#what-does-not-convert).
+- **One issue is deliberately unmilestoned:**
+  [#166](https://github.com/seunghyukchoe/copper-mcp/issues/166), the single-layer `verified_fill`
+  seam's missing shape validation. It needs a decision before it needs a milestone, and the decision
+  may be to close it. Containment is present on both paths, so the dangerous direction is already
+  gated; what is missing is type and size validation, whose failure mode is a loud exception rather
+  than wrong copper.
 
 ## M0 — Repository foundation (`0.1.x`, complete)
 
@@ -69,7 +72,7 @@ each for exactly one named construct:
 | Refusing saves | Construct | Issue |
 |---|---|---|
 | 4 | a custom-shape SMD pad — an envelope for it *is* derivable from the document, but a Board IR `Pad` is read over-approximating for its obstacle and under-approximating for its attachment core from the same three fields, and no single rectangle can be both ([ADR-0100](adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md)) | [#153](https://github.com/seunghyukchoe/copper-mcp/issues/153), closed |
-| 1 | a root copper graphic (`gr_text` on `F.Cu`) — **answered and staying refused**, see [ADR-0095](adr/0095-copper-text-has-no-derivable-envelope.md) | [#141](https://github.com/seunghyukchoe/copper-mcp/issues/141) |
+| 1 | a root copper graphic (`gr_text` on `F.Cu`) — **decided and staying refused**, see [ADR-0095](adr/0095-copper-text-has-no-derivable-envelope.md) | [#141](https://github.com/seunghyukchoe/copper-mcp/issues/141), closed |
 
 The count of refusing saves is measured; **the split between the two constructs is composed from two
 runs and not from one.** ADR-0100 measured three saves refusing for the custom pad, and ADR-0099
@@ -84,9 +87,17 @@ rounding ([ADR-0077](adr/0077-roundrect-corner-radius-rounding.md)) a third, net
 obstacle ([ADR-0078](adr/0078-netless-copper-as-obstacle.md)) a fourth, and reused KiCad UUIDs
 ([D-158](ledgers/decision-ledger.md)) the fifth.
 
+**Neither refusal is permanent, and neither is open work.** #141 closed on 2026-08-14 carrying the
+label the record supports — *decided by ADR-0095; five exit conditions written, none met, none in
+progress* — with the five conditions enumerated in the closing comment so that reopening is
+mechanical rather than a re-reading of the ADR. #153 closed the same way against ADR-0100. Because
+both are closed by decision, **no open issue owns reopening either**, and that is why each closure
+carries its exit conditions rather than only its verdict.
+
 **No "converts every board" result is claimed at any count**, and none should be stated until a
-re-measured survey supports it — nor is a target count a completion criterion, since one of the five
-refusals is permanent by decision. The counts above supersede earlier survey figures — including
+re-measured survey supports it — nor is a target count a completion criterion, since both remaining
+refusals are answered by decision rather than by missing work. The counts above supersede earlier
+survey figures — including
 #116's own original title, whose every number was wrong by the time it was read — rather than
 correcting them in place. Dated research notes and benchmark-ledger rows keep whatever they measured
 on the day they measured it. The corpus is a **live tree the designer edits during long runs**, so
@@ -175,18 +186,77 @@ any count from it is only as good as the digest sweep bracketing the run that pr
   global-configuration/state roots, and snapshot-confined file-table dependencies.
 - [x] Candidate preview without mutation.
 - [x] Version-skew and stale-board tests for the DRC adapter.
+- [ ] **Decide how a published schema changes** ([#172](https://github.com/seunghyukchoe/copper-mcp/issues/172)).
+  This is the gate on M1's one remaining conversion arc, not hygiene:
+  [ADR-0100](adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md) makes the custom-pad
+  envelope a `Pad` **type** fact, a type fact needs a schema bump, and a schema bump is exactly the
+  decision #172 owns. #149 already measured what a bump costs — envelope rather than payload, about
+  five tests and one codec call site. The post-0.8.0 audit swept every schema at every released tag
+  and found the practice is **four instances across three releases in two directions**, not one:
+  `audio-benchmark-catalog` at `v0.3.0` (a *required* key added — a narrowing), `board-ir` `0.2.0`
+  at `v0.7.0` (courtyard circles; `net_id` widened to accept `null`), `drc-summary` at `v0.7.0`
+  (a *required* key added — a narrowing), and `board-ir` `0.2.0` again at `v0.8.0` (the far-side
+  courtyard keys, #172's own instance). So a `0.2.0` document could have been produced under three
+  different accepted sets spanning `v0.5.0`–`v0.8.0`, and because the `footprint` definition carries
+  `additionalProperties: false`, a document produced under the newest is *rejected* by the oldest.
+  The decision is to bump to `0.3.0`, freeze `0.2.0` as published, correct nothing retroactively,
+  and say in the migration note that `0.2.0`-as-published spans three accepted sets — and it must
+  cover `drc-summary` and `audio-benchmark-catalog` too, since a Board IR-only decision fixes one of
+  three affected files. Two of the four instances break in the **narrowing** direction that #172's
+  own text does not discuss, so the drift gate that follows the decision has to fire both ways.
+- [ ] **Disclose the conversion counters an MCP client cannot see.** `ConversionResult` carries five
+  measured counts — roundrect rounding, unmodelled groups, edge-connector pads, unmodelled board
+  properties, unmodelled pad properties — and `BoardIrSummary` carries none of them. Four of the
+  five are the *disclosure* that four risk rows depend on
+  ([R-134](ledgers/risk-register.md), R-139, R-141 and R-144 each record that the conversion loses a
+  token and that the count is how a caller finds out), so a count that never reaches a client makes
+  those mitigations partial. The direction of error is under-disclosure. The fix is one
+  `unmodelled_counts` map on `BoardIrSummary` rather than five fields, gated by a contract test
+  asserting that every measured field on `ConversionResult` appears in it — so a sixth counter
+  becomes an entry rather than a contract change, which is precisely how this grew from three to
+  five without anyone noticing.
 
 ## M2 — Deterministic routing baseline
 
-Tracker state: 4 closed, 1 open — [#65](https://github.com/seunghyukchoe/copper-mcp/issues/65),
-benchmark comparison against open baselines.
+Tracker state: 4 closed, 3 open — [#65](https://github.com/seunghyukchoe/copper-mcp/issues/65)
+benchmark comparison against open baselines,
+[#164](https://github.com/seunghyukchoe/copper-mcp/issues/164) the layered fill-authority contract,
+and [#53](https://github.com/seunghyukchoe/copper-mcp/issues/53) parked.
 [#63](https://github.com/seunghyukchoe/copper-mcp/issues/63) closed on 2026-08-13 as **already
 delivered** by ADR-0039, ADR-0040 and ADR-0070 rather than by new capability: fill currency is not
 recoverable from the board document, so the model stays as it is and the single-layer core gained
 the two fail-closed shape gates the layered adapter already had
-([ADR-0101](adr/0101-fill-currency-is-not-in-the-document.md)). The layered seam's **public**
-fill-authority contract and `routing_effect` provenance are now
-[#164](https://github.com/seunghyukchoe/copper-mcp/issues/164), open and carrying no milestone.
+([ADR-0101](adr/0101-fill-currency-is-not-in-the-document.md)).
+
+### What closes M2
+
+Four conditions, replacing the earlier reading that M2 was "#65 only".
+
+1. **No capability the public surface cannot speak about.** The layered seam is the standing
+   example and [#164](https://github.com/seunghyukchoe/copper-mcp/issues/164) is the item.
+2. **A cross-router comparison artifact carrying typed results**, including `not_run` with a
+   reason. A typed `not_run` is a result; a missing row is not. `B-069` and `B-088` already record
+   FreeRouting as `not_run`, so what is owed is the artifact shape, not a causal comparison.
+3. **The closing measurement taken on a frozen, redistributable corpus** rather than on the
+   designer's live tree. [R-146](ledgers/risk-register.md) is why: the corpus grows and is edited
+   during long runs, so every figure taken from it decays silently.
+4. **No routing sentence claiming more than the 16-of-465 discipline supports** — `B-107`'s 465
+   route verdicts, of which 16 `routed` and 324 `already_connected`.
+
+**M2 can close without [#53](https://github.com/seunghyukchoe/copper-mcp/issues/53)**, whose own
+text says it does not authorize the operator's container-runtime installation, and **without
+[#167](https://github.com/seunghyukchoe/copper-mcp/issues/167)**: the corpus runner behind `B-107`
+never sets `include_fill_authority`, and the public `preview_layered_route` seam never supplies
+`verified_fill` at all, so the per-island ceiling never enters M2's closing measurement.
+
+**#164 carries an ordering constraint.** The layered candidate records no fill binding, so
+[ADR-0103](adr/0103-a-candidate-records-the-model-that-produced-it.md)'s replay invariant — a
+candidate records the model that produced it and refuses a replay under any other — is unenforced on
+that path. One of ADR-0103's two named triggers has already fired: the vertex-budget raise
+([ADR-0104](adr/0104-fill-vertex-budget-behind-a-parse.md)) landed in the same release. So the
+binding must land **with or before** any public `include_fill_authority` on the layered seam;
+shipping the flag first would make the divergence reachable through the public surface. No
+route-quality claim attaches to the work — `B-105` measured zero changed verdicts.
 
 - [~] Single two-pin A* routing with exact connectivity.
   - [x] Candidate-only integer four-neighbour reference with exact revision binding, deterministic
@@ -367,8 +437,38 @@ fill-authority contract and `routing_effect` provenance are now
 
 ## M3 — Safe candidate application
 
-Tracker state: 1 open — [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68), the IPC
-one-undo-commit apply. Both file-backed applies ship; the live one does not.
+Tracker state: 3 open — [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68) the IPC
+one-undo-commit apply, [#170](https://github.com/seunghyukchoe/copper-mcp/issues/170) DRC
+reproducibility, and [#52](https://github.com/seunghyukchoe/copper-mcp/issues/52) placement apply.
+Both file-backed applies ship; the live one does not.
+
+### Entry criteria, not a start date
+
+**M3 does not start next, and the earlier 50–80 hour estimate for it is retired.** Three
+independent reasons, none of which is a re-estimate:
+
+- **The scope half-shipped.** File-backed route apply and file-backed placement apply both landed,
+  so an estimate for "M3" now names a different milestone than the one that was estimated. #52 is
+  split rather than open: its file-backed half meets four of its six acceptance criteria, and its
+  live half waits on #68.
+- **Two of its criteria were never measured**, so part of the number was estimating work nobody had
+  characterised.
+- **The unit does not survive contact.** 50–80 hours is 68–109 agent runs against an observed 13
+  merges in the week after `v0.7.0`. The figure was never in the same currency as the delivery rate.
+
+What replaces it is four entry criteria. **Two of them are not agent-executable.**
+
+| | Criterion | Why it gates apply |
+|---|---|---|
+| **E1** | Legible reasons for a withheld apply token, as a closed literal set | [R-149](ledgers/risk-register.md): a caller cannot today distinguish "apply is off", "this board cannot be applied to", and "this candidate was routed under fill". An apply surface whose refusals are indistinguishable cannot be driven by an agent. |
+| **E2** | A DRC reproducibility policy ([#170](https://github.com/seunghyukchoe/copper-mcp/issues/170)) | An apply's evidence is DRC evidence, and `B-107` found DRC counts differing between two runs of identical bytes at the same commit. |
+| **E3** | One real-editor IPC observation, **or** a recorded park of #68 | `docs/handoff/project-state.md` records that no successful real-editor IPC oracle run has ever happened. **May need the operator** — the workstation IPC server is disabled, and enabling it is a change to the operator's machine. |
+| **E4** | Appliability re-measured on the frozen corpus | The current figure, 5 of 13 converting saves, is argued forward from a run on a tree that is not the current one. |
+
+The recommendation on E3, which the operator may take or decline, is to **park** #68: the mutation
+would be built on a transport this project has never successfully spoken to, and the protocol
+exposes no revision, no dirty flag and no conditional write. #68 is parked and deliberately **not
+closed**, because the decision is the operator's.
 
 - [x] Durable routing jobs and cancellation. The bounded internal ledger, single-worker lease
   recovery, redacted candidate manifests, file-backed layered request/result persistence,
@@ -420,9 +520,18 @@ one-undo-commit apply. Both file-backed applies ship; the live one does not.
 
 ## M4 — High-fidelity Circuit Scene and AI policy plugins
 
-Tracker state: **complete** — 3 closed, 0 open (issues #69, #72, #74). Read that as an accounting
-fact about the milestone, not as a claim that every `[~]` below is finished; the remaining ones are
-untracked, not done.
+Tracker state: 3 closed, 1 open. Issues #69, #72 and #74 are closed;
+[#110](https://github.com/seunghyukchoe/copper-mcp/issues/110) — give the excessive-agency
+evaluation a reachable externally authored project family — was filed unmilestoned on 2026-08-13 and
+moved here on 2026-08-14. **The milestone stood at zero open until then, and nothing about the
+engineering changed on the day it did**; read the count as an accounting fact about the tracker, not
+as a claim about the `[~]` items below, which remain untracked rather than done.
+
+[R-148](ledgers/risk-register.md) is what #110 answers: the excessive-agency suite can stop
+exercising its authorized path without failing, because every row degrades to `not_run` when its
+precondition is absent — honest per row and dangerous in aggregate. Measured, not hypothesised: 90
+passes become 76 with an empty `failures` list. The permit is evidenced on **one** held-out family,
+so a second independently authored family is what makes the aggregate legible.
 
 Circuit Scene IR covers both semantic and visual observation, and placement has a public preview
 surface judged by a deterministic legalizer. The bounded file-backed placement apply gate is now
@@ -534,23 +643,109 @@ placement, and the policy-plugin work.
   a corpus: more independently licensed families, a frozen policy comparison, and separate KiCad
   DRC evidence are required before this item can close.
 
-## M5 — Performance and physics
+## M5 — Verification and physics
 
-Tracker state: 0 closed, 6 open (issues #87, #88, #89, #90, #91, #99). Nothing in this milestone
-has landed; B-068 establishes only the measurement prerequisite.
+Renamed on 2026-08-14 from "Performance and physics". The old name promised acceleration work that
+nothing in the milestone had begun and that its own issues gated behind a profile nobody had taken.
+What the milestone actually contains, once those gates are honoured, is verification.
 
-- [~] Profile-guided Rust acceleration. B-068 establishes only the clean-worktree measurement
-  prerequisite: fixed routing, placement, and Circuit Scene fixtures; invariant output digests;
-  unprofiled timing samples; and a separate bounded cumulative profile. No Rust, SIMD, GPU, speedup,
-  cross-machine comparison, or public-contract change exists. Any acceleration experiment must
-  preserve the recorded outputs and beat a same-manifest baseline before this item advances.
-- [ ] Conflict-aware multicore scheduling.
-- [ ] Optional GPU candidate search after end-to-end profiling.
-- [~] Local exact repair for bounded congestion windows. The standalone deterministic operator and
-  predeclared 5 × 5 detour regression now exist (B-067), but negotiated-router integration does
-  not. Coordinator-derived window provenance, Board IR/candidate binding, physical-clearance and
-  reference replay gates, plus broader held-out evidence remain required.
-- [ ] SI/PI/thermal/DFM surrogate hooks with authoritative signoff.
+Tracker state: 2 closed, 5 open. [#99](https://github.com/seunghyukchoe/copper-mcp/issues/99) is now
+the centre; [#88](https://github.com/seunghyukchoe/copper-mcp/issues/88) and
+[#89](https://github.com/seunghyukchoe/copper-mcp/issues/89) are closed **by their own stated
+gates**, not by a judgement against multicore or GPU work, and each names the evidence that reopens
+it.
+
+- [~] **Profile-guided acceleration, re-scoped to profiling**
+  ([#87](https://github.com/seunghyukchoe/copper-mcp/issues/87)). B-068 establishes only the
+  clean-worktree measurement prerequisite: fixed routing, placement, and Circuit Scene fixtures;
+  invariant output digests; unprofiled timing samples; and a separate bounded cumulative profile. No
+  Rust, SIMD, GPU, speedup, cross-machine comparison, or public-contract change exists. The
+  re-scoping is forced by a measurement: [D-195](ledgers/decision-ledger.md) recorded **20.9 s of a
+  complete read's 24.2 s** on the largest corpus board spent in the parse rather than in the router,
+  and B-068's fixtures omit the parser entirely — so the milestone's one measurement prerequisite
+  does not measure the dominant cost. Extending the fixture set to cover the parse path, and
+  recording a profile that attributes cost by stage, is what this item is now.
+- [x] ~~Conflict-aware multicore scheduling~~ — **closed as a non-goal by its own gate**
+  (#88, closed 2026-08-14). The issue was "blocked on profiling evidence from the Rust-acceleration
+  issue to know where parallelism pays", and that evidence does not exist. Reopens if the profile
+  lands and shows candidate work dominating and parallelisable.
+- [x] ~~Optional GPU candidate search~~ — **closed as a non-goal by its own gate** (#89, closed
+  2026-08-14). It was "explicitly gated behind end-to-end profiling evidence", and neither conjunct
+  of that gate — candidate generation dominating, the CPU path failing to close the gap — is
+  established, because no end-to-end profile exists. Reopens on the profile plus a CPU attempt.
+- [~] **Verification harness for externally generated candidates**
+  ([#99](https://github.com/seunghyukchoe/copper-mcp/issues/99)) — the milestone's centre. Two
+  things are true today and both shape the first slice. The **disposer seam does not exist yet**:
+  `validate_candidate` normalizes an untrusted manifest and returns `valid` without reading
+  geometry, consulting a board or producing a verdict. And the committed tscircuit corpus
+  **carries no solution traces** — all 20 samples hold obstacles, connections, bounds, layer count
+  and minimum trace width, and no routed result — so the first foreign candidate must be
+  re-expressed from a run this project already made rather than read out of the corpus. The first
+  slice re-expresses B-088's 70 routed nets as foreign input, and its predeclared result has two
+  halves: every unperturbed candidate accepted, **and** four predeclared perturbations each refused
+  with a **distinct** typed code — a 1 nm shift into an obstacle, a dropped segment, a wrong-pad
+  endpoint, an undeclared-layer via. **The acceptance count alone is explicitly not the result**: a
+  seam that accepts all 70 and refuses nothing has demonstrated only that it parses.
+- [~] **Local exact repair for bounded congestion windows, parked behind #99**
+  ([#90](https://github.com/seunghyukchoe/copper-mcp/issues/90)). The standalone deterministic
+  operator and predeclared 5 × 5 detour regression exist (B-067), but negotiated-router integration
+  does not. Parked rather than scheduled because repair is a **proposer**, and integrating one into
+  the deterministic core before the core can dispose a proposal inverts the invariant the project is
+  built on. Coordinator-derived window provenance, Board IR/candidate binding, physical-clearance
+  and reference replay gates, plus broader held-out evidence, all remain required afterwards.
+- [ ] **SI/PI/thermal/DFM surrogate hooks with authoritative signoff, parked behind #99**
+  ([#91](https://github.com/seunghyukchoe/copper-mcp/issues/91)). The half of this that carries the
+  safety property is the signoff, not the surrogate — any claim surfaced to a caller comes from an
+  authoritative tool run or is declared a non-claim — and that is the same evidence-binding contract
+  #99 has to define first. Design the hook contract against #99's vocabulary rather than inventing a
+  second one.
+- [ ] **The ordered-layer per-island fill ceiling**
+  ([#167](https://github.com/seunghyukchoe/copper-mcp/issues/167)), parked with a paired-calibration
+  requirement: the per-island ceiling and `max_obstacle_checks` must be sized **together**, in the
+  style of B-094 and B-108, because the pairwise-contact cost is linear in ring vertices per test.
+  **No route-quality justification is admissible** — B-105 measured the single-layer fill shrink's
+  benefit on the corpus at zero (2 connectivity improvements, 6 budget regressions, 0 routes
+  unlocked). One correction to the issue's own text, recorded in its comment thread: an over-ceiling
+  island does **not** fall back to the zone's conservative outline envelope — the layered adapter
+  validates fill at the input boundary before any snapshot work, so a single over-ceiling island
+  refuses the **whole request**. The direction stays refusal-side and safe, but the graceful
+  per-island degradation the issue describes would have to be built, not preserved.
+
+## Audio Board Lab #001 — Physical validation
+
+Tracker state: 0 closed, 1 open — [#8](https://github.com/seunghyukchoe/copper-mcp/issues/8),
+validate the CopperTone stereo line buffer.
+
+### The gate, and why the issue as written does not carry it
+
+**As written, #8 would validate the board. The thing that needs validating is the tool.** A
+physical board that works proves the designer's work; it proves nothing about CopperMCP unless
+CopperMCP contributed a capability the tool owns. The excessive-agency evaluation makes the gap
+concrete: it records `no_apply_capability_available` on seven of its eight not-run rows, so the
+apply path — the one capability whose correctness a physical board could actually witness — is not
+being exercised at all.
+
+Four pre-conditions, in order.
+
+- [ ] **Close [R-033](ledgers/risk-register.md) first.** The committed CopperTone board's
+  mounting-hole rule areas were generated as octagons **inscribed** at the required 2.85 mm keep-out
+  radius, so their edges sit 0.2169 mm inside the requirement and copper may legally approach closer
+  than the constraint intends. The generator is already fixed; the committed board is not.
+  Regeneration moves coordinates, and **that invalidates every measurement recorded against the
+  board's current revision digest** — so the enumeration of those records comes first and the
+  regeneration is sized from it, not before it.
+- [ ] **Give CopperTone a capability the tool owns.** Concretely: a derivative with named nets left
+  unrouted → `preview_route` → apply under a real token, so the copper on the physical board came
+  from CopperMCP. The DRC half of that evidence is qualified under the reproducibility policy
+  ([#170](https://github.com/seunghyukchoe/copper-mcp/issues/170)), not published as a bare count.
+- [ ] **Decide `ComponentKind`.** It admits exactly `resistor` and `capacitor_unpolarized` today, so
+  an OPA1656 is inexpressible in Circuit Intent. Either widen the kind or record the manual path —
+  but record which, because the lab's build steps depend on the answer.
+- [ ] **Write the gate into #8 itself**, so the issue's acceptance criteria ask for tool validation
+  rather than board validation.
+
+One claim this section deliberately does not make: **"tier1-rev-a converts" is not verifiable from
+the published records**, which name no boards on purpose. Nothing above depends on it.
 
 ## M6 — Sustainable open-source project and supply-chain maturity (OpenSSF-informed)
 

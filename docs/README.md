@@ -50,6 +50,14 @@ contract.
   release records, including the ID-allocation convention.
 - [Research surveys](research/README.md) — the dated literature and licensing passes that ground
   each engineering arc.
+- [Post-0.8.0 audit and improvement plan](audit/2026-08-14-post-0.8.0-audit.md) — a dated audit at
+  the `v0.8.0` authorization commit: the correctness ranking (none of the four open issues is in the
+  forbidden class), which published claims still rest on unauditable or irreproducible measurements,
+  the four schema-drift instances behind
+  [#172](https://github.com/seunghyukchoe/copper-mcp/issues/172), and the ordered improvement plan
+  whose every item names the check that proves it done. Nine of its items carry **no estimate**, on
+  the rule that converting one without running its measure-first sub-item is the finding rather than
+  the fix. A snapshot, not a living document.
 - [Committed mutation specs](mutants/README.md) — the anchors, replacements and mutant→killing-test
   mappings behind every mutation claim made after
   [ADR-0098](adr/0098-reproducible-mutation-evidence.md). A kill count with no spec here is prose,
