@@ -117,6 +117,36 @@ never copper dropped — and sizing that ceiling belongs to
 
 ### Documentation
 
+- **Every reader of a Board IR pad's geometry is now enumerated, and three of them are reading in
+  the wrong direction** ([pad geometry reader survey](docs/research/pad-geometry-reader-survey-v1.md),
+  [D-203](docs/ledgers/decision-ledger.md), [B-112](docs/ledgers/benchmark-ledger.md),
+  [R-156](docs/ledgers/risk-register.md), plan item P3.3a,
+  [issue #116](https://github.com/seunghyukchoe/copper-mcp/issues/116)).
+  [ADR-0100](docs/adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md) refuses the
+  `custom` pad shape on the claim that a `Pad`'s three geometry fields are read in both directions
+  of error, and names **three** readers; `R-145` records that nobody had checked that was the set.
+  Two sweeps — by field access and by accessor call, the second following stored
+  `_PlacedPad.bounds`/`.core` dataclass fields to consumers three hops from any field name — find
+  **23 sites in 14 modules**: 8 needing **over**, 3 needing **under**, 4 needing **exact** where
+  neither region answers, 5 carriers, and **3 whose direction requirement is already unsatisfied**.
+  `placement/legalizer.py::_outline_containment` and `::_keepout_respect` publish **`violated`**
+  from an over-approximating box — the false-claim direction under ADR-0075/ADR-0080, because
+  `bbox(copper) ⊆ outline` is strictly stronger than `copper ⊆ outline` — and `::_resolve_bounds`
+  feeds `rect_inside_ring` (needs under) and `rect_touches_ring` (needs over) from the same call.
+  This **corrects one sentence** of the custom pad envelope note's §5, which recorded both
+  containment verdicts as unaffected. ADR-0100's decision stands and is strengthened.
+  **No code changes**: conversion is 13 of 18 before and after, no `Pad` field, schema, codec or
+  reader moves, and P3.3 is deliberately not attempted — see the entry below for why.
+- **A distinct pad envelope would convert nothing today, and that is measured rather than assumed**
+  ([B-112](docs/ledgers/benchmark-ledger.md)). The custom pad is now the live front blocker on 4 of
+  the 18 corpus saves, the `(property …)` blocker ADR-0100 reported having been cleared by
+  [ADR-0099](docs/adr/0099-pad-fabrication-properties-and-named-pad-refusals.md). With it
+  neutralised in a throwaway in-memory rewrite — deliberately unsound, never written to any tree or
+  board — **all four refuse immediately on `pad field 'thermal_bridge_angle' is unsupported`**, and
+  two of the four then hit further topology refusals. So P3.3 shipped perfectly converts **0 of 18**
+  additional saves, and a perfect P3.3 is indistinguishable from a broken one until
+  `thermal_bridge_angle` is resolved. Sixth and seventh instances of one refusal masking the next;
+  reported and filed, **never counted as progress**.
 - **PCBench is recorded as not redistributable, correcting an earlier determination.** The corpora
   README and the open-baseline research note both recorded PCBench as "MIT, redistributable with
   attribution". Its `LICENSE` is verbatim MIT, but PCBench aggregates 1,018 other repositories and
