@@ -649,6 +649,10 @@ class McpSurfaceTests(unittest.TestCase):
             self.assertIn(verdict, description)
         self.assertIn("every verdict", description)
         self.assertIn("apply token is not proof", description)
+        self.assertIn("preference/ranking evidence", description)
+        self.assertIn("does not block preview or apply", description)
+        self.assertIn("attachment core", description)
+        self.assertIn("obstacle envelope", description)
         schema = tool.output_schema
         assert isinstance(schema, dict)
         self.assertIs(schema["additionalProperties"], False)

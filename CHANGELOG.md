@@ -22,7 +22,10 @@ All notable changes are documented here. The format follows
   mutants are killed; no Board IR type, schema, accepted board construct, board byte or content
   address changes. The model-facing `preview_placement` description enumerates all four
   three-valued verdicts and requires all-proven consumers to inspect each one; candidate
-  publication or an apply token is not presented as boundary proof.
+  publication or an apply token is not presented as boundary proof. It also states the existing
+  rule contract explicitly: rules are preference/ranking evidence rather than legality gates, and
+  a pad region `keep_in` evaluates its attachment core while `keep_out` evaluates its obstacle
+  envelope.
 - **Board IR now validates and accepts pad `thermal_bridge_angle` as a typed non-claim**
   ([issue #186](https://github.com/seunghyukchoe/copper-mcp/issues/186), `D-205`, `R-158`).
   KiCad uses the decimal-degree value only while deriving thermal-relief spokes; it does not move

@@ -892,6 +892,10 @@ def preview_placement(request: PlacementPreviewToolRequest) -> PlacementPreviewT
     side - and name objects only by the references a scene already returned. Proposals are
     anchored the same way: an offset from another object's edge or centre, never an absolute
     coordinate. Positions in the response are derived here and snapped to the placement grid.
+    Rules are preference/ranking evidence, not legality gates: a violated rule remains in the
+    candidate and does not block preview or apply. For a pad subject, region ``keep_in`` evaluates
+    the under-approximating attachment core while ``keep_out`` evaluates the over-approximating
+    obstacle envelope; they deliberately answer different policy questions.
 
     A ``previewed`` result carries an immutable candidate with four independent deterministic
     legality verdicts. All four are three-valued: ``pad_overlap``, ``outline_containment``,
