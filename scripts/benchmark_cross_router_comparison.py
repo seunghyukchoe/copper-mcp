@@ -38,34 +38,31 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import platform
 import shutil
 import subprocess
 import sys
-import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from copper_mcp.routing import ROUTER_VERSION, ROUTING_POLICY
 from scripts.benchmark_simple_route_json_corpus import (
     CORPUS,
-    FIXED_GRID_STEP_NM,
-    POLICIES,
-    ROUTER_LIMITS,
-    SEED,
     CorpusBenchmarkError,
     load_corpus,
-    run_configuration,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = "scripts/benchmark_cross_router_comparison.py"
-CORPUS_RUNNER_PATH = "scripts/benchmark_simple_route_json_corpus.py"
+CORPUS_ARTIFACT_PATH = "benchmarks/results/routing/2026-08-06-simple-route-json-corpus-v1.json"
+CORPUS_ARTIFACT = ROOT / CORPUS_ARTIFACT_PATH
 DEFAULT_OUTPUT = ROOT / "benchmarks/results/routing/2026-08-14-cross-router-comparison-v1.json"
 REPORT_SCHEMA = "copper-mcp/benchmark/cross-router-comparison/v1"
+CORPUS_REPORT_SCHEMA = "copper-mcp/benchmark/simple-route-json-corpus/v1"
 RESEARCH_NOTE = "docs/research/open-baseline-benchmarks-v1.md"
+RECORDED_SUBJECT_CONFIGURATIONS = frozenset({"divisor-aligned", "fixed"})
 
 #: The metrics every row of the table reports, defined once so a baseline added later lands
 #: comparable rather than adjacent.  It is a closed tuple: a metric not named here does not appear
@@ -192,7 +189,7 @@ class BaselineRouter:
     determination_row: str
     #: ``licence`` or ``environment`` — which kind of §3 fact keeps this row unmeasured.
     reason_kind: str
-    reason: str
+    reason_context: str
     preconditions: tuple[Precondition, ...]
     #: Recorded even for a row that is not run, because it constrains what the row could mean if
     #: it ever were run.
@@ -227,7 +224,14 @@ class BaselineRouter:
         if unmet:
             row["status"] = "not_run"
             row["reason_kind"] = self.reason_kind
-            row["reason"] = self.reason
+            row["reason"] = (
+                f"{self.reason_context} Unmet preconditions observed in this recording: "
+                + "; ".join(
+                    f"{entry['name']}: {entry['description']}"
+                    for entry in preconditions
+                    if not entry["satisfied"]
+                )
+            )
             row["what_would_change_it"] = [
                 entry["description"] for entry in preconditions if not entry["satisfied"]
             ]
@@ -263,12 +267,11 @@ BASELINE_ROSTER: tuple[BaselineRouter, ...] = (
             "out-of-process baseline only, and not installed in the recording environment"
         ),
         reason_kind="environment",
-        reason=(
-            "FreeRouting is not installed in the recording environment. Its GPL-3.0 licence "
-            "permits an out-of-process baseline only — linking or vendoring it into this "
-            "Apache-2.0 repository would be licence-incompatible — and the contained provider "
-            "that would supply it, issue #53, is parked behind an operator gate whose own text "
-            "says the issue does not authorize the container-runtime installation it needs. No "
+        reason_context=(
+            "FreeRouting's GPL-3.0 licence permits an out-of-process baseline only; linking or "
+            "vendoring it into this Apache-2.0 repository would be licence-incompatible. The "
+            "contained provider that could supply it, issue #53, remains behind an operator gate "
+            "whose own text does not authorize the container-runtime installation it needs. No "
             "number is estimated, inferred, or carried over from B-069."
         ),
         preconditions=(
@@ -315,12 +318,11 @@ BASELINE_ROSTER: tuple[BaselineRouter, ...] = (
             "license key, GitHub API license: null — all rights reserved, nothing redistributed"
         ),
         reason_kind="licence",
-        reason=(
-            "The repository carries no licence at all, so its solvers are all rights reserved: "
-            "they may not be vendored, committed, or redistributed in this project's sdist, and "
-            "this project does not run third-party code it has no licence to hold. The "
-            "repository was archived on 2025-08-15, so the licence is unlikely to change. Its "
-            "format specification is cited by the import adapter; no file of it is copied."
+        reason_context=(
+            "At the reviewed revision the repository carried no licence, so its solvers were all "
+            "rights reserved and could not be vendored, committed, redistributed, or run from "
+            "this project. It was archived on 2025-08-15. Its format specification is cited by "
+            "the import adapter; no solver file is copied."
         ),
         preconditions=(
             Precondition(
@@ -342,11 +344,10 @@ BASELINE_ROSTER: tuple[BaselineRouter, ...] = (
             "evaluation code are CC-BY-4.0; announced, not released"
         ),
         reason_kind="licence",
-        reason=(
-            "The paper states its datasets and evaluation code 'will be released on a public "
-            "repository upon publication'. No GitHub, HuggingFace, or Zenodo host exists. There "
-            "is nothing to fetch, so there is nothing to run: recorded as announced rather than "
-            "released. The CC0 on the arXiv submission covers the paper, not the code."
+        reason_context=(
+            "The paper announces that its datasets and evaluation code will be released on a "
+            "public repository upon publication; the reviewed evidence contains no released "
+            "artifact. The CC0 on the arXiv submission covers the paper, not the code."
         ),
         preconditions=(
             Precondition(
@@ -476,39 +477,106 @@ def check_roster(rows: tuple[dict[str, Any], ...]) -> None:
             )
 
 
-def subject_row(
-    samples: tuple[tuple[str, bytes], ...], repetitions: int
-) -> tuple[dict[str, Any], dict[str, float]]:
-    """Measure CopperMCP's single-layer router on the problem set, under both grid policies."""
+def _load_recorded_subject(path: Path = CORPUS_ARTIFACT) -> dict[str, Any]:
+    """Load B-088 and verify its identity before using any of its measurements.
+
+    The comparison table is a view over the committed B-088 measurement, not another benchmark
+    run.  Verifying the self-digest here makes that distinction executable: edited or substituted
+    evidence is refused before a row is built.
+    """
+
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise CrossRouterComparisonError(f"cannot load the B-088 artifact: {error}") from error
+    if not isinstance(document, dict):
+        raise CrossRouterComparisonError("the B-088 artifact root is not an object")
+    if document.get("schema") != CORPUS_REPORT_SCHEMA:
+        raise CrossRouterComparisonError("the B-088 artifact has an unexpected schema")
+    recorded_run_id = document.get("run_id")
+    unsigned = {key: value for key, value in document.items() if key != "run_id"}
+    canonical = json.dumps(
+        unsigned, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode()
+    expected_run_id = "sha256:" + hashlib.sha256(canonical).hexdigest()
+    if recorded_run_id != expected_run_id:
+        raise CrossRouterComparisonError("the B-088 artifact fails its self-digest")
+    return document
+
+
+def subject_row(recorded: Mapping[str, Any]) -> dict[str, Any]:
+    """Project B-088's committed result into the common comparison protocol."""
+
+    metrics = recorded.get("metrics")
+    timing = recorded.get("timing")
+    configuration = recorded.get("configuration")
+    if not isinstance(metrics, dict) or not isinstance(timing, dict):
+        raise CrossRouterComparisonError("the B-088 artifact omits metrics or timing")
+    if not isinstance(configuration, dict):
+        raise CrossRouterComparisonError("the B-088 artifact omits its configuration")
+    raw_configurations = metrics.get("configurations")
+    raw_wall_times = timing.get("mean_wall_seconds")
+    if not isinstance(raw_configurations, dict) or not isinstance(raw_wall_times, dict):
+        raise CrossRouterComparisonError("the B-088 artifact omits configurations or wall times")
+    if set(raw_configurations) != RECORDED_SUBJECT_CONFIGURATIONS:
+        raise CrossRouterComparisonError(
+            "the B-088 artifact carries an unexpected configuration set"
+        )
+    if set(raw_configurations) != set(raw_wall_times):
+        raise CrossRouterComparisonError(
+            "the B-088 artifact does not carry one wall-time metric per configuration"
+        )
+    router_version = configuration.get("router_version")
+    routing_policy = configuration.get("routing_policy")
+    repetitions = timing.get("repetitions")
+    if not isinstance(router_version, str) or not router_version:
+        raise CrossRouterComparisonError("the B-088 artifact omits its router version")
+    if not isinstance(routing_policy, str) or not routing_policy:
+        raise CrossRouterComparisonError("the B-088 artifact omits its routing policy")
+    if not isinstance(repetitions, int) or isinstance(repetitions, bool) or repetitions < 1:
+        raise CrossRouterComparisonError("the B-088 artifact carries an invalid repetition count")
 
     configurations: dict[str, Any] = {}
-    wall_times: dict[str, float] = {}
-    for policy in POLICIES:
-        first: dict[str, Any] | None = None
-        elapsed = 0.0
-        for _ in range(repetitions):
-            started = time.perf_counter()
-            metrics = run_configuration(samples, policy)
-            elapsed += time.perf_counter() - started
-            if first is None:
-                first = metrics
-            elif metrics != first:
-                raise CrossRouterComparisonError(
-                    f"deterministic replay diverged for grid policy {policy.name}"
-                )
-        assert first is not None
-        configurations[policy.name] = _protocol_metrics(first)
-        wall_times[policy.name] = elapsed / repetitions
+    for name, raw_configuration in raw_configurations.items():
+        if not isinstance(name, str) or not isinstance(raw_configuration, dict):
+            raise CrossRouterComparisonError("the B-088 artifact carries a malformed configuration")
+        raw_wall_time = raw_wall_times[name]
+        if (
+            not isinstance(raw_wall_time, int | float)
+            or isinstance(raw_wall_time, bool)
+            or not math.isfinite(raw_wall_time)
+            or raw_wall_time < 0
+        ):
+            raise CrossRouterComparisonError(
+                f"the B-088 artifact carries an invalid wall time for {name}"
+            )
+        try:
+            projected = _protocol_metrics(raw_configuration)
+        except (KeyError, TypeError, ValueError) as error:
+            raise CrossRouterComparisonError(
+                f"the B-088 artifact carries invalid metrics for {name}: {error}"
+            ) from error
+        projected["mean_wall_seconds"] = raw_wall_time
+        configurations[name] = projected
+
     return {
         "id": "coppermcp-astar-grid",
         "role": "subject",
         "project": "this repository",
-        "version_considered": ROUTER_VERSION,
+        "version_considered": router_version,
         "license_spdx": "Apache-2.0",
-        "routing_policy": ROUTING_POLICY,
+        "routing_policy": routing_policy,
         "status": "measured",
         "results": configurations,
-    }, wall_times
+        "measurement_provenance": {
+            "artifact": CORPUS_ARTIFACT_PATH,
+            "artifact_run_id": recorded["run_id"],
+            "artifact_sha256": _file_digest(CORPUS_ARTIFACT),
+            "source_commit": recorded["source_commit"],
+            "environment": recorded["environment"],
+            "repetitions": repetitions,
+        },
+    }
 
 
 def _protocol_metrics(configuration: dict[str, Any]) -> dict[str, Any]:
@@ -591,8 +659,39 @@ def problem_set(manifest: dict[str, Any], samples: tuple[tuple[str, bytes], ...]
     }
 
 
+def check_recorded_problem_set(
+    recorded: Mapping[str, Any], current_problem_set: Mapping[str, Any]
+) -> None:
+    """Refuse to label B-088 as a replay if the verified corpus no longer matches it."""
+
+    metrics = recorded.get("metrics")
+    if not isinstance(metrics, dict) or metrics.get("deterministic_replays") is not True:
+        raise CrossRouterComparisonError("B-088 does not record deterministic replays")
+    recorded_corpus = metrics.get("corpus")
+    if not isinstance(recorded_corpus, dict):
+        raise CrossRouterComparisonError("B-088 omits its corpus identity")
+    identity_fields = (
+        "corpus_id",
+        "upstream_repository",
+        "upstream_commit",
+        "license_spdx",
+        "license_sha256",
+        "committed_subset_rule",
+        "committed_boards",
+        "upstream_sample_count",
+    )
+    mismatched = [
+        field
+        for field in identity_fields
+        if recorded_corpus.get(field) != current_problem_set.get(field)
+    ]
+    if mismatched:
+        raise CrossRouterComparisonError(
+            "B-088 was recorded on a different corpus identity: " + ", ".join(mismatched)
+        )
+
+
 def build_report(
-    repetitions: int = 2,
     corpus: Path = CORPUS,
     precondition_observations: Mapping[str, Mapping[str, bool]] | None = None,
 ) -> dict[str, Any]:
@@ -605,11 +704,12 @@ def build_report(
     difference, not the code's.
     """
 
-    if not 1 <= repetitions <= 8:
-        raise ValueError("repetitions must be between 1 and 8")
     check_protocol()
     manifest, samples = load_corpus(corpus)
-    subject, wall_times = subject_row(samples, repetitions)
+    recorded_subject = _load_recorded_subject()
+    current_problem_set = problem_set(manifest, samples)
+    check_recorded_problem_set(recorded_subject, current_problem_set)
+    subject = subject_row(recorded_subject)
     baseline_rows = tuple(
         baseline.resolve(
             None
@@ -625,18 +725,22 @@ def build_report(
         "schema": REPORT_SCHEMA,
         "date_utc": "2026-08-14",
         "source_commit": _git_commit(),
-        "environment": {"platform": platform.platform(), "python": sys.version.split()[0]},
+        "environment": {
+            "table_builder": {
+                "platform": platform.platform(),
+                "python": sys.version.split()[0],
+            },
+            "subject_measurement": recorded_subject["environment"],
+        },
         "configuration": {
-            "router_version": ROUTER_VERSION,
-            "routing_policy": ROUTING_POLICY,
-            "router_limits": dict(ROUTER_LIMITS),
-            "fixed_grid_step_nm": FIXED_GRID_STEP_NM,
-            "seed": SEED,
-            "runner_sha256": _file_digest(ROOT / SCRIPT_PATH),
-            "corpus_runner_sha256": _file_digest(ROOT / CORPUS_RUNNER_PATH),
+            "comparison_runner_sha256": _file_digest(ROOT / SCRIPT_PATH),
+            "subject_artifact": CORPUS_ARTIFACT_PATH,
+            "subject_artifact_run_id": recorded_subject["run_id"],
+            "subject_artifact_sha256": _file_digest(CORPUS_ARTIFACT),
+            "subject_measurement": recorded_subject["configuration"],
         },
         "metrics": {
-            "problem_set": problem_set(manifest, samples),
+            "problem_set": current_problem_set,
             "protocol": {
                 "common_input": (
                     "SimpleRouteJson bytes, verified against the corpus digest manifest before "
@@ -663,13 +767,7 @@ def build_report(
             "declared_rows": 1 + len(BASELINE_ROSTER),
             "comparison_supported": measured >= 2,
             "corpora_considered": list(CORPORA_CONSIDERED),
-            "deterministic_replays": True,
-        },
-        "timing": {
-            "repetitions": repetitions,
-            "mean_wall_seconds": {
-                name: round(value, 3) for name, value in sorted(wall_times.items())
-            },
+            "deterministic_replays": recorded_subject["metrics"]["deterministic_replays"],
         },
         "not_claimed": [
             "any comparison between routers. Every declared baseline resolves to not_run, so the "
@@ -698,11 +796,10 @@ def build_report(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
-    parser.add_argument("--repetitions", type=int, default=2)
     parser.add_argument("--corpus", type=Path, default=CORPUS)
     arguments = parser.parse_args()
     try:
-        report = build_report(arguments.repetitions, arguments.corpus)
+        report = build_report(arguments.corpus)
     except (CrossRouterComparisonError, CorpusBenchmarkError) as error:
         print(f"cross-router comparison failed: {error}", file=sys.stderr)
         return 1

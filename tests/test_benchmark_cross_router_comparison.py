@@ -160,6 +160,30 @@ def test_the_licence_bound_baselines_stay_not_run_for_a_licence_reason() -> None
     assert "helped define" in freerouting["comparability_caveat"]
 
 
+def test_a_partial_environment_change_only_names_the_still_unmet_preconditions() -> None:
+    freerouting = comparison.BASELINE_ROSTER[0]
+
+    row = freerouting.resolve(
+        {
+            "freerouting_executable": True,
+            "simple_route_json_to_dsn_bridge": False,
+            "java_runtime": True,
+        }
+    )
+
+    assert row["status"] == "not_run"
+    assert row["unmet_preconditions"] == ["simple_route_json_to_dsn_bridge"]
+    assert "simple_route_json_to_dsn_bridge" in row["reason"]
+    assert "not installed" not in row["reason"].lower()
+    assert row["what_would_change_it"] == [
+        next(
+            condition.description
+            for condition in freerouting.preconditions
+            if condition.name == "simple_route_json_to_dsn_bridge"
+        )
+    ]
+
+
 def test_the_protocol_declares_its_metrics_and_carries_no_drc_metric() -> None:
     comparison.check_protocol()
 
@@ -273,15 +297,44 @@ def test_the_problem_set_is_the_frozen_redistributable_corpus() -> None:
 
 def test_the_subject_row_replays_the_recorded_corpus_run_rather_than_remeasuring() -> None:
     subject = next(row for row in _artifact()["metrics"]["routers"] if row["role"] == "subject")
-    recorded = json.loads(CORPUS_ARTIFACT.read_text(encoding="utf-8"))["metrics"]["configurations"]
+    corpus_artifact = json.loads(CORPUS_ARTIFACT.read_text(encoding="utf-8"))
+    recorded = corpus_artifact["metrics"]["configurations"]
+    recorded_timing = corpus_artifact["timing"]["mean_wall_seconds"]
+    common_metrics = {name for name, _definition in comparison.COMPARISON_METRICS}
 
     for name, results in subject["results"].items():
+        assert common_metrics <= set(results)
         assert results["nets_attempted"] == recorded[name]["nets_attempted"]
         assert results["nets_completed"] == recorded[name]["nets_routed"]
         assert results["outcome_breakdown"] == recorded[name]["outcome_breakdown"]
         assert results["routed_wire_length_nm"] == recorded[name]["routed_wire_length_nm"]
         assert results["vias"] == recorded[name]["vias"]
         assert results["bends"] == recorded[name]["bends"]
+        assert results["mean_wall_seconds"] == recorded_timing[name]
+    assert subject["measurement_provenance"]["artifact_run_id"] == corpus_artifact["run_id"]
+
+
+def test_the_table_uses_loaded_b088_values_instead_of_running_the_router(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorded = json.loads(CORPUS_ARTIFACT.read_text(encoding="utf-8"))
+    recorded["metrics"]["configurations"]["fixed"]["routed_wire_length_nm"] = 123456789
+    monkeypatch.setattr(comparison, "_load_recorded_subject", lambda: recorded)
+
+    report = comparison.build_report()
+    subject = next(row for row in report["metrics"]["routers"] if row["role"] == "subject")
+
+    assert subject["results"]["fixed"]["routed_wire_length_nm"] == 123456789
+
+
+def test_a_tampered_b088_artifact_is_refused(tmp_path: Path) -> None:
+    recorded = json.loads(CORPUS_ARTIFACT.read_text(encoding="utf-8"))
+    recorded["metrics"]["configurations"]["fixed"]["nets_routed"] += 1
+    tampered = tmp_path / "b088.json"
+    tampered.write_text(json.dumps(recorded), encoding="utf-8")
+
+    with pytest.raises(comparison.CrossRouterComparisonError, match="self-digest"):
+        comparison._load_recorded_subject(tampered)
 
 
 def test_the_artifact_matches_a_fresh_run_of_the_committed_corpus() -> None:
@@ -296,7 +349,7 @@ def test_the_artifact_matches_a_fresh_run_of_the_committed_corpus() -> None:
         if row["role"] == "baseline"
     }
 
-    fresh = comparison.build_report(1, precondition_observations=observations)
+    fresh = comparison.build_report(precondition_observations=observations)
 
     assert fresh["metrics"] == recorded
 

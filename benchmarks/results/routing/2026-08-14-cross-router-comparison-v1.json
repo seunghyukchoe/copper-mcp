@@ -1,22 +1,54 @@
 {
   "configuration": {
-    "corpus_runner_sha256": "sha256:8fb5d05fb60a75b66e4720b3aa3ba9e0b28dbd8c3377ac159a239adbc4795fed",
-    "fixed_grid_step_nm": 250000,
-    "router_limits": {
-      "max_expansions": 100000,
-      "max_grid_nodes": 250000,
-      "max_obstacle_checks": 2000000,
-      "max_obstacles": 2048
-    },
-    "router_version": "astar-grid/0.7.0",
-    "routing_policy": "orthogonal-a-star-spatial-index-v1",
-    "runner_sha256": "sha256:0ab77191b46679a343304d1b942201383980994bc598511c94585b6100ee524a",
-    "seed": 0
+    "comparison_runner_sha256": "sha256:3073042ed1942ebd0d08cabf0a7eb6b41e1fd69ea8fc108fa4568fbf88a2084a",
+    "subject_artifact": "benchmarks/results/routing/2026-08-06-simple-route-json-corpus-v1.json",
+    "subject_artifact_run_id": "sha256:facf95ee9770ffab8c1bc403a32a403e55ca79f2c56d1eabc6679eb6ec4dfca3",
+    "subject_artifact_sha256": "sha256:76c99cbd66324553b82cc243898042a362b18daec90e276dc7e88cbaa64be15f",
+    "subject_measurement": {
+      "adapter_sha256": "sha256:fb64b59f5727d792de30d82b1e9c0b7eab606d071569a29c8c8bc3ff8db5ec66",
+      "adapter_version": "simple-route-json-import-v1",
+      "fixed_grid_step_nm": 250000,
+      "grid_step_ladder_nm": [
+        250000,
+        200000,
+        125000,
+        100000,
+        50000,
+        25000,
+        20000,
+        10000,
+        5000,
+        2000,
+        1000
+      ],
+      "import_policy": {
+        "clearance_nm": 200000,
+        "via_diameter_nm": 600000,
+        "via_drill_nm": 300000
+      },
+      "millimetre_rule": "SimpleRouteJson millimetre values are read as their literal JSON tokens, never as floats, and converted through decimal.Decimal at exactly 1000000 nanometres per millimetre. A token with at most six fractional digits and no exponent converts identically to copper_mcp.board_ir.mm_to_nm. Sub-nanometre residue is resolved by rounding copper outward (floor the low edge, ceil the high edge) and the board outline inward, both in exact decimal arithmetic, so every imported copper rectangle contains the source shape and the outline never grows.",
+      "router_limits": {
+        "max_expansions": 100000,
+        "max_grid_nodes": 250000,
+        "max_obstacle_checks": 2000000,
+        "max_obstacles": 2048
+      },
+      "router_version": "astar-grid/0.7.0",
+      "routing_policy": "orthogonal-a-star-spatial-index-v1",
+      "runner_sha256": "sha256:8fb5d05fb60a75b66e4720b3aa3ba9e0b28dbd8c3377ac159a239adbc4795fed",
+      "seed": 0
+    }
   },
   "date_utc": "2026-08-14",
   "environment": {
-    "platform": "macOS-26.5.2-arm64-arm-64bit",
-    "python": "3.12.13"
+    "subject_measurement": {
+      "platform": "macOS-26.5.2-arm64-arm-64bit",
+      "python": "3.12.13"
+    },
+    "table_builder": {
+      "platform": "macOS-26.5.2-arm64-arm-64bit",
+      "python": "3.12.13"
+    }
   },
   "metrics": {
     "comparison_supported": false,
@@ -203,6 +235,17 @@
       {
         "id": "coppermcp-astar-grid",
         "license_spdx": "Apache-2.0",
+        "measurement_provenance": {
+          "artifact": "benchmarks/results/routing/2026-08-06-simple-route-json-corpus-v1.json",
+          "artifact_run_id": "sha256:facf95ee9770ffab8c1bc403a32a403e55ca79f2c56d1eabc6679eb6ec4dfca3",
+          "artifact_sha256": "sha256:76c99cbd66324553b82cc243898042a362b18daec90e276dc7e88cbaa64be15f",
+          "environment": {
+            "platform": "macOS-26.5.2-arm64-arm-64bit",
+            "python": "3.12.13"
+          },
+          "repetitions": 3,
+          "source_commit": "7a868623d4f88e51bda3621c3acf0594d41f813e"
+        },
         "project": "this repository",
         "results": {
           "divisor-aligned": {
@@ -216,6 +259,7 @@
             },
             "import_refusals": {},
             "length_over_pad_gap_lower_bound": 1.1711303333567902,
+            "mean_wall_seconds": 3.274,
             "nets_attempted": 117,
             "nets_completed": 70,
             "nets_stating_no_routing_work": 9,
@@ -242,6 +286,7 @@
             },
             "import_refusals": {},
             "length_over_pad_gap_lower_bound": 1.1711303333567902,
+            "mean_wall_seconds": 3.283,
             "nets_attempted": 117,
             "nets_completed": 70,
             "nets_stating_no_routing_work": 9,
@@ -293,7 +338,7 @@
           }
         ],
         "project": "https://github.com/freerouting/freerouting",
-        "reason": "FreeRouting is not installed in the recording environment. Its GPL-3.0 licence permits an out-of-process baseline only \u2014 linking or vendoring it into this Apache-2.0 repository would be licence-incompatible \u2014 and the contained provider that would supply it, issue #53, is parked behind an operator gate whose own text says the issue does not authorize the container-runtime installation it needs. No number is estimated, inferred, or carried over from B-069.",
+        "reason": "FreeRouting's GPL-3.0 licence permits an out-of-process baseline only; linking or vendoring it into this Apache-2.0 repository would be licence-incompatible. The contained provider that could supply it, issue #53, remains behind an operator gate whose own text does not authorize the container-runtime installation it needs. No number is estimated, inferred, or carried over from B-069. Unmet preconditions observed in this recording: freerouting_executable: a FreeRouting v2.2.4 executable present in the recording environment, obtained under the operator approval issue #53 names and does not grant; simple_route_json_to_dsn_bridge: a SimpleRouteJson-to-Specctra-DSN bridge, so both routers read one common input rather than two documents asserted to be equivalent; java_runtime: a Java runtime that actually runs, observed by executing it rather than by finding a name on PATH \u2014 this host has /usr/bin/java and no JRE behind it",
         "reason_kind": "environment",
         "results": null,
         "role": "baseline",
@@ -324,7 +369,7 @@
           }
         ],
         "project": "https://github.com/tscircuit/autorouting",
-        "reason": "The repository carries no licence at all, so its solvers are all rights reserved: they may not be vendored, committed, or redistributed in this project's sdist, and this project does not run third-party code it has no licence to hold. The repository was archived on 2025-08-15, so the licence is unlikely to change. Its format specification is cited by the import adapter; no file of it is copied.",
+        "reason": "At the reviewed revision the repository carried no licence, so its solvers were all rights reserved and could not be vendored, committed, redistributed, or run from this project. It was archived on 2025-08-15. Its format specification is cited by the import adapter; no solver file is copied. Unmet preconditions observed in this recording: upstream_licence: a licence published by tscircuit/autorouting covering its solver code, or an independent reimplementation written from the format specification alone",
         "reason_kind": "licence",
         "results": null,
         "role": "baseline",
@@ -351,7 +396,7 @@
           }
         ],
         "project": "PCBWorld (arXiv:2607.05915)",
-        "reason": "The paper states its datasets and evaluation code 'will be released on a public repository upon publication'. No GitHub, HuggingFace, or Zenodo host exists. There is nothing to fetch, so there is nothing to run: recorded as announced rather than released. The CC0 on the arXiv submission covers the paper, not the code.",
+        "reason": "The paper announces that its datasets and evaluation code will be released on a public repository upon publication; the reviewed evidence contains no released artifact. The CC0 on the arXiv submission covers the paper, not the code. Unmet preconditions observed in this recording: published_artifact: PCBWorld's evaluation code and its CC-BY-4.0 synthetic sets published at a resolvable host, so a fixed revision can be pinned and fetched",
         "reason_kind": "licence",
         "results": null,
         "role": "baseline",
@@ -375,14 +420,7 @@
     "that this artifact re-measures anything. The subject row replays B-088's run unchanged and is expected to agree with it net for net.",
     "that a frozen SimpleRouteJson corpus discharges issue #110. It is a frozen corpus for the routing measurement and is not an externally authored KiCad family; R-153 stays open."
   ],
-  "run_id": "sha256:bd717233007df2a1d8e162d52fcd8cc4a0ad038c5f0830077ad9665bdee4ca55",
+  "run_id": "sha256:3e9017f3570ed0387c7646c6fd7ede22860ae6a6d787eedcfb46bb204f4bc65d",
   "schema": "copper-mcp/benchmark/cross-router-comparison/v1",
-  "source_commit": "4a5fa65d824b22eb1c5f2b97355928591b1de3ff",
-  "timing": {
-    "mean_wall_seconds": {
-      "divisor-aligned": 4.756,
-      "fixed": 4.672
-    },
-    "repetitions": 2
-  }
+  "source_commit": "523e2fd8f9462289dc94cf908799dee26a429a3e"
 }

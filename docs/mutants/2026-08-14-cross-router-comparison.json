@@ -132,8 +132,8 @@
     {
       "id": "XR12-a-declared-baseline-never-reaches-the-table",
       "file": "scripts/benchmark_cross_router_comparison.py",
-      "anchor": "    baseline_rows = tuple(baseline.resolve() for baseline in BASELINE_ROSTER)",
-      "replacement": "    baseline_rows = tuple(baseline.resolve() for baseline in BASELINE_ROSTER[:-1])",
+      "anchor": "        for baseline in BASELINE_ROSTER\n    )",
+      "replacement": "        for baseline in BASELINE_ROSTER[:-1]\n    )",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_benchmark_cross_router_comparison.py::test_the_artifact_matches_a_fresh_run_of_the_committed_corpus"

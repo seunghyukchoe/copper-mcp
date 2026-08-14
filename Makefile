@@ -55,7 +55,7 @@ benchmark-external-corpus:
 # Records the cross-router comparison table M2's closing condition 2 asks for. Offline: it reads the
 # same committed corpus as the target above and looks for baselines rather than fetching them.
 benchmark-cross-router:
-	PYTHONPATH=src $(PYTHON) scripts/benchmark_cross_router_comparison.py --repetitions 2
+	PYTHONPATH=src $(PYTHON) scripts/benchmark_cross_router_comparison.py
 
 check-audio-benchmarks:
 	$(PYTHON) scripts/check_audio_benchmarks.py

@@ -170,16 +170,20 @@ never copper dropped — and sizing that ceiling belongs to
   for typed results including `not_run`-with-reason, on the ground that a typed `not_run` is a
   result and a missing row is not. `scripts/benchmark_cross_router_comparison.py` records exactly
   that on the committed MIT SimpleRouteJson corpus: CopperMCP's single-layer router measured at
-  **70 of 117 nets, 1.1711× a provable lower bound, zero vias** — replayed from `B-088` and asserted
-  equal to it, not re-measured — beside three baselines that each carry the licence or environment
-  fact behind their `not_run` and the checkable conditions that would change it. FreeRouting is
+  **70 of 117 nets, 1.1711× a provable lower bound, zero vias** — projected directly from the
+  self-digest-verified `B-088` artifact, not re-measured — beside three baselines that each carry
+  the licence or environment fact behind their `not_run` and the checkable conditions that would
+  change it. Reasons are derived from the preconditions actually unmet in that recording, so a
+  partially prepared environment cannot retain a stale "not installed" claim. FreeRouting is
   `not_run` on an environment fact with [#53](https://github.com/seunghyukchoe/copper-mcp/issues/53)'s
   operator gate named; tscircuit/autorouting and PCBWorld are `not_run` on licence facts.
   **The artifact refuses to be over-read**: it records `measured_rows: 1`,
   `comparison_supported: false`, and states first among its non-claims that one measured row supports
   no comparative conclusion of any kind. **No DRC metric is in the protocol** — the metric set is a
   closed tuple with a test asserting it, because the problem set has no KiCad document behind it and
-  DRC counts are not reproducible across environments. Thirteen committed mutants, thirteen killed
+  DRC counts are not reproducible across environments. Recorded wall time is carried inside each
+  measured configuration row, as the common protocol declares. Thirteen committed mutants,
+  thirteen killed
   ([`docs/mutants/2026-08-14-cross-router-comparison.json`](docs/mutants/2026-08-14-cross-router-comparison.json)),
   three of them aimed squarely at the silent missing row.
 - **Ten licence-clean open-hardware boards re-saved in KiCad 10.0.5, and none of them converts**
