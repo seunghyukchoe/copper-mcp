@@ -53,8 +53,10 @@ def _profile() -> KiCadConstraintProfile:
     )
 
 
-def _snapshot_and_candidate() -> tuple[bytes, KiCadConstraintProfile, RouteCandidate]:
-    source = FIXTURE.read_bytes()
+def _snapshot_and_candidate(
+    source: bytes | None = None,
+) -> tuple[bytes, KiCadConstraintProfile, RouteCandidate]:
+    source = FIXTURE.read_bytes() if source is None else source
     profile = _profile()
     conversion = parse_kicad_bytes(source, profile)
     assert conversion.diagnostics == ()
@@ -72,6 +74,24 @@ def _snapshot_and_candidate() -> tuple[bytes, KiCadConstraintProfile, RouteCandi
     assert result.diagnostic is None
     assert result.candidate is not None
     return source, profile, result.candidate
+
+
+def test_a_route_splice_preserves_a_thermal_bridge_angle_token_byte_exactly() -> None:
+    """The unmodelled spoke angle remains authoritative in the source board after routing."""
+
+    token = b"      (thermal_bridge_angle 405.5)\n"
+    source = FIXTURE.read_bytes().replace(b'      (net "AUDIO")', token + b'      (net "AUDIO")', 1)
+    source, profile, candidate = _snapshot_and_candidate(source)
+    conversion = parse_kicad_bytes(source, profile)
+    assert conversion.snapshot is not None
+
+    rendered = render_kicad_candidate_board(source, conversion.snapshot, candidate, profile)
+
+    assert rendered != source
+    assert rendered.count(token) == 1
+    patched = parse_kicad_bytes(rendered, profile)
+    assert patched.snapshot is not None
+    assert patched.unmodelled_thermal_bridge_angle_pad_count == 1
 
 
 def _rehash(candidate: RouteCandidate) -> RouteCandidate:

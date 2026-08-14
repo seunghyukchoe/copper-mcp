@@ -1,0 +1,112 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "TBA01-accepted-head-removed",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        \"size\",\n        \"thermal_bridge_angle\",\n        \"tstamp\",",
+      "replacement": "        \"size\",\n        \"tstamp\",",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_thermal_bridge_angle_disclosure_counts_each_converted_copper_pad",
+        "tests/test_kicad_board_ir.py::test_the_pad_field_tables_cover_kicads_whole_pad_grammar"
+      ]
+    },
+    {
+      "id": "TBA02-empty-field-admitted",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            \"thermal_bridge_angle\",\n            locator,\n            minimum=1,\n            maximum=1,\n            required=False,",
+      "replacement": "            \"thermal_bridge_angle\",\n            locator,\n            minimum=0,\n            maximum=1,\n            required=False,",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_malformed_thermal_bridge_angle_refuses_without_partial_measurement"
+      ]
+    },
+    {
+      "id": "TBA03-multiple-atoms-admitted",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            \"thermal_bridge_angle\",\n            locator,\n            minimum=1,\n            maximum=1,\n            required=False,",
+      "replacement": "            \"thermal_bridge_angle\",\n            locator,\n            minimum=1,\n            maximum=2,\n            required=False,",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_malformed_thermal_bridge_angle_refuses_without_partial_measurement"
+      ]
+    },
+    {
+      "id": "TBA04-quoted-angle-admitted",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        if is_quoted_atom(value):\n            self.fail(\n                \"integer.precision\",\n                \"thermal bridge angle must be a bare decimal degree value\",\n                locator,\n                object_kind=\"pad\",\n            )\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_malformed_thermal_bridge_angle_refuses_without_partial_measurement"
+      ]
+    },
+    {
+      "id": "TBA05-exact-decimal-validation-removed",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        self._rotation(value, f\"{locator}.thermal_bridge_angle\")\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_malformed_thermal_bridge_angle_refuses_without_partial_measurement"
+      ]
+    },
+    {
+      "id": "TBA06-validator-never-called",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                has_thermal_bridge_angle = self._require_valid_thermal_bridge_angle(pad, locator)",
+      "replacement": "                has_thermal_bridge_angle = False",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_thermal_bridge_angle_disclosure_counts_each_converted_copper_pad",
+        "tests/test_kicad_board_ir.py::test_a_malformed_thermal_bridge_angle_refuses_without_partial_measurement"
+      ]
+    },
+    {
+      "id": "TBA07-aperture-counted",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                has_thermal_bridge_angle = self._require_valid_thermal_bridge_angle(pad, locator)",
+      "replacement": "                has_thermal_bridge_angle = self._require_valid_thermal_bridge_angle(pad, locator)\n                self.unmodelled_thermal_bridge_angle_pad_count += int(has_thermal_bridge_angle)\n                has_thermal_bridge_angle = False",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_an_aperture_thermal_bridge_angle_is_validated_but_not_counted"
+      ]
+    },
+    {
+      "id": "TBA08-copper-pad-count-dropped",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                if has_thermal_bridge_angle:\n                    self.unmodelled_thermal_bridge_angle_pad_count += 1\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_thermal_bridge_angle_disclosure_counts_each_converted_copper_pad"
+      ]
+    },
+    {
+      "id": "TBA09-mcp-disclosure-dropped",
+      "file": "src/copper_mcp/board_ir_service.py",
+      "anchor": "    \"unmodelled_thermal_bridge_angle_pad_count\",\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir_service.py::test_every_measured_conversion_field_appears_in_the_summary_map",
+        "tests/test_board_ir_service.py::test_a_thermal_bridge_angle_nonclaim_reaches_the_mcp_summary"
+      ]
+    },
+    {
+      "id": "TBA10-failed-conversion-may-report-a-partial-count",
+      "file": "src/copper_mcp/board_ir/diagnostics.py",
+      "anchor": "        if self.snapshot is None and self.unmodelled_thermal_bridge_angle_pad_count:\n            raise ValueError(\"a failed conversion cannot report a thermal-bridge-angle pad count\")\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir.py::test_a_refused_conversion_cannot_report_a_thermal_bridge_angle_pad_count"
+      ]
+    }
+  ]
+}

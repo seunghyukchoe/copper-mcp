@@ -1002,3 +1002,54 @@ def test_a_refused_conversion_cannot_report_a_board_property_count() -> None:
     assert ConversionResult(snapshot=None, diagnostics=refusal).unmodelled_board_property_count == 0
     with pytest.raises(ValueError, match="cannot report a board property count"):
         ConversionResult(snapshot=None, diagnostics=refusal, unmodelled_board_property_count=1)
+
+
+def test_a_thermal_bridge_angle_pad_count_must_be_a_non_negative_integer() -> None:
+    """The typed non-claim is an exact pad count, and a bool is not one."""
+
+    snapshot = make_snapshot(sample_content())
+
+    assert (
+        ConversionResult(
+            snapshot=snapshot, unmodelled_thermal_bridge_angle_pad_count=0
+        ).unmodelled_thermal_bridge_angle_pad_count
+        == 0
+    )
+    assert (
+        ConversionResult(
+            snapshot=snapshot, unmodelled_thermal_bridge_angle_pad_count=2
+        ).unmodelled_thermal_bridge_angle_pad_count
+        == 2
+    )
+    for bad in (True, False, -1, 1.0, "1", None):
+        with pytest.raises(ValueError, match="thermal-bridge-angle pad count"):
+            ConversionResult(  # type: ignore[arg-type]
+                snapshot=snapshot, unmodelled_thermal_bridge_angle_pad_count=bad
+            )
+
+
+def test_a_refused_conversion_cannot_report_a_thermal_bridge_angle_pad_count() -> None:
+    """A failed document converted no pad, so it cannot publish a partial measurement."""
+
+    refusal = (
+        Diagnostic(
+            code="unsupported.construct",
+            severity=Severity.ERROR,
+            message="pad shape is unsupported",
+            source_locator="kicad_pcb.footprint[0].pad[1]",
+            object_kind="pad",
+        ),
+    )
+
+    assert (
+        ConversionResult(
+            snapshot=None, diagnostics=refusal
+        ).unmodelled_thermal_bridge_angle_pad_count
+        == 0
+    )
+    with pytest.raises(ValueError, match="cannot report a thermal-bridge-angle pad count"):
+        ConversionResult(
+            snapshot=None,
+            diagnostics=refusal,
+            unmodelled_thermal_bridge_angle_pad_count=1,
+        )

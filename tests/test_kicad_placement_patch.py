@@ -465,6 +465,27 @@ def test_a_placement_splice_leaves_an_edge_connector_pad_token_intact() -> None:
     assert (moved.origin.x, moved.origin.y) != (0, 0)
 
 
+def test_a_placement_splice_preserves_a_thermal_bridge_angle_token_byte_exactly() -> None:
+    """Moving a footprint cannot re-emit or normalize an unmodelled thermal-spoke angle."""
+
+    expression = b"(thermal_bridge_angle -45.5)"
+    source = FIXTURE.read_bytes().replace(
+        b'      (uuid "92000000-0000-0000-0000-000000000012")',
+        b"      " + expression + b'\n      (uuid "92000000-0000-0000-0000-000000000012")',
+        1,
+    )
+    assert source.count(expression) == 1
+    source, snapshot, profile, candidate, _ = _candidate(source)
+
+    rendered = render_kicad_placement_candidate_board(source, snapshot, candidate, profile)
+
+    assert rendered != source
+    assert rendered.count(expression) == 1
+    patched = parse_kicad_bytes(rendered, profile)
+    assert patched.snapshot is not None
+    assert patched.unmodelled_thermal_bridge_angle_pad_count == 1
+
+
 _ROOT_BOARD_PROPERTY = b'(property "Fabricator" "two-layer, 1.6 mm, lead-free")'
 
 

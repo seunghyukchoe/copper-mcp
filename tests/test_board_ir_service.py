@@ -301,6 +301,7 @@ def test_a_supported_board_publishes_its_conversion_counts(tmp_path: Path) -> No
         "unmodelled_board_property_count": 0,
         "unmodelled_group_count": 0,
         "unmodelled_pad_property_count": 0,
+        "unmodelled_thermal_bridge_angle_pad_count": 0,
     }
 
 
@@ -323,6 +324,23 @@ def test_a_board_carrying_an_unmodelled_construct_discloses_it(tmp_path: Path) -
     assert summary.supported is True
     assert summary.unmodelled_counts["unmodelled_board_property_count"] == 1
     assert summary.to_dict()["unmodelled_counts"]["unmodelled_board_property_count"] == 1
+
+
+def test_a_thermal_bridge_angle_nonclaim_reaches_the_mcp_summary(tmp_path: Path) -> None:
+    """Issue #186's typed non-claim is visible at the public inspection boundary."""
+
+    source = FIXTURE.read_bytes().replace(
+        b'      (net "AUDIO")',
+        b'      (thermal_bridge_angle 45)\n      (net "AUDIO")',
+        1,
+    )
+    _, settings = _workspace(tmp_path, source=source)
+
+    summary = summarize_board_ir(_request(), settings)
+
+    assert summary.supported is True
+    assert summary.unmodelled_counts["unmodelled_thermal_bridge_angle_pad_count"] == 1
+    assert summary.to_dict()["unmodelled_counts"]["unmodelled_thermal_bridge_angle_pad_count"] == 1
 
 
 def test_an_unsupported_board_reports_no_conversion_counts(tmp_path: Path) -> None:
