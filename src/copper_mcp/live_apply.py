@@ -280,6 +280,13 @@ def layered_candidate_from_document(document: Mapping[str, Any]) -> LayeredRoute
     stating: the reconstructed object is re-hashed and compared, so a key this function does not
     read cannot influence the identity, the geometry, or the outcome. It would have to change
     the rebuilt candidate to matter, and it cannot.
+
+    ``fill_binding`` is where that argument stops being merely true and starts being
+    load-bearing (ADR-0106). Live apply holds no fill evidence and can replay nothing under it,
+    so a candidate the exact pour shaped must never verify here — and it cannot, precisely
+    because the binding is part of the canonical address: a manifest claiming one rebuilds
+    without it and then fails its own identity recomputation. Reading the key would be the
+    unsafe change, not ignoring it.
     """
 
     patch_fields = mapping("candidate.patch", document.get("patch"))

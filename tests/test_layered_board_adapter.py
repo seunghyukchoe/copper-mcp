@@ -35,6 +35,7 @@ from copper_mcp.routing import (
     LayeredRouteRequest,
     VerifiedFill,
     canonical_layered_candidate_bytes,
+    fill_binding_for,
     verify_layered_candidate_id,
 )
 
@@ -296,6 +297,10 @@ def test_three_layer_board_routes_only_through_the_inner_signal_layer() -> None:
     )
     # Committed three-layer identity; see the module-level note on why these digests are pinned.
     assert candidate.candidate_id == THREE_LAYER_CANDIDATE_ID
+    # Stable across ADR-0106 by construction, not by luck: this route was searched against
+    # the conservative zone envelopes, so it records no fill binding and the canonical
+    # identity payload omits the key entirely.
+    assert candidate.fill_binding is None
     assert verify_layered_candidate_id(candidate)
 
 
@@ -338,6 +343,10 @@ def test_two_layer_return_via_pins_its_committed_candidate_identity() -> None:
 
     assert len(canonical_layered_candidate_bytes(candidate)) == 1_527
     assert candidate.candidate_id == LEGACY_TWO_LAYER_CANDIDATE_ID
+    # Stable across ADR-0106 by construction, not by luck: this route was searched against
+    # the conservative zone envelopes, so it records no fill binding and the canonical
+    # identity payload omits the key entirely.
+    assert candidate.fill_binding is None
     assert [(via.start_layer_id, via.end_layer_id) for via in candidate.patch.vias] == [
         (LAYER_ID, BACK_LAYER_ID),
         (BACK_LAYER_ID, LAYER_ID),
@@ -393,6 +402,10 @@ def test_real_four_layer_fixture_pins_its_committed_candidate_identity() -> None
     )
 
     assert candidate.candidate_id == FOUR_LAYER_CANDIDATE_ID
+    # Stable across ADR-0106 by construction, not by luck: this route was searched against
+    # the conservative zone envelopes, so it records no fill binding and the canonical
+    # identity payload omits the key entirely.
+    assert candidate.fill_binding is None
     assert [path.layer_id for path in candidate.patch.paths] == [
         LAYER_ID,
         INNER_LAYER_ID,
@@ -889,3 +902,166 @@ def test_verified_fill_envelopes_are_charged_against_the_obstacle_budget() -> No
     assert fill_aware.diagnostic is not None
     assert fill_aware.diagnostic.code is LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED
     assert _candidate(generous).cost.wire_length_nm == 8_000
+
+
+# --- A layered candidate records the model that produced it (ADR-0106) -------------------------
+
+
+def test_a_layered_candidate_records_the_fill_that_produced_it() -> None:
+    """The binding is present exactly when fill produced the route, and never otherwise."""
+
+    snapshot = _fill_snapshot()
+    router = LayeredBoardRouter()
+    island = _island((3_000, 6_000, 7_000, 7_000))
+
+    envelope = _candidate(router.propose(snapshot, _request(snapshot)))
+    fill_aware = _candidate(router.propose(snapshot, _request(snapshot, verified_fill=(island,))))
+
+    assert envelope.fill_binding is None
+    assert fill_aware.fill_binding == fill_binding_for((island,))
+    assert fill_aware.fill_binding is not None
+    # The binding is in the identity when it exists, so the two candidates can never collide.
+    assert fill_aware.candidate_id != envelope.candidate_id
+    assert b'"fill_binding"' not in canonical_layered_candidate_bytes(envelope)
+    assert b'"fill_binding"' in canonical_layered_candidate_bytes(fill_aware)
+    # The omission is exactly the width of the key it would have added, which is the reason the
+    # committed two-, three- and four-layer identities above did not move.
+    stripped = canonical_layered_candidate_bytes(replace(fill_aware, fill_binding=None))
+    assert b'"fill_binding"' not in stripped
+    assert len(canonical_layered_candidate_bytes(fill_aware)) - len(stripped) == len(
+        b'"fill_binding":"",'
+    ) + len(fill_aware.fill_binding)
+
+
+def test_a_layered_fill_binding_must_be_content_addressed() -> None:
+    snapshot = _fill_snapshot()
+    candidate = _candidate(LayeredBoardRouter().propose(snapshot, _request(snapshot)))
+
+    with pytest.raises(ValueError, match="fill binding"):
+        replace(candidate, fill_binding="not-a-digest")
+
+
+def test_an_empty_layered_pour_and_no_pour_are_the_same_obstacle_model() -> None:
+    """An empty pour hands the router the model no pour hands it, so it is the same candidate."""
+
+    snapshot = _fill_snapshot()
+    router = LayeredBoardRouter()
+
+    without = _candidate(router.propose(snapshot, _request(snapshot)))
+    empty = _candidate(router.propose(snapshot, _request(snapshot, verified_fill=())))
+
+    assert fill_binding_for(()) is None
+    assert without.fill_binding is None
+    assert empty == without
+
+
+def test_a_layered_candidate_replays_under_the_fill_that_produced_it() -> None:
+    snapshot = _fill_snapshot()
+    router = LayeredBoardRouter()
+    island = _island((3_000, 6_000, 7_000, 7_000))
+    request = _request(snapshot, verified_fill=(island,))
+
+    candidate = _candidate(router.propose(snapshot, request))
+    replayed = router.replay(snapshot, candidate, request)
+
+    assert replayed.candidate == candidate
+    assert replayed.diagnostic is None
+    # Not vacuous in the other half either: the envelope candidate replays under no fill.
+    envelope_request = _request(snapshot)
+    envelope = _candidate(router.propose(snapshot, envelope_request))
+    assert router.replay(snapshot, envelope, envelope_request).candidate == envelope
+
+
+def test_layered_replay_without_the_producing_fill_refuses_instead_of_routing_differently() -> None:
+    """The understated direction, which is issue #163's shape on the layered path.
+
+    A foreign zone's outline envelope over-approximates the exact pour that retired it, so a
+    replay that lost the fill is *stricter* than the route that produced the candidate.  Left
+    unguarded it does not raise: it silently returns the 14,000 nm envelope route and the
+    serialization boundary blames the candidate for the disagreement its own verifier caused.
+    """
+
+    snapshot = _fill_snapshot()
+    router = LayeredBoardRouter()
+    island = _island((3_000, 6_000, 7_000, 7_000))
+    candidate = _candidate(router.propose(snapshot, _request(snapshot, verified_fill=(island,))))
+
+    refused = router.replay(snapshot, candidate, _request(snapshot))
+
+    assert refused.candidate is None
+    assert refused.diagnostic is not None
+    assert refused.diagnostic.code is LayeredRouteFailureCode.FILL_EVIDENCE_MISMATCH
+    # The unguarded behaviour is a *different route*, not an error, which is why the refusal has
+    # to be stated rather than inferred from a downstream mismatch.
+    assert candidate.cost.wire_length_nm == 8_000
+    assert _candidate(router.propose(snapshot, _request(snapshot))).cost.wire_length_nm == 14_000
+
+
+def test_layered_replay_refuses_fill_a_candidate_was_never_routed_under() -> None:
+    """The overstated direction, and the dangerous one.
+
+    An envelope-routed candidate replayed *with* fill searches a looser obstacle model than the
+    one that produced it: the fill retires envelopes the original search never saw retired.  A
+    replay that agreed under that model would confirm geometry the router never proved.
+    """
+
+    snapshot = _fill_snapshot()
+    router = LayeredBoardRouter()
+    island = _island((3_000, 6_000, 7_000, 7_000))
+    envelope = _candidate(router.propose(snapshot, _request(snapshot)))
+
+    refused = router.replay(snapshot, envelope, _request(snapshot, verified_fill=(island,)))
+
+    assert refused.candidate is None
+    assert refused.diagnostic is not None
+    assert refused.diagnostic.code is LayeredRouteFailureCode.FILL_EVIDENCE_MISMATCH
+    assert envelope.fill_binding is None
+
+
+def test_layered_replay_refuses_a_reordered_pour_that_would_reach_the_same_route() -> None:
+    """The binding covers island order, so an identical obstacle *set* is still not the model.
+
+    This is the test that shows the equality is on the recorded binding rather than on an
+    incidental geometry disagreement: reordering the two islands produces a candidate equal in
+    every field except the binding and the identity it feeds, so a replay that compared only
+    geometry would agree.
+    """
+
+    snapshot = _fill_snapshot()
+    router = LayeredBoardRouter()
+    islands = (
+        _island((3_000, 6_000, 7_000, 7_000)),
+        _island((3_000, 3_000, 7_000, 3_200)),
+    )
+    settings = LayeredAStarSettings(via_cost=2, max_obstacles=9)
+    candidate = _candidate(
+        router.propose(snapshot, _request(snapshot, verified_fill=islands, settings=settings))
+    )
+    reordered_request = _request(
+        snapshot, verified_fill=tuple(reversed(islands)), settings=settings
+    )
+
+    # The reordered model would reach a byte-identical route: everything but the binding matches.
+    would_agree = _candidate(router.propose(snapshot, reordered_request))
+    assert replace(would_agree, fill_binding=None, candidate_id=candidate.candidate_id) == replace(
+        candidate, fill_binding=None
+    )
+    assert would_agree.fill_binding != candidate.fill_binding
+
+    refused = router.replay(snapshot, candidate, reordered_request)
+
+    assert refused.candidate is None
+    assert refused.diagnostic is not None
+    assert refused.diagnostic.code is LayeredRouteFailureCode.FILL_EVIDENCE_MISMATCH
+
+
+def test_layered_replay_refuses_malformed_fill_before_comparing_a_binding() -> None:
+    snapshot = _fill_snapshot()
+    router = LayeredBoardRouter()
+    candidate = _candidate(router.propose(snapshot, _request(snapshot)))
+
+    refused = router.replay(snapshot, candidate, _request(snapshot, verified_fill=["island"]))
+
+    assert refused.candidate is None
+    assert refused.diagnostic is not None
+    assert refused.diagnostic.code is LayeredRouteFailureCode.INVALID_REQUEST

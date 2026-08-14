@@ -150,6 +150,26 @@ looser envelope. `include_fill_authority` with `include_drc` is supported and th
 ([ADR-0103](adr/0103-a-candidate-records-the-model-that-produced-it.md)). The `copper-mcp
 preview-route` CLI command has no equivalent flag.
 
+**Zone fill on the layered preview.** `preview_layered_route` accepts the same
+`include_fill_authority` flag on the same terms
+([ADR-0106](adr/0106-layered-fill-authority-is-public-and-bound.md)): the same private refill and
+exact-cache admission, the same fail-closed `stale_fill` refusal, and a `fill_authority` record
+carrying the same closed `routing_effect` literal — selected over the signal layers the layered
+search reached rather than over one named layer, because a layered route is not confined to a layer
+you chose. A layered candidate now carries `fill_binding` for the same reason a single-layer one
+does, and every verifier that replays it refuses any other obstacle model. `include_drc` with it is
+supported. **`preview_live_layered_route` pins the flag to `false`** and refuses an explicit `true`:
+the proof is about a file's cache, and a live proposal routes an unsaved editor snapshot. Durable
+routing jobs refuse it too.
+
+Expect it to refuse on many real boards. The ordered-layer router refuses any single fill island
+above 4,096 vertices, and it refuses the whole request rather than falling back to the zone
+outline, so a densely poured board returns `invalid_request` rather than a fill-aware route
+(`R-152`, [issue #167](https://github.com/seunghyukchoe/copper-mcp/issues/167)). That is the safe
+direction — an island refused is an envelope kept — but it is the outcome to plan for. **No route
+quality is claimed for any of this**: the measured effect of fill-aware routing on a real-board
+corpus was zero changed verdicts (`B-105`). What it buys is honest provenance at the boundary.
+
 ## Preview a placement
 
 Validate a proposed footprint placement without modifying the board:

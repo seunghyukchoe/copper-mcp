@@ -1,0 +1,199 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "LF01-layered-binding-equality-removed",
+      "file": "src/copper_mcp/routing/layered_board_adapter.py",
+      "anchor": "        if fill_binding_for(request.verified_fill) != candidate.fill_binding:\n            return _diagnostic(",
+      "replacement": "        if fill_binding_for(request.verified_fill) == candidate.fill_binding and fill_binding_for(request.verified_fill) != candidate.fill_binding:\n            return _diagnostic(",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_board_adapter.py::test_layered_replay_without_the_producing_fill_refuses_instead_of_routing_differently",
+        "tests/test_layered_board_adapter.py::test_layered_replay_refuses_fill_a_candidate_was_never_routed_under"
+      ]
+    },
+    {
+      "id": "LF02-layered-equality-only-refuses-the-understated-direction",
+      "file": "src/copper_mcp/routing/layered_board_adapter.py",
+      "anchor": "        if fill_binding_for(request.verified_fill) != candidate.fill_binding:\n            return _diagnostic(",
+      "replacement": "        if fill_binding_for(request.verified_fill) is None and candidate.fill_binding is not None:\n            return _diagnostic(",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_board_adapter.py::test_layered_replay_refuses_fill_a_candidate_was_never_routed_under"
+      ],
+      "note": "Guards only the direction issue #163 reported. Verified independently on 2026-08-14 by applying this mutant and running each direction's test alone: the understated-direction test (test_layered_replay_without_the_producing_fill_refuses_instead_of_routing_differently) PASSES -- the mutant survives it -- and this mutant dies solely to the overstated-direction test named below. That is what makes the dangerous direction independently covered rather than covered by accident."
+    },
+    {
+      "id": "LF03-layered-equality-only-refuses-the-overstated-direction",
+      "file": "src/copper_mcp/routing/layered_board_adapter.py",
+      "anchor": "        if fill_binding_for(request.verified_fill) != candidate.fill_binding:\n            return _diagnostic(",
+      "replacement": "        if fill_binding_for(request.verified_fill) is not None and candidate.fill_binding is None:\n            return _diagnostic(",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_board_adapter.py::test_layered_replay_without_the_producing_fill_refuses_instead_of_routing_differently"
+      ],
+      "note": "The complement of LF02: guards only the dangerous direction. Verified the same way -- the overstated-direction test (test_layered_replay_refuses_fill_a_candidate_was_never_routed_under) PASSES under this mutant, and it dies solely to the understated-direction test named below."
+    },
+    {
+      "id": "LF04-layered-equality-ignores-island-order",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "                \"points\": [{\"x_nm\": point.x, \"y_nm\": point.y} for point in island.points],",
+      "replacement": "                \"points\": [],",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_board_adapter.py::test_layered_replay_refuses_a_reordered_pour_that_would_reach_the_same_route"
+      ],
+      "note": "Mutates the shared canonical fill bytes so the binding stops covering island geometry. The killing test routes under two islands and replays under the same two reordered: the obstacle set is identical and the candidate matches in every field but the binding, so only the recorded binding can refuse it."
+    },
+    {
+      "id": "LF05-layered-candidate-does-not-record-the-model",
+      "file": "src/copper_mcp/routing/layered_board_adapter.py",
+      "anchor": "            seed=request.seed,\n            fill_binding=fill_binding_for(request.verified_fill),",
+      "replacement": "            seed=request.seed,",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_board_adapter.py::test_a_layered_candidate_records_the_fill_that_produced_it",
+        "tests/test_layered_board_adapter.py::test_a_layered_candidate_replays_under_the_fill_that_produced_it"
+      ]
+    },
+    {
+      "id": "PC01-layered-identity-always-carries-the-binding",
+      "file": "src/copper_mcp/routing/layered_contracts.py",
+      "anchor": "    fill_binding = (\n        {\"fill_binding\": candidate.fill_binding} if candidate.fill_binding is not None else {}\n    )",
+      "replacement": "    fill_binding = {\"fill_binding\": candidate.fill_binding}",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_board_adapter.py::test_two_layer_return_via_pins_its_committed_candidate_identity",
+        "tests/test_golden_identities.py::test_persisted_candidate_export_digest_matches_its_committed_golden_value"
+      ]
+    },
+    {
+      "id": "PC02-layered-identity-omits-the-binding-when-there-is-one",
+      "file": "src/copper_mcp/routing/layered_contracts.py",
+      "anchor": "        {\"fill_binding\": candidate.fill_binding} if candidate.fill_binding is not None else {}",
+      "replacement": "        {} if candidate.fill_binding is not None else {\"fill_binding\": candidate.fill_binding}",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_board_adapter.py::test_a_layered_candidate_records_the_fill_that_produced_it"
+      ]
+    },
+    {
+      "id": "KP01-layered-serializer-replays-through-propose-again",
+      "file": "src/copper_mcp/adapters/kicad_layered_route_patch.py",
+      "anchor": "    replay = LayeredBoardRouter().replay(snapshot, candidate, request)",
+      "replacement": "    replay = LayeredBoardRouter().propose(snapshot, request)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_layered_route_patch.py::test_serializing_a_fill_routed_layered_candidate_without_its_fill_names_the_evidence",
+        "tests/test_kicad_layered_route_patch.py::test_serializing_an_envelope_layered_candidate_with_fill_it_never_saw_refuses"
+      ]
+    },
+    {
+      "id": "KP02-layered-fill-mismatch-blames-the-candidate-again",
+      "file": "src/copper_mcp/adapters/kicad_layered_route_patch.py",
+      "anchor": "        raise KiCadLayeredRoutePatchError(\n            \"candidate was routed under verified zone fill that was not supplied for replay\"\n        )",
+      "replacement": "        raise KiCadLayeredRoutePatchError(\"candidate does not match a deterministic router replay\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_layered_route_patch.py::test_serializing_a_fill_routed_layered_candidate_without_its_fill_names_the_evidence",
+        "tests/test_kicad_layered_route_patch.py::test_serializing_an_envelope_layered_candidate_with_fill_it_never_saw_refuses"
+      ]
+    },
+    {
+      "id": "SF01-layered-stale-fill-gate-bypassed",
+      "file": "src/copper_mcp/layered_route_preview.py",
+      "anchor": "        except ZoneFillStaleError:\n            return _empty_result(\n                \"not_routed\",",
+      "replacement": "        except ZoneFillStaleError:\n            fill_authority, islands = None, ()\n            _empty_result(\n                \"not_routed\",",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_route_preview.py::test_layered_fill_authority_fails_closed_on_a_stale_cache"
+      ]
+    },
+    {
+      "id": "SF02-layered-stale-fill-refusal-is-mislabelled",
+      "file": "src/copper_mcp/layered_route_preview.py",
+      "anchor": "                    LayeredRouteFailureCode.STALE_FILL.value,",
+      "replacement": "                    LayeredRouteFailureCode.INVALID_REQUEST.value,",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_route_preview.py::test_layered_fill_authority_fails_closed_on_a_stale_cache"
+      ]
+    },
+    {
+      "id": "PV01-layered-preview-does-not-forward-the-fill-to-the-router",
+      "file": "src/copper_mcp/layered_route_preview.py",
+      "anchor": "        settings=request.settings,\n        verified_fill=verified_fill,\n    )",
+      "replacement": "        settings=request.settings,\n    )",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_route_preview.py::test_layered_fill_authority_is_opt_in_and_reports_its_routing_effect",
+        "tests/test_layered_route_preview.py::test_layered_candidate_drc_receives_the_fill_the_candidate_was_routed_under"
+      ]
+    },
+    {
+      "id": "RE01-layered-routing-effect-forced-to-the-wrong-literal",
+      "file": "src/copper_mcp/layered_route_preview.py",
+      "anchor": "    if foreign:\n        return \"foreign_zone_obstacles\"",
+      "replacement": "    if foreign:\n        return \"verified_context\"",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_route_preview.py::test_layered_fill_authority_is_opt_in_and_reports_its_routing_effect"
+      ]
+    },
+    {
+      "id": "RE02-layered-routing-effect-ignores-the-searched-layers",
+      "file": "src/copper_mcp/layered_route_preview.py",
+      "anchor": "    selected = tuple(fill for fill in fills if fill.layer_id in searched_layer_ids)",
+      "replacement": "    selected = ()",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_route_preview.py::test_layered_fill_authority_is_opt_in_and_reports_its_routing_effect"
+      ]
+    },
+    {
+      "id": "RE03-a-layered-routing-effect-can-be-reported-without-its-authority",
+      "file": "src/copper_mcp/layered_route_preview.py",
+      "anchor": "    if fill_authority is None:\n        if fill_routing_effect is not None:\n            raise LayeredRoutePreviewError(\"fill routing effect requires fill authority\")\n    elif fill_routing_effect not in _LAYERED_FILL_ROUTING_EFFECTS:\n        raise LayeredRoutePreviewError(\"fill authority routing effect is malformed\")",
+      "replacement": "    if fill_authority is not None and fill_routing_effect is None:\n        raise LayeredRoutePreviewError(\"fill routing effect requires fill authority\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_route_preview.py::test_a_layered_routing_effect_cannot_be_reported_without_the_authority_behind_it"
+      ]
+    },
+    {
+      "id": "JB01-persisted-job-envelope-names-the-new-capability",
+      "file": "src/copper_mcp/routing_job_service.py",
+      "anchor": "        if value is not None and key not in _PREVIEW_ONLY_CAPABILITIES",
+      "replacement": "        if value is not None and key != \"include_drc\"",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_job_mcp.py::test_a_persisted_job_envelope_never_names_a_preview_only_capability",
+        "tests/test_golden_identities.py::test_started_routing_job_identity_and_request_digest_match_their_golden_values"
+      ]
+    },
+    {
+      "id": "JB02-durable-job-accepts-the-fill-flag",
+      "file": "src/copper_mcp/routing_job_service.py",
+      "anchor": "    if request.include_fill_authority:",
+      "replacement": "    if request.include_fill_authority and not request.include_fill_authority:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_job_mcp.py::test_direct_job_preparation_rejects_zone_fill_authority_opt_in"
+      ]
+    },
+    {
+      "id": "LA01-live-layered-accepts-the-fill-flag",
+      "file": "src/copper_mcp/live_layered_route_preview.py",
+      "anchor": "    if normalized.get(\"include_fill_authority\", False) is True:",
+      "replacement": "    if normalized.get(\"include_fill_authority\", False) is None:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_layered_route_preview.py::test_live_preview_rejects_zone_fill_authority_opt_in"
+      ]
+    }
+  ]
+}

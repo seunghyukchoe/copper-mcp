@@ -1476,6 +1476,11 @@ class LayeredRoutePreviewRequestContract(_ClosedContract):
     seed: NonNegativeInteger = 0
     settings: LayeredRouteSettingsContract = Field(default_factory=LayeredRouteSettingsContract)
     include_drc: bool = False
+    #: Opt in to freshness-verified zone fill as the obstacle model, and to the ``fill_authority``
+    #: record describing what it did (ADR-0106). Fails closed exactly as ``preview_route`` does: a
+    #: board whose cached fill disagrees with a fresh KiCad refill refuses under ``stale_fill``.
+    #: No route-quality claim attaches to this flag; `B-105` measured zero changed verdicts.
+    include_fill_authority: bool = False
 
 
 LayeredRoutePreviewToolRequest = Annotated[
@@ -1490,6 +1495,11 @@ class LiveLayeredRoutePreviewRequestContract(LayeredRoutePreviewRequestContract)
     board: Literal["live"]
     expect_session_revision: SessionRevision
     include_drc: Literal[False] = False
+    #: Pinned, not defaulted, as ``LiveRoutePreviewRequestContract`` pins the single-layer live
+    #: path. Zone fill authority proves a *file's* cached fill fresh by refilling a private
+    #: disposable copy; a live proposal routes an IPC snapshot of a possibly unsaved editor, so
+    #: there is no file whose cache such a proof would be about (ADR-0106).
+    include_fill_authority: Literal[False] = False
     #: Ask for a live-scoped, single-use apply capability alongside a routed candidate. Setting
     #: it is a request, never a guarantee: the token is minted only for a routed result and only
     #: when the operator opted in to live apply, and the response field is otherwise ``null``.
@@ -1570,6 +1580,11 @@ class LayeredRouteCandidateContract(_ClosedContract):
     router_version: Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._/\-]{0,127}$")]
     policy: Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._/\-]{0,127}$")]
     seed: NonNegativeInteger
+    #: The obstacle model this candidate was routed under: the content address of the
+    #: freshness-verified zone fill the ordered-layer router was handed, or `null` when it was
+    #: handed none and searched the conservative zone envelopes instead (ADR-0106, mirroring
+    #: ADR-0103). `null` is the ordinary case.
+    fill_binding: Digest | None
     patch: LayeredRoutePatchContract
     cost: LayeredRouteCostContract
     metrics: LayeredRouteMetricsContract
@@ -1590,6 +1605,10 @@ class LayeredRouteDiagnosticContract(_ClosedContract):
         "obstacle_budget_exceeded",
         "search_budget_exceeded",
         "cancelled",
+        #: ``fill_evidence_mismatch`` is deliberately absent, exactly as it is absent from
+        #: ``RouteDiagnosticContract``: only a replay produces it, and a replay is never a
+        #: preview response.
+        "stale_fill",
         "no_path",
     ]
     message: Annotated[str, Field(min_length=1, max_length=256)]
@@ -1634,6 +1653,10 @@ class RoutedLayeredRoutePreviewContract(_LayeredRoutePreviewResponseCommonContra
     candidate: LayeredRouteCandidateContract
     diagnostic: None
     drc_evidence: RouteCandidateDrcEvidenceContract | None
+    #: Present and non-null only when the caller asked for fill authority and the board carries a
+    #: zone on a searched signal layer. Its ``routing_effect`` is the same closed ADR-0040 label
+    #: the single-layer seam publishes.
+    fill_authority: RouteFillAuthorityContract | None
     conversion_diagnostic_counts: _EmptyLayeredDiagnosticCounts
 
 
@@ -1644,6 +1667,9 @@ class NotRoutedLayeredRoutePreviewContract(_LayeredRoutePreviewResponseCommonCon
     diagnostic: LayeredRouteDiagnosticContract
     drc_evidence: None
     apply_token: None = None
+    #: A refused proposal reports no fill authority, including the ``stale_fill`` refusal: the
+    #: refusal is precisely the statement that no fresh fill evidence exists for this board.
+    fill_authority: None
     conversion_diagnostic_counts: _EmptyLayeredDiagnosticCounts
 
 
@@ -1654,6 +1680,7 @@ class StaleLayeredRoutePreviewContract(_LayeredRoutePreviewResponseCommonContrac
     diagnostic: LayeredRouteDiagnosticContract
     drc_evidence: None
     apply_token: None = None
+    fill_authority: None
     conversion_diagnostic_counts: _EmptyLayeredDiagnosticCounts
 
 
@@ -1663,6 +1690,7 @@ class UnsupportedLayeredRoutePreviewContract(_LayeredRoutePreviewResponseCommonC
     diagnostic: LayeredRouteDiagnosticContract | None
     drc_evidence: None
     apply_token: None = None
+    fill_authority: None
     conversion_diagnostic_counts: _LayeredDiagnosticCounts
 
 
@@ -1689,6 +1717,9 @@ class RoutingJobRequestContract(LayeredRoutePreviewRequestContract):
         ),
     ]
     include_drc: Literal[False] = False
+    #: A job runs in a later process and holds no fill evidence, so a candidate carrying a fill
+    #: binding could never be replayed from its persisted envelope (ADR-0103, ADR-0106).
+    include_fill_authority: Literal[False] = False
 
 
 RoutingJobRequest = Annotated[
