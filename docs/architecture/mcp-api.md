@@ -56,9 +56,18 @@ and report have independent size ceilings, and report growth is limited before K
 `inspect_board_ir` takes a workspace-relative `board` and integer `constraints`, and answers
 whether the board converts to the supported Board IR before a caller commits to a preview. It
 returns the board revision, snapshot and constraint digests, Board IR schema and units, copper
-layer identities, and per-collection object counts, or bounded conversion diagnostic-code counts
-when the board is outside the subset. It never returns coordinates, net names, pad or net
-identities, UUIDs, or source bytes.
+layer identities, per-collection object counts, and an `unmodelled_counts` map, or bounded
+conversion diagnostic-code counts when the board is outside the subset. It never returns
+coordinates, net names, pad or net identities, UUIDs, or source bytes.
+
+`unmodelled_counts` is how a client learns what the conversion **accepted and did not model** —
+roundrect rounding, unmodelled groups, edge-connector pads, unmodelled root board properties, and
+unmodelled pad fabrication properties, keyed by the measured field each comes from. Four of the
+five are the disclosure `R-134`, `R-139`, `R-141` and `R-144` each name as their mitigation, and
+until 0.9.0 none of them reached a client at all. Every value is a non-negative integer and none
+of them names anything: a count is not a set, and no surface refuses an operation on a board
+carrying one. An unsupported board reports `{}` — a refused conversion measured nothing, and
+zeros would claim it measured zero.
 
 Every live tool below requires `COPPER_MCP_ALLOW_LIVE_IPC=1`, exact-membership and default off, the
 same rule as `COPPER_MCP_ALLOW_APPLY`. With it unset the tools stay listed — a hidden tool is

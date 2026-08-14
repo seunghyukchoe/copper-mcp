@@ -378,3 +378,246 @@ def test_repository_ledgers_allocate_identifiers_cleanly(
 
     assert failures == []
     assert set(highest) == {"D", "R", "SEC", "B"}
+
+
+# ---------------------------------------------------------------------------
+# The published-release gate (P0.2)
+#
+# D-196: `0.7.0` was authorized `Ready`, tagged and published, and no
+# published-release row was ever written. `0.5.0` had the same gap. Both were
+# repaired by hand after an audit swept the tags; nothing detected either at the
+# time, and nothing would have detected the third.
+#
+# The cases below are organised by what could make this gate useless: it could
+# read a readiness target or a `Blocked` row as an authorization, it could stop
+# looking at published rows at all, or its outstanding marker could become a
+# permanent suppression switch rather than a dated statement of an open
+# obligation.
+# ---------------------------------------------------------------------------
+
+RELEASE = check_ledgers.RELEASE_LEDGER
+
+_PUBLISHED_HEADER = (
+    "# Release Ledger\n\n"
+    "| Version | Date | Tag / commit | Artifacts | Validation | Security | Notes |\n"
+    "|---|---|---|---|---|---|---|\n"
+)
+_AUTHORIZATION_HEADER = (
+    "\n## Release authorization\n\n"
+    "| Version | Date | Validated source commit | Full gate evidence | Status |\n"
+    "|---|---|---|---|---|\n"
+)
+
+
+def _release_ledger(
+    published: tuple[str, ...] = (),
+    authorizations: tuple[tuple[str, str], ...] = (),
+    markers: tuple[str, ...] = (),
+    readiness: tuple[str, ...] = (),
+) -> str:
+    body = _PUBLISHED_HEADER
+    for version in published:
+        body += f"| {version} | 2026-08-13 | `v{version}` | wheel | run | verified | Published. |\n"
+    body += _AUTHORIZATION_HEADER
+    for version, status in authorizations:
+        body += f"| {version} | 2026-08-13 | `abc1234` | Clean `make check`. | {status} |\n"
+    body += "\n"
+    for version in markers:
+        body += (
+            f"> **Outstanding publication — {version}:** the tag is not cut yet; this closes when "
+            "the published-release row lands.\n\n"
+        )
+    if readiness:
+        body += (
+            "## Unreleased readiness\n\n"
+            "| Target | Date | Source state | Completed validation | Outstanding release gates "
+            "| Status |\n|---|---|---|---|---|---|\n"
+        )
+        for version in readiness:
+            body += f"| {version} | 2026-08-13 | branch | some | some | Not a release. |\n"
+    return body
+
+
+def _run_published(root: Path, monkeypatch: pytest.MonkeyPatch, body: str) -> list[str]:
+    monkeypatch.setattr(check_ledgers, "ROOT", root)
+    _write(root, RELEASE, body)
+    failures: list[str] = []
+    check_ledgers._check_published_rows(failures)
+    return failures
+
+
+def test_a_ready_authorization_with_its_published_row_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    body = _release_ledger(published=("0.8.0",), authorizations=(("0.8.0", "Ready"),))
+
+    assert _run_published(tmp_path, monkeypatch, body) == []
+
+
+def test_a_ready_authorization_with_no_published_row_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-196 mechanised: this is the exact shape of the 0.7.0 gap."""
+
+    body = _release_ledger(published=(), authorizations=(("0.8.0", "Ready"),))
+
+    failures = _run_published(tmp_path, monkeypatch, body)
+
+    assert len(failures) == 1
+    assert "authorizes 0.8.0 as `Ready` with no published-release row" in failures[0]
+    assert "D-196" in failures[0]
+
+
+def test_a_ready_authorization_for_a_version_nobody_published_fails_beside_the_real_ones(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A `Ready` row invented for a version that does not exist is exactly as loud."""
+
+    body = _release_ledger(
+        published=("0.7.0", "0.8.0"),
+        authorizations=(("0.7.0", "Ready"), ("0.8.0", "Ready"), ("0.9.0", "Ready")),
+    )
+
+    failures = _run_published(tmp_path, monkeypatch, body)
+
+    assert len(failures) == 1
+    assert "authorizes 0.9.0 as `Ready`" in failures[0]
+
+
+def test_an_outstanding_marker_excuses_a_ready_row_with_no_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    body = _release_ledger(authorizations=(("0.9.0", "Ready"),), markers=("0.9.0",))
+
+    assert _run_published(tmp_path, monkeypatch, body) == []
+
+
+def test_an_outstanding_marker_naming_an_unauthorized_version_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The hatch cannot be opened before there is anything to excuse."""
+
+    body = _release_ledger(
+        published=("0.8.0",), authorizations=(("0.8.0", "Ready"),), markers=("0.9.0",)
+    )
+
+    failures = _run_published(tmp_path, monkeypatch, body)
+
+    assert len(failures) == 1
+    assert "no `Ready` authorization row exists for it" in failures[0]
+
+
+def test_an_outstanding_marker_left_behind_after_publication_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """And it cannot be left open after the fact, which is how an exemption rots."""
+
+    body = _release_ledger(
+        published=("0.8.0",), authorizations=(("0.8.0", "Ready"),), markers=("0.8.0",)
+    )
+
+    failures = _run_published(tmp_path, monkeypatch, body)
+
+    assert len(failures) == 1
+    assert "still marks 0.8.0 as an outstanding publication" in failures[0]
+
+
+def test_a_blocked_or_superseded_authorization_carries_no_publication_obligation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`Blocked` and `Superseded` authorize nothing, so they oblige nothing."""
+
+    body = _release_ledger(
+        published=("0.8.0",),
+        authorizations=(("0.8.0", "Blocked"), ("0.8.0", "Ready"), ("0.9.0", "Superseded")),
+    )
+
+    assert _run_published(tmp_path, monkeypatch, body) == []
+
+
+def test_a_published_row_without_an_authorization_row_is_not_a_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """0.1.0 predates the authorization discipline; the rule runs one way only."""
+
+    body = _release_ledger(published=("0.1.0", "0.8.0"), authorizations=(("0.8.0", "Ready"),))
+
+    assert _run_published(tmp_path, monkeypatch, body) == []
+
+
+def test_a_readiness_target_is_not_read_as_a_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """All three tables start a row with a version, so the gate has to be section-aware.
+
+    Without that, the unreleased-readiness row for 0.9.0 -- which says in its own
+    words that it is not a release -- would satisfy the obligation created by the
+    0.9.0 `Ready` row.
+    """
+
+    body = _release_ledger(
+        published=("0.8.0",),
+        authorizations=(("0.8.0", "Ready"), ("0.9.0", "Ready")),
+        readiness=("0.9.0",),
+    )
+
+    failures = _run_published(tmp_path, monkeypatch, body)
+
+    assert len(failures) == 1
+    assert "authorizes 0.9.0 as `Ready`" in failures[0]
+
+
+def test_a_release_ledger_with_no_ready_row_at_all_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An absence is evidence only if the observation could have reported a presence.
+
+    A gate that reads a `Ready`-less ledger as clean would pass just as loudly if
+    the authorization table were deleted, renamed, or reformatted past its own
+    regular expression -- so the empty reading is a failure rather than a pass.
+    """
+
+    body = _release_ledger(published=("0.8.0",), authorizations=(("0.8.0", "Blocked"),))
+
+    failures = _run_published(tmp_path, monkeypatch, body)
+
+    assert failures == [f"{RELEASE} records no `Ready` release authorization"]
+
+
+def test_the_committed_release_ledger_publishes_every_version_it_authorizes() -> None:
+    """The real ledger, at this commit, with no fixture in the way."""
+
+    failures: list[str] = []
+    check_ledgers._check_published_rows(failures)
+
+    assert failures == []
+
+    rows = check_ledgers._read_release_ledger(
+        (check_ledgers.ROOT / RELEASE).read_text(encoding="utf-8")
+    )
+    assert set(rows.ready) == {"0.2.0", "0.3.0", "0.4.0", "0.5.0", "0.6.0", "0.7.0", "0.8.0"}
+    assert set(rows.ready) <= set(rows.published)
+    assert rows.outstanding == {}
+
+
+def test_main_runs_the_published_release_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A gate that is not called is not a gate.
+
+    The three other checks here were wired into `main` when they were written and
+    nothing pins that they still are, which is the same class as the two
+    `make lint` checkers that had never run in CI. This asserts the call, so
+    removing it fails a test rather than quietly returning the repository to the
+    state D-196 describes.
+    """
+
+    monkeypatch.setattr(check_ledgers, "REPLAY_SUB_ENTRIES", REAL_REPLAYS)
+    monkeypatch.setattr(check_ledgers, "RECORDED_COLLISIONS", REAL_COLLISIONS)
+    called: list[int] = []
+
+    def _spy(failures: list[str]) -> None:
+        called.append(len(failures))
+
+    monkeypatch.setattr(check_ledgers, "_check_published_rows", _spy)
+
+    assert check_ledgers.main() == 0
+    assert called == [0]

@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Check that required project ledgers exist and remain structurally usable.
 
-This checker owns three narrow questions.
+This checker owns four narrow questions.
 
 1. Does every required ledger exist and carry its heading?
 2. Does every committed benchmark artifact match its own self-digest?
 3. Is every ledger identifier allocated exactly once, in order, and does the
    allocation registry in `docs/ledgers/README.md` still describe reality?
+4. Does every `Ready` release authorization end in a published-release row, or
+   in an explicit, dated outstanding marker that says it has not yet?
 
 The third question is the reason this file grew. Ledger IDs were previously
 enforced by review alone, and review does not see a merge: two branches that
@@ -41,6 +43,31 @@ The rules, and what each one deliberately does *not* do:
   That table is one line per ID space, so two branches that both allocate the
   next number now collide *textually* on that line and Git refuses to merge them
   silently -- which is the collision this whole module is trying to prevent.
+
+The fourth question is the newest, and it exists because the failure it catches
+already happened twice. `D-196` records that `0.7.0` was authorized `Ready`,
+tagged, and published -- and that no published-release row was ever written, so
+the ledger authorized a release it never recorded as published and nobody
+noticed until an audit swept the tags. `0.5.0` had the same gap. Both were
+repaired by hand on 2026-08-13 after the fact; nothing detected the next one.
+
+The rule is deliberately one-directional. A `Ready` row must resolve into
+either a published row for the same version or an outstanding marker naming it;
+a published row with no `Ready` row is *not* a failure, because `0.1.0` predates
+the authorization discipline entirely and repairing history is not this
+checker's business. `Blocked` and `Superseded` rows carry no obligation: they
+authorize nothing.
+
+The outstanding marker is an escape hatch with a lock on both sides, following
+`REPLAY_SUB_ENTRIES` and `EXEMPT_DRIFT`: it is a dated blockquote in the release
+ledger reading exactly
+
+    > **Outstanding publication -- 0.9.0:** <why, and what would close it>
+
+and it fails when it names a version with no `Ready` row (an outstanding marker
+for a release nobody authorized) *and* when it names a version that is already
+published (a marker that outlived its reason). So the hatch cannot be opened
+speculatively and cannot be left open after the fact.
 """
 
 from __future__ import annotations
@@ -64,6 +91,21 @@ REQUIRED = {
 MAX_BENCHMARK_BYTES = 2_000_000
 
 LEDGER_README = "docs/ledgers/README.md"
+RELEASE_LEDGER = "docs/ledgers/release-ledger.md"
+
+# The release ledger's three tables are told apart by the `##` heading above
+# them, because all three put a version string in the first cell and a regular
+# expression alone cannot tell a published row from an authorization row.
+# Everything before the first `##` is the published-release table.
+RELEASE_AUTHORIZATION_SECTION = "Release authorization"
+_MARKDOWN_SECTION = re.compile(r"^##\s+(?P<title>.+?)\s*$")
+_VERSION_ROW = re.compile(r"^\|\s*(?P<version>\d+\.\d+\.\d+)\s*\|")
+# `| 0.8.0 | ... | Ready |` -- the status is the authorization table's last cell.
+_AUTHORIZATION_STATUS = re.compile(r"\|\s*(?P<status>Ready|Blocked|Superseded)\s*\|\s*$")
+# `> **Outstanding publication -- 0.9.0:** ...`, with the project's em dash.
+OUTSTANDING_MARKER = re.compile(
+    r"^>\s*\*\*Outstanding publication — (?P<version>\d+\.\d+\.\d+):\*\*\s*\S"
+)
 
 
 @dataclass(frozen=True)
@@ -469,6 +511,94 @@ def _check_ledger_ids(failures: list[str], notes: list[str]) -> dict[str, int]:
     return highest
 
 
+@dataclass(frozen=True)
+class ReleaseLedgerRows:
+    """What the release ledger says about publication, read once and located."""
+
+    # version -> line of the first published-release row for it.
+    published: dict[str, int]
+    # version -> lines of every `Ready` authorization row for it.
+    ready: dict[str, list[int]]
+    # version -> line of each outstanding-publication marker.
+    outstanding: dict[str, int]
+
+
+def _read_release_ledger(text: str) -> ReleaseLedgerRows:
+    """Split the release ledger into its published, `Ready`, and outstanding claims.
+
+    Section-aware on purpose. The published table, the authorization table and
+    the unreleased-readiness table all begin a row with a version string, so a
+    row-shaped regular expression applied to the whole file would read a
+    readiness target as a publication and silently satisfy the gate it exists to
+    enforce.
+    """
+
+    published: dict[str, int] = {}
+    ready: dict[str, list[int]] = {}
+    outstanding: dict[str, int] = {}
+    section: str | None = None
+
+    for index, line in enumerate(text.splitlines(), start=1):
+        heading = _MARKDOWN_SECTION.match(line)
+        if heading is not None:
+            section = heading.group("title")
+            continue
+
+        marker = OUTSTANDING_MARKER.match(line)
+        if marker is not None:
+            outstanding.setdefault(marker.group("version"), index)
+            continue
+
+        row = _VERSION_ROW.match(line)
+        if row is None:
+            continue
+        version = row.group("version")
+        if section is None:
+            published.setdefault(version, index)
+        elif section == RELEASE_AUTHORIZATION_SECTION:
+            status = _AUTHORIZATION_STATUS.search(line)
+            if status is not None and status.group("status") == "Ready":
+                ready.setdefault(version, []).append(index)
+
+    return ReleaseLedgerRows(published=published, ready=ready, outstanding=outstanding)
+
+
+def _check_published_rows(failures: list[str]) -> None:
+    """Every `Ready` authorization must end in a published row or an outstanding marker."""
+
+    path = ROOT / RELEASE_LEDGER
+    if not path.is_file():
+        failures.append(f"missing {RELEASE_LEDGER}")
+        return
+    rows = _read_release_ledger(path.read_text(encoding="utf-8"))
+    if not rows.ready:
+        failures.append(f"{RELEASE_LEDGER} records no `Ready` release authorization")
+        return
+
+    for version, lines in sorted(rows.ready.items()):
+        if version in rows.published or version in rows.outstanding:
+            continue
+        failures.append(
+            f"{RELEASE_LEDGER}:{lines[-1]} authorizes {version} as `Ready` with no "
+            f"published-release row and no `**Outstanding publication — {version}:**` marker; "
+            "D-196 is what this looks like when nobody notices"
+        )
+
+    for version, line in sorted(rows.outstanding.items()):
+        if version not in rows.ready:
+            failures.append(
+                f"{RELEASE_LEDGER}:{line} marks {version} as an outstanding publication, but no "
+                "`Ready` authorization row exists for it; a marker cannot precede the "
+                "authorization it excuses"
+            )
+        elif version in rows.published:
+            failures.append(
+                f"{RELEASE_LEDGER}:{line} still marks {version} as an outstanding publication "
+                f"although it has a published-release row at line {rows.published[version]}; "
+                "remove the marker in the change that records the publication"
+            )
+
+
 def _check_allocation_registry(highest: dict[str, int], failures: list[str]) -> None:
     """Verify the `Highest allocated` / `Next free` table against the ledgers themselves."""
     path = ROOT / LEDGER_README
@@ -514,6 +644,7 @@ def main() -> int:
         if heading not in path.read_text(encoding="utf-8"):
             failures.append(f"{relative} is missing heading {heading!r}")
     _check_benchmark_artifacts(failures)
+    _check_published_rows(failures)
     highest = _check_ledger_ids(failures, notes)
     _check_allocation_registry(highest, failures)
     for note in notes:

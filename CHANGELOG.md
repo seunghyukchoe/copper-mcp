@@ -8,6 +8,94 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **Every benchmark DRC count now says how comparable it is, and no differential may cite one that
+  is not `repeated_agreement`**
+  ([ADR-0109](docs/adr/0109-a-drc-count-carries-the-comparability-it-was-taken-with.md),
+  [issue #170](https://github.com/seunghyukchoe/copper-mcp/issues/170)). `B-107` ran the corpus
+  runner twice at the *same commit* over *byte-identical* boards and nine boards' records still
+  differed — every one of them only in the `drc` section (`error_count` 936 → 941;
+  `hole_clearance` 201 → 202; a whole violation type present in one run and absent in the other).
+  Every DRC section a benchmark artifact publishes now carries exactly one of `single_invocation`,
+  `repeated_agreement` and `repeated_disagreement`, an aggregate takes the **weakest** literal of
+  its inputs, and `drc_differential` refuses unless both sides are `repeated_agreement`.
+  **Deliberately not a numeric tolerance** — a tolerance is a constant fitted to the oracle, which
+  [ADR-0095](docs/adr/0095-copper-text-has-no-derivable-envelope.md) already refused in another
+  domain. `schemas/drc-summary.schema.json` is **untouched and pinned by a test**: it is the live
+  payload, one invocation by construction, and widening it here would be the accepted-set drift
+  ADR-0105 exists to prevent. Counts published before the policy are **qualified, not retracted**
+  (`B-111`). The N-run characterisation of the distribution has **not** been run and stays open as
+  the issue's step 1.
+- **A DRC comparability gate**, `scripts/check_drc_comparability.py`, in `make lint` and in CI. It
+  sweeps every committed benchmark artifact for an unqualified DRC section, refuses a published
+  delta beside a non-`repeated_agreement` count, and requires each registered DRC-recording runner
+  to import the enforcement module. Five runners are wired;
+  `scripts/benchmark_route_bundle.py` is **deferred with its reason recorded** rather than wired,
+  because its committed artifact pins `script_sha256` of the runner itself — editing it would
+  invalidate a published binding to buy a gate the artifact sweep already provides.
+  `scripts/benchmark_freerouting_comparison.py` was checked against that same reason, does **not**
+  pin its own bytes, and is therefore wired rather than deferred. The section table names both of
+  this project's count vocabularies: `DrcSummary`'s own field names and the FreeRouting runner's
+  renamings of them (`hard_violations`, `unconnected`, `footprint_errors`), whose three committed
+  sections the first version of the table swept past in silence. Its pre-policy
+  exemption table is keyed
+  `(artifact, section path)`, each entry naming `B-111`, and an entry that matches nothing fails
+  the run.
+- `scripts/benchmark_real_board_capability.py` gains `--drc-repetitions`, which is what earns a
+  section the `repeated_agreement` literal. It defaults to `1` because KiCad dominates that
+  runner's wall clock, so the default is honest rather than flattering.
+- **The single-layer `verified_fill` seam refuses malformed evidence with a typed code**
+  ([ADR-0108](docs/adr/0108-typed-refusal-at-the-single-layer-fill-seam.md),
+  [issue #166](https://github.com/seunghyukchoe/copper-mcp/issues/166)). Measured on the seam
+  before deciding: of the nine malformed inputs the ordered-layer adapter names, **two were
+  accepted and routed** (a `list` of islands, a `list` of points) and **two raised an uncaught
+  `AttributeError`** (a non-`VerifiedFill` entry, a non-`PointNM` vertex); two more refused only
+  after the work they were meant to bound, under a code naming the obstacle model rather than the
+  input. All of it now returns `unsupported_geometry` at `propose`'s and `replay`'s boundary, in
+  the adapter's own vocabulary. **The ceilings are the single-layer path's own numbers** — 32,768
+  islands and 1,000,000 vertices per island — and deliberately not the adapter's 4,096, which
+  [issue #167](https://github.com/seunghyukchoe/copper-mcp/issues/167) files as an over-refusal
+  that 14 of 18 corpus boards already exceed. Those two ceilings **multiply**, and a Python tuple
+  aliases, so a third bounds the validation walk itself: the vertices of every island together may
+  not exceed `AStarSettings`'s domain ceiling on `max_obstacle_checks` (10,000,000), which is the
+  most geometric predicates one request may ever buy. That refusal is
+  `obstacle_check_budget_exceeded` and not `unsupported_geometry`, because the input it stops is
+  well formed and merely too large to examine. No well-formed input any real board offers changes
+  behaviour: the largest pour measured anywhere in the corpus is 130,305 vertices.
+
+- **`inspect_board_ir` discloses what the conversion accepted and did not model.** `BoardIrSummary`
+  gains one `unmodelled_counts` map carrying all five `ConversionResult` measured fields —
+  roundrect rounding, unmodelled groups, edge-connector pads, unmodelled root board properties and
+  unmodelled pad fabrication properties. Four of the five are the disclosure `R-134`, `R-139`,
+  `R-141` and `R-144` each name as their mitigation, and until now **none of them reached an MCP
+  client**, so four recorded mitigations were partial and the direction of error was
+  under-disclosure. It is an **additive optional output field**: no existing field moves, no
+  content address is involved, and `models.SCHEMA_VERSION` stays `1.0`. One map rather than five
+  fields, so a sixth counter is an entry rather than a contract change — a contract test reflects
+  over `ConversionResult` and fails until a new counter is mapped. An unsupported board reports
+  `{}`, because a refused conversion measured nothing and zeros would claim it measured zero. See
+  [the 0.9.0 migration note](docs/migrations/copper-mcp-0.9.0.md).
+- **Six process failures this project already paid for now have checkers, each proved to bite**
+  (`D-202`, `R-155`).
+  - `scripts/check_ledgers.py` fails when a `Ready` release authorization has neither a
+    published-release row nor an explicit outstanding marker. This is `D-196` mechanised: `0.7.0`
+    was authorized, tagged and published with no published row, `0.5.0` had the same gap, and both
+    were found by an audit rather than by a gate.
+  - `scripts/check_ci_budgets.py` requires every explicit `timeout-minutes` in
+    `.github/workflows/` to be at least twice its job's longest **recorded hosted** duration, read
+    from [`.github/ci-budget-calibration.json`](.github/ci-budget-calibration.json). The `v0.7.0`
+    release run was cancelled by a 20-minute budget derived from a *local* 20m29s measurement; the
+    hosted gate takes 34m59s. `ci.yml` gains its first timeout budget ever, 120 minutes against a
+    measured worst leg of 34m48s.
+  - `scripts/check_commit_message.py` gains a `--range` mode and runs in CI over the pull request's
+    own commits. It previously existed only as a client-side `commit-msg` hook, whose swallowed
+    rejection reached `main` twice. An unresolvable **or empty** range is a failure, not a pass.
+  - `check_audio_benchmarks.py` and `check_circuit_intents.py` now run hosted. Both were in
+    `make lint` from before the CI workflow existed and neither had ever run there.
+  - A golden set pins the KiCad adapter's tabled refusal messages — seven closed tables, 35
+    entries, 33 distinct sentences — so a message leaving, arriving or being reworded shows up in
+    the diff. **This makes the messages no more contractual than they were**, and the test and the
+    golden file both say so; deprecation was rejected because it would mean emitting a refusal the
+    server no longer means.
 - **`preview_layered_route` accepts `include_fill_authority`, and reports what the evidence did**
   ([ADR-0106](docs/adr/0106-layered-fill-authority-is-public-and-bound.md),
   [issue #164](https://github.com/seunghyukchoe/copper-mcp/issues/164)). Opt in and CopperMCP

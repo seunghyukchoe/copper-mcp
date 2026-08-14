@@ -95,20 +95,25 @@ The rules:
    `B-108`'s existing per-run count, cited rather than re-measured. No `B-` number was spent.
 
    The seventh round is the first one where the stepping-over was **decided up front rather than
-   discovered**. Three branches were opened concurrently on the same base at `4a5fa65`, and each was
-   handed a disjoint block before any of them read a ledger: this record (issues
+   discovered**. Four branches were opened concurrently on the same base at `4a5fa65`, and each
+   received a disjoint block before any of them read a ledger. All four have now landed: the
+   evidence record holds `D-200`/`D-201`/`R-154`/`B-111`; the process-checker record holds
+   `D-202`/`R-155`; the pad-reader survey holds `D-203`/`R-156`/`B-112`; and this record (issues
    [#65](https://github.com/seunghyukchoe/copper-mcp/issues/65) and
-   [#110](https://github.com/seunghyukchoe/copper-mcp/issues/110)) holds `D-204`, `R-157`, `B-113`
-   and `B-114`, which sat four, four and three above the next-free numbers that base recorded. By
-   the time this record landed (third of four), the survey and process-checker siblings had landed
-   ahead of it, so of the stepped-over block only `D-200`–`D-201`, `R-154` and `B-111` — the
-   evidence sibling's live claims — remain reported as unallocated until it lands.
-   Pre-assignment is the same mechanism as rule 1's stepping-over with the race removed: whichever
-   branch lands second resolves this table's textual conflict rather than discovering a collision in
-   a merged document. If a sibling is abandoned its numbers become permanent spent numbers like any
-   other, and this paragraph becomes the correction to make. This record spent no `SEC-` number: it
-   widens no input surface — the sweep in `B-114` committed zero third-party bytes, and the
-   comparison artifact in `B-113` reads only files already in the tree.
+   [#110](https://github.com/seunghyukchoe/copper-mcp/issues/110)) holds
+   `D-204`/`R-157`/`B-113`/`B-114`. Pre-assignment is rule 1's stepping-over with the race removed:
+   each later merge resolved this table's textual conflict instead of discovering an identifier
+   collision in an already-merged document.
+
+   Two security numbers from that round were deliberately declined and are permanent spent
+   numbers. The evidence record did not take its pre-assigned `SEC-147`; it adds validation and
+   comparability qualification without widening an input surface. The process-checker record
+   declined `SEC-148` because its only surface change is an additive output map on
+   `BoardIrSummary`; no new byte is accepted from a board, MCP argument, or environment value.
+   This record likewise spends no `SEC-` number: the sweep in `B-114` committed zero third-party
+   bytes, and the comparison artifact in `B-113` reads only files already in the tree. The process
+   record took no `B-` number either: its hosted durations calibrate CI rather than benchmark
+   product behaviour and live in `.github/ci-budget-calibration.json`.
 
    The fifth round is this record stepping over **three** live claims at once, in every ID space
    at the same time. Issue #165 (`D-195`/`R-150`/`SEC-144`/`B-108`, ADR-0104) was allocated while

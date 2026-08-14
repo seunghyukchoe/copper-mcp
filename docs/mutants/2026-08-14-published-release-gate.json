@@ -1,0 +1,92 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "PR1-the-0-8-0-published-row-is-deleted",
+      "file": "docs/ledgers/release-ledger.md",
+      "anchor": "| 0.8.0 | 2026-08-13 UTC | [`v0.8.0`](https://github.com/seunghyukchoe/copper-mcp/releases/tag/v0.8.0) / [`0bc72daaded23c2bd6f016cd27240b8f773f0bd2`](https://github.com/seunghyukchoe/copper-mcp/commit/0bc72daaded23c2bd6f016cd27240b8f773f0bd2) | Wheel `copper_mcp-0.8.0-py3-none-any.whl`: 567,551 bytes, SHA-256 `f6bc77232f68cf9db6e0dbda9b1429b5153c4c97747e5047bf0896379580a8b2`; sdist `copper_mcp-0.8.0.tar.gz`: 5,144,684 bytes, SHA-256 `04b0520f0f84229a15836898263804b8b4a67c421d431a28dfb7a81584e3be34`; PCM `coppermcp-live-observer-0.8.0.zip`: 20,184 bytes, SHA-256 `e7071723e586763000c87c24c45b58e74611117749cc48dac02340a1db18cd18`, with its `metadata.json`: 3,262 bytes, SHA-256 `cb5250b878b06a836d5ccffe01d1a6d8556272191908de70aaaf34ba3919a6da` | **Tag-triggered Release run [#31729552824](https://github.com/seunghyukchoe/copper-mcp/actions/runs/31729552824) ran to completion** \u2014 `Verify and build` and `Publish GitHub release` both `success` under the gate budget recalibrated by this same release (20 \u2192 120 minutes; the 20-minute budget is what cancelled 0.7.0's run and cost it its provenance, D-196) | All four assets re-downloaded and their byte sizes and SHA-256 digests independently reproduced; **`gh attestation verify` succeeded for both the wheel and the sdist** against this repository. The workflow-built wheel's digest differs from the locally built wheel recorded in the `Blocked` row (same byte count; wheels are not byte-reproducible across environments), and the published digests above are the ones that bind. The published sdist is 5,144,684 bytes against the `Blocked` row's locally built 5,142,021: the tag resolves to metadata commit `0bc72da`, one commit past validated source `d2132c7`, and that commit's release-ledger bytes ride inside the sdist \u2014 the delta is the authorization itself, not drift | Published `2026-08-13T18:47:26Z` by the release workflow, not by hand. The tag commit is an ancestor of current `main`. This row completes the `Ready` authorization per D-196's obligation: tag, artifacts, digests, the workflow that built them, and the provenance binding them, all recorded. No clean-install claim. |\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ledgers.py::test_the_committed_release_ledger_publishes_every_version_it_authorizes"
+      ]
+    },
+    {
+      "id": "PR2-a-ready-row-for-a-version-nobody-published",
+      "file": "docs/ledgers/release-ledger.md",
+      "anchor": "not a hand-published release. | Ready |\n",
+      "replacement": "not a hand-published release. | Ready |\n| 0.9.0 | 2026-08-14 | `0000000000000000000000000000000000000000` | A fabricated authorization for a release that does not exist. | Ready |\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ledgers.py::test_the_committed_release_ledger_publishes_every_version_it_authorizes"
+      ]
+    },
+    {
+      "id": "PR3-a-ready-row-with-no-publication-stops-failing",
+      "file": "scripts/check_ledgers.py",
+      "anchor": "        if version in rows.published or version in rows.outstanding:\n            continue\n",
+      "replacement": "        if True:\n            continue\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ledgers.py::test_a_ready_authorization_with_no_published_row_fails",
+        "tests/test_check_ledgers.py::test_a_ready_authorization_for_a_version_nobody_published_fails_beside_the_real_ones"
+      ]
+    },
+    {
+      "id": "PR4-the-reader-stops-telling-the-three-tables-apart",
+      "file": "scripts/check_ledgers.py",
+      "anchor": "        if section is None:\n            published.setdefault(version, index)\n",
+      "replacement": "        if True:\n            published.setdefault(version, index)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ledgers.py::test_a_readiness_target_is_not_read_as_a_publication",
+        "tests/test_check_ledgers.py::test_the_committed_release_ledger_publishes_every_version_it_authorizes"
+      ]
+    },
+    {
+      "id": "PR5-a-stale-or-premature-marker-stops-failing",
+      "file": "scripts/check_ledgers.py",
+      "anchor": "    for version, line in sorted(rows.outstanding.items()):\n",
+      "replacement": "    for version, line in sorted({}.items()):\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ledgers.py::test_an_outstanding_marker_naming_an_unauthorized_version_fails",
+        "tests/test_check_ledgers.py::test_an_outstanding_marker_left_behind_after_publication_fails"
+      ]
+    },
+    {
+      "id": "PR6-a-ledger-with-no-ready-row-reads-as-clean",
+      "file": "scripts/check_ledgers.py",
+      "anchor": "    if not rows.ready:\n        failures.append(f\"{RELEASE_LEDGER} records no `Ready` release authorization\")\n        return\n",
+      "replacement": "    if not rows.ready:\n        return\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ledgers.py::test_a_release_ledger_with_no_ready_row_at_all_fails"
+      ]
+    },
+    {
+      "id": "PR7-blocked-and-superseded-rows-count-as-authorizations",
+      "file": "scripts/check_ledgers.py",
+      "anchor": "            if status is not None and status.group(\"status\") == \"Ready\":\n",
+      "replacement": "            if status is not None:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ledgers.py::test_a_blocked_or_superseded_authorization_carries_no_publication_obligation"
+      ]
+    },
+    {
+      "id": "PR8-the-gate-is-never-called-by-main",
+      "file": "scripts/check_ledgers.py",
+      "anchor": "    _check_published_rows(failures)\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ledgers.py::test_main_runs_the_published_release_gate"
+      ]
+    }
+  ]
+}

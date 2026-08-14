@@ -1,0 +1,271 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "DC01-emission-gate-never-refuses",
+      "file": "src/copper_mcp/benchmarks/drc_comparability.py",
+      "anchor": "    for path, section in drc_sections(document):\n        literal = section.get(LITERAL_KEY)\n        if literal not in COMPARABILITY_LITERALS:\n            raise DrcComparabilityError(\n",
+      "replacement": "    for path, section in drc_sections(document):\n        literal = section.get(LITERAL_KEY)\n        if False:\n            raise DrcComparabilityError(\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_emitting_an_unqualified_count_is_refused",
+        "tests/test_check_drc_comparability.py::test_an_unqualified_count_fails"
+      ]
+    },
+    {
+      "id": "DC02-the-literal-set-stops-being-closed",
+      "file": "src/copper_mcp/benchmarks/drc_comparability.py",
+      "anchor": "        if literal not in COMPARABILITY_LITERALS:\n",
+      "replacement": "        if literal is None:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_a_literal_outside_the_closed_set_is_refused",
+        "tests/test_check_drc_comparability.py::test_a_literal_outside_the_closed_set_fails"
+      ]
+    },
+    {
+      "id": "DC03-prohibition-neutered",
+      "file": "src/copper_mcp/benchmarks/drc_comparability.py",
+      "anchor": "    literal = section.get(LITERAL_KEY)\n    if literal != _ADMISSIBLE_IN_DIFFERENTIAL:\n        raise DrcComparabilityError(\n",
+      "replacement": "    literal = section.get(LITERAL_KEY)\n    if False:\n        raise DrcComparabilityError(\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_a_differential_may_not_cite_an_incomparable_count",
+        "tests/test_drc_comparability.py::test_a_differential_refuses_when_either_side_is_incomparable"
+      ]
+    },
+    {
+      "id": "DC04-a-single-invocation-count-admitted-into-a-differential",
+      "file": "src/copper_mcp/benchmarks/drc_comparability.py",
+      "anchor": "    if literal != _ADMISSIBLE_IN_DIFFERENTIAL:\n",
+      "replacement": "    if literal not in (_ADMISSIBLE_IN_DIFFERENTIAL, \"single_invocation\"):\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_a_differential_may_not_cite_an_incomparable_count",
+        "tests/test_drc_comparability.py::test_a_differential_refuses_when_either_side_is_incomparable"
+      ]
+    },
+    {
+      "id": "DC05-differential-checks-only-the-after-side",
+      "file": "src/copper_mcp/benchmarks/drc_comparability.py",
+      "anchor": "    admissible_in_differential(before, where=f\"{where} (before)\")\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_a_differential_refuses_when_either_side_is_incomparable"
+      ]
+    },
+    {
+      "id": "DC06-one-invocation-claims-agreement",
+      "file": "src/copper_mcp/benchmarks/drc_comparability.py",
+      "anchor": "    if len(observations) == 1:\n        return \"single_invocation\"\n",
+      "replacement": "    if len(observations) == 1:\n        return \"repeated_agreement\"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_one_observation_earns_single_invocation"
+      ]
+    },
+    {
+      "id": "DC07-repetition-alone-claims-agreement",
+      "file": "src/copper_mcp/benchmarks/drc_comparability.py",
+      "anchor": "    rendered = {_canonical(observation) for observation in observations}\n    return \"repeated_agreement\" if len(rendered) == 1 else \"repeated_disagreement\"\n",
+      "replacement": "    return \"repeated_agreement\"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_every_count_field_that_moves_costs_the_agreement"
+      ]
+    },
+    {
+      "id": "DC08-the-count-that-moved-is-excluded-from-the-comparison",
+      "file": "src/copper_mcp/benchmarks/drc_comparability.py",
+      "anchor": "        # Wall clock. Never equal across two runs, and not a property of the board.\n        \"elapsed_ms\",\n",
+      "replacement": "        # Wall clock. Never equal across two runs, and not a property of the board.\n        \"elapsed_ms\",\n        \"error_count\",\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_no_count_may_be_excluded_from_the_comparison",
+        "tests/test_drc_comparability.py::test_every_count_field_that_moves_costs_the_agreement"
+      ]
+    },
+    {
+      "id": "DC09-an-aggregate-takes-the-strongest-of-its-inputs",
+      "file": "src/copper_mcp/benchmarks/drc_comparability.py",
+      "anchor": "    return min(literals, key=COMPARABILITY_LITERALS.index)\n",
+      "replacement": "    return max(literals, key=COMPARABILITY_LITERALS.index)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_an_aggregate_takes_the_weakest_of_its_inputs"
+      ]
+    },
+    {
+      "id": "DC10-the-sweep-stops-descending-into-lists",
+      "file": "src/copper_mcp/benchmarks/drc_comparability.py",
+      "anchor": "    elif isinstance(document, list | tuple):\n        for index, value in enumerate(document):\n            yield from drc_sections(value, f\"{path}[{index}]\")\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_a_section_is_found_wherever_it_sits_including_inside_a_list",
+        "tests/test_check_drc_comparability.py::test_a_count_nested_in_a_list_is_swept_too"
+      ]
+    },
+    {
+      "id": "DC11-a-count-name-drops-out-of-the-section-table",
+      "file": "src/copper_mcp/benchmarks/drc_comparability.py",
+      "anchor": "        \"error_count\",\n        \"exclusion_count\",\n",
+      "replacement": "        \"exclusion_count\",\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_a_section_is_found_wherever_it_sits_including_inside_a_list",
+        "tests/test_check_drc_comparability.py::test_an_unqualified_count_fails"
+      ]
+    },
+    {
+      "id": "DC12-a-boolean-is-subtracted-as-if-it-were-a-count",
+      "file": "src/copper_mcp/benchmarks/drc_comparability.py",
+      "anchor": "        if isinstance(value, bool) or not isinstance(value, int):\n",
+      "replacement": "        if not isinstance(value, int):\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_a_differential_refuses_a_boolean_dressed_as_a_count"
+      ]
+    },
+    {
+      "id": "DC13-checker-exemptions-become-a-suppression-list",
+      "file": "scripts/check_drc_comparability.py",
+      "anchor": "    for key in sorted(set(PRE_POLICY) - used):\n        failures.append(\n            f\"{key[0]}: pre-policy exemption for {key[1]} ({PRE_POLICY[key]}) matched no DRC \"\n            \"section; remove it\"\n        )\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_drc_comparability.py::test_an_exemption_that_matches_nothing_fails"
+      ]
+    },
+    {
+      "id": "DC14-a-stale-exemption-survives-its-section-being-qualified",
+      "file": "scripts/check_drc_comparability.py",
+      "anchor": "            if literal in COMPARABILITY_LITERALS:\n                if key in PRE_POLICY:\n                    failures.append(\n",
+      "replacement": "            if literal in COMPARABILITY_LITERALS:\n                if False:\n                    failures.append(\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_drc_comparability.py::test_an_exemption_over_a_now_qualified_section_fails"
+      ]
+    },
+    {
+      "id": "DC15-checker-admits-a-differential-over-an-incomparable-count",
+      "file": "scripts/check_drc_comparability.py",
+      "anchor": "            if deltas and literal != ADMISSIBLE_IN_DIFFERENTIAL:\n",
+      "replacement": "            if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_drc_comparability.py::test_a_delta_on_an_incomparable_count_fails",
+        "tests/test_check_drc_comparability.py::test_the_prohibition_also_reaches_an_exempted_section"
+      ]
+    },
+    {
+      "id": "DC16-checker-stops-requiring-the-runners-to-enforce-at-emission",
+      "file": "scripts/check_drc_comparability.py",
+      "anchor": "    _check_runners(failures)\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_drc_comparability.py::test_a_registered_runner_that_stops_importing_the_gate_fails",
+        "tests/test_check_drc_comparability.py::test_a_registered_runner_that_no_longer_exists_fails"
+      ]
+    },
+    {
+      "id": "DC17-the-corpus-runner-stops-qualifying-what-it-publishes",
+      "file": "scripts/benchmark_real_board_capability.py",
+      "anchor": "from copper_mcp.benchmarks.drc_comparability import (\n    LITERAL_KEY,\n    qualified,\n    require_qualified,\n    weakest,\n)\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_drc_comparability.py::test_every_registered_runner_exists_and_imports_the_gate",
+        "tests/test_check_drc_comparability.py::test_the_gate_is_green_on_this_tree"
+      ]
+    },
+    {
+      "id": "DC18-the-live-drc-summary-schema-is-widened-on-this-policys-authority",
+      "file": "schemas/drc-summary.schema.json",
+      "anchor": "  \"required\": [\n    \"base_revision\",\n",
+      "replacement": "  \"required\": [\n    \"drc_comparability\",\n    \"base_revision\",\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_the_live_drc_summary_schema_is_untouched_by_this_policy"
+      ]
+    },
+    {
+      "id": "DC19-the-second-count-vocabulary-drops-out-of-the-section-table",
+      "file": "src/copper_mcp/benchmarks/drc_comparability.py",
+      "anchor": "        \"footprint_errors\",\n        \"hard_violations\",\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_the_second_count_vocabulary_is_a_section_too",
+        "tests/test_check_drc_comparability.py::test_the_gate_is_green_on_this_tree"
+      ]
+    },
+    {
+      "id": "DC20-the-renamed-unconnected-count-drops-out-of-the-section-table",
+      "file": "src/copper_mcp/benchmarks/drc_comparability.py",
+      "anchor": "        \"unconnected\",\n        \"unconnected_count\",\n",
+      "replacement": "        \"unconnected_count\",\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_the_second_count_vocabulary_is_a_section_too"
+      ]
+    },
+    {
+      "id": "DC21-a-declared-fixture-baseline-is-policed-as-if-it-were-an-observation",
+      "file": "src/copper_mcp/benchmarks/drc_comparability.py",
+      "anchor": "        \"exclusion_count\",\n        \"footprint_errors\",\n",
+      "replacement": "        \"exclusion_count\",\n        \"expected_hard_violations\",\n        \"footprint_errors\",\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_a_declared_fixture_baseline_is_not_a_drc_section",
+        "tests/test_check_drc_comparability.py::test_the_gate_is_green_on_this_tree"
+      ]
+    },
+    {
+      "id": "DC22-the-freerouting-runner-stops-qualifying-what-it-publishes",
+      "file": "scripts/benchmark_freerouting_comparison.py",
+      "anchor": "    require_qualified(report, where=SCHEMA)\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_freerouting_comparison.py::test_the_emission_gate_refuses_an_unqualified_drc_section"
+      ]
+    },
+    {
+      "id": "DC23-a-single-invocation-drc-count-claims-agreement",
+      "file": "scripts/benchmark_freerouting_comparison.py",
+      "anchor": "        LITERAL_KEY: comparability_of([dict(observed_counts)]),\n",
+      "replacement": "        LITERAL_KEY: \"repeated_agreement\",\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_freerouting_comparison.py::test_gui_source_drc_requires_unambiguous_expected_report_structure"
+      ]
+    },
+    {
+      "id": "DC24-the-cli-drc-path-publishes-a-bare-count",
+      "file": "scripts/benchmark_freerouting_comparison.py",
+      "anchor": "                LITERAL_KEY: comparability_of(\n                    [\n                        {\n                            \"hard_violations\": summary.error_count,\n                            \"unconnected\": summary.unconnected_count,\n                        }\n                    ]\n                ),\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_freerouting_comparison.py::test_the_cli_drc_path_qualifies_the_counts_it_publishes"
+      ]
+    },
+    {
+      "id": "DC25-the-freerouting-runner-falls-out-of-the-registry",
+      "file": "scripts/check_drc_comparability.py",
+      "anchor": "        \"scripts/benchmark_freerouting_comparison.py\",\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_drc_comparability.py::test_the_freerouting_runner_is_wired_because_it_has_no_self_pin_to_protect"
+      ]
+    }
+  ]
+}
