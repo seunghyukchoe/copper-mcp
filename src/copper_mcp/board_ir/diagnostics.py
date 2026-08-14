@@ -103,7 +103,15 @@ class ConversionResult:
     is a count and not a diagnostic for the same reason the four above are.  See ADR-0099 and
     R-144.
 
-    **Adding a sixth measured field is one line here and one line in**
+    ``unmodelled_thermal_bridge_angle_pad_count`` counts converted copper pads carrying a
+    validated ``(thermal_bridge_angle <degrees>)`` override.  KiCad uses the value only while
+    deriving thermal-relief spokes: it does not change the pad envelope or zone outline, and an
+    exact-fill route consumes KiCad's saved, freshness-verified fill polygons with the angle
+    already applied.  The value is therefore accepted without adding a lossy Board IR field, but
+    a snapshot alone cannot reproduce those spokes.  This count is the typed disclosure of that
+    non-claim.  Aperture-skipped and refused pads never contribute.  See D-205 and R-158.
+
+    **Adding another measured field is one line here and one line in**
     ``board_ir_service._MEASURED_COUNT_FIELDS``, **and the test will tell you.**  Every measured
     field on this dataclass is published to MCP clients through ``BoardIrSummary``'s single
     ``unmodelled_counts`` map, and ``test_board_ir_service`` reflects over these fields to assert
@@ -121,6 +129,7 @@ class ConversionResult:
     edge_connector_pad_count: int = 0
     unmodelled_board_property_count: int = 0
     unmodelled_pad_property_count: int = 0
+    unmodelled_thermal_bridge_angle_pad_count: int = 0
 
     def __post_init__(self) -> None:
         if self.snapshot is not None and not isinstance(self.snapshot, BoardIRSnapshot):
@@ -159,6 +168,14 @@ class ConversionResult:
             or self.unmodelled_pad_property_count < 0
         ):
             raise ValueError("conversion pad property count must be a non-negative integer")
+        if (
+            isinstance(self.unmodelled_thermal_bridge_angle_pad_count, bool)
+            or not isinstance(self.unmodelled_thermal_bridge_angle_pad_count, int)
+            or self.unmodelled_thermal_bridge_angle_pad_count < 0
+        ):
+            raise ValueError(
+                "conversion thermal-bridge-angle pad count must be a non-negative integer"
+            )
         has_error = any(item.severity is Severity.ERROR for item in self.diagnostics)
         if has_error and self.snapshot is not None:
             raise ValueError("conversion errors cannot accompany a snapshot")
@@ -174,3 +191,5 @@ class ConversionResult:
             raise ValueError("a failed conversion cannot report a board property count")
         if self.snapshot is None and self.unmodelled_pad_property_count:
             raise ValueError("a failed conversion cannot report a pad property count")
+        if self.snapshot is None and self.unmodelled_thermal_bridge_angle_pad_count:
+            raise ValueError("a failed conversion cannot report a thermal-bridge-angle pad count")

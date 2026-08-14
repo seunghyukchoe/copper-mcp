@@ -35,29 +35,31 @@ from copper_mcp.request_boundary import (
 from copper_mcp.security import read_workspace_file
 
 _REQUIRED_FIELDS = ("board", "constraints")
-# Every measured field on `ConversionResult`, published as one map rather than as five fields.
+# Every measured field on `ConversionResult`, published as one map rather than separate fields.
 #
-# Four of the five are the *disclosure* a documented risk depends on: `R-134` (groups), `R-139`
-# (root board properties), `R-141` (edge-connector pads) and `R-144` (pad fabrication properties)
-# each record that the conversion accepts a construct, loses its token, and counts what it lost --
-# and each names the count as how a caller finds out. Until 0.9.0 the count reached no MCP client
-# at all, so those four mitigations were partial and the direction of error was under-disclosure.
+# Five of the six are the *disclosure* a documented risk depends on: `R-134` (groups), `R-139`
+# (root board properties), `R-141` (edge-connector pads), `R-144` (pad fabrication properties),
+# and `R-158` (thermal-bridge angles) each record that conversion accepts a construct, loses its
+# token, and counts what it lost -- and each names the count as how a caller finds out. Until 0.9.0
+# the earlier counts reached no MCP client at all, so those mitigations were partial and the
+# direction of error was under-disclosure.
 #
 # This is a hand-maintained list on purpose, and the maintenance is the point. Building the map by
-# reflecting over `ConversionResult` would make a sixth counter appear here silently, which is
-# exactly how the set grew from two to five with nobody noticing; instead a sixth counter has to be
-# added to this tuple, and `test_board_ir_service` reflects over the dataclass and fails until it
+# reflecting over `ConversionResult` would make another counter appear here silently, which is
+# exactly how the set once grew without anybody noticing; instead a new counter has to be added to
+# this tuple, and `test_board_ir_service` reflects over the dataclass and fails until it
 # is. One line, in a diff a reviewer sees.
 #
 # `max_roundrect_rounding_nm` is a magnitude in nanometres rather than a count, and it is in the
-# map anyway: the audit specified all five, the key carries its own unit, and a second map for one
-# field would be the five-fields shape this exists to avoid.
+# map anyway: the audit specified it alongside the counts, the key carries its own unit, and a
+# second map for one field would recreate the separate-field shape this exists to avoid.
 _MEASURED_COUNT_FIELDS = (
     "max_roundrect_rounding_nm",
     "unmodelled_group_count",
     "edge_connector_pad_count",
     "unmodelled_board_property_count",
     "unmodelled_pad_property_count",
+    "unmodelled_thermal_bridge_angle_pad_count",
 )
 _OBJECT_COLLECTIONS = (
     "outline",

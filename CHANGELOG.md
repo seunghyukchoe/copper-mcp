@@ -8,6 +8,20 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **Board IR now validates and accepts pad `thermal_bridge_angle` as a typed non-claim**
+  ([issue #186](https://github.com/seunghyukchoe/copper-mcp/issues/186), `D-205`, `R-158`).
+  KiCad uses the decimal-degree value only while deriving thermal-relief spokes; it does not move
+  the pad envelope or zone outline, conservative routing still treats the whole zone outline as an
+  over-approximating obstacle, and exact-fill routing still consumes only freshness-verified KiCad
+  polygons generated from the original board bytes. The value is required to be one bare exact
+  decimal with at most microdegree precision; duplicate, quoted, exponent, nested, and malformed
+  forms fail closed. No `Pad`, schema, codec, canonical content, or content address changes.
+  `inspect_board_ir.unmodelled_counts` exposes the number of converted copper pads carrying the
+  override, while route and placement splices retain its source token exactly. Snapshot-only refill
+  parity is explicitly not claimed. As predeclared, direct conversion remains **13/18** because
+  `custom` is still the first refusal; with only custom-pad handling neutralised in memory, the two
+  named main saves convert and the other two reveal their recorded topology blockers (**15/18**;
+  `B-115`).
 - **Every benchmark DRC count now says how comparable it is, and no differential may cite one that
   is not `repeated_agreement`**
   ([ADR-0109](docs/adr/0109-a-drc-count-carries-the-comparability-it-was-taken-with.md),

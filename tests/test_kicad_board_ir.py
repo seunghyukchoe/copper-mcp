@@ -3393,6 +3393,112 @@ def _with_pad_zone_connect(value: bytes) -> bytes:
     return _insert_before(SUBSET_BOARD.read_bytes(), b"      (drill 1)", b"      " + value + b"\n")
 
 
+def _with_pad_thermal_bridge_angles(*values: bytes) -> bytes:
+    """Put thermal-spoke angle overrides on up to both fixture pads."""
+
+    if not 1 <= len(values) <= 2:
+        raise ValueError("one or two thermal bridge angle values are required")
+    source = _insert_before(
+        SUBSET_BOARD.read_bytes(),
+        b'      (net "SIG_\xc2\xb5")',
+        b"      (thermal_bridge_angle " + values[0] + b")\n",
+    )
+    if len(values) == 2:
+        source = _insert_before(
+            source,
+            b"      (drill 1)",
+            b"      (thermal_bridge_angle " + values[1] + b")\n",
+        )
+    return source
+
+
+@pytest.mark.parametrize("value", [b"45", b"90", b"30", b"-45", b"405", b"45.5"])
+def test_a_thermal_bridge_angle_is_a_counted_board_ir_nonclaim(value: bytes) -> None:
+    """KiCad's spoke angle changes derived fill, not the pad envelope represented by Board IR.
+
+    Acceptance is deliberately broader than the 45/90 shape defaults: KiCad parses a decimal
+    angle rather than an enum or bounded range.  Exact fill remains KiCad-owned; the Board IR
+    snapshot is otherwise identical and the lost source distinction is disclosed by its count.
+    """
+
+    baseline = parse_kicad_bytes(SUBSET_BOARD.read_bytes(), constraint_profile(assign_signal=True))
+    accepted = parse_kicad_bytes(
+        _with_pad_thermal_bridge_angles(value), constraint_profile(assign_signal=True)
+    )
+
+    assert baseline.snapshot is not None
+    assert accepted.snapshot is not None
+    assert baseline.unmodelled_thermal_bridge_angle_pad_count == 0
+    assert accepted.unmodelled_thermal_bridge_angle_pad_count == 1
+    assert accepted.snapshot.content.source.revision != baseline.snapshot.content.source.revision
+    assert (
+        replace(accepted.snapshot.content, source=baseline.snapshot.content.source)
+        == baseline.snapshot.content
+    )
+
+
+def test_thermal_bridge_angle_disclosure_counts_each_converted_copper_pad() -> None:
+    """The measured disclosure counts pads, not documents or angle values."""
+
+    result = parse_kicad_bytes(
+        _with_pad_thermal_bridge_angles(b"22.5", b"135"),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is not None
+    assert result.unmodelled_thermal_bridge_angle_pad_count == 2
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        b"(thermal_bridge_angle)",
+        b"(thermal_bridge_angle 45 90)",
+        b'(thermal_bridge_angle "45")',
+        b"(thermal_bridge_angle 4.5e1)",
+        b"(thermal_bridge_angle 45.0000001)",
+        b"(thermal_bridge_angle forty_five)",
+        b"(thermal_bridge_angle (value 45))",
+        b"(thermal_bridge_angle 45)\n      (thermal_bridge_angle 90)",
+    ],
+)
+def test_a_malformed_thermal_bridge_angle_refuses_without_partial_measurement(
+    field: bytes,
+) -> None:
+    """Allowlisting the head is not an untyped passthrough, including on duplicate declarations."""
+
+    result = parse_kicad_bytes(
+        _with_pad_zone_connect(field), constraint_profile(assign_signal=True)
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code in {
+        "syntax.duplicate_field",
+        "syntax.invalid",
+        "integer.precision",
+    }
+    assert result.unmodelled_thermal_bridge_angle_pad_count == 0
+
+
+def test_an_aperture_thermal_bridge_angle_is_validated_but_not_counted() -> None:
+    """A skipped stencil aperture cannot smuggle bad syntax or claim converted copper."""
+
+    accepted = parse_kicad_bytes(
+        _with_pad(_aperture_pad(extra=b"      (thermal_bridge_angle 45)\n")),
+        constraint_profile(assign_signal=True),
+    )
+    refused = parse_kicad_bytes(
+        _with_pad(_aperture_pad(extra=b"      (thermal_bridge_angle 4.5e1)\n")),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert accepted.snapshot is not None
+    assert accepted.unmodelled_thermal_bridge_angle_pad_count == 0
+    assert refused.snapshot is None
+    assert refused.diagnostics[0].code == "integer.precision"
+    assert refused.unmodelled_thermal_bridge_angle_pad_count == 0
+
+
 @pytest.mark.parametrize(
     ("value", "meaning"),
     [
@@ -3501,7 +3607,6 @@ def test_a_pad_zone_connect_outside_kicads_enum_is_refused(value: bytes) -> None
         (b"(offset 0 0.1)", "offset"),
         (b"(primitives (gr_poly (pts (xy 0 0))))", "primitives"),
         (b"(options (clearance outline))", "options"),
-        (b"(thermal_bridge_angle 45)", "thermal_bridge_angle"),
         (b"(thermal_bridge_width 0.4)", "thermal_bridge_width"),
         (b"(thermal_gap 0.3)", "thermal_gap"),
     ],

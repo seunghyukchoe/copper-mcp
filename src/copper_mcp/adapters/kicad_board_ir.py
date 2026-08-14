@@ -358,7 +358,6 @@ _UNSUPPORTED_PAD_FIELDS = (
     "teardrops",
     "tenting",
     "tertiary_drill",
-    "thermal_bridge_angle",
     "thermal_bridge_width",
     "thermal_gap",
     "thermal_width",
@@ -422,6 +421,7 @@ _SUPPORTED_PAD_FIELDS = frozenset(
         "remove_unused_layers",
         "roundrect_rratio",
         "size",
+        "thermal_bridge_angle",
         "tstamp",
         "uuid",
         "zone_connect",
@@ -600,6 +600,10 @@ class _Converter:
         # and a count is the only way to say so without a diagnostic that would refuse the board.
         self.edge_connector_pad_count = 0
         self.unmodelled_pad_property_count = 0
+        # Pads carrying a validated `thermal_bridge_angle` token.  The angle affects KiCad's
+        # derived zone-fill spokes, not the pad envelope represented by Board IR, so the token is
+        # accepted as a typed non-claim and disclosed rather than silently discarded.
+        self.unmodelled_thermal_bridge_angle_pad_count = 0
         # Root ``(property ...)`` expressions accepted as board metadata and not modelled, on the
         # same measured-and-reported footing as the group count above.
         self.root_board_property_count = 0
@@ -1553,6 +1557,43 @@ class _Converter:
                 object_kind="pad",
             )
 
+    def _require_valid_thermal_bridge_angle(self, pad: SExpr, locator: str) -> bool:
+        """Validate and disclose a pad-level thermal spoke angle without modelling it.
+
+        KiCad parses this field as one decimal degree value and applies it only while deriving
+        thermal-relief spokes.  It does not change the pad envelope, hole, layers, clearance, or
+        zone outline.  Conservative routing therefore keeps its over-approximating zone boundary,
+        while exact-fill routing consumes KiCad's freshness-verified polygons with this value
+        already applied.  Board IR cannot reproduce the fill from a snapshot alone, so presence
+        is returned to the caller for measured MCP disclosure rather than treated as an inert
+        field.  See issue #186 and D-205.
+
+        The accepted numeric language is CopperMCP's existing exact rotation boundary: bare,
+        non-exponent decimal degrees with at most microdegree precision.  KiCad itself does not
+        impose a 45/90 enum or a 0..360 range, so values outside either are deliberately accepted.
+        """
+
+        values = self._values(
+            pad,
+            "thermal_bridge_angle",
+            locator,
+            minimum=1,
+            maximum=1,
+            required=False,
+        )
+        if not values:
+            return False
+        value = values[0]
+        if is_quoted_atom(value):
+            self.fail(
+                "integer.precision",
+                "thermal bridge angle must be a bare decimal degree value",
+                locator,
+                object_kind="pad",
+            )
+        self._rotation(value, f"{locator}.thermal_bridge_angle")
+        return True
+
     def _require_supported_pad_property(self, pad: SExpr, locator: str) -> bool:
         """Accept a pad fabrication property only in the closed shape and value table below.
 
@@ -2441,6 +2482,10 @@ class _Converter:
                 # The value is inert on an aperture, which has no copper for a pour to reach --
                 # but skipping a pad must not become a way to smuggle an unvalidated token in.
                 self._require_attaching_pad_zone_connection(pad, locator)
+                # Like `zone_connect`, this allowlisted value must be validated before the
+                # aperture skip.  Its disclosure count is incremented only after that skip, so
+                # it describes converted copper pads rather than syntax merely encountered.
+                has_thermal_bridge_angle = self._require_valid_thermal_bridge_angle(pad, locator)
                 # Validated before the aperture skip for the same reason `zone_connect` is: the
                 # head is on the pad allowlist now, so a skipped aperture pad would otherwise
                 # carry an unvalidated -- possibly castellated -- token past every check.  It is
@@ -2470,6 +2515,8 @@ class _Converter:
                 # discard is still silent.
                 if has_fabrication_property:
                     self.unmodelled_pad_property_count += 1
+                if has_thermal_bridge_angle:
+                    self.unmodelled_thermal_bridge_angle_pad_count += 1
                 pad_at = self._values(pad, "at", locator, minimum=2, maximum=3)
                 local = PointNM(
                     self._mm(pad_at[0], f"{locator}.at.x"),
@@ -3588,6 +3635,9 @@ class _Converter:
             edge_connector_pad_count=self.edge_connector_pad_count,
             unmodelled_board_property_count=self.root_board_property_count,
             unmodelled_pad_property_count=self.unmodelled_pad_property_count,
+            unmodelled_thermal_bridge_angle_pad_count=(
+                self.unmodelled_thermal_bridge_angle_pad_count
+            ),
         )
 
 
