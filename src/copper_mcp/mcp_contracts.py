@@ -1928,8 +1928,12 @@ class PlacementLegalityContract(_ClosedContract):
     #: prove collision; ``inconclusive`` is everything between and is neither a pass nor a
     #: failure. Treating it as either would claim a proof nobody has.
     pad_overlap: Literal["proven_clear", "inconclusive", "violated"]
-    outline_containment: Literal["proven_inside", "violated"]
-    keepout_respect: Literal["proven_clear", "violated"]
+    #: Three-valued direction bracket. Pad bounds prove containment while pad cores prove a
+    #: breach; the gap is disclosed rather than collapsed into a false KiCad-parity claim.
+    outline_containment: Literal["proven_inside", "inconclusive", "violated"]
+    #: Pad bounds prove clearance while pad cores prove intrusion. A bounds-only contact is
+    #: inconclusive because publishing it as ``violated`` would accuse copper that is not there.
+    keepout_respect: Literal["proven_clear", "inconclusive", "violated"]
     #: Three-valued for the same reason ``pad_overlap`` is. A footprint's rings are one even-odd
     #: region, so a nested ring is a hole rather than a second solid, and each region is contracted
     #: by KiCad 10.0.5's cached-courtyard inset before the collision test. ``inconclusive`` is the

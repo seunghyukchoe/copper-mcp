@@ -237,7 +237,14 @@ carries evidence holding per-rule residuals and the legality record. `pad_overla
 **three-valued**: `proven_clear` when pad
 bounds are disjoint, `violated` when pad cores overlap, and `inconclusive` in between.
 `inconclusive` is not a failure and a candidate is still produced; it means neither clearance nor
-collision could be proven. `courtyard_overlap` is **three-valued** for the same reason, over Board IR 0.2's simple orthogonal
+collision could be proven. `outline_containment` and `keepout_respect` use the same direction
+bracket: over-approximating bounds prove `proven_inside`/`proven_clear`, under-approximating cores
+prove an actual edge crossing or keepout intrusion, and the gap is `inconclusive`. This includes
+copper wholly remote from an edge: KiCad 10.0.5's `copper_edge_clearance` provider tests collision
+with nearby `Edge.Cuts`, not global point-in-board containment. A consumer needing an all-proven
+placement must reject an inconclusive field or request the candidate-bound KiCad DRC path
+([ADR-0110](../adr/0110-placement-boundary-verdicts-bracket-kicad-parity.md)).
+`courtyard_overlap` is **three-valued** for the same reason, over Board IR 0.2's simple orthogonal
 courtyard subset: `proven_clear` when the regions share no area, `violated` at exact parity with
 KiCad's contracted courtyard cache, and `inconclusive` in the penetration band below its 10,000 nm
 collision threshold, where raw geometry and KiCad disagree. A footprint's rings form one even-odd
@@ -258,7 +265,7 @@ A `refused` response carries a typed code: `unresolved_ref`, `infeasible_constra
 first is a proof that no placement satisfies the rules as written, the second an admission that
 the work ran out - and only syntactic contradictions are claimed as infeasible. An
 `illegal_placement` refusal includes the legality record that condemned it, so a caller never has
-to guess which of the three independent checks failed. `satisfied_within_tolerance` appears only
+to guess which independent check failed. `satisfied_within_tolerance` appears only
 when the caller supplied a `tolerance_nm`; an unstated tolerance means exact.
 
 A proposal that would move a footprint whose Board IR `locked` field is true is refused as

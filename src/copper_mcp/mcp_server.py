@@ -892,15 +892,21 @@ def preview_placement(request: PlacementPreviewToolRequest) -> PlacementPreviewT
     side - and name objects only by the references a scene already returned. Proposals are
     anchored the same way: an offset from another object's edge or centre, never an absolute
     coordinate. Positions in the response are derived here and snapped to the placement grid.
+    Rules are preference/ranking evidence, not legality gates: a violated rule remains in the
+    candidate and does not block preview or apply. For a pad subject, region ``keep_in`` evaluates
+    the under-approximating attachment core while ``keep_out`` evaluates the over-approximating
+    obstacle envelope; they deliberately answer different policy questions.
 
-    A ``previewed`` result carries an immutable candidate whose legality was proven
-    deterministically. Note that ``pad_overlap`` and ``courtyard_overlap`` are three-valued:
-    ``inconclusive`` means neither clearance nor collision could be proven, and is not a
-    failure. Courtyard overlap covers the bounded same-side subset - octilinear rings and
-    exact circles. Unsupported courtyard topology fails closed. This tool never applies a
-    placement. ``include_drc`` is an opt-in, file-backed replay through KiCad DRC. It returns
-    only aggregate findings and digest bindings for a disposable patched board; it never grants
-    placement apply authority or exposes board bytes. Live placement does not support DRC.
+    A ``previewed`` result carries an immutable candidate with four independent deterministic
+    legality verdicts. All four are three-valued: ``pad_overlap``, ``outline_containment``,
+    ``keepout_respect`` and ``courtyard_overlap``. ``inconclusive`` means neither endpoint was
+    proven and is not itself a failure. A caller requiring an all-proven placement must inspect
+    every verdict; candidate publication or an apply token is not proof that an inconclusive
+    boundary lies inside or clear. Courtyard overlap covers the bounded per-courtyard-layer subset
+    of octilinear rings and exact circles. Unsupported courtyard topology fails closed. This tool
+    never applies a placement. ``include_drc`` is an opt-in, file-backed replay through KiCad DRC.
+    It returns only aggregate findings and digest bindings for a disposable patched board; it never
+    grants placement apply authority or exposes board bytes. Live placement does not support DRC.
     """
 
     # Both transports, like preview_route: one self-contained response, no server-side state,

@@ -8,6 +8,24 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **Placement boundary verdicts now preserve the proof gap instead of publishing false KiCad
+  violations** ([ADR-0110](docs/adr/0110-placement-boundary-verdicts-bracket-kicad-parity.md),
+  [issue #187](https://github.com/seunghyukchoe/copper-mcp/issues/187), `D-206`, `R-159`,
+  `B-116`). `outline_containment` and `keepout_respect` gain `inconclusive`: pad bounds prove
+  inside/clear, pad cores prove a real edge crossing or keepout intrusion, and the gap claims
+  neither. Region keep-in now resolves the core, keep-out retains bounds, and alignment/symmetry
+  use exact object centres. The first core-only repair was measured and rejected because KiCad's
+  edge provider tests proximity/collision with `Edge.Cuts`, not global board containment. On the
+  13 converting corpus boards, false published outline violations fall **1→0**, keepout false
+  violations remain **0**, three formerly refused batches become previewable, conversion remains
+  **13/18**, and all relevant KiCad counts agree over two runs per board. Sixteen committed
+  mutants are killed; no Board IR type, schema, accepted board construct, board byte or content
+  address changes. The model-facing `preview_placement` description enumerates all four
+  three-valued verdicts and requires all-proven consumers to inspect each one; candidate
+  publication or an apply token is not presented as boundary proof. It also states the existing
+  rule contract explicitly: rules are preference/ranking evidence rather than legality gates, and
+  a pad region `keep_in` evaluates its attachment core while `keep_out` evaluates its obstacle
+  envelope.
 - **Board IR now validates and accepts pad `thermal_bridge_angle` as a typed non-claim**
   ([issue #186](https://github.com/seunghyukchoe/copper-mcp/issues/186), `D-205`, `R-158`).
   KiCad uses the decimal-degree value only while deriving thermal-relief spokes; it does not move

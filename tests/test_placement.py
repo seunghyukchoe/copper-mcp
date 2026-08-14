@@ -44,7 +44,12 @@ from copper_mcp.placement.geometry import (
     pad_core,
     rects_overlap,
 )
-from copper_mcp.placement.legalizer import snap
+from copper_mcp.placement.legalizer import (
+    _PlacedFootprint,
+    _PlacedPad,
+    _resolve_centre,
+    snap,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "placement-v0.1"
@@ -826,6 +831,28 @@ class LegalityTests(unittest.TestCase):
         # Inconclusive is not a violation, so a candidate is still produced.
         self.assertTrue(evidence.legality.legal)
 
+    def test_outline_containment_brackets_a_circle_at_a_diagonal_edge(self) -> None:
+        """A box corner outside is not proof that the circular pad leaves the board."""
+
+        result = _evaluate(FIXTURES / "placement-circle-outline-bracket.kicad_pcb")
+
+        self.assertEqual(result.status, "previewed")
+        assert result.candidate is not None
+        legality = result.candidate.evidence.legality
+        self.assertEqual(legality.outline_containment, "inconclusive")
+        self.assertTrue(legality.legal)
+
+    def test_keepout_respect_brackets_a_circle_at_a_diagonal_boundary(self) -> None:
+        """An envelope touching a keepout is not proof that circular copper intrudes."""
+
+        result = _evaluate(FIXTURES / "placement-circle-keepout-bracket.kicad_pcb")
+
+        self.assertEqual(result.status, "previewed")
+        assert result.candidate is not None
+        legality = result.candidate.evidence.legality
+        self.assertEqual(legality.keepout_respect, "inconclusive")
+        self.assertTrue(legality.legal)
+
     def test_bounds_and_cores_bracket_every_pad(self) -> None:
         """The direction-of-error invariant the three-valued verdict rests on."""
 
@@ -1025,6 +1052,38 @@ class CourtyardInconclusiveContractTests(unittest.TestCase):
                 outline_containment="proven_inside",
                 keepout_respect="proven_clear",
                 courtyard_overlap="not_modelled",
+            )
+
+
+class PadBoundaryInconclusiveContractTests(unittest.TestCase):
+    """Outline and keepout evidence preserve the gap between cores and envelopes."""
+
+    def test_outline_and_keepout_accept_inconclusive_without_calling_it_clear(self) -> None:
+        legality = PlacementLegality(
+            pad_overlap="proven_clear",
+            outline_containment="inconclusive",
+            keepout_respect="inconclusive",
+            courtyard_overlap="proven_clear",
+        )
+
+        self.assertTrue(legality.legal)
+        self.assertEqual(legality.to_dict()["outline_containment"], "inconclusive")
+        self.assertEqual(legality.to_dict()["keepout_respect"], "inconclusive")
+
+    def test_a_fourth_boundary_value_is_refused(self) -> None:
+        with self.subTest(field="outline_containment"), self.assertRaises(PlacementError):
+            PlacementLegality(
+                pad_overlap="proven_clear",
+                outline_containment="not_modelled",
+                keepout_respect="proven_clear",
+                courtyard_overlap="proven_clear",
+            )
+        with self.subTest(field="keepout_respect"), self.assertRaises(PlacementError):
+            PlacementLegality(
+                pad_overlap="proven_clear",
+                outline_containment="proven_inside",
+                keepout_respect="not_modelled",
+                courtyard_overlap="proven_clear",
             )
 
 
@@ -1356,6 +1415,113 @@ class RuleEvaluationTests(unittest.TestCase):
         self.assertEqual(outcomes[0], "satisfied_exactly", "the west footprint is clear")
         self.assertEqual(outcomes[1], "violated", "the east footprint sits in the keepout")
 
+    def test_region_keep_in_uses_the_pad_core(self) -> None:
+        """The core is inside this diamond while the circular pad's box corners are outside."""
+
+        source = (
+            (FIXTURES / "placement-circle-keepout-bracket.kicad_pcb")
+            .read_bytes()
+            .replace(b"(at 25.6 10.6 0)", b"(at 29 14 0)")
+        )
+        converted = parse_kicad_bytes(source, _profile(), ParseLimits())
+        assert converted.snapshot is not None
+        snapshot = converted.snapshot
+        view = build_placement_view(source, snapshot)
+        pad_ref = next(iter(view.owner_by_pad))
+        boundary_ref = snapshot.content.keepouts[0].id
+
+        result = evaluate_placement(
+            _intent(
+                view,
+                "directional-region-rule.kicad_pcb",
+                rules=[
+                    {
+                        "kind": "region",
+                        "subject": pad_ref,
+                        "mode": "keep_in",
+                        "boundary_ref": boundary_ref,
+                    },
+                ],
+            ),
+            snapshot,
+            view,
+        )
+
+        assert result.diagnostic is not None
+        assert result.diagnostic.legality is not None
+        self.assertEqual(
+            [item.status for item in result.diagnostic.rule_results],
+            ["satisfied_exactly"],
+        )
+        self.assertEqual(result.diagnostic.legality.keepout_respect, "violated")
+
+    def test_region_keep_out_uses_the_pad_bounds(self) -> None:
+        """The box touches this diamond while the circular core remains outside it."""
+
+        source = (FIXTURES / "placement-circle-keepout-bracket.kicad_pcb").read_bytes()
+        converted = parse_kicad_bytes(source, _profile(), ParseLimits())
+        assert converted.snapshot is not None
+        snapshot = converted.snapshot
+        view = build_placement_view(source, snapshot)
+        pad_ref = next(iter(view.owner_by_pad))
+        boundary_ref = snapshot.content.keepouts[0].id
+
+        result = evaluate_placement(
+            _intent(
+                view,
+                "directional-region-keep-out-rule.kicad_pcb",
+                rules=[
+                    {
+                        "kind": "region",
+                        "subject": pad_ref,
+                        "mode": "keep_out",
+                        "boundary_ref": boundary_ref,
+                    }
+                ],
+            ),
+            snapshot,
+            view,
+        )
+
+        assert result.candidate is not None
+        self.assertEqual(
+            [item.status for item in result.candidate.evidence.rule_results],
+            ["violated"],
+        )
+        self.assertEqual(result.candidate.evidence.legality.keepout_respect, "inconclusive")
+
+    def test_alignment_position_does_not_come_from_an_asymmetric_pad_envelope(self) -> None:
+        """Custom-pad preparation: position is the pad centre, never the envelope centre."""
+
+        _, snapshot, view = _board(FIXTURES / "placement-legal.kicad_pcb")
+        footprint_ref = sorted(view.footprints)[0]
+        footprint = view.footprints[footprint_ref]
+        pad = next(item for item in snapshot.content.pads if item.id in footprint.pad_ids)
+        pad_centre = PointNM(11_000_000, 13_000_000)
+        placed_pad = _PlacedPad(
+            pad=pad,
+            centre=pad_centre,
+            rotation_udeg=0,
+            bounds=(20_000_000, 30_000_000, 26_000_000, 38_000_000),
+            core=(10_000_000, 12_000_000, 12_000_000, 14_000_000),
+        )
+        origin = PointNM(7_000_000, 9_000_000)
+        placed = _PlacedFootprint(
+            ref_id=footprint_ref,
+            origin=origin,
+            orientation_udeg=0,
+            side="front",
+            moved=False,
+            pads=(placed_pad,),
+            hull=placed_pad.bounds,
+            courtyards=(),
+            courtyard_circles=(),
+        )
+        placed_by_ref = {footprint_ref: placed}
+
+        self.assertEqual(_resolve_centre(footprint_ref, placed_by_ref, view), origin)
+        self.assertEqual(_resolve_centre(pad.id, placed_by_ref, view), pad_centre)
+
     def test_a_region_rule_naming_a_boundary_that_does_not_exist_is_unresolved(self) -> None:
         snapshot, view, refs = self._view()
         result = evaluate_placement(
@@ -1543,10 +1709,9 @@ class MetamorphicTests(unittest.TestCase):
             shrunk_result.snapshot,
             shrunk_view,
         )
-        assert outcome.diagnostic is not None
-        self.assertEqual(outcome.diagnostic.code, PlacementFailureCode.ILLEGAL_PLACEMENT)
-        assert outcome.diagnostic.legality is not None
-        self.assertEqual(outcome.diagnostic.legality.outline_containment, "violated")
+        assert outcome.candidate is not None
+        self.assertEqual(outcome.status, "previewed")
+        self.assertEqual(outcome.candidate.evidence.legality.outline_containment, "inconclusive")
 
 
 class RotatedNonSquareTests(unittest.TestCase):
@@ -1589,9 +1754,10 @@ class KiCadOracleTests(unittest.TestCase):
     ``proven_clear`` is only a claim about pad overlap, not about every rule KiCad checks.
     """
 
-    def _drc_errors(self, board: Path) -> int:
+    def _drc_violation_types(self, board: Path) -> dict[str, int]:
         import json
         import tempfile
+        from collections import Counter
 
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
@@ -1617,9 +1783,16 @@ class KiCadOracleTests(unittest.TestCase):
             )
             self.assertIn(completed.returncode, (0, 5), completed.stderr)
             payload = json.loads(report.read_text(encoding="utf-8"))
-        return sum(
-            1 for violation in payload.get("violations", []) if violation.get("severity") == "error"
+        return dict(
+            Counter(
+                str(violation.get("type"))
+                for violation in payload.get("violations", [])
+                if violation.get("severity") == "error"
+            )
         )
+
+    def _drc_errors(self, board: Path) -> int:
+        return sum(self._drc_violation_types(board).values())
 
     def test_every_proven_violation_is_also_a_kicad_error(self) -> None:
         """All three checks, each against the authoritative tool.
@@ -1653,6 +1826,22 @@ class KiCadOracleTests(unittest.TestCase):
         result = _evaluate(board)
         self.assertEqual(result.status, "previewed")
         self.assertEqual(self._drc_errors(board), 0)
+
+    def test_direction_brackets_do_not_publish_kicad_violations_that_are_absent(self) -> None:
+        cases = {
+            "placement-circle-outline-bracket.kicad_pcb": "copper_edge_clearance",
+            "placement-circle-keepout-bracket.kicad_pcb": "items_not_allowed",
+        }
+        for name, violation_type in cases.items():
+            with self.subTest(fixture=name):
+                board = FIXTURES / name
+                result = _evaluate(board)
+                assert result.candidate is not None
+                self.assertIn(
+                    "inconclusive",
+                    result.candidate.evidence.legality.to_dict().values(),
+                )
+                self.assertEqual(self._drc_violation_types(board).get(violation_type, 0), 0)
 
 
 @pytest.mark.skipif(not REAL_KICAD_CLI.is_file(), reason="KiCad CLI is not installed")

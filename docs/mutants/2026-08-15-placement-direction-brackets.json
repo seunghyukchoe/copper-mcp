@@ -1,0 +1,169 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "PDB01-outline-bounds-publish-violation",
+      "file": "src/copper_mcp/placement/legalizer.py",
+      "anchor": "                if core_crosses_edge:\n                    return \"violated\"\n                inconclusive = True",
+      "replacement": "                if core_crosses_edge:\n                    return \"violated\"\n                return \"violated\"",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_placement.py::LegalityTests::test_outline_containment_brackets_a_circle_at_a_diagonal_edge"
+      ]
+    },
+    {
+      "id": "PDB02-real-outline-crossing-demoted",
+      "file": "src/copper_mcp/placement/legalizer.py",
+      "anchor": "                if core_crosses_edge:\n                    return \"violated\"",
+      "replacement": "                if False and core_crosses_edge:\n                    return \"violated\"",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_placement.py::LegalityTests::test_each_illegality_is_reported_by_its_own_check"
+      ]
+    },
+    {
+      "id": "PDB03-core-outside-mistaken-for-edge-crossing",
+      "file": "src/copper_mcp/placement/legalizer.py",
+      "anchor": "                if core_crosses_edge:\n                    return \"violated\"",
+      "replacement": "                if not core_inside:\n                    return \"violated\"",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_placement.py::MetamorphicTests::test_the_relation_would_notice_a_verdict_that_did_not_travel"
+      ]
+    },
+    {
+      "id": "PDB04-keepout-bounds-publish-violation",
+      "file": "src/copper_mcp/placement/legalizer.py",
+      "anchor": "                if pad.core is not None and rect_touches_ring(pad.core, keepout.boundary):\n                    return \"violated\"\n                inconclusive = True",
+      "replacement": "                return \"violated\"",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_placement.py::LegalityTests::test_keepout_respect_brackets_a_circle_at_a_diagonal_boundary"
+      ]
+    },
+    {
+      "id": "PDB05-real-keepout-intrusion-demoted",
+      "file": "src/copper_mcp/placement/legalizer.py",
+      "anchor": "                if pad.core is not None and rect_touches_ring(pad.core, keepout.boundary):",
+      "replacement": "                if False and pad.core is not None and rect_touches_ring(pad.core, keepout.boundary):",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_placement.py::LegalityTests::test_each_illegality_is_reported_by_its_own_check"
+      ]
+    },
+    {
+      "id": "PDB06-outline-gap-hidden-as-inside",
+      "file": "src/copper_mcp/placement/legalizer.py",
+      "anchor": "    return \"inconclusive\" if inconclusive else \"proven_inside\"",
+      "replacement": "    return \"proven_inside\"",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_placement.py::LegalityTests::test_outline_containment_brackets_a_circle_at_a_diagonal_edge"
+      ]
+    },
+    {
+      "id": "PDB07-keepout-gap-hidden-as-clear",
+      "file": "src/copper_mcp/placement/legalizer.py",
+      "anchor": "    return \"inconclusive\" if inconclusive else \"proven_clear\"",
+      "replacement": "    return \"proven_clear\"",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_placement.py::LegalityTests::test_keepout_respect_brackets_a_circle_at_a_diagonal_boundary"
+      ]
+    },
+    {
+      "id": "PDB08-outline-contract-drops-third-value",
+      "file": "src/copper_mcp/placement/contracts.py",
+      "anchor": "        if self.outline_containment not in {\"proven_inside\", \"inconclusive\", \"violated\"}:",
+      "replacement": "        if self.outline_containment not in {\"proven_inside\", \"violated\"}:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_placement.py::PadBoundaryInconclusiveContractTests::test_outline_and_keepout_accept_inconclusive_without_calling_it_clear"
+      ]
+    },
+    {
+      "id": "PDB09-keepout-contract-drops-third-value",
+      "file": "src/copper_mcp/placement/contracts.py",
+      "anchor": "        if self.keepout_respect not in {\"proven_clear\", \"inconclusive\", \"violated\"}:",
+      "replacement": "        if self.keepout_respect not in {\"proven_clear\", \"violated\"}:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_placement.py::PadBoundaryInconclusiveContractTests::test_outline_and_keepout_accept_inconclusive_without_calling_it_clear"
+      ]
+    },
+    {
+      "id": "PDB10-outline-inconclusive-made-illegal",
+      "file": "src/copper_mcp/placement/contracts.py",
+      "anchor": "            and self.outline_containment != \"violated\"",
+      "replacement": "            and self.outline_containment == \"proven_inside\"",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_placement.py::PadBoundaryInconclusiveContractTests::test_outline_and_keepout_accept_inconclusive_without_calling_it_clear"
+      ]
+    },
+    {
+      "id": "PDB11-keepout-inconclusive-made-illegal",
+      "file": "src/copper_mcp/placement/contracts.py",
+      "anchor": "            and self.keepout_respect != \"violated\"",
+      "replacement": "            and self.keepout_respect == \"proven_clear\"",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_placement.py::PadBoundaryInconclusiveContractTests::test_outline_and_keepout_accept_inconclusive_without_calling_it_clear"
+      ]
+    },
+    {
+      "id": "PDB12-pad-position-derived-from-envelope-centre",
+      "file": "src/copper_mcp/placement/legalizer.py",
+      "anchor": "                if pad.pad.id == ref:\n                    return pad.centre",
+      "replacement": "                if pad.pad.id == ref:\n                    return PointNM(\n                        (pad.bounds[0] + pad.bounds[2]) // 2,\n                        (pad.bounds[1] + pad.bounds[3]) // 2,\n                    )",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_placement.py::RuleEvaluationTests::test_alignment_position_does_not_come_from_an_asymmetric_pad_envelope"
+      ]
+    },
+    {
+      "id": "PDB13-region-keep-in-uses-envelope",
+      "file": "src/copper_mcp/placement/legalizer.py",
+      "anchor": "            core = _resolve_core(rule.subject, placed_by_ref, view)\n            residual = 0 if rect_inside_ring(core, boundary) else 1",
+      "replacement": "            bounds = _resolve_bounds(rule.subject, placed_by_ref, view)\n            residual = 0 if rect_inside_ring(bounds, boundary) else 1",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_placement.py::RuleEvaluationTests::test_region_keep_in_uses_the_pad_core"
+      ]
+    },
+    {
+      "id": "PDB14-region-keep-out-uses-core",
+      "file": "src/copper_mcp/placement/legalizer.py",
+      "anchor": "            bounds = _resolve_bounds(rule.subject, placed_by_ref, view)\n            residual = 1 if rect_touches_ring(bounds, boundary) else 0",
+      "replacement": "            core = _resolve_core(rule.subject, placed_by_ref, view)\n            residual = 1 if rect_touches_ring(core, boundary) else 0",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_placement.py::RuleEvaluationTests::test_region_keep_out_uses_the_pad_bounds"
+      ]
+    },
+    {
+      "id": "PDB15-mcp-outline-contract-drops-third-value",
+      "file": "src/copper_mcp/mcp_contracts.py",
+      "anchor": "    outline_containment: Literal[\"proven_inside\", \"inconclusive\", \"violated\"]",
+      "replacement": "    outline_containment: Literal[\"proven_inside\", \"violated\"]",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_placement_preview.py::McpSurfaceTests::test_the_tool_advertises_a_real_output_schema"
+      ]
+    },
+    {
+      "id": "PDB16-mcp-keepout-contract-drops-third-value",
+      "file": "src/copper_mcp/mcp_contracts.py",
+      "anchor": "    keepout_respect: Literal[\"proven_clear\", \"inconclusive\", \"violated\"]",
+      "replacement": "    keepout_respect: Literal[\"proven_clear\", \"violated\"]",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_placement_preview.py::McpSurfaceTests::test_the_tool_advertises_a_real_output_schema"
+      ]
+    }
+  ]
+}
