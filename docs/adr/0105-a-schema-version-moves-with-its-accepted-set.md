@@ -156,14 +156,44 @@ untestable.
 It sweeps two axes: every consecutive release tag, which is what puts the four historical instances
 on the record as exemptions rather than as folklore, and the newest tag against the working tree,
 which is the half that catches the next break before it merges. Two things fail separately because
-the comparison cannot see them: a published schema being **removed**, which is the one way to undo
-this ADR's freeze silently, and a **release tag missing from `RELEASE_TAGS`**, which would leave
-the working-tree half comparing against a tag that is no longer the newest.
+the comparison cannot see them: a published schema being **removed**, and a **release tag missing
+from `RELEASE_TAGS`**, which would leave the working-tree half comparing against a tag that is no
+longer the newest.
 
-**Exemptions follow `EXEMPT_LABEL_RECORDS`' discipline exactly.** `EXEMPT_DRIFT` is keyed
-`(file, declared version, tag)`, each entry names `D-197`, and **an entry that matches no real drift
-fails the run**. Four entries make it green; a fifth cannot be added without a ledger row, and none
-can be added and then quietly forgotten.
+**Removal is not the only silent route, and saying it was is a correction this record owes.** An
+accepted-set gate cannot enforce a byte freeze, and adversarial review proved it: all 2,046 lines of
+`0.2.0.schema.json` were rewritten — reindented, every multi-member `enum` reversed — and the gate
+plus all 107 schema tests stayed green, *correctly*, because the accepted set had not moved. There
+are therefore three silent routes, not one: removal, an accepted-set-neutral rewrite, and an edit to
+a keyword the extractor does not watch (`pattern`, `maximum`, `$ref`). All three are closed for the
+two frozen files by a **byte pin** —
+`test_a_frozen_published_schema_keeps_the_exact_bytes_it_shipped_with`, digest and byte count for
+`0.1.0` and `0.2.0` both. The active `0.3.0` is deliberately *not* pinned, and a test says why: a
+schema that is expected to change would turn every legitimate edit into a pin update, which is how
+a pin becomes a rubber stamp.
+
+**Exemptions follow `EXEMPT_LABEL_RECORDS`' discipline**, with two clauses this record's first
+draft did not have. `EXEMPT_DRIFT` is keyed `(file, declared version, tag)`, each entry names
+`D-197`, and four entries make it green. What is **enforced**:
+
+- **An entry matching no real drift fails the run**, so none can be added and then forgotten.
+- **An entry's tag must be a release tag.** Adversarial review defeated the first draft by adding
+  real drift plus one line keyed `(file, version, "the working tree")` citing a nonexistent row —
+  and the run passed. Only a *published* break is unrepairable, so only a published break is
+  exemptible; anything in the working tree can simply be fixed. A working-tree key is now both
+  rejected and **inapplicable**, so the drift it tried to suppress is reported too.
+- **An entry's recorded direction must be one the comparison observed.** `narrowing` and `widening`
+  inside a reason were unverified prose, and a mutant flipping the word on the ADR-0097 entry
+  survived everything. The check is *containment*, not equality, and `drc-summary` is why: a
+  required-key addition is simultaneously a widening of the property set and a narrowing of the
+  `required` list, and the entry records the net effect on a consumer. A reason must claim only
+  directions the change has; it is not required to enumerate them all.
+
+What is **not** enforced, said plainly rather than left to be assumed: that the ledger row an entry
+cites exists, or says what the entry claims it says. The earlier sentence "a fifth cannot be added
+without a ledger row" was **false as written** — nothing reads `D-197`. What a fifth cannot do is
+name a non-release tag or a direction the change does not have. The citation itself is review
+discipline, exactly as it is in `check_doc_links.py`.
 
 **What the gate does not own**, stated because an absence is evidence only if the observation could
 report a presence. It has no opinion about whether a change is *correct*, only about whether the
@@ -183,12 +213,12 @@ PYTHONPATH=src:. python scripts/mutation_harness.py \
   docs/mutants/2026-08-14-schema-set-drift.json --report report.json
 ```
 
-**14 mutants, 14 killed, no survivors, no `stale_anchor`, no `invalid_run`.** Python 3.12.13 on
-`macOS-26.5.2-arm64`. Every mutant carries its anchor and its named killing tests in the spec, and
-every kill is proved in both directions by the harness. This is a claim about those fourteen, not
-about the mutation space.
+**22 mutants: 21 killed, 1 survived and declared equivalent with its argument.** No
+`stale_anchor`, no `invalid_run`. Python 3.12.13 on `macOS-26.5.2-arm64`. Every mutant carries its
+anchor and its named killing tests in the spec, and every kill is proved in both directions by the
+harness. This is a claim about those twenty-two, not about the mutation space.
 
-Four results are worth recording rather than just counting.
+Five results are worth recording rather than just counting.
 
 - **Both directions are covered by real edits rather than synthetic ones.** `SD1` removes the
   exemption for ADR-0097's *actual historical* widening, so the gate must detect the real
@@ -200,17 +230,23 @@ Four results are worth recording rather than just counting.
   comparison, leaving the historical sweep intact — so the gate stays green, keeps reporting four
   matched exemptions, and records the past while catching nothing. It is killed only because two
   tests assert on the working-tree axis specifically. An "it passes" test would not have found it.
-- **`SD10` changed the code rather than the test.** Writing it exposed that the first draft labelled
-  a whole constraint site appearing as `[widening]`, which is not readable locally — the same site
-  narrows when it is reached through a required key. The label is now `[shape]`, the mutant pins it,
-  and the finding is recorded here rather than quietly fixed: a confident wrong word in a failure
-  message is worse than an honest absence of one.
-- **`SD11` and `SD12` each closed a hole in this ADR's own promise.** Deleting
-  `0.2.0.schema.json` is not an accepted-set *change*, so the comparison could never see it — the
-  freeze would have been enforced by nothing. And `RELEASE_TAGS` is an explicit list, so a release
-  tagged and not listed would quietly stop "the newest tag" being the newest. Both now fail the
-  run, and the mutants pin them. Neither was in the first draft; both were found by asking what a
-  green run would still be compatible with.
+- **Six mutants exist because a review defeated the first draft, and each closed a real hole.**
+  `SD10` (a site's appearance claimed a direction it cannot know), `SD11` (a removed published
+  schema), `SD12` (a stale `RELEASE_TAGS`), `SD13` (a working-tree exemption smuggling live drift),
+  `SD14`/`SD15` (an unverified direction word, and the exact flip the reviewer used), and `FZ1` (a
+  frozen schema rewritten without moving its accepted set). Every one of them was **green before**.
+- **`CV5` is the most useful result in the run, and it is a survivor.** It was declared `killed`,
+  applied, and survived: making the *inner* refusal message echo the caller's declared version
+  changes nothing a caller sees, because every `BoardIRValidationError` raised inside
+  `decode_snapshot_json`'s `try` block has its message discarded and only its code kept. So the
+  non-echo property is enforced by the normalisation, not by the test — which also means the test
+  proving it was, at that site, incapable of reporting a presence. `CV6` mutates the *tail*, which
+  is the site that can echo, and is killed there. The mutant is left in the spec as
+  `equivalent` with its argument, because the survival is the evidence.
+- **`CV1` came back `stale_anchor` rather than passing quietly**, because the version refusal it
+  anchored to had been rewritten by this same change. Re-anchored and re-run. That is the guard
+  ADR-0098 added working as intended: a mutant that silently stops applying is a passing check
+  measuring nothing.
 
 ## Consequences
 
@@ -227,27 +263,40 @@ Four results are worth recording rather than just counting.
   been the source board for the active golden since `0.2.0`. The directory names the era the boards
   were authored in. Renaming it would move thirty path references across nine test modules and five
   benchmark scripts to record a version change that touched one file.
-- **A persisted `0.2.0` envelope no longer decodes.** Typed as `schema.invalid`, pinned by
-  `test_the_codec_refuses_a_persisted_v0_2_0_envelope_with_a_typed_code`. Re-convert from the source
-  board; there is no auto-migration, exactly as `0.1` → `0.2` had none. **The code is not
-  version-specific**, and that is recorded rather than repaired: `schema.invalid` also covers "not
-  Board IR JSON at all" and is what a `0.1` envelope already gets, so a caller cannot separate a
-  stale version from malformed bytes by the code alone. A discriminated code is a
-  diagnostic-vocabulary change with its own migration cost and does not belong inside a decision
-  about the envelope's version.
+- **A persisted `0.2.0` envelope no longer decodes, and the refusal now says the true why.**
+  Re-convert from the source board; there is no auto-migration, exactly as `0.1` → `0.2` had none.
+  The **diagnostic vocabulary gains one code**, `schema.version`, separate from `schema.invalid`.
+
+  This record's first draft kept the generic code and deferred the message to plan item P3.7. That
+  was wrong, and adversarial review was right to reject it. `schema.invalid`'s message reads *"JSON
+  does not conform to Board IR v0.2"* — and a persisted `0.2.0` envelope conforms to
+  `0.2.0`-as-published **exactly**; it is refused *because* it does, at a version this build has
+  superseded. That is not a stale label for a later sweep to tidy: it is a wrong *why* on a refusal
+  surface, on the one path this decision created. P3.7's golden set pins messages that are true;
+  it does not launder one that is false.
+
+  The new message is derived from `BOARD_IR_SCHEMA_VERSION` rather than restated, so it cannot go
+  stale the way its predecessor did, and it names only the version this build accepts — never the
+  version the document declared, which is caller-controlled and which no diagnostic echoes.
+  `0.1` envelopes move to the same code for the same reason, which is a behaviour change the
+  migration note carries. Pinned by
+  `test_the_codec_refuses_a_persisted_v0_2_0_envelope_with_a_discriminated_code`,
+  `test_the_version_refusal_never_echoes_the_version_the_document_declared` and
+  `test_the_version_code_separates_a_stale_version_from_bytes_that_are_not_board_ir`.
 - **`BoardIrSummary.ir_schema_version` reports `0.3.0`.** This is a visible MCP contract change and
   the migration note leads with it.
 - **`schemas/board-ir/0.3.0.schema.json` differs from `0.2.0` in three strings only** — `$id`,
   `title`, and the `schema_version` `const`. Substituting them back reproduces `0.2.0` byte for
   byte. The accepted set is deliberately identical: this bump reconciles a version with the set it
   already had, and folding a content change into it would make the two indistinguishable later.
-- **Roughly twenty refusal messages still read `Board IR v0.2`, and they are deliberately not
-  touched.** They name the IR *model generation*, which this change does not move: no modelled
-  field, type or invariant changes. Rewriting them would be a blanket identifier replacement across
-  a published refusal surface — the class [audit §3.3](../audit/2026-08-14-post-0.8.0-audit.md)
-  says a golden set should own — for a change that is about the envelope's version and nothing else.
-  This ADR does **not** claim the prose is unambiguous to a reader who has only the string; it
-  claims that changing it here would cost more than it is worth and belongs to plan item P3.7.
+- **The other refusal messages reading `Board IR v0.2` are deliberately not touched, and the line
+  between them and the one that was is stated.** About twenty remain. Each names the IR *model
+  generation*, which this change does not move — no modelled field, type or invariant changes — so
+  each is imprecise but **true**. The one that was fixed was **false**: it told a caller their
+  conforming document did not conform. Imprecise-but-true prose across a published refusal surface
+  is plan item P3.7's golden set; a false *why* on a path this decision created is this decision's.
+  This ADR does **not** claim the remaining twenty are unambiguous to a reader who has only the
+  string.
 - **`make lint` gains a git dependency.** The gate exits with a clear message when `git` is absent
   rather than passing silently. CI already checks out with `fetch-depth: 0`.
 

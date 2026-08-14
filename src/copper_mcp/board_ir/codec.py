@@ -47,6 +47,27 @@ from copper_mcp.board_ir.validation import BoardIRValidationError, validate_cont
 
 _JSON_NUMBER = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?")
 
+# A discriminated code for "this is Board IR, at a version this build does not
+# accept", separate from `schema.invalid`, which means "this is not Board IR".
+#
+# The two were one code until ADR-0105 made the distinction load-bearing. A
+# persisted `0.2.0` envelope conforms to `0.2.0`-as-published *exactly*; it is
+# refused because that version is superseded, not because it is malformed. The
+# old message -- "JSON does not conform to Board IR v0.2" -- said the opposite of
+# the truth on precisely the path the version bump created, and a wrong *why* on
+# a refusal surface is worse than a vague one.
+SCHEMA_VERSION_UNSUPPORTED = "schema.version"
+
+# One value, derived from the constant rather than restated, so it cannot go
+# stale the way the sentence it replaces did. It names the version this build
+# accepts and never the version the document declared: that string is
+# caller-controlled and no diagnostic echoes caller-controlled bytes.
+_SCHEMA_VERSION_REFUSAL = (
+    "Board IR envelope declares a superseded or unknown schema version; "
+    f"this build accepts {BOARD_IR_SCHEMA_VERSION} only, and an envelope at any "
+    "other version must be re-converted from its source board"
+)
+
 
 @dataclass(slots=True)
 class _JSONFrame:
@@ -872,7 +893,11 @@ def decode_snapshot_json(payload: bytes, limits: ParseLimits | None = None) -> B
             _string(envelope["schema_version"], "snapshot.schema_version")
             != BOARD_IR_SCHEMA_VERSION
         ):
-            raise ValueError("snapshot schema version is unsupported")
+            raise BoardIRValidationError(
+                SCHEMA_VERSION_UNSUPPORTED,
+                _SCHEMA_VERSION_REFUSAL,
+                "snapshot.schema_version",
+            )
         content = _decode_content(envelope["content"])
         validate_content(content, limits)
         content = normalize_content(content)
@@ -893,6 +918,13 @@ def decode_snapshot_json(payload: bytes, limits: ParseLimits | None = None) -> B
         raise BoardIRValidationError(
             "schema.invalid", "JSON does not conform to Board IR v0.2", "json"
         ) from error
+    # The version refusal keeps its own message and locator rather than being normalised into
+    # "content failed semantic validation", which would be false: the content is fine and the
+    # version is not. Its locator names the field, so a caller can act without guessing.
+    if validation_code == SCHEMA_VERSION_UNSUPPORTED:
+        raise BoardIRValidationError(
+            validation_code, _SCHEMA_VERSION_REFUSAL, "snapshot.schema_version"
+        )
     # Prefix, not equality: the re-raise has to carry whichever discriminated budget code the
     # inner failure chose, and a future budget must not silently fall through to the semantic
     # branch and be reported as failed validation.

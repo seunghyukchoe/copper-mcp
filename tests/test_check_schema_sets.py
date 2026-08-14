@@ -266,6 +266,112 @@ def test_the_new_0_3_0_schema_is_not_reported_as_drift_against_0_2_0() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_every_exemption_is_keyed_to_a_release_tag() -> None:
+    for path, version, tag in check_schema_sets.EXEMPT_DRIFT:
+        assert tag in check_schema_sets.RELEASE_TAGS, (path, version, tag)
+
+
+def test_an_exemption_keyed_to_the_working_tree_cannot_wave_through_live_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The exact attack adversarial review used to defeat the first draft.
+
+    Real drift in the working tree, plus one line here keyed to the working tree
+    and citing a row that does not exist, and the run went green. Only a
+    *published* break is unrepairable, so only a published break is exemptible;
+    anything in the working tree can simply be fixed. Rejecting the key makes the
+    smuggled entry inexpressible rather than something a reviewer must catch.
+    """
+
+    real = check_schema_sets._working_tree_schemas
+
+    def widened() -> dict[str, Any]:
+        documents = real()
+        footprint = documents["schemas/board-ir/0.2.0.schema.json"]["$defs"]["footprint"]
+        footprint["properties"]["smuggled_courtyards"] = {"type": "array"}
+        return documents
+
+    smuggled = ("schemas/board-ir/0.2.0.schema.json", "0.2.0", check_schema_sets.WORKING_TREE)
+    monkeypatch.setattr(check_schema_sets, "_working_tree_schemas", widened)
+    monkeypatch.setattr(
+        check_schema_sets,
+        "EXEMPT_DRIFT",
+        {**check_schema_sets.EXEMPT_DRIFT, smuggled: "D-999: widening"},
+    )
+
+    with pytest.raises(SystemExit) as caught:
+        check_schema_sets.main()
+
+    message = str(caught.value)
+    assert "is not a release tag" in message
+    # And the drift itself is still reported, rather than the run stopping at the key check.
+    assert "smuggled_courtyards" in message
+
+
+def test_an_exemption_recording_a_direction_the_change_does_not_have_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`narrowing` and `widening` inside a reason are checked, not prose.
+
+    Adversarial review flipped this exact word on this exact entry and nothing
+    noticed. ADR-0097's edit is a widening; recording it as a narrowing must now
+    fail against the gate's own re-derivation.
+    """
+
+    key = ("schemas/board-ir/0.2.0.schema.json", "0.2.0", "v0.8.0")
+    flipped = dict(check_schema_sets.EXEMPT_DRIFT)
+    flipped[key] = flipped[key].replace("(widening)", "(narrowing)")
+    monkeypatch.setattr(check_schema_sets, "EXEMPT_DRIFT", flipped)
+
+    with pytest.raises(SystemExit) as caught:
+        check_schema_sets.main()
+
+    message = str(caught.value)
+    assert "records narrowing" in message
+    assert "it shows widening" in message
+
+
+def test_an_exemption_recording_no_direction_at_all_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    key = ("schemas/drc-summary.schema.json", "1.0", "v0.7.0")
+    silent = dict(check_schema_sets.EXEMPT_DRIFT)
+    silent[key] = "ADR-0105 / D-197: something changed"
+    monkeypatch.setattr(check_schema_sets, "EXEMPT_DRIFT", silent)
+
+    with pytest.raises(SystemExit) as caught:
+        check_schema_sets.main()
+
+    assert "records no direction" in str(caught.value)
+
+
+def test_a_recorded_direction_need_not_be_exhaustive_and_drc_summary_is_why() -> None:
+    """The check is containment, and this is the case that forces it to be.
+
+    `clean` became a required key at `v0.7.0`. That is simultaneously a widening
+    of the object's property set and a narrowing of its `required` list. The
+    entry records the net effect on a consumer -- the narrowing -- and an
+    equality check would reject that true record.
+    """
+
+    key = ("schemas/drc-summary.schema.json", "1.0", "v0.7.0")
+    reason = check_schema_sets.EXEMPT_DRIFT[key]
+
+    assert "narrowing" in reason
+    assert "widening" not in reason
+
+    before = check_schema_sets.accepted_set(
+        check_schema_sets._document_at("v0.6.0", "schemas/drc-summary.schema.json")
+    )
+    after = check_schema_sets.accepted_set(
+        check_schema_sets._document_at("v0.7.0", "schemas/drc-summary.schema.json")
+    )
+    observed = check_schema_sets._observed_directions(check_schema_sets.drift(before, after))
+
+    assert observed == {"narrowing", "widening"}
+    assert check_schema_sets.main() == 0
+
+
 def test_an_exemption_that_matches_no_drift_fails_the_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

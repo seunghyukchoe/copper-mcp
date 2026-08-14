@@ -12,10 +12,23 @@ note it is a **decision** rather than a compatibility fix. It is
 
 ### What breaks
 
-**A persisted `0.2.0` Board IR envelope no longer decodes.** `decode_snapshot_json` refuses it with
-a typed `schema.invalid` code. There is no auto-migration and none is offered, exactly as `0.1` →
-`0.2` had none: **re-convert from the source `.kicad_pcb`**. The conversion is deterministic, so the
-snapshot digest you get back is the one you had.
+**A persisted `0.2.0` Board IR envelope no longer decodes.** There is no auto-migration and none is
+offered, exactly as `0.1` → `0.2` had none: **re-convert from the source `.kicad_pcb`**. The
+conversion is deterministic, so the snapshot digest you get back is the one you had.
+
+**The diagnostic vocabulary gains one code: `schema.version`.** An envelope that is well-formed
+Board IR at a version this build does not accept now refuses with `schema.version` at locator
+`snapshot.schema_version`, where it previously refused with `schema.invalid`. **This affects `0.1`
+envelopes too**, which have always taken that path. If you branch on the code, add the new one;
+`schema.invalid` now means what it says — the bytes are not Board IR.
+
+The reason is worth a sentence, because it is the same class as the rest of this note. A persisted
+`0.2.0` envelope conforms to `0.2.0`-as-published *exactly*; it is refused **because** it does, at a
+superseded version. The old message — "JSON does not conform to Board IR v0.2" — told the caller the
+opposite of the truth. The new one names the version this build accepts and tells you to
+re-convert, and it is derived from the version constant so it cannot go stale the way its
+predecessor did. It never repeats the version your document declared: that string is
+caller-controlled, and no CopperMCP diagnostic echoes caller-controlled bytes.
 
 **`BoardIrSummary.ir_schema_version` now reports `0.3.0`.** A client asserting the literal `0.2.0`
 fails. A client that reads it and moves on is unaffected.
@@ -84,8 +97,16 @@ which. The four historical instances are carried as exemptions keyed `(file, ver
 naming `D-197`; an exemption that matches no real drift fails the run, so the list cannot become a
 suppression mechanism.
 
-It also fails when a published schema is deleted — the one way the freeze above could be undone
-without anything noticing — and when a release tag exists that its own tag list omits.
+It also fails when a published schema is deleted, and when a release tag exists that its own tag
+list omits. An exemption may only name a **release tag** — a live break cannot be waved through by
+keying one to the working tree — and its recorded direction must be one the comparison actually
+observed.
+
+**An accepted-set gate cannot enforce a byte freeze**, so it does not pretend to. Both frozen
+schemas, `board-ir/0.1.0` and `board-ir/0.2.0`, additionally carry a **sha256 pin of their exact
+published bytes**. That is what closes the three silent routes an accepted-set comparison cannot
+see: deletion, a cosmetic rewrite, and an edit to a keyword it does not watch. The active `0.3.0` is
+deliberately not pinned — it is expected to change, with its version.
 
 It is a floor rather than a proof, and `R-151` records what it cannot see: a tightened `pattern`, a
 lowered `maximum`, a re-pointed `$ref`. A green run means no *watched* keyword moved.

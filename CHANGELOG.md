@@ -12,8 +12,11 @@ All notable changes are documented here. The format follows
   stands.** `schemas/board-ir/0.3.0.schema.json` is the accepted set for a new document;
   `schemas/board-ir/0.2.0.schema.json` is byte-frozen at its `v0.8.0` bytes and is **not** corrected
   retroactively. A persisted `0.2.0` envelope no longer decodes — the codec refuses it with a typed
-  `schema.invalid` code — so re-convert from the source `.kicad_pcb`; there is no auto-migration,
-  exactly as `0.1` → `0.2` had none. `BoardIrSummary.ir_schema_version` now reports `0.3.0`.
+  discriminated `schema.version` code — so re-convert from the source `.kicad_pcb`; there is no
+  auto-migration, exactly as `0.1` → `0.2` had none. `BoardIrSummary.ir_schema_version` now reports
+  `0.3.0`. Both frozen schemas, `board-ir/0.1.0` and `board-ir/0.2.0`, carry a **sha256 pin of
+  their published bytes**: an accepted-set gate cannot enforce a byte freeze, and a review proved
+  it by rewriting all 2,046 lines of `0.2.0` while everything stayed green.
   **No content address moves:** the snapshot digest, the constraint digest and the source revision
   are byte-identical, the encoded envelope is 4,280 bytes before and after, and it differs at
   exactly one byte — proved by construction, not asserted. The migration note states plainly that
@@ -22,6 +25,12 @@ All notable changes are documented here. The format follows
   ([ADR-0105](docs/adr/0105-a-schema-version-moves-with-its-accepted-set.md), `D-197`,
   [migration note](docs/migrations/copper-mcp-0.9.0.md),
   [issue #172](https://github.com/seunghyukchoe/copper-mcp/issues/172))
+  - **`schema.version` is a new diagnostic code**, separate from `schema.invalid`, for an envelope
+    that is well-formed Board IR at a version this build does not accept. `0.1` envelopes move to
+    it too. The old refusal read "JSON does not conform to Board IR v0.2" on a document that
+    conforms to `0.2.0`-as-published exactly and is refused *because* it does — a wrong *why* on a
+    refusal surface, not a stale label. The replacement is derived from the version constant and
+    never echoes the version the document declared.
   - ADR-0096 is **amended by name**: it articulated the rule and then declined the bump on a cost
     it had not measured. PR #149 measured it; that measurement was re-verified here and found to
     have aged by one test — **six move, not the five `D-186` recorded** — which is corrected in
@@ -49,9 +58,12 @@ All notable changes are documented here. The format follows
   instances it records, two are required-key additions, which invalidate documents already written
   rather than merely making an older consumer over-refuse. The four are carried as exemptions keyed
   `(file, version, tag)`, each naming `D-197`, under `EXEMPT_LABEL_RECORDS`' discipline — an
-  exemption matching no real drift fails the run. It is a floor and not a proof; `R-151` names what
-  it cannot see. It also fails when a published schema is deleted, and when a release tag exists
-  that its own tag list omits. Fourteen committed mutants, all killed
+  exemption matching no real drift fails the run, its tag must be a **release tag** so a live break
+  cannot be waved through by keying one to the working tree, and its recorded direction must be one
+  the comparison actually observed. It is a floor and not a proof; `R-151` names what it cannot see.
+  It also fails when a published schema is deleted, and when a release tag exists that its own tag
+  list omits. Twenty-two committed mutants — 21 killed, 1 survived and declared equivalent with its
+  argument
   ([`docs/mutants/2026-08-14-schema-set-drift.json`](docs/mutants/2026-08-14-schema-set-drift.json)).
 
 ### Documentation

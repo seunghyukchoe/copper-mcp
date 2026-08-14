@@ -45,7 +45,13 @@ thing is true here: a published break cannot be repaired. `EXEMPT_DRIFT` is
 keyed `(file, declared version, tag)`, each entry names the ledger row that
 records the break, and an entry matching nothing **fails the run**. An exemption
 that can be added and then quietly forgotten is a suppression mechanism, not a
-record.
+record. Two further clauses exist because adversarial review defeated the first
+draft with them: an exemption's tag **must be a release tag**, so a live break
+cannot be waved through by keying an entry to the working tree; and an
+exemption's recorded **direction** must be one the comparison actually observed,
+so `narrowing`/`widening` in a reason is a checked claim rather than prose. What
+stays unchecked is whether the ledger row an entry cites exists or says what the
+entry claims -- that is reviewer-owned, exactly as it is in `check_doc_links.py`.
 """
 
 from __future__ import annotations
@@ -84,8 +90,21 @@ RELEASE_TAGS = (
 # rather than correct them, and `D-197` is the row.
 #
 # Keyed `(path, declared version, the tag at which the set moved)`. The value
-# names the record. Adding an entry requires a ledger row; an entry that matches
-# no real drift fails the run.
+# names the record and the direction. Three things are enforced about an entry,
+# and one is not:
+#
+# * **Its tag must be a release tag.** An exemption keyed to the working tree
+#   would let a live break be waved through by adding a line here, which is a
+#   suppression mechanism wearing an exemption's clothes. Only history can be
+#   exempted, because only history cannot be repaired.
+# * **It must match real drift.** An entry matching nothing fails the run, so it
+#   cannot be added and then quietly forgotten.
+# * **Its recorded direction must be one the gate observed** (see
+#   `_check_recorded_direction`). Not exhaustive -- see that function for why.
+#
+# **Not enforced:** that the record it names exists or says what the entry claims
+# it says. `D-197` is a citation, and citation truth is reviewer-owned here
+# exactly as it is in `check_doc_links.py`.
 EXEMPT_DRIFT: dict[tuple[str, str, str], str] = {
     (
         "schemas/audio-benchmark-catalog/0.1.0.schema.json",
@@ -290,6 +309,74 @@ def _check_tags_are_current(failures: list[str]) -> None:
         )
 
 
+def _check_exemptions_are_keyed_to_history(failures: list[str]) -> None:
+    """An exemption may only name a release tag, never the working tree.
+
+    Without this, a live break is waved through by adding one line: real drift
+    plus an entry keyed `(file, version, "the working tree")` and the run goes
+    green. Only a *published* break is unrepairable, so only a published break
+    is exemptible; anything in the working tree can simply be fixed. Rejecting
+    the key makes the smuggled entry inexpressible rather than merely something
+    a reviewer is supposed to notice.
+    """
+
+    for key in sorted(EXEMPT_DRIFT):
+        path, version, tag = key
+        if tag not in RELEASE_TAGS:
+            failures.append(
+                f"{path}: drift exemption for {version!r} names {tag!r}, which is not a release "
+                "tag; only a published break can be exempted"
+            )
+
+
+# The direction words a reason may claim. `shape` is a label the gate emits and
+# never a word a reason carries, so it is deliberately not in this set.
+_DIRECTION_WORDS = ("narrowing", "widening")
+
+
+def _observed_directions(differences: list[str]) -> set[str]:
+    return {
+        word
+        for word in _DIRECTION_WORDS
+        if any(f"[{word}" in line or f"/{word}]" in line for line in differences)
+    }
+
+
+def _check_recorded_direction(
+    key: tuple[str, str, str], differences: list[str], failures: list[str]
+) -> None:
+    """The direction an exemption claims must be one the gate actually saw.
+
+    Without this the words `narrowing` and `widening` in a reason are unverified
+    prose: flipping one changes nothing and no test notices.
+
+    **The check is containment, not equality, and that is deliberate.** A
+    required-key addition is simultaneously a widening of the object's property
+    set and a narrowing of its `required` list -- `drc-summary` at `v0.7.0` is
+    exactly that, and it is recorded by its *net* effect on a consumer, which is
+    the narrowing. So a reason must claim only directions the gate observed; it
+    is **not** required to enumerate all of them. What this catches is a reason
+    naming a direction the change does not have.
+    """
+
+    path, version, tag = key
+    observed = _observed_directions(differences)
+    recorded = {word for word in _DIRECTION_WORDS if word in EXEMPT_DRIFT[key]}
+    if not recorded:
+        failures.append(
+            f"{path}: drift exemption for {version!r} at {tag} records no direction; "
+            f"name at least one of {', '.join(_DIRECTION_WORDS)}"
+        )
+        return
+    unsupported = sorted(recorded - observed)
+    if unsupported:
+        failures.append(
+            f"{path}: drift exemption for {version!r} at {tag} records "
+            f"{', '.join(unsupported)}, which the accepted-set comparison does not show "
+            f"(it shows {', '.join(sorted(observed)) or 'no direction at all'})"
+        )
+
+
 def _snapshot_at(tag: str) -> dict[str, Any]:
     return {path: _document_at(tag, path) for path in _schema_paths_at(tag)}
 
@@ -322,9 +409,14 @@ def _compare(
         differences = drift(accepted_set(before[path]), accepted_set(document))
         if not differences:
             continue
+        # `label in RELEASE_TAGS` is what makes a working-tree exemption
+        # *inapplicable* rather than merely reported: without it the smuggled
+        # entry still suppresses its drift, and the run fails without ever
+        # naming what was waved through.
         key = (path, version, label)
-        if key in EXEMPT_DRIFT:
+        if label in RELEASE_TAGS and key in EXEMPT_DRIFT:
             used.add(key)
+            _check_recorded_direction(key, differences, failures)
             continue
         detail = "\n    ".join(differences)
         failures.append(
@@ -338,6 +430,7 @@ def main() -> int:
     used: set[tuple[str, str, str]] = set()
 
     _check_tags_are_current(failures)
+    _check_exemptions_are_keyed_to_history(failures)
     previous = _snapshot_at(RELEASE_TAGS[0])
     for tag in RELEASE_TAGS[1:]:
         current = _snapshot_at(tag)
@@ -348,6 +441,9 @@ def main() -> int:
 
     for key in sorted(set(EXEMPT_DRIFT) - used):
         path, version, tag = key
+        if tag not in RELEASE_TAGS:
+            # Already reported, and by the more specific reason of the two.
+            continue
         failures.append(
             f"{path}: drift exemption for {version!r} at {tag} ({EXEMPT_DRIFT[key]}) "
             "matched no accepted-set change; remove it"

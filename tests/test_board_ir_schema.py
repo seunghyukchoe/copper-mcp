@@ -97,7 +97,11 @@ def test_active_schema_and_decoder_reject_legacy_v0_1_snapshot() -> None:
     with pytest.raises(BoardIRValidationError) as caught:
         decode_snapshot_json(encoded)
 
-    assert caught.value.code == "schema.invalid"
+    # Moved from `schema.invalid` by ADR-0105, and for the same reason a persisted `0.2.0`
+    # envelope moved: a `0.1` document is well-formed Board IR at a superseded version, not
+    # malformed bytes. The remedy the message states -- re-convert from the source board -- is
+    # exactly what `docs/migrations/board-ir-0.2.md` has always required.
+    assert caught.value.code == "schema.version"
 
 
 # The `0.2.0`-as-published envelope for the subset board, digested at `v0.8.0`.  ADR-0105 froze
@@ -129,6 +133,64 @@ def test_the_version_bump_moved_the_envelope_by_its_version_string_and_nothing_e
     assert hashlib.sha256(published).hexdigest() == PUBLISHED_V0_2_0_ENVELOPE_SHA256
 
 
+# The exact bytes of the two frozen published schemas, as shipped at `v0.8.0`.
+#
+# **The accepted-set gate cannot enforce a byte freeze and this pin exists because it was proved
+# it cannot.** Adversarial review of PR #181 rewrote all 2,046 lines of `0.2.0.schema.json` --
+# reindented, every multi-member `enum` reversed -- and the gate plus all 107 schema tests stayed
+# green, correctly, because the *accepted set* had not moved. ADR-0105 claims byte permanence, and
+# byte permanence needs a byte pin. It also closes the two other silent routes the ADR's first
+# draft missed: an accepted-set-neutral rewrite, and an edit to a keyword the gate does not watch
+# (`pattern`, `maximum`, `$ref`).
+#
+# `git show v0.8.0:schemas/board-ir/<name> | shasum -a 256` reproduces each.
+FROZEN_SCHEMA_DIGESTS = {
+    "0.1.0.schema.json": (
+        "4f8652ce217129749e1ea968c9672ce728c4755311779c95904a28f848edf6da",
+        16_773,
+    ),
+    "0.2.0.schema.json": (
+        "7653de48a5b289bf671b44770f32d6bc7b2df7d5d653c74f38bc407168029c3c",
+        24_040,
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(FROZEN_SCHEMA_DIGESTS))
+def test_a_frozen_published_schema_keeps_the_exact_bytes_it_shipped_with(name: str) -> None:
+    """Byte permanence, pinned rather than described.
+
+    Both digests and byte counts, for the reason `tests/test_golden_identities.py` gives: two
+    payloads differing only inside one fixed-width field have the same length, so a length
+    assertion alone misses it -- but a reindent or a reordered member moves the length, so the
+    pair says *which* kind of drift happened rather than only that a hex string moved.
+
+    Updating a value here to make a red test green is the failure this pin exists to prevent.
+    `0.2.0` is frozen by ADR-0105 and `0.1.0` by the `0.1` -> `0.2` migration; neither may move
+    again for any reason, including a purely cosmetic one.
+    """
+
+    digest, byte_count = FROZEN_SCHEMA_DIGESTS[name]
+    raw = (SCHEMA_ROOT / name).read_bytes()
+
+    assert len(raw) == byte_count
+    assert hashlib.sha256(raw).hexdigest() == digest
+
+
+def test_the_active_schema_is_not_pinned_by_byte_and_says_why() -> None:
+    """The pin above is deliberately not extended to `0.3.0`, and that is a decision.
+
+    A frozen schema may not change at all, so its bytes are the contract. The **active** schema
+    is expected to change -- that is what a version bump is for -- and pinning its bytes would
+    turn every legitimate edit into a pin update, which is how a pin becomes a rubber stamp.
+    What guards the active schema is `scripts/check_schema_sets.py`: it may change only with its
+    declared version.
+    """
+
+    assert SCHEMA_PATH.name not in FROZEN_SCHEMA_DIGESTS
+    assert FROZEN_V0_2_0_SCHEMA_PATH.name in FROZEN_SCHEMA_DIGESTS
+
+
 def test_the_frozen_v0_2_0_schema_still_accepts_the_envelope_it_was_published_beside() -> None:
     """The freeze is a promise to a consumer holding the `0.5.0`-`0.8.0` copy, so it is checked.
 
@@ -147,17 +209,18 @@ def test_the_frozen_v0_2_0_schema_still_accepts_the_envelope_it_was_published_be
     ]
 
 
-def test_the_codec_refuses_a_persisted_v0_2_0_envelope_with_a_typed_code() -> None:
+def test_the_codec_refuses_a_persisted_v0_2_0_envelope_with_a_discriminated_code() -> None:
     """The largest real cost of ADR-0105's bump, pinned rather than described.
 
     Anyone storing `0.2.0` snapshots must re-convert from the source board; the decoder will not
-    read them.  The refusal is typed (`schema.invalid`), not an uncaught exception.
+    read them.  The refusal is `schema.version`, **not** `schema.invalid`, and the distinction is
+    the point: this document conforms to `0.2.0`-as-published exactly and is refused *because*
+    that version is superseded.  Reporting it as malformed -- which the first draft of ADR-0105
+    did, under a message reading "JSON does not conform to Board IR v0.2" -- states the opposite
+    of the truth on the one path the version bump created.
 
-    The code is **not** version-specific -- `schema.invalid` also covers "not Board IR JSON at
-    all", and the same code is what a `0.1` envelope gets.  A caller cannot tell a stale version
-    from malformed bytes by the code alone.  That is recorded rather than repaired here: a new
-    discriminated code is a diagnostic-vocabulary change with its own migration cost, and
-    ADR-0105 is about the envelope version.
+    The message is asserted, not just the code: a caller reading it must be told to re-convert,
+    and must be told which version this build accepts.
     """
 
     persisted = VALID_FIXTURE.read_bytes().replace(b'"0.3.0"', b'"0.2.0"')
@@ -165,6 +228,48 @@ def test_the_codec_refuses_a_persisted_v0_2_0_envelope_with_a_typed_code() -> No
     with pytest.raises(BoardIRValidationError) as caught:
         decode_snapshot_json(persisted)
 
+    assert caught.value.code == "schema.version"
+    assert caught.value.source_locator == "snapshot.schema_version"
+    assert caught.value.message == (
+        "Board IR envelope declares a superseded or unknown schema version; this build accepts "
+        "0.3.0 only, and an envelope at any other version must be re-converted from its source "
+        "board"
+    )
+
+
+def test_the_version_refusal_never_echoes_the_version_the_document_declared() -> None:
+    """A declared version is caller-controlled, so no diagnostic may repeat it.
+
+    Naming the *found* version would be the friendlier message and is exactly the thing the
+    adapter's own rule forbids: a refusal names the field, never the bytes in it.
+    """
+
+    secret = "9." + "7" * 200 + ".0"
+    forged = VALID_FIXTURE.read_bytes().replace(b'"0.3.0"', f'"{secret}"'.encode())
+
+    with pytest.raises(BoardIRValidationError) as caught:
+        decode_snapshot_json(forged)
+
+    assert caught.value.code == "schema.version"
+    assert secret not in caught.value.message
+    assert "7777" not in str(caught.value)
+
+
+def test_the_version_code_separates_a_stale_version_from_bytes_that_are_not_board_ir() -> None:
+    """Both halves of the discrimination, because one half alone proves nothing.
+
+    A code that fires on everything is not a discriminated code.
+    """
+
+    not_board_ir = b'{"schema":"something.else","schema_version":"0.3.0",'
+    not_board_ir += b'"snapshot_digest":"sha256:' + b"0" * 64 + b'","content":{}}'
+
+    with pytest.raises(BoardIRValidationError) as caught:
+        decode_snapshot_json(not_board_ir)
+    assert caught.value.code == "schema.invalid"
+
+    with pytest.raises(BoardIRValidationError) as caught:
+        decode_snapshot_json(b"not json at all")
     assert caught.value.code == "schema.invalid"
 
 

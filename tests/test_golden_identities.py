@@ -36,6 +36,11 @@ Surfaces already pinned elsewhere, deliberately not duplicated here:
 - the Circuit Intent snapshot digest as it is stored inside its own fixture -
   ``tests/test_circuit_ir.py`` (re-pinned here against the schematic build path, which is a
   different consumer of the same address)
+- the exact bytes of the two **frozen published JSON Schemas**, ``board-ir/0.1.0`` and
+  ``board-ir/0.2.0`` - ``tests/test_board_ir_schema.py``.  Deliberately not here: a schema file
+  is a published artifact but not a content address, so nothing binds to its digest and no
+  caller re-derives it.  What it needs is byte permanence (ADR-0105), which is a different
+  promise checked in the module that owns the freeze.
 """
 
 from __future__ import annotations

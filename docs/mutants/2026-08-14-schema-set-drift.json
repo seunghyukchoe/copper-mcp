@@ -106,11 +106,11 @@
     {
       "id": "CV1-codec-accepts-any-envelope-version",
       "file": "src/copper_mcp/board_ir/codec.py",
-      "anchor": "            != BOARD_IR_SCHEMA_VERSION\n        ):\n            raise ValueError(\"snapshot schema version is unsupported\")\n",
+      "anchor": "            != BOARD_IR_SCHEMA_VERSION\n        ):\n            raise BoardIRValidationError(\n                SCHEMA_VERSION_UNSUPPORTED,\n                _SCHEMA_VERSION_REFUSAL,\n                \"snapshot.schema_version\",\n            )\n",
       "replacement": "            != BOARD_IR_SCHEMA_VERSION\n        ):\n            pass\n",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_board_ir_schema.py::test_the_codec_refuses_a_persisted_v0_2_0_envelope_with_a_typed_code",
+        "tests/test_board_ir_schema.py::test_the_codec_refuses_a_persisted_v0_2_0_envelope_with_a_discriminated_code",
         "tests/test_board_ir_schema.py::test_active_schema_and_decoder_reject_legacy_v0_1_snapshot"
       ]
     },
@@ -153,6 +153,90 @@
       "expectation": "killed",
       "killing_tests": [
         "tests/test_check_schema_sets.py::test_a_release_tag_this_checker_has_never_heard_of_fails_the_run"
+      ]
+    },
+    {
+      "id": "SD13-working-tree-exemption-smuggles-live-drift",
+      "file": "scripts/check_schema_sets.py",
+      "anchor": "    _check_exemptions_are_keyed_to_history(failures)\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_schema_sets.py::test_an_exemption_keyed_to_the_working_tree_cannot_wave_through_live_drift",
+        "tests/test_check_schema_sets.py::test_every_exemption_is_keyed_to_a_release_tag"
+      ]
+    },
+    {
+      "id": "SD14-recorded-direction-goes-unverified",
+      "file": "scripts/check_schema_sets.py",
+      "anchor": "            _check_recorded_direction(key, differences, failures)\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_schema_sets.py::test_an_exemption_recording_a_direction_the_change_does_not_have_fails",
+        "tests/test_check_schema_sets.py::test_an_exemption_recording_no_direction_at_all_fails"
+      ]
+    },
+    {
+      "id": "SD15-adr-0097-direction-flipped-in-its-own-record",
+      "file": "scripts/check_schema_sets.py",
+      "anchor": "    ): \"ADR-0105 / D-197: `far_side_courtyards` and `far_side_courtyard_circles` added to \"\n    \"`$defs/footprint` by ADR-0097 (widening) -- issue #172's instance\",\n",
+      "replacement": "    ): \"ADR-0105 / D-197: `far_side_courtyards` and `far_side_courtyard_circles` added to \"\n    \"`$defs/footprint` by ADR-0097 (narrowing) -- issue #172's instance\",\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_schema_sets.py::test_the_gate_is_green_on_this_tree_with_exactly_four_recorded_exemptions"
+      ]
+    },
+    {
+      "id": "FZ1-frozen-schema-rewritten-without-moving-its-accepted-set",
+      "file": "schemas/board-ir/0.2.0.schema.json",
+      "anchor": "  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n",
+      "replacement": "  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"$comment\": \"accepted-set-neutral edit\",\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir_schema.py::test_a_frozen_published_schema_keeps_the_exact_bytes_it_shipped_with"
+      ]
+    },
+    {
+      "id": "CV3-version-refusal-loses-its-discriminated-code",
+      "file": "src/copper_mcp/board_ir/codec.py",
+      "anchor": "                SCHEMA_VERSION_UNSUPPORTED,\n                _SCHEMA_VERSION_REFUSAL,\n                \"snapshot.schema_version\",\n",
+      "replacement": "                \"schema.invalid\",\n                _SCHEMA_VERSION_REFUSAL,\n                \"snapshot.schema_version\",\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir_schema.py::test_the_codec_refuses_a_persisted_v0_2_0_envelope_with_a_discriminated_code",
+        "tests/test_board_ir_schema.py::test_active_schema_and_decoder_reject_legacy_v0_1_snapshot"
+      ]
+    },
+    {
+      "id": "CV4-version-refusal-message-normalised-away",
+      "file": "src/copper_mcp/board_ir/codec.py",
+      "anchor": "    if validation_code == SCHEMA_VERSION_UNSUPPORTED:\n",
+      "replacement": "    if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir_schema.py::test_the_codec_refuses_a_persisted_v0_2_0_envelope_with_a_discriminated_code"
+      ]
+    },
+    {
+      "id": "CV5-inner-refusal-message-echoes-the-declared-version",
+      "file": "src/copper_mcp/board_ir/codec.py",
+      "anchor": "                SCHEMA_VERSION_UNSUPPORTED,\n                _SCHEMA_VERSION_REFUSAL,\n                \"snapshot.schema_version\",\n            )\n        content = _decode_content",
+      "replacement": "                SCHEMA_VERSION_UNSUPPORTED,\n                f\"{_SCHEMA_VERSION_REFUSAL} (declared {envelope['schema_version']!r})\",\n                \"snapshot.schema_version\",\n            )\n        content = _decode_content",
+      "expectation": "equivalent",
+      "killing_tests": [
+        "tests/test_board_ir_schema.py::test_the_version_refusal_never_echoes_the_version_the_document_declared"
+      ],
+      "equivalence_argument": "Unobservable through the public surface by construction. Every BoardIRValidationError raised inside decode_snapshot_json's try block is caught by `except BoardIRValidationError as error: validation_code = error.code`, which keeps the code and discards the message; the caller receives whichever message the tail re-raise chooses. So the message at this site cannot reach a caller no matter what it is built from. This was found by running the mutant, not by inspection -- it was declared killed first and reported as survived. It is left in the spec because the survival is the evidence: it proves the non-echo property is enforced by the normalisation and not by the test. CV6 mutates the tail, which is the site that can echo, and is killed there."
+    },
+    {
+      "id": "CV6-tail-refusal-message-echoes-the-declared-version",
+      "file": "src/copper_mcp/board_ir/codec.py",
+      "anchor": "    if validation_code == SCHEMA_VERSION_UNSUPPORTED:\n        raise BoardIRValidationError(\n            validation_code, _SCHEMA_VERSION_REFUSAL, \"snapshot.schema_version\"\n        )\n",
+      "replacement": "    if validation_code == SCHEMA_VERSION_UNSUPPORTED:\n        raise BoardIRValidationError(\n            validation_code,\n            f\"{_SCHEMA_VERSION_REFUSAL} (declared {envelope['schema_version']!r})\",\n            \"snapshot.schema_version\",\n        )\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir_schema.py::test_the_version_refusal_never_echoes_the_version_the_document_declared"
       ]
     }
   ]
