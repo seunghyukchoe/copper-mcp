@@ -35,6 +35,11 @@ try:
 except ImportError:  # pragma: no cover - Windows has no POSIX resource module.
     resource = None  # type: ignore[assignment]
 
+from copper_mcp.benchmarks.drc_comparability import (
+    LITERAL_KEY,
+    comparability_of,
+    require_qualified,
+)
 from copper_mcp.kicad_cli import (
     _BOUNDED_EXEC,
     KiCadCliError,
@@ -1046,6 +1051,20 @@ def drc_metrics(
         output.update(
             {
                 "board_sha256": sha256_file(board, MAX_BOARD_BYTES),
+                # One `kicad-cli pcb drc` invocation per board, so the literal ADR-0109 requires
+                # is `single_invocation` and it is derived from the observation list rather than
+                # written as a constant: a later slice that runs the gate twice changes the list
+                # and the literal follows it.  `hard_violations` and `unconnected` are
+                # `DrcSummary.error_count` and `DrcSummary.unconnected_count` renamed on the way
+                # out, so they carry exactly the run-to-run instability `B-107` measured.
+                LITERAL_KEY: comparability_of(
+                    [
+                        {
+                            "hard_violations": summary.error_count,
+                            "unconnected": summary.unconnected_count,
+                        }
+                    ]
+                ),
                 "hard_violations": summary.error_count,
                 "kicad_version": summary.kicad_version,
                 "report_sha256": sha256_file(report, MAX_DRC_REPORT_BYTES),
@@ -1127,6 +1146,10 @@ def gui_drc_metrics(board: Path, report: Path | None) -> dict[str, Any]:
         return {"status": "failed"}
     return {
         "board_sha256": board_sha256,
+        # A GUI report is one operator-run invocation, transcribed once.  Nothing here can make
+        # it `repeated_agreement`: this runner reads a file it did not produce, so it cannot even
+        # assert the precondition that two observations came from one commit over identical bytes.
+        LITERAL_KEY: comparability_of([dict(observed_counts)]),
         "footprint_errors": observed_counts["Footprint errors"],
         "hard_violations": observed_counts["DRC violations"],
         "report_sha256": report_sha256,
@@ -1630,6 +1653,10 @@ def build_report(
             "self_attested_unverified" if self_attested_evidence else "incomplete_evidence"
         )
     report["status"] = "unavailable_or_incomplete"
+    # ADR-0109's emission gate, before the digest that is this artifact's identity: it walks the
+    # whole report rather than the sections this function remembered to build, so a DRC count
+    # published under a new key in a nested record is refused by the call already made here.
+    require_qualified(report, where=SCHEMA)
     canonical = json.dumps(report, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     report["run_id"] = "sha256:" + hashlib.sha256(canonical).hexdigest()
     return report

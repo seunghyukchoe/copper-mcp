@@ -73,6 +73,8 @@ jobs:
       # Reads every release tag with `git show`, so it depends on the full checkout above.
       - name: Check published schema accepted sets
         run: python scripts/check_schema_sets.py
+      - name: Check published DRC comparability literals
+        run: python scripts/check_drc_comparability.py
       # P0.5: both of these have been in `make lint` since before this workflow existed and
       # neither had ever run hosted, so a contributor without a local KiCad-era checkout could
       # break either one and see a green pull request.

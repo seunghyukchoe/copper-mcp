@@ -27,6 +27,7 @@ from copper_mcp.board_ir import (
     verify_snapshot,
 )
 from copper_mcp.routing.contracts import (
+    _MAX_OBSTACLE_CHECKS,
     BATCHED_ONE_STEINER_ORDERING,
     COMPONENT_MST_ORDERING,
     MAX_REPRESENTABLE_STEP_NM,
@@ -1111,6 +1112,185 @@ class VerifiedFill:
     layer_id: str
     points: tuple[PointNM, ...]
     source_revision: str
+
+
+#: The most islands the single-layer core will accept as evidence, and it is **this path's own
+#: number**: every island becomes a candidate obstacle, and `AStarSettings.max_obstacles` admits
+#: at most 32,768 of those, so evidence above the ceiling could not be modelled even if it were
+#: read.  Deliberately *not* the ordered-layer adapter's 4,096 -- see `invalid_verified_fill`.
+_MAX_VERIFIED_FILL_ISLANDS = 32_768
+
+#: The most vertices one island may carry.  Equal to the domain ceiling of
+#: `Settings.max_fill_vertices`, which bounds a whole *document's* pour, so it is a true upper
+#: bound on any single island a configured reader can produce and refuses nothing any shipped
+#: configuration admits.  It is not inert: the seam this gate exists for is an in-process caller
+#: that synthesises islands rather than reading them (issue #166), and such a caller reaches it.
+_MAX_VERIFIED_FILL_ISLAND_VERTICES = 1_000_000
+
+#: The most fill vertices this boundary will examine **across every island together**, and it is
+#: an existing declared constant rather than a new one: `AStarSettings`'s domain ceiling on
+#: `max_obstacle_checks`, which is the most exact geometric predicates any one request may ever
+#: buy.  Each vertex this boundary examines is one such predicate -- `_polygon_bounds` charged
+#: exactly these reads against exactly this budget before ADR-0108 moved a copy of the traversal
+#: to the boundary -- so the ceiling restores that meter in the only form a seam that runs
+#: *before* `_WorkBudget` exists can carry.  It is a resource bound and nothing else, which is
+#: why it refuses under `obstacle_check_budget_exceeded` rather than a malformedness code: the
+#: input it stops is well formed and merely too large to examine.
+#:
+#: Without it the two ceilings above **multiply**.  Python tuples alias, so
+#: `(island,) * _MAX_VERIFIED_FILL_ISLANDS` holding one
+#: `_MAX_VERIFIED_FILL_ISLAND_VERTICES`-vertex ring costs a caller a few hundred kilobytes to
+#: build and would cost this walk 32,768 x 1,000,000 = 3.27e10 unmetered, uncancellable vertex
+#: predicates.  The ceiling replaces that product with a sum and cuts the worst case by 3,270x,
+#: to no more predicate work than one request is already permitted to spend inside the search.
+#:
+#: It is deliberately **larger** than `_MAX_VERIFIED_FILL_ISLAND_VERTICES` and not equal to it.
+#: Equal, it would subsume the per-island clause -- every over-ceiling ring would cross the
+#: aggregate first -- and leave that clause reachable only in principle, which is the dead-code
+#: outcome ADR-0108 refused when it left the three-vertex floor in `_prepare`.  Larger, the two
+#: bound different things and both stay live: one ring may not exceed a whole document's pour,
+#: and all the rings together may not exceed one request's predicate budget.
+_MAX_VERIFIED_FILL_VERTICES = _MAX_OBSTACLE_CHECKS
+
+#: Longest identity body accepted after the `net:` / `layer:` prefix.  The ordered-layer adapter
+#: applies the same bound with its own copy of this predicate; `tests/test_routing_astar.py` pins
+#: the two implementations to the same answers so the two seams cannot drift into two
+#: vocabularies, which is what issue #166 asked to avoid.
+_MAX_IDENTITY_BODY = 160
+
+
+def _typed_identity(value: object, prefix: str) -> bool:
+    """Return whether ``value`` is a typed Board IR identity with ``prefix``."""
+
+    return (
+        isinstance(value, str)
+        and value.startswith(prefix)
+        and 1 <= len(value.removeprefix(prefix)) <= _MAX_IDENTITY_BODY
+        and all(
+            character.isascii() and (character.isalnum() or character in "_.:-")
+            for character in value
+        )
+    )
+
+
+def _digest_shape(value: object) -> bool:
+    """Return whether ``value`` has the shape of a `sha256:` revision digest."""
+
+    if not isinstance(value, str) or len(value) != 71 or not value.startswith("sha256:"):
+        return False
+    try:
+        int(value[7:], 16)
+    except ValueError:
+        return False
+    return True
+
+
+def invalid_verified_fill(fill: object) -> str | None:
+    """Reject malformed fill evidence at the public boundary, before any preparation work.
+
+    The ordered-layer adapter has refused all of this at *its* boundary since ADR-0070; the
+    single-layer seam did not, and issue #166 asked for the asymmetry to be closed or recorded.
+    It is closed here, and what the measurement found is why: of the classes the adapter names,
+    a **list instead of a tuple** and a **list of points** were accepted and routed, while a
+    non-`VerifiedFill` entry and a non-`PointNM` vertex raised an uncaught `AttributeError` out
+    of a seam whose every other refusal is typed.  The rest already refused, but two of them
+    only after the work had been done and under a code naming the obstacle model rather than the
+    input (`obstacle_budget_exceeded`, `obstacle_check_budget_exceeded`).  ADR-0108 records the
+    per-class measurement.
+
+    Two clauses of the adapter's list are deliberately **not** mirrored, and neither omission is
+    an oversight:
+
+    * **The three-vertex floor stays in `_prepare`**, which already refuses it under its own
+      message and its own test.  Restating it here would leave that check unreachable, and dead
+      code cannot be shown to work.
+    * **The vertex range clause is not carried at all**, because on this path it is provably
+      unreachable: `PointNM.__post_init__` enforces `JSON_SAFE_INTEGER`, which *is*
+      `(1 << 53) - 1`, so a value that passes the type check above cannot fail a range check
+      below it.  (The same is true of the adapter's own copy.)
+
+    The two ceilings are this path's own numbers.  The adapter's per-island ceiling of 4,096 is
+    reached by 14 of 18 boards in the real-board corpus (`B-108`), is filed as an over-refusal in
+    issue #167, and is parked pending a paired calibration that plan item P7.1 says no quality
+    argument may substitute for.  Importing it here would newly refuse, on a path that accepts
+    them today, boards whose only fault is a large pour -- closing a hygiene gap by copying a
+    known defect.
+
+    **This walk is affordable only because `verified_fill_over_check_budget` runs first.**  The
+    two ceilings above are per-path and multiply, and a tuple aliases, so an aggregate ceiling is
+    what stops 32,768 references to one 1,000,000-vertex ring from buying 3.27e10 unmetered
+    predicates here.  This function reports *malformedness* and never a size; the aggregate
+    ceiling reports a *size* and never a malformedness, and refuses under a budget code because
+    the input it stops is well formed.
+    """
+
+    if not isinstance(fill, tuple):
+        return "verified fill must be a tuple"
+    if len(fill) > _MAX_VERIFIED_FILL_ISLANDS:
+        return "verified fill island count exceeds the obstacle ceiling"
+    for island in fill:
+        if not isinstance(island, VerifiedFill):
+            return "verified fill entry must be a VerifiedFill value"
+        if not _typed_identity(island.net_id, "net:") or not _typed_identity(
+            island.layer_id, "layer:"
+        ):
+            return "verified fill island identity is malformed"
+        if not _digest_shape(island.source_revision):
+            return "verified fill source revision is malformed"
+        points: object = island.points
+        if not isinstance(points, tuple) or len(points) > _MAX_VERIFIED_FILL_ISLAND_VERTICES:
+            return "verified fill island is not a bounded polygon"
+        for point in points:
+            if not isinstance(point, PointNM):
+                return "verified fill island vertex is malformed"
+    return None
+
+
+def verified_fill_over_check_budget(fill: object) -> str | None:
+    """Refuse fill evidence that is too large to *validate*, before anything walks it.
+
+    This runs **before** `invalid_verified_fill` and exists to make that walk affordable.  The
+    shape gate is O(islands x vertices), and its two per-path ceilings multiply: a tuple aliases,
+    so `(one_island,) * 32_768` holding one 1,000,000-vertex ring is a few hundred kilobytes to
+    build and 3.27e10 vertex predicates to check.  On `propose` that work happens before
+    `_WorkBudget` exists, so it is neither metered nor cancellable, and on `replay` there is no
+    budget at all -- the exact regression ADR-0108 introduced by moving a copy of the traversal
+    `_polygon_bounds` used to meter to the boundary, and leaving the meter behind.
+
+    The pass itself is O(islands) and never touches a vertex: it reads `len` of each island's
+    point tuple and stops at the first prefix whose running total crosses the ceiling.  So the
+    ceiling bounds the *shape* walk that follows -- at most `_MAX_VERIFIED_FILL_VERTICES` vertex
+    predicates, which is the most one request may spend on geometric predicates anywhere -- and
+    this pass costs at most `_MAX_VERIFIED_FILL_ISLANDS` length reads to prove
+    it.  Anything it cannot measure it declines to judge (`None`) and leaves to the shape gate,
+    which names it: a non-tuple container, an entry that is not a `VerifiedFill`, a `points` that
+    is not a tuple.  That division is deliberate.  This function must never be the thing that
+    reports a malformedness, and the shape gate must never be the thing that reports a size.
+
+    **Refusing here is the safe direction.**  The evidence this validates is fill the router
+    treats as an obstacle, so an island admitted unchecked is copper the search may walk through.
+    Refusing a well-formed pour that is too large to validate costs a caller a route; admitting
+    one costs the board.
+    """
+
+    if not isinstance(fill, tuple) or len(fill) > _MAX_VERIFIED_FILL_ISLANDS:
+        # An over-count is the shape gate's refusal and it needs no walk to make it, so bailing
+        # here also keeps this pass bounded by `_MAX_VERIFIED_FILL_ISLANDS` length reads.
+        return None
+    vertices = 0
+    for island in fill:
+        if not isinstance(island, VerifiedFill):
+            return None
+        points: object = island.points
+        if not isinstance(points, tuple):
+            return None
+        vertices += len(points)
+        if vertices > _MAX_VERIFIED_FILL_VERTICES:
+            return (
+                "verified fill vertex count exceeds the fill-validation ceiling "
+                f"(max_verified_fill_vertices={_MAX_VERIFIED_FILL_VERTICES})"
+            )
+    return None
 
 
 def canonical_fill_bytes(verified_fill: tuple[VerifiedFill, ...]) -> bytes:
@@ -2735,6 +2915,18 @@ class AStarRouter:
         would be looser than the route, and would confirm geometry the router never proved.
         """
 
+        over_budget = verified_fill_over_check_budget(verified_fill)
+        if over_budget is not None:
+            # Before the shape walk, which is what this bounds.  `replay` has no `_WorkBudget`
+            # at all, so a ceiling is the only meter this seam can carry.
+            return _result_failure(
+                _fail(RouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED, over_budget)
+            )
+        malformed = invalid_verified_fill(verified_fill)
+        if malformed is not None:
+            # Before `fill_binding_for`, which reads every field of every island and would
+            # otherwise raise on the malformed evidence rather than refusing it.
+            return _result_failure(_fail(RouteFailureCode.UNSUPPORTED_GEOMETRY, malformed))
         binding = fill_binding_for(verified_fill)
         if binding != candidate.fill_binding:
             return _result_failure(
@@ -2782,6 +2974,16 @@ class AStarRouter:
         validated = _validate_public_inputs(snapshot, request, cancelled, congestion_penalty)
         if isinstance(validated, RouteResult):
             return validated
+        over_budget = verified_fill_over_check_budget(verified_fill)
+        if over_budget is not None:
+            # Before the shape walk, which is what this bounds, and before `_WorkBudget` exists
+            # to meter or cancel it.
+            return _result_failure(
+                _fail(RouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED, over_budget)
+            )
+        malformed = invalid_verified_fill(verified_fill)
+        if malformed is not None:
+            return _result_failure(_fail(RouteFailureCode.UNSUPPORTED_GEOMETRY, malformed))
         checked_snapshot, checked_request, cancellation_check, checked_penalty = validated
         work = _WorkBudget(settings=checked_request.settings, cancelled=cancellation_check)
         try:

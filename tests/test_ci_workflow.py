@@ -54,6 +54,7 @@ WHY = {
     "check_adr_numbers.py": "ADR number allocation",
     "check_doc_links.py": "documentation links",
     "check_schema_sets.py": "published schema accepted sets",
+    "check_drc_comparability.py": "published benchmark DRC comparability literals (P4.1)",
     "check_ci_budgets.py": "the CI timeout budgets declared in this very directory (P0.3)",
     "check_audio_benchmarks.py": (
         "in `make lint` since before this workflow existed and never hosted until P0.5"
@@ -75,6 +76,7 @@ LINT_SCRIPTS = frozenset(
         "check_adr_numbers.py",
         "check_doc_links.py",
         "check_schema_sets.py",
+        "check_drc_comparability.py",
         "check_ci_budgets.py",
         "check_audio_benchmarks.py",
         "check_circuit_intents.py",

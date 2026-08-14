@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0108**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0110**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -183,15 +183,17 @@ never silently widens it.
 | [0105](0105-a-schema-version-moves-with-its-accepted-set.md) | A schema version moves with its accepted set, and `0.2.0` is frozen where it stands | Accepted |
 | [0106](0106-layered-fill-authority-is-public-and-bound.md) | A layered candidate records its obstacle model before the layered seam may reach one | Accepted |
 | [0107](0107-an-aggregators-licence-does-not-govern-what-it-aggregated.md) | An aggregator's repository licence does not govern the data it aggregated | Accepted |
+| [0108](0108-typed-refusal-at-the-single-layer-fill-seam.md) | The single-layer fill seam refuses malformed evidence under its own numbers | Accepted |
+| [0109](0109-a-drc-count-carries-the-comparability-it-was-taken-with.md) | A published DRC count carries the comparability it was taken with | Accepted |
 
-One hundred and seven numbers allocated, one hundred and one records, no duplicates — and
+One hundred and nine numbers allocated, one hundred and four records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
 its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
 the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
 and 0086 are unused; see **Known gaps** above. 0107 was allocated over the live claims 0105 and
 0106 rather than racing them, the mechanism the [ledger README](../ledgers/README.md) describes for
 `D-`/`R-`/`B-` numbers. Both have since landed — 0106 with issue #164's record and 0105 with issue
-#172's — so neither is a gap, and all of 0100 through 0107 are real records in the index above.
+#172's — so neither is a gap, and all of 0100 through 0109 are real records in the index above.
 
 ## Reading order
 
@@ -200,15 +202,15 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070, 0076, 0077,
   0078, 0079, 0080, 0087, 0090, 0091, 0092, 0094, 0095, 0096, 0097, 0099, 0100.
 - **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
-  0066, 0068, 0070, 0072, 0073, 0075, 0081, 0089, 0093, 0101, 0103, 0104, 0106.
-- **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060, 0075.
+  0066, 0068, 0070, 0072, 0073, 0075, 0081, 0089, 0093, 0101, 0103, 0104, 0106, 0108.
+- **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060, 0075, 0109.
 - **Circuit Intent and schematic verification** — 0014, 0015, 0056, 0071, 0084.
 - **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065, 0067, 0075, 0097.
 - **Circuit Scene and rendering** — 0010, 0022, 0023, 0028, 0088.
 - **Live KiCad IPC** — 0029, 0030, 0031, 0032, 0033, 0044, 0063, 0069, 0074.
 - **Durable jobs and persistence** — 0043, 0046, 0047, 0048.
 - **Mutation and authorization** — 0001, 0025, 0059, 0074.
-- **Evidence, evaluation, and review boundaries** — 0041, 0052, 0054, 0098, 0102, 0105, 0107.
+- **Evidence, evaluation, and review boundaries** — 0041, 0052, 0054, 0098, 0102, 0105, 0107, 0109.
 
 - [ADR-0001: Candidate-first mutation model](0001-candidate-first.md)
 - [ADR-0002: MCP is an external adapter](0002-mcp-adapter.md)
@@ -312,3 +314,5 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0106: A layered candidate records its obstacle model before the layered seam may reach one](0106-layered-fill-authority-is-public-and-bound.md)
 - [ADR-0105: A schema version moves with its accepted set, and `0.2.0` is frozen where it stands](0105-a-schema-version-moves-with-its-accepted-set.md)
 - [ADR-0107: An aggregator's repository licence does not govern the data it aggregated](0107-an-aggregators-licence-does-not-govern-what-it-aggregated.md)
+- [ADR-0108: The single-layer fill seam refuses malformed evidence under its own numbers](0108-typed-refusal-at-the-single-layer-fill-seam.md)
+- [ADR-0109: A published DRC count carries the comparability it was taken with](0109-a-drc-count-carries-the-comparability-it-was-taken-with.md)

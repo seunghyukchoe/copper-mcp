@@ -43,6 +43,12 @@ from copper_mcp.adapters.kicad_route_patch import (
     KiCadRoutePatchError,
     _require_native_geometry_identities,
 )
+from copper_mcp.benchmarks.drc_comparability import (
+    LITERAL_KEY,
+    qualified,
+    require_qualified,
+    weakest,
+)
 from copper_mcp.config import Settings
 from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.placement.contracts import parse_placement_intent
@@ -167,7 +173,7 @@ def _measure_board_ir(board: str, settings: Settings, source: bytes) -> dict[str
     return record
 
 
-def _measure_drc(board: str, settings: Settings) -> dict[str, Any]:
+def _one_drc_observation(board: str, settings: Settings) -> dict[str, Any]:
     started = time.monotonic()
     try:
         summary = tools.run_board_drc(board, settings)
@@ -188,6 +194,25 @@ def _measure_drc(board: str, settings: Settings) -> dict[str, Any]:
         "unconnected_count": summary["unconnected_count"],
         "violation_type_counts": dict(summary["violation_type_counts"]),
     }
+
+
+def _measure_drc(board: str, settings: Settings, repetitions: int) -> dict[str, Any]:
+    """Record one board's DRC together with the comparability the invocations earned.
+
+    The board is not touched between invocations and the commit does not move under the run, so
+    the precondition ADR-0109's `repeated_agreement` literal asserts -- one commit, identical
+    bytes -- is the precondition this loop already satisfies. What it cannot assert is that
+    `repetitions` was greater than one: at `--drc-repetitions 1`, which is the default because
+    KiCad dominates this runner's wall clock, every section is honestly `single_invocation` and
+    no differential may cite it.
+    """
+
+    observations = [_one_drc_observation(board, settings) for _ in range(repetitions)]
+    section = dict(observations[0])
+    if section["outcome"] != "reported":
+        # No count is published, so there is nothing for the literal to qualify.
+        return section
+    return qualified(section, observations)
 
 
 def _scene_shape(document: dict[str, Any]) -> dict[str, Any]:
@@ -421,7 +446,9 @@ def _measure_route(
     return record
 
 
-def _measure(board_path: Path, corpus: Path, settings: Settings) -> dict[str, Any]:
+def _measure(
+    board_path: Path, corpus: Path, settings: Settings, drc_repetitions: int
+) -> dict[str, Any]:
     relative = board_path.relative_to(corpus).as_posix()
     source = board_path.read_bytes()
     record: dict[str, Any] = {
@@ -429,7 +456,7 @@ def _measure(board_path: Path, corpus: Path, settings: Settings) -> dict[str, An
         "board_revision": f"sha256:{hashlib.sha256(source).hexdigest()}",
     }
     record["board_ir"] = _measure_board_ir(relative, settings, source)
-    record["drc"] = _measure_drc(relative, settings)
+    record["drc"] = _measure_drc(relative, settings, drc_repetitions)
 
     conversion = _convert(source, relative, settings)
     if conversion.snapshot is None:
@@ -468,6 +495,13 @@ def _totals(boards: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "boards_measured": len(boards),
         "boards_converting": len(converting),
+        # A total over several boards is only as comparable as its least comparable input, so the
+        # aggregate takes the weakest per-board literal rather than laundering a disagreement
+        # through an addition. With no reported board there is nothing to aggregate and the
+        # totals below are all zero, which is `single_invocation`'s honest floor.
+        LITERAL_KEY: weakest(
+            [board["drc"][LITERAL_KEY] for board in drc_reported] or ["single_invocation"]
+        ),
         "drc_reported": len(drc_reported),
         "drc_passed": sum(1 for board in drc_reported if board["drc"]["passed"]),
         "drc_clean": sum(1 for board in drc_reported if board["drc"]["clean"]),
@@ -513,7 +547,19 @@ def main() -> int:
         default=None,
         help="kicad-cli executable; DRC is recorded as refused when it cannot be discovered",
     )
+    parser.add_argument(
+        "--drc-repetitions",
+        type=int,
+        default=1,
+        help=(
+            "how many times to invoke KiCad DRC per board. One is the default because KiCad "
+            "dominates this runner's wall clock; two or more is what earns a section the "
+            "repeated_agreement literal a differential may cite (ADR-0109)."
+        ),
+    )
     arguments = parser.parse_args()
+    if not 1 <= arguments.drc_repetitions <= 16:
+        raise SystemExit("--drc-repetitions must be between 1 and 16")
 
     corpus = arguments.corpus.expanduser().resolve(strict=True)
     settings = Settings(workspace=corpus, kicad_cli=arguments.kicad_cli)
@@ -522,7 +568,9 @@ def main() -> int:
     assert settings.allow_live_apply is False
 
     started = time.monotonic()
-    boards = [_measure(path, corpus, settings) for path in _boards(corpus)]
+    boards = [
+        _measure(path, corpus, settings, arguments.drc_repetitions) for path in _boards(corpus)
+    ]
     wall_clock_s = round(time.monotonic() - started, 1)
 
     commit, dirty = _commit()
@@ -551,6 +599,7 @@ def main() -> int:
             "placement_batch": PLACEMENT_BATCH,
             "placement_latency_samples": PLACEMENT_LATENCY_SAMPLES,
             "bounded_region_radius_nm": BOUNDED_REGION_RADIUS_NM,
+            "drc_repetitions": arguments.drc_repetitions,
             "allow_apply": settings.allow_apply,
             "allow_live_ipc": settings.allow_live_ipc,
             "allow_live_apply": settings.allow_live_apply,
@@ -575,6 +624,7 @@ def main() -> int:
             "the corpus is one designer's project family, not a random sample of KiCad boards",
         ],
     }
+    require_qualified(report, where="real-board-tier2-capability-v1")
     payload = json.dumps(report, sort_keys=True, separators=(",", ":"), allow_nan=False)
     report["run_id"] = "sha256:" + hashlib.sha256(payload.encode()).hexdigest()
     arguments.output.parent.mkdir(parents=True, exist_ok=True)

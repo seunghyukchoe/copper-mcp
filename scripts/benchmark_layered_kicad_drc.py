@@ -21,6 +21,11 @@ from pathlib import Path
 from typing import Any
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
+from copper_mcp.benchmarks.drc_comparability import (
+    LITERAL_KEY,
+    comparability_of,
+    require_qualified,
+)
 from copper_mcp.board_ir import NetClass
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import discover_kicad_cli, run_layered_route_candidate_drc
@@ -137,6 +142,27 @@ def _run(repetitions: int, kicad_cli: Path) -> dict[str, Any]:
         raise RuntimeError("layered candidate DRC evidence is not deterministic")
     return {
         "repetitions": repetitions,
+        # Every repetition copies the same fixture into a fresh workspace at one commit, so the
+        # `repeated_agreement` precondition holds by construction and the literal reports what
+        # the repetitions actually found (ADR-0109). The identity check above already refuses a
+        # disagreement outright, so `repeated_disagreement` is unreachable *here* -- but the
+        # literal is derived rather than hardcoded, because a runner that stops refusing would
+        # otherwise keep publishing the strong claim.
+        LITERAL_KEY: comparability_of(
+            [
+                {
+                    name: item["summary"][name]
+                    for name in (
+                        "error_count",
+                        "warning_count",
+                        "unconnected_count",
+                        "ignored_check_count",
+                        "passed",
+                    )
+                }
+                for item in evidence
+            ]
+        ),
         "deterministic_evidence": True,
         "passed_runs": sum(item["summary"]["passed"] for item in evidence),
         "error_count": evidence[0]["summary"]["error_count"],
@@ -179,6 +205,7 @@ def main() -> None:
         "script": str(SCRIPT_PATH),
         "metrics": metrics,
     }
+    require_qualified(payload, where="copper-mcp/benchmark/layered-kicad-drc/v1")
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     payload["run_id"] = "sha256:" + hashlib.sha256(canonical).hexdigest()
     rendered = json.dumps(payload, indent=2, sort_keys=True) + "\n"
