@@ -63,6 +63,15 @@ def parse_live_layered_route_preview_request(payload: Any) -> LayeredRoutePrevie
         raise LayeredRoutePreviewError(
             "live layered route proposals cannot request authoritative DRC"
         )
+    # Pinned rather than defaulted, exactly as `LiveRoutePreviewRequestContract` pins the
+    # single-layer live path (ADR-0106). Zone fill authority proves a *file's* cached fill fresh
+    # by refilling a private disposable copy; a live proposal routes an IPC snapshot of an
+    # unsaved editor, so there is no file whose cache the proof would be about. Accepting the
+    # flag and ignoring it would be a silently unhonoured authority request.
+    if normalized.get("include_fill_authority", False) is True:
+        raise LayeredRoutePreviewError(
+            "live layered route proposals cannot request zone fill authority"
+        )
     normalized["board"] = "live.kicad_pcb"
     request = replace(parse_layered_route_preview_request(normalized), board="live")
     if not isinstance(session_revision, str):

@@ -25,7 +25,7 @@ contain, so it cannot go stale unnoticed.
 |---|---|---|---|
 | [Decision ledger](decision-ledger.md) | `D-` | `D-199` | `D-200` |
 | [Risk register](risk-register.md) | `R-` | `R-153` | `R-154` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-144` | `SEC-145` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-146` | `SEC-147` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-110` | `B-111` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
@@ -75,6 +75,24 @@ The rules:
    free, took `SEC-139` and stepped over *this* record's live claim in return. Both directions
    are rule 1 working as designed; whichever lands second resolves the registry line's textual
    conflict.
+
+   The sixth round is issue #164's record (`D-198`/`R-152`/`SEC-146`, ADR-0106) stepping over two
+   sibling waves at once. Branches on [issue #172](https://github.com/seunghyukchoe/copper-mcp/issues/172)
+   (`D-197`/`R-151`/`SEC-145`, `ADR-0105`) and [issue #110](https://github.com/seunghyukchoe/copper-mcp/issues/110)
+   (`D-199`/`R-153`/`B-110`, `ADR-0107`) were open on this same base, so this record took numbers
+   above the first rather than racing it and did **not** step over the second, which sits above it
+   by pre-assignment. #110's branch has since landed and filled `D-199`, `R-153`, `B-110` and
+   `ADR-0107` — that half left no gap, and ADR-0107's own text called `ADR-0106` a live claim and
+   stepped over it in return, which is rule 1 running in both directions inside one round.
+   `D-197`, `R-151` and `ADR-0105` have since **landed** with #172's record, so they are real
+   rows rather than gaps. `SEC-145` was pre-assigned to that branch and **declined** — the change
+   widened no input surface — so #180 stepped over it to take `SEC-146`, and `SEC-145` is now a
+   permanent spent number like any other deliberate gap, and
+   this paragraph becomes the correction to make. This record also **declined its pre-assigned `B-109`
+   under rule 4**: it measured nothing new. The quality question was already answered by `B-105` at
+   zero changed verdicts and is explicitly not claimed, and the reachability figure the record
+   needed -- 14 of 18 corpus boards carrying an island above the ordered-layer ceiling -- is
+   `B-108`'s existing per-run count, cited rather than re-measured. No `B-` number was spent.
 
    The fifth round is this record stepping over **three** live claims at once, in every ID space
    at the same time. Issue #165 (`D-195`/`R-150`/`SEC-144`/`B-108`, ADR-0104) was allocated while

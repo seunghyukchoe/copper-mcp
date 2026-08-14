@@ -718,6 +718,14 @@ def test_persisted_candidate_export_digest_matches_its_committed_golden_value() 
     assert len(rendered) == EXPORT_RENDERED_BYTES
     assert result.candidate.candidate_id == EXPORT_CANDIDATE_ID
     assert _candidate_document_digest(document) == EXPORT_CANDIDATE_ID
+    # **Did not move for ADR-0106** (issue #164), which added `fill_binding` to
+    # `LayeredRouteCandidate`. This fixture routes under the conservative zone envelopes, so its
+    # binding is `None` and the canonical identity payload omits the key entirely -- exactly as
+    # ADR-0103 arranged for the single-layer candidate. The stability of this pin and its byte
+    # count is therefore a stated consequence rather than a coincidence, and the two assertions
+    # below are what make it one.
+    assert result.candidate.fill_binding is None
+    assert "fill_binding" not in document
 
 
 # ---------------------------------------------------------------------------

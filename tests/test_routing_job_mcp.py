@@ -20,7 +20,9 @@ from copper_mcp.routing import RoutingJobRepository
 from copper_mcp.routing_job_service import (
     RoutingJobServiceError,
     RoutingJobUnsupportedError,
+    _canonical_bytes,
     _prepare_layered_job,
+    _spec,
     execute_routing_job,
 )
 from copper_mcp.routing_job_service import (
@@ -210,6 +212,42 @@ def test_direct_job_preparation_rejects_layered_drc_opt_in(tmp_path: Path) -> No
         match="cannot request authoritative DRC evidence",
     ):
         _prepare_layered_job(request, settings)
+
+
+def test_direct_job_preparation_rejects_zone_fill_authority_opt_in(tmp_path: Path) -> None:
+    """A job runs in a later process and holds no fill evidence (ADR-0103, ADR-0106)."""
+
+    settings, request, _ = _workspace(tmp_path)
+    request["include_fill_authority"] = True
+
+    with pytest.raises(
+        RoutingJobServiceError,
+        match="cannot request zone fill authority",
+    ):
+        _prepare_layered_job(request, settings)
+
+    # Not vacuous: the same request with the flag explicitly false prepares.
+    request["include_fill_authority"] = False
+    prepared = _prepare_layered_job(request, settings)
+    assert prepared.request.include_fill_authority is False
+
+
+def test_a_persisted_job_envelope_never_names_a_preview_only_capability(tmp_path: Path) -> None:
+    """The persisted request is a content address, so an added flag would re-address every job."""
+
+    settings, request, _ = _workspace(tmp_path)
+    prepared = _prepare_layered_job(request, settings)
+
+    spec, request_document = _spec(prepared, settings)
+
+    assert "include_fill_authority" not in request_document
+    assert "include_drc" not in request_document
+    # The observation could report a presence: every other request field is named here, and the
+    # digest the ledger stores is computed from exactly this document.
+    assert {"board", "start_pad_id", "end_pad_id", "constraints"} <= set(request_document)
+    assert spec.request_digest == (
+        f"sha256:{hashlib.sha256(_canonical_bytes(request_document)).hexdigest()}"
+    )
 
 
 def test_durable_job_refuses_internal_three_layer_router_snapshot(

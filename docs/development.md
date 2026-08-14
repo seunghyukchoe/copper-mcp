@@ -54,6 +54,17 @@ PYTHONPATH=src:. .venv/bin/pytest -q
 `src` makes `copper_mcp` importable from a non-editable checkout; `.` makes `scripts` importable.
 Both forms are equivalent to `make test` once `.` is present.
 
+**In a `git worktree`, `PYTHONPATH=src:.` is not a style preference — it is what makes the run
+about your code at all.** The shared `.venv` is editable-installed against the **primary
+checkout**, so `import copper_mcp` from a worktree resolves to the primary checkout's `src/`
+unless something puts the worktree's `src/` ahead of it. A bare `pytest` in a worktree therefore
+runs the worktree's *tests* against **main's source**, silently: nothing errors, nothing warns,
+and new tests fail against code that does not contain the change they were written for. PR #180's
+adversarial review lost 27 false failures to exactly this before spotting it. Always run
+`PYTHONPATH=src:. <primary-checkout>/.venv/bin/python -m pytest` from inside the worktree, and if
+a brand-new test fails with a `ModuleNotFoundError`, `AttributeError`, or an assertion about a
+field that plainly exists in your diff, check this first.
+
 Tests should not require network access or proprietary boards. GPU and KiCad integration tests must
 be separately marked and have deterministic CPU or fixture-based coverage where practical.
 

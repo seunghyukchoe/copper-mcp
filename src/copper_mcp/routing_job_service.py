@@ -55,6 +55,8 @@ _SHA256_RE: Final = re.compile(r"^sha256:[0-9a-f]{64}$")
 _MAX_SAFE_INT: Final = (1 << 53) - 1
 _DEFAULT_MAX_RUNTIME_MS: Final = 300_000
 _JOB_SCHEMA_VERSION: Final = "1.0"
+#: Preview-only request flags that never reach the persisted, redacted job envelope.
+_PREVIEW_ONLY_CAPABILITIES: Final = frozenset({"include_drc", "include_fill_authority"})
 
 
 class RoutingJobServiceError(ValueError):
@@ -147,6 +149,11 @@ def _prepare_layered_job(payload: object, settings: Settings) -> PreparedLayered
         raise RoutingJobServiceError(
             "durable routing jobs cannot request authoritative DRC evidence"
         )
+    if request.include_fill_authority:
+        # A job runs in a later process against bytes it re-reads, so the fill proof would have
+        # to be re-established there rather than carried; and a candidate carrying a fill binding
+        # cannot be replayed by anything that holds no fill evidence (ADR-0103, ADR-0106).
+        raise RoutingJobServiceError("durable routing jobs cannot request zone fill authority")
     try:
         board = read_workspace_file(
             settings.workspace,
@@ -194,13 +201,16 @@ def _prepare_layered_job(payload: object, settings: Settings) -> PreparedLayered
 
 
 def _spec(prepared: PreparedLayeredRoutingJob, settings: Settings) -> tuple[Any, dict[str, object]]:
-    # ``include_drc`` is a preview-only capability.  The parser and job schema accept only its
-    # explicit false default, and omitting that default from the persisted envelope prevents the
-    # redacted job repository from ever acquiring a silently ignored authority flag.
+    # ``include_drc`` and ``include_fill_authority`` are preview-only capabilities.  The parser
+    # and job schema accept only their explicit false defaults, and omitting those defaults from
+    # the persisted envelope prevents the redacted job repository from ever acquiring a silently
+    # ignored authority flag.  Omission is also what keeps the persisted request digest a stable
+    # content address across the addition of the second flag: an envelope that named it would
+    # re-address every queued job in an existing ledger to record a capability nothing can grant.
     request_document = {
         key: value
         for key, value in prepared.request.to_dict().items()
-        if value is not None and key != "include_drc"
+        if value is not None and key not in _PREVIEW_ONLY_CAPABILITIES
     }
     request_digest = f"sha256:{hashlib.sha256(_canonical_bytes(request_document)).hexdigest()}"
     request = prepared.request

@@ -31,7 +31,7 @@ from copper_mcp.board_ir import (
     verify_snapshot,
 )
 from copper_mcp.board_ir.types import Layer, NetClass
-from copper_mcp.routing.astar import VerifiedFill
+from copper_mcp.routing.astar import VerifiedFill, fill_binding_for
 from copper_mcp.routing.layered_astar import (
     MAX_EXPLICIT_VIAS,
     MAX_LAYERS,
@@ -489,6 +489,56 @@ class LayeredBoardRouter:
     @property
     def name(self) -> str:
         return LAYERED_ROUTING_POLICY
+
+    def replay(
+        self,
+        snapshot: BoardIRSnapshot,
+        candidate: LayeredRouteCandidate,
+        request: LayeredRouteRequest,
+        *,
+        cancelled: CancellationCheck | None = None,
+    ) -> LayeredRouteResult:
+        """Re-propose one immutable layered candidate under the obstacle model that produced it.
+
+        A replay that substitutes a different obstacle model is not a replay, so the fill carried
+        by ``request`` has to be the fill that produced ``candidate``: ``fill_binding_for`` over
+        ``request.verified_fill`` must equal the candidate's own recorded binding, and any
+        difference refuses instead of searching.  **One equality enforces both directions**, and
+        that is the whole safety argument.
+
+        Refusing the *understated* direction - a candidate routed with fill, replayed without it -
+        is issue #163's shape on this path: a foreign zone's outline envelope over-approximates
+        the exact pour that retired it, so the replay is stricter than the route was and the
+        disagreement surfaces as the candidate's fault.  Refusing the *overstated* direction - a
+        candidate routed under the envelope, replayed with fill that retires envelopes the search
+        never saw retired - matters more: that replay is looser than the route, and it would
+        confirm geometry the router never proved.  Neither direction is reachable without changing
+        this one comparison.
+        """
+
+        # This seam reads two fields before it can delegate, so both operands are re-checked
+        # here rather than relying on `propose`: the layered contract never raises for an
+        # untrusted candidate or request, it returns a bounded diagnostic.
+        candidate_obj: object = candidate
+        request_obj: object = request
+        if not isinstance(candidate_obj, LayeredRouteCandidate):
+            return _diagnostic(
+                LayeredRouteFailureCode.INVALID_REQUEST, "layered replay candidate is malformed"
+            )
+        if not isinstance(request_obj, LayeredRouteRequest):
+            return _diagnostic(
+                LayeredRouteFailureCode.INVALID_REQUEST, "request must be a LayeredRouteRequest"
+            )
+        malformed = _invalid_verified_fill(request.verified_fill)
+        if malformed is not None:
+            return _diagnostic(LayeredRouteFailureCode.INVALID_REQUEST, malformed)
+        if fill_binding_for(request.verified_fill) != candidate.fill_binding:
+            return _diagnostic(
+                LayeredRouteFailureCode.FILL_EVIDENCE_MISMATCH,
+                "the verified fill supplied for replay is not the fill this candidate "
+                "was routed under",
+            )
+        return self.propose(snapshot, request, cancelled=cancelled)
 
     def propose(
         self,
@@ -1004,6 +1054,7 @@ class LayeredBoardRouter:
             router_version=LAYERED_ROUTER_VERSION,
             policy=LAYERED_ROUTING_POLICY,
             seed=request.seed,
+            fill_binding=fill_binding_for(request.verified_fill),
         )
         candidate = replace(
             candidate,

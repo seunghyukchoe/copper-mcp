@@ -22,8 +22,8 @@ allocated plus one. Gaps are reported as information and never fail. Keeping the
 line is deliberate: two branches that both allocate it now conflict textually, so Git refuses the
 merge instead of accepting it.
 
-**Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086. Every one of them
-is **spent, not free**. Recycling a number would silently repoint every external citation of the
+**Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, ADR-0086, or ADR-0105. Every
+one of them is **spent, not free**. Recycling a number would silently repoint every external citation of the
 draft that reserved it at an unrelated decision, which is the exact failure the never-reuse rule
 exists to prevent.
 
@@ -35,6 +35,8 @@ exists to prevent.
   same terms whether or not it ever does.
 - **0085** and **0086** were claimed by two branches still open when ADR-0088 landed, so ADR-0088
   took a number above both rather than the next one.
+
+- **0105** was a live claim held by the branch for [issue #172](https://github.com/seunghyukchoe/copper-mcp/issues/172) while the records for [issue #164](https://github.com/seunghyukchoe/copper-mcp/issues/164) (0106) and [issue #110](https://github.com/seunghyukchoe/copper-mcp/issues/110) (0107) stepped over it. It has since landed with its own record, so it is not a gap — the third consecutive round in which stepping over a live claim cost nothing when the claim landed.
 
 **No other number is a gap.** This section has repeatedly carried notes recording a number as a
 "live claim" held by an open branch — 0081, 0089, 0090, 0092, 0094, 0097, and 0099 through 0103 all
@@ -179,16 +181,17 @@ never silently widens it.
 | [0103](0103-a-candidate-records-the-model-that-produced-it.md) | A candidate records the obstacle model that produced it, and a replay refuses every other one | Accepted |
 | [0104](0104-fill-vertex-budget-behind-a-parse.md) | The fill-vertex budget sits behind a parse, and is calibrated as what it is | Accepted |
 | [0105](0105-a-schema-version-moves-with-its-accepted-set.md) | A schema version moves with its accepted set, and `0.2.0` is frozen where it stands | Accepted |
+| [0106](0106-layered-fill-authority-is-public-and-bound.md) | A layered candidate records its obstacle model before the layered seam may reach one | Accepted |
 | [0107](0107-an-aggregators-licence-does-not-govern-what-it-aggregated.md) | An aggregator's repository licence does not govern the data it aggregated | Accepted |
 
 One hundred and seven numbers allocated, one hundred and one records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
 its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
 the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
-and 0086 are unused; see **Known gaps** above. 0107 was allocated over 0105 and 0106 rather than
-racing them, the mechanism the [ledger README](../ledgers/README.md) describes for `D-`/`R-`/`B-`
-numbers; 0105 has since landed with this record, and **0106 alone remains a live claim on an open
-branch**, not a gap. If that branch is abandoned the number is spent like any other.
+and 0086 are unused; see **Known gaps** above. 0107 was allocated over the live claims 0105 and
+0106 rather than racing them, the mechanism the [ledger README](../ledgers/README.md) describes for
+`D-`/`R-`/`B-` numbers. Both have since landed — 0106 with issue #164's record and 0105 with issue
+#172's — so neither is a gap, and all of 0100 through 0107 are real records in the index above.
 
 ## Reading order
 
@@ -197,7 +200,7 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070, 0076, 0077,
   0078, 0079, 0080, 0087, 0090, 0091, 0092, 0094, 0095, 0096, 0097, 0099, 0100.
 - **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
-  0066, 0068, 0070, 0072, 0073, 0075, 0081, 0089, 0093, 0101, 0103, 0104.
+  0066, 0068, 0070, 0072, 0073, 0075, 0081, 0089, 0093, 0101, 0103, 0104, 0106.
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060, 0075.
 - **Circuit Intent and schematic verification** — 0014, 0015, 0056, 0071, 0084.
 - **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065, 0067, 0075, 0097.
@@ -306,5 +309,6 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0102: A refusal evaluation must observe a permit, and prove it kept observing one](0102-an-evaluation-must-observe-a-permit.md)
 - [ADR-0103: A candidate records the obstacle model that produced it, and a replay refuses every other one](0103-a-candidate-records-the-model-that-produced-it.md)
 - [ADR-0104: The fill-vertex budget sits behind a parse, and is calibrated as what it is](0104-fill-vertex-budget-behind-a-parse.md)
+- [ADR-0106: A layered candidate records its obstacle model before the layered seam may reach one](0106-layered-fill-authority-is-public-and-bound.md)
 - [ADR-0105: A schema version moves with its accepted set, and `0.2.0` is frozen where it stands](0105-a-schema-version-moves-with-its-accepted-set.md)
 - [ADR-0107: An aggregator's repository licence does not govern the data it aggregated](0107-an-aggregators-licence-does-not-govern-what-it-aggregated.md)

@@ -431,6 +431,18 @@ envelope over-approximates the pour, so the replay was *stricter* than the route
 equality now forbids the looser direction as well, which is the one that would confirm geometry the
 router never proved.
 
+The ordered-layer path carries the same binding and the same equality
+([ADR-0106](../adr/0106-layered-fill-authority-is-public-and-bound.md)), computed by the same
+function over the same `VerifiedFill` values, so the two paths cannot disagree about what "the same
+fill" is. `LayeredBoardRouter.replay` refuses `fill_evidence_mismatch` before it searches, and
+`render_kicad_layered_candidate_board` goes through it. That landed **before** the public layered
+flag rather than alongside it, because the flag is what would have made the gap reachable. With the
+binding in place, `preview_layered_route` accepts `include_fill_authority` and reports a
+`routing_effect` over the signal layers the search reached. Two honest limits: no layered candidate
+identity moves, because the binding enters the canonical payload only when it exists; and the
+per-island 4,096-vertex ceiling above means the flag refuses the whole request on the 14 of 18
+corpus boards that exceed it, which is `R-152`.
+
 ## Multi-pin trees
 
 A net with more than two pads is routed by sequential component merging. Connectivity analysis
