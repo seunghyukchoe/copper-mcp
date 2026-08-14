@@ -13,6 +13,7 @@ real binding raises.
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,7 @@ from copper_mcp.live_apply import (
 )
 from copper_mcp.live_layered_route_preview import preview_live_layered_route
 from copper_mcp.request_boundary import RequestError
+from copper_mcp.routing import canonical_layered_candidate_bytes, verify_layered_candidate_id
 
 FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "two-pad.kicad_pcb"
 SESSION_TOKEN = "copper-mcp-test-kicad-session"
@@ -1045,3 +1047,37 @@ def test_a_via_carrying_manifest_is_reconstructed_field_for_field(tmp_path: Path
         live_apply.layered_candidate_from_document(
             dict(document, metrics=dict(document["metrics"], vias=0))
         )
+
+
+def test_a_fill_bound_layered_manifest_fails_closed_at_the_reconstruction(tmp_path: Path) -> None:
+    """Live apply holds no fill evidence, so a fill-bound candidate must never verify here.
+
+    ``layered_candidate_from_document`` ignores keys it does not read, and its docstring argues
+    that is safe because the reconstruction is re-hashed and compared.  Adding ``fill_binding``
+    to the canonical identity (ADR-0106) is what makes that argument load-bearing rather than
+    merely true: the binding *is* part of the address now, so a manifest that claims one rebuilds
+    without it and fails its own identity recomputation.  Nothing had to be added to this seam,
+    and this test is what makes the absence evidence -- it could report a presence.
+    """
+
+    document = dict(_preview(tmp_path, ApplyTokenAuthority())["candidate"])
+    envelope = live_apply.layered_candidate_from_document(document)
+    assert envelope.fill_binding is None
+
+    bound = replace(envelope, fill_binding=f"sha256:{'d' * 64}")
+    bound = replace(
+        bound,
+        candidate_id=(
+            f"sha256:{hashlib.sha256(canonical_layered_candidate_bytes(bound)).hexdigest()}"
+        ),
+    )
+    assert bound.candidate_id != envelope.candidate_id
+    assert verify_layered_candidate_id(bound)
+
+    rebuilt = live_apply.layered_candidate_from_document(
+        dict(document, fill_binding=bound.fill_binding, candidate_id=bound.candidate_id)
+    )
+
+    assert rebuilt.fill_binding is None
+    with pytest.raises(ValueError, match="does not match canonical route content"):
+        verify_layered_candidate_id(rebuilt)

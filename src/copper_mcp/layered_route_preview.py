@@ -25,7 +25,10 @@ from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import (
     KiCadCliError,
     LayeredRouteCandidateDrcEvidence,
+    ZoneFillAuthority,
+    ZoneFillStaleError,
     run_layered_route_candidate_drc,
+    run_zone_fill_authority,
 )
 from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.request_boundary import (
@@ -46,6 +49,7 @@ from copper_mcp.routing import (
     LayeredBoardRouter,
     LayeredRouteFailureCode,
     LayeredRouteRequest,
+    VerifiedFill,
     canonical_layered_candidate_bytes,
     verify_layered_candidate_id,
 )
@@ -73,6 +77,7 @@ _OPTIONAL_FIELDS = (
     "start_layer_id",
     "end_layer_id",
     "include_drc",
+    "include_fill_authority",
 )
 _SETTING_LIMITS: dict[str, int] = {
     "move_cost": 1_000_000_000,
@@ -102,6 +107,10 @@ class LayeredRoutePreviewRequest:
     seed: int
     settings: LayeredAStarSettings
     include_drc: bool = False
+    #: Opt in to freshness-verified zone fill as the layered obstacle model (ADR-0106). Fails
+    #: closed: a board whose cached fill does not match a fresh KiCad refill refuses under
+    #: ``stale_fill`` rather than routing against the cache.
+    include_fill_authority: bool = False
     start_layer_id: str | None = None
     end_layer_id: str | None = None
     expect_session_revision: str | None = None
@@ -128,6 +137,7 @@ class LayeredRoutePreviewRequest:
             "seed": self.seed,
             "settings": {field: getattr(self.settings, field) for field in _SETTINGS_FIELDS},
             "include_drc": self.include_drc,
+            "include_fill_authority": self.include_fill_authority,
             "start_layer_id": self.start_layer_id,
             "end_layer_id": self.end_layer_id,
         }
@@ -216,6 +226,9 @@ def parse_layered_route_preview_request(payload: Any) -> LayeredRoutePreviewRequ
             seed=integer("seed", fields.get("seed", 0), minimum=0, maximum=MAX_JSON_SAFE_INTEGER),
             settings=_settings(fields.get("settings", {})),
             include_drc=boolean("include_drc", fields.get("include_drc", False)),
+            include_fill_authority=boolean(
+                "include_fill_authority", fields.get("include_fill_authority", False)
+            ),
             start_layer_id=(
                 _layer_selector("start_layer_id", fields["start_layer_id"])
                 if "start_layer_id" in fields
@@ -309,7 +322,44 @@ def _candidate_document(candidate: object) -> dict[str, object]:
         for via in canonical_vias
     ]
     typed_document["candidate_id"] = cast(Any, candidate).candidate_id
+    # `null` when the conservative zone envelope was the obstacle model, which is the ordinary
+    # case. The *canonical identity* payload above omits the key entirely in that case (ADR-0103,
+    # ADR-0106); this document is not content-addressed once `candidate_id` is written into it,
+    # and it follows the response convention of naming every field.
+    typed_document["fill_binding"] = cast(Any, candidate).fill_binding
     return typed_document
+
+
+_LAYERED_FILL_ROUTING_EFFECTS = frozenset(
+    {"foreign_zone_obstacles", "connectivity_evidence", "both", "verified_context"}
+)
+
+
+def _layered_fill_routing_effect(
+    fills: tuple[VerifiedFill, ...],
+    routed_net_id: str,
+    searched_layer_ids: frozenset[str],
+) -> str:
+    """Describe how freshness-bound islands affected one routed layered preview.
+
+    The same four closed labels the single-layer seam publishes (ADR-0040), selected the same
+    way, over the layers the ordered-layer search actually reached rather than over one named
+    layer -- a layered route is not confined to a layer the caller chose, so an island on any
+    searched signal layer is an island that could have shaped it.  This label makes verified
+    evidence legible; it makes no claim about route quality, which `B-105` measured at zero
+    changed verdicts on the real-board corpus.
+    """
+
+    selected = tuple(fill for fill in fills if fill.layer_id in searched_layer_ids)
+    foreign = any(fill.net_id != routed_net_id for fill in selected)
+    same_net = any(fill.net_id == routed_net_id for fill in selected)
+    if foreign and same_net:
+        return "both"
+    if foreign:
+        return "foreign_zone_obstacles"
+    if same_net:
+        return "connectivity_evidence"
+    return "verified_context"
 
 
 def _empty_result(
@@ -324,7 +374,14 @@ def _empty_result(
     conversion_diagnostic_counts: dict[str, int] | None = None,
     drc_evidence: LayeredRouteCandidateDrcEvidence | None = None,
     apply_token: str | None = None,
+    fill_authority: ZoneFillAuthority | None = None,
+    fill_routing_effect: str | None = None,
 ) -> dict[str, object]:
+    if fill_authority is None:
+        if fill_routing_effect is not None:
+            raise LayeredRoutePreviewError("fill routing effect requires fill authority")
+    elif fill_routing_effect not in _LAYERED_FILL_ROUTING_EFFECTS:
+        raise LayeredRoutePreviewError("fill authority routing effect is malformed")
     return {
         "schema_version": "1.0",
         "status": status,
@@ -335,6 +392,11 @@ def _empty_result(
         "candidate": candidate,
         "apply_token": apply_token,
         "drc_evidence": None if drc_evidence is None else drc_evidence.to_dict(),
+        "fill_authority": (
+            None
+            if fill_authority is None
+            else {**fill_authority.to_dict(), "routing_effect": fill_routing_effect}
+        ),
         "diagnostic": diagnostic,
         "conversion_diagnostic_counts": conversion_diagnostic_counts or {},
     }
@@ -436,6 +498,51 @@ def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]
             ),
         )
 
+    searched_layer_ids = frozenset(
+        layer.id for layer in snapshot.content.copper_layers if layer.kind == "signal"
+    )
+    verified_fill: tuple[VerifiedFill, ...] = ()
+    fill_authority: ZoneFillAuthority | None = None
+    if request.include_fill_authority and any(
+        zone.layer_id in searched_layer_ids for zone in snapshot.content.zones
+    ):
+        # Poured copper may only be believed when KiCad has just confirmed the board's cache
+        # still describes it. Refill happens on a private disposable copy, never here.
+        remaining = int(deadline - time.monotonic())
+        if remaining < 1:
+            raise LayeredRoutePreviewError(
+                "the layered preview deadline expired before zone fill authority could run"
+            )
+        try:
+            fill_authority, islands = run_zone_fill_authority(
+                relative_path,
+                replace(
+                    settings,
+                    kicad_timeout_seconds=min(settings.kicad_timeout_seconds, remaining),
+                ),
+            )
+        except ZoneFillStaleError:
+            return _empty_result(
+                "not_routed",
+                request,
+                relative_path,
+                board_revision,
+                snapshot_digest=snapshot.snapshot_digest,
+                diagnostic=_diagnostic_document(
+                    LayeredRouteFailureCode.STALE_FILL.value,
+                    "the board's cached zone fill does not match a fresh KiCad refill",
+                ),
+            )
+        verified_fill = tuple(
+            VerifiedFill(
+                net_id=island.net_id,
+                layer_id=island.layer_id,
+                points=island.points,
+                source_revision=fill_authority.source_revision,
+            )
+            for island in islands
+        )
+
     layered_request = LayeredRouteRequest(
         board_revision=snapshot.snapshot_digest,
         expected_revision=snapshot.snapshot_digest,
@@ -447,6 +554,7 @@ def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]
         end_layer_id=request.end_layer_id,
         grid_step_nm=request.grid_step_nm,
         settings=request.settings,
+        verified_fill=verified_fill,
     )
     result = LayeredBoardRouter().propose(
         snapshot,
@@ -495,6 +603,12 @@ def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]
             snapshot_digest=snapshot.snapshot_digest,
             candidate=_candidate_document(result.candidate),
             drc_evidence=evidence,
+            fill_authority=fill_authority,
+            fill_routing_effect=(
+                _layered_fill_routing_effect(verified_fill, net_id, searched_layer_ids)
+                if fill_authority is not None
+                else None
+            ),
         )
     assert result.diagnostic is not None
     diagnostic = result.diagnostic

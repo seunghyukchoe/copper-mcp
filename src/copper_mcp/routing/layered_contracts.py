@@ -223,6 +223,11 @@ class LayeredRouteFailureCode(StrEnum):
     OBSTACLE_BUDGET_EXCEEDED = "obstacle_budget_exceeded"
     SEARCH_BUDGET_EXCEEDED = "search_budget_exceeded"
     CANCELLED = "cancelled"
+    STALE_FILL = "stale_fill"
+    #: Only :meth:`LayeredBoardRouter.replay` produces this, so it cannot reach a preview
+    #: response and is deliberately absent from ``LayeredRouteDiagnosticContract`` -- exactly as
+    #: ``fill_evidence_mismatch`` is absent from the single-layer ``RouteDiagnosticContract``.
+    FILL_EVIDENCE_MISMATCH = "fill_evidence_mismatch"
     NO_PATH = "no_path"
 
 
@@ -257,6 +262,16 @@ class LayeredRouteCandidate:
     router_version: str
     policy: str
     seed: int
+    fill_binding: str | None = None
+    """The obstacle model that produced this candidate, as a binding rather than as evidence.
+
+    The sha256 content address of the freshness-verified zone fill the ordered-layer router was
+    handed, or ``None`` when it was handed none and searched against the conservative zone
+    envelope (ADR-0103, ADR-0106).  It is computed by the *same* ``fill_binding_for`` the
+    single-layer path uses, over the same ``VerifiedFill`` values
+    ``LayeredRouteRequest.verified_fill`` already carries, so the two paths cannot disagree about
+    what "the same fill" is.
+    """
 
     def __post_init__(self) -> None:
         _digest("layered candidate ID", self.candidate_id)
@@ -278,6 +293,8 @@ class LayeredRouteCandidate:
         if not isinstance(self.policy, str) or not self.policy:
             raise ValueError("layered routing policy is malformed")
         _integer("layered seed", self.seed)
+        if self.fill_binding is not None:
+            _digest("layered fill binding", self.fill_binding)
         if self.cost.wire_length_nm != self.patch.wire_length_nm:
             raise ValueError("layered candidate length must match patch geometry")
         if self.cost.via_count != len(self.patch.vias) or self.metrics.vias != len(self.patch.vias):
@@ -315,7 +332,20 @@ def canonical_layered_candidate_bytes(candidate: LayeredRouteCandidate) -> bytes
     # discrimination while breaking every two-layer identity ever issued.
     if candidate.settings.max_vias is not None:
         settings_payload["max_vias"] = candidate.settings.max_vias
+    # `fill_binding` is present only when there is one, for the reason ADR-0103 gives for the
+    # single-layer candidate and which holds identically here.  A candidate routed under the
+    # conservative envelope is the same proposal it has always been, so its published content
+    # address must not move; emitting `"fill_binding":null` would move *every* layered identity
+    # at once to record an absence, including the two-, three- and four-layer values pinned in
+    # `tests/test_layered_board_adapter.py` and the durable export pinned in
+    # `tests/test_golden_identities.py`, and would break every persisted candidate from every
+    # earlier router version, because `verify_layered_candidate_id` recomputes the address from a
+    # rehydrated candidate's own fields.  `LAYERED_ROUTER_VERSION` therefore does not move.
+    fill_binding = (
+        {"fill_binding": candidate.fill_binding} if candidate.fill_binding is not None else {}
+    )
     payload = {
+        **fill_binding,
         "base_revision": candidate.base_revision,
         "cost": {
             "total_search_cost_units": candidate.cost.total_search_cost_units,

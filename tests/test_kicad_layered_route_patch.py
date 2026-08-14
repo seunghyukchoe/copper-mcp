@@ -12,12 +12,13 @@ from copper_mcp.adapters import (
     parse_kicad_bytes,
     render_kicad_layered_candidate_board,
 )
-from copper_mcp.board_ir import NetClass
+from copper_mcp.board_ir import NetClass, PointNM
 from copper_mcp.routing import (
     LayeredAStarSettings,
     LayeredBoardRouter,
     LayeredRouteCandidate,
     LayeredRouteRequest,
+    VerifiedFill,
     canonical_layered_candidate_bytes,
 )
 
@@ -119,3 +120,101 @@ def test_layered_serializer_rejects_tampered_identity_and_stale_revision() -> No
     )
     with pytest.raises(KiCadLayeredRoutePatchError, match="stale"):
         render_kicad_layered_candidate_board(source, snapshot, stale, profile, request=request)
+
+
+# --- The serialization boundary replays under the model that produced the candidate ------------
+
+ZONE_FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "blocked-zone.kicad_pcb"
+
+
+def _zone_candidates() -> tuple[
+    bytes,
+    KiCadConstraintProfile,
+    object,
+    LayeredRouteRequest,
+    LayeredRouteCandidate,
+    LayeredRouteRequest,
+    LayeredRouteCandidate,
+]:
+    """One board, two candidates: one routed under the envelope, one under the exact pour."""
+
+    source = ZONE_FIXTURE.read_bytes()
+    profile = _profile()
+    conversion = parse_kicad_bytes(source, profile)
+    assert conversion.diagnostics == ()
+    assert conversion.snapshot is not None
+    snapshot = conversion.snapshot
+    zone = snapshot.content.zones[0]
+    pads = snapshot.content.pads
+    envelope_request = LayeredRouteRequest(
+        board_revision=snapshot.snapshot_digest,
+        net_id=pads[0].net_id,
+        start_pad_id=pads[0].id,
+        end_pad_id=pads[1].id,
+        start_layer_id=F_CU,
+        end_layer_id=F_CU,
+        grid_step_nm=500_000,
+        settings=LayeredAStarSettings(via_cost=2),
+    )
+    island = VerifiedFill(
+        net_id=zone.net_id,
+        layer_id=F_CU,
+        points=(
+            PointNM(18_000_000, 11_000_000),
+            PointNM(22_000_000, 11_000_000),
+            PointNM(22_000_000, 14_000_000),
+            PointNM(18_000_000, 14_000_000),
+        ),
+        source_revision=snapshot.content.source.revision,
+    )
+    fill_request = replace(envelope_request, verified_fill=(island,))
+    envelope = LayeredBoardRouter().propose(snapshot, envelope_request)
+    fill_routed = LayeredBoardRouter().propose(snapshot, fill_request)
+    assert envelope.candidate is not None
+    assert fill_routed.candidate is not None
+    return (
+        source,
+        profile,
+        snapshot,
+        envelope_request,
+        envelope.candidate,
+        fill_request,
+        fill_routed.candidate,
+    )
+
+
+def test_a_fill_routed_layered_candidate_serializes_when_its_own_fill_is_supplied() -> None:
+    source, profile, snapshot, _, envelope, fill_request, fill_routed = _zone_candidates()
+
+    rendered = render_kicad_layered_candidate_board(
+        source, snapshot, fill_routed, profile, request=fill_request
+    )
+
+    assert rendered != source
+    # Not vacuous: the pour genuinely changes the route, so this is not the envelope candidate
+    # being re-serialized under a different name.
+    assert fill_routed.fill_binding is not None
+    assert envelope.fill_binding is None
+    assert fill_routed.patch != envelope.patch
+
+
+def test_serializing_a_fill_routed_layered_candidate_without_its_fill_names_the_evidence() -> None:
+    """The understated direction, reported under its own message rather than as a bad candidate."""
+
+    source, profile, snapshot, envelope_request, _, _, fill_routed = _zone_candidates()
+
+    with pytest.raises(KiCadLayeredRoutePatchError, match="was not supplied for replay"):
+        render_kicad_layered_candidate_board(
+            source, snapshot, fill_routed, profile, request=envelope_request
+        )
+
+
+def test_serializing_an_envelope_layered_candidate_with_fill_it_never_saw_refuses() -> None:
+    """The overstated direction: fill that retires envelopes this candidate's search never lost."""
+
+    source, profile, snapshot, _, envelope, fill_request, _ = _zone_candidates()
+
+    with pytest.raises(KiCadLayeredRoutePatchError, match="was not supplied for replay"):
+        render_kicad_layered_candidate_board(
+            source, snapshot, envelope, profile, request=fill_request
+        )

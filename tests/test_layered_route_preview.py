@@ -9,15 +9,22 @@ import pytest
 
 import copper_mcp.layered_route_preview as layered_preview
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
-from copper_mcp.board_ir import Layer, NetClass, make_snapshot
+from copper_mcp.board_ir import Layer, NetClass, PointNM, make_snapshot
 from copper_mcp.config import Settings
-from copper_mcp.kicad_cli import KiCadCliError, LayeredRouteCandidateDrcEvidence
+from copper_mcp.kicad_cli import (
+    FillIsland,
+    KiCadCliError,
+    LayeredRouteCandidateDrcEvidence,
+    ZoneFillAuthority,
+    ZoneFillStaleError,
+)
 from copper_mcp.layered_route_preview import (
     LayeredRoutePreviewError,
     parse_layered_route_preview_request,
     preview_layered_route,
 )
 from copper_mcp.models import DrcSummary
+from copper_mcp.routing import fill_binding_for
 
 FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "two-pad.kicad_pcb"
 BLOCKED_PAD_FIXTURE = (
@@ -600,3 +607,278 @@ def test_the_file_backed_surface_mints_no_capability_even_with_live_apply_enable
 
     assert result["status"] == "routed"
     assert result["apply_token"] is None
+
+
+# --- Public layered fill authority and routing_effect provenance (ADR-0106, issue #164) --------
+
+ZONE_FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "blocked-zone.kicad_pcb"
+
+
+def _zone_workspace(tmp_path: Path) -> tuple[Path, Settings, str, str, str, str, Any]:
+    board = tmp_path / ZONE_FIXTURE.name
+    source = ZONE_FIXTURE.read_bytes()
+    board.write_bytes(source)
+    profile = KiCadConstraintProfile(net_classes=(DEFAULT,), default_net_class_id=DEFAULT.id)
+    conversion = parse_kicad_bytes(source, profile)
+    assert conversion.snapshot is not None
+    snapshot = conversion.snapshot
+    pads = snapshot.content.pads
+    return (
+        board,
+        Settings(workspace=tmp_path),
+        pads[0].id,
+        pads[1].id,
+        f"sha256:{hashlib.sha256(source).hexdigest()}",
+        snapshot.snapshot_digest,
+        snapshot,
+    )
+
+
+def _authority(board_revision: str) -> ZoneFillAuthority:
+    return ZoneFillAuthority(
+        source_revision=board_revision,
+        context_revision=f"sha256:{'a' * 64}",
+        source_fill_digest=f"sha256:{'b' * 64}",
+        refilled_fill_digest=f"sha256:{'b' * 64}",
+        kicad_version="10.0.5",
+        fill_polygon_count=1,
+        fill_vertex_count=4,
+    )
+
+
+def _fill_island(snapshot: Any) -> FillIsland:
+    """The pour inside the fixture's blocking zone, clipped to its lower half."""
+
+    return FillIsland(
+        net_id=snapshot.content.zones[0].net_id,
+        layer_id="layer:F.Cu",
+        points=(
+            PointNM(18_000_000, 11_000_000),
+            PointNM(22_000_000, 11_000_000),
+            PointNM(22_000_000, 14_000_000),
+            PointNM(18_000_000, 14_000_000),
+        ),
+    )
+
+
+def test_layered_fill_authority_is_opt_in_and_reports_its_routing_effect(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    board, settings, start, end, board_revision, snapshot_digest, snapshot = _zone_workspace(
+        tmp_path
+    )
+    authority = _authority(board_revision)
+    monkeypatch.setattr(
+        layered_preview,
+        "run_zone_fill_authority",
+        lambda *_: (authority, (_fill_island(snapshot),)),
+    )
+
+    fill_routed = preview_layered_route(
+        _request(
+            board,
+            start,
+            end,
+            board_revision,
+            snapshot_digest,
+            grid_step_nm=500_000,
+            include_fill_authority=True,
+        ),
+        settings,
+    )
+    envelope = preview_layered_route(
+        _request(board, start, end, board_revision, snapshot_digest, grid_step_nm=500_000),
+        settings,
+    )
+
+    assert fill_routed["status"] == "routed"
+    fill_record = fill_routed["fill_authority"]
+    assert isinstance(fill_record, dict)
+    assert fill_record["source_revision"] == board_revision
+    # The pour is foreign to the routed net, so it can only have acted as an obstacle.
+    assert fill_record["routing_effect"] == "foreign_zone_obstacles"
+    assert fill_routed["candidate"]["fill_binding"] is not None  # type: ignore[index]
+    assert fill_routed["request"]["include_fill_authority"] is True  # type: ignore[index]
+    # Not vacuous: the same request without the flag reaches no fill at all, and its candidate
+    # records that it was routed under the conservative envelope.
+    assert envelope["status"] == "routed"
+    assert envelope["fill_authority"] is None
+    assert envelope["candidate"]["fill_binding"] is None  # type: ignore[index]
+    assert envelope["request"]["include_fill_authority"] is False  # type: ignore[index]
+    assert envelope["candidate"]["patch"] != fill_routed["candidate"]["patch"]  # type: ignore[index]
+    assert board.read_bytes() == ZONE_FIXTURE.read_bytes()
+
+
+def test_layered_fill_authority_fails_closed_on_a_stale_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cache KiCad does not reproduce is not evidence, so the proposal refuses rather than
+    routing against it."""
+
+    board, settings, start, end, board_revision, snapshot_digest, _ = _zone_workspace(tmp_path)
+
+    def stale(*_: object) -> tuple[ZoneFillAuthority, tuple[FillIsland, ...]]:
+        raise ZoneFillStaleError("cached zone fill does not match a fresh refill")
+
+    monkeypatch.setattr(layered_preview, "run_zone_fill_authority", stale)
+
+    result = preview_layered_route(
+        _request(
+            board,
+            start,
+            end,
+            board_revision,
+            snapshot_digest,
+            grid_step_nm=500_000,
+            include_fill_authority=True,
+        ),
+        settings,
+    )
+
+    assert result["status"] == "not_routed"
+    assert result["candidate"] is None
+    assert result["fill_authority"] is None
+    diagnostic = result["diagnostic"]
+    assert isinstance(diagnostic, dict)
+    assert diagnostic["code"] == "stale_fill"
+    # A refusal, not a fallback: the same request without the flag routes on this board.
+    unflagged = preview_layered_route(
+        _request(board, start, end, board_revision, snapshot_digest, grid_step_nm=500_000),
+        settings,
+    )
+    assert unflagged["status"] == "routed"
+
+
+def test_layered_fill_authority_is_not_run_for_a_board_with_no_searched_zone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The flag is a request to prove a cache fresh, and there is no cache to prove."""
+
+    board, settings, start, end, snapshot_digest = _workspace(tmp_path)
+    board_revision = f"sha256:{hashlib.sha256(board.read_bytes()).hexdigest()}"
+
+    def refuse(*_: object) -> tuple[ZoneFillAuthority, tuple[FillIsland, ...]]:
+        raise AssertionError("zone fill authority must not run for a zoneless board")
+
+    monkeypatch.setattr(layered_preview, "run_zone_fill_authority", refuse)
+
+    result = preview_layered_route(
+        _request(board, start, end, board_revision, snapshot_digest, include_fill_authority=True),
+        settings,
+    )
+
+    assert result["status"] == "routed"
+    assert result["fill_authority"] is None
+    assert result["candidate"]["fill_binding"] is None  # type: ignore[index]
+
+
+def test_layered_candidate_drc_receives_the_fill_the_candidate_was_routed_under(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The preview holds the evidence, so it is the only caller that can supply it.
+
+    The layered DRC path replays the candidate inside the serializer, and that replay refuses any
+    obstacle model but the recorded one -- so a request that did not carry the fill forward would
+    make ``include_drc`` with ``include_fill_authority`` permanently unusable.
+    """
+
+    board, settings, start, end, board_revision, snapshot_digest, snapshot = _zone_workspace(
+        tmp_path
+    )
+    authority = _authority(board_revision)
+    monkeypatch.setattr(
+        layered_preview,
+        "run_zone_fill_authority",
+        lambda *_: (authority, (_fill_island(snapshot),)),
+    )
+    observed: dict[str, Any] = {}
+
+    def capture(
+        requested_path: str,
+        candidate: object,
+        profile: object,
+        drc_settings: Settings,
+        *,
+        request: Any,
+    ) -> LayeredRouteCandidateDrcEvidence:
+        observed["fill"] = request.verified_fill
+        observed["candidate"] = candidate
+        raise KiCadCliError("stop after capturing the forwarded evidence")
+
+    monkeypatch.setattr(layered_preview, "run_layered_route_candidate_drc", capture)
+
+    with pytest.raises(LayeredRoutePreviewError):
+        preview_layered_route(
+            _request(
+                board,
+                start,
+                end,
+                board_revision,
+                snapshot_digest,
+                grid_step_nm=500_000,
+                include_drc=True,
+                include_fill_authority=True,
+            ),
+            settings,
+        )
+
+    assert observed["candidate"].fill_binding is not None
+    assert fill_binding_for(observed["fill"]) == observed["candidate"].fill_binding
+
+
+def test_layered_include_fill_authority_requires_a_real_boolean() -> None:
+    with pytest.raises(LayeredRoutePreviewError, match="include_fill_authority"):
+        parse_layered_route_preview_request(
+            {
+                "board": "board.kicad_pcb",
+                "start_pad_id": "pad:a",
+                "end_pad_id": "pad:b",
+                "expect_board_revision": f"sha256:{'a' * 64}",
+                "expect_snapshot_digest": f"sha256:{'b' * 64}",
+                "constraints": {
+                    "clearance_nm": 250_000,
+                    "track_width_nm": 250_000,
+                    "via_diameter_nm": 800_000,
+                    "via_drill_nm": 400_000,
+                },
+                "include_fill_authority": "yes",
+            }
+        )
+
+
+def test_a_layered_routing_effect_cannot_be_reported_without_the_authority_behind_it() -> None:
+    """A label is a claim about evidence, so it must not be constructible without the evidence."""
+
+    request = parse_layered_route_preview_request(
+        {
+            "board": "board.kicad_pcb",
+            "start_pad_id": "pad:a",
+            "end_pad_id": "pad:b",
+            "expect_board_revision": f"sha256:{'a' * 64}",
+            "expect_snapshot_digest": f"sha256:{'b' * 64}",
+            "constraints": {
+                "clearance_nm": 250_000,
+                "track_width_nm": 250_000,
+                "via_diameter_nm": 800_000,
+                "via_drill_nm": 400_000,
+            },
+        }
+    )
+
+    with pytest.raises(LayeredRoutePreviewError, match="requires fill authority"):
+        layered_preview._empty_result(
+            "routed",
+            request,
+            "board.kicad_pcb",
+            f"sha256:{'a' * 64}",
+            fill_routing_effect="foreign_zone_obstacles",
+        )
+    with pytest.raises(LayeredRoutePreviewError, match="routing effect is malformed"):
+        layered_preview._empty_result(
+            "routed",
+            request,
+            "board.kicad_pcb",
+            f"sha256:{'a' * 64}",
+            fill_authority=_authority(f"sha256:{'a' * 64}"),
+            fill_routing_effect="mostly_harmless",
+        )

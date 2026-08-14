@@ -6,8 +6,57 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`preview_layered_route` accepts `include_fill_authority`, and reports what the evidence did**
+  ([ADR-0106](docs/adr/0106-layered-fill-authority-is-public-and-bound.md),
+  [issue #164](https://github.com/seunghyukchoe/copper-mcp/issues/164)). Opt in and CopperMCP
+  refills a private disposable copy of the board with KiCad, admits the cached pour only if the
+  refill reproduces it exactly, hands the verified islands to the ordered-layer adapter's existing
+  `verified_fill` gate, and returns a `fill_authority` record carrying one closed `routing_effect`
+  literal — the same four labels `preview_route` publishes, selected over the signal layers the
+  layered search actually reached. A cache KiCad does not reproduce refuses with the new layered
+  `stale_fill` diagnostic rather than answering from either version. `include_drc` with it is
+  supported: the evidence rides in the request the DRC path already forwards.
+  **No route-quality claim attaches** — `B-105` measured zero changed verdicts on the real-board
+  corpus, and this is provenance and parity only.
+- **A layered candidate records the obstacle model that produced it.**
+  `LayeredRouteCandidate` gains `fill_binding`, the content address of the freshness-verified fill
+  the router was handed, computed by the same function the single-layer path uses. New
+  `LayeredBoardRouter.replay` refuses with `LayeredRouteFailureCode.FILL_EVIDENCE_MISMATCH` unless
+  the fill supplied for a replay is the fill that produced the candidate, and
+  `render_kicad_layered_candidate_board` now reports that under its own message instead of blaming
+  the candidate. **One equality forbids both directions**: replaying under a *stricter* model than
+  routed (which silently returned a different route) and under a *looser* one (which would confirm
+  geometry the router never proved). This landed **before** the public flag, deliberately: the
+  binding is what stops the flag making the divergence reachable.
+
+**No published content address moves.** `LAYERED_ROUTER_VERSION` is unchanged, `fill_binding`
+enters the canonical identity payload only when it is not `null`, and the pinned two-, three- and
+four-layer candidate identities, the durable layered export digest and the persisted routing-job
+request digest are all byte-for-byte unchanged — each now with a test that states *why* rather than
+merely observing that it did not move.
+
+**What to expect on a real board.** The ordered-layer adapter refuses any single fill island above
+4,096 vertices, and it refuses the **whole request** rather than falling back to the zone envelope.
+`B-108` measured 14 of 18 corpus boards carrying such an island, so `include_fill_authority` will
+often return `invalid_request` there. That is over-refusal — an island refused is an envelope kept,
+never copper dropped — and sizing that ceiling belongs to
+[issue #167](https://github.com/seunghyukchoe/copper-mcp/issues/167) (`R-152`).
+
 ### Changed
 
+- A fill-bound candidate cannot complete a durable routing job: `validate_candidate_for_job`
+  refuses one, so an in-process caller cannot publish a ledger row for a candidate every
+  downstream replay must refuse.
+- `LiveLayeredRoutePreviewRequestContract` pins `include_fill_authority` to `false`, and
+  `preview_live_layered_route` refuses an explicit `true`. Zone fill authority proves a *file's*
+  cache fresh; a live proposal routes an IPC snapshot of a possibly unsaved editor, so accepting
+  the flag could only mean ignoring it. Durable routing jobs refuse it for the sibling reason and
+  never persist it.
+- The layered preview response gains a `fill_authority` key on every outcome (`null` except on a
+  routed proposal that asked for one), and the layered candidate document gains `fill_binding`
+  (`null` in the ordinary case).
 - **The excessive-agency evaluation records an unconvertible board instead of aborting on one.**
   `_run_family` raised `EvaluationError` on the first board that would not convert to Board IR, so
   a single unreadable board in any project family took the whole artifact with it. It now records

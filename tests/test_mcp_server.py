@@ -442,6 +442,7 @@ class McpServerTests(unittest.TestCase):
         self.assertIn("grid_step_nm", request_schema["properties"])
         self.assertIn("settings", request_schema["properties"])
         self.assertEqual(request_schema["properties"]["include_drc"]["type"], "boolean")
+        self.assertEqual(request_schema["properties"]["include_fill_authority"]["type"], "boolean")
         output = layered.output_schema
         self.assertIsNotNone(output)
         assert isinstance(output, dict)
@@ -453,6 +454,43 @@ class McpServerTests(unittest.TestCase):
         )
         for variant in variants:
             self.assertIs(variant["additionalProperties"], False)
+        definitions = output["$defs"]
+        # The same closed assertions the single-layer candidate gets, including the binding that
+        # records which obstacle model produced the candidate (ADR-0106).
+        _assert_closed_object(
+            definitions["LayeredRouteCandidateContract"],
+            {
+                "candidate_id",
+                "base_revision",
+                "start_pad_id",
+                "end_pad_id",
+                "router_version",
+                "policy",
+                "seed",
+                "fill_binding",
+                "patch",
+                "cost",
+                "metrics",
+                "settings",
+            },
+        )
+        # One closed `routing_effect` literal, the same four ADR-0040 labels the single-layer
+        # seam publishes, on the same shared contract.
+        self.assertEqual(
+            definitions["RouteFillAuthorityContract"]["properties"]["routing_effect"]["enum"],
+            ["foreign_zone_obstacles", "connectivity_evidence", "both", "verified_context"],
+        )
+        routed = next(
+            variant for variant in variants if variant["properties"]["status"]["const"] == "routed"
+        )
+        self.assertIn("fill_authority", routed["properties"])
+        # `stale_fill` is reportable; `fill_evidence_mismatch` is not, because only a replay
+        # produces it and a replay is never a preview response.
+        diagnostic_codes = definitions["LayeredRouteDiagnosticContract"]["properties"]["code"][
+            "enum"
+        ]
+        self.assertIn("stale_fill", diagnostic_codes)
+        self.assertNotIn("fill_evidence_mismatch", diagnostic_codes)
         assert layered.annotations is not None
         self.assertIs(layered.annotations.read_only_hint, True)
         self.assertIs(layered.annotations.destructive_hint, False)
@@ -496,6 +534,7 @@ class McpServerTests(unittest.TestCase):
         self.assertNotIn("net", request_schema["properties"])
         self.assertNotIn("net_ref_id", request_schema["properties"])
         self.assertEqual(request_schema["properties"]["include_drc"].get("const"), False)
+        self.assertEqual(request_schema["properties"]["include_fill_authority"].get("const"), False)
         self.assertEqual(
             set(request_schema["required"]),
             {
@@ -595,6 +634,7 @@ class McpServerTests(unittest.TestCase):
                 "router_version": "layered-board-a-star/0.1.0",
                 "policy": "board-layered-a-star-v1",
                 "seed": 0,
+                "fill_binding": None,
                 "patch": {
                     "net_id": "net:name:0123456789abcdef0123456789abcdef",
                     "width_nm": 250_000,
@@ -626,6 +666,7 @@ class McpServerTests(unittest.TestCase):
                 },
                 "settings": {},
             },
+            "fill_authority": None,
             "diagnostic": None,
         }
         with patch.object(_server, "preview_layered_route_service", return_value=response):
@@ -635,6 +676,8 @@ class McpServerTests(unittest.TestCase):
         assert isinstance(structured, dict)
         self.assertEqual(structured["status"], "routed")
         self.assertEqual(structured["candidate"]["patch"]["paths"][0]["layer_id"], "layer:F.Cu")
+        self.assertIsNone(structured["candidate"]["fill_binding"])
+        self.assertIsNone(structured["fill_authority"])
         self.assertNotIn("net", structured["request"])
         tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
         output_schema = tools["preview_layered_route"].output_schema

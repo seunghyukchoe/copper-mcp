@@ -33,6 +33,7 @@ from copper_mcp.routing.layered_board_adapter import LayeredBoardRouter, Layered
 from copper_mcp.routing.layered_candidate_verifier import verify_layered_candidate
 from copper_mcp.routing.layered_contracts import (
     LayeredRouteCandidate,
+    LayeredRouteFailureCode,
     LayeredRoutePath,
     verify_layered_candidate_id,
 )
@@ -191,7 +192,17 @@ def render_kicad_layered_candidate_board(
         verify_layered_candidate_id(candidate)
     except ValueError as error:
         raise KiCadLayeredRoutePatchError("candidate identity verification failed") from error
-    replay = LayeredBoardRouter().propose(snapshot, request)
+    replay = LayeredBoardRouter().replay(snapshot, candidate, request)
+    if (
+        replay.diagnostic is not None
+        and replay.diagnostic.code is LayeredRouteFailureCode.FILL_EVIDENCE_MISMATCH
+    ):
+        # Not the candidate's fault, and saying so matters: the caller either has to supply the
+        # verified fill this candidate was routed under, or it is holding fill this candidate was
+        # never routed under and must not be re-verified against.
+        raise KiCadLayeredRoutePatchError(
+            "candidate was routed under verified zone fill that was not supplied for replay"
+        )
     if replay.candidate is None or replay.candidate != candidate:
         raise KiCadLayeredRoutePatchError("candidate does not match a deterministic router replay")
 

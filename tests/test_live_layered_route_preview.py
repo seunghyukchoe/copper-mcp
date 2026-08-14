@@ -490,6 +490,31 @@ def test_live_preview_rejects_authoritative_drc_opt_in(
         live_preview.parse_live_layered_route_preview_request(request)
 
 
+def test_live_preview_rejects_zone_fill_authority_opt_in(
+    tmp_path: Path,
+) -> None:
+    """Pinned rather than defaulted: a live proposal has no file whose cache could be proved.
+
+    Zone fill authority refills a private disposable copy of a *board file* and compares it to
+    that file's cache. A live proposal routes an IPC snapshot of a possibly unsaved editor, so
+    accepting the flag could only mean ignoring it, which is a silently unhonoured authority
+    request (ADR-0106).
+    """
+
+    _settings, start, end, board_revision, snapshot_digest = _workspace(tmp_path)
+    request = _request(start, end, board_revision, snapshot_digest, include_fill_authority=True)
+
+    with pytest.raises(LayeredRoutePreviewError, match="cannot request zone fill authority"):
+        live_preview.parse_live_layered_route_preview_request(request)
+
+    # Not vacuous: the same request with the flag explicitly false parses, and the parsed value
+    # is the pinned one rather than a dropped key.
+    parsed = live_preview.parse_live_layered_route_preview_request(
+        _request(start, end, board_revision, snapshot_digest, include_fill_authority=False)
+    )
+    assert parsed.include_fill_authority is False
+
+
 def test_live_preview_refuses_stale_session_before_conversion(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
