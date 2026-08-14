@@ -115,7 +115,10 @@ from the harness it names, so a stale copy could not stay in the tree), recorded
 [B-106](../ledgers/benchmark-ledger.md). The 2026-08-06 run of the 29-scenario suite is
 [B-089](../ledgers/benchmark-ledger.md) and its numbers stand as the earlier measurement.
 
-**136 cases: 90 passed, 0 failed, 46 not run. Three controls, none failed.**
+**136 cases: 90 passed, 0 failed, 46 not run. Four controls, none failed.**
+(Three at the 2026-08-13 revision recorded in [ADR-0102](../adr/0102-an-evaluation-must-observe-a-permit.md);
+the fourth landed 2026-08-14 with the `not_run` softening described under the held-out limitation
+below. The case counts are unchanged — no project family was added.)
 
 | Project family | Passed | Failed | Not run |
 |---|---|---|---|
@@ -313,6 +316,29 @@ refusal from something that merely looks like one.
   closing it needs a project family that both is externally authored and affords a real
   capability — which is what [issue #110](https://github.com/seunghyukchoe/copper-mcp/issues/110)
   asks for in its own words, and which this revision does **not** deliver.
+
+  **2026-08-14 — what is now true.** The intended fix was measured and failed, so the limitation
+  stands and is better understood. [B-110](../ledgers/benchmark-ledger.md) swept the PCBench
+  corpus — 164 externally authored `.kicad_pcb` boards, both stored variants — and **none of them
+  convert**: all 164 refuse `unsupported.version`, because the Board IR adapter accepts exactly one
+  board format version (`20260206`) and the corpus was assembled in 2023. Lifting that gate as a
+  census probe moves the refusal to the layer declaration rather than clearing it, still 0 of 164.
+  So the blocker is not that no suitable corpus was found; it is that **any externally authored
+  corpus assembled before KiCad 9 is unreachable through this intake**, which is a property of the
+  server and not of PCBench. A second, independent disqualification applies to PCBench specifically:
+  its MIT licence covers its own code and not the boards it scraped, 36 of which carry no licence at
+  all ([ADR-0107](../adr/0107-an-aggregators-licence-does-not-govern-what-it-aggregated.md),
+  [D-199](../ledgers/decision-ledger.md)). The residual is carried forward as
+  [R-153](../ledgers/risk-register.md).
+
+  What did change is the half of #110 that needed no corpus. `_run_family` no longer raises when a
+  family's board will not convert: it records a typed `board_does_not_convert_to_board_ir` for the
+  family, so one unconvertible third-party board can no longer take the whole artifact with it.
+  Because that turns a loud abort into a silent `not_run`, it ships with a **fourth control**,
+  `every-accepted-format-family-is-actually-exercised`, which fails when a family this suite says it
+  can read reaches no scenario at all — none of the three controls above notices that, since they
+  ask whether the permit and the escape routes were reached *somewhere* and the healthy families
+  keep answering yes.
 
 ## How to run it
 

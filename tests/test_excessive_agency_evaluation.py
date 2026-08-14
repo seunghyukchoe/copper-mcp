@@ -37,9 +37,14 @@ EXPECTED_COUNTS = {
     "not_run": 46,
     "scenarios": 34,
     "project_families": 4,
-    "controls": 3,
+    "controls": 4,
     "controls_failed": 0,
 }
+
+#: A board that is in the repository and genuinely does not convert: the Board IR adapter refuses
+#: it `syntax.invalid`. Used to exercise the `not_run` softening on a real refusal rather than on
+#: a mocked one.
+UNCONVERTIBLE_BOARD = "tests/fixtures/board-ir-v0.1/malformed-unbalanced.kicad_pcb"
 
 
 @pytest.fixture(scope="module")
@@ -438,6 +443,95 @@ def test_the_coverage_controls_fail_when_the_authorized_path_is_never_exercised(
     for row in degraded["control_failures"]:
         assert row["observed"] == "control_not_satisfied"
         assert row["detail"]
+
+
+def test_a_family_whose_board_does_not_convert_records_not_run_rather_than_raising() -> None:
+    """Issue #110: an unconvertible board is a result about the board, not a broken harness.
+
+    Before this, `_run_family` raised `EvaluationError` on the first board that would not convert
+    and the whole evaluation aborted -- so one third-party board outside the Board IR subset could
+    take the entire suite's artifact with it.
+    """
+
+    family = evaluation.ProjectFamily(
+        id="unconvertible",
+        held_out=True,
+        provenance="a board the Board IR adapter refuses, used to exercise the not_run path",
+        boards=(UNCONVERTIBLE_BOARD,),
+    )
+    rows = evaluation._run_family(family)
+
+    assert len(rows) == len(evaluation.SCENARIOS)
+    assert {row["disposition"] for row in rows} == {"not_run"}
+    assert {row["observed"] for row in rows} == {"board_does_not_convert_to_board_ir"}
+    assert {row["surface"] for row in rows} == {"inspect_board_ir"}
+    # The reason is a declared one, not a free-text string invented at the point of failure.
+    catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
+    assert "board_does_not_convert_to_board_ir" in catalog["not_run_reasons"]
+    # Nothing about the board itself reaches the rows.
+    assert "malformed-unbalanced" not in json.dumps(rows)
+
+
+def test_the_coverage_control_fails_when_an_accepted_format_family_stops_converting() -> None:
+    """The `D-193` half of the softening above, and the reason it is safe to make.
+
+    A family declared `accepted_format=True` that converts nothing now contributes 34 `not_run`
+    rows and **zero failures** -- the scenario layer cannot see it, exactly as with the authorized
+    path. The fourth control is the only thing that does.
+    """
+
+    unconvertible = evaluation.ProjectFamily(
+        id="unconvertible",
+        held_out=True,
+        provenance="a board the Board IR adapter refuses, used to exercise the not_run path",
+        boards=(UNCONVERTIBLE_BOARD,),
+    )
+    with patch.object(
+        evaluation, "PROJECT_FAMILIES", (*evaluation.PROJECT_FAMILIES, unconvertible)
+    ):
+        degraded = evaluation.build_report(evidence_harness_commit=TEST_HARNESS_COMMIT)
+
+    # The scenario layer notices nothing at all.
+    assert degraded["failures"] == []
+    assert degraded["counts"]["failed"] == 0
+    assert degraded["per_project_family"]["unconvertible"]["not_run"] == len(evaluation.SCENARIOS)
+    assert degraded["per_project_family"]["unconvertible"]["passed"] == 0
+    # The control does.
+    assert degraded["counts"]["controls_failed"] == 1
+    failed = {row["control"] for row in degraded["control_failures"]}
+    assert failed == {"every-accepted-format-family-is-actually-exercised"}
+    assert degraded["control_failures"][0]["detail"]
+
+
+def test_the_accepted_format_control_is_not_satisfied_by_the_other_families() -> None:
+    """The control must be per-family, not "somewhere".
+
+    Written because the obvious way to add this control -- reuse the `somewhere` shape of the
+    three that already exist -- would pass on the degraded report above, since three healthy
+    families keep answering yes.
+    """
+
+    healthy = evaluation._controls(
+        [
+            {
+                "project_family": "development-fixtures",
+                "scenario_family": "workspace_containment",
+                "scenario": evaluation.PERMIT_SCENARIO,
+                "disposition": "pass",
+                "observed": "",
+                "surface": "",
+                "detail": "",
+            }
+        ]
+    )
+    row = next(
+        control
+        for control in healthy
+        if control["control"] == "every-accepted-format-family-is-actually-exercised"
+    )
+    # Two accepted-format families reached nothing in this synthetic case, so the control fails
+    # even though a permit was recorded elsewhere.
+    assert row["disposition"] == "fail"
 
 
 def test_the_cli_exits_non_zero_on_a_failed_control(tmp_path: Path) -> None:
