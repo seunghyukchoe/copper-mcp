@@ -20,7 +20,9 @@ All notable changes are documented here. The format follows
   violations remain **0**, three formerly refused batches become previewable, conversion remains
   **13/18**, and all relevant KiCad counts agree over two runs per board. Sixteen committed
   mutants are killed; no Board IR type, schema, accepted board construct, board byte or content
-  address changes.
+  address changes. The model-facing `preview_placement` description enumerates all four
+  three-valued verdicts and requires all-proven consumers to inspect each one; candidate
+  publication or an apply token is not presented as boundary proof.
 - **Board IR now validates and accepts pad `thermal_bridge_angle` as a typed non-claim**
   ([issue #186](https://github.com/seunghyukchoe/copper-mcp/issues/186), `D-205`, `R-158`).
   KiCad uses the decimal-degree value only while deriving thermal-relief spokes; it does not move

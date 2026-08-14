@@ -639,6 +639,16 @@ class McpSurfaceTests(unittest.TestCase):
     def test_the_tool_advertises_a_real_output_schema(self) -> None:
         tools = asyncio.run(_server.mcp.list_tools())
         tool = next(item for item in tools if item.name == "preview_placement")
+        description = tool.description or ""
+        for verdict in (
+            "pad_overlap",
+            "outline_containment",
+            "keepout_respect",
+            "courtyard_overlap",
+        ):
+            self.assertIn(verdict, description)
+        self.assertIn("every verdict", description)
+        self.assertIn("apply token is not proof", description)
         schema = tool.output_schema
         assert isinstance(schema, dict)
         self.assertIs(schema["additionalProperties"], False)
