@@ -20,6 +20,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+from copper_mcp.benchmarks.drc_comparability import (
+    LITERAL_KEY,
+    comparability_of,
+    require_qualified,
+)
 from copper_mcp.config import Settings
 from copper_mcp.placement_preview import preview_placement
 
@@ -79,6 +84,7 @@ def _run(repetitions: int) -> dict[str, Any]:
     passed_runs = 0
     clean_runs = 0
     aggregate_signatures: set[tuple[int, int, int, int, int]] = set()
+    observations: list[dict[str, Any]] = []
     for _ in range(repetitions):
         with tempfile.TemporaryDirectory(prefix="copper-mcp-public-placement-drc-") as root:
             workspace = Path(root)
@@ -123,6 +129,20 @@ def _run(repetitions: int) -> dict[str, Any]:
                     )
                 )
             )
+            observations.append(
+                {
+                    name: summary[name]
+                    for name in (
+                        "error_count",
+                        "warning_count",
+                        "exclusion_count",
+                        "ignored_check_count",
+                        "unconnected_count",
+                        "passed",
+                        "clean",
+                    )
+                }
+            )
             evidence_bytes = json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode()
             evidence_digests.add("sha256:" + hashlib.sha256(evidence_bytes).hexdigest())
     aggregate_counts: dict[str, int] | None = None
@@ -141,11 +161,18 @@ def _run(repetitions: int) -> dict[str, Any]:
                 strict=True,
             )
         )
+    # One literal, derived from the repetitions this run actually took, and repeated onto the
+    # nested `aggregate_counts` mapping because that mapping publishes counts of its own and
+    # ADR-0109's gate reads sections rather than documents.
+    literal = comparability_of(observations)
     return {
         "repetitions": repetitions,
+        LITERAL_KEY: literal,
         "passed_drc_runs": passed_runs,
         "clean_drc_runs": clean_runs,
-        "aggregate_counts": aggregate_counts,
+        "aggregate_counts": (
+            None if aggregate_counts is None else {**aggregate_counts, LITERAL_KEY: literal}
+        ),
         "aggregate_counts_deterministic": len(aggregate_signatures) == 1,
         "candidate_binding": candidate_bound,
         "context_binding": context_bound,
@@ -178,6 +205,7 @@ def main() -> int:
             "FreeRouting parity",
         ],
     }
+    require_qualified(payload, where="copper-mcp/benchmark/public-placement-preview-drc/v1")
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     payload["run_id"] = "sha256:" + hashlib.sha256(canonical).hexdigest()
     rendered = json.dumps(payload, indent=2, sort_keys=True) + "\n"

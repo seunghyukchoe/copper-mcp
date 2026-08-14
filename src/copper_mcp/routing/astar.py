@@ -1113,6 +1113,106 @@ class VerifiedFill:
     source_revision: str
 
 
+#: The most islands the single-layer core will accept as evidence, and it is **this path's own
+#: number**: every island becomes a candidate obstacle, and `AStarSettings.max_obstacles` admits
+#: at most 32,768 of those, so evidence above the ceiling could not be modelled even if it were
+#: read.  Deliberately *not* the ordered-layer adapter's 4,096 -- see `invalid_verified_fill`.
+_MAX_VERIFIED_FILL_ISLANDS = 32_768
+
+#: The most vertices one island may carry.  Equal to the domain ceiling of
+#: `Settings.max_fill_vertices`, which bounds a whole *document's* pour, so it is a true upper
+#: bound on any single island a configured reader can produce and refuses nothing any shipped
+#: configuration admits.  It is not inert: the seam this gate exists for is an in-process caller
+#: that synthesises islands rather than reading them (issue #166), and such a caller reaches it.
+_MAX_VERIFIED_FILL_ISLAND_VERTICES = 1_000_000
+
+#: Longest identity body accepted after the `net:` / `layer:` prefix.  The ordered-layer adapter
+#: applies the same bound with its own copy of this predicate; `tests/test_routing_astar.py` pins
+#: the two implementations to the same answers so the two seams cannot drift into two
+#: vocabularies, which is what issue #166 asked to avoid.
+_MAX_IDENTITY_BODY = 160
+
+
+def _typed_identity(value: object, prefix: str) -> bool:
+    """Return whether ``value`` is a typed Board IR identity with ``prefix``."""
+
+    return (
+        isinstance(value, str)
+        and value.startswith(prefix)
+        and 1 <= len(value.removeprefix(prefix)) <= _MAX_IDENTITY_BODY
+        and all(
+            character.isascii() and (character.isalnum() or character in "_.:-")
+            for character in value
+        )
+    )
+
+
+def _digest_shape(value: object) -> bool:
+    """Return whether ``value`` has the shape of a `sha256:` revision digest."""
+
+    if not isinstance(value, str) or len(value) != 71 or not value.startswith("sha256:"):
+        return False
+    try:
+        int(value[7:], 16)
+    except ValueError:
+        return False
+    return True
+
+
+def invalid_verified_fill(fill: object) -> str | None:
+    """Reject malformed fill evidence at the public boundary, before any preparation work.
+
+    The ordered-layer adapter has refused all of this at *its* boundary since ADR-0070; the
+    single-layer seam did not, and issue #166 asked for the asymmetry to be closed or recorded.
+    It is closed here, and what the measurement found is why: of the classes the adapter names,
+    a **list instead of a tuple** and a **list of points** were accepted and routed, while a
+    non-`VerifiedFill` entry and a non-`PointNM` vertex raised an uncaught `AttributeError` out
+    of a seam whose every other refusal is typed.  The rest already refused, but two of them
+    only after the work had been done and under a code naming the obstacle model rather than the
+    input (`obstacle_budget_exceeded`, `obstacle_check_budget_exceeded`).  ADR-0108 records the
+    per-class measurement.
+
+    Two clauses of the adapter's list are deliberately **not** mirrored, and neither omission is
+    an oversight:
+
+    * **The three-vertex floor stays in `_prepare`**, which already refuses it under its own
+      message and its own test.  Restating it here would leave that check unreachable, and dead
+      code cannot be shown to work.
+    * **The vertex range clause is not carried at all**, because on this path it is provably
+      unreachable: `PointNM.__post_init__` enforces `JSON_SAFE_INTEGER`, which *is*
+      `(1 << 53) - 1`, so a value that passes the type check above cannot fail a range check
+      below it.  (The same is true of the adapter's own copy.)
+
+    The two ceilings are this path's own numbers.  The adapter's per-island ceiling of 4,096 is
+    reached by 14 of 18 boards in the real-board corpus (`B-108`), is filed as an over-refusal in
+    issue #167, and is parked pending a paired calibration that plan item P7.1 says no quality
+    argument may substitute for.  Importing it here would newly refuse, on a path that accepts
+    them today, boards whose only fault is a large pour -- closing a hygiene gap by copying a
+    known defect.
+    """
+
+    if not isinstance(fill, tuple):
+        return "verified fill must be a tuple"
+    if len(fill) > _MAX_VERIFIED_FILL_ISLANDS:
+        return "verified fill island count exceeds the obstacle ceiling"
+    for island in fill:
+        if not isinstance(island, VerifiedFill):
+            return "verified fill entry must be a VerifiedFill value"
+        if not _typed_identity(island.net_id, "net:") or not _typed_identity(
+            island.layer_id, "layer:"
+        ):
+            return "verified fill island identity is malformed"
+        if not _digest_shape(island.source_revision):
+            return "verified fill source revision is malformed"
+        points: object = island.points
+        if not isinstance(points, tuple) or len(points) > _MAX_VERIFIED_FILL_ISLAND_VERTICES:
+            return "verified fill island is not a bounded polygon"
+        for point in points:
+            if not isinstance(point, PointNM):
+                return "verified fill island vertex is malformed"
+    return None
+
+
 def canonical_fill_bytes(verified_fill: tuple[VerifiedFill, ...]) -> bytes:
     """Return stable identity bytes for one exact sequence of verified fill islands."""
 
@@ -2735,6 +2835,11 @@ class AStarRouter:
         would be looser than the route, and would confirm geometry the router never proved.
         """
 
+        malformed = invalid_verified_fill(verified_fill)
+        if malformed is not None:
+            # Before `fill_binding_for`, which reads every field of every island and would
+            # otherwise raise on the malformed evidence rather than refusing it.
+            return _result_failure(_fail(RouteFailureCode.UNSUPPORTED_GEOMETRY, malformed))
         binding = fill_binding_for(verified_fill)
         if binding != candidate.fill_binding:
             return _result_failure(
@@ -2782,6 +2887,9 @@ class AStarRouter:
         validated = _validate_public_inputs(snapshot, request, cancelled, congestion_penalty)
         if isinstance(validated, RouteResult):
             return validated
+        malformed = invalid_verified_fill(verified_fill)
+        if malformed is not None:
+            return _result_failure(_fail(RouteFailureCode.UNSUPPORTED_GEOMETRY, malformed))
         checked_snapshot, checked_request, cancellation_check, checked_penalty = validated
         work = _WorkBudget(settings=checked_request.settings, cancelled=cancellation_check)
         try:

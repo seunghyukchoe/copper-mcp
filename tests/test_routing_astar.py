@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import math
 import random
+from collections.abc import Callable
 from dataclasses import replace
 from itertools import pairwise
+from pathlib import Path
 from typing import cast
 
 import pytest
@@ -53,11 +55,14 @@ from copper_mcp.routing import (
     verify_candidate_id,
 )
 from copper_mcp.routing.astar import (
+    _MAX_VERIFIED_FILL_ISLAND_VERTICES,
+    _MAX_VERIFIED_FILL_ISLANDS,
     OFF_GRID_MESSAGE_LEAD,
     _arc_envelope,
     _arc_sagitta_bound_nm,
     _arc_spans_at_most_half_turn,
     _diagonal_segment_cores,
+    _digest_shape,
     _off_grid_evidence,
     _pad_cores,
     _point_segment_distance_lt,
@@ -67,6 +72,7 @@ from copper_mcp.routing.astar import (
     _rectangles_touch,
     _segment_envelope,
     _swept_square_envelope,
+    _typed_identity,
     _via_cores,
     _WorkBudget,
 )
@@ -3767,3 +3773,278 @@ def test_a_same_net_zone_on_another_layer_also_blocks_the_claim() -> None:
 
     assert result.connected is None
     _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+
+
+# ---------------------------------------------------------------------------
+# Issue #166 / ADR-0108: the single-layer `verified_fill` shape gate.
+#
+# Every test below feeds a gate the input it must reject and reads the refusal.
+# None of them compares a board routed with evidence against the same board
+# routed without it: that differential bounds what the evidence *adds*, and says
+# nothing about what a gate fails to reject, which is the trap issue #166 names.
+# ---------------------------------------------------------------------------
+
+
+def _fill_snapshot() -> BoardIRSnapshot:
+    """A board with a foreign pour, so well-shaped evidence has somewhere to land."""
+
+    return _snapshot(foreign_zones=(_rectangle(3_000, 3_000, 7_000, 7_000),))
+
+
+def _well_shaped_island(**changes: object) -> VerifiedFill:
+    defaults: dict[str, object] = {
+        "net_id": OTHER_NET_ID,
+        "layer_id": LAYER_ID,
+        "points": (PointNM(3_000, 6_000), PointNM(7_000, 6_000), PointNM(7_000, 7_000)),
+        "source_revision": SOURCE_REVISION,
+    }
+    defaults.update(changes)
+    return VerifiedFill(**defaults)  # type: ignore[arg-type]
+
+
+class _DuckTypedPoint:
+    """A vertex that is not a `PointNM` but answers to one."""
+
+    x = JSON_SAFE_INTEGER
+    y = JSON_SAFE_INTEGER
+
+
+#: One rejection class per row, each carrying a *builder* rather than a value: two of the cases
+#: hold a million vertices and thirty-two thousand islands, and holding those for the whole
+#: session to satisfy `parametrize` would be a cost every other test in this file pays.
+_MALFORMED_FILL: tuple[tuple[str, Callable[[], object], str], ...] = (
+    # Accepted and routed before this gate existed: a list is not a tuple.
+    ("list container", lambda: [_well_shaped_island()], "verified fill must be a tuple"),
+    (
+        "island count over the ceiling",
+        lambda: (_well_shaped_island(),) * (_MAX_VERIFIED_FILL_ISLANDS + 1),
+        "verified fill island count exceeds the obstacle ceiling",
+    ),
+    # Raised an uncaught AttributeError before this gate existed.
+    (
+        "foreign entry",
+        lambda: ("not-an-island",),
+        "verified fill entry must be a VerifiedFill value",
+    ),
+    (
+        "untyped net identity",
+        lambda: (_well_shaped_island(net_id="power"),),
+        "verified fill island identity is malformed",
+    ),
+    (
+        "untyped layer identity",
+        lambda: (_well_shaped_island(layer_id="F.Cu"),),
+        "verified fill island identity is malformed",
+    ),
+    (
+        "malformed source digest",
+        lambda: (_well_shaped_island(source_revision="revision-3"),),
+        "verified fill source revision is malformed",
+    ),
+    # Accepted and routed before this gate existed: a list of points is not a tuple.
+    (
+        "list of points",
+        lambda: (_well_shaped_island(points=[PointNM(3_000, 6_000)] * 3),),
+        "verified fill island is not a bounded polygon",
+    ),
+    (
+        "ring over the vertex ceiling",
+        lambda: (
+            _well_shaped_island(
+                points=tuple(
+                    PointNM(3_000 + index % 1_000, 6_000)
+                    for index in range(_MAX_VERIFIED_FILL_ISLAND_VERTICES + 1)
+                )
+            ),
+        ),
+        "verified fill island is not a bounded polygon",
+    ),
+    # Raised an uncaught AttributeError before this gate existed.
+    (
+        "duck-typed vertex",
+        lambda: (_well_shaped_island(points=(_DuckTypedPoint(),) * 3),),
+        "verified fill island vertex is malformed",
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    ("name", "build_fill", "message"),
+    _MALFORMED_FILL,
+    ids=[case[0] for case in _MALFORMED_FILL],
+)
+def test_propose_refuses_malformed_verified_fill_by_class(
+    name: str, build_fill: Callable[[], object], message: str
+) -> None:
+    """Each rejection class the ordered-layer adapter names is refused, and named, here too."""
+
+    snapshot = _fill_snapshot()
+
+    result = AStarRouter().propose(
+        snapshot,
+        _request(snapshot),
+        verified_fill=cast("tuple[VerifiedFill, ...]", build_fill()),
+    )
+
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert result.diagnostic.message == message
+
+
+@pytest.mark.parametrize(
+    ("name", "build_fill", "message"),
+    _MALFORMED_FILL,
+    ids=[case[0] for case in _MALFORMED_FILL],
+)
+def test_replay_refuses_malformed_verified_fill_before_binding_it(
+    name: str, build_fill: Callable[[], object], message: str
+) -> None:
+    """`replay` reads every field to bind the fill, so its gate has to run first."""
+
+    snapshot = _fill_snapshot()
+    candidate = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    result = AStarRouter().replay(
+        snapshot,
+        candidate,
+        verified_fill=cast("tuple[VerifiedFill, ...]", build_fill()),
+    )
+
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert result.diagnostic.message == message
+
+
+def test_the_shape_gate_does_not_swallow_the_semantic_gates() -> None:
+    """Well-shaped evidence still reaches the revision, backing and containment checks."""
+
+    snapshot = _fill_snapshot()
+
+    stale = AStarRouter().propose(
+        snapshot,
+        _request(snapshot),
+        verified_fill=(_well_shaped_island(source_revision=OTHER_REVISION),),
+    )
+    _assert_failure(stale, RouteFailureCode.STALE_FILL)
+
+    unbacked = AStarRouter().propose(
+        snapshot,
+        _request(snapshot),
+        verified_fill=(_well_shaped_island(net_id="net:unbacked"),),
+    )
+    _assert_failure(unbacked, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert unbacked.diagnostic is not None
+    assert (
+        unbacked.diagnostic.message
+        == "verified zone fill is not backed by a matching Board IR zone"
+    )
+
+    escaping = AStarRouter().propose(
+        snapshot,
+        _request(snapshot),
+        verified_fill=(
+            _well_shaped_island(points=(PointNM(0, 0), PointNM(9_000, 0), PointNM(9_000, 9_000))),
+        ),
+    )
+    _assert_failure(escaping, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert escaping.diagnostic is not None
+    assert (
+        escaping.diagnostic.message
+        == "verified zone fill escapes its backing Board IR zone outline"
+    )
+
+
+def test_the_three_vertex_floor_stays_in_prepare_and_stays_reachable() -> None:
+    """The boundary gate bounds the ring from above only, so `_prepare`'s floor is still live."""
+
+    snapshot = _fill_snapshot()
+
+    result = AStarRouter().propose(
+        snapshot,
+        _request(snapshot),
+        verified_fill=(_well_shaped_island(points=(PointNM(3_000, 6_000), PointNM(7_000, 6_000))),),
+    )
+
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert result.diagnostic.message == "verified zone fill island is not a closed ring"
+
+
+def test_the_two_fill_identity_predicates_agree_across_the_two_routers() -> None:
+    """One vocabulary, two copies: the copies must answer identically or #166 recurs."""
+
+    from copper_mcp.routing import layered_board_adapter
+
+    identities = (
+        "net:audio",
+        "net:",
+        "audio",
+        "net:" + "a" * 160,
+        "net:" + "a" * 161,
+        "net:a b",
+        "net:é",
+        123,
+        None,
+    )
+    for value in identities:
+        assert _typed_identity(value, "net:") is layered_board_adapter._typed(value, "net:")
+
+    digests = (
+        SOURCE_REVISION,
+        SOURCE_REVISION[:-1],
+        "sha256:" + "g" * 64,
+        "md5:" + "a" * 64,
+        "a" * 71,
+        123,
+        None,
+    )
+    for value in digests:
+        assert _digest_shape(value) is layered_board_adapter._digest(value)
+
+
+def test_the_vertex_range_clause_is_unreachable_behind_the_type_check() -> None:
+    """`PointNM` enforces the same bound, so a range clause after `isinstance` would be dead.
+
+    This is the eighth class in issue #166's list, and it is recorded rather than implemented.
+    The ordered-layer adapter's own copy of it is dead for exactly the same reason.
+    """
+
+    from copper_mcp.routing import layered_board_adapter
+
+    assert JSON_SAFE_INTEGER == layered_board_adapter._MAX_SAFE_INT
+    with pytest.raises(ValueError, match="outside the supported integer range"):
+        PointNM(JSON_SAFE_INTEGER + 1, 0)
+    with pytest.raises(ValueError, match="outside the supported integer range"):
+        PointNM(0, -JSON_SAFE_INTEGER - 1)
+
+
+def test_the_two_fill_ceilings_are_this_paths_own_numbers(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Both ceilings are derived here, and neither is the ordered-layer adapter's.
+
+    Pinning them is the point: harmonising this gate with the adapter's 4,096-vertex ceiling
+    would newly refuse the 14-of-18 corpus boards `B-108` measured above it, on a path that
+    accepts them today. Issue #167 owns that ceiling and plan item P7.1 says no quality argument
+    may stand in for its calibration, so a later harmonisation has to fail here and read ADR-0108.
+    """
+
+    from copper_mcp.config import ConfigurationError, Settings
+    from copper_mcp.routing import contracts, layered_board_adapter
+
+    # Every island becomes a candidate obstacle, and this is the obstacle domain ceiling.
+    assert _MAX_VERIFIED_FILL_ISLANDS == contracts._MAX_OBSTACLES
+
+    # A whole document's pour cannot exceed this, so one island cannot either. The ceiling is
+    # accepted and one more is refused, so this pins the number and not merely its direction.
+    # `Settings.from_env` resolves the workspace strictly and falls back to the process cwd, which
+    # a sibling test can leave inside a deleted temporary directory. Name a real one.
+    monkeypatch.setenv("COPPER_MCP_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("COPPER_MCP_MAX_FILL_VERTICES", str(_MAX_VERIFIED_FILL_ISLAND_VERTICES))
+    assert Settings.from_env().max_fill_vertices == _MAX_VERIFIED_FILL_ISLAND_VERTICES
+    monkeypatch.setenv("COPPER_MCP_MAX_FILL_VERTICES", str(_MAX_VERIFIED_FILL_ISLAND_VERTICES + 1))
+    with pytest.raises(ConfigurationError):
+        Settings.from_env()
+
+    assert _MAX_VERIFIED_FILL_ISLAND_VERTICES != layered_board_adapter._MAX_FILL_VERTICES
+    assert _MAX_VERIFIED_FILL_ISLANDS != layered_board_adapter._MAX_OBSTACLES

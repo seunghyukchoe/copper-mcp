@@ -22,6 +22,11 @@ from pathlib import Path
 from typing import Any
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
+from copper_mcp.benchmarks.drc_comparability import (
+    LITERAL_KEY,
+    comparability_of,
+    require_qualified,
+)
 from copper_mcp.board_ir import NetClass
 from copper_mcp.config import Settings
 from copper_mcp.placement import build_placement_view, evaluate_placement, parse_placement_intent
@@ -103,6 +108,7 @@ def _run(repetitions: int) -> dict[str, Any]:
     candidate = _candidate(source, profile)
     samples: list[int] = []
     passed = 0
+    observations: list[dict[str, Any]] = []
     source_preserved = True
     candidate_bound = True
     context_bound = True
@@ -122,6 +128,16 @@ def _run(repetitions: int) -> dict[str, Any]:
             samples.append(time.perf_counter_ns() - started)
             after = board.stat()
             passed += int(evidence.summary.passed)
+            observations.append(
+                {
+                    "error_count": evidence.summary.error_count,
+                    "warning_count": evidence.summary.warning_count,
+                    "exclusion_count": evidence.summary.exclusion_count,
+                    "ignored_check_count": evidence.summary.ignored_check_count,
+                    "unconnected_count": evidence.summary.unconnected_count,
+                    "passed": evidence.summary.passed,
+                }
+            )
             source_preserved = source_preserved and board.read_bytes() == source
             source_preserved = source_preserved and after.st_ino == before.st_ino
             source_preserved = source_preserved and after.st_mtime_ns == before.st_mtime_ns
@@ -131,6 +147,7 @@ def _run(repetitions: int) -> dict[str, Any]:
             )
     return {
         "repetitions": repetitions,
+        LITERAL_KEY: comparability_of(observations),
         "clean_drc_runs": passed,
         "all_clean": passed == repetitions,
         "candidate_binding": candidate_bound,
@@ -164,6 +181,7 @@ def main() -> int:
             "FreeRouting parity",
         ],
     }
+    require_qualified(payload, where="copper-mcp/benchmark/placement-candidate-drc/v1")
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     payload["run_id"] = "sha256:" + hashlib.sha256(canonical).hexdigest()
     rendered = json.dumps(payload, indent=2, sort_keys=True) + "\n"

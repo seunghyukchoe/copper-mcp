@@ -1,0 +1,208 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "VF01-tuple-container-admitted",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "    if not isinstance(fill, tuple):\n        return \"verified fill must be a tuple\"\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_propose_refuses_malformed_verified_fill_by_class",
+        "tests/test_routing_astar.py::test_replay_refuses_malformed_verified_fill_before_binding_it"
+      ]
+    },
+    {
+      "id": "VF02-island-count-ceiling-removed",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "    if len(fill) > _MAX_VERIFIED_FILL_ISLANDS:\n        return \"verified fill island count exceeds the obstacle ceiling\"\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_propose_refuses_malformed_verified_fill_by_class",
+        "tests/test_routing_astar.py::test_replay_refuses_malformed_verified_fill_before_binding_it"
+      ]
+    },
+    {
+      "id": "VF03-foreign-entry-admitted",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        if not isinstance(island, VerifiedFill):\n            return \"verified fill entry must be a VerifiedFill value\"\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_propose_refuses_malformed_verified_fill_by_class",
+        "tests/test_routing_astar.py::test_replay_refuses_malformed_verified_fill_before_binding_it"
+      ]
+    },
+    {
+      "id": "VF04-untyped-identity-admitted",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        if not _typed_identity(island.net_id, \"net:\") or not _typed_identity(\n            island.layer_id, \"layer:\"\n        ):\n            return \"verified fill island identity is malformed\"\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_propose_refuses_malformed_verified_fill_by_class",
+        "tests/test_routing_astar.py::test_replay_refuses_malformed_verified_fill_before_binding_it"
+      ]
+    },
+    {
+      "id": "VF05-only-the-net-identity-is-typed",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        if not _typed_identity(island.net_id, \"net:\") or not _typed_identity(\n            island.layer_id, \"layer:\"\n        ):\n",
+      "replacement": "        if not _typed_identity(island.net_id, \"net:\"):\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_propose_refuses_malformed_verified_fill_by_class",
+        "tests/test_routing_astar.py::test_replay_refuses_malformed_verified_fill_before_binding_it"
+      ]
+    },
+    {
+      "id": "VF06-malformed-digest-admitted",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        if not _digest_shape(island.source_revision):\n            return \"verified fill source revision is malformed\"\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_propose_refuses_malformed_verified_fill_by_class",
+        "tests/test_routing_astar.py::test_replay_refuses_malformed_verified_fill_before_binding_it"
+      ]
+    },
+    {
+      "id": "VF07-unbounded-polygon-admitted",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        if not isinstance(points, tuple) or len(points) > _MAX_VERIFIED_FILL_ISLAND_VERTICES:\n            return \"verified fill island is not a bounded polygon\"\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_propose_refuses_malformed_verified_fill_by_class",
+        "tests/test_routing_astar.py::test_replay_refuses_malformed_verified_fill_before_binding_it"
+      ]
+    },
+    {
+      "id": "VF08-points-container-unchecked",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        if not isinstance(points, tuple) or len(points) > _MAX_VERIFIED_FILL_ISLAND_VERTICES:\n",
+      "replacement": "        if len(points) > _MAX_VERIFIED_FILL_ISLAND_VERTICES:  # type: ignore[arg-type]\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_propose_refuses_malformed_verified_fill_by_class",
+        "tests/test_routing_astar.py::test_replay_refuses_malformed_verified_fill_before_binding_it"
+      ]
+    },
+    {
+      "id": "VF09-foreign-vertex-admitted",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        for point in points:\n            if not isinstance(point, PointNM):\n                return \"verified fill island vertex is malformed\"\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_propose_refuses_malformed_verified_fill_by_class",
+        "tests/test_routing_astar.py::test_replay_refuses_malformed_verified_fill_before_binding_it"
+      ]
+    },
+    {
+      "id": "VF10-gate-not-called-from-propose",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        malformed = invalid_verified_fill(verified_fill)\n        if malformed is not None:\n            return _result_failure(_fail(RouteFailureCode.UNSUPPORTED_GEOMETRY, malformed))\n        checked_snapshot, checked_request, cancellation_check, checked_penalty = validated\n",
+      "replacement": "        checked_snapshot, checked_request, cancellation_check, checked_penalty = validated\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_propose_refuses_malformed_verified_fill_by_class"
+      ]
+    },
+    {
+      "id": "VF11-gate-not-called-from-replay",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        malformed = invalid_verified_fill(verified_fill)\n        if malformed is not None:\n            # Before `fill_binding_for`, which reads every field of every island and would\n            # otherwise raise on the malformed evidence rather than refusing it.\n            return _result_failure(_fail(RouteFailureCode.UNSUPPORTED_GEOMETRY, malformed))\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_replay_refuses_malformed_verified_fill_before_binding_it"
+      ]
+    },
+    {
+      "id": "VF12-refusal-loses-its-typed-code",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        malformed = invalid_verified_fill(verified_fill)\n        if malformed is not None:\n            return _result_failure(_fail(RouteFailureCode.UNSUPPORTED_GEOMETRY, malformed))\n        checked_snapshot",
+      "replacement": "        malformed = invalid_verified_fill(verified_fill)\n        if malformed is not None:\n            return _result_failure(_fail(RouteFailureCode.INVALID_REQUEST, malformed))\n        checked_snapshot",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_propose_refuses_malformed_verified_fill_by_class"
+      ]
+    },
+    {
+      "id": "VF13-vertex-ceiling-harmonised-with-the-layered-adapter",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "_MAX_VERIFIED_FILL_ISLAND_VERTICES = 1_000_000\n",
+      "replacement": "_MAX_VERIFIED_FILL_ISLAND_VERTICES = 4_096\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_the_two_fill_ceilings_are_this_paths_own_numbers"
+      ]
+    },
+    {
+      "id": "VF14-island-ceiling-harmonised-with-the-layered-adapter",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "_MAX_VERIFIED_FILL_ISLANDS = 32_768\n",
+      "replacement": "_MAX_VERIFIED_FILL_ISLANDS = 4_096\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_the_two_fill_ceilings_are_this_paths_own_numbers"
+      ]
+    },
+    {
+      "id": "VF15-boundary-gate-swallows-the-three-vertex-floor",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        if not isinstance(points, tuple) or len(points) > _MAX_VERIFIED_FILL_ISLAND_VERTICES:\n            return \"verified fill island is not a bounded polygon\"\n",
+      "replacement": "        if not isinstance(points, tuple) or not (\n            3 <= len(points) <= _MAX_VERIFIED_FILL_ISLAND_VERTICES\n        ):\n            return \"verified fill island is not a bounded polygon\"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_the_three_vertex_floor_stays_in_prepare_and_stays_reachable"
+      ]
+    },
+    {
+      "id": "VF16-prepare-loses-the-three-vertex-floor",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        if len(island.points) < 3:\n",
+      "replacement": "        if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_the_three_vertex_floor_stays_in_prepare_and_stays_reachable"
+      ]
+    },
+    {
+      "id": "VF17-identity-predicate-accepts-anything",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "    return (\n        isinstance(value, str)\n        and value.startswith(prefix)\n        and 1 <= len(value.removeprefix(prefix)) <= _MAX_IDENTITY_BODY\n",
+      "replacement": "    return (\n        isinstance(value, str)\n        and value.startswith(prefix)\n        and 1 <= len(value.removeprefix(prefix))\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_the_two_fill_identity_predicates_agree_across_the_two_routers"
+      ]
+    },
+    {
+      "id": "VF18-digest-predicate-stops-reading-the-hex-body",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "    try:\n        int(value[7:], 16)\n    except ValueError:\n        return False\n    return True\n\n\ndef invalid_verified_fill",
+      "replacement": "    return True\n\n\ndef invalid_verified_fill",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_the_two_fill_identity_predicates_agree_across_the_two_routers"
+      ]
+    },
+    {
+      "id": "VF19-shape-gate-swallows-the-containment-gate",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        island_bounds = _polygon_bounds(island.points, work)\n        if not any(\n",
+      "replacement": "        island_bounds = _polygon_bounds(island.points, work)\n        if False and not any(\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_the_shape_gate_does_not_swallow_the_semantic_gates"
+      ]
+    }
+  ]
+}
