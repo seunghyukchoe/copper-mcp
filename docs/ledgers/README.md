@@ -99,9 +99,10 @@ The rules:
    handed a disjoint block before any of them read a ledger: this record (issues
    [#65](https://github.com/seunghyukchoe/copper-mcp/issues/65) and
    [#110](https://github.com/seunghyukchoe/copper-mcp/issues/110)) holds `D-204`, `R-157`, `B-113`
-   and `B-114`, which sit four, four and three above the next-free numbers this base records. So
-   `D-200`–`D-203`, `R-154`–`R-156` and `B-111`–`B-112` are **live claims of the sibling branches,
-   not gaps**, and the checker reports them as unallocated because it cannot see an unmerged branch.
+   and `B-114`, which sat four, four and three above the next-free numbers that base recorded. By
+   the time this record landed (third of four), the survey and process-checker siblings had landed
+   ahead of it, so of the stepped-over block only `D-200`–`D-201`, `R-154` and `B-111` — the
+   evidence sibling's live claims — remain reported as unallocated until it lands.
    Pre-assignment is the same mechanism as rule 1's stepping-over with the race removed: whichever
    branch lands second resolves this table's textual conflict rather than discovering a collision in
    a merged document. If a sibling is abandoned its numbers become permanent spent numbers like any

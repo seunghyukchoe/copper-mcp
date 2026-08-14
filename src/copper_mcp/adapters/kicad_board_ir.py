@@ -476,6 +476,19 @@ _REFUSED_PAD_PROPERTY = "pad_prop_castellated"
 # the core sound and lets the obstacle miss real metal.  See ADR-0100 and
 # docs/research/kicad-custom-pad-envelope-v1.md.
 #
+# Those three call sites are the *clearest* readers, not the only ones.  The P3.3a survey
+# (2026-08-14, docs/research/pad-geometry-reader-survey-v1.md, `B-112`) enumerated all of them by
+# field access **and** by accessor call: 23 sites across 14 modules, of which 8 need the
+# over-approximating direction, 3 the under-approximating one, and 4 need an exact region that
+# neither answers -- `canonical.py::_pad` feeds the snapshot digest, `codec.py` feeds a published
+# schema closed by `additionalProperties: false`, `Pad.__post_init__` binds drill and radius
+# invariants to `size`, and `circuit_scene.py::_pad_object` publishes `size_nm` on the scene
+# contract.  Three more read pad geometry in a direction they do not get today, all in
+# `placement/legalizer.py` and all reached through the stored `_PlacedPad.bounds` rather than
+# through any field name here.  The argument above is strengthened by that count and not weakened:
+# one rectangle cannot serve 18 readers if it cannot serve 3.  What the survey changes is the cost
+# of the revisit, which is why `D-203` stopped at the measurement rather than proceeding to P3.3.
+#
 # `trapezoid` earns a different sentence for a weaker reason and the difference is deliberate:
 # a trapezoid is a convex quadrilateral derivable from `size` and `(rect_delta ...)`, so both
 # directions are available and it is unmodelled rather than unmodellable.  A reader must be able
