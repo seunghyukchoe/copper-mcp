@@ -1,0 +1,4343 @@
+{
+  "boards": [
+    {
+      "board": "1Bitsy_1bitsy",
+      "declared_layers": 4,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/1Bitsy/1bitsy-hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 244573,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "d1d775dd42d7aa297a18a47d839e83f25fa2b4b0f75c8102a6b296edd3be2e8b"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 469452,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "891a877a1604cbf423e848add21dab154acf99b6f98284caf509c4030768c3d4"
+        }
+      }
+    },
+    {
+      "board": "JavierIH_kameshield",
+      "declared_layers": 2,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/JavierIH/miniKame",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 44226,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "ad4fcc4c6c45ce0441f3905c5a63a207d5e6cb16c9455978090fbabc6f4e2b33"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 53018,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "02c2d39460bea7e165e9dd1654b6dca49cdf57a002aff0a9e8668f4a90aa63a7"
+        }
+      }
+    },
+    {
+      "board": "LibreSolar_MPPT_charger_20A",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'Creative Commons Attribution Share Alike 4.0 International', 'link': 'https://api.github.com/licenses/cc-by-sa-4.0'}]",
+      "upstream_source": "https://github.com/LibreSolar/mppt-2420-lc",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 726356,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "664c0e4257a9fb0b83f9fa02bd926ff9ecac8497b71b59c70c3b7baf1b2926c1"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 878391,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "0ce214ea33c56f232627222a363d2202e894525c8faf276071362cbc3c206866"
+        }
+      }
+    },
+    {
+      "board": "Ttl_wlan_radar",
+      "declared_layers": 4,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/Ttl/fmcw",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 332238,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "5a0607297e3521f393836ecba3b7005e8f737c18beec10904368634277d55301"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 668040,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "ac7160261501ef2e7b5222129c4d309f2d5f9249d902954d24e45c042d12c848"
+        }
+      }
+    },
+    {
+      "board": "bishboria_ErgoDox",
+      "declared_layers": 2,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/bishboria/ErgoDox",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 487874,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "6ea120df61ee21dafc1644af10176c54af50cab55f53d490827d760559531cb7"
+        },
+        "raw": {
+          "board_format_version": "3",
+          "bytes": 877094,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "02ea44e09b58c3b61d4fb4bf5f440e3d48479c6d5c0f8407161aca229160b0d4"
+        }
+      }
+    },
+    {
+      "board": "bobc_LCD-panel-adapter-lvc",
+      "declared_layers": 2,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/bobc/bobc_hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "3",
+          "bytes": 77317,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "93bb663e8f300d63d8751ee0565979e4a9e5d13fa031900cd01434bc198c699c"
+        },
+        "raw": {
+          "board_format_version": "3",
+          "bytes": 64608,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "8b80f57e5c6821e27067e8deb2c10e014830665f96f7b6614720a01a1743b1c1"
+        }
+      }
+    },
+    {
+      "board": "bobc_MS-F100",
+      "declared_layers": 2,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/bobc/bobc_hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 166862,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "46b539af9e5566e35f4a57b39bff754463daab1944d71de0fce8ea8046301142"
+        },
+        "raw": {
+          "board_format_version": "3",
+          "bytes": 142822,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "cccb51237f26ff209f185441e36fe2ba17025c8b7521a575e7415a9690eeca69"
+        }
+      }
+    },
+    {
+      "board": "bobc_control_panel",
+      "declared_layers": 2,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/bobc/bobc_hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 126451,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "0caedd305ad20234b408f17942fc65b21776a9aafa8dfbb745b3dd39cda83e5e"
+        },
+        "raw": {
+          "board_format_version": "3",
+          "bytes": 105778,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "b7ebe8fa65f24d5ec30ab8f98325ce11452d376b0ac2723054e788668ec880cf"
+        }
+      }
+    },
+    {
+      "board": "bobc_led_clock",
+      "declared_layers": 2,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/bobc/bobc_hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "3",
+          "bytes": 285313,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "65272d8f3e6bd958cb961df3863791eb049fa305248790ad42b2adcebd5b3c89"
+        },
+        "raw": {
+          "board_format_version": "3",
+          "bytes": 234993,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "2ddc02f9e73f681cdd3795cdc433ac64fdb4711a6a1a28b0c8633d9ff05f1b08"
+        }
+      }
+    },
+    {
+      "board": "bobc_matrix_clock",
+      "declared_layers": 2,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/bobc/bobc_hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 234633,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "56be7613e583f4872cd4690c1f408a4478c0fdfbeb61bb619e1137aeebb02aeb"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 193414,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "6bfb6bdeeccb02e7c366bac528e6e27410cd353ecf7cb8227ce45a0fca2c1d67"
+        }
+      }
+    },
+    {
+      "board": "bobc_mbeduinopresso",
+      "declared_layers": 2,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/bobc/bobc_hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 201957,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "228f379baeaa0401be7e513a6ed6e53092745eaf301dc8ce1317f808143acd85"
+        },
+        "raw": {
+          "board_format_version": "3",
+          "bytes": 169718,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "2f7a52353c75043bdd60d2c405e9655855b164d594de2a1659481d070ff1e71f"
+        }
+      }
+    },
+    {
+      "board": "cnlohr_wiflier",
+      "declared_layers": 2,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/cnlohr/wiflier",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 201872,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "e5be4b0686f99fb6e5124676cbbcc5a946b578267f0d112007322c4a5a9d64bc"
+        },
+        "raw": {
+          "board_format_version": "3",
+          "bytes": 232277,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "1e39f698ab9ba805da0f3a9fe28dc5bd00bdc5b5d00463766b7322524c888896"
+        }
+      }
+    },
+    {
+      "board": "cnlohr_wiflier_B",
+      "declared_layers": 2,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/cnlohr/wiflier",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 162428,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "d5e6254ae9fc4d99165570764f200055f6988948507530dc80e25cca600de207"
+        },
+        "raw": {
+          "board_format_version": "3",
+          "bytes": 255869,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "7acb233500099eaf8930c8720fc452add882fbe90c91fe7649cd6ef450025ff2"
+        }
+      }
+    },
+    {
+      "board": "devttys0_IRis",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'The Unlicense', 'link': 'https://api.github.com/licenses/unlicense'}]",
+      "upstream_source": "https://github.com/devttys0/IRis",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 66292,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "8dc7c0e9d1f08b44ddb4b8cc8928c0dee74ae629b86b4e52110b77f29cb46656"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 99232,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "b22582629bf22e10ded6699752abc9462304e6304ceb61248e35eda3d0e9df49"
+        }
+      }
+    },
+    {
+      "board": "hamityanik_ULP-Weather-Logger",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT License', 'link': 'https://api.github.com/licenses/mit'}]",
+      "upstream_source": "https://github.com/hamityanik/ULP-Weather-Logger",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 169536,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "a332cfd532986250fcf59b833a1edc3e91d8dae2430efd1915180c7d28964c97"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 367154,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "310d2d7812a34823986c0c8108881aee8792787cf2c22a7c01a7afca7f42c7bf"
+        }
+      }
+    },
+    {
+      "board": "hwstar_ac-power-monitor",
+      "declared_layers": 2,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/hwstar/HW-AC-Emeter",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 119505,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "66d8353de914fff21da28b20fa490f77684782d1246e8bc861cf8ebafce78265"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 188374,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "af2bbdbb5439a5994b63c567ead53c37813149742bd52f931882f701186dd370"
+        }
+      }
+    },
+    {
+      "board": "jadonk_PocketBone",
+      "declared_layers": 4,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/jadonk/PocketBone",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 392500,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "a1c2a675b1d915e418423cda6a89a4c9e01dae04588cdd099ebc255fbdc78b4d"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 523175,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "44255319c29f0092bb186b66a1af955e2125046c9147055be87f9e6d3bbe80b3"
+        }
+      }
+    },
+    {
+      "board": "kitspace_120-channel-pogo-pin-board",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/sci-bots/dropbot-120-channel-pogo-pin-board.kicad/main/LICENSE.md'}]",
+      "upstream_source": "https://github.com/sci-bots/dropbot-120-channel-pogo-pin-board.kicad",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 256346,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "7521cadffcbb4a46b91dfc4f6d7517582523a28e78f085ecbc095d65438cced8"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 346420,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "5ef90bfcb18f891700d80a097ff2812f592b9e4bd67aa49bef336592e6d396a6"
+        }
+      }
+    },
+    {
+      "board": "kitspace_120-channel-test-board",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/sci-bots/dropbot-120-channel-test-board.kicad/main/LICENSE'}]",
+      "upstream_source": "https://github.com/sci-bots/dropbot-120-channel-test-board.kicad",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 457818,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "2ec9c9153b74fd21db3d7ef6f23a357ef5ea7b188231b971ca4054304d9126d2"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 633670,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "01b0be899519ec9a5e8d28419a1ad35317304e5e20b13acf7af7d446930024ee"
+        }
+      }
+    },
+    {
+      "board": "kitspace_12V5A_breakout",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 107215,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "d894655368c1dddb39834973ab7e28d93f9ee3de53f2dc18a35ff83ab7182328"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 132295,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "4e8829c3ea5e1d5d9da5c40b1230787bba76c5cc7c5f5f087b719492641a2492"
+        }
+      }
+    },
+    {
+      "board": "kitspace_12_24_boost_converter",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 101308,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "d9809c2b5dfd72200d642bd54db388be41dd25f32f12c098e99140b6ea47d061"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 134650,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "49d05790d5e6d133794b3b64667b37b0bd344754de38097fbfabe178201816c1"
+        }
+      }
+    },
+    {
+      "board": "kitspace_40-channel-hv-switching-board",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/sci-bots/dropbot-40-channel-HV-switching-board.kicad/main/LICENSE.md'}]",
+      "upstream_source": "https://github.com/sci-bots/dropbot-40-channel-HV-switching-board.kicad",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 693511,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "2d7bfd36f1b2b3fd2302086231bc9a2aecdbf01b99f3c3bd360c3c637bfc028c"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 2129087,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "d30b551479dec054f5abf9c587066ef0d6c1eb55330192c9a786fb15f078b5c3"
+        }
+      }
+    },
+    {
+      "board": "kitspace_4_switch_array",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 119922,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "2524495eb734429a5530cfb28ebfd61e1a9ca1191f9d1ee78e353db2f1bf447e"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 150722,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "dba58eb6a64625bb5b2a852b0e831740ad9a6f507ba7291e33222388f36b07c0"
+        }
+      }
+    },
+    {
+      "board": "kitspace_8_switch_array",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 170438,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "d6d9e9f3fb691ad6d560d2dd69e157d4583d2936d09f56e1cff2778a0548164f"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 231944,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "87e57ec2c53b064ddf82849f802823a956fc3ab7a8eacd5bf862edb30a84f506"
+        }
+      }
+    },
+    {
+      "board": "kitspace_Arduino_uno_sheild",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'Apache', 'link': 'https://raw.githubusercontent.com/nasa-jpl/open-source-rover/master/LICENSE.txt'}]",
+      "upstream_source": "https://github.com/nasa-jpl/open-source-rover",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 68306,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "690a2b58ad513cd4faecfd4e58b26271769e2dd60313098d6d7b90ebde023f46"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 132990,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "9744af24046db4f1d51b8c3a0c270c55eedebe323a843d9c3eb6cca6c8721146"
+        }
+      }
+    },
+    {
+      "board": "kitspace_BQ25570_Harvester",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'License not found', 'link': ''}]",
+      "upstream_source": "https://github.com/kitspace-forks/BQ25570_Harvester",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 69039,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "57637e741beb174c117fe212f2cc2d47a7b04c0a36d78f9c3d238c6d9fe27cbe"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 94326,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "110681f0a9a964a74b796e2b604b3af10ab4a2fbe557462cad85431183f46c32"
+        }
+      }
+    },
+    {
+      "board": "kitspace_BalthazarKeyboard3-keycaps",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'CERN', 'link': 'https://raw.githubusercontent.com/balthazar-space/balthazarKeyboard3/main/LICENSE.md'}]",
+      "upstream_source": "https://github.com/balthazar-space/balthazarKeyboard3",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 737815,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "94dabfcb2f5b1f92299b6b96d6431202d79d80ee1ae9bed6da34b356ed9cf231"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 1509666,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "09d25a8c35cb996b396f26d22df42a0e3ed2f0a4dfc6d44e64d04cd01d6d3ecc"
+        }
+      }
+    },
+    {
+      "board": "kitspace_BalthazarPSU3",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'CERN', 'link': 'https://raw.githubusercontent.com/balthazar-space/balthazarPSU3/main/LICENSE.md'}]",
+      "upstream_source": "https://github.com/balthazar-space/balthazarPSU3",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 265127,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "59565b9336b2b9e6140dd01cb6db8aa2d81b2741f055dac7cabb68e8fe96c9cf"
+        },
+        "raw": {
+          "board_format_version": "20220914",
+          "bytes": 700917,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "5e9698313889bdae513fd8f63f0e6659e95ec8cfc7574f6daaf2968ee742ab2f"
+        }
+      }
+    },
+    {
+      "board": "kitspace_Brk40p",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'CERN', 'link': 'https://raw.githubusercontent.com/SdtElectronics/Xassette-Asterisk/master/LICENCE'}]",
+      "upstream_source": "https://github.com/SdtElectronics/Xassette-Asterisk",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 276550,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "11a3a9c4081fceb29a34fbd8a7553149c3b7f5dbc1cda173d7a267a26b37f710"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 207918,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "ea5d483da5c84d2f243f0f83af79c6cc3c2c48b3296bebff05cc6d304128fd69"
+        }
+      }
+    },
+    {
+      "board": "kitspace_CA3306E",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'License not found', 'link': ''}]",
+      "upstream_source": "https://github.com/kelu124/bomanz",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 58210,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "2b1a0b8d2cbca52b60de6d05545afb78a23d29efd819498c765084ed06e08033"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 98255,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "2c2f4029e7b75f3cf6c6fb21cfb3ef322535307094f37ed52d5fc8dfd7d91771"
+        }
+      }
+    },
+    {
+      "board": "kitspace_CH330",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/Jana-Marie/CH330_Hardware/master/LICENSE'}]",
+      "upstream_source": "https://github.com/Jana-Marie/CH330_Hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 36421,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "4eaf9470d74ece8139a9585684b3a19bb287b1dff6bacd68382beb94a03ee953"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 34194,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "7aad44e2fbfa87c4f92ac4005bb7deb0d9f60ff0e80f8a4f577bc12fa205fdf6"
+        }
+      }
+    },
+    {
+      "board": "kitspace_CO2",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/nerdyscout/NodeMCU/master/lib/LICENSE.md'}, {'name': 'CERN', 'link': 'https://raw.githubusercontent.com/nerdyscout/NodeMCU/master/CO2/LICENSE.TXT'}]",
+      "upstream_source": "https://github.com/nerdyscout/NodeMCU",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 143948,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "6f6166443fcadb33f8c40598c021dd3f937ee07b11e6c1543223578463986185"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 319145,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "5f333cb104c0d1f5cafc9956be0489224cfc9f6c1dfa20906ab1b82735e637b7"
+        }
+      }
+    },
+    {
+      "board": "kitspace_ChaosLooper",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/GaudiLabs/ChaosLooper/master/LICENSE'}]",
+      "upstream_source": "https://github.com/GaudiLabs/ChaosLooper",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 592740,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "7b228dbc442b93507de6134ef604f2670706ae354e3700234ac4a3befdfe4a63"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 561816,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "539221fa3c13b824706a52f231f418dc938043c2445bd9519d4c92c999a9ff3c"
+        }
+      }
+    },
+    {
+      "board": "kitspace_CocoMixtape_UGM_Kicad",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'License not found', 'link': ''}]",
+      "upstream_source": "https://github.com/GenericLab/GOSH-Board_UGM/",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 638034,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "29dced4582eff9ab12f5fe3af8dd3c144f240747efc6c13e0581e146b326787e"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 759881,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "c5ff58070eb9abc762e8c65cbdafa6d79cba6b3e2395885f382617e142e748a9"
+        }
+      }
+    },
+    {
+      "board": "kitspace_Control%20Board",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'Apache', 'link': 'https://raw.githubusercontent.com/nasa-jpl/open-source-rover/master/LICENSE.txt'}]",
+      "upstream_source": "https://github.com/nasa-jpl/open-source-rover",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 431868,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "1563fa3622aa72f8189b816bd7cedd33f0eca3c201f548e7c398f1c9fad95552"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 803229,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "35aa8fea646b85e0070311fffd371fed884201ac143ffb9f372800d94d715d58"
+        }
+      }
+    },
+    {
+      "board": "kitspace_DIY_detector",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'BSD', 'link': 'https://raw.githubusercontent.com/ozel/DIY_particle_detector/master/LICENSE'}, {'name': 'CERN', 'link': 'https://raw.githubusercontent.com/ozel/DIY_particle_detector/master/hardware/V1.1/CERN_OPEN_HARDWARE_LICENSE_OHL_v_1_2.txt'}]",
+      "upstream_source": "https://github.com/ozel/DIY_particle_detector",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 195523,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "d06e684c3dc8f91ba40e83c5c8fac3f0b2eec0c30647c9a2ad431f828001a7e2"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 228760,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "d66abb4826bb3821a7aa47db351fa4245851508c5d96f49f0e3f996477bdb432"
+        }
+      }
+    },
+    {
+      "board": "kitspace_Driverino-Shield",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'CERN', 'link': 'https://raw.githubusercontent.com/weirdgyn/Driverino-Shield/main/LICENSE'}]",
+      "upstream_source": "https://github.com/weirdgyn/Driverino-Shield",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 257845,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "86fa01f72ece2a48b10ba94f1f326a1e4018dc2d66f4ab36c511beb1c3832d1d"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 662340,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "fece76ea7725a0e20d722b813d9e660a430530889cb94dbe1cd4c43ecd2c28ef"
+        }
+      }
+    },
+    {
+      "board": "kitspace_EEZ%20DIB%20MCU%20r1B2",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'TAPR', 'link': 'https://raw.githubusercontent.com/eez-open/modular-psu/master/LICENSE.TXT'}]",
+      "upstream_source": "https://github.com/eez-open/modular-psu",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 1584494,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "da41414adf0de8c2d353c6de744d15409d6abae3ab0dc24105fda6a9b4559c31"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 3059751,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "678db5b6e886a388776e24d986d0d4c83eb2554e498383d85bf17f8559dc9d2d"
+        }
+      }
+    },
+    {
+      "board": "kitspace_ESP8266-PowerMonitor",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'License not found', 'link': ''}]",
+      "upstream_source": "https://github.com/jasiek/ESP8266-PowerMonitor",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 143855,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "768cce8e7e257c6779077592d4086f27e59683c5ce424656b63752e753612da8"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 120230,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "bf3099a15ac280d5e57a7fbad45ef4a733c9ae66b72b0caac369cb7ca337dfe8"
+        }
+      }
+    },
+    {
+      "board": "kitspace_ESPTINY86_Mixtape_version2",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'License not found', 'link': ''}]",
+      "upstream_source": "https://github.com/8BitMixtape/ESPTINY86_MixtapePCB",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 171637,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "b672cdc67fdb16be4afbbaf5356956e3b0d949b84065c08b3a437a6af05fa317"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 1485239,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "f6489e2b697e8fc44235ed5efd9e13d2742722e9147eb5315bf2164605e21ee8"
+        }
+      }
+    },
+    {
+      "board": "kitspace_GPSMux",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'Apache', 'link': 'https://raw.githubusercontent.com/weirdgyn/GPSMux/main/LICENSE'}]",
+      "upstream_source": "https://github.com/weirdgyn/GPSMux",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 61788,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "b545821b245dde95fe71e8a34c32d0cb62b171b7de7dd903b3f8336f1a2d108d"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 105933,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "74a51d41267ff5a5bbff4850fbd02953119b8d15a96437e5f8fdbee149a1cd90"
+        }
+      }
+    },
+    {
+      "board": "kitspace_Heltec_Node",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'License not found', 'link': ''}]",
+      "upstream_source": "https://github.com/morgulbrut/LoRa32_Node",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 789320,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "dbdf0fd69e887872535f015badf119cd6eab2de825b3855e7e0cce659d2c5c0e"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 849212,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "486f62ca7381c5f0b18feb1be2f79a7f5281cc22b1074e262adba2c225c5d4d1"
+        }
+      }
+    },
+    {
+      "board": "kitspace_LED%20Zappelin",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/BadenLab/LED-Zappelin/master/LICENSE'}, {'name': 'CERN', 'link': 'https://raw.githubusercontent.com/BadenLab/LED-Zappelin/master/PCB/LICENSE'}]",
+      "upstream_source": "https://github.com/BadenLab/LED-Zappelin",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 371560,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "fe7f52d9f68cab7f8f26c06ea38d7d188d436cff50e10d50bfa6c1ad37936356"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 433218,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "a620b090ff982ad57ec01fe306e16ed0c65635a7cd9c9e7e8dd5a089ce6644d7"
+        }
+      }
+    },
+    {
+      "board": "kitspace_Lcr_addon",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/eulerlab/open-visual-stimulator/master/LICENSE'}]",
+      "upstream_source": "https://github.com/eulerlab/open-visual-stimulator",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 94510,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "235b849195382aed912822ac2aed33e0bae5753005e629d7d45da34b31ed2e9e"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 156085,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "22a9b0a1485d39053639a9297e9cf3d9313827f3339baed1304df3eda5fde20b"
+        }
+      }
+    },
+    {
+      "board": "kitspace_Minisumo_V2.1",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'Apache', 'link': 'https://raw.githubusercontent.com/rosmo-robot/micro-bot/master/LICENSE'}]",
+      "upstream_source": "https://github.com/rosmo-robot/micro-bot",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 135193,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "903eaf412a3666825e57f0a89cb77f0dd69ffeed36e4b44ad65158d7eb77400d"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 722854,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "32f0fb30d7f2c841fe3d4b708d69c315fdfdf2cc403e4afa2ac4a516c4a81f47"
+        }
+      }
+    },
+    {
+      "board": "kitspace_Mixtape_Barebone",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'License not found', 'link': ''}]",
+      "upstream_source": "https://github.com/8BitMixtape/mCore_Mixtape",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 50676,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "afa0c96cd83532c34208e2391db91fa119351d3582b873d411060a9b7e54d3be"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 847392,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "2dfaeb453167d2a1325ebad1b227b92324562057c30550f4f29e125f677dbec2"
+        }
+      }
+    },
+    {
+      "board": "kitspace_OSO-BOOK-C1",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/joeycastillo/The-Open-Book/main/LICENSE.md'}]",
+      "upstream_source": "https://github.com/joeycastillo/The-Open-Book",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 467892,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "2ea96e8abb3419a5679f2bf08a8ef7c2afefffc032b49121aaa3dfc709b54b4f"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 1281727,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "3d600ca21768c193c7991034bfc620aca080bc37c38f008b18e5625052dba2ec"
+        }
+      }
+    },
+    {
+      "board": "kitspace_Oak",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'License not found', 'link': ''}]",
+      "upstream_source": "https://github.com/hutscape/oak",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 313478,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "edea5e6c722e033b30e51d1ca861e640b4a098fbec7e5cb52be713166204b091"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 1120755,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "d99b737b394489ca69690a948433339d6e7b385a3dea18b648b127e52796d8ec"
+        }
+      }
+    },
+    {
+      "board": "kitspace_OpenSpritzer_1.3",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/BadenLab/Openspritzer/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BadenLab/Openspritzer",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 286208,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "b34ecee47d93392214d6935700d625ab87d17e125295438ca5dea8fc9eebf451"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 364183,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "8c40090bb7080106b376200b335b9ede171e83af5f8d027866ad872063bc500b"
+        }
+      }
+    },
+    {
+      "board": "kitspace_OtterCastAmp",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/Ottercast/OtterCastAmp/main/LICENSE'}]",
+      "upstream_source": "https://github.com/Ottercast/OtterCastAmp",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 932375,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "d7be73e3403bcf9d40090b9fd027efaad3015d7560654fbd8229fcc642218682"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 2196415,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "1464bebff325580e667aff8ae671eef3de1e9aac1f9a053eb729eaa14bda8659"
+        }
+      }
+    },
+    {
+      "board": "kitspace_OtterCastAudioV2",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/Ottercast/OtterCastAudioV2/main/LICENSE'}]",
+      "upstream_source": "https://github.com/Ottercast/OtterCastAudioV2",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 754446,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "87ebd9a4b7ffccce395a18f4c965aa400a199d068c15d36c0a5dd0b47b304a0d"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 1762234,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "708da48d452f98a5334312826eaf2213ec23174e09d00ee32de83cb19b6d9785"
+        }
+      }
+    },
+    {
+      "board": "kitspace_OtterPill",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'CERN', 'link': 'https://raw.githubusercontent.com/Jana-Marie/OtterPill/main/LICENSE.md'}]",
+      "upstream_source": "https://github.com/Jana-Marie/OtterPill",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 269504,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "342656574859d7c27beb5867ea25a800b435d1aa67e4912461f72ff3094aa4b0"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 751003,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "58a530400c0692cae5483635f96c972c0abb6acc59cb4cc687c5a056fc8b21c6"
+        }
+      }
+    },
+    {
+      "board": "kitspace_OtterPillG",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'CERN', 'link': 'https://raw.githubusercontent.com/Jana-Marie/OtterPill/main/LICENSE.md'}]",
+      "upstream_source": "https://github.com/Jana-Marie/OtterPill",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 156323,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "71e5060448b33deb831534512854e14af7afa0178d96106d3400c5456d7e956e"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 260195,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "acee966987bc6001972883de2b419dfb3950dec8538980f4abbaec9594e3c087"
+        }
+      }
+    },
+    {
+      "board": "kitspace_OtterScreen",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/Jana-Marie/OtterScreenAdapter/master/LICENSE'}]",
+      "upstream_source": "https://github.com/Jana-Marie/OtterScreenAdapter",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 127447,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "638deee96ce7c5785ab8858a138fc1647090234588750a226accb5ce4c9025f1"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 264998,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "e1e07904671af0237fd5731ab24eeac4f9fc490a263a84f7ceb2d06fa13f752f"
+        }
+      }
+    },
+    {
+      "board": "kitspace_OutlineChaos",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/GaudiLabs/ChaosLooper/master/LICENSE'}]",
+      "upstream_source": "https://github.com/GaudiLabs/ChaosLooper",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 522171,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "810af0c8ee3fcfad945e50d03d3d4a539ba69957ff04363408bcdb7a5940d7d2"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 502488,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "b36ac4521e3be7048de0e0c66772ddbeea6ca16a42320171a35eefd3e7e28440"
+        }
+      }
+    },
+    {
+      "board": "kitspace_PCBs",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'Apache', 'link': 'https://raw.githubusercontent.com/fossasia/pslab-hardware/pslab-v6/LICENSE'}]",
+      "upstream_source": "https://github.com/fossasia/pslab-hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 109418,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "c168949bc08294278a6399a7ed161548d1974799f6ae1a45976e68b80e50e8b1"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 122874,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "369be678dc65cc83a16d652bf2553bfa23490bf3e9e772a72e9c2e0860a8bbc7"
+        }
+      }
+    },
+    {
+      "board": "kitspace_PIS",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/nerdyscout/NodeMCU/master/lib/LICENSE.md'}, {'name': 'CERN', 'link': 'https://raw.githubusercontent.com/nerdyscout/NodeMCU/master/CO2/LICENSE.TXT'}]",
+      "upstream_source": "https://github.com/nerdyscout/NodeMCU",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 106877,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "64342cfe521f8825c6fe00b82a3e6a88ea3102af1bccedc89ffba44f6248a707"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 235489,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "30d190f8d2154999c85a91aff18ffd813fbe6564374c3237868107f10e5fd73d"
+        }
+      }
+    },
+    {
+      "board": "kitspace_PSLab",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'Apache', 'link': 'https://raw.githubusercontent.com/fossasia/pslab-hardware/pslab-v6/LICENSE'}]",
+      "upstream_source": "https://github.com/fossasia/pslab-hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 593001,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "e7f2fcd1626033bd847fcdb980845b76f5da713bdc640f4b4765d693b5fc715a"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 627818,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "e4c7e40f495a8c7139583e7b13b2698cb95d526e4e34dc77aea6b45dabb14ede"
+        }
+      }
+    },
+    {
+      "board": "kitspace_PWR",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/nerdyscout/NodeMCU/master/lib/LICENSE.md'}, {'name': 'CERN', 'link': 'https://raw.githubusercontent.com/nerdyscout/NodeMCU/master/CO2/LICENSE.TXT'}]",
+      "upstream_source": "https://github.com/nerdyscout/NodeMCU",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 97217,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "a879400a0506d3fbed6dd808aedfc2a97f7be682783f81626a6339f75e35f921"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 132544,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "62c8cf5ad970d5f1cd43d654c140f7537ef629ed318a613d12309d35200f776d"
+        }
+      }
+    },
+    {
+      "board": "kitspace_Potentiometer_mount_16LED",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/BadenLab/LED-Zappelin/master/LICENSE'}, {'name': 'CERN', 'link': 'https://raw.githubusercontent.com/BadenLab/LED-Zappelin/master/PCB/LICENSE'}]",
+      "upstream_source": "https://github.com/BadenLab/LED-Zappelin",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 146347,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "74d1550f8e9c5ce4ed99224619ef7bbc98c2434c0a6981eba08f1a59545b383c"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 148293,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "98a338f751de6f49a444bb67ce29d4945250d1f2eb8a15133529755d5e72dd6b"
+        }
+      }
+    },
+    {
+      "board": "kitspace_Potentiometer_mount_24LED",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/BadenLab/LED-Zappelin/master/LICENSE'}, {'name': 'CERN', 'link': 'https://raw.githubusercontent.com/BadenLab/LED-Zappelin/master/PCB/LICENSE'}]",
+      "upstream_source": "https://github.com/BadenLab/LED-Zappelin",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 210230,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "9979e7b0716259dd15d701db792650255bce8c8bb42197653d545037eed8763c"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 215233,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "2c5e5747efc92fc77219792ee269794dbcb7164bd92c362c91b8fb5d6a772cd1"
+        }
+      }
+    },
+    {
+      "board": "kitspace_Potentiometer_mount_4LED",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/BadenLab/LED-Zappelin/master/LICENSE'}, {'name': 'CERN', 'link': 'https://raw.githubusercontent.com/BadenLab/LED-Zappelin/master/PCB/LICENSE'}]",
+      "upstream_source": "https://github.com/BadenLab/LED-Zappelin",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 80820,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "e2dda167d98d3716d5e7f013a2ef07b50bc4063e3219ecb60512ee1a120e5a99"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 77068,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "5524f5d0f407a90204e4512a38c0c057a22517163d7249e1a786e9f0ebdd5cdc"
+        }
+      }
+    },
+    {
+      "board": "kitspace_Potentiometer_mount_8LED",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/BadenLab/LED-Zappelin/master/LICENSE'}, {'name': 'CERN', 'link': 'https://raw.githubusercontent.com/BadenLab/LED-Zappelin/master/PCB/LICENSE'}]",
+      "upstream_source": "https://github.com/BadenLab/LED-Zappelin",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 105630,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "e7ac60ce4a443f2dee7204aae756bdfbf86ff5b49a15f67b7327b8427863211a"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 119513,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "91f9bea6f98e994582dc7a223b31e450cebd755ab4429e40ffa73b76bcc42891"
+        }
+      }
+    },
+    {
+      "board": "kitspace_RPi_shield",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/matiasandina/FEDWatcher/main/LICENSE'}]",
+      "upstream_source": "https://github.com/matiasandina/FEDWatcher",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 49212,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "3556b5e3c57a6f91716e26cf30b7a6f904ea9eb3821d9ec645256ff2071cc2f9"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 79746,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "b76643cfdfea57060c13c902e3369c1b4a88ef5e916f289f73a0a29ca3323b46"
+        }
+      }
+    },
+    {
+      "board": "kitspace_Spikeling_ESP32",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/MaxZimmer/Spikeling-V2/main/LICENSE'}]",
+      "upstream_source": "https://github.com/MaxZimmer/Spikeling-V2",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 138936,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "10733d4a9fde0f14370eafd5ed391cb5659bbe18c90341c64ca14f4c2cdac2a2"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 698498,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "312c047cee8caf0c4b9f04784eac41fdd8600f73209aee18b33db340320ff963"
+        }
+      }
+    },
+    {
+      "board": "kitspace_Spikeling_V2.1",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/MaxZimmer/Spikeling-V2/main/LICENSE'}]",
+      "upstream_source": "https://github.com/MaxZimmer/Spikeling-V2",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 524629,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "54f3d45c2e9d493285e8f68014d36c2a9a26d3df7187495915cb01de207f245f"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 1252647,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "244c44b1204145b31b1ef1d84d73ce37b861b73ef86a9673ec41662804748b5b"
+        }
+      }
+    },
+    {
+      "board": "kitspace_Spikeling_V2.2",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/MaxZimmer/Spikeling-V2/main/LICENSE'}]",
+      "upstream_source": "https://github.com/MaxZimmer/Spikeling-V2",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 178435,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "77bd9ad60d66ae367ca6754427495629e9cf6f1389d962908faba132e6951d11"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 1299901,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "28fe6feac0945b3967f09b492a40d4337f2b66a3bd6e3a0608cca8d602c38c65"
+        }
+      }
+    },
+    {
+      "board": "kitspace_Spikeling_V2.2c",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/MaxZimmer/Spikeling-V2/main/LICENSE'}]",
+      "upstream_source": "https://github.com/MaxZimmer/Spikeling-V2",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 526801,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "6d6eae9d385836c8deb9d74b1550e18852f10151b645dba1b15052dfcf5c56c4"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 1335857,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "410a5c031afcc9cd6591f91fdd932d6230b9e6e495e6fa61966116a554a950a4"
+        }
+      }
+    },
+    {
+      "board": "kitspace_T32_ref",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/sci-bots/teensy-3.2-clone.kicad/master/LICENSE'}]",
+      "upstream_source": "https://github.com/sci-bots/teensy-3.2-clone.kicad",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 239357,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "851278a0760cc60cac952355f534e737b6b5f76e4b973e89c18a307a32c34ad3"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 356590,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "32094acf286f262907798ab257a205c7ec0cb73d60fa721fb7a49884d8fdb129"
+        }
+      }
+    },
+    {
+      "board": "kitspace_TS100C",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/Jana-Marie/Otter-Iron/main/LICENSE'}]",
+      "upstream_source": "https://github.com/Jana-Marie/Otter-Iron",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 211471,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "060920cf01ee1611897f0af838f479d678e3614ed20594978bfe3ebb7d60d586"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 722070,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "79628f052f8ca4ea61dc37143a2538bd72f83c679a3ac1326aa5a0fa8377650e"
+        }
+      }
+    },
+    {
+      "board": "kitspace_TuneShroom",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/ollyoid/TuneShroom/master/lufa/Demos/Device/LowLevel/BulkVendor/WindowsDriver/license/libusb0/installer_license.txt'}]",
+      "upstream_source": "https://github.com/ollyoid/TuneShroom",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 668980,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "c98a124fd48ec6ea9cdaffac2016c3a1e25d84047afbf3962d0ab812998ba059"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 768819,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "bec4758c4ee8e86eff51a3b9ed92c409637e5c7d4827a56a0ba7a03622b0000d"
+        }
+      }
+    },
+    {
+      "board": "kitspace_USB-C-Screen-Adapter",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/Jana-Marie/OtterScreenAdapter/master/LICENSE'}]",
+      "upstream_source": "https://github.com/Jana-Marie/OtterScreenAdapter",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 303630,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "af68f85c9e98d72d86e6a6842d509bd5f0a3c7abdcfa6f41c89c6c2bbb395c00"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 484170,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "1c7ea97b4aadfea7381d7434ab977dec838c585a9ac516b53335998e1abdce92"
+        }
+      }
+    },
+    {
+      "board": "kitspace_USB-C-Screen-Adapter-LDR6023SS",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/Jana-Marie/OtterScreenAdapter/master/LICENSE'}]",
+      "upstream_source": "https://github.com/Jana-Marie/OtterScreenAdapter",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 174094,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "c3a7ebebc6917350ff18024a4e2d342b864cbdf3f8c1e88d88130403693e69cb"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 343159,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "3a584554acef7b48467ba46823d629877477a39f9df04b1ef68d1fb5ad1a94fc"
+        }
+      }
+    },
+    {
+      "board": "kitspace_USB-LED-Otter",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'CERN', 'link': 'https://raw.githubusercontent.com/Jana-Marie/USB-LED-Otter/master/LICENSE.md'}]",
+      "upstream_source": "https://github.com/Jana-Marie/USB-LED-Otter",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 59248,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "0c16b0b81a9dc60fa44d9fe28e9061da2d88182f59f27de2ac485a879a4b0058"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 77658,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "4b1cb16ff578f71f8d314545c50d22509e3a4680224c29992add4f24e2ad129e"
+        }
+      }
+    },
+    {
+      "board": "kitspace_USBI2C01",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/mlab-modules/USBI2C01/USBI2C01A/LICENSE'}]",
+      "upstream_source": "https://github.com/mlab-modules/USBI2C01",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 91026,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "d26d83e035eb0137f12288381f14e6858c3f419a5f9fab3beeda10fd74d91bf8"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 448520,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "c4d1c0448f7c5dc9f5bd30d58f1578179691cbd607e33bc5c0eb0e428ba4fc87"
+        }
+      }
+    },
+    {
+      "board": "kitspace_USBee32-S2",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/dhairyashah1/USBee32-S2/main/LICENSE'}]",
+      "upstream_source": "https://github.com/dhairyashah1/USBee32-S2",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 351347,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "240d53c1c65255dc75dd35ff324f1611dfa268b5235df9572b95af17d4f39748"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 528911,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "46e5100aff41ab81c26fdada9bc9541af0dc95db14e4c66f939127ac0faf910b"
+        }
+      }
+    },
+    {
+      "board": "kitspace_Unifying",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'CERN', 'link': 'https://raw.githubusercontent.com/balthazar-space/Unifying-PCB/main/LICENSE.md'}]",
+      "upstream_source": "https://github.com/balthazar-space/Unifying-PCB",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 762615,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "3c9a009be3d00ca69acca8dc8257073e60e477b89250e83198c19fbcb0bd7009"
+        },
+        "raw": {
+          "board_format_version": "20220914",
+          "bytes": 2790532,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "3ad14582d66defb14563962cfdc1941265242d737cbcdcd9a52a5f993c93bbac"
+        }
+      }
+    },
+    {
+      "board": "kitspace_XassetteAsterisk",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'CERN', 'link': 'https://raw.githubusercontent.com/SdtElectronics/Xassette-Asterisk/master/LICENCE'}]",
+      "upstream_source": "https://github.com/SdtElectronics/Xassette-Asterisk",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 676282,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "6cfec822b4ca33f9083b7b9b14ba3f3d4ee5c5ffe1d1aa30f9f41dc8f7845d42"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 1040668,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "255171520509b787254d737c825ba6444e14a3d47ad1160916ff47d51ad3d363"
+        }
+      }
+    },
+    {
+      "board": "kitspace__autosave-nunchuk_breakout",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/Jana-Marie/hoverboard-breakout/master/LICENSE'}]",
+      "upstream_source": "https://github.com/Jana-Marie/hoverboard-breakout",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 132157,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "dc359126d355b779e27e711dc833865cf838a826a084c8c9d14f0e5b1437c0d4"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 185410,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "a01da77e25819f5634c549ff60942065a9071b70d03b8f5304407e20a564d258"
+        }
+      }
+    },
+    {
+      "board": "kitspace__autosave-postcard",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/ollyoid/ShenzhenPostcard/master/LICENSE'}]",
+      "upstream_source": "https://github.com/ollyoid/ShenzhenPostcard",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 529641,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "48328cb9215b518de74e564fbdc0349fb7d3421e944bcdd264967d855c3df539"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 1260674,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "add02b08e0c8e215122b8356760c78bc9c11570da3f2249d1130af4accd696b5"
+        }
+      }
+    },
+    {
+      "board": "kitspace_antenna_analyser",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'License not found', 'link': ''}]",
+      "upstream_source": "https://github.com/jasiek/antenna-analyser",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 112461,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "b965ac3e5d59ff7d7236248b5caa3f75187c2afeca68f9582f75e3e164488003"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 198921,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "e96d0a1d079085af189f83377749489222cb5421e8d55efb640bb343cbe98614"
+        }
+      }
+    },
+    {
+      "board": "kitspace_aquarius",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/LincolnUehara/Aquarius/master/LICENSE'}]",
+      "upstream_source": "https://github.com/LincolnUehara/Aquarius",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 537244,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "3a997312900d5c7f14ca115f4d78190f406b660bd1269258bdd83b4ec8279ec8"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 1445573,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "eb8b8b0b79c63e9780b0856ef68049b06c9f7b759b742bee120dd9270dc626a8"
+        }
+      }
+    },
+    {
+      "board": "kitspace_ardfpga",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/bru4bas/gelatino-board/main/LICENSE'}]",
+      "upstream_source": "https://github.com/bru4bas/gelatino-board",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 345121,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "e9692734a7b801e8faf798a06adb7ea363e22f6f827ee55845cdcdb3f4c7d709"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 871385,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "3adf61c26cd5c66b7303590dbf27a1f54b04a57ddb531bb23029138c85480657"
+        }
+      }
+    },
+    {
+      "board": "kitspace_bbq10breakout",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'License not found', 'link': ''}]",
+      "upstream_source": "https://github.com/arturo182/bbq10kbd_breakout",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 38728,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "0f5c0c78cd6e6eb34fd0ab97d8677083e8d841db676e9d85dead542aea826fdf"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 53389,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "fa716d4711d4306409b7839af960fe819332e8e8e0f474aa7988625e8146d4d3"
+        }
+      }
+    },
+    {
+      "board": "kitspace_beehive",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 180097,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "279f27c59f296175cd5505bb769f055cf04a27e1c72220a85174b7b397e7631a"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 361268,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "c1829902cfb8664c4e0710f2388171de30f7302cc8e4e091129db2e78458018b"
+        }
+      }
+    },
+    {
+      "board": "kitspace_bobbycar",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/Jana-Marie/hoverboard-breakout/master/LICENSE'}]",
+      "upstream_source": "https://github.com/Jana-Marie/hoverboard-breakout",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 360852,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "420d328326e258ea95e01b28b93e843d69f8fb606d781d0445516dcaba47b191"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 845389,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "61f0e0c6aa8a18c12e239d212f70315241a87e84741d68aa06bd6456858564c8"
+        }
+      }
+    },
+    {
+      "board": "kitspace_bomanz",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'License not found', 'link': ''}]",
+      "upstream_source": "https://github.com/kelu124/bomanz",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 92967,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "c7a0760ad9ee1560412355d51ed63eede32993002b6c96ee9ce0ac87df8e2556"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 147200,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "3f909df97ecfa0bd5b9b6bab4469801868b49577f3520d6eaa4c8dbb0ca219f1"
+        }
+      }
+    },
+    {
+      "board": "kitspace_cseduinov4",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/jpralves/cseduino/master/LICENSE'}]",
+      "upstream_source": "https://github.com/jpralves/cseduino",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 86126,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "a169101c23403c4b5a604d1c5c31d70e4d3967aa2dad0f2035d0617c10842c2f"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 153976,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "01dd81346c6a04e553b4f0fa43a2bcf9ae2596f9d916f26e68ddc9ef33ec4504"
+        }
+      }
+    },
+    {
+      "board": "kitspace_d20_r0.1",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'BSD', 'link': 'https://raw.githubusercontent.com/gregdavill/d20-hardware/main/LICENSE'}]",
+      "upstream_source": "https://github.com/gregdavill/d20-hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 375595,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "ea2bbccc66120228a1b9dddb92ffefbed2e6e2501e531ef66efd08f7316b7f73"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 1366839,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "65825987bc7b10bfec96faed288080751b787743b7ba2ecd86a15a7beeb6bbbf"
+        }
+      }
+    },
+    {
+      "board": "kitspace_d20_tri_r0.2",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'BSD', 'link': 'https://raw.githubusercontent.com/gregdavill/d20-hardware/main/LICENSE'}]",
+      "upstream_source": "https://github.com/gregdavill/d20-hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 962083,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "b17881d8014b3eb659c34ee7013fca1e03a4ce7ed5f3a2bbc55133c5aa9ba347"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 1145169,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "5fc67ea6b813ec0ae4b521c93c0c45f78ac85d2053cc65524e99a2285ce9c12f"
+        }
+      }
+    },
+    {
+      "board": "kitspace_d20_tri_r0.3",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'BSD', 'link': 'https://raw.githubusercontent.com/gregdavill/d20-hardware/main/LICENSE'}]",
+      "upstream_source": "https://github.com/gregdavill/d20-hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 971645,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "c0e8ca7d383b2b834338472f0e1794b930869ff90c444cf77e48153cd5af9c82"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 1161911,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "bf4b886fb614b3304898f7f68f508d6b5ac9274e0784d27905745e1c6e034241"
+        }
+      }
+    },
+    {
+      "board": "kitspace_d20_tri_r1.0",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'BSD', 'link': 'https://raw.githubusercontent.com/gregdavill/d20-hardware/main/LICENSE'}]",
+      "upstream_source": "https://github.com/gregdavill/d20-hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 811822,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "c45be13912c44cb7ad299da6e1371aa3dc2e7dda2ee33aed88c2d35aa4c5209a"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 1777457,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "b38113c201fac53b3c446346176e873f62e77b85f7cabb44e2e7629352af1ba9"
+        }
+      }
+    },
+    {
+      "board": "kitspace_dropbot-front-panel",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/sci-bots/dropbot-front-panel.kicad/main/LICENSE.md'}]",
+      "upstream_source": "https://github.com/sci-bots/dropbot-front-panel.kicad",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 275075,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "27e6b689b6b9915838301ade507fe7fe552fac526739220676cba87853ded8ec"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 668829,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "495611b808b2c2ff59cb046beba98c5ef29931dcdbd9d8077d3af182aa7e7751"
+        }
+      }
+    },
+    {
+      "board": "kitspace_dropbot_control_board",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/sci-bots/dropbot-control-board.kicad/main/LICENSE.md'}]",
+      "upstream_source": "https://github.com/sci-bots/dropbot-control-board.kicad",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 382347,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "f6829c8e4cfd1dc6fdaad3fb6ecce9ae3e20a6c513362b2ed452cb04e5f9b9d3"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 764515,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "a52fbac1e1f64e1aca3efbe32836dc05b0eed64b24a8d3d0991976556b7a6787"
+        }
+      }
+    },
+    {
+      "board": "kitspace_dynamixel_shield",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/descampsa/DynamixelShield/master/LICENSE'}]",
+      "upstream_source": "https://github.com/descampsa/DynamixelShield",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 114702,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "8e7d509dbf0cd6c5184eefb1e9ec5a5cb573c09f837f9e4c6e2f7f11afb81d42"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 239005,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "956843aab554b1ec20fbac98713c44b02e08c29f90f39b6ec5bbbda5e04bd454"
+        }
+      }
+    },
+    {
+      "board": "kitspace_esp8266",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/alpharesearch/ESP8266_DS18B20/master/LICENSE'}]",
+      "upstream_source": "https://github.com/alpharesearch/ESP8266_DS18B20",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 104139,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "85b53d34af7c8308058537abd5c895523a9905ce7b479d01bb57a72e679d3c7b"
+        },
+        "raw": {
+          "board_format_version": "20170123",
+          "bytes": 126544,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "8c258ef0c69e74b2327fb5bc9bd8572025ad2cce81c4c44c2e079b0cb5857d30"
+        }
+      }
+    },
+    {
+      "board": "kitspace_esp8266-12-breakout",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'License not found', 'link': ''}]",
+      "upstream_source": "https://github.com/mattvenn/esp8266-breakout",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 134622,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "4e92f3190de6bfb10ae9ad20b804312ecbb8e94778b43fd24749d9b5fed65504"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 149327,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "ddf4fdbde1260793c034420bc6df8c4e240d7006a2c5ceed0dcdd3b0cd938e11"
+        }
+      }
+    },
+    {
+      "board": "kitspace_esptiny86_Stompbox",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'Apache', 'link': 'https://raw.githubusercontent.com/dusjagr/ESPTINY86_Stompbox/master/LICENSE'}]",
+      "upstream_source": "https://github.com/dusjagr/ESPTINY86_Stompbox",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 1463060,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "437cb8f9e2de0da0650dfa61a2422557525dd334db6881435522ba9b3047286a"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 1741135,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "a4009ab82f9cf3e549a30eeb713244e844fa5e181854d721507696529ebc9d92"
+        }
+      }
+    },
+    {
+      "board": "kitspace_f-91w",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/carrotIndustries/pluto/master/LICENSE'}]",
+      "upstream_source": "https://github.com/carrotIndustries/pluto",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 186681,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "2aa406229f771ca0742ce7fca1638ee7f00dda1b271ddb9580e2f518ed457d0c"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 173587,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "475820990b02bfee236ee39ba67390f1d41bd93de47bb5c862dc0fbd9084a9d9"
+        }
+      }
+    },
+    {
+      "board": "kitspace_fast_diode_pcb",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/amchagas/fast-response-diode/master/LICENSE'}]",
+      "upstream_source": "https://github.com/amchagas/fast-response-diode",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 69257,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "886e5147b25bb02c071672cfbb0ecee395e550450d544a7678069b77cec36926"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 76264,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "eb2bd6e4684b51c5f4defafcbb9c7e23f92f2e28a6c2057c8d41da0910bced0e"
+        }
+      }
+    },
+    {
+      "board": "kitspace_filaSens",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/drspangle/infidel-sensor/main/LICENSE'}]",
+      "upstream_source": "https://github.com/drspangle/infidel-sensor",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 79318,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "77a287ce8274bdab120d03ea4a770db2589e5cf79ec9c7d5f1da0cf562e5f3ae"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 72925,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "b9b36dd6e2673e2f75bbdcdbc2f244282317060496c70abce718d83828486706"
+        }
+      }
+    },
+    {
+      "board": "kitspace_firefly",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/intergalaktik/firefly/main/LICENSE'}]",
+      "upstream_source": "https://github.com/intergalaktik/firefly",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 454023,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "63be713ea3f4cf20df9c389ab5b1425fed70ecea28c3b61f012030275d2d47aa"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 1070373,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "e3732b3b4713c73c77c32a3319f9ad266eda3d177885874e90006a3013332964"
+        }
+      }
+    },
+    {
+      "board": "kitspace_flypi",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/amchagas/Flypi/master/LICENSE'}]",
+      "upstream_source": "https://github.com/amchagas/Flypi",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 212597,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "38fdd34a52e34b4d72a07f471d779695f70df2a6c1604a476b57dc502f28b4a0"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 295036,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "36c4f6c1916f35eb85f9f7af80835bc79492a3a0512517ec72921919c5a76dc6"
+        }
+      }
+    },
+    {
+      "board": "kitspace_flypi_v2",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 180361,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "91fd6fc1a92e8452efc9c4d6912497a83dcda777680f4a950ba594bdaa711dcd"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 352612,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "ec03dfbc99dc234fd2ebffe874c2bfb3776575aef1af5abf3e6bbe56e648890c"
+        }
+      }
+    },
+    {
+      "board": "kitspace_gas_sensor",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 76230,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "f2cf1564e5076ffb880e09df7bc6dc82f4553b36cb7df38f06823cc85c87d353"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 92700,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "e87fe478c4a4cde901fa7d2fd8953525df3597b955e0f83c55f8532b803cec91"
+        }
+      }
+    },
+    {
+      "board": "kitspace_glasgow",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'BSD', 'link': 'https://raw.githubusercontent.com/GlasgowEmbedded/glasgow/main/LICENSE-0BSD.txt'}, {'name': 'Apache', 'link': 'https://raw.githubusercontent.com/GlasgowEmbedded/glasgow/main/LICENSE-Apache-2.0.txt'}]",
+      "upstream_source": "https://github.com/GlasgowEmbedded/glasgow",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 1452291,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "2c86a31d7ac139fee4cd5ced51df893dc074b57d302624cd00eb656ec4ace9ae"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 2077948,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "6b1eead22e17f70c4181dd436f4cf478d4c2329061565d427b2b9a014763b1f4"
+        }
+      }
+    },
+    {
+      "board": "kitspace_grove_adaptor",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 149903,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "906995b10f457aa605a8fe2becdc67f6e4329b2a2ddf9886e8a85631f77cd45a"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 110759,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "ba425e25984e482c007cc2745f508f360fb70eff1ae26c70ec301a9e49b4db9d"
+        }
+      }
+    },
+    {
+      "board": "kitspace_hack",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'CERN', 'link': 'https://raw.githubusercontent.com/kitspace-forks/HACK/master/LICENCE.txt'}]",
+      "upstream_source": "https://github.com/kitspace-forks/HACK",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 215930,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "b1736473f9039b7206deda0bed127fe24e0f7be1ba73a986a82e53d7ee767e65"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 272786,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "5cecb10c1f608bb50a788d8adbe3f6869125a5023e65da673f9c44275f9c1005"
+        }
+      }
+    },
+    {
+      "board": "kitspace_hbridge_driver",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 220505,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "7be66c55a3d09e1d33d18ba3c78d7a726959544c08f8800f5f9263b7ad67eca2"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 242336,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "eb998108a2e5b223e3d28ea555ef6ee891b3ff7d14a2b416da01d2fd165ca2cc"
+        }
+      }
+    },
+    {
+      "board": "kitspace_hp_led_switch",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 149509,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "e0a01398a0ea9698bb9d71daf45376cf5760cb6a85c5fe15b480fc05e4338e0d"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 197828,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "4080158a9cad238dc04f23db2c93e62d46ddc64f1ebd6a36c63ce0f060098837"
+        }
+      }
+    },
+    {
+      "board": "kitspace_hum_temp_sensor",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 101020,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "db6f42112b5512fcdb2a83079dbbcdf92bd034e34f18d4e1b5bc3bc9641725dd"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 98718,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "fc0964fcf99ff1f4d67a6d95d28fce517c7a91691f16bd0f74b7f288cefdbafe"
+        }
+      }
+    },
+    {
+      "board": "kitspace_ideal_diode",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'CERN', 'link': 'https://raw.githubusercontent.com/InaneCoding/KOS01_IdealDiode20A/master/LICENSE.md'}]",
+      "upstream_source": "https://github.com/InaneCoding/KOS01_IdealDiode20A",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 67432,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "daba0a54c05b64a13570c528e1c9b2665ff2dd1c6f9056fa422bed39826f4f27"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 72869,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "d9a81a085472fd91d58ef70d8217ad697cc1675461af7a99f3157db5172b21cf"
+        }
+      }
+    },
+    {
+      "board": "kitspace_ir_sensor",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 20213,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "cd4019d1c87964fd0f312f26d12cdc24d5e322aa43e1efe4f844ba6207d0cfcc"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 26342,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "82b6e10e217d1d39c2aea7c393979ddfc59febc2792fbe8d7411b4b317d4ced3"
+        }
+      }
+    },
+    {
+      "board": "kitspace_led_driver",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/eulerlab/open-visual-stimulator/master/LICENSE'}]",
+      "upstream_source": "https://github.com/eulerlab/open-visual-stimulator",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 128216,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "ccc2efb5c4c0d7d1a764330f32a23851719639adfc6f0d9456678857eac02f4f"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 157297,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "87cdd33fcbdc7d027a4d5352ce4f9ce9766f94247e2eedbe32f0c53c11c9d931"
+        }
+      }
+    },
+    {
+      "board": "kitspace_level_shifter",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 100929,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "68a2f1df3fc6b7890c6674cc49cf6c4bf2677db545b0e6cd7a0b33e32fb2af2a"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 134470,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "2803218154ab1a558beaf28a01139bf31171ffdcd8a4fa6f26055d8c33143cfe"
+        }
+      }
+    },
+    {
+      "board": "kitspace_lpa96",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'License not found', 'link': ''}]",
+      "upstream_source": "https://github.com/kb-consulting/pt101a",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 858473,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "ecd40c0416d944ce0491ccdec2f867329870c99f51adbae27ee192ee11e4a112"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 1234494,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "4c464c532ef8dda11d156cbbd2c114bdff4157317beadd7e924bd74f7cbba0b0"
+        }
+      }
+    },
+    {
+      "board": "kitspace_minisumo_v3",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'Apache', 'link': 'https://raw.githubusercontent.com/rosmo-robot/micro-bot/master/LICENSE'}]",
+      "upstream_source": "https://github.com/rosmo-robot/micro-bot",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 321417,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "dc8549d02f9137e8f7e4c29aa1329688a7b7723d8454473d9d0ddebdace44511"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 1425739,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "bb43f5792d5888223d924473e0d5e94046d01dff1e4159ec1a80ecbe94b8bd5e"
+        }
+      }
+    },
+    {
+      "board": "kitspace_mppt-1210-hus",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'CERN', 'link': 'https://raw.githubusercontent.com/LibreSolar/mppt-1210-hus/main/LICENCE'}, {'name': 'GPL', 'link': 'https://raw.githubusercontent.com/LibreSolar/mppt-1210-hus/main/manual/template/fontawesome/LICENSE.txt'}]",
+      "upstream_source": "https://github.com/LibreSolar/mppt-1210-hus",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 578504,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "bf76ec69352af8e1de0eba5de4e5421d4e8aad82d1fb7db1fc31af0534b68a1f"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 759587,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "1804304f68d5fe7f57b351e57465771fccc4fdb30b734f8b321d2b65753e1dd3"
+        }
+      }
+    },
+    {
+      "board": "kitspace_neotron-32",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/Neotron-Compute/Neotron-32-Hardware/master/models/din-5.license.txt'}]",
+      "upstream_source": "https://github.com/Neotron-Compute/Neotron-32-Hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 479347,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "db5b7ce0fc785819e61b69e1cc2a991f6a1fd6d90b153079e3f0336770d8daa5"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 1804867,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "2144ac2704f0a6493234e518d143be4b5b433ee21c72f3cdd3af4315cca45325"
+        }
+      }
+    },
+    {
+      "board": "kitspace_nunchuk_breakout",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/Jana-Marie/hoverboard-breakout/master/LICENSE'}]",
+      "upstream_source": "https://github.com/Jana-Marie/hoverboard-breakout",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 297052,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "4a0d039634332b2bd8b70438e19e106c76d0daa55b8a3d21eb1a808a8b6f55c1"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 345815,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "73e13848027c76437580e72eb60a7882f74fa28fc3d677b176b1f5a7205e1520"
+        }
+      }
+    },
+    {
+      "board": "kitspace_parasite",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'License not found', 'link': ''}]",
+      "upstream_source": "https://github.com/rbaron/b-parasite",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 187537,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "27e8e2d4968dd897c75d0e5868a78985e73b4fb8505ba29cad65875be8e7771a"
+        },
+        "raw": {
+          "board_format_version": "20221018",
+          "bytes": 360518,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "bf70c1b2269648164ddddc99faea63563e1a74579a4c31951d28c9db0f327693"
+        }
+      }
+    },
+    {
+      "board": "kitspace_peltier",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 192668,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "ed7ae4b182baafc378109cdd90edace44419fc5a95af5b6876e48188bf5b16e1"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 260394,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "345eeb4e00c9779a2efcf7e5389ea2660e262ed3b9b5a353012aac5ce8e1961f"
+        }
+      }
+    },
+    {
+      "board": "kitspace_piezo_amplifier",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 151359,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "a3920d2c26f3cf7d64945c6d0ff5d2bd6895e0d0a1a57213afcff3ffb2ef3bbe"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 170644,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "2a9333265365414fadb7eeb3c174eb58f01f90d8503f7ca31e9483e522302f9d"
+        }
+      }
+    },
+    {
+      "board": "kitspace_pmt_combiner",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/Sussex-Neuroscience/pmt-combiner/master/LICENSE'}]",
+      "upstream_source": "https://github.com/Sussex-Neuroscience/pmt-combiner",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 151210,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "eeae14bf9b2ccec3efbdc5ecac2b80f63d4c6ff5c143deb44654edf66d443922"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 120140,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "1069d742684c4f5f02f5863cf81e0f4a4011ae7ffd80da8f7effb53bb8040313"
+        }
+      }
+    },
+    {
+      "board": "kitspace_postcard",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/ollyoid/ShenzhenPostcard/master/LICENSE'}]",
+      "upstream_source": "https://github.com/ollyoid/ShenzhenPostcard",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 586617,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "d58f92a322a0a87cfcdb71badbf8202dda850954cdebe863ffc0386782a2ae32"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 1260674,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "add02b08e0c8e215122b8356760c78bc9c11570da3f2249d1130af4accd696b5"
+        }
+      }
+    },
+    {
+      "board": "kitspace_power_supply",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 144918,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "c2f642eb679802de0eb29320d1c16811935c2c5dc0cd60582af62e741381894f"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 293171,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "fef99633a51e6ebfd412fbab0b76218fbefa390d37b80ff50e9f1b68b471854b"
+        }
+      }
+    },
+    {
+      "board": "kitspace_push-on-hold-off",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'License not found', 'link': ''}]",
+      "upstream_source": "https://github.com/kasbah/push-on-hold-off",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 50716,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "47d67a7aa82bd2163fa7d52ef2b2ab78935865fa855bcf84ce0129d1e9f41882"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 70459,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "4fc855baf733efb8027b705c41ab5a29c9eb840f75c1f71a587effa0f732c158"
+        }
+      }
+    },
+    {
+      "board": "kitspace_sensor",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'CERN', 'link': 'https://raw.githubusercontent.com/less-smog/hardware/master/LICENSE'}]",
+      "upstream_source": "https://github.com/less-smog/hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 420761,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "647db9dfd07c736b60ff2bedd794fbc069c898d86c30dcf9ea18c97d017651fe"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 504848,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "6cd79a36ea82fa86d4e4f188d7be496835c32201286f3581e605300b68392ed1"
+        }
+      }
+    },
+    {
+      "board": "kitspace_solenoid_driver",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 145888,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "d09d4dd23d5e41e6848eca5d6b884d5c7225ed3ddb51a71b753fafdc349065f3"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 304713,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "974893bfb394e83b2f609408eecd9c54a5e6db1759524e961ac47f7356d0d0cc"
+        }
+      }
+    },
+    {
+      "board": "kitspace_sop8breakout",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'License not found', 'link': ''}]",
+      "upstream_source": "https://github.com/jasiek/antenna-analyser",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 15889,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "5db01781e4b2c8b20ef535da47276f69e784982f8650f61b38de23fddf13f289"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 174605,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "b620fa05751e767a961e33bf995bb0c8e129bfba9e7c0b6bcf510d83af021fc5"
+        }
+      }
+    },
+    {
+      "board": "kitspace_spike_n_hold",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/Sussex-Neuroscience/odour-stimulator/master/LICENSE'}, {'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/Sussex-Neuroscience/odour-stimulator/master/build_instructions/_build/license.md'}]",
+      "upstream_source": "https://github.com/Sussex-Neuroscience/odour-stimulator",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 192569,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "2016bc4df27a01112989cb45adfd72ea370e8978e2225e77b65d638e69ea0972"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 311719,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "34a579f4970555587c6dee177c4623b1acb31786d8c0184abc62a47cbb0a03e6"
+        }
+      }
+    },
+    {
+      "board": "kitspace_ss_relay",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/eulerlab/open-visual-stimulator/master/LICENSE'}]",
+      "upstream_source": "https://github.com/eulerlab/open-visual-stimulator",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 180871,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "28659393cf5fd17da67b668bdff93fcb7197f3b218a14ad829a7147b435b540e"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 181616,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "e06c0fdf9ea22a6c9761ab8e83b270ca129ef97912eccc86b4d963366a7f4581"
+        }
+      }
+    },
+    {
+      "board": "kitspace_stack-light",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/Tyler-Ward/stacklight-hardware/master/LICENSE.txt'}]",
+      "upstream_source": "https://github.com/Tyler-Ward/stacklight-hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 400409,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "c24af22f217b7d0b604562ec71105cbae6a12e2f06f7063a6394125c0731d2d9"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 902057,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "abf2d184de8678525ba63044ff7e7d12cd6fdc4c18a00962e1b5437bd5ca86cc"
+        }
+      }
+    },
+    {
+      "board": "kitspace_sympetrum-v2%20FF1.1",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/borgel/sympetrum-v2/master/LICENSE'}]",
+      "upstream_source": "https://github.com/borgel/sympetrum-v2",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 388001,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "9c5b571a01eda1127e16301011971964ad22d69d06f9c4ae42cfe4d49b50c987"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 418612,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "11ff6808a9215794d9f8edd4a1d15fac7b546fd932f133c7e0fbd8f148ca91d5"
+        }
+      }
+    },
+    {
+      "board": "kitspace_sympetrum-v2%20NFF1",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/borgel/sympetrum-v2/master/LICENSE'}]",
+      "upstream_source": "https://github.com/borgel/sympetrum-v2",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 134692,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "ab3029ba1a2625bf5d306680322aa1cadd685722c8d423b41f415d2d1bf6b1b2"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 131862,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "60ea36e4ccded409048df3b411be2e56336e165301f8f05b11c2777e736837ca"
+        }
+      }
+    },
+    {
+      "board": "kitspace_sympetrum-v2%20NFF1.1",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/borgel/sympetrum-v2/master/LICENSE'}]",
+      "upstream_source": "https://github.com/borgel/sympetrum-v2",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 145274,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "e8358d2a99f08bf2aad40a0df31d8e7005d83ea7db2be2c3824ec7e7e5d2fa0a"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 137201,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "c7c15b26c8b28706fcce98346193ac18b860f6da99998ae663903aa80d067952"
+        }
+      }
+    },
+    {
+      "board": "kitspace_teensy-fx",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'License not found', 'link': ''}]",
+      "upstream_source": "https://github.com/mattvenn/teensy-audio-fx",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 415954,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "db80ded8064d9087db3b0e6bfa459965ca78c089e35522dc44f3f0c25246d1d3"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 732251,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "869148a70b896c87df37ffa1203904ec166552746ccd22c9f824c71667625a09"
+        }
+      }
+    },
+    {
+      "board": "kitspace_temp_breakout",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 98063,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "fe221417fc012772fb15833c1b4d40fd727aa315a939eed840ab8d610c4a6533"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 113748,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "4b10d372088fd755284d83d985c433663f2881e87d4557784c431567e99a555a"
+        }
+      }
+    },
+    {
+      "board": "kitspace_test-jig",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'BSD', 'link': 'https://raw.githubusercontent.com/GlasgowEmbedded/glasgow/main/LICENSE-0BSD.txt'}, {'name': 'Apache', 'link': 'https://raw.githubusercontent.com/GlasgowEmbedded/glasgow/main/LICENSE-Apache-2.0.txt'}]",
+      "upstream_source": "https://github.com/GlasgowEmbedded/glasgow",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 414299,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "c4aa207741d228245dcb12ff68ad6f192cf01ffbbd71a7856b682da479576d20"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 774252,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "08af2843228b3547202045a97e236b423feb893b70d99add0fe6896916d5e264"
+        }
+      }
+    },
+    {
+      "board": "kitspace_threeboard",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/taylorconor/threeboard/master/firmware/LICENSE.txt'}, {'name': 'CERN', 'link': 'https://raw.githubusercontent.com/taylorconor/threeboard/master/hardware/LICENSE.txt'}, {'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/taylorconor/threeboard/master/documentation/threeboard/LICENSE.txt'}]",
+      "upstream_source": "https://github.com/taylorconor/threeboard",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 148273,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "cb0dbe0097b6653791bf059098a59519d3067e1fb7703fee8a9537c81bf550ff"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 246212,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "c2eca75bbfc92b594bbc48d427ac6742c245685affec103c61a0357f4a227fb3"
+        }
+      }
+    },
+    {
+      "board": "kitspace_tomu",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/im-tomu/tomu-hardware/master/LICENSE'}, {'name': 'TAPR', 'link': 'https://raw.githubusercontent.com/im-tomu/tomu-hardware/master/LICENSE.TAPR'}]",
+      "upstream_source": "https://github.com/im-tomu/tomu-hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 76363,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "ce176d9ff2c71e05d3b13c2f26d0b469341ff643a11364599e1e708e0126e3a5"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 93315,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "2bf83419f43f31e89149eee3c126c76a6d20358b7774afc21fa2092dd7abcb0b"
+        }
+      }
+    },
+    {
+      "board": "kitspace_training_board",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 215713,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "dd928ea04edc77f6c73906fb16203b4b5f6fd9d42a8f5c298e891650d0271225"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 902434,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "4ee3838f546b45da45a824ad216670cfa64f030e765c657c2d56925d17ba17b6"
+        }
+      }
+    },
+    {
+      "board": "kitspace_training_board_v02",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT', 'link': 'https://raw.githubusercontent.com/BeeHive-org/BeeHive/master/LICENSE'}]",
+      "upstream_source": "https://github.com/BeeHive-org/BeeHive",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 233021,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "fa886a5dcf217453c87c9a610acb091f4073fe3339451dcf9184a93c856cc101"
+        },
+        "raw": {
+          "board_format_version": "20211014",
+          "bytes": 921379,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "cc19dac26357cd722362ed9eb34a6bcb0d1116fad26bae35c107110dc3755cb9"
+        }
+      }
+    },
+    {
+      "board": "kitspace_trans_switch_volt_amp",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU', 'link': 'https://raw.githubusercontent.com/Sussex-Neuroscience/voltage-amplifier/master/LICENSE'}]",
+      "upstream_source": "https://github.com/Sussex-Neuroscience/voltage-amplifier",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 103213,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "91cfe995c8aceabd5af6f0b4e2a6d9e323e87394048cfbc4a73e5b611fded7cf"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 308811,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "86d32e91e6e46b366fa8f735f38856dabbcd1595d3b5adb2379629a1d8426a08"
+        }
+      }
+    },
+    {
+      "board": "kitspace_tri_panel_4up_r0.1",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'BSD', 'link': 'https://raw.githubusercontent.com/gregdavill/d20-hardware/main/LICENSE'}]",
+      "upstream_source": "https://github.com/gregdavill/d20-hardware",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 814482,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "c83be10586fca06be9423a7251c07fdb5467a880be450dee59be0f25b2ad6483"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 4165023,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "0095e3051e4589ea9d74c04a76b513b0fa33c794a72c53cedd0f73172453af92"
+        }
+      }
+    },
+    {
+      "board": "kitspace_tt_nano_HAT_b1",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/vektorious/test_tube_photometer/master/LICENSE.md'}]",
+      "upstream_source": "https://github.com/vektorious/test_tube_photometer",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 88468,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "0153cc418fbeaf4db6fc5c989f3ab4bbdf49ace83ce3b8557ff1a87270cbc920"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 142289,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "a994193879500d65a9e2dd9f2df8f6a88bac704670425d247731c7034625022d"
+        }
+      }
+    },
+    {
+      "board": "kitspace_tt_nano_HAT_b2",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/vektorious/test_tube_photometer/master/LICENSE.md'}]",
+      "upstream_source": "https://github.com/vektorious/test_tube_photometer",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 104265,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "8e6fddb586f605a6e74c82d5217fc352b41ba67b2650510cef59ef4ea7b3910f"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 150420,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "b54e8f0d6e72db17852833c3834211aea5bb3d8084d5ea491b9560f4cd19ed4b"
+        }
+      }
+    },
+    {
+      "board": "kitspace_tt_opt101_module_b1",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/vektorious/test_tube_photometer/master/LICENSE.md'}]",
+      "upstream_source": "https://github.com/vektorious/test_tube_photometer",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 19027,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "78c61fdcd6925b2fa4bbfb53a4427a8c8510e029569f2642a627db1711e5411f"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 27719,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "1bb8377bd7151b015c17af52ada3eae87244d9bccfb1b304d02d78f3af9bf877"
+        }
+      }
+    },
+    {
+      "board": "kitspace_ulx3s",
+      "declared_layers": 4,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/emard/ulx3s/master/footprints/esp8266/LICENSE.md'}]",
+      "upstream_source": "https://github.com/emard/ulx3s",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 1274241,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "5cf497c5208c21473c2c6732cd130dad812a2555de53fdde2b19ae1c86353261"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 2649655,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "ed466a96910662050574606206d0c0215459230aa80fbe9eed651aeddfcbb806"
+        }
+      }
+    },
+    {
+      "board": "kitspace_ulx4m",
+      "declared_layers": 6,
+      "upstream_licence": "[{'name': 'Creative Commons', 'link': 'https://raw.githubusercontent.com/intergalaktik/ulx4m/ulx4m-ls/LICENSES/CC-BY-SA-4.0.txt'}, {'name': 'CERN', 'link': 'https://raw.githubusercontent.com/intergalaktik/ulx4m/ulx4m-ls/LICENSES/CERN-OHL-S-2.0.txt'}]",
+      "upstream_source": "https://github.com/intergalaktik/ulx4m",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 1818141,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "8beefe2b3a2575ef376b06d00654a898ab956bdb186eaec91a0bf5c04bc4ae7c"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 3021156,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "645103016e392da61f87e9803e747c53331084f5ca3508bd25bc155cabbc7b43"
+        }
+      }
+    },
+    {
+      "board": "linklayer_contact",
+      "declared_layers": 2,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/linklayer/cantact-hw",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 126051,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "af492517a3452d70f996a937e0147bc853c59344a15a78ee48f21d1ba0f95f05"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 106740,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "be28303c3b096bd7e66454e545339c2b86453024c9dd1883d09b58ff573a5935"
+        }
+      }
+    },
+    {
+      "board": "moonpunchorg_pcieduino",
+      "declared_layers": 2,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/moonpunchorg/pcieduino",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 138032,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "a0ba2980d8c6cca25f6a4ee5345c765a4965ea11425fe3cefac2077b6dc6ec66"
+        },
+        "raw": {
+          "board_format_version": "3",
+          "bytes": 193282,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "2a677afdb99c587cef4b76ddc230e7444d36bffe845ed88d74ca40863fba9914"
+        }
+      }
+    },
+    {
+      "board": "opendous_Upconverter",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'The Unlicense', 'link': 'https://api.github.com/licenses/unlicense'}]",
+      "upstream_source": "https://github.com/opendous/Upconverter1v3",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 679369,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "a81910c173df1fcec4feca19c16c6dfbd42fe6faff2c4449b375fea1713c2c60"
+        },
+        "raw": {
+          "board_format_version": "3",
+          "bytes": 752343,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unknown.layer",
+          "sha256": "18cff148b95404be65755f3f7799c973408da1b15aa2f92e7fdbc7e06c688ee7"
+        }
+      }
+    },
+    {
+      "board": "oskirby_logicbone",
+      "declared_layers": 8,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/oskirby/logicbone",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 2025418,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "cfef4114aeb6e3b4f650cc96eda656afc1b1743be3f6df96480eb6847ae7aaa2"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 1700665,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "0e0d68a06c2c3dcef2304a3f16811e431b21125361b98ebea8829c3b69a2b052"
+        }
+      }
+    },
+    {
+      "board": "retroreflectors_CONGFLOCK",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU General Public License v2.0', 'link': 'https://api.github.com/licenses/gpl-2.0'}]",
+      "upstream_source": "https://github.com/mossmann/retroreflectors",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 14476,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "dc610575c05205c63feba178cd0dbd6595cde91df89f1538605af2558ee7a119"
+        },
+        "raw": {
+          "board_format_version": "3",
+          "bytes": 12567,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "ee32e1d97ede5c5bbdcec258157a3eac18bf295ccacf1de6546fb3a6fafaebbb"
+        }
+      }
+    },
+    {
+      "board": "retroreflectors_FLAMENCOFLOCK",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU General Public License v2.0', 'link': 'https://api.github.com/licenses/gpl-2.0'}]",
+      "upstream_source": "https://github.com/mossmann/retroreflectors",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 15885,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "a253e116739a599142b009860bbfa7f7b2ec7082ffbcf96b68f7b655e60a61f1"
+        },
+        "raw": {
+          "board_format_version": "3",
+          "bytes": 24021,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "9b34fdaf6073c915b06b396665b513c3eb0818696b6d0bc3e15f8067725a8f08"
+        }
+      }
+    },
+    {
+      "board": "retroreflectors_RUMBAFLOCK",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU General Public License v2.0', 'link': 'https://api.github.com/licenses/gpl-2.0'}]",
+      "upstream_source": "https://github.com/mossmann/retroreflectors",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 15044,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "43fd50f69b7c66c73271141ffc68384f998146d5f844f944595d6d1ef3f77bc8"
+        },
+        "raw": {
+          "board_format_version": "3",
+          "bytes": 13041,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "1dc8b78e391d4112c9205bb7a813fcaf18d5ec9883c81021f006d0aca794898d"
+        }
+      }
+    },
+    {
+      "board": "retroreflectors_SALSAFLOCK",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU General Public License v2.0', 'link': 'https://api.github.com/licenses/gpl-2.0'}]",
+      "upstream_source": "https://github.com/mossmann/retroreflectors",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 44656,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "324d04363ee57f36c15b929167df55fe0d89a0adb751e0f8a78e044cb3260df1"
+        },
+        "raw": {
+          "board_format_version": "3",
+          "bytes": 69104,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "b4571d64bed7d533ae3869c2f1dd1b0a3d7bbf3d8d3d31c800c59bc6c83da966"
+        }
+      }
+    },
+    {
+      "board": "retroreflectors_TANGOFLOCK",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'GNU General Public License v2.0', 'link': 'https://api.github.com/licenses/gpl-2.0'}]",
+      "upstream_source": "https://github.com/mossmann/retroreflectors",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 14918,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "bf00a8efa7daf67248055c1eee84f7e1cbbc0d5ccc5c367e1ff8079f0e56f74c"
+        },
+        "raw": {
+          "board_format_version": "3",
+          "bytes": 21392,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "a7063a6cc95888971315f020b685f58443eb054d47f9de1c453b2f993df36915"
+        }
+      }
+    },
+    {
+      "board": "rjw57_cpu-board",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT License', 'link': 'https://api.github.com/licenses/mit'}]",
+      "upstream_source": "https://github.com/rjw57/buri",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 334729,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "bed4faa0ccbe4671185a27dfc9ad01e759bcf83e2f5bb3f86ce438d2c7a0be42"
+        },
+        "raw": {
+          "board_format_version": "4",
+          "bytes": 412740,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "8beb62335b0be887fb0e203c4ea4fa274f4e0a8a703fab7d6b7575c3b5fc7892"
+        }
+      }
+    },
+    {
+      "board": "tmk_HHKB_controller",
+      "declared_layers": 2,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/tmk/HHKB_controller",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 243825,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "695f08b4356fe3e268e523c40b1e2b5d5a6d7dcb35693ac323093e210f9adad5"
+        },
+        "raw": {
+          "board_format_version": "20170123",
+          "bytes": 657728,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "9d893d1a6cd79da5b0d3f380a9ef138cce5114d87b0513a84b3050f8d00c3431"
+        }
+      }
+    },
+    {
+      "board": "wiggleport_wiggle-spine",
+      "declared_layers": 2,
+      "upstream_licence": "EMPTY",
+      "upstream_source": "https://github.com/wiggleport/wiggle-spine",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 2195148,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "4e44b2c43bb5fb42e968757a8277aa4d6c779510322fbe5ef466e16329673c60"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 1949100,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "489f06e620ad01004844ae46497ffcd1f91692c172b61aa14cf0d706590e6737"
+        }
+      }
+    },
+    {
+      "board": "z2amiller_sensorboard",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT License', 'link': 'https://api.github.com/licenses/mit'}]",
+      "upstream_source": "https://github.com/z2amiller/sensorboard",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 77871,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "3fb36e57228bf41db21e05a49f12c89a09c7e63d154135ed98363cf64859a47b"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 64235,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "c7294af9ad3c54f99c14c1283ce8155ded3955f5e0194e3e7d78457a00f06e66"
+        }
+      }
+    },
+    {
+      "board": "z2amiller_sensorboard_programmer",
+      "declared_layers": 2,
+      "upstream_licence": "[{'name': 'MIT License', 'link': 'https://api.github.com/licenses/mit'}]",
+      "upstream_source": "https://github.com/z2amiller/sensorboard",
+      "variants": {
+        "processed": {
+          "board_format_version": "20171130",
+          "bytes": 26023,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "146e93f9bdc0cc282e7992b501b24cf20626cd93bee6c8a2c1f81bf3164203c8"
+        },
+        "raw": {
+          "board_format_version": "20171130",
+          "bytes": 22146,
+          "converts_as_shipped": false,
+          "converts_behind_version_gate": false,
+          "refusal_as_shipped": "unsupported.version",
+          "refusal_behind_version_gate": "unsupported.construct",
+          "sha256": "56d4fbe48449b4d26697becc1f6fb48ce1fb29440447da7c5ab26a04670b9fa2"
+        }
+      }
+    }
+  ],
+  "committed_board_bytes": 0,
+  "method": "Every board read through copper_mcp.adapters.parse_kicad_bytes with the net class the excessive-agency evaluation uses, in two passes. The first pass is the adapter exactly as shipped. The second lifts the accepted-version set in-process only, to report what refuses a board once the version gate is not the answer; it is a census probe and never a capability claim.",
+  "per_variant": {
+    "processed": {
+      "board_format_versions": {
+        "20171130": 162,
+        "3": 2
+      },
+      "boards": 164,
+      "converts_as_shipped": 0,
+      "converts_behind_version_gate": 0,
+      "refusal_as_shipped": {
+        "unsupported.version": 164
+      },
+      "refusal_behind_version_gate": {
+        "unknown.layer": 16,
+        "unsupported.construct": 148
+      }
+    },
+    "raw": {
+      "board_format_versions": {
+        "20170123": 2,
+        "20171130": 87,
+        "20211014": 20,
+        "20220914": 2,
+        "20221018": 1,
+        "3": 15,
+        "4": 37
+      },
+      "boards": 164,
+      "converts_as_shipped": 0,
+      "converts_behind_version_gate": 0,
+      "refusal_as_shipped": {
+        "unsupported.version": 164
+      },
+      "refusal_behind_version_gate": {
+        "unknown.layer": 16,
+        "unsupported.construct": 148
+      }
+    }
+  },
+  "run_id": "sha256:7112bee24947ad38a6098984cd408bd6ac4c2e817fcc712f71cfd8c715af0e30",
+  "schema": "copper-mcp/benchmark/kicad-conversion-census/v1",
+  "upstream": {
+    "board_directories_in_tree": 1182,
+    "boards_in_dataset": 164,
+    "commit": "dec3be75cbdef74787625f9043c7391cd473bb64",
+    "fetched": "2026-08-14",
+    "repository": "https://github.com/PCBench/PCBench",
+    "repository_licence": "MIT",
+    "repository_licence_sha256": "27f95dfaac3ac61888e14732fb83736da6880127c4a5d3093446e26e33ee1cb8"
+  },
+  "upstream_licence_census": {
+    "Apache": 8,
+    "Apache/BSD": 2,
+    "BSD": 5,
+    "BSD/CERN": 1,
+    "CERN": 12,
+    "CERN/Creative Commons": 4,
+    "CERN/Creative Commons/GNU": 1,
+    "CERN/GNU": 5,
+    "CERN/GPL": 1,
+    "Creative Commons": 14,
+    "Creative Commons Attribution Share Alike 4.0 International": 1,
+    "Creative Commons/GNU": 1,
+    "Creative Commons/TAPR": 1,
+    "GNU": 26,
+    "GNU General Public License v2.0": 5,
+    "MIT": 34,
+    "MIT License": 4,
+    "TAPR": 1,
+    "The Unlicense": 2,
+    "no_licence_found": 17,
+    "none_recorded": 19
+  }
+}

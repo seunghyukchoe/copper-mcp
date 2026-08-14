@@ -6,6 +6,40 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The excessive-agency evaluation records an unconvertible board instead of aborting on one.**
+  `_run_family` raised `EvaluationError` on the first board that would not convert to Board IR, so
+  a single unreadable board in any project family took the whole artifact with it. It now records
+  every scenario of that family as `not_run` with the declared reason
+  `board_does_not_convert_to_board_ir` ([issue #110](https://github.com/seunghyukchoe/copper-mcp/issues/110)).
+  Because that turns a loud abort into a silent degradation, it ships with a **fourth predeclared
+  coverage control**, `every-accepted-format-family-is-actually-exercised`, which fails when a
+  family the suite declares it can read reaches no scenario at all — none of ADR-0102's three
+  notice that, since they ask whether the permit and the escape routes were reached *somewhere*.
+  The suite's counts are unchanged (136 cases, 90 passed, 0 failed, 46 not run) because no project
+  family was added; the artifact now reports four controls rather than three.
+
+### Documentation
+
+- **PCBench is recorded as not redistributable, correcting an earlier determination.** The corpora
+  README and the open-baseline research note both recorded PCBench as "MIT, redistributable with
+  attribution". Its `LICENSE` is verbatim MIT, but PCBench aggregates 1,018 other repositories and
+  its boards keep their own upstream licences, which PCBench itself records per board: of the 164
+  it advertises, **36 have no licence at all**, 57 are copyleft or CERN-OHL, and 53 permissive.
+  Both determinations are corrected in place with a dated qualification, and the rule that would
+  have let this through is sharpened in
+  [ADR-0107](docs/adr/0107-an-aggregators-licence-does-not-govern-what-it-aggregated.md): when the
+  upstream aggregated someone else's work, the licence is determined per item and never from the
+  aggregator's repository licence.
+- **A conversion census over 164 externally authored KiCad boards, and what it found**
+  ([B-110](docs/ledgers/benchmark-ledger.md)). **0 of 164 convert**, on both stored variants: every
+  board refuses `unsupported.version`, because the Board IR adapter accepts exactly one board
+  format version (`20260206`) and the corpus was assembled in 2023. Lifting that gate as a census
+  probe moves the refusal to the layer declaration rather than clearing it — still 0 of 164, split
+  148 `unsupported.construct` / 16 `unknown.layer`. No board byte is committed; the per-board
+  digests are, so the finding can be re-checked against a re-fetch.
+
 ## [0.8.0] - 2026-08-13
 
 Upgrading from 0.7.0: see the [0.8.0 migration notes](docs/migrations/copper-mcp-0.8.0.md).

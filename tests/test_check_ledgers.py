@@ -47,6 +47,68 @@ def _run_ids(root: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[list[str], li
     return failures, notes
 
 
+def _artifact(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str) -> list[str]:
+    results = tmp_path / "benchmarks" / "results"
+    results.mkdir(parents=True)
+    (results / "census.json").write_text(body, encoding="utf-8")
+    monkeypatch.setattr(check_ledgers, "ROOT", tmp_path)
+    failures: list[str] = []
+    check_ledgers._check_benchmark_artifacts(failures)
+    return failures
+
+
+def test_a_benchmark_artifact_whose_run_id_does_not_match_its_content_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The digest is what makes a committed measurement checkable rather than merely present.
+
+    Written because nothing pinned this rule: the run_id check could be weakened to accept any
+    well-formed digest and the whole suite stayed green, which is the state a benchmark artifact
+    must never be able to reach. An artifact edited after the run that produced it -- a count
+    corrected by hand, a board's verdict softened -- is exactly what this catches.
+    """
+
+    import hashlib
+    import json
+
+    content = {"schema": "test/v1", "boards": 164, "converts": 0}
+    canonical = json.dumps(content, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    honest = dict(content, run_id="sha256:" + hashlib.sha256(canonical.encode()).hexdigest())
+
+    assert _artifact(tmp_path, monkeypatch, json.dumps(honest)) == []
+
+
+def test_a_hand_edited_benchmark_artifact_is_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The non-vacuous half: the same artifact with one number changed must fail."""
+
+    import hashlib
+    import json
+
+    content = {"schema": "test/v1", "boards": 164, "converts": 0}
+    canonical = json.dumps(content, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    run_id = "sha256:" + hashlib.sha256(canonical.encode()).hexdigest()
+    # The digest is left as-is and the measurement is edited underneath it.
+    tampered = dict(content, converts=12, run_id=run_id)
+
+    failures = _artifact(tmp_path, monkeypatch, json.dumps(tampered))
+
+    assert len(failures) == 1
+    assert "run_id does not match its canonical report content" in failures[0]
+
+
+def test_a_benchmark_artifact_with_no_run_id_at_all_is_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An absent digest must not read as a satisfied one."""
+
+    failures = _artifact(tmp_path, monkeypatch, '{"schema":"test/v1","boards":164}')
+
+    assert len(failures) == 1
+    assert "run_id does not match its canonical report content" in failures[0]
+
+
 @pytest.mark.parametrize("number", ["1e999", "-1e999"])
 def test_benchmark_artifacts_reject_overflowing_json_numbers(
     tmp_path: Path,
