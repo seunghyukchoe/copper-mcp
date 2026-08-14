@@ -43,6 +43,7 @@ import shutil
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -161,11 +162,19 @@ class Precondition:
             return False
         return completed.returncode == 0
 
-    def payload(self) -> dict[str, Any]:
+    def payload(self, observed: bool | None = None) -> dict[str, Any]:
+        """Typed observation of this precondition.
+
+        ``observed`` replays a previously recorded observation instead of probing this machine.
+        A recorded row is a fact about the environment that produced it; a parity check against
+        that row must hold the environment fixed, or it compares two machines rather than two
+        runs of the same code.
+        """
+
         return {
             "name": self.name,
             "description": self.description,
-            "satisfied": self.satisfied(),
+            "satisfied": self.satisfied() if observed is None else observed,
             "observable": self.executable is not None,
             "probe": list(self.probe_args) if self.probe_args is not None else None,
         }
@@ -189,15 +198,21 @@ class BaselineRouter:
     #: it ever were run.
     comparability_caveat: str | None = None
 
-    def resolve(self) -> dict[str, Any]:
+    def resolve(self, observations: Mapping[str, bool] | None = None) -> dict[str, Any]:
         """Return this baseline's typed row.
 
         ``measured`` requires every declared precondition to hold.  There is no partial state and
         no remembered number: a baseline whose preconditions are not all observed to hold is
         ``not_run``, and the row carries the reason and the unmet preconditions by name.
+
+        ``observations`` (precondition name → satisfied) replays recorded observations instead of
+        probing this machine; a name absent from the mapping is probed live.
         """
 
-        preconditions = tuple(condition.payload() for condition in self.preconditions)
+        preconditions = tuple(
+            condition.payload(None if observations is None else observations.get(condition.name))
+            for condition in self.preconditions
+        )
         unmet = tuple(entry["name"] for entry in preconditions if not entry["satisfied"])
         row: dict[str, Any] = {
             "id": self.id,
@@ -576,15 +591,33 @@ def problem_set(manifest: dict[str, Any], samples: tuple[tuple[str, bytes], ...]
     }
 
 
-def build_report(repetitions: int = 2, corpus: Path = CORPUS) -> dict[str, Any]:
-    """Build the canonical, self-digesting comparison report without writing it."""
+def build_report(
+    repetitions: int = 2,
+    corpus: Path = CORPUS,
+    precondition_observations: Mapping[str, Mapping[str, bool]] | None = None,
+) -> dict[str, Any]:
+    """Build the canonical, self-digesting comparison report without writing it.
+
+    ``precondition_observations`` (baseline id → precondition name → satisfied) replays recorded
+    environment observations instead of probing this machine.  The committed artifact's baseline
+    rows are facts about the recording environment — the macOS java stub among them — so a parity
+    re-run on a different machine must replay those observations or it measures the machines'
+    difference, not the code's.
+    """
 
     if not 1 <= repetitions <= 8:
         raise ValueError("repetitions must be between 1 and 8")
     check_protocol()
     manifest, samples = load_corpus(corpus)
     subject, wall_times = subject_row(samples, repetitions)
-    baseline_rows = tuple(baseline.resolve() for baseline in BASELINE_ROSTER)
+    baseline_rows = tuple(
+        baseline.resolve(
+            None
+            if precondition_observations is None
+            else precondition_observations.get(baseline.id)
+        )
+        for baseline in BASELINE_ROSTER
+    )
     check_roster(baseline_rows)
     measured = 1 + sum(1 for row in baseline_rows if row["status"] == "measured")
 

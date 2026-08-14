@@ -12,7 +12,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
-import shutil
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -114,24 +114,32 @@ def test_an_unobservable_precondition_is_never_assumed_to_hold() -> None:
     assert observable.satisfied() is True
 
 
-def test_a_name_on_path_is_not_evidence_that_the_thing_behind_it_runs() -> None:
+def test_a_name_on_path_is_not_evidence_that_the_thing_behind_it_runs(tmp_path: Path) -> None:
     # macOS ships /usr/bin/java as a stub that exists whether or not a JRE does and exits non-zero
     # saying so. A which-hit would have reported it satisfied and flipped FreeRouting's row off
     # not_run on no evidence, which is the audit's own rule: an absence is evidence only if the
-    # observation was capable of reporting a presence — and so is a presence.
-    which_only = comparison.Precondition(name="java", description="java on PATH", executable="java")
+    # observation was capable of reporting a presence — and so is a presence. The stub is
+    # reproduced as a controlled executable rather than scavenged from the host: a runner with a
+    # real JRE inverts the host-scavenged premise (that is how this test failed on hosted CI).
+    stub = tmp_path / "java"
+    stub.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    stub.chmod(0o755)
+    which_only = comparison.Precondition(
+        name="java", description="java on PATH", executable=str(stub)
+    )
     probed = comparison.Precondition(
-        name="java", description="java that runs", executable="java", probe_args=("-version",)
+        name="java", description="java that runs", executable=str(stub), probe_args=("-version",)
     )
 
-    if shutil.which("java") is None:  # pragma: no cover - environment-dependent branch
-        pytest.skip("no java name on PATH, so the stub distinction cannot be observed here")
     assert which_only.satisfied() is True
     assert probed.satisfied() is False
     assert probed.payload()["probe"] == ["-version"]
     # A probe that does succeed must still report satisfied, or the check would be a constant.
+    runs = tmp_path / "java-that-runs"
+    runs.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    runs.chmod(0o755)
     assert comparison.Precondition(
-        name="git", description="git that runs", executable="git", probe_args=("--version",)
+        name="java", description="java that runs", executable=str(runs), probe_args=("-version",)
     ).satisfied()
 
 
@@ -277,9 +285,20 @@ def test_the_subject_row_replays_the_recorded_corpus_run_rather_than_remeasuring
 
 
 def test_the_artifact_matches_a_fresh_run_of_the_committed_corpus() -> None:
-    fresh = comparison.build_report(1)
+    # The artifact's baseline rows record the environment that produced them (the macOS java
+    # stub among the observations). Parity replays those recorded observations rather than
+    # re-probing this machine — probing live here would compare two machines, not two runs of
+    # the same code, and a hosted runner with a real JRE flips FreeRouting's row.
+    recorded = _artifact()["metrics"]
+    observations = {
+        row["id"]: {entry["name"]: entry["satisfied"] for entry in row["preconditions"]}
+        for row in recorded["routers"]
+        if row["role"] == "baseline"
+    }
 
-    assert fresh["metrics"] == _artifact()["metrics"]
+    fresh = comparison.build_report(1, precondition_observations=observations)
+
+    assert fresh["metrics"] == recorded
 
 
 def test_a_roster_entry_whose_preconditions_all_hold_is_not_silently_reported_not_run() -> None:
