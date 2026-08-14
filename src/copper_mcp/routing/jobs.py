@@ -410,6 +410,14 @@ def validate_candidate_for_job(candidate: Candidate, spec: RoutingJobSpec) -> tu
         verify_layered_candidate_id(candidate)
     else:
         raise RoutingJobError("routing job completion requires a supported route candidate")
+    if candidate.fill_binding is not None:
+        # A job's request cannot ask for zone fill authority and its persisted envelope never
+        # names it (ADR-0106), so a fill-bound candidate did not come from this job's own worker.
+        # Every downstream replay of one would refuse for want of evidence a later process cannot
+        # hold (ADR-0103), so publishing the row would record a completion nothing can exercise.
+        # The in-process seam is the only way such a candidate could reach here, and this is the
+        # door it would come through.
+        raise RoutingJobError("a fill-routed candidate cannot complete a durable routing job")
     if candidate_kind is not spec.request_kind:
         raise RoutingJobError("candidate kind does not match the routing job")
     if candidate.base_revision != spec.expected_candidate_revision:

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -15,6 +17,8 @@ from copper_mcp.routing import (
     LayeredBoardRouter,
     LayeredRouteCandidate,
     LayeredRouteRequest,
+    canonical_layered_candidate_bytes,
+    verify_layered_candidate_id,
 )
 from copper_mcp.routing.jobs import (
     RoutingJobConflictError,
@@ -154,6 +158,38 @@ def test_completion_binds_kind_router_policy_seed_and_work_limits() -> None:
     running = RoutingJobRecord.create(mismatched).start(expected_revision=0, now_ms=3)
     with pytest.raises(ValueError, match="candidate seed"):
         running.complete(candidate, expected_revision=running.revision, now_ms=4)
+
+
+def test_a_fill_routed_candidate_cannot_complete_a_durable_job() -> None:
+    """The durable ledger's own door, not the request boundary's (ADR-0106).
+
+    A job request cannot ask for zone fill authority and its persisted envelope never names it,
+    so this candidate did not come from this job's worker. Downstream replay would refuse it for
+    want of evidence a later process cannot hold, and the row would record a completion nothing
+    can exercise. The in-process seam is the only way one could arrive here, so this is where it
+    is refused.
+    """
+
+    candidate, spec = _candidate_and_spec()
+    bound = replace(candidate, fill_binding=f"sha256:{'d' * 64}")
+    bound = replace(
+        bound,
+        candidate_id=(
+            f"sha256:{hashlib.sha256(canonical_layered_candidate_bytes(bound)).hexdigest()}"
+        ),
+    )
+    running = RoutingJobRecord.create(spec).start(expected_revision=0, now_ms=1)
+
+    with pytest.raises(ValueError, match="fill-routed candidate"):
+        running.complete(bound, expected_revision=running.revision, now_ms=2)
+
+    # Not vacuous: the identical candidate without a binding completes, and the refusal above is
+    # not the identity check firing -- this one verifies.
+    assert verify_layered_candidate_id(bound)
+    assert candidate.fill_binding is None
+    completed = running.complete(candidate, expected_revision=running.revision, now_ms=2)
+    assert completed.status is RoutingJobStatus.COMPLETED
+    assert completed.candidate_id == candidate.candidate_id
 
 
 def test_cancellation_is_cooperative_and_wins_over_candidate_publication() -> None:

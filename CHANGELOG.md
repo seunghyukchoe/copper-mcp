@@ -33,6 +33,9 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- A fill-bound candidate cannot complete a durable routing job: `validate_candidate_for_job`
+  refuses one, so an in-process caller cannot publish a ledger row for a candidate every
+  downstream replay must refuse.
 - `LiveLayeredRoutePreviewRequestContract` pins `include_fill_authority` to `false`, and
   `preview_live_layered_route` refuses an explicit `true`. Zone fill authority proves a *file's*
   cache fresh; a live proposal routes an IPC snapshot of a possibly unsaved editor, so accepting

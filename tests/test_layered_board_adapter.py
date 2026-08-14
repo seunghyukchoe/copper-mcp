@@ -1065,3 +1065,83 @@ def test_layered_replay_refuses_malformed_fill_before_comparing_a_binding() -> N
     assert refused.candidate is None
     assert refused.diagnostic is not None
     assert refused.diagnostic.code is LayeredRouteFailureCode.INVALID_REQUEST
+
+
+IN2_LAYER_ID = "layer:In2.Cu"
+
+
+def _stacked_fill_snapshot() -> BoardIRSnapshot:
+    """A four-layer board carrying the *same* foreign pour on In1.Cu and In2.Cu.
+
+    Two islands over this board can be byte-identical in net, geometry and source revision and
+    differ only in the layer they were proved on -- and both are legitimate evidence, because each
+    has its own backing zone. That is the shape the binding's layer component exists for.
+    """
+
+    base = _fill_snapshot()
+
+    def _zone(identifier: str, layer_id: str) -> Zone:
+        return Zone(
+            id=identifier,
+            net_id=FILL_NET_ID,
+            layer_id=layer_id,
+            boundary=_rectangle(*FILL_ZONE_BOUNDS),
+            clearance_nm=100,
+            min_thickness_nm=100,
+            thermal_gap_nm=100,
+            thermal_bridge_width_nm=100,
+        )
+
+    return make_snapshot(
+        replace(
+            base.content,
+            copper_layers=(
+                Layer(id=LAYER_ID, name="F.Cu", index=0),
+                Layer(id=INNER_LAYER_ID, name="In1.Cu", index=1),
+                Layer(id=IN2_LAYER_ID, name="In2.Cu", index=2),
+                Layer(id=BACK_LAYER_ID, name="B.Cu", index=3),
+            ),
+            zones=(
+                *base.content.zones,
+                _zone("zone:power-in1", INNER_LAYER_ID),
+                _zone("zone:power-in2", IN2_LAYER_ID),
+            ),
+        )
+    )
+
+
+def test_the_layered_binding_distinguishes_the_layer_a_pour_was_proved_on() -> None:
+    """The binding's layer component, tested by behaviour rather than by an anchor.
+
+    Copper on In1.Cu and the same copper on In2.Cu are different obstacle models, and the only
+    thing separating these two candidates is which layer the evidence was proved on: the islands
+    agree in net, vertices and source revision, and the resulting candidates agree in **every**
+    field but the binding and the identity it feeds. So a replay comparing geometry would accept
+    either, and a binding blind to `layer_id` would too.
+    """
+
+    snapshot = _stacked_fill_snapshot()
+    router = LayeredBoardRouter()
+    settings = LayeredAStarSettings(via_cost=2, max_vias=4)
+    on_in1 = _island(FILL_ZONE_BOUNDS, layer_id=INNER_LAYER_ID)
+    on_in2 = _island(FILL_ZONE_BOUNDS, layer_id=IN2_LAYER_ID)
+
+    assert replace(on_in1, layer_id="") == replace(on_in2, layer_id="")
+    assert fill_binding_for((on_in1,)) != fill_binding_for((on_in2,))
+
+    in1_request = _request(snapshot, verified_fill=(on_in1,), settings=settings)
+    in2_request = _request(snapshot, verified_fill=(on_in2,), settings=settings)
+    candidate = _candidate(router.propose(snapshot, in1_request))
+    other = _candidate(router.propose(snapshot, in2_request))
+    # Nothing but the binding separates them, so nothing but the binding can refuse the swap.
+    assert replace(candidate, fill_binding=None, candidate_id=other.candidate_id) == replace(
+        other, fill_binding=None
+    )
+
+    refused = router.replay(snapshot, candidate, in2_request)
+
+    assert refused.candidate is None
+    assert refused.diagnostic is not None
+    assert refused.diagnostic.code is LayeredRouteFailureCode.FILL_EVIDENCE_MISMATCH
+    # Not vacuous: the same candidate replays under the layer it was actually proved on.
+    assert router.replay(snapshot, candidate, in1_request).candidate == candidate

@@ -194,6 +194,28 @@
       "killing_tests": [
         "tests/test_live_layered_route_preview.py::test_live_preview_rejects_zone_fill_authority_opt_in"
       ]
+    },
+    {
+      "id": "LF06-layered-binding-is-blind-to-the-layer",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "                \"layer_id\": island.layer_id,\n                \"net_id\": island.net_id,",
+      "replacement": "                \"net_id\": island.net_id,",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_board_adapter.py::test_the_layered_binding_distinguishes_the_layer_a_pour_was_proved_on"
+      ],
+      "note": "Added 2026-08-14 after adversarial review of PR #180 found this mutant surviving all 1,438 tests on the layered path -- only a committed spec's anchor text drifting caught it, which is a textual tripwire rather than a behaviour. The killing test routes under an island on In1.Cu and replays with the byte-identical island on In2.Cu; both are legitimate evidence with their own backing zone, and the two candidates agree in every field but the binding, so nothing but the layer component can refuse the swap."
+    },
+    {
+      "id": "JB03-durable-ledger-publishes-a-fill-bound-candidate",
+      "file": "src/copper_mcp/routing/jobs.py",
+      "anchor": "    if candidate.fill_binding is not None:",
+      "replacement": "    if candidate.fill_binding is not None and candidate.fill_binding is None:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_jobs.py::test_a_fill_routed_candidate_cannot_complete_a_durable_job"
+      ],
+      "note": "Added 2026-08-14 from the same review. The request boundary already refuses the flag, but `validate_candidate_for_job` is reachable in-process, so this is the durable ledger's own door rather than the request boundary's."
     }
   ]
 }

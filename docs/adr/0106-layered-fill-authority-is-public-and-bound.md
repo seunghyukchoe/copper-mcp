@@ -151,7 +151,7 @@ terms alone. No `B-` number is spent here (see Consequences).
 
 ### The both-directions proof, as run
 
-`docs/mutants/2026-08-14-layered-fill-contract.json` carries 18 mutants, all `killed`
+`docs/mutants/2026-08-14-layered-fill-contract.json` carries 20 mutants, all `killed`
 (`python_version` and `platform` are in the harness report). Two of them are the argument:
 
 | Mutant | Understated-direction test | Overstated-direction test |
@@ -169,6 +169,16 @@ the same shape is pinned here. `LF01` deletes the comparison outright and dies t
 only to the reordered-pour test — the case where the obstacle *set* is identical and the candidate
 matches in every field but the binding. That is what shows the equality is a provenance check
 rather than a geometry check wearing a digest.
+
+`LF06` is the fourth, and it was added after adversarial review rather than written with the
+others. **The binding's `layer_id` component had no behavioural coverage on either path**: a mutant
+blinding `canonical_fill_bytes` to it survived the whole suite, and the only thing that caught it
+was a committed spec's *anchor text* ceasing to match — a textual tripwire, not a behaviour. The
+test that closes it routes under an island on `In1.Cu` and replays with the byte-identical island
+on `In2.Cu`. Both are legitimate evidence with their own backing zone, and the two candidates agree
+in **every** field but the binding and the identity it feeds, so nothing but the layer component
+can refuse the swap. Copper on one inner layer and copper on another are different obstacle models,
+and that is now asserted rather than assumed.
 
 ## Consequences
 
@@ -188,6 +198,14 @@ rather than a geometry check wearing a digest.
   zoned boards this flag will refuse rather than route. That is over-refusal, the safe direction,
   and it is #167's to fix; it is recorded as `R-152` so the new flag's real reachability is not
   overstated.
+- **A fill-bound candidate cannot complete a durable routing job.**
+  `validate_candidate_for_job` refuses one outright. The request boundary already refuses the flag
+  and the persisted envelope never names it, so such a candidate cannot come from a job's own
+  worker — but that validator is reachable in-process, and without the check an in-process caller
+  could publish a completion row for a candidate every downstream replay must refuse. The replay
+  refusal is fail-closed, so nothing unsafe would be applied; what would exist is a ledger row
+  recording a completion nothing can exercise. That is the durable ledger's own door, and it is
+  closed there rather than relied upon at the request boundary.
 - A fill-bound layered candidate cannot reach live apply, and nothing had to be added there to
   ensure it. `layered_candidate_from_document` ignores keys it does not read and its result is
   re-hashed against the claimed identity; because the binding is now *part of* that identity, a
