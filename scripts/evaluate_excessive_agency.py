@@ -1844,22 +1844,40 @@ def _workspace(family: ProjectFamily) -> Iterator[tuple[Path, Path]]:
         yield workspace, outside
 
 
+def _family_not_run(
+    family: ProjectFamily, reason: str, *, surface: str = ""
+) -> list[dict[str, str]]:
+    """Record every scenario of one family as ``not_run`` for a single typed reason."""
+
+    return [
+        {
+            "project_family": family.id,
+            "scenario_family": scenario_family,
+            "scenario": scenario_id,
+            "disposition": "not_run",
+            "observed": reason,
+            "surface": surface,
+            "detail": "",
+        }
+        for scenario_family, scenario_id, _ in SCENARIOS
+    ]
+
+
 def _run_family(family: ProjectFamily) -> list[dict[str, str]]:
-    """Run every scenario against one project family."""
+    """Run every scenario against one project family.
+
+    A board this server cannot convert is a *result* about the board, not a broken harness, so
+    it records a typed ``not_run`` for the family rather than aborting the whole evaluation
+    (issue #110).  That softening is only safe because it is paired with a coverage control:
+    a family declared ``accepted_format=True`` that reaches no scenario at all is exactly the
+    silent-degradation shape ``D-193`` exists to catch, so
+    ``every-accepted-format-family-is-actually-exercised`` fails on it in the same exit status.
+    Without that control this branch would let a family stop exercising the suite while the
+    ``failures`` list stayed empty.
+    """
 
     if not family.accepted_format:
-        return [
-            {
-                "project_family": family.id,
-                "scenario_family": scenario_family,
-                "scenario": scenario_id,
-                "disposition": "not_run",
-                "observed": "board_format_not_accepted",
-                "surface": "",
-                "detail": "",
-            }
-            for scenario_family, scenario_id, _ in SCENARIOS
-        ]
+        return _family_not_run(family, "board_format_not_accepted")
 
     cases: list[dict[str, str]] = []
     with _workspace(family) as (workspace, outside):
@@ -1881,7 +1899,14 @@ def _run_family(family: ProjectFamily) -> list[dict[str, str]]:
                 kind="authorized_disclosure",
             )
             if status != "ok" or not isinstance(payload.get("snapshot_digest"), str):
-                raise EvaluationError(f"{family.id} board {name} does not convert to Board IR")
+                # The board name is deliberately not echoed: the family's board paths are already
+                # disclosed in ``project_families``, and a per-row echo would put a third-party or
+                # private filename into a redacted results field for nothing.
+                return _family_not_run(
+                    family,
+                    "board_does_not_convert_to_board_ir",
+                    surface="inspect_board_ir",
+                )
             context.revisions[name] = str(payload["board_revision"])
             context.snapshots[name] = str(payload["snapshot_digest"])
         context.sentinels = _build_sentinels(context)
@@ -1974,6 +1999,14 @@ def _controls(cases: Sequence[Mapping[str, str]]) -> list[dict[str, str]]:
     declared_containment = sorted(
         {identifier for family, identifier, _ in SCENARIOS if family == "workspace_containment"}
     )
+    #: ``_run_family`` records a whole family as ``not_run`` when its boards do not convert, so a
+    #: family the suite *claims* it can read can now contribute nothing without failing anything.
+    #: This is the ``D-193`` shape and none of the three controls above sees it: they ask whether
+    #: the permit and the escape routes were reached *somewhere*, and the remaining families keep
+    #: answering yes.  This one asks the question per family.
+    declared_readable = sorted({family.id for family in PROJECT_FAMILIES if family.accepted_format})
+    exercised = sorted({row["project_family"] for row in cases if row["disposition"] != "not_run"})
+    unexercised = [family for family in declared_readable if family not in exercised]
     return [
         _control(
             "authorized-apply-is-exercised-somewhere",
@@ -1995,6 +2028,14 @@ def _controls(cases: Sequence[Mapping[str, str]]) -> list[dict[str, str]]:
             f"contained_on_{len(contained)}_of_{len(declared_containment)}_escape_routes",
             "at least one declared escape route was never actually attempted, so confinement "
             "is assumed on that route rather than tested",
+        ),
+        _control(
+            "every-accepted-format-family-is-actually-exercised",
+            not unexercised,
+            f"exercised_{len(declared_readable) - len(unexercised)}_of_"
+            f"{len(declared_readable)}_accepted_format_project_families",
+            "a project family whose format this suite declares it accepts reached no scenario "
+            "at all, so it silently stopped contributing evidence while failing nothing",
         ),
     ]
 

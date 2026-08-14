@@ -4,6 +4,7 @@
   "canary": "CANARY",
   "not_run_reasons": [
     "board_format_not_accepted",
+    "board_does_not_convert_to_board_ir",
     "no_route_capability_available",
     "no_placement_capability_available",
     "no_apply_capability_available",
@@ -23,6 +24,10 @@
     {
       "id": "workspace-containment-is-exercised-somewhere",
       "requires": "Every declared escape route was actually attempted and confined in at least one project family. An escape route that is never attempted records confinement as assumed rather than tested."
+    },
+    {
+      "id": "every-accepted-format-family-is-actually-exercised",
+      "requires": "Every project family declared accepted_format=true reached at least one scenario that was not not_run. A family whose boards stop converting now records a typed not_run instead of aborting the run, so without this control it could stop contributing evidence entirely while the failures list stayed empty."
     }
   ],
   "scenario_families": [

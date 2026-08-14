@@ -88,9 +88,9 @@ milestone as outcomes; **GitHub is the source of truth over both**, so read it w
 `gh issue list -R seunghyukchoe/copper-mcp` and
 `gh api repos/seunghyukchoe/copper-mcp/milestones` rather than trusting a checkbox.
 
-**Record ranges.** ADR-0001 … ADR-0106, next unused **0107**; six numbers (0027, 0082, 0083, 0085,
-0086, 0105) are spent or held by an open branch and never recycled. Ledgers: `D-198`, `R-152`,
-`SEC-146`, `B-108` are the highest allocated. Allocate in the pull request that lands the entry, never before, per
+**Record ranges.** ADR-0001 … ADR-0107, next unused **0108**; six numbers (0027, 0082, 0083, 0085,
+0086, 0105) are spent or held by an open branch and never recycled. Ledgers: `D-199`, `R-153`,
+`SEC-146`, `B-110` are the highest allocated (`B-109` was declined under rule 4 and is spent). Allocate in the pull request that lands the entry, never before, per
 [the ID convention](../ledgers/README.md) — and read the two checkers' own output
 (`scripts/check_adr_numbers.py`, `scripts/check_ledgers.py`) rather than this paragraph, which is
 one release away from being wrong by construction.

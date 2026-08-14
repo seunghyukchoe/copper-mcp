@@ -23,10 +23,10 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-198` | `D-199` |
-| [Risk register](risk-register.md) | `R-` | `R-152` | `R-153` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-199` | `D-200` |
+| [Risk register](risk-register.md) | `R-` | `R-153` | `R-154` |
 | [Security review ledger](security-ledger.md) | `SEC-` | `SEC-146` | `SEC-147` |
-| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-108` | `B-109` |
+| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-110` | `B-111` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
 The rules:
@@ -81,10 +81,13 @@ The rules:
    (`D-197`/`R-151`/`SEC-145`, `ADR-0105`) and [issue #110](https://github.com/seunghyukchoe/copper-mcp/issues/110)
    (`D-199`/`R-153`/`B-110`, `ADR-0107`) were open on this same base, so this record took numbers
    above the first rather than racing it and did **not** step over the second, which sits above it
-   by pre-assignment. `D-197`, `R-151`, `SEC-145` and `ADR-0105` are **live claims, not gaps**, and
-   the checker reports them as unallocated because it cannot see an unmerged branch; if either
-   branch is abandoned its numbers become permanent gaps like any other spent number, and this
-   paragraph becomes the correction to make. This record also **declined its pre-assigned `B-109`
+   by pre-assignment. #110's branch has since landed and filled `D-199`, `R-153`, `B-110` and
+   `ADR-0107` — that half left no gap, and ADR-0107's own text called `ADR-0106` a live claim and
+   stepped over it in return, which is rule 1 running in both directions inside one round.
+   `D-197`, `R-151`, `SEC-145` and `ADR-0105` remain **live claims, not gaps**, held by #172's
+   branch, and the checker reports them as unallocated because it cannot see an unmerged branch;
+   if that branch is abandoned its numbers become permanent gaps like any other spent number, and
+   this paragraph becomes the correction to make. This record also **declined its pre-assigned `B-109`
    under rule 4**: it measured nothing new. The quality question was already answered by `B-105` at
    zero changed verdicts and is explicitly not claimed, and the reachability figure the record
    needed -- 14 of 18 corpus boards carrying an island above the ordered-layer ceiling -- is

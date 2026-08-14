@@ -31,6 +31,19 @@ All notable changes are documented here. The format follows
   geometry the router never proved). This landed **before** the public flag, deliberately: the
   binding is what stops the flag making the divergence reachable.
 
+**No published content address moves.** `LAYERED_ROUTER_VERSION` is unchanged, `fill_binding`
+enters the canonical identity payload only when it is not `null`, and the pinned two-, three- and
+four-layer candidate identities, the durable layered export digest and the persisted routing-job
+request digest are all byte-for-byte unchanged — each now with a test that states *why* rather than
+merely observing that it did not move.
+
+**What to expect on a real board.** The ordered-layer adapter refuses any single fill island above
+4,096 vertices, and it refuses the **whole request** rather than falling back to the zone envelope.
+`B-108` measured 14 of 18 corpus boards carrying such an island, so `include_fill_authority` will
+often return `invalid_request` there. That is over-refusal — an island refused is an envelope kept,
+never copper dropped — and sizing that ceiling belongs to
+[issue #167](https://github.com/seunghyukchoe/copper-mcp/issues/167) (`R-152`).
+
 ### Changed
 
 - A fill-bound candidate cannot complete a durable routing job: `validate_candidate_for_job`
@@ -44,19 +57,37 @@ All notable changes are documented here. The format follows
 - The layered preview response gains a `fill_authority` key on every outcome (`null` except on a
   routed proposal that asked for one), and the layered candidate document gains `fill_binding`
   (`null` in the ordinary case).
+- **The excessive-agency evaluation records an unconvertible board instead of aborting on one.**
+  `_run_family` raised `EvaluationError` on the first board that would not convert to Board IR, so
+  a single unreadable board in any project family took the whole artifact with it. It now records
+  every scenario of that family as `not_run` with the declared reason
+  `board_does_not_convert_to_board_ir` ([issue #110](https://github.com/seunghyukchoe/copper-mcp/issues/110)).
+  Because that turns a loud abort into a silent degradation, it ships with a **fourth predeclared
+  coverage control**, `every-accepted-format-family-is-actually-exercised`, which fails when a
+  family the suite declares it can read reaches no scenario at all — none of ADR-0102's three
+  notice that, since they ask whether the permit and the escape routes were reached *somewhere*.
+  The suite's counts are unchanged (136 cases, 90 passed, 0 failed, 46 not run) because no project
+  family was added; the artifact now reports four controls rather than three.
 
-**No published content address moves.** `LAYERED_ROUTER_VERSION` is unchanged, `fill_binding`
-enters the canonical identity payload only when it is not `null`, and the pinned two-, three- and
-four-layer candidate identities, the durable layered export digest and the persisted routing-job
-request digest are all byte-for-byte unchanged — each now with a test that states *why* rather than
-merely observing that it did not move.
+### Documentation
 
-**What to expect on a real board.** The ordered-layer adapter refuses any single fill island above
-4,096 vertices, and it refuses the **whole request** rather than falling back to the zone envelope.
-`B-108` measured 14 of 18 corpus boards carrying such an island, so `include_fill_authority` will
-often return `invalid_request` there. That is over-refusal — an island refused is an envelope kept,
-never copper dropped — and sizing that ceiling belongs to
-[issue #167](https://github.com/seunghyukchoe/copper-mcp/issues/167) (`R-152`).
+- **PCBench is recorded as not redistributable, correcting an earlier determination.** The corpora
+  README and the open-baseline research note both recorded PCBench as "MIT, redistributable with
+  attribution". Its `LICENSE` is verbatim MIT, but PCBench aggregates 1,018 other repositories and
+  its boards keep their own upstream licences, which PCBench itself records per board: of the 164
+  it advertises, **36 have no licence at all**, 57 are copyleft or CERN-OHL, and 53 permissive.
+  Both determinations are corrected in place with a dated qualification, and the rule that would
+  have let this through is sharpened in
+  [ADR-0107](docs/adr/0107-an-aggregators-licence-does-not-govern-what-it-aggregated.md): when the
+  upstream aggregated someone else's work, the licence is determined per item and never from the
+  aggregator's repository licence.
+- **A conversion census over 164 externally authored KiCad boards, and what it found**
+  ([B-110](docs/ledgers/benchmark-ledger.md)). **0 of 164 convert**, on both stored variants: every
+  board refuses `unsupported.version`, because the Board IR adapter accepts exactly one board
+  format version (`20260206`) and the corpus was assembled in 2023. Lifting that gate as a census
+  probe moves the refusal to the layer declaration rather than clearing it — still 0 of 164, split
+  148 `unsupported.construct` / 16 `unknown.layer`. No board byte is committed; the per-board
+  digests are, so the finding can be re-checked against a re-fetch.
 
 ## [0.8.0] - 2026-08-13
 

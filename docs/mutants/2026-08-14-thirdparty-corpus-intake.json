@@ -1,0 +1,73 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "TC01-run-family-raises-again",
+      "file": "scripts/evaluate_excessive_agency.py",
+      "anchor": "                return _family_not_run(\n                    family,\n                    \"board_does_not_convert_to_board_ir\",\n                    surface=\"inspect_board_ir\",\n                )",
+      "replacement": "                raise EvaluationError(f\"{family.id} board {name} does not convert to Board IR\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_excessive_agency_evaluation.py::test_a_family_whose_board_does_not_convert_records_not_run_rather_than_raising",
+        "tests/test_excessive_agency_evaluation.py::test_the_coverage_control_fails_when_an_accepted_format_family_stops_converting"
+      ]
+    },
+    {
+      "id": "TC02-the-new-control-is-satisfied-somewhere-instead-of-per-family",
+      "file": "scripts/evaluate_excessive_agency.py",
+      "anchor": "    unexercised = [family for family in declared_readable if family not in exercised]",
+      "replacement": "    unexercised = [] if exercised else list(declared_readable)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_excessive_agency_evaluation.py::test_the_coverage_control_fails_when_an_accepted_format_family_stops_converting",
+        "tests/test_excessive_agency_evaluation.py::test_the_accepted_format_control_is_not_satisfied_by_the_other_families"
+      ]
+    },
+    {
+      "id": "TC03-the-new-control-cannot-fail",
+      "file": "scripts/evaluate_excessive_agency.py",
+      "anchor": "        _control(\n            \"every-accepted-format-family-is-actually-exercised\",\n            not unexercised,",
+      "replacement": "        _control(\n            \"every-accepted-format-family-is-actually-exercised\",\n            True,",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_excessive_agency_evaluation.py::test_the_coverage_control_fails_when_an_accepted_format_family_stops_converting",
+        "tests/test_excessive_agency_evaluation.py::test_the_accepted_format_control_is_not_satisfied_by_the_other_families"
+      ]
+    },
+    {
+      "id": "TC04-a-tampered-benchmark-artifact-is-admitted",
+      "file": "scripts/check_ledgers.py",
+      "anchor": "        if run_id != expected:\n            failures.append(f\"{relative} run_id does not match its canonical report content\")",
+      "replacement": "        if not isinstance(run_id, str) or not run_id.startswith(\"sha256:\"):\n            failures.append(f\"{relative} run_id does not match its canonical report content\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ledgers.py::test_a_hand_edited_benchmark_artifact_is_rejected"
+      ]
+    },
+    {
+      "id": "TC05-an-absent-run-id-reads-as-a-satisfied-one",
+      "file": "scripts/check_ledgers.py",
+      "anchor": "        run_id = report.pop(\"run_id\", None)",
+      "replacement": "        run_id = report.pop(\"run_id\", None)\n        if run_id is None:\n            continue",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ledgers.py::test_a_benchmark_artifact_with_no_run_id_at_all_is_rejected"
+      ]
+    },
+    {
+      "id": "TC06-the-not-run-reason-is-invented-rather-than-declared",
+      "file": "scripts/evaluate_excessive_agency.py",
+      "anchor": "                    \"board_does_not_convert_to_board_ir\",",
+      "replacement": "                    \"board_did_not_convert\",",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_excessive_agency_evaluation.py::test_a_family_whose_board_does_not_convert_records_not_run_rather_than_raising",
+        "tests/test_excessive_agency_evaluation.py::test_not_run_rows_carry_a_reason_from_the_declared_vocabulary"
+      ]
+    }
+  ]
+}
