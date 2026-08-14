@@ -1,0 +1,123 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "CM1-the-subject-length-limit-stops-binding",
+      "file": "scripts/check_commit_message.py",
+      "anchor": "MAX_SUBJECT_BODY = 72\n",
+      "replacement": "MAX_SUBJECT_BODY = 200\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_commit_message.py::test_an_over_long_subject_fails_the_range",
+        "tests/test_check_commit_message.py::test_an_over_long_subject_fails_in_file_mode"
+      ]
+    },
+    {
+      "id": "CM2-an-unresolvable-range-reads-as-clean",
+      "file": "scripts/check_commit_message.py",
+      "anchor": "    if listed.returncode != 0:\n",
+      "replacement": "    if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_commit_message.py::test_an_unresolvable_range_fails"
+      ]
+    },
+    {
+      "id": "CM3-an-empty-range-reads-as-clean",
+      "file": "scripts/check_commit_message.py",
+      "anchor": "    commits = [line for line in listed.stdout.split() if line]\n    if not commits:\n",
+      "replacement": "    commits = [line for line in listed.stdout.split() if line]\n    if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_commit_message.py::test_an_empty_range_fails"
+      ]
+    },
+    {
+      "id": "CM4-the-range-mode-never-reports-a-failure",
+      "file": "scripts/check_commit_message.py",
+      "anchor": "    if failed:\n        print(ADVICE, file=sys.stderr)\n",
+      "replacement": "    if False:\n        print(ADVICE, file=sys.stderr)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_commit_message.py::test_an_over_long_subject_fails_the_range",
+        "tests/test_check_commit_message.py::test_a_subject_with_no_conventional_prefix_fails_the_range"
+      ]
+    },
+    {
+      "id": "CM5-the-two-modes-drift-apart",
+      "file": "scripts/check_commit_message.py",
+      "anchor": "        if not subject_is_acceptable(subject):\n            failed.append((commit, subject))\n",
+      "replacement": "        if not subject.startswith(tuple(\"abcdefghijklmnopqrstuvwxyz\")) is None:\n            failed.append((commit, subject))\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_commit_message.py::test_both_modes_answer_the_same_question",
+        "tests/test_check_commit_message.py::test_an_over_long_subject_fails_the_range"
+      ]
+    },
+    {
+      "id": "CM6-the-ci-twin-is-unwired-again",
+      "file": ".github/workflows/ci.yml",
+      "anchor": "        run: python scripts/check_commit_message.py --range \"${BASE_SHA}..${HEAD_SHA}\"\n",
+      "replacement": "        run: python -c \"pass\"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_ci_workflow.py::test_the_commit_message_checker_runs_over_the_pull_requests_own_commits"
+      ]
+    },
+    {
+      "id": "CW1-the-audio-benchmark-checker-is-unwired-again",
+      "file": ".github/workflows/ci.yml",
+      "anchor": "        run: python scripts/check_audio_benchmarks.py\n",
+      "replacement": "        run: python -c \"pass\"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_ci_workflow.py::test_every_repository_checker_runs_in_ci[check_audio_benchmarks.py]",
+        "tests/test_ci_workflow.py::test_the_lint_target_and_the_workflow_check_the_same_scripts"
+      ]
+    },
+    {
+      "id": "CW2-the-circuit-intent-checker-is-unwired-again",
+      "file": ".github/workflows/ci.yml",
+      "anchor": "        run: PYTHONPATH=src python scripts/check_circuit_intents.py\n",
+      "replacement": "        run: python -c \"pass\"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_ci_workflow.py::test_the_lint_target_and_the_workflow_check_the_same_scripts"
+      ]
+    },
+    {
+      "id": "CW3-the-ci-budget-checker-is-unwired",
+      "file": ".github/workflows/ci.yml",
+      "anchor": "        run: python scripts/check_ci_budgets.py\n",
+      "replacement": "        run: python -c \"pass\"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_ci_workflow.py::test_the_lint_target_and_the_workflow_check_the_same_scripts"
+      ]
+    },
+    {
+      "id": "CW4-the-full-checkout-the-range-depends-on-is-removed",
+      "file": ".github/workflows/ci.yml",
+      "anchor": "          fetch-depth: 0\n",
+      "replacement": "          fetch-depth: 1\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_ci_workflow.py::test_the_full_checkout_the_range_and_the_tag_reads_both_need_is_still_there"
+      ]
+    },
+    {
+      "id": "CW5-a-checker-is-dropped-from-make-lint-instead",
+      "file": "Makefile",
+      "anchor": "\t$(PYTHON) scripts/check_ci_budgets.py\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_ci_workflow.py::test_the_lint_target_and_the_workflow_check_the_same_scripts"
+      ]
+    }
+  ]
+}

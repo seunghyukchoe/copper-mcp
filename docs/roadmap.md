@@ -204,7 +204,9 @@ any count from it is only as good as the digest sweep bracketing the run that pr
   cover `drc-summary` and `audio-benchmark-catalog` too, since a Board IR-only decision fixes one of
   three affected files. Two of the four instances break in the **narrowing** direction that #172's
   own text does not discuss, so the drift gate that follows the decision has to fire both ways.
-- [ ] **Disclose the conversion counters an MCP client cannot see.** `ConversionResult` carries five
+- [x] **Disclose the conversion counters an MCP client cannot see.** Landed as `D-202`:
+  `BoardIrSummary.unmodelled_counts`, one additive optional map carrying all five, gated by the
+  reflection test below. `ConversionResult` carries five
   measured counts — roundrect rounding, unmodelled groups, edge-connector pads, unmodelled board
   properties, unmodelled pad properties — and `BoardIrSummary` carries none of them. Four of the
   five are the *disclosure* that four risk rows depend on
