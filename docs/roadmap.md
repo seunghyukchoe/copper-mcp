@@ -239,9 +239,20 @@ Four conditions, replacing the earlier reading that M2 was "#65 only".
 2. **A cross-router comparison artifact carrying typed results**, including `not_run` with a
    reason. A typed `not_run` is a result; a missing row is not. `B-069` and `B-088` already record
    FreeRouting as `not_run`, so what is owed is the artifact shape, not a causal comparison.
+   **Delivered** by [`B-113`](ledgers/benchmark-ledger.md) (`D-204`): a declared roster of every
+   router baseline the licensing determination names, each row typed, each `not_run` carrying the
+   licence or environment fact behind it and the checkable conditions that would change it, beside
+   CopperMCP's measured row. The artifact records `measured_rows: 1` and
+   `comparison_supported: false`, because one measured row supports no comparison.
 3. **The closing measurement taken on a frozen, redistributable corpus** rather than on the
    designer's live tree. [R-146](ledgers/risk-register.md) is why: the corpus grows and is edited
    during long runs, so every figure taken from it decays silently.
+   **Satisfied for the routing measurement** by the committed MIT SimpleRouteJson corpus, which is
+   frozen in the sense this condition requires — digest-verified before every run, under a subset
+   rule fixed in advance — and is what `B-113` measures on. It is not an externally authored KiCad
+   family, so it does not discharge [#110](https://github.com/seunghyukchoe/copper-mcp/issues/110);
+   [`B-114`](ledgers/benchmark-ledger.md) measures why that one is still open, and `R-157` records
+   that the blocker there is geometry coverage rather than licensing or the board format era.
 4. **No routing sentence claiming more than the 16-of-465 discipline supports** — `B-107`'s 465
    route verdicts, of which 16 `routed` and 324 `already_connected`.
 

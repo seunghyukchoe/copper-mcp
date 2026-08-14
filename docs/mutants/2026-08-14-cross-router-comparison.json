@@ -1,0 +1,143 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "XR01-a-dropped-baseline-leaves-a-well-formed-shorter-table",
+      "file": "scripts/benchmark_cross_router_comparison.py",
+      "anchor": "    if len(rows) != len(BASELINE_ROSTER):\n        raise CrossRouterComparisonError(\"a declared baseline has no row in the comparison table\")",
+      "replacement": "    if len(rows) > len(BASELINE_ROSTER) + 1:\n        raise CrossRouterComparisonError(\"a declared baseline has no row in the comparison table\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_cross_router_comparison.py::test_dropping_a_declared_baseline_from_the_table_is_refused"
+      ]
+    },
+    {
+      "id": "XR02-a-substituted-baseline-keeps-the-count",
+      "file": "scripts/benchmark_cross_router_comparison.py",
+      "anchor": "    if {str(row[\"id\"]) for row in rows} != declared:",
+      "replacement": "    if len({str(row[\"id\"]) for row in rows}) != len(declared):",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_cross_router_comparison.py::test_substituting_a_baseline_keeps_the_count_and_is_still_refused"
+      ]
+    },
+    {
+      "id": "XR03-a-blank-reason-reads-as-a-reason",
+      "file": "scripts/benchmark_cross_router_comparison.py",
+      "anchor": "        if not str(row.get(\"reason\", \"\")).strip():",
+      "replacement": "        if row.get(\"reason\") is None:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_cross_router_comparison.py::test_a_not_run_row_with_no_reason_is_refused"
+      ]
+    },
+    {
+      "id": "XR04-a-not-run-that-names-no-remedy-is-admitted",
+      "file": "scripts/benchmark_cross_router_comparison.py",
+      "anchor": "        if not isinstance(remedy, list) or not remedy:",
+      "replacement": "        if not isinstance(remedy, list):",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_cross_router_comparison.py::test_a_not_run_row_that_names_nothing_that_would_change_it_is_refused"
+      ]
+    },
+    {
+      "id": "XR05-a-freshly-invented-reason-kind-is-admitted",
+      "file": "scripts/benchmark_cross_router_comparison.py",
+      "anchor": "        if row.get(\"reason_kind\") not in {\"licence\", \"environment\"}:",
+      "replacement": "        if row.get(\"reason_kind\") is None:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_cross_router_comparison.py::test_a_reason_that_is_neither_a_licence_nor_an_environment_fact_is_refused"
+      ]
+    },
+    {
+      "id": "XR06-an-unobservable-precondition-is-optimistically-assumed",
+      "file": "scripts/benchmark_cross_router_comparison.py",
+      "anchor": "        if self.executable is None:\n            return False",
+      "replacement": "        if self.executable is None:\n            return True",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_cross_router_comparison.py::test_an_unobservable_precondition_is_never_assumed_to_hold",
+        "tests/test_benchmark_cross_router_comparison.py::test_the_licence_bound_baselines_stay_not_run_for_a_licence_reason",
+        "tests/test_benchmark_cross_router_comparison.py::test_the_artifact_matches_a_fresh_run_of_the_committed_corpus"
+      ]
+    },
+    {
+      "id": "XR13-a-name-on-path-decides-a-runtime-is-present",
+      "file": "scripts/benchmark_cross_router_comparison.py",
+      "anchor": "        if self.probe_args is None:\n            return True\n        try:",
+      "replacement": "        return True\n        try:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_cross_router_comparison.py::test_a_name_on_path_is_not_evidence_that_the_thing_behind_it_runs",
+        "tests/test_benchmark_cross_router_comparison.py::test_the_artifact_matches_a_fresh_run_of_the_committed_corpus"
+      ]
+    },
+    {
+      "id": "XR07-a-drc-metric-enters-the-protocol",
+      "file": "scripts/benchmark_cross_router_comparison.py",
+      "anchor": "            if marker in lowered:",
+      "replacement": "            if marker == lowered:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_cross_router_comparison.py::test_a_drc_metric_arriving_in_the_protocol_is_refused"
+      ]
+    },
+    {
+      "id": "XR08-a-completion-rate-over-a-shortened-denominator",
+      "file": "scripts/benchmark_cross_router_comparison.py",
+      "anchor": "    if attempted != configuration[\"nets_attempted\"]:",
+      "replacement": "    if attempted < 0:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_cross_router_comparison.py::test_a_completion_rate_over_a_shortened_denominator_is_refused"
+      ]
+    },
+    {
+      "id": "XR09-the-artifact-claims-a-comparison-it-does-not-have",
+      "file": "scripts/benchmark_cross_router_comparison.py",
+      "anchor": "            \"comparison_supported\": measured >= 2,",
+      "replacement": "            \"comparison_supported\": True,",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_cross_router_comparison.py::test_the_artifact_matches_a_fresh_run_of_the_committed_corpus"
+      ]
+    },
+    {
+      "id": "XR10-a-not-run-row-is-counted-as-measured",
+      "file": "scripts/benchmark_cross_router_comparison.py",
+      "anchor": "    measured = 1 + sum(1 for row in baseline_rows if row[\"status\"] == \"measured\")",
+      "replacement": "    measured = 1 + len(baseline_rows)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_cross_router_comparison.py::test_the_artifact_matches_a_fresh_run_of_the_committed_corpus"
+      ]
+    },
+    {
+      "id": "XR11-a-roster-member-is-renamed-out-of-section-three",
+      "file": "scripts/benchmark_cross_router_comparison.py",
+      "anchor": "BASELINE_ROSTER: tuple[BaselineRouter, ...] = (\n    BaselineRouter(\n        id=\"freerouting\",",
+      "replacement": "BASELINE_ROSTER: tuple[BaselineRouter, ...] = (\n    BaselineRouter(\n        id=\"freerouting-contained\",",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_cross_router_comparison.py::test_the_declared_roster_is_exactly_the_router_baselines_section_three_names",
+        "tests/test_benchmark_cross_router_comparison.py::test_the_licence_bound_baselines_stay_not_run_for_a_licence_reason"
+      ]
+    },
+    {
+      "id": "XR12-a-declared-baseline-never-reaches-the-table",
+      "file": "scripts/benchmark_cross_router_comparison.py",
+      "anchor": "        for baseline in BASELINE_ROSTER\n    )",
+      "replacement": "        for baseline in BASELINE_ROSTER[:-1]\n    )",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_cross_router_comparison.py::test_the_artifact_matches_a_fresh_run_of_the_committed_corpus"
+      ]
+    }
+  ]
+}

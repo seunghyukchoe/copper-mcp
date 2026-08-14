@@ -1,0 +1,426 @@
+{
+  "configuration": {
+    "comparison_runner_sha256": "sha256:3073042ed1942ebd0d08cabf0a7eb6b41e1fd69ea8fc108fa4568fbf88a2084a",
+    "subject_artifact": "benchmarks/results/routing/2026-08-06-simple-route-json-corpus-v1.json",
+    "subject_artifact_run_id": "sha256:facf95ee9770ffab8c1bc403a32a403e55ca79f2c56d1eabc6679eb6ec4dfca3",
+    "subject_artifact_sha256": "sha256:76c99cbd66324553b82cc243898042a362b18daec90e276dc7e88cbaa64be15f",
+    "subject_measurement": {
+      "adapter_sha256": "sha256:fb64b59f5727d792de30d82b1e9c0b7eab606d071569a29c8c8bc3ff8db5ec66",
+      "adapter_version": "simple-route-json-import-v1",
+      "fixed_grid_step_nm": 250000,
+      "grid_step_ladder_nm": [
+        250000,
+        200000,
+        125000,
+        100000,
+        50000,
+        25000,
+        20000,
+        10000,
+        5000,
+        2000,
+        1000
+      ],
+      "import_policy": {
+        "clearance_nm": 200000,
+        "via_diameter_nm": 600000,
+        "via_drill_nm": 300000
+      },
+      "millimetre_rule": "SimpleRouteJson millimetre values are read as their literal JSON tokens, never as floats, and converted through decimal.Decimal at exactly 1000000 nanometres per millimetre. A token with at most six fractional digits and no exponent converts identically to copper_mcp.board_ir.mm_to_nm. Sub-nanometre residue is resolved by rounding copper outward (floor the low edge, ceil the high edge) and the board outline inward, both in exact decimal arithmetic, so every imported copper rectangle contains the source shape and the outline never grows.",
+      "router_limits": {
+        "max_expansions": 100000,
+        "max_grid_nodes": 250000,
+        "max_obstacle_checks": 2000000,
+        "max_obstacles": 2048
+      },
+      "router_version": "astar-grid/0.7.0",
+      "routing_policy": "orthogonal-a-star-spatial-index-v1",
+      "runner_sha256": "sha256:8fb5d05fb60a75b66e4720b3aa3ba9e0b28dbd8c3377ac159a239adbc4795fed",
+      "seed": 0
+    }
+  },
+  "date_utc": "2026-08-14",
+  "environment": {
+    "subject_measurement": {
+      "platform": "macOS-26.5.2-arm64-arm-64bit",
+      "python": "3.12.13"
+    },
+    "table_builder": {
+      "platform": "macOS-26.5.2-arm64-arm-64bit",
+      "python": "3.12.13"
+    }
+  },
+  "metrics": {
+    "comparison_supported": false,
+    "corpora_considered": [
+      {
+        "determination": "imported",
+        "id": "dwiel-tscircuit-benchmark",
+        "license_spdx": "MIT",
+        "note": "The problem set of this artifact. MIT, \u00a9 2026 Zach Dwiel, frozen at upstream commit be36518b5bf51755dae92c230061ab3cf4e3e063, 20 of 36 boards committed under a stated prefix rule with the upstream LICENSE and an ATTRIBUTION.md beside them.",
+        "project": "https://github.com/dwiel/tscircuit-benchmark"
+      },
+      {
+        "determination": "not_redistributable",
+        "id": "tscircuit-autorouting",
+        "license_spdx": "NOASSERTION",
+        "note": "No licence, archived 2025-08-15. Its tiered problems cannot enter an in-repo corpus. It also appears above as a router baseline, for the same reason.",
+        "project": "https://github.com/tscircuit/autorouting"
+      },
+      {
+        "determination": "not_redistributable",
+        "id": "pcbench",
+        "license_spdx": "MIT (aggregator only)",
+        "note": "Ruled out twice over, and independently. Licence: the MIT grant covers PCBench's own contribution, not the 164 boards it scraped from 1,018 repositories \u2014 36 record no licence at all, 57 copyleft or CERN-OHL, 53 permissive (ADR-0107, D-199). Format: B-110 measured 0 of 164 converting through the KiCad intake, all refusing unsupported.version on 2023-era saves. Not a router baseline: PCBench publishes a dataset and an RL environment, and this artifact does not assert it ships a router.",
+        "project": "https://github.com/PCBench/PCBench"
+      },
+      {
+        "determination": "not_released",
+        "id": "pcbworld",
+        "license_spdx": "CC-BY-4.0 (D1/D2) + heterogeneous (D3)",
+        "note": "Announced, with no public host. Its 679 real D3 boards 'retain the license of their source repository' and are heterogeneous, so D3 would fall under ADR-0107's per-item rule even once published.",
+        "project": "PCBWorld (arXiv:2607.05915)"
+      }
+    ],
+    "declared_rows": 4,
+    "deterministic_replays": true,
+    "measured_rows": 1,
+    "problem_set": {
+      "boards": [
+        {
+          "board": "ts01_led",
+          "sha256": "82de1250c881da992b4df7356b38a51afe7962f8ef7c45afc9deb0de9c712db1"
+        },
+        {
+          "board": "ts02_voltage_divider",
+          "sha256": "fed0121c186d732ce20bfd0065a17be35f5a9a7d82042d57f022a147f018fe22"
+        },
+        {
+          "board": "ts03_rc_filter",
+          "sha256": "f5597407c8b506a3bbb1dd53e7908995373c6f76ce7e9828b59867a02f1d79c9"
+        },
+        {
+          "board": "ts04_dual_led",
+          "sha256": "777bccf69ee7d16d0b3da1c90841cf4589d7904e2d5ef38e0e82c139c6d6016d"
+        },
+        {
+          "board": "ts05_npn_switch",
+          "sha256": "fe84c51a53238d12654a649f50bcad91da38962be439cdab90bf14429d25ad4e"
+        },
+        {
+          "board": "ts06_push_pull",
+          "sha256": "1cd6bfc5227e0fff4166305b463215deb447d332b43644443391c60fc59d116d"
+        },
+        {
+          "board": "ts07_differential_pair",
+          "sha256": "59df862d485b8857e101cfc5ee6ffb57b4b1d773a91d20e2917d13dba4438c04"
+        },
+        {
+          "board": "ts08_inverting_amp",
+          "sha256": "203cbc6c93620a84a9211250653eefe3fc6fdf730a1b385d199b454d8524e1a4"
+        },
+        {
+          "board": "ts09_active_filter",
+          "sha256": "98bd691ef17f4d9938b770842af9f689d9f61e737de66aac23a73e3c6ed98a93"
+        },
+        {
+          "board": "ts10_wheatstone_bridge",
+          "sha256": "ec66069bcc93e7f23912c2ef484f78f34e300922c952011422d8a4c422bdf9c8"
+        },
+        {
+          "board": "ts11_generated",
+          "sha256": "cf3a4d551e9407809163c4c68645ddd0c262e6e2dc06a36a73e35292e5bd12d3"
+        },
+        {
+          "board": "ts12_generated",
+          "sha256": "463a0fa657d898b651e5bbd60c5e75dcbc3919b292ea4be270960d003f22b7c6"
+        },
+        {
+          "board": "ts13_555_blinker",
+          "sha256": "db32b0e87b1cd2c81d85bc8c2e9a0e8cf4a80adc57c630d79bb03e2e268e4313"
+        },
+        {
+          "board": "ts14_usb_power",
+          "sha256": "f0238a8e5ad50a9e8ac445f7d8453e344f3900853c4e26b679a7415a22233fbe"
+        },
+        {
+          "board": "ts15_i2c_sensor",
+          "sha256": "c0f1281931e18798dcd938a03d56444385619ddc7a7931fd382b140ca765bdd6"
+        },
+        {
+          "board": "ts16_h_bridge",
+          "sha256": "16354c08f72034b552ef3c432922c98c909571fb1ba13c675867025fb904b45d"
+        },
+        {
+          "board": "ts17_attiny_minimal",
+          "sha256": "397d16aea8572fd81cc6e0d969f7aed882835823532182e0d4b51b02fe3c2f35"
+        },
+        {
+          "board": "ts18_dual_reg",
+          "sha256": "b21648856f604934592c3e42d3adc274780f57eb7ac9e7e2118f491751a6b2e9"
+        },
+        {
+          "board": "ts19_adc_breakout",
+          "sha256": "16b73b6de39a4662ddd348fa8cc7d5b56820582fc85387b2adf14ae57bb87600"
+        },
+        {
+          "board": "ts20_esp32_wifi",
+          "sha256": "94d1251ee0e7f4812ab2b58b46f5e6bf81a90b49aa0b225aff0ce84b0bac2fe0"
+        }
+      ],
+      "committed_boards": 20,
+      "committed_subset_rule": "the first 20 sample filenames in upstream lexical order",
+      "corpus_id": "tscircuit-benchmark",
+      "frozen_and_redistributable": true,
+      "license_sha256": "5e1e61463320a61ebac4a326a3c6ea5608280c75e5b95c6931497e3a14ebb632",
+      "license_spdx": "MIT",
+      "provenance_limits": [
+        "the boards are LLM-generated from plain-English specs, not human-engineered production hardware, so a result generalises to LLM-generated tscircuit boards and to nothing else",
+        "FreeRouting was in the construction loop, so this corpus is not a neutral yardstick for FreeRouting",
+        "every board is 2-layer with 3-35 components: no multi-layer, BGA, differential-pair or width-constrained case exists in it",
+        "the committed 20 are the first 20 in upstream lexical order, and upstream orders roughly by growing component count, so the prefix is the easier half"
+      ],
+      "upstream_commit": "be36518b5bf51755dae92c230061ab3cf4e3e063",
+      "upstream_repository": "https://github.com/dwiel/tscircuit-benchmark",
+      "upstream_sample_count": 36,
+      "why_this_satisfies_the_closing_corpus_condition": "M2's closing condition 3 asks for the closing measurement to be taken on a frozen, redistributable corpus rather than on the designer's live tree (R-146: a live tree is edited under long runs, so every figure taken from it decays silently). This corpus is exactly that for the routing measurement: MIT, \u00a9 2026 Zach Dwiel, committed in-repo at a pinned upstream commit with a per-file digest manifest the runner verifies before routing, under a subset rule fixed in advance. It is frozen in the sense the condition requires \u2014 the bytes cannot change without failing the digest check \u2014 and redistributable in the sense the corpora README requires. It is not a substitute for a frozen corpus of real KiCad documents, which issue #110 still owes M4's evaluation and which R-153 still records as open."
+    },
+    "protocol": {
+      "accounting_identity": "every attempted net is accounted for by exactly one outcome, and the breakdown sums to nets_attempted. The harness raises rather than reporting a rate over a shortened denominator.",
+      "common_input": "SimpleRouteJson bytes, verified against the corpus digest manifest before any router sees them. A baseline that cannot read SimpleRouteJson needs a bridge, and the bridge is named as a precondition on that baseline's row rather than assumed away by declaring two documents equivalent.",
+      "excluded_metrics": {
+        "markers": [
+          "drc",
+          "violation",
+          "clean"
+        ],
+        "reason": "No DRC metric is in this protocol. The problem set is SimpleRouteJson, so no imported board has a KiCad document a design-rule check could be run against; and a DRC count is not reproducible across environments, so a count carried between two rows would not be a comparison. A cross-router DRC comparison needs a comparability argument made on its own terms, and this artifact does not make one."
+      },
+      "metrics": [
+        {
+          "definition": "nets offered to the router: every imported net with at least two pads. A net with one pad states no routing work and is counted separately, outside this denominator.",
+          "name": "nets_attempted"
+        },
+        {
+          "definition": "nets for which the router returned a geometry joining every pad of the net. Any other outcome is a refusal carrying its own typed code and stays in the denominator.",
+          "name": "nets_completed"
+        },
+        {
+          "definition": "nets_completed * 100 / nets_attempted, over the denominator above and no other.",
+          "name": "completion_percent"
+        },
+        {
+          "definition": "summed length of the geometries counted by nets_completed, in nanometres.",
+          "name": "routed_wire_length_nm"
+        },
+        {
+          "definition": "routed_wire_length_nm divided by the provable pad-gap lower bound over the same nets. The bound ignores every obstacle, bend and detour, so the ratio is safe to publish and is not an optimality statement.",
+          "name": "length_over_pad_gap_lower_bound"
+        },
+        {
+          "definition": "vias in the counted geometries.",
+          "name": "vias"
+        },
+        {
+          "definition": "direction changes in the counted geometries.",
+          "name": "bends"
+        },
+        {
+          "definition": "mean wall time of one whole-corpus pass on the recording machine. Machine-bound, and comparable only between rows recorded in the same environment.",
+          "name": "mean_wall_seconds"
+        }
+      ]
+    },
+    "routers": [
+      {
+        "id": "coppermcp-astar-grid",
+        "license_spdx": "Apache-2.0",
+        "measurement_provenance": {
+          "artifact": "benchmarks/results/routing/2026-08-06-simple-route-json-corpus-v1.json",
+          "artifact_run_id": "sha256:facf95ee9770ffab8c1bc403a32a403e55ca79f2c56d1eabc6679eb6ec4dfca3",
+          "artifact_sha256": "sha256:76c99cbd66324553b82cc243898042a362b18daec90e276dc7e88cbaa64be15f",
+          "environment": {
+            "platform": "macOS-26.5.2-arm64-arm-64bit",
+            "python": "3.12.13"
+          },
+          "repetitions": 3,
+          "source_commit": "7a868623d4f88e51bda3621c3acf0594d41f813e"
+        },
+        "project": "this repository",
+        "results": {
+          "divisor-aligned": {
+            "bends": 235,
+            "boards_imported": 20,
+            "boards_offered": 20,
+            "completion_percent": 59.82905982905983,
+            "grid_policy": {
+              "description": "a two-pin net uses the largest ladder step dividing the greatest common divisor of its pad-centre delta, decided from the net's geometry before routing and never by retrying; a wider net uses the ladder's first entry, because the router imposes no divisibility requirement on it",
+              "name": "divisor-aligned"
+            },
+            "import_refusals": {},
+            "length_over_pad_gap_lower_bound": 1.1711303333567902,
+            "mean_wall_seconds": 3.274,
+            "nets_attempted": 117,
+            "nets_completed": 70,
+            "nets_stating_no_routing_work": 9,
+            "outcome_breakdown": {
+              "no_routing_work": 9,
+              "refused:grid_budget_exceeded": 21,
+              "refused:no_path": 2,
+              "refused:no_path_in_region": 9,
+              "refused:off_grid": 15,
+              "routed": 70
+            },
+            "routed_pad_gap_lower_bound_nm": 1431522993,
+            "routed_wire_length_nm": 1676500000,
+            "vias": 0
+          },
+          "fixed": {
+            "bends": 235,
+            "boards_imported": 20,
+            "boards_offered": 20,
+            "completion_percent": 59.82905982905983,
+            "grid_policy": {
+              "description": "every request uses a 250000 nm lattice step, so a two-pin net whose pad-centre delta does not divide by it refuses with off_grid",
+              "name": "fixed"
+            },
+            "import_refusals": {},
+            "length_over_pad_gap_lower_bound": 1.1711303333567902,
+            "mean_wall_seconds": 3.283,
+            "nets_attempted": 117,
+            "nets_completed": 70,
+            "nets_stating_no_routing_work": 9,
+            "outcome_breakdown": {
+              "no_routing_work": 9,
+              "refused:no_path": 2,
+              "refused:no_path_in_region": 9,
+              "refused:off_grid": 36,
+              "routed": 70
+            },
+            "routed_pad_gap_lower_bound_nm": 1431522993,
+            "routed_wire_length_nm": 1676500000,
+            "vias": 0
+          }
+        },
+        "role": "subject",
+        "routing_policy": "orthogonal-a-star-spatial-index-v1",
+        "status": "measured",
+        "version_considered": "astar-grid/0.7.0"
+      },
+      {
+        "comparability_caveat": "Even fully run, this row would not be a neutral comparison on this problem set. The corpus was constructed with FreeRouting in the loop \u2014 upstream's own table reports FreeRouting clean on 35 of 36 boards \u2014 so scoring against FreeRouting here measures a set FreeRouting helped define. A FreeRouting row needs a corpus neither router helped construct.",
+        "determination_row": "docs/research/open-baseline-benchmarks-v1.md \u00a73, row 'freerouting/freerouting': GPL-3.0, invocable as an out-of-process baseline only, and not installed in the recording environment",
+        "id": "freerouting",
+        "license_spdx": "GPL-3.0-only",
+        "preconditions": [
+          {
+            "description": "a FreeRouting v2.2.4 executable present in the recording environment, obtained under the operator approval issue #53 names and does not grant",
+            "name": "freerouting_executable",
+            "observable": true,
+            "probe": null,
+            "satisfied": false
+          },
+          {
+            "description": "a SimpleRouteJson-to-Specctra-DSN bridge, so both routers read one common input rather than two documents asserted to be equivalent",
+            "name": "simple_route_json_to_dsn_bridge",
+            "observable": false,
+            "probe": null,
+            "satisfied": false
+          },
+          {
+            "description": "a Java runtime that actually runs, observed by executing it rather than by finding a name on PATH \u2014 this host has /usr/bin/java and no JRE behind it",
+            "name": "java_runtime",
+            "observable": true,
+            "probe": [
+              "-version"
+            ],
+            "satisfied": false
+          }
+        ],
+        "project": "https://github.com/freerouting/freerouting",
+        "reason": "FreeRouting's GPL-3.0 licence permits an out-of-process baseline only; linking or vendoring it into this Apache-2.0 repository would be licence-incompatible. The contained provider that could supply it, issue #53, remains behind an operator gate whose own text does not authorize the container-runtime installation it needs. No number is estimated, inferred, or carried over from B-069. Unmet preconditions observed in this recording: freerouting_executable: a FreeRouting v2.2.4 executable present in the recording environment, obtained under the operator approval issue #53 names and does not grant; simple_route_json_to_dsn_bridge: a SimpleRouteJson-to-Specctra-DSN bridge, so both routers read one common input rather than two documents asserted to be equivalent; java_runtime: a Java runtime that actually runs, observed by executing it rather than by finding a name on PATH \u2014 this host has /usr/bin/java and no JRE behind it",
+        "reason_kind": "environment",
+        "results": null,
+        "role": "baseline",
+        "status": "not_run",
+        "unmet_preconditions": [
+          "freerouting_executable",
+          "simple_route_json_to_dsn_bridge",
+          "java_runtime"
+        ],
+        "version_considered": "v2.2.4 (2026-05-13)",
+        "what_would_change_it": [
+          "a FreeRouting v2.2.4 executable present in the recording environment, obtained under the operator approval issue #53 names and does not grant",
+          "a SimpleRouteJson-to-Specctra-DSN bridge, so both routers read one common input rather than two documents asserted to be equivalent",
+          "a Java runtime that actually runs, observed by executing it rather than by finding a name on PATH \u2014 this host has /usr/bin/java and no JRE behind it"
+        ]
+      },
+      {
+        "determination_row": "docs/research/open-baseline-benchmarks-v1.md \u00a73, row 'tscircuit/autorouting': no LICENSE file, no package.json license key, GitHub API license: null \u2014 all rights reserved, nothing redistributed",
+        "id": "tscircuit-autorouting",
+        "license_spdx": "NOASSERTION",
+        "preconditions": [
+          {
+            "description": "a licence published by tscircuit/autorouting covering its solver code, or an independent reimplementation written from the format specification alone",
+            "name": "upstream_licence",
+            "observable": false,
+            "probe": null,
+            "satisfied": false
+          }
+        ],
+        "project": "https://github.com/tscircuit/autorouting",
+        "reason": "At the reviewed revision the repository carried no licence, so its solvers were all rights reserved and could not be vendored, committed, redistributed, or run from this project. It was archived on 2025-08-15. Its format specification is cited by the import adapter; no solver file is copied. Unmet preconditions observed in this recording: upstream_licence: a licence published by tscircuit/autorouting covering its solver code, or an independent reimplementation written from the format specification alone",
+        "reason_kind": "licence",
+        "results": null,
+        "role": "baseline",
+        "status": "not_run",
+        "unmet_preconditions": [
+          "upstream_licence"
+        ],
+        "version_considered": "archived 2025-08-15",
+        "what_would_change_it": [
+          "a licence published by tscircuit/autorouting covering its solver code, or an independent reimplementation written from the format specification alone"
+        ]
+      },
+      {
+        "determination_row": "docs/research/open-baseline-benchmarks-v1.md \u00a73, row 'PCBWorld': synthetic sets D1/D2, their generators and the evaluation code are CC-BY-4.0; announced, not released",
+        "id": "pcbworld-evaluation",
+        "license_spdx": "CC-BY-4.0 (synthetic sets and evaluation code)",
+        "preconditions": [
+          {
+            "description": "PCBWorld's evaluation code and its CC-BY-4.0 synthetic sets published at a resolvable host, so a fixed revision can be pinned and fetched",
+            "name": "published_artifact",
+            "observable": false,
+            "probe": null,
+            "satisfied": false
+          }
+        ],
+        "project": "PCBWorld (arXiv:2607.05915)",
+        "reason": "The paper announces that its datasets and evaluation code will be released on a public repository upon publication; the reviewed evidence contains no released artifact. The CC0 on the arXiv submission covers the paper, not the code. Unmet preconditions observed in this recording: published_artifact: PCBWorld's evaluation code and its CC-BY-4.0 synthetic sets published at a resolvable host, so a fixed revision can be pinned and fetched",
+        "reason_kind": "licence",
+        "results": null,
+        "role": "baseline",
+        "status": "not_run",
+        "unmet_preconditions": [
+          "published_artifact"
+        ],
+        "version_considered": "v2 preprint, datasets announced",
+        "what_would_change_it": [
+          "PCBWorld's evaluation code and its CC-BY-4.0 synthetic sets published at a resolvable host, so a fixed revision can be pinned and fetched"
+        ]
+      }
+    ]
+  },
+  "not_claimed": [
+    "any comparison between routers. Every declared baseline resolves to not_run, so the table carries one measured row, and one row supports no comparative conclusion of any kind \u2014 not better, not worse, not comparable.",
+    "any DRC, electrical, signal-integrity, thermal or fabrication result. No DRC metric is in the protocol and none is inferred from one that is.",
+    "any route-quality claim. The recorded ratio is against a loose provable lower bound that ignores every obstacle, bend and detour, and is not an optimality statement.",
+    "a whole-board completion result: each net is routed independently against the unrouted snapshot, so the candidates are not compatible with one another.",
+    "generalisation beyond LLM-generated 2-layer tscircuit boards, or that the committed 20-board prefix represents the full 36-board corpus.",
+    "that this artifact re-measures anything. The subject row replays B-088's run unchanged and is expected to agree with it net for net.",
+    "that a frozen SimpleRouteJson corpus discharges issue #110. It is a frozen corpus for the routing measurement and is not an externally authored KiCad family; R-153 stays open."
+  ],
+  "run_id": "sha256:3e9017f3570ed0387c7646c6fd7ede22860ae6a6d787eedcfb46bb204f4bc65d",
+  "schema": "copper-mcp/benchmark/cross-router-comparison/v1",
+  "source_commit": "523e2fd8f9462289dc94cf908799dee26a429a3e"
+}

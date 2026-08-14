@@ -252,6 +252,42 @@ never copper dropped — and sizing that ceiling belongs to
   probe moves the refusal to the layer declaration rather than clearing it — still 0 of 164, split
   148 `unsupported.construct` / 16 `unknown.layer`. No board byte is committed; the per-board
   digests are, so the finding can be re-checked against a re-fetch.
+- **A cross-router comparison artifact, with a typed result for every declared baseline**
+  ([B-113](docs/ledgers/benchmark-ledger.md), `D-204`,
+  [issue #65](https://github.com/seunghyukchoe/copper-mcp/issues/65)). M2's closing condition 2 asks
+  for typed results including `not_run`-with-reason, on the ground that a typed `not_run` is a
+  result and a missing row is not. `scripts/benchmark_cross_router_comparison.py` records exactly
+  that on the committed MIT SimpleRouteJson corpus: CopperMCP's single-layer router measured at
+  **70 of 117 nets, 1.1711× a provable lower bound, zero vias** — projected directly from the
+  self-digest-verified `B-088` artifact, not re-measured — beside three baselines that each carry
+  the licence or environment fact behind their `not_run` and the checkable conditions that would
+  change it. Reasons are derived from the preconditions actually unmet in that recording, so a
+  partially prepared environment cannot retain a stale "not installed" claim. FreeRouting is
+  `not_run` on an environment fact with [#53](https://github.com/seunghyukchoe/copper-mcp/issues/53)'s
+  operator gate named; tscircuit/autorouting and PCBWorld are `not_run` on licence facts.
+  **The artifact refuses to be over-read**: it records `measured_rows: 1`,
+  `comparison_supported: false`, and states first among its non-claims that one measured row supports
+  no comparative conclusion of any kind. **No DRC metric is in the protocol** — the metric set is a
+  closed tuple with a test asserting it, because the problem set has no KiCad document behind it and
+  DRC counts are not reproducible across environments. Recorded wall time is carried inside each
+  measured configuration row, as the common protocol declares. Thirteen committed mutants,
+  thirteen killed
+  ([`docs/mutants/2026-08-14-cross-router-comparison.json`](docs/mutants/2026-08-14-cross-router-comparison.json)),
+  three of them aimed squarely at the silent missing row.
+- **Ten licence-clean open-hardware boards re-saved in KiCad 10.0.5, and none of them converts**
+  ([B-114](docs/ledgers/benchmark-ledger.md), `R-157`,
+  [issue #110](https://github.com/seunghyukchoe/copper-mcp/issues/110)). ADR-0107 named the candidate
+  its rule leaves standing — a single-author repository whose own licence covers its own boards — so
+  ten were verified per item: **8 of 10 importable on licence alone**, two of them carrying the
+  permission inside the board file's own `title_block`. All ten clear the board-format-version gate
+  that refused 164 of 164 PCBench boards, because a KiCad 10.0.5 re-save upgrades them to `20260206`.
+  **0 of 10 convert.** Eight refuse `Edge.Cuts` outline curves; with that gate lifted in a scratch
+  probe, still **0 of 10**, and six land instead on
+  [ADR-0095](docs/adr/0095-copper-text-has-no-derivable-envelope.md)'s copper-text refusal. **No
+  import lands and no board byte is committed** — the sdist carries no board data, and its measured
+  delta of +35,618 bytes is entirely records. The result renames the
+  blocker for #110: it is geometry coverage, not licensing and not the format era, and it corrects
+  `R-153`'s stated blocker, since KiCad 4–7 intake would buy an import nothing.
 
 ## [0.8.0] - 2026-08-13
 

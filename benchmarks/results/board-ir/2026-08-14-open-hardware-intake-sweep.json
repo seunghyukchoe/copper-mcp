@@ -1,0 +1,513 @@
+{
+  "committed_board_bytes": 0,
+  "date_utc": "2026-08-14",
+  "environment": {
+    "kicad": "10.0.5",
+    "kicad_python": "3.9",
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "method": "Ten boards from ten upstream repositories, each fetched at a pinned commit. Per item: (1) the licence determined from the repository's own LICENSE, its README licence section and the board file's own title_block, never from an aggregator; (2) the board opened and re-saved once by KiCad 10.0.5 pcbnew, which upgrades the board format version and edits no design content; (3) the re-saved bytes converted through copper_mcp.adapters.parse_kicad_bytes under the same net class the excessive-agency evaluation uses, so a board that converts here converts there. A second pass lifts the Edge.Cuts curve gate in-process, in a scratch script and never in the product, because the conversion path fails closed on the first refusal and a census that stops there reports the gate rather than the gap. Per B-107 and B-110's precedent the sweep script is not committed: it duplicates the adapter's conversion call, and the boards it needs are not in the tree, so a committed copy could not be replayed from a clean checkout. The per-board digests are what make the result checkable.",
+  "metrics": {
+    "blocking_geometry": {
+      "boards_with_copper_text": 7,
+      "boards_with_edge_cuts_curves": 9,
+      "total_copper_text_objects": 24,
+      "total_edge_cuts_curves": 97
+    },
+    "boards": [
+      {
+        "conversion": {
+          "pass_1_as_shipped": {
+            "message": "Edge.Cuts outline arcs, circles and curves are unsupported",
+            "verdict": "unsupported.construct"
+          },
+          "pass_2_edge_cuts_curve_gate_lifted": {
+            "message": "copper text has no envelope derivable from the board and is unsupported",
+            "verdict": "unsupported.construct"
+          }
+        },
+        "derived": {
+          "board_format_version": "20260206",
+          "bytes": 7991561,
+          "derivation": "opened and re-saved once by KiCad 10.0.5 pcbnew.LoadBoard/SaveBoard, no design content edited",
+          "sha256": "8a2452d8bfe0992b2aec1a55da6942cd767fd54a8a1c8c8327595988e3fa6485"
+        },
+        "geometry": {
+          "copper_layers": 4,
+          "copper_text_objects": 4,
+          "edge_cuts_curves": 4,
+          "edge_cuts_lines": 4,
+          "footprints": 330,
+          "nets": 149,
+          "tracks": 3186,
+          "zones": 7
+        },
+        "licence": {
+          "evidence": "README separates the artefact classes by name: the PCB under Apache-2.0, the documentation under CC0. Board title_block records '(C) 2025 Pat Deegan'.",
+          "hardware_coverage": "explicit",
+          "importable_on_licence_alone": true,
+          "licence_file": "LICENSE",
+          "spdx_id": "Apache-2.0"
+        },
+        "original": {
+          "board_format_version": "20241229",
+          "bytes": 7929198,
+          "sha256": "773a0e295ca6cc31a088088ec29efa98ee67ee6bcbaac98d281f5433c45320db"
+        },
+        "upstream_commit": "293a3e216aa00c69c30838bb283a3f2f5d20779b",
+        "upstream_path": "tinytapeout-demo.kicad_pcb",
+        "upstream_repository": "https://github.com/TinyTapeout/tt-demo-pcb"
+      },
+      {
+        "conversion": {
+          "pass_1_as_shipped": {
+            "message": "Edge.Cuts outline arcs, circles and curves are unsupported",
+            "verdict": "unsupported.construct"
+          },
+          "pass_2_edge_cuts_curve_gate_lifted": {
+            "message": "copper text has no envelope derivable from the board and is unsupported",
+            "verdict": "unsupported.construct"
+          }
+        },
+        "derived": {
+          "board_format_version": "20260206",
+          "bytes": 5429842,
+          "derivation": "opened and re-saved once by KiCad 10.0.5 pcbnew.LoadBoard/SaveBoard, no design content edited",
+          "sha256": "ddc82e9f12311caa7aecf2dd93051aa874f2d2828790b9a57a92cad50763d245"
+        },
+        "geometry": {
+          "copper_layers": 6,
+          "copper_text_objects": 1,
+          "edge_cuts_curves": 7,
+          "edge_cuts_lines": 14,
+          "footprints": 68,
+          "nets": 262,
+          "tracks": 1746,
+          "zones": 15
+        },
+        "licence": {
+          "evidence": "Apache-2.0 LICENSE at root; the repository is a single hardware design with no firmware. No README licence section, so coverage is inferred from repository scope rather than stated.",
+          "hardware_coverage": "repo_scope",
+          "importable_on_licence_alone": true,
+          "licence_file": "LICENSE",
+          "spdx_id": "Apache-2.0"
+        },
+        "original": {
+          "board_format_version": "20241229",
+          "bytes": 5401885,
+          "sha256": "1e8281a7e5eb7cd833e1117264f8766d850b5632610f1fc7b8a90c2d9f7bc792"
+        },
+        "upstream_commit": "93e67cfc3f267443d9b637073688457e8f5c1f91",
+        "upstream_path": "lpddr4-testbed.kicad_pcb",
+        "upstream_repository": "https://github.com/antmicro/lpddr4-testbed"
+      },
+      {
+        "conversion": {
+          "pass_1_as_shipped": {
+            "message": "Edge.Cuts outline arcs, circles and curves are unsupported",
+            "verdict": "unsupported.construct"
+          },
+          "pass_2_edge_cuts_curve_gate_lifted": {
+            "message": "copper text has no envelope derivable from the board and is unsupported",
+            "verdict": "unsupported.construct"
+          }
+        },
+        "derived": {
+          "board_format_version": "20260206",
+          "bytes": 1883290,
+          "derivation": "opened and re-saved once by KiCad 10.0.5 pcbnew.LoadBoard/SaveBoard, no design content edited",
+          "sha256": "6dfe7a68f671f345ec92277abd21261c2f8207b8dd1462473a4483feebb1f674"
+        },
+        "geometry": {
+          "copper_layers": 4,
+          "copper_text_objects": 2,
+          "edge_cuts_curves": 3,
+          "edge_cuts_lines": 12,
+          "footprints": 20,
+          "nets": 66,
+          "tracks": 879,
+          "zones": 5
+        },
+        "licence": {
+          "evidence": "README: 'This repository contains open hardware design files for an adapter card ... This project is licensed under the Apache-2.0 license.' The repository holds the board, the project file, images, LICENSE and README and no firmware, so no separate software licence can attach.",
+          "hardware_coverage": "explicit",
+          "importable_on_licence_alone": true,
+          "licence_file": "LICENSE",
+          "spdx_id": "Apache-2.0"
+        },
+        "original": {
+          "board_format_version": "20241229",
+          "bytes": 1865463,
+          "sha256": "36533460dd1e940f87672a101aca968ff0e2cc1687a26e02b32b2177f95414f5"
+        },
+        "upstream_commit": "11844f18ce14393043affde9e7aa8d51c0cd3ba7",
+        "upstream_path": "m2-pcie-adapter.kicad_pcb",
+        "upstream_repository": "https://github.com/antmicro/m2-pcie-adapter"
+      },
+      {
+        "conversion": {
+          "pass_1_as_shipped": {
+            "message": "copper text has no envelope derivable from the board and is unsupported",
+            "verdict": "unsupported.construct"
+          },
+          "pass_2_edge_cuts_curve_gate_lifted": {
+            "message": "copper text has no envelope derivable from the board and is unsupported",
+            "verdict": "unsupported.construct"
+          }
+        },
+        "derived": {
+          "board_format_version": "20260206",
+          "bytes": 5782039,
+          "derivation": "opened and re-saved once by KiCad 10.0.5 pcbnew.LoadBoard/SaveBoard, no design content edited",
+          "sha256": "49b569aa3977fb524f703d9847279e041a7984234dce29ecb997d3a4bd4fc8ce"
+        },
+        "geometry": {
+          "copper_layers": 4,
+          "copper_text_objects": 1,
+          "edge_cuts_curves": 0,
+          "edge_cuts_lines": 4,
+          "footprints": 82,
+          "nets": 125,
+          "tracks": 1429,
+          "zones": 13
+        },
+        "licence": {
+          "evidence": "Apache-2.0 LICENSE at root; single hardware design, no firmware. No README licence section.",
+          "hardware_coverage": "repo_scope",
+          "importable_on_licence_alone": true,
+          "licence_file": "LICENSE",
+          "spdx_id": "Apache-2.0"
+        },
+        "original": {
+          "board_format_version": "20241229",
+          "bytes": 5743997,
+          "sha256": "9a73c217474afa28fb8cb29f26af0eab4f69481db1f7559e9a1aa26540d7f382"
+        },
+        "upstream_commit": "ea69666fa06f66a0691e50eebff9356cc2a08e32",
+        "upstream_path": "ov9281-dual-camera-board.kicad_pcb",
+        "upstream_repository": "https://github.com/antmicro/ov9281-camera-board"
+      },
+      {
+        "conversion": {
+          "pass_1_as_shipped": {
+            "message": "Edge.Cuts outline arcs, circles and curves are unsupported",
+            "verdict": "unsupported.construct"
+          },
+          "pass_2_edge_cuts_curve_gate_lifted": {
+            "message": "copper text has no envelope derivable from the board and is unsupported",
+            "verdict": "unsupported.construct"
+          }
+        },
+        "derived": {
+          "board_format_version": "20260206",
+          "bytes": 484103,
+          "derivation": "opened and re-saved once by KiCad 10.0.5 pcbnew.LoadBoard/SaveBoard, no design content edited",
+          "sha256": "9cd1f4623efb589de2daff685f42842ef7aa94d5147127aa064aca914866f680"
+        },
+        "geometry": {
+          "copper_layers": 4,
+          "copper_text_objects": 4,
+          "edge_cuts_curves": 15,
+          "edge_cuts_lines": 11,
+          "footprints": 41,
+          "nets": 56,
+          "tracks": 503,
+          "zones": 3
+        },
+        "licence": {
+          "evidence": "The board file's own title_block reads (company \"Copyright 2020-2023 Great Scott Gadgets\") (comment 1 \"Licensed under the CERN-OHL-P v2\"), so the permission travels inside the item rather than only in repository metadata. README places gateware and host software in a different repository.",
+          "hardware_coverage": "explicit_in_file",
+          "importable_on_licence_alone": true,
+          "licence_file": "LICENSE",
+          "spdx_id": "CERN-OHL-P-2.0"
+        },
+        "original": {
+          "board_format_version": "20221018",
+          "bytes": 446857,
+          "sha256": "df5938be2ef76b9ef680836756c781be9ae4cfb61f9170ae5db0b818316922b1"
+        },
+        "upstream_commit": "b1027cf452365fd1572cb8df8dfed4d3004ec8c2",
+        "upstream_path": "amalthea.kicad_pcb",
+        "upstream_repository": "https://github.com/greatscottgadgets/amalthea-hardware"
+      },
+      {
+        "conversion": {
+          "pass_1_as_shipped": {
+            "message": "Edge.Cuts outline arcs, circles and curves are unsupported",
+            "verdict": "unsupported.construct"
+          },
+          "pass_2_edge_cuts_curve_gate_lifted": {
+            "message": "copper text has no envelope derivable from the board and is unsupported",
+            "verdict": "unsupported.construct"
+          }
+        },
+        "derived": {
+          "board_format_version": "20260206",
+          "bytes": 5992291,
+          "derivation": "opened and re-saved once by KiCad 10.0.5 pcbnew.LoadBoard/SaveBoard, no design content edited",
+          "sha256": "d603deadae7751e6954cf53c607da1f59228d1e19ba75cfcb40b2e7eb7133695"
+        },
+        "geometry": {
+          "copper_layers": 6,
+          "copper_text_objects": 6,
+          "edge_cuts_curves": 4,
+          "edge_cuts_lines": 8,
+          "footprints": 348,
+          "nets": 376,
+          "tracks": 4273,
+          "zones": 65
+        },
+        "licence": {
+          "evidence": "CERN-OHL-P-2.0 LICENSE at root. The board's title_block licence field is an unsubstituted template variable (${LICENSE}), so the in-file notice is absent in the committed bytes.",
+          "hardware_coverage": "repo_scope",
+          "importable_on_licence_alone": true,
+          "licence_file": "LICENSE",
+          "spdx_id": "CERN-OHL-P-2.0"
+        },
+        "original": {
+          "board_format_version": "20221018",
+          "bytes": 6257788,
+          "sha256": "51e978f0e3c02f1b22c6e8013f2d26b309a6724749f27b39abd932545bcd5313"
+        },
+        "upstream_commit": "13aa71c2fb0be3837cd2ec580ee5d2c25fc1c678",
+        "upstream_path": "cynthion.kicad_pcb",
+        "upstream_repository": "https://github.com/greatscottgadgets/cynthion-hardware"
+      },
+      {
+        "conversion": {
+          "pass_1_as_shipped": {
+            "message": "copper layer kind is unsupported",
+            "verdict": "unsupported.construct"
+          },
+          "pass_2_edge_cuts_curve_gate_lifted": {
+            "message": "copper layer kind is unsupported",
+            "verdict": "unsupported.construct"
+          }
+        },
+        "derived": {
+          "board_format_version": "20260206",
+          "bytes": 8217442,
+          "derivation": "opened and re-saved once by KiCad 10.0.5 pcbnew.LoadBoard/SaveBoard, no design content edited",
+          "sha256": "d9c775ec58100560dcceed92bf18cb719ffd0fd8116ab123976c83928c3df9b6"
+        },
+        "geometry": {
+          "copper_layers": 6,
+          "copper_text_objects": 6,
+          "edge_cuts_curves": 20,
+          "edge_cuts_lines": 20,
+          "footprints": 581,
+          "nets": 491,
+          "tracks": 5643,
+          "zones": 25
+        },
+        "licence": {
+          "evidence": "CERN-OHL-P-2.0 LICENSE at root. Board title_block licence field is an unsubstituted ${LICENSE} template variable.",
+          "hardware_coverage": "repo_scope",
+          "importable_on_licence_alone": true,
+          "licence_file": "LICENSE",
+          "spdx_id": "CERN-OHL-P-2.0"
+        },
+        "original": {
+          "board_format_version": "20241229",
+          "bytes": 8031948,
+          "sha256": "95bc1e5b6318c25b228ff66d8af32b8ee3d5daac39a3380e926cd76d50d18d42"
+        },
+        "upstream_commit": "359b98f2451395408bc25dae64efa9fc518e93d0",
+        "upstream_path": "praline.kicad_pcb",
+        "upstream_repository": "https://github.com/greatscottgadgets/hackrf-pro"
+      },
+      {
+        "conversion": {
+          "pass_1_as_shipped": {
+            "message": "Edge.Cuts outline arcs, circles and curves are unsupported",
+            "verdict": "unsupported.construct"
+          },
+          "pass_2_edge_cuts_curve_gate_lifted": {
+            "message": "graphic without one explicit layer is unsupported",
+            "verdict": "unsupported.construct"
+          }
+        },
+        "derived": {
+          "board_format_version": "20260206",
+          "bytes": 3112089,
+          "derivation": "opened and re-saved once by KiCad 10.0.5 pcbnew.LoadBoard/SaveBoard, no design content edited",
+          "sha256": "a5e2134a92202a95e13e7a4fb90d88f330d05d92effd1a4fafe8038bb7dcf7f8"
+        },
+        "geometry": {
+          "copper_layers": 2,
+          "copper_text_objects": 0,
+          "edge_cuts_curves": 36,
+          "edge_cuts_lines": 38,
+          "footprints": 286,
+          "nets": 85,
+          "tracks": 1059,
+          "zones": 2
+        },
+        "licence": {
+          "evidence": "LICENSE.txt at root, GitHub API spdx_id MIT, README carries a licence section. Board file has no title_block at all.",
+          "hardware_coverage": "repo_scope",
+          "importable_on_licence_alone": true,
+          "licence_file": "LICENSE.txt",
+          "spdx_id": "MIT"
+        },
+        "original": {
+          "board_format_version": "20240108",
+          "bytes": 3158625,
+          "sha256": "baca2b7cdf259357cbc1fb810fab5610e5ee843bd5751e54fdc47e96e3b2285f"
+        },
+        "upstream_commit": "984cb91ef5d5e1b03571d9ab189e3f19bce9ca7e",
+        "upstream_path": "bfo9000.kicad_pcb",
+        "upstream_repository": "https://github.com/keebio/bfo9000-pcb"
+      },
+      {
+        "conversion": {
+          "pass_1_as_shipped": {
+            "message": "Edge.Cuts outline arcs, circles and curves are unsupported",
+            "verdict": "unsupported.construct"
+          },
+          "pass_2_edge_cuts_curve_gate_lifted": {
+            "message": "root expression contains an unsupported semantic construct",
+            "verdict": "unsupported.construct"
+          }
+        },
+        "derived": {
+          "board_format_version": "20260206",
+          "bytes": 1640863,
+          "derivation": "opened and re-saved once by KiCad 10.0.5 pcbnew.LoadBoard/SaveBoard, no design content edited",
+          "sha256": "88251112829454882e2be1f11377df10aeb86cb9cbf9ed399e8fee630c98489f"
+        },
+        "geometry": {
+          "copper_layers": 4,
+          "copper_text_objects": 0,
+          "edge_cuts_curves": 4,
+          "edge_cuts_lines": 4,
+          "footprints": 110,
+          "nets": 254,
+          "tracks": 1581,
+          "zones": 6
+        },
+        "licence": {
+          "evidence": "'Lone Dynamics Open License' (LICENSE.md, GitHub API NOASSERTION): non-OSI, BSD-1-Clause-shaped, and it does name physical forms. Its README also warns the KiCad files may contain third-party symbols and footprints, which is an unresolved per-item unknown inside the file that would be shipped.",
+          "hardware_coverage": "custom_licence",
+          "importable_on_licence_alone": false,
+          "licence_file": "LICENSE.md",
+          "spdx_id": "NOASSERTION"
+        },
+        "original": {
+          "board_format_version": "20240108",
+          "bytes": 1634314,
+          "sha256": "301fdd66dcd79f0475c598fe94bd7510160a756dea4ecbfbfbdfb29cabe2030f"
+        },
+        "upstream_commit": "88f30799b1f6242a76a2c719c7d475dfa27ea3d5",
+        "upstream_path": "pcb/v0/lakritz.kicad_pcb",
+        "upstream_repository": "https://github.com/machdyne/lakritz"
+      },
+      {
+        "conversion": {
+          "pass_1_as_shipped": {
+            "message": "Edge.Cuts outline arcs, circles and curves are unsupported",
+            "verdict": "unsupported.construct"
+          },
+          "pass_2_edge_cuts_curve_gate_lifted": {
+            "message": "root dimension objects are unsupported",
+            "verdict": "unsupported.construct"
+          }
+        },
+        "derived": {
+          "board_format_version": "20260206",
+          "bytes": 4395237,
+          "derivation": "opened and re-saved once by KiCad 10.0.5 pcbnew.LoadBoard/SaveBoard, no design content edited",
+          "sha256": "c5fa235dc467ad4b0055f11f613f976b0bd47384d538591ddd9caae7750f0548"
+        },
+        "geometry": {
+          "copper_layers": 4,
+          "copper_text_objects": 0,
+          "edge_cuts_curves": 4,
+          "edge_cuts_lines": 8,
+          "footprints": 235,
+          "nets": 151,
+          "tracks": 2178,
+          "zones": 4
+        },
+        "licence": {
+          "evidence": "LICENSE.md maps CERN-OHL-P v2 to hardware/mainboard per directory, and the board's own title_block carries (comment 2 \"CERN-OHL-P v2\").",
+          "hardware_coverage": "explicit_in_file",
+          "importable_on_licence_alone": false,
+          "licence_file": "LICENSE.md",
+          "spdx_id": "NOASSERTION"
+        },
+        "original": {
+          "board_format_version": "20241229",
+          "bytes": 4325002,
+          "sha256": "49e0eb1777957893d979ef459ae66b82a840c2bd8bf51231e20c14193c4ddb24"
+        },
+        "upstream_commit": "652b28c950ed04ca41f0d8aa98d9b1be2f310f76",
+        "upstream_path": "hardware/mainboard/mainboard.kicad_pcb",
+        "upstream_repository": "https://github.com/wntrblm/Castor_and_Pollux"
+      }
+    ],
+    "candidates_examined": 10,
+    "conversion": {
+      "pass_1_as_shipped": {
+        "by_message": {
+          "Edge.Cuts outline arcs, circles and curves are unsupported": 8,
+          "copper layer kind is unsupported": 1,
+          "copper text has no envelope derivable from the board and is unsupported": 1
+        },
+        "converted": 0,
+        "refused": 10
+      },
+      "pass_2_edge_cuts_curve_gate_lifted": {
+        "by_message": {
+          "copper layer kind is unsupported": 1,
+          "copper text has no envelope derivable from the board and is unsupported": 6,
+          "graphic without one explicit layer is unsupported": 1,
+          "root dimension objects are unsupported": 1,
+          "root expression contains an unsupported semantic construct": 1
+        },
+        "converted": 0,
+        "refused": 10
+      }
+    },
+    "distinct_upstream_repositories": 10,
+    "format_era": {
+      "boards_clearing_the_version_gate_after_resave": 10,
+      "derived_versions": {
+        "20260206": 10
+      },
+      "original_versions": {
+        "20221018": 2,
+        "20240108": 2,
+        "20241229": 6
+      }
+    },
+    "licence": {
+      "hardware_coverage_counts": {
+        "custom_licence": 1,
+        "explicit": 2,
+        "explicit_in_file": 2,
+        "repo_scope": 5
+      },
+      "importable_on_licence_alone": 8,
+      "spdx_counts": {
+        "Apache-2.0": 4,
+        "CERN-OHL-P-2.0": 3,
+        "MIT": 1,
+        "NOASSERTION": 2
+      }
+    }
+  },
+  "not_claimed": [
+    "not a claim that these boards are unconvertible in principle: the census is two layers deep and stops there, and everything behind the second refusal is unmeasured.",
+    "not a claim that the ten repositories are a sample of anything. They were selected for licence clarity and KiCad-native development, which is a selection on exactly the property being tested, so the conversion rate is a statement about these ten boards and no population.",
+    "not a routing, DRC, placement, timing or memory result. Nothing was routed, applied, written or opened in a GUI.",
+    "not a claim about how hard Edge.Cuts arc support or copper-text envelopes would be. No cost was estimated for either.",
+    "not a legal opinion. The licence rows are this project's determination about its own redistribution, not advice about anyone else's.",
+    "no board byte from any of these repositories is committed by this record. committed_board_bytes is 0, so the sdist grows by no board data at all; measured end to end, the sdist moves 5,269,472 -> 5,305,090 bytes (+35,618, +0.68 %), and every one of those bytes is this artifact, the comparison artifact, a mutation spec, a runner and its tests."
+  ],
+  "question": "Issue #110 needs an externally authored .kicad_pcb family this server can read, and ADR-0107 settled how to license one: per item, from the item's own provenance. B-110 killed PCBench on two grounds at once, licence and format era, which left the honest question unanswered \u2014 is either ground actually binding once you pick upstreams that clear both? This sweep picks single-author or single-organisation open-hardware repositories whose own licence covers their own boards, clears the format era by re-saving each in KiCad 10.0.5, and then converts.",
+  "run_id": "sha256:2890f2e09b751e2148d2328748be30753f955a1749f3fded6bdc67b3681da03f",
+  "schema": "copper-mcp/benchmark/open-hardware-intake-sweep/v1",
+  "source_commit": "4a5fa65d824b22eb1c5f2b97355928591b1de3ff"
+}

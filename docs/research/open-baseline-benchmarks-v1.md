@@ -197,6 +197,23 @@ recording environment; there is no SimpleRouteJson-to-DSN bridge in this reposit
 artifact records `status: not_run` with a reason, and the ledger entry says the comparison in #65
 remains unmeasured. No number is estimated, inferred, or carried over.
 
+> **Amendment — 2026-08-14.** §3's determinations are now carried into a committed comparison table
+> rather than living only here. [B-113](../ledgers/benchmark-ledger.md) declares one row per router
+> baseline this section names — FreeRouting on an environment fact, `tscircuit/autorouting` and
+> PCBWorld on licence facts — with the unmet preconditions named and the roster pinned by a test, so
+> a baseline leaving the table is a test failure rather than a shorter table. The corpora rows are
+> carried too, so no §3 row is silently absent. Two things this section said that are worth restating
+> because the table now depends on them: the dwiel corpus **is** frozen and redistributable in the
+> sense M2's closing condition 3 requires, which is what makes the routing measurement closable
+> today; and a FreeRouting row measured on it would still not be neutral, which the table records as
+> a caveat on that row rather than discovering later.
+>
+> Separately, and outside this note's routing scope: [B-114](../ledgers/benchmark-ledger.md) took
+> §3's own reasoning to the KiCad intake path and found the constraint is not where this note's
+> licence work would suggest. Ten single-author open-hardware boards, verified per item under
+> ADR-0107, eight importable on licence alone, all ten clearing the board format version after a
+> KiCad 10.0.5 re-save — and none converting. The binding constraint there is geometry coverage.
+
 ## 6. Not claimed
 
 Recorded here so the ledger entry can point at one list:
