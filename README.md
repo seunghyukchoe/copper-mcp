@@ -142,9 +142,11 @@ context, without writing a candidate file into the source workspace.
 **Judge a placement.** A typed placement-intent contract and deterministic legalizer, surfaced as a
 non-mutating preview. Seven rule kinds name objects only by scene references and carry exact integer
 parameters; the language has no way to state an absolute coordinate or to permit an overlap. A
-candidate proves exactly four things: pad overlap, board-outline containment, keepout respect, and —
-for Board IR `0.2`'s simple closed octilinear courtyard rings and circles, between shapes drawn on
-the **same courtyard layer** — courtyard overlap.
+candidate reports four independent legality checks: pad overlap, board-outline containment,
+keepout respect, and — for Board IR `0.2`'s simple closed octilinear courtyard rings and circles,
+between shapes drawn on the **same courtyard layer** — courtyard overlap. Each check names what was
+proved and uses `inconclusive` when direction-typed bounds and cores leave a gap; a preview never
+turns that gap into a false KiCad-parity claim ([ADR-0110](docs/adr/0110-placement-boundary-verdicts-bracket-kicad-parity.md)).
 
 **Build a schematic.** Immutable Circuit Intent IR `0.1.0` for bounded two-pin resistor/capacitor
 topology, with a strict codec, canonical content digest, and deterministic in-memory KiCad

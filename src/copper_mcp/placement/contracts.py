@@ -620,10 +620,10 @@ class PlacementLegality:
     def __post_init__(self) -> None:
         if self.pad_overlap not in {"proven_clear", "inconclusive", "violated"}:
             raise PlacementError("pad overlap must be three-valued")
-        if self.outline_containment not in {"proven_inside", "violated"}:
-            raise PlacementError("outline containment is malformed")
-        if self.keepout_respect not in {"proven_clear", "violated"}:
-            raise PlacementError("keepout respect is malformed")
+        if self.outline_containment not in {"proven_inside", "inconclusive", "violated"}:
+            raise PlacementError("outline containment must be three-valued")
+        if self.keepout_respect not in {"proven_clear", "inconclusive", "violated"}:
+            raise PlacementError("keepout respect must be three-valued")
         if self.courtyard_overlap not in {"proven_clear", "inconclusive", "violated"}:
             raise PlacementError("courtyard overlap must be three-valued")
 
@@ -633,8 +633,8 @@ class PlacementLegality:
 
         return (
             self.pad_overlap != "violated"
-            and self.outline_containment == "proven_inside"
-            and self.keepout_respect == "proven_clear"
+            and self.outline_containment != "violated"
+            and self.keepout_respect != "violated"
             and self.courtyard_overlap != "violated"
         )
 

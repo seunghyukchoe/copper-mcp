@@ -658,11 +658,34 @@ class McpSurfaceTests(unittest.TestCase):
                 "drc_evidence",
             },
         )
+        legality = schema["$defs"]["PlacementLegalityContract"]["properties"]
+        self.assertEqual(
+            legality["outline_containment"]["enum"],
+            ["proven_inside", "inconclusive", "violated"],
+        )
+        self.assertEqual(
+            legality["keepout_respect"]["enum"],
+            ["proven_clear", "inconclusive", "violated"],
+        )
         input_schema = tool.input_schema
         self.assertIn("include_drc", json.dumps(input_schema, sort_keys=True))
         live = next(item for item in tools if item.name == "preview_live_placement")
         live_request = live.input_schema["properties"]["request"]
         self.assertEqual(live_request["properties"]["include_drc"]["const"], False)
+
+    def test_an_inconclusive_boundary_survives_the_actual_mcp_boundary(self) -> None:
+        result = self._call(
+            _request(
+                "placement-circle-outline-bracket.kicad_pcb",
+                subjects=["footprint:kicad:91000000-0000-0000-0000-000000000001"],
+            )
+        )
+
+        self.assertFalse(result.is_error)
+        assert result.structured_content is not None
+        candidate = result.structured_content["candidate"]
+        assert candidate is not None
+        self.assertEqual(candidate["evidence"]["legality"]["outline_containment"], "inconclusive")
 
     def test_the_tool_is_annotated_read_only(self) -> None:
         tools = asyncio.run(_server.mcp.list_tools())

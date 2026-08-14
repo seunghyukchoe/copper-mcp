@@ -567,7 +567,12 @@ placement, and the policy-plugin work.
 - [x] Typed placement-intent contract and immutable placement preview/candidates. The seven-rule
   intent language, the revision-bound Board IR footprint view, the deterministic legalizer, the
   dual-digest-bound `PlacementCandidate` and the `preview_placement` MCP tool and CLI command are
-  implemented. A locked footprint cannot be moved. `preview_live_placement` adds the same
+  implemented. Outline and footprint-keepout legality are now three-valued direction brackets:
+  bounds prove inside/clear, cores prove a real boundary crossing/intrusion, and the gap is
+  `inconclusive` rather than a false KiCad-parity violation (ADR-0110; B-116 measured false outline
+  violations **1→0** across the converting corpus). Region rules separately resolve cores for
+  keep-in, bounds for keep-out, and exact positions for alignment/symmetry, closing issue #187's
+  prerequisite for custom pads. A locked footprint cannot be moved. `preview_live_placement` adds the same
   candidate-only pipeline over a byte-confirmed active KiCad snapshot; it requires both scene
   digests and never writes or grants apply authority. File-backed placement apply is tracked as a
   separately authorized gate below; live placement remains proposal-only.

@@ -501,39 +501,73 @@ def _pad_overlap(placed: tuple[_PlacedFootprint, ...], budget: _Budget) -> tuple
 def _outline_containment(
     placed: tuple[_PlacedFootprint, ...], snapshot: BoardIRSnapshot, budget: _Budget
 ) -> str:
+    """Bracket KiCad edge collisions without inventing global containment semantics.
+
+    Bounds entirely inside an outer ring prove the pad is inside.  An under-approximating core
+    crossing an outer or hole boundary proves real copper crosses an edge.  The gap includes both
+    rounded copper whose box clips an edge and copper wholly remote from every edge; KiCad 10.0.5's
+    edge-clearance provider reports neither as a global containment failure, so both are disclosed
+    as ``inconclusive`` rather than collapsed into a parity claim.
+    """
+
     contours = snapshot.content.outline
     if not contours:
         raise _UnsupportedError("a board with no outline cannot bound a placement")
+    inconclusive = False
     for footprint in placed:
         for pad in footprint.pads:
             budget.charge()
-            if not any(rect_inside_ring(pad.bounds, contour.outer) for contour in contours):
-                return "violated"
+            bounds_inside = any(rect_inside_ring(pad.bounds, contour.outer) for contour in contours)
+            core_inside = pad.core is not None and any(
+                rect_inside_ring(pad.core, contour.outer) for contour in contours
+            )
+            if not bounds_inside:
+                core_crosses_edge = (
+                    pad.core is not None
+                    and not core_inside
+                    and any(rect_touches_ring(pad.core, contour.outer) for contour in contours)
+                )
+                if core_crosses_edge:
+                    return "violated"
+                inconclusive = True
             for contour in contours:
                 for hole in contour.holes:
                     budget.charge()
+                    if pad.core is not None and rect_touches_ring(pad.core, hole):
+                        if not rect_inside_ring(pad.core, hole):
+                            return "violated"
                     if rect_touches_ring(pad.bounds, hole):
-                        return "violated"
-    return "proven_inside"
+                        inconclusive = True
+    return "inconclusive" if inconclusive else "proven_inside"
 
 
 def _keepout_respect(
     placed: tuple[_PlacedFootprint, ...], snapshot: BoardIRSnapshot, budget: _Budget
 ) -> str:
+    """Bracket footprint-keepout contact with direction-typed pad geometry.
+
+    Disjoint over-approximating bounds prove clearance; contact by an under-approximating core
+    proves intrusion.  Bounds-only contact is neither proof and remains ``inconclusive``.
+    """
+
     keepouts: tuple[Keepout, ...] = tuple(
         item for item in snapshot.content.keepouts if item.prohibit_footprints
     )
     if not keepouts:
         return "proven_clear"
+    inconclusive = False
     for footprint in placed:
         for pad in footprint.pads:
             for keepout in keepouts:
                 budget.charge()
                 if not set(pad.pad.layer_ids) & set(keepout.layer_ids):
                     continue
-                if rect_touches_ring(pad.bounds, keepout.boundary):
+                if not rect_touches_ring(pad.bounds, keepout.boundary):
+                    continue
+                if pad.core is not None and rect_touches_ring(pad.core, keepout.boundary):
                     return "violated"
-    return "proven_clear"
+                inconclusive = True
+    return "inconclusive" if inconclusive else "proven_clear"
 
 
 def _courtyard_overlap(placed: tuple[_PlacedFootprint, ...], budget: _Budget) -> str:
@@ -603,6 +637,8 @@ def _courtyard_overlap(placed: tuple[_PlacedFootprint, ...], budget: _Budget) ->
 def _resolve_bounds(
     ref: str, placed_by_ref: dict[str, _PlacedFootprint], view: PlacementView
 ) -> Rect:
+    """Resolve the over-approximating region used for clearance and touch requirements."""
+
     footprint = placed_by_ref.get(ref)
     if footprint is not None:
         return footprint.hull
@@ -617,8 +653,51 @@ def _resolve_bounds(
     raise _UnresolvedError("a rule names an object that does not exist on this board")
 
 
-def _centre(rect: Rect) -> tuple[int, int]:
-    return ((rect[0] + rect[2]) // 2, (rect[1] + rect[3]) // 2)
+def _resolve_core(
+    ref: str, placed_by_ref: dict[str, _PlacedFootprint], view: PlacementView
+) -> Rect:
+    """Resolve the under-approximating region used for pad containment requirements.
+
+    Footprint rules retain their existing hull semantics: a footprint is the rule subject, not a
+    copper primitive with a separately modelled attachment core.  Pad rules require a real core
+    and refuse when this Board IR version cannot supply one.
+    """
+
+    footprint = placed_by_ref.get(ref)
+    if footprint is not None:
+        return footprint.hull
+    owner = view.owner_by_pad.get(ref)
+    if owner is not None:
+        parent = placed_by_ref.get(owner)
+        if parent is not None:
+            for pad in parent.pads:
+                if pad.pad.id == ref:
+                    if pad.core is None:
+                        raise _UnsupportedError(
+                            "a rule needs pad attachment geometry this version cannot prove"
+                        )
+                    return pad.core
+    _reject_padless(view, ref)
+    raise _UnresolvedError("a rule names an object that does not exist on this board")
+
+
+def _resolve_centre(
+    ref: str, placed_by_ref: dict[str, _PlacedFootprint], view: PlacementView
+) -> PointNM:
+    """Resolve an exact pose centre; an envelope midpoint is not an identity-bearing position."""
+
+    footprint = placed_by_ref.get(ref)
+    if footprint is not None:
+        return footprint.origin
+    owner = view.owner_by_pad.get(ref)
+    if owner is not None:
+        parent = placed_by_ref.get(owner)
+        if parent is not None:
+            for pad in parent.pads:
+                if pad.pad.id == ref:
+                    return pad.centre
+    _reject_padless(view, ref)
+    raise _UnresolvedError("a rule names an object that does not exist on this board")
 
 
 def _status(residual: int, tolerance: int | None) -> str:
@@ -649,19 +728,20 @@ def _evaluate_rule(
         residual = max(0, gap - rule.max_distance_nm)
     elif isinstance(rule, AlignmentRule):
         axis_index = 0 if rule.axis == "x" else 1
-        values = [
-            _centre(_resolve_bounds(member, placed_by_ref, view))[axis_index]
-            for member in rule.members
-        ]
+        centres = [_resolve_centre(member, placed_by_ref, view) for member in rule.members]
+        values = [centre.x if axis_index == 0 else centre.y for centre in centres]
         residual = max(values) - min(values)
     elif isinstance(rule, SymmetryRule):
         axis_index = 0 if rule.axis == "x" else 1
-        mirror = _centre(_resolve_bounds(rule.about, placed_by_ref, view))[axis_index]
+        mirror_centre = _resolve_centre(rule.about, placed_by_ref, view)
+        mirror = mirror_centre.x if axis_index == 0 else mirror_centre.y
         worst = 0
         for left, right in rule.pairs:
             budget.charge()
-            left_value = _centre(_resolve_bounds(left, placed_by_ref, view))[axis_index]
-            right_value = _centre(_resolve_bounds(right, placed_by_ref, view))[axis_index]
+            left_centre = _resolve_centre(left, placed_by_ref, view)
+            right_centre = _resolve_centre(right, placed_by_ref, view)
+            left_value = left_centre.x if axis_index == 0 else left_centre.y
+            right_value = right_centre.x if axis_index == 0 else right_centre.y
             worst = max(worst, abs((left_value + right_value) - 2 * mirror))
         # Doubling the mirror keeps this exact: comparing midpoints directly would need a
         # division that is not always integral.
@@ -678,10 +758,11 @@ def _evaluate_rule(
         residual = abs(actual - rule.offset_nm)
     elif isinstance(rule, RegionRule):
         boundary = _boundary_ring(rule.boundary_ref, snapshot)
-        bounds = _resolve_bounds(rule.subject, placed_by_ref, view)
         if rule.mode == "keep_in":
-            residual = 0 if rect_inside_ring(bounds, boundary) else 1
+            core = _resolve_core(rule.subject, placed_by_ref, view)
+            residual = 0 if rect_inside_ring(core, boundary) else 1
         else:
+            bounds = _resolve_bounds(rule.subject, placed_by_ref, view)
             residual = 1 if rect_touches_ring(bounds, boundary) else 0
     elif isinstance(rule, OrientationRule):
         footprint = placed_by_ref.get(rule.subject)
