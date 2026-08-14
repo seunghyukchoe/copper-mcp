@@ -1,0 +1,159 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "SD1-adr-0097-widening-unexempted",
+      "file": "scripts/check_schema_sets.py",
+      "anchor": "    (\n        \"schemas/board-ir/0.2.0.schema.json\",\n        \"0.2.0\",\n        \"v0.8.0\",\n    ): \"ADR-0105 / D-197: `far_side_courtyards` and `far_side_courtyard_circles` added to \"\n    \"`$defs/footprint` by ADR-0097 (widening) -- issue #172's instance\",\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_schema_sets.py::test_the_gate_is_green_on_this_tree_with_exactly_four_recorded_exemptions",
+        "tests/test_check_schema_sets.py::test_the_four_exemptions_span_three_releases_and_two_directions"
+      ]
+    },
+    {
+      "id": "SD2-adr-0097-widening-reapplied-live",
+      "file": "schemas/board-ir/0.2.0.schema.json",
+      "anchor": "        \"far_side_courtyards\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"maxItems\": 64,\n          \"items\": {\n            \"$ref\": \"#/$defs/ring\"\n          }\n        },\n",
+      "replacement": "        \"far_side_courtyard_arcs\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"maxItems\": 64,\n          \"items\": {\n            \"$ref\": \"#/$defs/ring\"\n          }\n        },\n        \"far_side_courtyards\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"maxItems\": 64,\n          \"items\": {\n            \"$ref\": \"#/$defs/ring\"\n          }\n        },\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_schema_sets.py::test_the_gate_is_green_on_this_tree_with_exactly_four_recorded_exemptions",
+        "tests/test_check_schema_sets.py::test_the_new_0_3_0_schema_is_not_reported_as_drift_against_0_2_0"
+      ]
+    },
+    {
+      "id": "SD3-required-key-added-to-a-frozen-schema",
+      "file": "schemas/board-ir/0.2.0.schema.json",
+      "anchor": "      \"required\": [\n        \"id\",\n        \"origin\",\n        \"rotation_udeg\",\n        \"side\",\n        \"pad_ids\",\n        \"courtyards\",\n        \"locked\"\n      ],\n",
+      "replacement": "      \"required\": [\n        \"id\",\n        \"origin\",\n        \"rotation_udeg\",\n        \"side\",\n        \"pad_ids\",\n        \"courtyards\",\n        \"courtyard_circles\",\n        \"locked\"\n      ],\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_schema_sets.py::test_the_gate_is_green_on_this_tree_with_exactly_four_recorded_exemptions",
+        "tests/test_check_schema_sets.py::test_the_new_0_3_0_schema_is_not_reported_as_drift_against_0_2_0"
+      ]
+    },
+    {
+      "id": "SD4-gate-stops-extracting-required",
+      "file": "scripts/check_schema_sets.py",
+      "anchor": "                found[f\"{path} |{_REQUIRED}\"] = sorted(node.get(_REQUIRED, []))\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_schema_sets.py::test_a_required_key_addition_is_a_narrowing",
+        "tests/test_check_schema_sets.py::test_it_reports_the_drc_summary_required_key_narrowing_when_that_exemption_is_removed"
+      ]
+    },
+    {
+      "id": "SD5-narrowing-misreported-as-widening",
+      "file": "scripts/check_schema_sets.py",
+      "anchor": "    if key.endswith(f\"|{_REQUIRED}\"):\n        return bool(set(after) - set(before))\n",
+      "replacement": "    if key.endswith(f\"|{_REQUIRED}\"):\n        return False\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_schema_sets.py::test_a_required_key_addition_is_a_narrowing",
+        "tests/test_check_schema_sets.py::test_it_reports_the_drc_summary_required_key_narrowing_when_that_exemption_is_removed"
+      ]
+    },
+    {
+      "id": "SD6-working-tree-never-compared",
+      "file": "scripts/check_schema_sets.py",
+      "anchor": "    working_tree = _working_tree_schemas()\n    _compare(WORKING_TREE, previous, working_tree, failures, used)\n",
+      "replacement": "    working_tree = _working_tree_schemas()\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_schema_sets.py::test_the_working_tree_is_compared_against_the_newest_release_tag",
+        "tests/test_check_schema_sets.py::test_a_working_tree_required_key_addition_fails_as_a_narrowing"
+      ]
+    },
+    {
+      "id": "SD7-version-guard-inverted",
+      "file": "scripts/check_schema_sets.py",
+      "anchor": "        if declared_version(path, before[path]) != version:\n",
+      "replacement": "        if declared_version(path, before[path]) == version:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_schema_sets.py::test_the_gate_is_green_on_this_tree_with_exactly_four_recorded_exemptions",
+        "tests/test_check_schema_sets.py::test_the_working_tree_is_compared_against_the_newest_release_tag"
+      ]
+    },
+    {
+      "id": "SD8-stale-exemption-no-longer-fails",
+      "file": "scripts/check_schema_sets.py",
+      "anchor": "    for key in sorted(set(EXEMPT_DRIFT) - used):\n",
+      "replacement": "    for key in sorted(set()):\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_schema_sets.py::test_an_exemption_that_matches_no_drift_fails_the_run"
+      ]
+    },
+    {
+      "id": "SD9-absent-additional-properties-read-as-closed",
+      "file": "scripts/check_schema_sets.py",
+      "anchor": "                found[f\"{path} |{_ADDITIONAL}\"] = node.get(_ADDITIONAL, True)\n",
+      "replacement": "                found[f\"{path} |{_ADDITIONAL}\"] = node.get(_ADDITIONAL, False)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_schema_sets.py::test_an_absent_additional_properties_is_read_as_open",
+        "tests/test_check_schema_sets.py::test_each_keyword_is_classified_by_the_direction_it_breaks"
+      ]
+    },
+    {
+      "id": "CV1-codec-accepts-any-envelope-version",
+      "file": "src/copper_mcp/board_ir/codec.py",
+      "anchor": "            != BOARD_IR_SCHEMA_VERSION\n        ):\n            raise ValueError(\"snapshot schema version is unsupported\")\n",
+      "replacement": "            != BOARD_IR_SCHEMA_VERSION\n        ):\n            pass\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir_schema.py::test_the_codec_refuses_a_persisted_v0_2_0_envelope_with_a_typed_code",
+        "tests/test_board_ir_schema.py::test_active_schema_and_decoder_reject_legacy_v0_1_snapshot"
+      ]
+    },
+    {
+      "id": "CV2-version-bump-reverted",
+      "file": "src/copper_mcp/board_ir/types.py",
+      "anchor": "BOARD_IR_SCHEMA_VERSION = \"0.3.0\"\n",
+      "replacement": "BOARD_IR_SCHEMA_VERSION = \"0.2.0\"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir_schema.py::test_adapter_output_matches_golden_fixture_and_schema",
+        "tests/test_board_ir_service.py::test_describes_a_supported_board_without_disclosing_content"
+      ]
+    },
+    {
+      "id": "SD10-shape-change-claims-a-direction",
+      "file": "scripts/check_schema_sets.py",
+      "anchor": "            lines.append(f\"added {key} = {after[key]!r} [shape]\")\n",
+      "replacement": "            lines.append(f\"added {key} = {after[key]!r} [widening]\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_schema_sets.py::test_a_whole_constraint_site_appearing_is_labelled_shape_and_claims_no_direction"
+      ]
+    },
+    {
+      "id": "SD11-published-schema-removal-goes-unnoticed",
+      "file": "scripts/check_schema_sets.py",
+      "anchor": "    for path in sorted(set(before) - set(after)):\n",
+      "replacement": "    for path in sorted(set()):\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_schema_sets.py::test_removing_a_published_schema_fails_the_run"
+      ]
+    },
+    {
+      "id": "SD12-stale-release-tag-list-goes-unnoticed",
+      "file": "scripts/check_schema_sets.py",
+      "anchor": "    _check_tags_are_current(failures)\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_schema_sets.py::test_a_release_tag_this_checker_has_never_heard_of_fails_the_run"
+      ]
+    }
+  ]
+}

@@ -26,7 +26,7 @@ Authoritative DRC remains required before routing through vias can be marked com
 
 | Surface | First-slice contract |
 |---|---|
-| Snapshot | Canonical, digest-verified Board IR `0.2.0` |
+| Snapshot | Canonical, digest-verified Board IR `0.3.0` |
 | Request | One stable net ID, one stable signal-layer ID, exact base revision, seed, integer settings |
 | Connectivity | Exactly two pads belonging to the net; both accessible on the selected layer |
 | Constraints | One net-class width/clearance assignment; no selected-net length or differential-pair rule |

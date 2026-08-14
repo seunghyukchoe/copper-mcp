@@ -284,7 +284,7 @@
     }
   },
   "schema": "copper.board-ir",
-  "schema_version": "0.2.0",
+  "schema_version": "0.3.0",
   "snapshot_digest": "sha256:157661bfa1c007a8d54ee2cc591eddabb2dbcda2925a62348a283f467ea27878",
   "unexpected": true
 }

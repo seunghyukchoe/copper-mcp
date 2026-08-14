@@ -100,6 +100,10 @@ contract.
   from the source entirely, nineteen pad fields that stop matching the generic sentence, courtyard
   overlap now paired by drawn layer, the new `FILL_EVIDENCE_MISMATCH` code, and a published schema
   widened in place under an unchanged version.
+- [CopperMCP 0.9.0 migration](migrations/copper-mcp-0.9.0.md) — `BOARD_IR_SCHEMA_VERSION` moves to
+  `0.3.0` and `0.2.0` is frozen where it stands: no content address moves, a persisted `0.2.0`
+  envelope stops decoding, and `0.2.0` as published spans three different accepted sets across
+  `v0.5.0`–`v0.8.0`.
 - [Public media assets](assets/README.md) — project media, with provenance; not routing or
   benchmark evidence.
 

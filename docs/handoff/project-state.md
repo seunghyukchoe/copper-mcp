@@ -34,7 +34,7 @@ the package version:
 
 | Contract | Version | Constant that decides it | Note |
 |---|---|---|---|
-| Board IR | `0.2.0` | `board_ir.types.BOARD_IR_SCHEMA_VERSION` | `0.1.0` remains as an **immutable legacy** schema, kept as compatibility evidence. `0.1` snapshots are re-converted from the source board, never auto-migrated — see [the 0.1 → 0.2 migration](../migrations/board-ir-0.2.md) and [the Board IR contract](../architecture/board-ir.md). |
+| Board IR | `0.3.0` | `board_ir.types.BOARD_IR_SCHEMA_VERSION` | `0.2.0` and `0.1.0` remain as **immutable legacy** schemas, kept as compatibility evidence; `0.2.0` is byte-frozen by [ADR-0105](../adr/0105-a-schema-version-moves-with-its-accepted-set.md) and, as published, spans three accepted sets across `v0.5.0`–`v0.8.0`. Old snapshots are re-converted from the source board, never auto-migrated — see [the 0.1 → 0.2 migration](../migrations/board-ir-0.2.md), [the 0.9.0 note](../migrations/copper-mcp-0.9.0.md) and [the Board IR contract](../architecture/board-ir.md). |
 | Circuit Scene | `0.3.0` | `circuit_scene.SCENE_VERSION` | There is no compatibility mode. A truncated scene now withholds a whole object kind rather than returning an empty array. |
 | Circuit Intent IR | `0.1.0` | `circuit_ir.types.CIRCUIT_INTENT_SCHEMA_VERSION` | See [the Circuit Intent contract](../architecture/circuit-intent.md). |
 | Router | `astar-grid/0.7.0` | `routing.astar.ROUTER_VERSION` | Advanced in `0.7.0`; every stored candidate and bundle identity must be re-derived. No path geometry changed. Candidates recorded under `0.4.0`–`0.6.0` still select their historical search behaviour for replay. |

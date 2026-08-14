@@ -178,15 +178,17 @@ never silently widens it.
 | [0102](0102-an-evaluation-must-observe-a-permit.md) | A refusal evaluation must observe a permit, and prove it kept observing one | Accepted |
 | [0103](0103-a-candidate-records-the-model-that-produced-it.md) | A candidate records the obstacle model that produced it, and a replay refuses every other one | Accepted |
 | [0104](0104-fill-vertex-budget-behind-a-parse.md) | The fill-vertex budget sits behind a parse, and is calibrated as what it is | Accepted |
+| [0105](0105-a-schema-version-moves-with-its-accepted-set.md) | A schema version moves with its accepted set, and `0.2.0` is frozen where it stands | Accepted |
 | [0107](0107-an-aggregators-licence-does-not-govern-what-it-aggregated.md) | An aggregator's repository licence does not govern the data it aggregated | Accepted |
 
-One hundred and seven numbers allocated, one hundred records, no duplicates — and
+One hundred and seven numbers allocated, one hundred and one records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
 its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
 the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
-and 0086 are unused; see **Known gaps** above. 0105 and 0106 are **live claims on open branches**
-at the time of writing, not gaps — 0107 stepped over both rather than racing them, which is the
-same mechanism the [ledger README](../ledgers/README.md) describes for `D-`/`R-`/`B-` numbers.
+and 0086 are unused; see **Known gaps** above. 0107 was allocated over 0105 and 0106 rather than
+racing them, the mechanism the [ledger README](../ledgers/README.md) describes for `D-`/`R-`/`B-`
+numbers; 0105 has since landed with this record, and **0106 alone remains a live claim on an open
+branch**, not a gap. If that branch is abandoned the number is spent like any other.
 
 ## Reading order
 
@@ -203,7 +205,7 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - **Live KiCad IPC** — 0029, 0030, 0031, 0032, 0033, 0044, 0063, 0069, 0074.
 - **Durable jobs and persistence** — 0043, 0046, 0047, 0048.
 - **Mutation and authorization** — 0001, 0025, 0059, 0074.
-- **Evidence, evaluation, and review boundaries** — 0041, 0052, 0054, 0098, 0102, 0107.
+- **Evidence, evaluation, and review boundaries** — 0041, 0052, 0054, 0098, 0102, 0105, 0107.
 
 - [ADR-0001: Candidate-first mutation model](0001-candidate-first.md)
 - [ADR-0002: MCP is an external adapter](0002-mcp-adapter.md)
@@ -304,4 +306,5 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0102: A refusal evaluation must observe a permit, and prove it kept observing one](0102-an-evaluation-must-observe-a-permit.md)
 - [ADR-0103: A candidate records the obstacle model that produced it, and a replay refuses every other one](0103-a-candidate-records-the-model-that-produced-it.md)
 - [ADR-0104: The fill-vertex budget sits behind a parse, and is calibrated as what it is](0104-fill-vertex-budget-behind-a-parse.md)
+- [ADR-0105: A schema version moves with its accepted set, and `0.2.0` is frozen where it stands](0105-a-schema-version-moves-with-its-accepted-set.md)
 - [ADR-0107: An aggregator's repository licence does not govern the data it aggregated](0107-an-aggregators-licence-does-not-govern-what-it-aggregated.md)

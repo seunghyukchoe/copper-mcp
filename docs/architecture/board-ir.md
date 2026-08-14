@@ -1,7 +1,7 @@
 # Board IR and KiCad Adapter Contracts
 
 Board IR is the deterministic board snapshot shared by routing, replay, placement, benchmark, and
-MCP application layers. The current contract is `copper.board-ir` version `0.2.0`. It is implemented
+MCP application layers. The current contract is `copper.board-ir` version `0.3.0`. It is implemented
 as a pure domain package, strict JSON codec, JSON Schema, and a narrow read-only KiCad converter.
 
 See [ADR-0005](../adr/0005-canonical-board-ir.md) for the original integer/digest contract and
@@ -14,9 +14,10 @@ See [ADR-0005](../adr/0005-canonical-board-ir.md) for the original integer/diges
 | `copper_mcp.board_ir.types` | Immutable typed units, geometry, constraints, items, and snapshot envelope. |
 | `copper_mcp.board_ir.validation` | Reference, identity, budget, degeneracy, and exact polygon-topology checks. |
 | `copper_mcp.board_ir.canonical` | Normalization, canonical JSON bytes, constraint digest, and snapshot digest. |
-| `copper_mcp.board_ir.codec` | Strict bounded decoding of untrusted `0.2.0` JSON. |
+| `copper_mcp.board_ir.codec` | Strict bounded decoding of untrusted `0.3.0` JSON. |
 | `copper_mcp.adapters.kicad_board_ir` | Fail-closed conversion of the documented KiCad subset from bytes. |
-| [`0.2.0.schema.json`](../../schemas/board-ir/0.2.0.schema.json) | Active portable serialized-envelope contract. |
+| [`0.3.0.schema.json`](../../schemas/board-ir/0.3.0.schema.json) | Active portable serialized-envelope contract. |
+| [`0.2.0.schema.json`](../../schemas/board-ir/0.2.0.schema.json) | Byte-frozen by ADR-0105; the copy a `v0.5.0`–`v0.8.0` consumer holds. |
 | [`0.1.0.schema.json`](../../schemas/board-ir/0.1.0.schema.json) | Immutable legacy compatibility contract. |
 
 The board model has no dependency on MCP, GUI APIs, provider SDKs, routing backends, or filesystem
@@ -29,7 +30,7 @@ The serialized shape is:
 ```json
 {
   "schema": "copper.board-ir",
-  "schema_version": "0.2.0",
+  "schema_version": "0.3.0",
   "snapshot_digest": "sha256:<64 lowercase hex characters>",
   "content": {
     "units": {"distance": "nm", "angle": "udeg"},
@@ -105,8 +106,9 @@ board. The schema is the field-level reference.
   solder paste, the Gerber aperture attribute, pick-and-place "exclude all TH", the Edge.Cuts
   clearance DRC exemption, a distinct property-system value user DRC rules can name, and four
   reporting surfaces — and every one is outside what a Board IR `Pad` claims. `PadKind` gains
-  **no member**: nothing in this repository would read it, and widening the published `0.2.0`
-  enum in place would break a consumer promised a closed three-value domain. The token is
+  **no member**: nothing in this repository would read it, and widening the published enum in
+  place would break a consumer promised a closed three-value domain — the rule ADR-0105 now
+  states once and gates. The token is
   therefore discarded, and `ConversionResult.edge_connector_pad_count` reports how many pads it
   happened to — an **in-process** count that reaches no MCP contract, CLI output or scene, exactly
   like the group count above. What bounds the loss is the write path: both patch adapters are
@@ -381,24 +383,37 @@ treat `snapshot is None` as a hard failure rather than attempting partial routin
 ## Evolution rules
 
 Breaking canonical changes require a new schema version, fixtures, compatibility tests, migration
-guidance, ADR review, and changelog entry. Source-adapter coverage may expand under `0.2.0` only when
+guidance, ADR review, and changelog entry. Source-adapter coverage may expand under the active version only when
 the resulting canonical meaning is unchanged and the accepted/rejected matrix plus fixtures are
 updated. Unknown Board IR versions and unknown fields remain errors.
 
-> **`0.2.0.schema.json` was widened in place, and this rule did not stop it.** ADR-0097 added
-> `far_side_courtyards` and `far_side_courtyard_circles` to `$defs/footprint`, whose
-> `additionalProperties` is `false`, under the same filename, `$id` and version. A consumer holding
-> the copy of `0.2.0.schema.json` shipped before that change will **reject a valid snapshot of any
-> board carrying a far-side courtyard**; re-download the schema. Nothing caught it because the keys
-> are emitted only when non-empty, so no golden digest and no version constant moved, and no gate
-> has an opinion about a published schema's accepted set. This is not a claim that any emitted
-> payload was ever invalid against the schema shipped beside it — the break is between *versions of
-> the schema file*. Whether `0.2.0` is corrected retroactively or the next widening bumps to
-> `0.3.0`, and whether a mechanical gate should exist for this class at all, are open in
-> [#172](https://github.com/seunghyukchoe/copper-mcp/issues/172) and are deliberately not decided
-> here. Note the measured cost recorded in ADR-0096: bumping `BOARD_IR_SCHEMA_VERSION` does **not**
-> move a snapshot digest, because the version lives in the envelope rather than in the content
-> payload.
+> **`0.2.0.schema.json` was widened in place three times, and this rule did not stop any of them.**
+> The open questions this paragraph used to carry are answered by
+> [ADR-0105](../adr/0105-a-schema-version-moves-with-its-accepted-set.md) (`D-197`, #172).
+>
+> The sweep found **four** in-place accepted-set changes across **three** releases and **three**
+> files, in **two** directions: `audio-benchmark-catalog/0.1.0` at `v0.3.0` and `drc-summary` at
+> `v0.7.0` each added a **required** key, which is a *narrowing* and invalidates documents already
+> written; `board-ir/0.2.0` was widened at `v0.7.0` (`courtyard_circles`, nullable `net_id`) and
+> again at `v0.8.0` by ADR-0097 (`far_side_courtyards`, `far_side_courtyard_circles`), which is
+> #172's instance.
+>
+> **The decision:** `BOARD_IR_SCHEMA_VERSION` is `0.3.0`; `0.2.0.schema.json` is **frozen
+> permanently** at its `v0.8.0` bytes and is not corrected retroactively, because a correction
+> cannot reach a downloaded copy and would produce a fourth accepted set for one version string.
+> **`0.2.0` as published therefore spans three accepted sets across `v0.5.0`–`v0.8.0`, and the
+> authoritative copy for a snapshot is the one shipped alongside the release that produced it.**
+> The [0.9.0 migration note](../migrations/copper-mcp-0.9.0.md) carries the table.
+>
+> **The gate:** `scripts/check_schema_sets.py`, in `make lint` and in CI, fails any
+> `schemas/**/*.json` accepted-set change at an unmoved version, in either direction, with the four
+> historical instances carried as exemptions that must each match a real change. It is a floor
+> rather than a proof — `R-151` names the keywords it cannot see.
+>
+> This is still not a claim that any emitted payload was ever invalid against the schema shipped
+> beside it; the break is between *versions of the schema file*. The bump's cost was measured
+> rather than reasoned: it moves **no** snapshot digest, because the version lives in the envelope
+> rather than in the content payload.
 
 Serialized 0.1 snapshots cannot be upgraded by inventing missing parents. Preserve them against the
 legacy schema and re-convert the original source as described in the

@@ -8,6 +8,25 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- **`BOARD_IR_SCHEMA_VERSION` moves from `0.2.0` to `0.3.0`, and `0.2.0` is frozen where it
+  stands.** `schemas/board-ir/0.3.0.schema.json` is the accepted set for a new document;
+  `schemas/board-ir/0.2.0.schema.json` is byte-frozen at its `v0.8.0` bytes and is **not** corrected
+  retroactively. A persisted `0.2.0` envelope no longer decodes — the codec refuses it with a typed
+  `schema.invalid` code — so re-convert from the source `.kicad_pcb`; there is no auto-migration,
+  exactly as `0.1` → `0.2` had none. `BoardIrSummary.ir_schema_version` now reports `0.3.0`.
+  **No content address moves:** the snapshot digest, the constraint digest and the source revision
+  are byte-identical, the encoded envelope is 4,280 bytes before and after, and it differs at
+  exactly one byte — proved by construction, not asserted. The migration note states plainly that
+  **`0.2.0` as published spans three accepted sets across `v0.5.0`–`v0.8.0`** and that the
+  authoritative copy for a snapshot is the one shipped alongside the release that produced it.
+  ([ADR-0105](docs/adr/0105-a-schema-version-moves-with-its-accepted-set.md), `D-197`,
+  [migration note](docs/migrations/copper-mcp-0.9.0.md),
+  [issue #172](https://github.com/seunghyukchoe/copper-mcp/issues/172))
+  - ADR-0096 is **amended by name**: it articulated the rule and then declined the bump on a cost
+    it had not measured. PR #149 measured it; that measurement was re-verified here and found to
+    have aged by one test — **six move, not the five `D-186` recorded** — which is corrected in
+    `D-197` rather than by editing `D-186`.
+
 - **The excessive-agency evaluation records an unconvertible board instead of aborting on one.**
   `_run_family` raised `EvaluationError` on the first board that would not convert to Board IR, so
   a single unreadable board in any project family took the whole artifact with it. It now records
@@ -19,6 +38,21 @@ All notable changes are documented here. The format follows
   notice that, since they ask whether the permit and the escape routes were reached *somewhere*.
   The suite's counts are unchanged (136 cases, 90 passed, 0 failed, 46 not run) because no project
   family was added; the artifact now reports four controls rather than three.
+
+### Added
+
+- **A schema accepted-set drift gate**, `scripts/check_schema_sets.py`, in `make lint` and in CI.
+  It fails when any `schemas/**/*.json` accepted set — property names, `additionalProperties`,
+  `required`, `enum`, `const`, union `type` — changes while the declared version does not, sweeping
+  every consecutive release tag and the newest tag against the working tree, and labelling each
+  difference **narrowing** or **widening**. Both directions matter: of the four historical
+  instances it records, two are required-key additions, which invalidate documents already written
+  rather than merely making an older consumer over-refuse. The four are carried as exemptions keyed
+  `(file, version, tag)`, each naming `D-197`, under `EXEMPT_LABEL_RECORDS`' discipline — an
+  exemption matching no real drift fails the run. It is a floor and not a proof; `R-151` names what
+  it cannot see. It also fails when a published schema is deleted, and when a release tag exists
+  that its own tag list omits. Fourteen committed mutants, all killed
+  ([`docs/mutants/2026-08-14-schema-set-drift.json`](docs/mutants/2026-08-14-schema-set-drift.json)).
 
 ### Documentation
 

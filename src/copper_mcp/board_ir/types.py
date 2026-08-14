@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 BOARD_IR_SCHEMA = "copper.board-ir"
-BOARD_IR_SCHEMA_VERSION = "0.2.0"
+BOARD_IR_SCHEMA_VERSION = "0.3.0"
 JSON_SAFE_INTEGER = (1 << 53) - 1
 NM_PER_MM = 1_000_000
 UDEG_PER_DEGREE = 1_000_000

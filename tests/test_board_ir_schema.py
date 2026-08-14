@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Callable
 from copy import deepcopy
@@ -18,11 +19,18 @@ from copper_mcp.board_ir import (
 )
 
 TEST_ROOT = Path(__file__).parent
+# The directory names the era the boards under it were authored in, not the envelope version its
+# golden carries.  `board-ir-v0.1/subset.kicad_pcb` has been the source board for the active
+# golden since `0.2.0`, and after ADR-0105 the active golden in `board-ir-v0.2/` is a `0.3.0`
+# envelope.  Renaming would move a dozen `.kicad_pcb` paths that no version bump touches.
 ACTIVE_FIXTURE_ROOT = TEST_ROOT / "fixtures" / "board-ir-v0.2"
 LEGACY_FIXTURE_ROOT = TEST_ROOT / "fixtures" / "board-ir-v0.1"
 SCHEMA_ROOT = TEST_ROOT.parent / "schemas" / "board-ir"
-SCHEMA_PATH = SCHEMA_ROOT / "0.2.0.schema.json"
+SCHEMA_PATH = SCHEMA_ROOT / "0.3.0.schema.json"
 LEGACY_SCHEMA_PATH = SCHEMA_ROOT / "0.1.0.schema.json"
+# `0.2.0` is byte-frozen by ADR-0105 and no longer the accepted set for a new document.  It is
+# kept, and checked below, as the copy a consumer of a v0.5.0-v0.8.0 release is holding.
+FROZEN_V0_2_0_SCHEMA_PATH = SCHEMA_ROOT / "0.2.0.schema.json"
 VALID_FIXTURE = ACTIVE_FIXTURE_ROOT / "schema-valid.json"
 INVALID_FIXTURE = ACTIVE_FIXTURE_ROOT / "schema-invalid.json"
 LEGACY_VALID_FIXTURE = LEGACY_FIXTURE_ROOT / "schema-valid.json"
@@ -88,6 +96,74 @@ def test_active_schema_and_decoder_reject_legacy_v0_1_snapshot() -> None:
     assert list(_validator().iter_errors(payload))
     with pytest.raises(BoardIRValidationError) as caught:
         decode_snapshot_json(encoded)
+
+    assert caught.value.code == "schema.invalid"
+
+
+# The `0.2.0`-as-published envelope for the subset board, digested at `v0.8.0`.  ADR-0105 froze
+# `0.2.0` rather than correcting it, so this artifact is not committed a second time: it is
+# recovered from the active golden by substituting the version string, which is the whole of what
+# the bump moved.  `git show v0.8.0:tests/fixtures/board-ir-v0.2/schema-valid.json | shasum -a 256`
+# reproduces it.
+PUBLISHED_V0_2_0_ENVELOPE_SHA256 = (
+    "3a4edf3732624c836860a112d3d060778b6e6b28f3ee6fc5f8863eeacba0efe6"
+)
+PUBLISHED_V0_2_0_ENVELOPE_BYTES = 4_280
+
+
+def test_the_version_bump_moved_the_envelope_by_its_version_string_and_nothing_else() -> None:
+    """ADR-0105, proved by construction rather than by a second committed fixture.
+
+    Substituting `0.2.0` back into the active golden must reproduce the `0.2.0`-as-published
+    bytes exactly.  If any other byte had moved the substitution would not reach the recorded
+    digest, so this is the whole claim and not a sample of it.  `"0.2.0"` and `"0.3.0"` are the
+    same width, which is why the byte count is unchanged as well.
+    """
+
+    active = VALID_FIXTURE.read_bytes()
+
+    assert active.count(b'"0.3.0"') == 1
+    published = active.replace(b'"0.3.0"', b'"0.2.0"')
+
+    assert len(published) == len(active) == PUBLISHED_V0_2_0_ENVELOPE_BYTES
+    assert hashlib.sha256(published).hexdigest() == PUBLISHED_V0_2_0_ENVELOPE_SHA256
+
+
+def test_the_frozen_v0_2_0_schema_still_accepts_the_envelope_it_was_published_beside() -> None:
+    """The freeze is a promise to a consumer holding the `0.5.0`-`0.8.0` copy, so it is checked.
+
+    ADR-0105 declined to correct `0.2.0` retroactively.  That is only worth anything if the
+    frozen copy still accepts the documents it accepted when it shipped.
+    """
+
+    published = VALID_FIXTURE.read_bytes().replace(b'"0.3.0"', b'"0.2.0"')
+    frozen = Draft202012Validator(_load_json(FROZEN_V0_2_0_SCHEMA_PATH))
+
+    assert list(frozen.iter_errors(json.loads(published))) == []
+    # And the active schema rejects it, on the version and only on the version.
+    errors = list(_validator().iter_errors(json.loads(published)))
+    assert [(error.validator, list(error.absolute_path)) for error in errors] == [
+        ("const", ["schema_version"])
+    ]
+
+
+def test_the_codec_refuses_a_persisted_v0_2_0_envelope_with_a_typed_code() -> None:
+    """The largest real cost of ADR-0105's bump, pinned rather than described.
+
+    Anyone storing `0.2.0` snapshots must re-convert from the source board; the decoder will not
+    read them.  The refusal is typed (`schema.invalid`), not an uncaught exception.
+
+    The code is **not** version-specific -- `schema.invalid` also covers "not Board IR JSON at
+    all", and the same code is what a `0.1` envelope gets.  A caller cannot tell a stale version
+    from malformed bytes by the code alone.  That is recorded rather than repaired here: a new
+    discriminated code is a diagnostic-vocabulary change with its own migration cost, and
+    ADR-0105 is about the envelope version.
+    """
+
+    persisted = VALID_FIXTURE.read_bytes().replace(b'"0.3.0"', b'"0.2.0"')
+
+    with pytest.raises(BoardIRValidationError) as caught:
+        decode_snapshot_json(persisted)
 
     assert caught.value.code == "schema.invalid"
 

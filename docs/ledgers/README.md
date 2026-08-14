@@ -108,6 +108,23 @@ The rules:
    branches that both read the same "next free" line and neither of which will conflict textually
    with the other, because they will write the same value.
 
+   The sixth round runs the mechanism from the other end, and it is the first one written *after*
+   part of it resolved rather than while every claim was still live. Issue #172's record took the
+   *lowest* free numbers -- `D-197`/`R-151` and `ADR-0105` -- while two siblings on the same base
+   stepped over it by agreement: issue #110 holding `ADR-0107`/`D-199`/`R-153`/`B-110`, and issue
+   #164 holding `ADR-0106`/`D-198`/`R-152`/`SEC-146`/`B-109`. **#110's set has since landed** as
+   PR #179, so `ADR-0107`, `D-199`, `R-153` and `B-110` are filled and are not claims of any kind.
+   **#164's set is still open**, so `ADR-0106`, `D-198`, `R-152`, `SEC-146` and `B-109` are **live
+   claims, not gaps**, and the checker reports the unfilled ones as unallocated because it cannot
+   see an unmerged branch; if that branch is abandoned they become permanent gaps like any other
+   spent number, and this paragraph becomes the correction to make. Note the consequence of the
+   landing order: `D-199` merged before `D-197`, and the ledger reads correctly anyway because
+   rows are ordered by ID rather than by merge date -- which is the case rule 1's closing
+   paragraph describes, observed again here. Issue #172's record also declined a pre-assigned
+   `SEC-145` under the same discipline rule 4 applies to `B-` numbers: it checked rather than
+   assumed, found the whole `src/` diff to be one string literal and the codec's change to accept
+   strictly *less* input, and spent no number for a security review with nothing to review.
+
    **A row that has only been pushed to a branch is not yet a record, and rule 3 does not reach
    it.** Adversarial review found a false mechanism in `D-186` while its pull request was still
    open. The first instinct was to append a correction row, and that was wrong. Append-only
