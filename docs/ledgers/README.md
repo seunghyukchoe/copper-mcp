@@ -23,8 +23,8 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-199` | `D-200` |
-| [Risk register](risk-register.md) | `R-` | `R-153` | `R-154` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-202` | `D-203` |
+| [Risk register](risk-register.md) | `R-` | `R-155` | `R-156` |
 | [Security review ledger](security-ledger.md) | `SEC-` | `SEC-146` | `SEC-147` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-110` | `B-111` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
@@ -93,6 +93,25 @@ The rules:
    zero changed verdicts and is explicitly not claimed, and the reachability figure the record
    needed -- 14 of 18 corpus boards carrying an island above the ordered-layer ceiling -- is
    `B-108`'s existing per-run count, cited rather than re-measured. No `B-` number was spent.
+
+   The seventh round is the process-checker record (`D-202`/`R-155`) stepping over sibling waves by
+   **pre-assignment** rather than by discovery. It was handed numbers above the registry's next-free
+   line while that line still read `D-200`/`R-154`, which is the mechanism working from the other
+   end: the step-over was decided before the branches opened rather than after one of them was
+   found. `D-200`, `D-201`, `R-154` and `SEC-147` are therefore treated here as **live claims, not
+   gaps** — this record cannot see an unmerged branch and does not assert one, only that it did not
+   take those numbers. The checker reports the unfilled ones as unallocated for the same reason; if
+   an intervening number is never filled it becomes a permanent gap like any other spent number,
+   and this paragraph becomes the correction to make.
+   This record also **declined its pre-assigned `SEC-148`**, for the same
+   reason `SEC-145` was declined one round earlier and stated the same way: the change widens an
+   **output** surface — one additive map on `BoardIrSummary` — and no input surface at all. No new
+   byte is accepted from a board, an MCP argument or an environment value, the map's values are
+   integers and its keys are this repository's own field names, and a test proves a distinctive
+   property key and value reach no output. `SEC-148` is now a permanent spent number. No `B-`
+   number was pre-assigned or taken either: the hosted CI durations this record measures are a
+   fact about GitHub's runners rather than about this project's behaviour, and they live in
+   `.github/ci-budget-calibration.json`, which the checker reads, rather than in a benchmark row.
 
    The fifth round is this record stepping over **three** live claims at once, in every ID space
    at the same time. Issue #165 (`D-195`/`R-150`/`SEC-144`/`B-108`, ADR-0104) was allocated while

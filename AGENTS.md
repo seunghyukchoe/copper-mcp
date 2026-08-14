@@ -19,8 +19,8 @@ bounded operations, but must never bypass validation or apply model-generated co
 ## Commands
 
 - `make test`: dependency-light unit tests.
-- `make lint`: Ruff plus the version, ledger, ADR-number, documentation-link, audio-benchmark, and
-  Circuit Intent checkers.
+- `make lint`: Ruff plus the version, ledger, ADR-number, documentation-link, schema-set,
+  CI-budget, audio-benchmark, and Circuit Intent checkers.
 - `make typecheck`: strict mypy.
 - `make security`: repository secret scan and dependency audit.
 - `make build`: build the source distribution and wheel.

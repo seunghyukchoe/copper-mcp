@@ -118,3 +118,62 @@ which this release does not move — no modelled field, type or invariant change
 would be a blanket replacement across a published refusal surface for a change about the envelope's
 version alone. If you match on those strings, they are stable. ADR-0105 does not claim they are
 unambiguous to a reader holding only the string.
+
+## 2. `inspect_board_ir` gains an additive `unmodelled_counts` map
+
+`BoardIrSummary` — the value `inspect_board_ir` returns — now carries one more field:
+
+```json
+"unmodelled_counts": {
+  "edge_connector_pad_count": 2,
+  "max_roundrect_rounding_nm": 0,
+  "unmodelled_board_property_count": 1,
+  "unmodelled_group_count": 0,
+  "unmodelled_pad_property_count": 0
+}
+```
+
+### Nothing breaks
+
+It is an **additive output field**. A client that does not read it is unaffected; no existing field
+moves, changes type, or changes meaning; no digest, revision or identity is involved, because
+nothing here is inside a content address. `models.SCHEMA_VERSION` stays `1.0`, which is what that
+module's own contract already permits: *a field may be added but not silently repurposed*. And this
+is not a `schemas/**/*.json` accepted set, so [ADR-0105](../adr/0105-a-schema-version-moves-with-its-accepted-set.md)'s
+version rule and the drift gate that enforces it do not reach it — verified, not assumed: the gate
+is green on this change and no exemption was added for it.
+
+### What it discloses, and why the absence was the defect
+
+The KiCad adapter accepts several constructs it cannot model and **counts** what it discarded rather
+than refusing the board over them. Four risk rows — `R-134` (groups), `R-139` (root board
+properties), `R-141` (edge-connector pads), `R-144` (pad fabrication properties) — each say in their
+own words that the conversion loses a token and that *the count is the disclosure*.
+
+Until now those counts stopped at an in-process return value. From an MCP client the discard was
+**silent**, so four recorded mitigations rested on a channel no published surface carried. The
+direction of error was under-disclosure, and this closes it.
+
+Read them as follows.
+
+| Key | Means |
+|---|---|
+| `max_roundrect_rounding_nm` | The largest number of nanometres any roundrect corner radius was rounded **up** by. Zero on a board whose radii are already exact nanometres. A magnitude, not a count. |
+| `unmodelled_group_count` | Root `(group …)` expressions accepted and not modelled. A caller that moves one member breaks a grouping nothing told it about. A *locked* group refuses the board instead, so it never appears here. |
+| `edge_connector_pad_count` | Pads whose source token was `connect` and which converted as `smd`. Reading `kind == "smd"` cannot tell you the designer wrote `connect`. |
+| `unmodelled_board_property_count` | Root `(property "<key>" "<value>")` **expressions** — not KiCad map entries, so a document with a duplicate key has more expressions than entries. |
+| `unmodelled_pad_property_count` | Pad `(property <token>)` fabrication annotations on converted pads. |
+
+Every value is a non-negative integer. **None of them names anything**: not which pads, not which
+keys, not which groups. A count is not a set, and no CopperMCP surface refuses an operation on a
+board carrying one.
+
+An **unsupported** board reports `{}` rather than zeros. A refused conversion measured nothing, and
+zeros would claim it measured zero.
+
+### The shape is one map on purpose
+
+There are five counters and one field, because this set grew from two to five without anyone
+noticing that none of them reached a client. A sixth counter is now an **entry** rather than a
+contract change: `tests/test_board_ir_service.py::test_every_measured_conversion_field_appears_in_the_summary_map`
+reflects over `ConversionResult` and fails until the new counter is mapped.

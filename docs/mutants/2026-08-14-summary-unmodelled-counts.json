@@ -1,0 +1,92 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "UC1-a-measured-field-is-dropped-from-the-published-map",
+      "file": "src/copper_mcp/board_ir_service.py",
+      "anchor": "    \"edge_connector_pad_count\",\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir_service.py::test_every_measured_conversion_field_appears_in_the_summary_map",
+        "tests/test_board_ir_service.py::test_a_supported_board_publishes_its_conversion_counts"
+      ]
+    },
+    {
+      "id": "UC2-a-sixth-counter-lands-on-the-dataclass-and-is-never-mapped",
+      "file": "src/copper_mcp/board_ir/diagnostics.py",
+      "anchor": "    unmodelled_pad_property_count: int = 0\n",
+      "replacement": "    unmodelled_pad_property_count: int = 0\n    unmodelled_net_tie_count: int = 0\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir_service.py::test_every_measured_conversion_field_appears_in_the_summary_map"
+      ]
+    },
+    {
+      "id": "UC3-the-summary-stops-carrying-the-counts",
+      "file": "src/copper_mcp/board_ir_service.py",
+      "anchor": "        unmodelled_counts=_unmodelled_counts(conversion),\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir_service.py::test_a_supported_board_publishes_its_conversion_counts",
+        "tests/test_board_ir_service.py::test_a_board_carrying_an_unmodelled_construct_discloses_it"
+      ]
+    },
+    {
+      "id": "UC4-the-map-is-dropped-from-the-detached-document",
+      "file": "src/copper_mcp/board_ir_service.py",
+      "anchor": "            \"unmodelled_counts\": dict(self.unmodelled_counts),\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir_service.py::test_every_measured_conversion_field_appears_in_the_summary_map",
+        "tests/test_board_ir_service.py::test_an_unsupported_board_reports_no_conversion_counts"
+      ]
+    },
+    {
+      "id": "UC5-a-supported-summary-may-report-an-incomplete-map",
+      "file": "src/copper_mcp/board_ir_service.py",
+      "anchor": "            if set(self.unmodelled_counts) != set(_MEASURED_COUNT_FIELDS):\n",
+      "replacement": "            if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir_service.py::test_a_supported_summary_missing_a_measured_count_is_refused"
+      ]
+    },
+    {
+      "id": "UC6-a-refused-conversion-publishes-zeros-it-never-measured",
+      "file": "src/copper_mcp/board_ir_service.py",
+      "anchor": "            if self.unmodelled_counts:\n                raise BoardIrError(\"an unsupported board cannot report conversion counts\")\n",
+      "replacement": "            pass\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir_service.py::test_an_unsupported_summary_carrying_counts_is_refused"
+      ]
+    },
+    {
+      "id": "UC7-the-map-is-no-longer-frozen-or-range-checked",
+      "file": "src/copper_mcp/board_ir_service.py",
+      "anchor": "        for name in (\"object_counts\", \"conversion_diagnostic_counts\", \"unmodelled_counts\"):\n",
+      "replacement": "        for name in (\"object_counts\", \"conversion_diagnostic_counts\"):\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir_service.py::test_the_conversion_counts_are_detached_and_immutable"
+      ]
+    },
+    {
+      "id": "UC8-the-docstring-cross-reference-drifts-back",
+      "file": "src/copper_mcp/board_ir/diagnostics.py",
+      "anchor": "    diagnostic would refuse the board.  See ADR-0094 and R-139.\n",
+      "replacement": "    diagnostic would refuse the board.  See ADR-0094 and R-139.\n    XX-DRIFT-XX the two fields above are wrong now.\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir_service.py::test_the_conversion_docstring_counts_the_fields_that_actually_precede_it"
+      ]
+    }
+  ]
+}

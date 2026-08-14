@@ -8,6 +8,40 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **`inspect_board_ir` discloses what the conversion accepted and did not model.** `BoardIrSummary`
+  gains one `unmodelled_counts` map carrying all five `ConversionResult` measured fields —
+  roundrect rounding, unmodelled groups, edge-connector pads, unmodelled root board properties and
+  unmodelled pad fabrication properties. Four of the five are the disclosure `R-134`, `R-139`,
+  `R-141` and `R-144` each name as their mitigation, and until now **none of them reached an MCP
+  client**, so four recorded mitigations were partial and the direction of error was
+  under-disclosure. It is an **additive optional output field**: no existing field moves, no
+  content address is involved, and `models.SCHEMA_VERSION` stays `1.0`. One map rather than five
+  fields, so a sixth counter is an entry rather than a contract change — a contract test reflects
+  over `ConversionResult` and fails until a new counter is mapped. An unsupported board reports
+  `{}`, because a refused conversion measured nothing and zeros would claim it measured zero. See
+  [the 0.9.0 migration note](docs/migrations/copper-mcp-0.9.0.md).
+- **Six process failures this project already paid for now have checkers, each proved to bite**
+  (`D-202`, `R-155`).
+  - `scripts/check_ledgers.py` fails when a `Ready` release authorization has neither a
+    published-release row nor an explicit outstanding marker. This is `D-196` mechanised: `0.7.0`
+    was authorized, tagged and published with no published row, `0.5.0` had the same gap, and both
+    were found by an audit rather than by a gate.
+  - `scripts/check_ci_budgets.py` requires every explicit `timeout-minutes` in
+    `.github/workflows/` to be at least twice its job's longest **recorded hosted** duration, read
+    from [`.github/ci-budget-calibration.json`](.github/ci-budget-calibration.json). The `v0.7.0`
+    release run was cancelled by a 20-minute budget derived from a *local* 20m29s measurement; the
+    hosted gate takes 34m59s. `ci.yml` gains its first timeout budget ever, 120 minutes against a
+    measured worst leg of 34m48s.
+  - `scripts/check_commit_message.py` gains a `--range` mode and runs in CI over the pull request's
+    own commits. It previously existed only as a client-side `commit-msg` hook, whose swallowed
+    rejection reached `main` twice. An unresolvable **or empty** range is a failure, not a pass.
+  - `check_audio_benchmarks.py` and `check_circuit_intents.py` now run hosted. Both were in
+    `make lint` from before the CI workflow existed and neither had ever run there.
+  - A golden set pins the KiCad adapter's tabled refusal messages — seven closed tables, 35
+    entries, 33 distinct sentences — so a message leaving, arriving or being reworded shows up in
+    the diff. **This makes the messages no more contractual than they were**, and the test and the
+    golden file both say so; deprecation was rejected because it would mean emitting a refusal the
+    server no longer means.
 - **`preview_layered_route` accepts `include_fill_authority`, and reports what the evidence did**
   ([ADR-0106](docs/adr/0106-layered-fill-authority-is-public-and-bound.md),
   [issue #164](https://github.com/seunghyukchoe/copper-mcp/issues/164)). Opt in and CopperMCP

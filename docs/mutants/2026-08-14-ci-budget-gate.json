@@ -1,0 +1,122 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "CB1-the-release-budget-goes-back-to-twenty-minutes",
+      "file": ".github/workflows/release.yml",
+      "anchor": "    timeout-minutes: 120\n",
+      "replacement": "    timeout-minutes: 20\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ci_budgets.py::test_the_committed_workflows_declare_calibrated_budgets"
+      ]
+    },
+    {
+      "id": "CB2-the-ci-job-loses-the-budget-it-never-had-before",
+      "file": ".github/workflows/ci.yml",
+      "anchor": "    timeout-minutes: 120\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ci_budgets.py::test_every_committed_job_that_runs_the_suite_declares_a_budget",
+        "tests/test_check_ci_budgets.py::test_the_committed_workflows_declare_calibrated_budgets"
+      ]
+    },
+    {
+      "id": "CB3-the-half-rule-becomes-no-rule",
+      "file": "scripts/check_ci_budgets.py",
+      "anchor": "HALF_RULE_FACTOR = 2\n",
+      "replacement": "HALF_RULE_FACTOR = 1\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ci_budgets.py::test_a_budget_below_twice_the_recorded_duration_fails",
+        "tests/test_check_ci_budgets.py::test_the_boundary_is_inside_the_rule_and_one_second_past_it_is_not"
+      ]
+    },
+    {
+      "id": "CB4-only-the-fastest-recorded-run-binds",
+      "file": "scripts/check_ci_budgets.py",
+      "anchor": "        worst = max(observations, key=lambda item: int(item[\"seconds\"]))\n",
+      "replacement": "        worst = min(observations, key=lambda item: int(item[\"seconds\"]))\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ci_budgets.py::test_every_recorded_observation_binds_not_only_the_newest"
+      ]
+    },
+    {
+      "id": "CB5-an-undersized-budget-stops-failing",
+      "file": "scripts/check_ci_budgets.py",
+      "anchor": "        if budget.minutes < required:\n",
+      "replacement": "        if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ci_budgets.py::test_a_budget_below_twice_the_recorded_duration_fails",
+        "tests/test_check_ci_budgets.py::test_the_v0_7_0_budget_would_fail_against_the_recorded_gate"
+      ]
+    },
+    {
+      "id": "CB6-an-uncalibrated-budget-is-waved-through",
+      "file": "scripts/check_ci_budgets.py",
+      "anchor": "        if observations is None:\n",
+      "replacement": "        if observations is None and False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ci_budgets.py::test_a_budget_with_no_calibration_entry_fails"
+      ]
+    },
+    {
+      "id": "CB7-a-stale-calibration-entry-outlives-its-budget",
+      "file": "scripts/check_ci_budgets.py",
+      "anchor": "    for workflow, job in sorted(set(recorded) - calibrated):\n",
+      "replacement": "    for workflow, job in sorted(set()):\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ci_budgets.py::test_a_calibration_entry_for_a_job_with_no_budget_fails"
+      ]
+    },
+    {
+      "id": "CB8-a-timeout-the-reader-cannot-attribute-is-skipped",
+      "file": "scripts/check_ci_budgets.py",
+      "anchor": "        if not in_jobs or job is None or indent != _JOB_KEY_INDENT:\n",
+      "replacement": "        if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ci_budgets.py::test_a_timeout_it_cannot_attribute_to_a_job_fails"
+      ]
+    },
+    {
+      "id": "CB9-a-repository-with-no-budgets-passes-vacuously",
+      "file": "scripts/check_ci_budgets.py",
+      "anchor": "    if not budgets:\n",
+      "replacement": "    if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ci_budgets.py::test_a_workflow_directory_with_no_budgets_at_all_fails"
+      ]
+    },
+    {
+      "id": "CB10-a-calibration-entry-with-no-observations-is-accepted",
+      "file": "scripts/check_ci_budgets.py",
+      "anchor": "        if not isinstance(observations, list) or not observations:\n",
+      "replacement": "        if not isinstance(observations, list):\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ci_budgets.py::test_a_calibration_entry_with_no_observations_fails"
+      ]
+    },
+    {
+      "id": "CB11-the-recorded-hosted-gate-duration-is-edited-down",
+      "file": ".github/ci-budget-calibration.json",
+      "anchor": "          \"seconds\": 2099\n",
+      "replacement": "          \"seconds\": 600\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ci_budgets.py::test_the_calibration_file_records_the_hosted_runs_it_claims_to"
+      ]
+    }
+  ]
+}
