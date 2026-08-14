@@ -117,6 +117,49 @@
       "killing_tests": [
         "tests/test_check_ci_budgets.py::test_the_calibration_file_records_the_hosted_runs_it_claims_to"
       ]
+    },
+    {
+      "id": "CB12-a-run-that-never-succeeded-calibrates-the-budget",
+      "file": "scripts/check_ci_budgets.py",
+      "anchor": "            if conclusion != REQUIRED_CONCLUSION:\n",
+      "replacement": "            if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ci_budgets.py::test_a_failed_run_does_not_calibrate_a_budget",
+        "tests/test_check_ci_budgets.py::test_a_cancelled_run_is_rejected_by_name_rather_than_dropped",
+        "tests/test_check_ci_budgets.py::test_an_observation_with_no_recorded_conclusion_fails"
+      ]
+    },
+    {
+      "id": "CB13-the-timeout-key-is-only-seen-when-its-value-is-a-bare-integer",
+      "file": "scripts/check_ci_budgets.py",
+      "anchor": "_TIMEOUT_KEY = re.compile(r\"^(?P<indent> *)timeout-minutes:(?P<value>.*)$\")\n",
+      "replacement": "_TIMEOUT_KEY = re.compile(r\"^(?P<indent> *)timeout-minutes:(?P<value>\\s*\\d+\\s*)$\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ci_budgets.py::test_a_timeout_whose_value_it_cannot_model_fails",
+        "tests/test_check_ci_budgets.py::test_a_timeout_with_a_trailing_comment_parses_as_its_integer"
+      ]
+    },
+    {
+      "id": "CB14-a-commented-budget-stops-being-a-budget",
+      "file": "scripts/check_ci_budgets.py",
+      "anchor": "_TIMEOUT_VALUE = re.compile(r\"^(?P<minutes>\\d+)(?:\\s*#.*)?$\")\n",
+      "replacement": "_TIMEOUT_VALUE = re.compile(r\"^(?P<minutes>\\d+)$\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ci_budgets.py::test_a_timeout_with_a_trailing_comment_parses_as_its_integer"
+      ]
+    },
+    {
+      "id": "CB15-an-unmodelled-timeout-value-is-skipped-instead-of-reported",
+      "file": "scripts/check_ci_budgets.py",
+      "anchor": "        if minutes is None:\n",
+      "replacement": "        if minutes is None and False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_ci_budgets.py::test_a_timeout_whose_value_it_cannot_model_fails"
+      ]
     }
   ]
 }

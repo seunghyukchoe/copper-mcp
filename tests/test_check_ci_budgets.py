@@ -19,7 +19,11 @@ So the cases here are organised by how the gate could be green and worthless:
 * it could silently skip a `timeout-minutes` written in a shape its reader does
   not model, and report "no budgets" identically to a repository that has none
   (`test_a_timeout_it_cannot_attribute_to_a_job_fails`,
-  `test_a_workflow_directory_with_no_budgets_at_all_fails`).
+  `test_a_timeout_whose_value_it_cannot_model_fails`,
+  `test_a_workflow_directory_with_no_budgets_at_all_fails`);
+* it could calibrate against a run that never finished the work, so that a
+  two-minute setup failure buys a 35-minute job a four-minute ceiling
+  (`test_a_failed_run_does_not_calibrate_a_budget`).
 
 And one case is the real historical mutant: putting the release budget back to
 20 must fail (`test_the_v0_7_0_budget_would_fail_against_the_recorded_gate`).
@@ -65,14 +69,14 @@ def _workflow(job: str = "test", minutes: int | None = None) -> str:
     return _WORKFLOW.format(job=job, timeout=timeout)
 
 
-def _observation(seconds: int) -> dict[str, Any]:
+def _observation(seconds: int, conclusion: str = "success") -> dict[str, Any]:
     return {
         "run_id": 1,
         "job_id": 2,
         "hosted_job_name": "Example job",
         "started_at": "2026-08-14T00:00:00Z",
         "completed_at": "2026-08-14T00:00:00Z",
-        "conclusion": "success",
+        "conclusion": conclusion,
         "seconds": seconds,
     }
 
@@ -100,12 +104,19 @@ def _tree(
 
 
 def _entry(
-    seconds: list[int], workflow: str = ".github/workflows/ci.yml", job: str = "test"
+    seconds: list[int],
+    workflow: str = ".github/workflows/ci.yml",
+    job: str = "test",
+    conclusions: list[str] | None = None,
 ) -> dict[str, Any]:
+    verdicts = ["success"] * len(seconds) if conclusions is None else conclusions
     return {
         "workflow": workflow,
         "job": job,
-        "observations": [_observation(value) for value in seconds],
+        "observations": [
+            _observation(value, conclusion)
+            for value, conclusion in zip(seconds, verdicts, strict=True)
+        ],
     }
 
 
@@ -237,6 +248,69 @@ def test_a_calibration_entry_with_no_observations_fails(
     assert any("with no observations" in failure for failure in failures)
 
 
+def test_a_failed_run_does_not_calibrate_a_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run that stopped early measures nothing about the work it did not do.
+
+    This is `D-196` with the sign flipped. There the budget was measured on the
+    wrong machine; here it would be measured on the right machine during the
+    wrong run -- a two-minute setup failure recorded as the job's duration, and
+    a four-minute ceiling derived from it that clears the half rule while the
+    successful run takes thirty-five. Validating `seconds` and ignoring
+    `conclusion` accepts exactly that.
+    """
+
+    failures, notes = _tree(
+        tmp_path,
+        monkeypatch,
+        {"ci.yml": _workflow(minutes=4)},
+        [_entry([120], conclusions=["failure"])],
+    )
+
+    assert notes == []
+    rejected = [failure for failure in failures if "conclusion is 'failure'" in failure]
+    assert len(rejected) == 1
+    assert "run 1 job 2" in rejected[0]
+    # With its only observation refused, the budget is uncalibrated rather than
+    # calibrated from nothing -- so the budget itself fails too.
+    assert any("with no entry in" in failure for failure in failures)
+
+
+def test_a_cancelled_run_is_rejected_by_name_rather_than_dropped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Silently discarding it would leave the remaining sample looking complete.
+
+    The other observations here do clear the half rule, so a checker that merely
+    filtered the cancelled run out would print a clean note and never say that
+    the file records something it will not use.
+    """
+
+    failures, _ = _tree(
+        tmp_path,
+        monkeypatch,
+        {"ci.yml": _workflow(minutes=120)},
+        [_entry([2088, 60], conclusions=["success", "cancelled"])],
+    )
+
+    assert len(failures) == 1
+    assert "conclusion is 'cancelled'" in failures[0]
+    assert "not 'success'" in failures[0]
+
+
+def test_an_observation_with_no_recorded_conclusion_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An absent conclusion is not a successful one; the file must say which run it read."""
+
+    entry = _entry([2088])
+    del entry["observations"][0]["conclusion"]
+    failures, _ = _tree(tmp_path, monkeypatch, {"ci.yml": _workflow(minutes=120)}, [entry])
+
+    assert any("conclusion is None" in failure for failure in failures)
+
+
 def test_a_calibration_entry_for_a_job_with_no_budget_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -287,6 +361,58 @@ def test_a_timeout_it_cannot_attribute_to_a_job_fails(
 
     assert len(failures) == 1
     assert "cannot attribute to a job" in failures[0]
+
+
+def test_a_timeout_with_a_trailing_comment_parses_as_its_integer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`timeout-minutes: 120 # calibrated` is valid YAML and a real budget.
+
+    The value is still a plain integer; only the line has more on it. A reader
+    that requires the number to end the line does not reject this budget -- it
+    stops seeing it, which is the failure mode this file exists to refuse.
+    """
+
+    body = _workflow(minutes=120).replace(
+        "timeout-minutes: 120", "timeout-minutes: 120 # calibrated against run 31784160677"
+    )
+    failures, notes = _tree(tmp_path, monkeypatch, {"ci.yml": body}, [_entry([2088])])
+
+    assert failures == []
+    assert len(notes) == 1
+    assert "budget 120 min" in notes[0]
+
+
+def test_a_timeout_whose_value_it_cannot_model_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An Actions expression is a budget this reader cannot evaluate, so it must say so.
+
+    The key is recognised independently of its value on purpose. Matching the
+    two together means an unmodelled value never matches at all: the line is
+    skipped, and the global "some budgets exist" check still passes because the
+    *other* workflows declare budgets -- so an uncalibrated ceiling ships while
+    the checker reports full coverage. That is the same silent-skip defect as an
+    unattributable budget, one level down.
+    """
+
+    expression = _workflow(job="build", minutes=30).replace(
+        "timeout-minutes: 30", "timeout-minutes: ${{ inputs.timeout }}"
+    )
+    failures, notes = _tree(
+        tmp_path,
+        monkeypatch,
+        {"ci.yml": _workflow(minutes=120), "build.yml": expression},
+        [_entry([2088])],
+    )
+
+    assert len(failures) == 1
+    assert failures[0].startswith(".github/workflows/build.yml:")
+    assert "${{ inputs.timeout }}" in failures[0]
+    assert "cannot model" in failures[0]
+    # The calibrated budget in the other workflow is why the vacuous-pass check
+    # stayed green in the defect: coverage looked complete because it was counted.
+    assert len(notes) == 1
 
 
 def test_a_workflow_directory_with_no_budgets_at_all_fails(
@@ -371,4 +497,11 @@ def test_the_calibration_file_records_the_hosted_runs_it_claims_to() -> None:
     ci = by_job[(".github/workflows/ci.yml", "test")]
     assert len(ci["observations"]) == 27
     assert max(observation["seconds"] for observation in ci["observations"]) == 2088
-    assert {observation["conclusion"] for observation in ci["observations"]} == {"success"}
+
+    # Every committed observation is a completed successful run, which is the only
+    # kind the checker will calibrate from.
+    assert {
+        observation["conclusion"]
+        for entry in document["jobs"]
+        for observation in entry["observations"]
+    } == {check_ci_budgets.REQUIRED_CONCLUSION}

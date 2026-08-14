@@ -37,7 +37,15 @@ weaker than it looks.
   reported rather than skipped. An absence is evidence only if the observation
   was capable of reporting a presence, and a parser that silently ignores what
   it does not understand reports "no budgets" identically to a repository that
-  has none.
+  has none. The key is therefore detected independently of its value: a budget
+  written as `${{ inputs.timeout }}`, or in any other shape the value reader
+  does not model, is a named failure rather than a line that never matched.
+- **Only a `success` observation calibrates a budget.** A run that failed or
+  was cancelled stopped early, so its duration bounds the work from below
+  instead of measuring it -- a two-minute setup failure would otherwise buy a
+  35-minute job a four-minute ceiling, which is `D-196` with the sign flipped.
+  A recorded non-success conclusion is rejected by name rather than dropped,
+  for the same reason an unattributable budget is.
 
 The workflow reader is deliberately small and strict rather than a YAML parser:
 these files are 2-space block YAML, the shapes it accepts are pinned by tests,
@@ -63,9 +71,16 @@ CALIBRATION_SCHEMA = "ci-budget-calibration/1"
 # A budget must be at least this many times the longest recorded duration.
 HALF_RULE_FACTOR = 2
 
+# The only conclusion a recorded run may have. See the module docstring.
+REQUIRED_CONCLUSION = "success"
+
 _JOBS_KEY = re.compile(r"^jobs:\s*$")
 _JOB_ID = re.compile(r"^ {2}(?P<job>[A-Za-z_][A-Za-z0-9_-]*):\s*$")
-_TIMEOUT = re.compile(r"^(?P<indent> *)timeout-minutes:\s*(?P<minutes>\d+)\s*$")
+# The key is matched without regard to its value, so that a value shape this reader
+# does not model reaches the failure below instead of never matching at all.
+_TIMEOUT_KEY = re.compile(r"^(?P<indent> *)timeout-minutes:(?P<value>.*)$")
+# The one value shape modelled: a plain integer, optionally with a trailing comment.
+_TIMEOUT_VALUE = re.compile(r"^(?P<minutes>\d+)(?:\s*#.*)?$")
 # The indentation a job-level key sits at: two for the job id, two more for its keys.
 _JOB_KEY_INDENT = 4
 
@@ -104,7 +119,7 @@ def _read_workflow(relative: str, text: str, failures: list[str]) -> list[Budget
                 seen_jobs += 1
                 continue
 
-        timeout = _TIMEOUT.match(line)
+        timeout = _TIMEOUT_KEY.match(line)
         if timeout is None:
             continue
         indent = len(timeout.group("indent"))
@@ -116,8 +131,19 @@ def _read_workflow(relative: str, text: str, failures: list[str]) -> list[Budget
                 "is an uncalibrated one"
             )
             continue
+        value = timeout.group("value").strip()
+        minutes = _TIMEOUT_VALUE.match(value)
+        if minutes is None:
+            failures.append(
+                f"{relative}:{index} declares `timeout-minutes: {value}` on job {job!r}, a value "
+                "this checker cannot model (it reads a plain integer, optionally followed by a `#` "
+                "comment). Write the budget as a literal, or extend scripts/check_ci_budgets.py to "
+                "model this shape -- a budget whose value cannot be read cannot be calibrated, and "
+                "skipping the line would report it identically to a job that declares none"
+            )
+            continue
         budgets.append(
-            Budget(workflow=relative, job=job, line=index, minutes=int(timeout.group("minutes")))
+            Budget(workflow=relative, job=job, line=index, minutes=int(minutes.group("minutes")))
         )
 
     if seen_jobs == 0:
@@ -188,6 +214,17 @@ def _read_calibration(failures: list[str]) -> dict[tuple[str, str], list[dict[st
             if isinstance(seconds, bool) or not isinstance(seconds, int) or seconds < 0:
                 failures.append(
                     f"{CALIBRATION} records a non-integer duration for {workflow}:{job}"
+                )
+                continue
+            conclusion = observation.get("conclusion")
+            if conclusion != REQUIRED_CONCLUSION:
+                failures.append(
+                    f"{CALIBRATION} calibrates {workflow}:{job} from run "
+                    f"{observation.get('run_id')} job {observation.get('job_id')}, whose recorded "
+                    f"conclusion is {conclusion!r} and not {REQUIRED_CONCLUSION!r}. A run that "
+                    "failed or was cancelled stopped early, so its duration bounds the work from "
+                    "below rather than measuring it: a two-minute setup failure would calibrate a "
+                    "four-minute ceiling for a job that needs thirty-five"
                 )
                 continue
             clean.append(observation)

@@ -171,15 +171,23 @@ and in CI. To change a budget:
 1. Read the newest completed runs of the affected job —
    `gh api repos/<owner>/<repo>/actions/runs/<run_id>/jobs` — and take
    `completed_at - started_at` per job, which is the same wall clock `timeout-minutes` bounds.
-2. Replace that job's `observations` list in the calibration file. Every recorded observation
-   binds, not only the newest, so a slow run cannot be retired by appending a fast one.
+2. Replace that job's `observations` list in the calibration file, recording each run's
+   `conclusion` alongside its duration. Every recorded observation binds, not only the newest, so a
+   slow run cannot be retired by appending a fast one.
 3. Set the budget and run `python scripts/check_ci_budgets.py`.
+
+Only a run whose `conclusion` is `success` calibrates a budget. A failed or cancelled run stopped
+early, so its duration bounds the work from below rather than measuring it — recording a two-minute
+setup failure would justify a four-minute ceiling for a job that needs thirty-five, which is `D-196`
+with the sign flipped. Any other conclusion is rejected by name rather than dropped.
 
 A budget with no calibration entry fails, and a calibration entry for a job that declares no budget
 fails — the same closed-list discipline the schema-drift exemptions and the ledger replay list run
 under. A `timeout-minutes` the reader cannot attribute to a job fails loudly rather than being
 skipped, because a parser that ignores what it does not understand reports "no budgets" identically
-to a repository that has none.
+to a repository that has none. The same holds for the *value*: the key is recognised independently
+of what follows it, so `timeout-minutes: ${{ inputs.timeout }}` is a named failure rather than a
+line the regex never matched while the global "some budgets exist" check stayed green.
 
 ## Board IR development
 
