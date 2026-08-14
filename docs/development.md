@@ -152,12 +152,14 @@ that.
 
 ## Board IR development
 
-Board IR `0.2.0` is the active strict public contract; `0.1.0` is retained only as immutable
-compatibility evidence and is never edited. Start with
+Board IR `0.3.0` is the active strict public contract. `0.2.0` and `0.1.0` are retained as
+immutable compatibility evidence and are never edited -- `0.2.0` is byte-frozen by
+[ADR-0105](adr/0105-a-schema-version-moves-with-its-accepted-set.md), which also gates the class
+of change that produced the freeze. Start with
 [`docs/architecture/board-ir.md`](architecture/board-ir.md),
 [`ADR-0005`](adr/0005-canonical-board-ir.md) for the original integer/digest contract,
 [`ADR-0026`](adr/0026-first-class-footprints-in-board-ir.md) for the 0.2 footprint model, and the
-[`0.2.0` JSON Schema](../schemas/board-ir/0.2.0.schema.json).
+[`0.3.0` JSON Schema](../schemas/board-ir/0.3.0.schema.json).
 
 The pure domain API is exported by `copper_mcp.board_ir`. Use `make_content` and `make_snapshot` for
 programmatic construction, `encode_snapshot` for byte-stable JSON, and `decode_snapshot_json` for
@@ -182,7 +184,9 @@ CopperMCP writers must remain readable with the default limits.
 When extending the model or adapter:
 
 1. Decide whether canonical meaning changes. If it does, follow the versioning process in ADR-0005
-   rather than changing `0.2.0` in place.
+   rather than changing a published version in place. `scripts/check_schema_sets.py` fails the
+   build if you do: it compares every `schemas/**/*.json` accepted set against every release tag
+   and against the newest tag, in both directions.
 2. Preserve exact integer conversion and reject geometry that cannot be represented without an
    explicit, reviewed rule.
 3. Add valid and invalid fixtures for the construct, including budget, graphics-layer,

@@ -91,7 +91,7 @@ Each capability below is bound to tests and, where it touches KiCad, to recorded
 confinement, including protection against parent-path and symlink escapes. SHA-256 board revisions
 and versioned JSON schemas throughout.
 
-**Represent a board exactly.** Immutable Board IR `0.2.0` with exact integer units, typed
+**Represent a board exactly.** Immutable Board IR `0.3.0` with exact integer units, typed
 constraints, canonical digests, first-class footprint pose/side/lock/pad ownership, simple closed
 octilinear courtyard rings and exact-integer-radius courtyard circles held **per courtyard layer**
 — a footprint may draw on the layer opposite its own side, and that geometry keeps out on the layer

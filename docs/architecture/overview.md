@@ -52,7 +52,7 @@ live revision before it can release the synchronous connection.
 | `routing/jobs.py` / `routing/job_worker.py` / `routing/candidate_store.py` | Transport-independent revision-safe job records, bounded single-worker lease/recovery, and redacted candidate manifests; no route-geometry export or MCP Tasks adapter. |
 | `mcp_server.py` | MCP tools/resources and transport configuration. |
 
-Board IR `0.2.0` is the domain and source-adapter foundation. It adds immutable footprint pose,
+Board IR `0.3.0` is the domain and source-adapter foundation. It adds immutable footprint pose,
 side, lock state, total pad ownership, and bounded board-frame simple closed octilinear courtyard
 rings and exact-integer-radius courtyard circles to the geometry already used by routing.
 A narrow deterministic
