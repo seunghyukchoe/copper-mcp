@@ -112,12 +112,15 @@ the copper's bounding box."* That is true of the *bound* and does not carry the 
 containment predicate is not monotone in the way the sentence assumes. **This note corrects that
 claim.**
 
-The defect is latent today and small — a roundrect's box corner can clip an outline its actual
-rounded corner clears, which is exactly the magnitude `_pad_overlap`'s docstring already reports as
-measured (*"axis-aligned boxes clip on pads KiCad calls clean"*). Under P3.3 it stops being small:
-on the corpus pad the envelope is a step shape's bounding box and the core is an anchor well under
-half its area, so re-pointing `pad_bounds` at the envelope turns a nanometre-scale conservatism into
-a false-`violated` surface the size of the gap between them.
+The defect is latent in *frequency*, not in magnitude. `pad_bounds` represents circles, ovals,
+and roundrects by their axis-aligned bounding boxes, so a box corner extends beyond the copper by
+up to (√2−1)·r ≈ 0.414× the pad radius for a circle — about 207 µm on a 1 mm-diameter pad, and
+`_pad_overlap`'s docstring already reports the class as measured (*"axis-aligned boxes clip on pads
+KiCad calls clean"*). `_outline_containment` and `_keepout_respect` can therefore publish `violated`
+hundreds of micrometres from copper KiCad calls clear **today**; what P3.3 changes is exposure, not
+existence: on the corpus pad the envelope is a step shape's bounding box and the core is an anchor
+well under half its area, so re-pointing `pad_bounds` at the envelope widens the false-`violated`
+surface from the corner slivers to the whole gap between envelope and core.
 
 ### C2 — `placement/legalizer.py:520-536` `_keepout_respect`
 
