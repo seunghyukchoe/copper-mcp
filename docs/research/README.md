@@ -166,6 +166,17 @@ When adding a document, add it to the list below in the same sentence form — *
   Board IR `Pad` is read over-approximating for its obstacle and under-approximating for its
   attachment core from the same three fields, and no single rectangle can be both. It offers no
   bounded primitive subset and no with/without differential, either of which would prove nothing here.
+- [Pad geometry reader survey](./pad-geometry-reader-survey-v1.md) enumerates every reader of a
+  Board IR `Pad`'s `shape`, `size_x_nm` and `size_y_nm` — by field access and by accessor call,
+  including consumers three hops away through stored dataclass fields — and records the direction of
+  error each one needs. It finds 23 sites where ADR-0100 assumed 3, and its decisive finding is
+  three readers in `placement/legalizer.py` whose direction requirement is **already unsatisfied**:
+  two publish `violated` from an over-approximating box, and one feeds `rect_inside_ring` and
+  `rect_touches_ring` — opposite directions — from a single accessor. It corrects one sentence of
+  the custom pad envelope note's §5 and it measures what a distinct envelope would buy on the
+  corpus: **zero additional saves**, because `thermal_bridge_angle` refuses one construct behind the
+  custom pad on every target board. It claims no false-violation rate on any real board, and no
+  conversion win.
 - [KiCad `connect` pads](./kicad-connect-pad-attribute-v1.md) establishes what
   `PAD_ATTRIB::CONN` is from two sweeps of KiCad's source outside the foreign-format import
   plug-ins: every occurrence of `PAD_ATTRIB::CONN` (35 across 17 files) and every occurrence of
