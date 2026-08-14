@@ -23,10 +23,10 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-199` | `D-200` |
-| [Risk register](risk-register.md) | `R-` | `R-153` | `R-154` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-204` | `D-205` |
+| [Risk register](risk-register.md) | `R-` | `R-157` | `R-158` |
 | [Security review ledger](security-ledger.md) | `SEC-` | `SEC-146` | `SEC-147` |
-| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-110` | `B-111` |
+| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-114` | `B-115` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
 The rules:
@@ -93,6 +93,21 @@ The rules:
    zero changed verdicts and is explicitly not claimed, and the reachability figure the record
    needed -- 14 of 18 corpus boards carrying an island above the ordered-layer ceiling -- is
    `B-108`'s existing per-run count, cited rather than re-measured. No `B-` number was spent.
+
+   The seventh round is the first one where the stepping-over was **decided up front rather than
+   discovered**. Three branches were opened concurrently on the same base at `4a5fa65`, and each was
+   handed a disjoint block before any of them read a ledger: this record (issues
+   [#65](https://github.com/seunghyukchoe/copper-mcp/issues/65) and
+   [#110](https://github.com/seunghyukchoe/copper-mcp/issues/110)) holds `D-204`, `R-157`, `B-113`
+   and `B-114`, which sit four, four and three above the next-free numbers this base records. So
+   `D-200`–`D-203`, `R-154`–`R-156` and `B-111`–`B-112` are **live claims of the sibling branches,
+   not gaps**, and the checker reports them as unallocated because it cannot see an unmerged branch.
+   Pre-assignment is the same mechanism as rule 1's stepping-over with the race removed: whichever
+   branch lands second resolves this table's textual conflict rather than discovering a collision in
+   a merged document. If a sibling is abandoned its numbers become permanent spent numbers like any
+   other, and this paragraph becomes the correction to make. This record spent no `SEC-` number: it
+   widens no input surface — the sweep in `B-114` committed zero third-party bytes, and the
+   comparison artifact in `B-113` reads only files already in the tree.
 
    The fifth round is this record stepping over **three** live claims at once, in every ID space
    at the same time. Issue #165 (`D-195`/`R-150`/`SEC-144`/`B-108`, ADR-0104) was allocated while

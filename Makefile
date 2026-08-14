@@ -2,7 +2,7 @@ PYTHON ?= python3
 
 .PHONY: install install-dev test lint format typecheck security build pcm check \
 	check-audio-benchmarks check-circuit-intents benchmark-audio benchmark-routing \
-	benchmark-external-corpus evaluate-excessive-agency clean
+	benchmark-external-corpus benchmark-cross-router evaluate-excessive-agency clean
 
 install:
 	$(PYTHON) -m pip install -e .
@@ -51,6 +51,11 @@ benchmark-routing:
 # in the tree and verifies each against the digest manifest before routing.
 benchmark-external-corpus:
 	PYTHONPATH=src $(PYTHON) scripts/benchmark_simple_route_json_corpus.py --repetitions 2
+
+# Records the cross-router comparison table M2's closing condition 2 asks for. Offline: it reads the
+# same committed corpus as the target above and looks for baselines rather than fetching them.
+benchmark-cross-router:
+	PYTHONPATH=src $(PYTHON) scripts/benchmark_cross_router_comparison.py --repetitions 2
 
 check-audio-benchmarks:
 	$(PYTHON) scripts/check_audio_benchmarks.py
