@@ -150,6 +150,45 @@ counts, digests, units, and standard KiCad layer names only — never coordinate
 net identities, UUIDs, or source bytes — and its disclosure regression test must keep asserting
 that.
 
+Its `unmodelled_counts` map publishes every measured field on `ConversionResult`. **Adding a sixth
+measured counter is one line on the dataclass and one line in
+`board_ir_service._MEASURED_COUNT_FIELDS`**, and a contract test reflecting over the dataclass
+fails until the second line exists. The list is hand-maintained on purpose: building the map by
+reflection would make a new counter appear silently, which is precisely how the set grew from two
+to five while none of them reached an MCP client.
+
+## CI budgets are calibrated, not chosen
+
+Every explicit `timeout-minutes` in `.github/workflows/` must clear the **half rule**: a budget is
+at least twice the longest recorded hosted duration of the job it bounds. `v0.7.0` shipped without
+provenance because a 20-minute budget cancelled a 34m59s hosted gate (`D-196`), and the 20 came
+from a *local* `make check` — a real measurement of the wrong machine.
+
+The measurements live in [`.github/ci-budget-calibration.json`](../.github/ci-budget-calibration.json),
+read from the GitHub Actions API, and `scripts/check_ci_budgets.py` enforces the rule in `make lint`
+and in CI. To change a budget:
+
+1. Read the newest completed runs of the affected job —
+   `gh api repos/<owner>/<repo>/actions/runs/<run_id>/jobs` — and take
+   `completed_at - started_at` per job, which is the same wall clock `timeout-minutes` bounds.
+2. Replace that job's `observations` list in the calibration file, recording each run's
+   `conclusion` alongside its duration. Every recorded observation binds, not only the newest, so a
+   slow run cannot be retired by appending a fast one.
+3. Set the budget and run `python scripts/check_ci_budgets.py`.
+
+Only a run whose `conclusion` is `success` calibrates a budget. A failed or cancelled run stopped
+early, so its duration bounds the work from below rather than measuring it — recording a two-minute
+setup failure would justify a four-minute ceiling for a job that needs thirty-five, which is `D-196`
+with the sign flipped. Any other conclusion is rejected by name rather than dropped.
+
+A budget with no calibration entry fails, and a calibration entry for a job that declares no budget
+fails — the same closed-list discipline the schema-drift exemptions and the ledger replay list run
+under. A `timeout-minutes` the reader cannot attribute to a job fails loudly rather than being
+skipped, because a parser that ignores what it does not understand reports "no budgets" identically
+to a repository that has none. The same holds for the *value*: the key is recognised independently
+of what follows it, so `timeout-minutes: ${{ inputs.timeout }}` is a named failure rather than a
+line the regex never matched while the global "some budgets exist" check stayed green.
+
 ## Board IR development
 
 Board IR `0.3.0` is the active strict public contract. `0.2.0` and `0.1.0` are retained as

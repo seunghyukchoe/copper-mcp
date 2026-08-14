@@ -75,6 +75,7 @@ class ConversionResult:
     the two above are -- every caller of ``parse_kicad_bytes`` treats a non-empty ``diagnostics``
     tuple as a refusal -- and it counts converted pads only, so an aperture-skipped or refused pad
     never appears in it. See ADR-0096 and R-141.
+
     ``unmodelled_board_property_count`` counts the root ``(property "<key>" "<value>")``
     expressions the KiCad adapter accepted and did not model.  A root board property is one entry
     of ``BOARD::m_properties``, the board's text-variable map: two strings, read only by
@@ -85,7 +86,7 @@ class ConversionResult:
     a board from a snapshot alone would drop it, and text rendered from Board IR would leave
     ``${KEY}`` unexpanded.  It counts *expressions*, not KiCad map entries -- ``std::map::insert``
     silently keeps the first value for a repeated key, so a document with a duplicate has more
-    expressions than entries.  It is a count for the same reason the two fields above are: a
+    expressions than entries.  It is a count for the same reason the three fields above are: a
     diagnostic would refuse the board.  See ADR-0094 and R-139.
 
     ``unmodelled_pad_property_count`` counts the pad ``(property <token>)`` expressions the KiCad
@@ -101,6 +102,16 @@ class ConversionResult:
     and the eighth value, ``pad_prop_castellated``, never does either -- it refuses the board.  It
     is a count and not a diagnostic for the same reason the four above are.  See ADR-0099 and
     R-144.
+
+    **Adding a sixth measured field is one line here and one line in**
+    ``board_ir_service._MEASURED_COUNT_FIELDS``, **and the test will tell you.**  Every measured
+    field on this dataclass is published to MCP clients through ``BoardIrSummary``'s single
+    ``unmodelled_counts`` map, and ``test_board_ir_service`` reflects over these fields to assert
+    the map covers all of them -- so a counter added here and not mapped there fails a test rather
+    than becoming the fifth invisible disclosure.  That is the shape the fix took because this set
+    grew from two to five without anyone noticing that none of them reached a client:
+    ``R-134``, ``R-139``, ``R-141`` and ``R-144`` each record an erasure whose *disclosure* is the
+    count, and until 0.9.0 the disclosure went nowhere.
     """
 
     snapshot: BoardIRSnapshot | None

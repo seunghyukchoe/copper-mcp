@@ -1,0 +1,100 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "RG1-a-tabled-message-is-deleted",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "    \"dimension\": \"root dimension objects are unsupported\",\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_refusal_message_golden.py::test_the_tabled_refusal_messages_match_their_committed_golden_set"
+      ]
+    },
+    {
+      "id": "RG2-a-tabled-message-is-reworded",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "    \"trapezoid\": \"trapezoid pad shapes are unsupported in Board IR adapter v0.2\",\n",
+      "replacement": "    \"trapezoid\": \"trapezoid pad shapes are unsupported in this adapter\",\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_refusal_message_golden.py::test_the_tabled_refusal_messages_match_their_committed_golden_set"
+      ]
+    },
+    {
+      "id": "RG3-a-new-pad-field-refusal-arrives-unannounced",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "    \"back_post_machining\",\n",
+      "replacement": "    \"back_post_machining\",\n    \"backdrill_offset\",\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_refusal_message_golden.py::test_the_tabled_refusal_messages_match_their_committed_golden_set",
+        "tests/test_refusal_message_golden.py::test_the_two_token_tables_are_registered_although_no_scan_can_find_them"
+      ]
+    },
+    {
+      "id": "RG4-gr-text-box-is-split-away-from-the-copper-text-refusal",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "    \"gr_text_box\": _COPPER_TEXT_REFUSAL,\n",
+      "replacement": "    \"gr_text_box\": _UNNAMED_COPPER_GRAPHIC,\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_refusal_message_golden.py::test_the_tabled_refusal_messages_match_their_committed_golden_set"
+      ]
+    },
+    {
+      "id": "RG5-the-object-kind-changes-while-the-sentence-does-not",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "_UNNAMED_COPPER_GRAPHIC: tuple[str, str] = (\"root graphic on copper is unsupported\", \"graphic\")\n",
+      "replacement": "_UNNAMED_COPPER_GRAPHIC: tuple[str, str] = (\"root graphic on copper is unsupported\", \"shape\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_refusal_message_golden.py::test_the_tabled_refusal_messages_match_their_committed_golden_set"
+      ]
+    },
+    {
+      "id": "RG6-the-registry-scan-stops-recognising-a-refusal-sentence",
+      "file": "tests/test_refusal_message_golden.py",
+      "anchor": "    return \" \" in value and _MESSAGE.search(value) is not None\n",
+      "replacement": "    return False\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_refusal_message_golden.py::test_the_registry_covers_every_tabled_message_in_the_module"
+      ]
+    },
+    {
+      "id": "RG7-the-scan-stops-telling-a-message-from-a-diagnostic-code",
+      "file": "tests/test_refusal_message_golden.py",
+      "anchor": "    return \" \" in value and _MESSAGE.search(value) is not None\n",
+      "replacement": "    return _MESSAGE.search(value) is not None\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_refusal_message_golden.py::test_the_registry_covers_every_tabled_message_in_the_module"
+      ]
+    },
+    {
+      "id": "RG8-the-golden-file-is-edited-instead-of-the-source",
+      "file": "tests/fixtures/refusal-messages/kicad-board-ir-tables-v1.json",
+      "anchor": "      \"image\": \"root embedded images are unsupported\"\n",
+      "replacement": "      \"image\": \"root embedded images are not supported\"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_refusal_message_golden.py::test_the_tabled_refusal_messages_match_their_committed_golden_set"
+      ]
+    },
+    {
+      "id": "RG9-the-goldens-own-disclaimer-is-removed",
+      "file": "tests/fixtures/refusal-messages/kicad-board-ir-tables-v1.json",
+      "anchor": "\"not_a_contract\": \"These messages are not a contract",
+      "replacement": "\"not_a_contract\": \"These messages are a contract",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_refusal_message_golden.py::test_the_golden_set_says_in_its_own_file_that_it_promises_nothing"
+      ]
+    }
+  ]
+}

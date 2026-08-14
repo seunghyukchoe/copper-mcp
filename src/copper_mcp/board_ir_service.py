@@ -17,6 +17,7 @@ from typing import Any
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.board_ir import BoardIRSnapshot, NetClass
+from copper_mcp.board_ir.diagnostics import ConversionResult
 from copper_mcp.config import Settings
 from copper_mcp.models import SCHEMA_VERSION
 from copper_mcp.parse_budgets import parse_limits_for
@@ -34,6 +35,30 @@ from copper_mcp.request_boundary import (
 from copper_mcp.security import read_workspace_file
 
 _REQUIRED_FIELDS = ("board", "constraints")
+# Every measured field on `ConversionResult`, published as one map rather than as five fields.
+#
+# Four of the five are the *disclosure* a documented risk depends on: `R-134` (groups), `R-139`
+# (root board properties), `R-141` (edge-connector pads) and `R-144` (pad fabrication properties)
+# each record that the conversion accepts a construct, loses its token, and counts what it lost --
+# and each names the count as how a caller finds out. Until 0.9.0 the count reached no MCP client
+# at all, so those four mitigations were partial and the direction of error was under-disclosure.
+#
+# This is a hand-maintained list on purpose, and the maintenance is the point. Building the map by
+# reflecting over `ConversionResult` would make a sixth counter appear here silently, which is
+# exactly how the set grew from two to five with nobody noticing; instead a sixth counter has to be
+# added to this tuple, and `test_board_ir_service` reflects over the dataclass and fails until it
+# is. One line, in a diff a reviewer sees.
+#
+# `max_roundrect_rounding_nm` is a magnitude in nanometres rather than a count, and it is in the
+# map anyway: the audit specified all five, the key carries its own unit, and a second map for one
+# field would be the five-fields shape this exists to avoid.
+_MEASURED_COUNT_FIELDS = (
+    "max_roundrect_rounding_nm",
+    "unmodelled_group_count",
+    "edge_connector_pad_count",
+    "unmodelled_board_property_count",
+    "unmodelled_pad_property_count",
+)
 _OBJECT_COLLECTIONS = (
     "outline",
     "copper_layers",
@@ -113,6 +138,10 @@ class BoardIrSummary:
     copper_layer_ids: tuple[str, ...] = ()
     object_counts: Mapping[str, int] = field(default_factory=dict)
     conversion_diagnostic_counts: Mapping[str, int] = field(default_factory=dict)
+    # What the conversion accepted and did not model, as one map keyed by the measured field it
+    # comes from. Additive and optional: a client that does not read it is unaffected, and the
+    # accepted set of this unversioned summary contract only widens. See `_MEASURED_COUNT_FIELDS`.
+    unmodelled_counts: Mapping[str, int] = field(default_factory=dict)
     schema_version: str = SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -122,7 +151,7 @@ class BoardIrSummary:
             raise BoardIrError("Board IR summary schema version is unsupported")
         if not isinstance(self.supported, bool):
             raise BoardIrError("supported must be a boolean")
-        for name in ("object_counts", "conversion_diagnostic_counts"):
+        for name in ("object_counts", "conversion_diagnostic_counts", "unmodelled_counts"):
             counts = getattr(self, name)
             if not isinstance(counts, Mapping):
                 raise BoardIrError(f"{name} must be a mapping")
@@ -151,6 +180,11 @@ class BoardIrSummary:
                 raise BoardIrError("a supported board must not report conversion diagnostics")
             if not self.copper_layer_ids or not self.object_counts:
                 raise BoardIrError("a supported board must report layers and object counts")
+            # An empty map and an absent one read the same to a client, so a supported board
+            # reporting nothing here would be indistinguishable from the pre-0.9.0 surface that
+            # disclosed nothing. Every measured field is present, zeros included.
+            if set(self.unmodelled_counts) != set(_MEASURED_COUNT_FIELDS):
+                raise BoardIrError("a supported board must report every measured conversion count")
         else:
             if any(value is not None for value in described):
                 raise BoardIrError("an unsupported board cannot describe a Board IR snapshot")
@@ -158,6 +192,11 @@ class BoardIrSummary:
                 raise BoardIrError("an unsupported board must report conversion diagnostics")
             if self.copper_layer_ids or self.object_counts:
                 raise BoardIrError("an unsupported board cannot report converted structure")
+            # A refused conversion measured nothing: `ConversionResult` already refuses to carry a
+            # non-zero count without a snapshot, so reporting zeros here would publish a
+            # measurement that was never taken.
+            if self.unmodelled_counts:
+                raise BoardIrError("an unsupported board cannot report conversion counts")
 
     def to_dict(self) -> dict[str, Any]:
         """Return a detached plain dictionary; mutating it cannot alter this summary."""
@@ -177,7 +216,14 @@ class BoardIrSummary:
             "copper_layer_ids": list(self.copper_layer_ids),
             "object_counts": dict(self.object_counts),
             "conversion_diagnostic_counts": dict(self.conversion_diagnostic_counts),
+            "unmodelled_counts": dict(self.unmodelled_counts),
         }
+
+
+def _unmodelled_counts(conversion: ConversionResult) -> dict[str, int]:
+    """Read every measured conversion count named by `_MEASURED_COUNT_FIELDS`."""
+
+    return {name: int(getattr(conversion, name)) for name in _MEASURED_COUNT_FIELDS}
 
 
 def _object_counts(snapshot: BoardIRSnapshot) -> dict[str, int]:
@@ -236,4 +282,5 @@ def summarize_board_ir(payload: Any, settings: Settings) -> BoardIrSummary:
         angle_unit=snapshot.content.units.angle,
         copper_layer_ids=tuple(sorted(layer.id for layer in snapshot.content.copper_layers)),
         object_counts=_object_counts(snapshot),
+        unmodelled_counts=_unmodelled_counts(conversion),
     )

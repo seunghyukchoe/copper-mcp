@@ -199,6 +199,19 @@ conservative one. Bounds-based verdicts (`_outline_containment`, `_keepout_respe
 because the union's bounding box *is* the copper's bounding box — the defect is one-sided and it is
 on the side that cannot be widened.
 
+> **Amendment, 2026-08-14 — the last sentence above is wrong, and it is corrected rather than
+> deleted.** `_outline_containment` and `_keepout_respect` are **not** unaffected. The claim is true
+> of the *bound* and does not carry the *verdict*: `bbox(copper) ⊆ outline` is strictly stronger
+> than `copper ⊆ outline`, so an over-approximating box makes `rect_inside_ring` more likely false
+> and `rect_touches_ring` more likely true, and **both publish `violated`** — the false-claim
+> direction this very paragraph invokes ADR-0075 and ADR-0080 to forbid. The error is latent today
+> at roundrect-corner magnitude and would scale with envelope-minus-core under P3.3. A third site
+> the section misses entirely, `placement/legalizer.py::_resolve_bounds`, feeds `rect_inside_ring`
+> and `rect_touches_ring` from the *same call* and so admits no correct region at all. Established
+> by the [pad geometry reader survey](pad-geometry-reader-survey-v1.md) §4 (`B-112`, `D-203`,
+> `R-156`), which also finds that section 8's condition 2 covers 18 readers rather than the three
+> listed above. **Section 8's conclusion is unchanged and strengthened.**
+
 ## 6 — Two sub-questions that do not change the outcome, answered anyway
 
 **6.1 `(options (clearance outline|convexhull))` changes zone fill, not pad copper, and only

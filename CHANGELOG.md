@@ -62,6 +62,40 @@ All notable changes are documented here. The format follows
   well formed and merely too large to examine. No well-formed input any real board offers changes
   behaviour: the largest pour measured anywhere in the corpus is 130,305 vertices.
 
+- **`inspect_board_ir` discloses what the conversion accepted and did not model.** `BoardIrSummary`
+  gains one `unmodelled_counts` map carrying all five `ConversionResult` measured fields —
+  roundrect rounding, unmodelled groups, edge-connector pads, unmodelled root board properties and
+  unmodelled pad fabrication properties. Four of the five are the disclosure `R-134`, `R-139`,
+  `R-141` and `R-144` each name as their mitigation, and until now **none of them reached an MCP
+  client**, so four recorded mitigations were partial and the direction of error was
+  under-disclosure. It is an **additive optional output field**: no existing field moves, no
+  content address is involved, and `models.SCHEMA_VERSION` stays `1.0`. One map rather than five
+  fields, so a sixth counter is an entry rather than a contract change — a contract test reflects
+  over `ConversionResult` and fails until a new counter is mapped. An unsupported board reports
+  `{}`, because a refused conversion measured nothing and zeros would claim it measured zero. See
+  [the 0.9.0 migration note](docs/migrations/copper-mcp-0.9.0.md).
+- **Six process failures this project already paid for now have checkers, each proved to bite**
+  (`D-202`, `R-155`).
+  - `scripts/check_ledgers.py` fails when a `Ready` release authorization has neither a
+    published-release row nor an explicit outstanding marker. This is `D-196` mechanised: `0.7.0`
+    was authorized, tagged and published with no published row, `0.5.0` had the same gap, and both
+    were found by an audit rather than by a gate.
+  - `scripts/check_ci_budgets.py` requires every explicit `timeout-minutes` in
+    `.github/workflows/` to be at least twice its job's longest **recorded hosted** duration, read
+    from [`.github/ci-budget-calibration.json`](.github/ci-budget-calibration.json). The `v0.7.0`
+    release run was cancelled by a 20-minute budget derived from a *local* 20m29s measurement; the
+    hosted gate takes 34m59s. `ci.yml` gains its first timeout budget ever, 120 minutes against a
+    measured worst leg of 34m48s.
+  - `scripts/check_commit_message.py` gains a `--range` mode and runs in CI over the pull request's
+    own commits. It previously existed only as a client-side `commit-msg` hook, whose swallowed
+    rejection reached `main` twice. An unresolvable **or empty** range is a failure, not a pass.
+  - `check_audio_benchmarks.py` and `check_circuit_intents.py` now run hosted. Both were in
+    `make lint` from before the CI workflow existed and neither had ever run there.
+  - A golden set pins the KiCad adapter's tabled refusal messages — seven closed tables, 35
+    entries, 33 distinct sentences — so a message leaving, arriving or being reworded shows up in
+    the diff. **This makes the messages no more contractual than they were**, and the test and the
+    golden file both say so; deprecation was rejected because it would mean emitting a refusal the
+    server no longer means.
 - **`preview_layered_route` accepts `include_fill_authority`, and reports what the evidence did**
   ([ADR-0106](docs/adr/0106-layered-fill-authority-is-public-and-bound.md),
   [issue #164](https://github.com/seunghyukchoe/copper-mcp/issues/164)). Opt in and CopperMCP
@@ -171,6 +205,36 @@ never copper dropped — and sizing that ceiling belongs to
 
 ### Documentation
 
+- **Every reader of a Board IR pad's geometry is now enumerated, and three of them are reading in
+  the wrong direction** ([pad geometry reader survey](docs/research/pad-geometry-reader-survey-v1.md),
+  [D-203](docs/ledgers/decision-ledger.md), [B-112](docs/ledgers/benchmark-ledger.md),
+  [R-156](docs/ledgers/risk-register.md), plan item P3.3a,
+  [issue #116](https://github.com/seunghyukchoe/copper-mcp/issues/116)).
+  [ADR-0100](docs/adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md) refuses the
+  `custom` pad shape on the claim that a `Pad`'s three geometry fields are read in both directions
+  of error, and names **three** readers; `R-145` records that nobody had checked that was the set.
+  Two sweeps — by field access and by accessor call, the second following stored
+  `_PlacedPad.bounds`/`.core` dataclass fields to consumers three hops from any field name — find
+  **23 sites in 14 modules**: 8 needing **over**, 3 needing **under**, 4 needing **exact** where
+  neither region answers, 5 carriers, and **3 whose direction requirement is already unsatisfied**.
+  `placement/legalizer.py::_outline_containment` and `::_keepout_respect` publish **`violated`**
+  from an over-approximating box — the false-claim direction under ADR-0075/ADR-0080, because
+  `bbox(copper) ⊆ outline` is strictly stronger than `copper ⊆ outline` — and `::_resolve_bounds`
+  feeds `rect_inside_ring` (needs under) and `rect_touches_ring` (needs over) from the same call.
+  This **corrects one sentence** of the custom pad envelope note's §5, which recorded both
+  containment verdicts as unaffected. ADR-0100's decision stands and is strengthened.
+  **No code changes**: conversion is 13 of 18 before and after, no `Pad` field, schema, codec or
+  reader moves, and P3.3 is deliberately not attempted — see the entry below for why.
+- **A distinct pad envelope would convert nothing today, and that is measured rather than assumed**
+  ([B-112](docs/ledgers/benchmark-ledger.md)). The custom pad is now the live front blocker on 4 of
+  the 18 corpus saves, the `(property …)` blocker ADR-0100 reported having been cleared by
+  [ADR-0099](docs/adr/0099-pad-fabrication-properties-and-named-pad-refusals.md). With it
+  neutralised in a throwaway in-memory rewrite — deliberately unsound, never written to any tree or
+  board — **all four refuse immediately on `pad field 'thermal_bridge_angle' is unsupported`**, and
+  two of the four then hit further topology refusals. So P3.3 shipped perfectly converts **0 of 18**
+  additional saves, and a perfect P3.3 is indistinguishable from a broken one until
+  `thermal_bridge_angle` is resolved. Sixth and seventh instances of one refusal masking the next;
+  reported and filed, **never counted as progress**.
 - **PCBench is recorded as not redistributable, correcting an earlier determination.** The corpora
   README and the open-baseline research note both recorded PCBench as "MIT, redistributable with
   attribution". Its `LICENSE` is verbatim MIT, but PCBench aggregates 1,018 other repositories and

@@ -21,6 +21,7 @@ lint:
 	$(PYTHON) scripts/check_doc_links.py
 	$(PYTHON) scripts/check_schema_sets.py
 	PYTHONPATH=src $(PYTHON) scripts/check_drc_comparability.py
+	$(PYTHON) scripts/check_ci_budgets.py
 	$(PYTHON) scripts/check_audio_benchmarks.py
 	PYTHONPATH=src $(PYTHON) scripts/check_circuit_intents.py
 

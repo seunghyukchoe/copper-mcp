@@ -17,6 +17,14 @@ jobs:
   test:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
+    # 120 minutes, calibrated rather than chosen. The slowest recorded hosted leg of this job is
+    # 2,088 s (34m48s, Python 3.12), so the half rule -- a budget is at least twice the longest
+    # recorded duration -- needs 70 minutes and this is 120. The measurements are in
+    # `.github/ci-budget-calibration.json` and `scripts/check_ci_budgets.py` enforces the rule; do
+    # not move this number without re-recording that file. This job had no budget at all until
+    # now, which is not the same as having a generous one: an unbounded job cannot be cancelled by
+    # a ceiling, but it also cannot tell anyone the suite has grown.
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -36,6 +44,18 @@ jobs:
           cache-dependency-path: pyproject.toml
       - name: Install project and development tools
         run: python -m pip install --upgrade pip && python -m pip install -e ".[dev,security]"
+      # P0.4: the server twin of the `commit-msg` hook. The hook only ever protected an author who
+      # had it installed and did not bypass it, and a rejection swallowed by the loop driving the
+      # commit looks exactly like a hook that passed -- which is how this class reached `main`
+      # twice. It runs on one matrix leg because the answer cannot differ between interpreters,
+      # and inside this job rather than beside it so it needs no timeout budget of its own (see
+      # `.github/ci-budget-calibration.json`: an uncalibrated budget is a guess).
+      - name: Check commit message conventions
+        if: github.event_name == 'pull_request' && matrix.python-version == '3.12'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python scripts/check_commit_message.py --range "${BASE_SHA}..${HEAD_SHA}"
       - name: Check formatting
         run: python -m ruff format --check .
       - name: Lint
@@ -55,6 +75,16 @@ jobs:
         run: python scripts/check_schema_sets.py
       - name: Check published DRC comparability literals
         run: python scripts/check_drc_comparability.py
+      # P0.5: both of these have been in `make lint` since before this workflow existed and
+      # neither had ever run hosted, so a contributor without a local KiCad-era checkout could
+      # break either one and see a green pull request.
+      - name: Check audio benchmark catalog
+        run: python scripts/check_audio_benchmarks.py
+      - name: Check Circuit Intent fixtures
+        run: PYTHONPATH=src python scripts/check_circuit_intents.py
+      # P0.3: the budgets declared in this directory, against recorded hosted durations.
+      - name: Check CI timeout budgets
+        run: python scripts/check_ci_budgets.py
       - name: Scan repository for secrets
         run: python scripts/check_secrets.py
       - name: Build packages

@@ -44,6 +44,22 @@ ledger and `CHANGELOG.md` relative to that source commit. `Ready` authorizes cre
 corresponding tag from the metadata commit; it is not evidence that a tag, artifact, GitHub release,
 or package publication exists.
 
+**Every `Ready` row must resolve.** `scripts/check_ledgers.py` fails when a `Ready` row's version
+has neither a published-release row in the table above nor an explicit outstanding marker naming it
+(`P0.2`). This is `D-196` mechanised: `0.7.0` was authorized, tagged and published with no
+published-release row, `0.5.0` had the same gap, and both were repaired by hand after an audit
+swept the tags rather than caught at the time. The marker is a dated blockquote whose first line is
+
+```text
+> **Outstanding publication — <MAJOR.MINOR.PATCH>:** why it is still open, and what would close it.
+```
+
+written with the real version in place of the placeholder — the placeholder is what keeps this
+paragraph from being read as a live marker by the checker it describes. It fails in two more
+directions so it cannot become a suppression switch: naming a version with
+no `Ready` row, and surviving the publication it excused. A published row with **no** `Ready` row is
+not a failure — `0.1.0` predates this discipline, and repairing history is not a checker's business.
+
 | Version | Date | Validated source commit | Full gate evidence | Status |
 |---|---|---|---|---|
 | 0.2.0 | 2026-08-03 | `0cdb1fac7c16c2ccce72c8d1777c3f68d48d3bb1` | Clean `make check` on this exact commit with Python 3.12.13 and KiCad 10.0.5: Ruff lint and format, version, ledger, audio, and Circuit Intent checkers, strict mypy across 39 source files also clean under mypy 2.3.0, 494 tests plus 29 subtests including all 14 real-KiCad DRC nodes, secret scan, `pip-audit` with no known vulnerabilities, and the isolated sdist and wheel build; hosted PR #34 checks (CI on Python 3.11-3.13, CodeQL, dependency review, dependency and secret audit) green at this head | Superseded |

@@ -67,6 +67,17 @@ KiCad.
 | `routing/layered_board_adapter.py::_pad_bounds` | **over** | the same box, inflated into a layered obstacle |
 | `routing/astar.py::_pad_core_extent` | **under** — must be inside the copper | "half extents of a rectangle strictly inside the pad", the attachment core a search may terminate on |
 
+> **Amendment, 2026-08-14.** This table names the three clearest readers, and it was written as if
+> it were the complete set — [R-145](../ledgers/risk-register.md) records that nobody had checked.
+> The P3.3a survey ([pad geometry reader survey](../research/pad-geometry-reader-survey-v1.md),
+> `B-112`, `D-203`) enumerates **23 sites across 14 modules**: 8 needing **over**, 3 needing
+> **under**, 4 needing an **exact** region neither answers, 5 carriers, and **3 whose direction
+> requirement is unsatisfied on `main` today**. **This record's decision is unaffected and its
+> argument is strengthened** — one rectangle cannot serve 18 readers if it cannot serve 3. What
+> moves is the cost of the revisit in Consequences below: condition 2 is not bookkeeping over three
+> call sites, and one of the three unsatisfied readers needs two opposite directions from a single
+> accessor, so it admits no re-point at all.
+
 For `PadShape.RECT` the over- and under-approximating readers collapse onto one rectangle —
 `(size + 1) // 2` against `size // 2`, at most a nanometre apart per axis. A `Pad` with
 `shape=RECT` therefore does not *bound* its copper in either direction; it **asserts that the
