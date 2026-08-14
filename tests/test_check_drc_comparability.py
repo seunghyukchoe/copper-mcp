@@ -109,6 +109,45 @@ def test_the_deferred_runner_still_has_the_reason_it_is_deferred() -> None:
     assert "script_sha256" in artifact
 
 
+_FREEROUTING_RUNNER = "scripts/benchmark_freerouting_comparison.py"
+_FREEROUTING_ARTIFACT = "benchmarks/results/routing/2026-08-05-freerouting-common-two-pad.json"
+
+
+def test_the_freerouting_runner_is_wired_because_it_has_no_self_pin_to_protect() -> None:
+    """The deferral is a cost paid for a real binding, so the reason has to be checked, not assumed.
+
+    `benchmark_route_bundle.py` is deferred because its artifact pins `script_sha256` of the
+    runner. This runner was checked against that same reason and does not have it: its artifact
+    records no `script_sha256` and no `script` field at all, so editing the runner invalidates
+    nothing that was published. If a future regeneration ever adds a self-pin here, this test
+    fails and the wiring decision has to be re-taken rather than silently inherited.
+    """
+
+    assert _FREEROUTING_RUNNER in check_drc_comparability.DRC_RECORDING_RUNNERS
+    assert _FREEROUTING_RUNNER not in check_drc_comparability.DEFERRED_RUNNERS
+
+    artifact = json.loads((ROOT / _FREEROUTING_ARTIFACT).read_text(encoding="utf-8"))
+    assert "script_sha256" not in artifact
+    assert "script" not in artifact
+    assert artifact["schema"] == "copper-mcp/benchmark/freerouting-comparison/v1"
+
+
+def test_the_freerouting_artifacts_three_drc_sections_are_swept_and_exempted() -> None:
+    """The sections the first version of the section table could not see.
+
+    All three publish their counts under the second vocabulary. Their bytes are not edited --
+    `run_id` is a digest of the artifact's own content -- so each is keyed into `PRE_POLICY`
+    against `B-111` exactly as the six artifacts before them.
+    """
+
+    document = json.loads((ROOT / _FREEROUTING_ARTIFACT).read_text(encoding="utf-8"))
+    paths = {path for path, _ in check_drc_comparability.drc_sections(document)}
+
+    assert paths == {"/results[0]/drc", "/results[1]/drc", "/source_drc"}
+    for path in paths:
+        assert (_FREEROUTING_ARTIFACT, path) in check_drc_comparability.PRE_POLICY
+
+
 # ---------------------------------------------------------------------------
 # The artifact sweep
 # ---------------------------------------------------------------------------

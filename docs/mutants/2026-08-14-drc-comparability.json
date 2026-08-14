@@ -194,6 +194,78 @@
       "killing_tests": [
         "tests/test_drc_comparability.py::test_the_live_drc_summary_schema_is_untouched_by_this_policy"
       ]
+    },
+    {
+      "id": "DC19-the-second-count-vocabulary-drops-out-of-the-section-table",
+      "file": "src/copper_mcp/benchmarks/drc_comparability.py",
+      "anchor": "        \"footprint_errors\",\n        \"hard_violations\",\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_the_second_count_vocabulary_is_a_section_too",
+        "tests/test_check_drc_comparability.py::test_the_gate_is_green_on_this_tree"
+      ]
+    },
+    {
+      "id": "DC20-the-renamed-unconnected-count-drops-out-of-the-section-table",
+      "file": "src/copper_mcp/benchmarks/drc_comparability.py",
+      "anchor": "        \"unconnected\",\n        \"unconnected_count\",\n",
+      "replacement": "        \"unconnected_count\",\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_the_second_count_vocabulary_is_a_section_too"
+      ]
+    },
+    {
+      "id": "DC21-a-declared-fixture-baseline-is-policed-as-if-it-were-an-observation",
+      "file": "src/copper_mcp/benchmarks/drc_comparability.py",
+      "anchor": "        \"exclusion_count\",\n        \"footprint_errors\",\n",
+      "replacement": "        \"exclusion_count\",\n        \"expected_hard_violations\",\n        \"footprint_errors\",\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_drc_comparability.py::test_a_declared_fixture_baseline_is_not_a_drc_section",
+        "tests/test_check_drc_comparability.py::test_the_gate_is_green_on_this_tree"
+      ]
+    },
+    {
+      "id": "DC22-the-freerouting-runner-stops-qualifying-what-it-publishes",
+      "file": "scripts/benchmark_freerouting_comparison.py",
+      "anchor": "    require_qualified(report, where=SCHEMA)\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_freerouting_comparison.py::test_the_emission_gate_refuses_an_unqualified_drc_section"
+      ]
+    },
+    {
+      "id": "DC23-a-single-invocation-drc-count-claims-agreement",
+      "file": "scripts/benchmark_freerouting_comparison.py",
+      "anchor": "        LITERAL_KEY: comparability_of([dict(observed_counts)]),\n",
+      "replacement": "        LITERAL_KEY: \"repeated_agreement\",\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_freerouting_comparison.py::test_gui_source_drc_requires_unambiguous_expected_report_structure"
+      ]
+    },
+    {
+      "id": "DC24-the-cli-drc-path-publishes-a-bare-count",
+      "file": "scripts/benchmark_freerouting_comparison.py",
+      "anchor": "                LITERAL_KEY: comparability_of(\n                    [\n                        {\n                            \"hard_violations\": summary.error_count,\n                            \"unconnected\": summary.unconnected_count,\n                        }\n                    ]\n                ),\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_freerouting_comparison.py::test_the_cli_drc_path_qualifies_the_counts_it_publishes"
+      ]
+    },
+    {
+      "id": "DC25-the-freerouting-runner-falls-out-of-the-registry",
+      "file": "scripts/check_drc_comparability.py",
+      "anchor": "        \"scripts/benchmark_freerouting_comparison.py\",\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_drc_comparability.py::test_the_freerouting_runner_is_wired_because_it_has_no_self_pin_to_protect"
+      ]
     }
   ]
 }

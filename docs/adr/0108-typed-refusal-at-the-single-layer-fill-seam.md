@@ -114,17 +114,42 @@ public route preview builds its islands from `run_zone_fill_authority` and mypy 
 path, which is exactly why ADR-0101 declined this and why it is landing now as hygiene rather than
 as a correctness fix.
 
-**Evidence.** 19 committed mutants,
+**A ceiling on the walk itself, added under review.** The first version of this gate bounded the
+islands and bounded each island's ring, and those two ceilings **multiply**: a Python tuple
+aliases, so `(one_island,) * 32_768` holding one 1,000,000-vertex ring costs a caller a few
+hundred kilobytes to build and would have cost this walk 3.27e10 vertex predicates — performed on
+`propose` *before* `_WorkBudget` exists, so metered by nothing and cancellable by nothing, and on
+`replay` with no budget at all. That is a regression this change introduced rather than found:
+`_polygon_bounds` charged exactly these reads against `max_obstacle_checks`, and moving a copy of
+the traversal to the boundary left the meter behind. `verified_fill_over_check_budget` restores it
+in the only form a seam that runs before the budget can carry — an **aggregate** ceiling on the
+vertices of every island together, checked by an O(islands) pass that reads one `len` per island
+and never touches a vertex.
+
+The ceiling is `AStarSettings`'s **domain ceiling on `max_obstacle_checks`** (10,000,000): each
+vertex this boundary examines is one geometric predicate, and that constant is the most such
+predicates any one request may ever buy. It is not a new number, and it is deliberately **larger**
+than the per-island ceiling: equal, every over-ceiling ring would cross the aggregate first and
+the per-island refusal would become unreachable — the dead-code outcome this ADR refused when it
+left the three-vertex floor in `_prepare`. And the refusal is `obstacle_check_budget_exceeded`
+rather than `unsupported_geometry`, because the input it stops is **well formed and merely too
+large to examine**; the two functions are held apart in both directions, so the size pass never
+reports a malformedness and the shape gate never reports a size.
+
+**Evidence.** 25 committed mutants,
 [`docs/mutants/2026-08-14-verified-fill-shape-gate.json`](../mutants/2026-08-14-verified-fill-shape-gate.json),
-one per clause plus the two call sites, the typed code, both ceilings, both identity predicates,
-the floor in both directions, and the containment gate — **19 mutants, 19 killed, 0 survivors,
-0 `not_run`**, run through `scripts/mutation_harness.py` per ADR-0098; Python 3.12.13 on
-macOS-26.5.2-arm64, `baseline_returncode: 0`, spec
-`sha256:9795eaaf030b89db91baf1562b01a2517a013ddea01c64fa619f0aa8deb980b9`. Read the mapping and
+one per clause plus the four call sites, both typed codes, all three ceilings, both identity
+predicates, the floor in both directions, and the containment gate — **25 mutants, 25 killed,
+0 survivors, 0 `not_run`**, run through `scripts/mutation_harness.py` per ADR-0098; Python 3.12.13
+on macOS-26.5.2-arm64, `baseline_returncode: 0`, spec
+`sha256:8011ceaf831331b1434f5e09f8dcdaf41c3a89b4f96bdc7b37b2f533fb16da30`. Read the mapping and
 not the count: **VF15 and VF16 are the pair that matters.** They hold the three-vertex floor and
 the boundary ceiling apart in opposite directions — VF16 deletes `_prepare`'s floor, VF15 adds the
 floor to the boundary — so between them no version of this change can leave one of the two checks
-unreachable while the suite stays green.
+unreachable while the suite stays green. **VF21 and VF25 are the second such pair**: VF21
+harmonises the aggregate ceiling down onto the per-island one, which would make the per-island
+refusal unreachable, and VF25 lets the size pass answer for malformedness, which would make the
+shape gate's own names unreachable.
 
 ## Alternatives considered
 
@@ -146,4 +171,14 @@ the same protection at a fraction of the risk, and says so.
 
 **Refuse with a new failure code.** Rejected: the issue names `unsupported_geometry` and ADR-0101's
 two gates already use it, so a second vocabulary for the same class of mistake would be the drift
-this ADR is closing.
+this ADR is closing. The aggregate ceiling is not an exception to this and is not a new code: it
+reuses `obstacle_check_budget_exceeded`, which is the code this exact traversal already refused
+under while `_polygon_bounds` metered it, and it is a different *class* of mistake — a size, not a
+malformedness.
+
+**Meter the boundary walk under `_WorkBudget` instead of bounding it.** Rejected because the seam
+cannot: `replay` never builds a budget, and on `propose` the gate must run before `fill_binding_for`
+and before `_prepare`, which is before the budget exists. Building a budget early enough to charge
+would mean charging the search's own counter for validation work, so a large pour would silently
+buy a shorter search. A ceiling derived from that budget's domain maximum bounds the same work
+without spending the caller's.

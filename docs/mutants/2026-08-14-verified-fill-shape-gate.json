@@ -203,6 +203,70 @@
       "killing_tests": [
         "tests/test_routing_astar.py::test_the_shape_gate_does_not_swallow_the_semantic_gates"
       ]
+    },
+    {
+      "id": "VF20-aggregate-vertex-ceiling-removed",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        vertices += len(points)\n        if vertices > _MAX_VERIFIED_FILL_VERTICES:\n",
+      "replacement": "        vertices += len(points)\n        if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_the_aggregate_ceiling_refuses_a_pour_no_island_of_which_is_over_the_ceiling",
+        "tests/test_routing_astar.py::test_replay_carries_the_same_aggregate_ceiling",
+        "tests/test_routing_astar.py::test_the_aggregate_ceiling_reports_size_and_never_malformedness"
+      ]
+    },
+    {
+      "id": "VF21-aggregate-ceiling-harmonised-with-the-per-island-ceiling",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "_MAX_VERIFIED_FILL_VERTICES = _MAX_OBSTACLE_CHECKS\n",
+      "replacement": "_MAX_VERIFIED_FILL_VERTICES = _MAX_VERIFIED_FILL_ISLAND_VERTICES\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_the_two_per_path_ceilings_multiply_and_the_aggregate_ceiling_is_what_stops_it",
+        "tests/test_routing_astar.py::test_a_single_over_ceiling_ring_is_still_the_per_island_refusal"
+      ]
+    },
+    {
+      "id": "VF22-size-gate-not-called-from-propose",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        over_budget = verified_fill_over_check_budget(verified_fill)\n        if over_budget is not None:\n            # Before the shape walk, which is what this bounds, and before `_WorkBudget` exists\n            # to meter or cancel it.\n            return _result_failure(\n                _fail(RouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED, over_budget)\n            )\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_the_aggregate_ceiling_refuses_a_pour_no_island_of_which_is_over_the_ceiling"
+      ]
+    },
+    {
+      "id": "VF23-size-gate-not-called-from-replay",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        over_budget = verified_fill_over_check_budget(verified_fill)\n        if over_budget is not None:\n            # Before the shape walk, which is what this bounds.  `replay` has no `_WorkBudget`\n            # at all, so a ceiling is the only meter this seam can carry.\n            return _result_failure(\n                _fail(RouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED, over_budget)\n            )\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_replay_carries_the_same_aggregate_ceiling"
+      ]
+    },
+    {
+      "id": "VF24-size-refusal-loses-its-resource-code",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "            # Before the shape walk, which is what this bounds, and before `_WorkBudget` exists\n            # to meter or cancel it.\n            return _result_failure(\n                _fail(RouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED, over_budget)\n            )\n",
+      "replacement": "            return _result_failure(\n                _fail(RouteFailureCode.UNSUPPORTED_GEOMETRY, over_budget)\n            )\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_the_aggregate_ceiling_refuses_a_pour_no_island_of_which_is_over_the_ceiling"
+      ]
+    },
+    {
+      "id": "VF25-size-gate-answers-for-malformedness-too",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "        if not isinstance(island, VerifiedFill):\n            return None\n        points: object = island.points\n        if not isinstance(points, tuple):\n            return None\n",
+      "replacement": "        if not isinstance(island, VerifiedFill):\n            return \"verified fill entry must be a VerifiedFill value\"\n        points: object = island.points\n        if not isinstance(points, tuple):\n            return \"verified fill island is not a bounded polygon\"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_the_aggregate_ceiling_reports_size_and_never_malformedness",
+        "tests/test_routing_astar.py::test_propose_refuses_malformed_verified_fill_by_class"
+      ]
     }
   ]
 }

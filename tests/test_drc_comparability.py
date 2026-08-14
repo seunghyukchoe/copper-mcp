@@ -172,6 +172,39 @@ def test_a_section_is_found_wherever_it_sits_including_inside_a_list() -> None:
     assert {path for path, _ in drc_sections(document)} == {"/boards[0]/drc", "/totals"}
 
 
+def test_the_second_count_vocabulary_is_a_section_too() -> None:
+    """A renamed count is the same KiCad answer, so the table has to know both names.
+
+    `benchmark_freerouting_comparison.py` publishes `DrcSummary.error_count` as
+    `hard_violations` and `DrcSummary.unconnected_count` as `unconnected`, and adds the KiCad-GUI
+    report's own `footprint_errors`. While the table named only the first vocabulary, three
+    committed DRC sections were swept over in silence and the whole gate reported green -- which
+    is the failure mode ADR-0109 exists to prevent, arriving through the table rather than
+    through a missing runner.
+    """
+
+    document = {
+        "results": [
+            {"drc": {"hard_violations": 0, "unconnected": 0, "footprint_errors": 0}},
+            {"drc": {"status": "failed"}},
+        ],
+        "source_drc": {"hard_violations": 0},
+        "source_drc_binding": {"expected_hard_violations": 0, "status": "self_attested"},
+    }
+
+    assert {path for path, _ in drc_sections(document)} == {"/results[0]/drc", "/source_drc"}
+    for name in ("footprint_errors", "hard_violations", "unconnected"):
+        assert name in SECTION_KEYS
+        assert name in COUNT_KEYS
+
+
+def test_a_declared_fixture_baseline_is_not_a_drc_section() -> None:
+    """`expected_hard_violations` is read out of a provenance file, not off a DRC run."""
+
+    assert list(drc_sections({"source_drc_binding": {"expected_hard_violations": 0}})) == []
+    assert "expected_hard_violations" not in COUNT_KEYS
+
+
 def test_a_derived_flag_alone_does_not_make_a_section() -> None:
     """`passed` and `clean` mean too many things elsewhere to identify a DRC record by."""
 

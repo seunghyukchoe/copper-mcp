@@ -8,6 +8,12 @@ import types
 from datetime import UTC, datetime
 from pathlib import Path
 
+from copper_mcp.benchmarks.drc_comparability import (
+    LITERAL_KEY,
+    DrcComparabilityError,
+    drc_sections,
+)
+
 SCRIPT = Path(__file__).parents[1] / "scripts" / "benchmark_freerouting_comparison.py"
 SPEC = importlib.util.spec_from_file_location("benchmark_freerouting_comparison", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
@@ -285,6 +291,40 @@ def test_drc_metrics_accepts_kicad_cli_v10_basename_source_field(
     assert observed == {"source": "result.kicad_pcb"}
 
 
+def test_the_cli_drc_path_qualifies_the_counts_it_publishes(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    """One `kicad-cli pcb drc` invocation per board, so the counts are `single_invocation`.
+
+    `hard_violations` and `unconnected` are `DrcSummary.error_count` and
+    `DrcSummary.unconnected_count` renamed on the way out, so they carry exactly the run-to-run
+    instability `B-107` measured and ADR-0109 requires them to say so.
+    """
+
+    board = tmp_path / "result.kicad_pcb"
+    board.write_text("(kicad_pcb (version 20240108))\n", encoding="utf-8")
+
+    def fake_run(argv: tuple[str, ...], _timeout: int, _cwd: Path, **_kwargs: object) -> object:
+        Path(argv[argv.index("--output") + 1]).write_text("{}", encoding="utf-8")
+        return benchmark.ProcessResult(argv, 1, 0, "ok", "", "")
+
+    monkeypatch.setattr(benchmark, "run_process", fake_run)
+    monkeypatch.setattr(
+        benchmark,
+        "_parse_drc_report",
+        lambda *_args, **_kwargs: types.SimpleNamespace(
+            error_count=3, unconnected_count=1, kicad_version="10.0.5"
+        ),
+    )
+
+    result = benchmark.drc_metrics(tmp_path / "kicad-cli", board, 1, tmp_path)
+
+    assert result["status"] == "ok"
+    assert result["hard_violations"] == 3
+    assert result["unconnected"] == 1
+    assert result[LITERAL_KEY] == "single_invocation"
+
+
 def test_source_drc_binding_requires_declared_exact_baseline_and_source_hash() -> None:
     source_sha = "sha256:" + "a" * 64
     expectation = {"hard_violations": 0, "intentional_unconnected_items": 1}
@@ -334,6 +374,9 @@ def test_gui_source_drc_requires_unambiguous_expected_report_structure(tmp_path:
     assert evidence["hard_violations"] == 0
     assert evidence["unconnected"] == 1
     assert evidence["footprint_errors"] == 0
+    # One transcription of one operator-run GUI report. This runner cannot even assert the
+    # precondition for `repeated_agreement` -- it reads a file it did not produce.
+    assert evidence[LITERAL_KEY] == "single_invocation"
     assert benchmark.gui_source_drc_metrics(source, None)["status"] == "unavailable"
     report.write_text("** Drc report for another.kicad_pcb **", encoding="utf-8")
     assert benchmark.gui_source_drc_metrics(source, report)["status"] == "failed"
@@ -549,8 +592,20 @@ def _comparison_inputs(tmp_path: Path) -> dict[str, Path]:
     }
 
 
+#: What `drc_metrics` returns for a clean board, including the ADR-0109 comparability literal it
+#: derives.  A fake that omits the literal is not a stand-in for the real function -- the emission
+#: gate in `build_report` refuses it, which is exactly what
+#: `test_the_emission_gate_refuses_an_unqualified_drc_section` proves.
+_CLEAN_DRC: dict[str, object] = {
+    "status": "ok",
+    "hard_violations": 0,
+    "unconnected": 0,
+    LITERAL_KEY: "single_invocation",
+}
+
+
 def _clean_drc(*_args: object, **_kwargs: object) -> dict[str, object]:
-    return {"status": "ok", "hard_violations": 0, "unconnected": 0}
+    return dict(_CLEAN_DRC)
 
 
 def _build_kwargs(paths: dict[str, Path]) -> dict[str, Path]:
@@ -562,6 +617,87 @@ def _build_kwargs(paths: dict[str, Path]) -> dict[str, Path]:
         "kicad_cli": paths["kicad"],
         "provenance": paths["provenance"],
     }
+
+
+def test_every_drc_section_this_runner_writes_carries_the_comparability_literal(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    """ADR-0109: the counts this runner publishes say which comparability they were taken with.
+
+    Both of its DRC evidence paths are one invocation -- one `kicad-cli pcb drc` call per board,
+    and one transcription of an operator's GUI report -- so both are `single_invocation`, and the
+    prohibition follows: none of these counts may be cited in a before/after differential.
+    """
+
+    paths = _comparison_inputs(tmp_path)
+    monkeypatch.setattr(
+        benchmark, "preflight", lambda **_kwargs: {"available": True, "reasons": [], "probes": {}}
+    )
+    monkeypatch.setattr(benchmark, "drc_metrics", _clean_drc)
+    monkeypatch.setattr(
+        benchmark,
+        "run_process",
+        lambda argv, *_args: benchmark.ProcessResult(argv, 1, 0, "ok", "", ""),
+    )
+    report = benchmark.build_report(
+        **_build_kwargs(paths),
+        copper_board=paths["board"],
+        freerouting_board=paths["board"],
+        copper_receipt=None,
+        freerouting_receipt=None,
+        copper_command=None,
+        seed=1,
+        timeout_seconds=1,
+    )
+
+    sections = dict(drc_sections(report))
+    assert sections
+    for path, section in sections.items():
+        assert section[LITERAL_KEY] == "single_invocation", path
+
+
+def test_the_emission_gate_refuses_an_unqualified_drc_section(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    """The gate walks the whole report, not the sections `build_report` remembered to build.
+
+    A count published under a key nobody wired is exactly how the first version of ADR-0109's
+    section table let this runner's three committed sections through, so the emission gate is
+    proved by handing it a section that lacks the literal rather than by observing that the
+    sections it does build carry one.
+    """
+
+    paths = _comparison_inputs(tmp_path)
+    monkeypatch.setattr(
+        benchmark, "preflight", lambda **_kwargs: {"available": True, "reasons": [], "probes": {}}
+    )
+    monkeypatch.setattr(
+        benchmark,
+        "drc_metrics",
+        lambda *_args, **_kwargs: {"status": "ok", "hard_violations": 0, "unconnected": 0},
+    )
+    monkeypatch.setattr(
+        benchmark,
+        "run_process",
+        lambda argv, *_args: benchmark.ProcessResult(argv, 1, 0, "ok", "", ""),
+    )
+
+    try:
+        benchmark.build_report(
+            **_build_kwargs(paths),
+            copper_board=paths["board"],
+            freerouting_board=paths["board"],
+            copper_receipt=None,
+            freerouting_receipt=None,
+            copper_command=None,
+            seed=1,
+            timeout_seconds=1,
+        )
+    except DrcComparabilityError as error:
+        assert "drc_comparability" in str(error)
+        assert benchmark.SCHEMA in str(error)
+    else:
+        raise AssertionError("an unqualified DRC section must not reach the artifact's run_id")
 
 
 def test_failed_freerouting_with_ses_and_clean_boards_cannot_close(
@@ -952,7 +1088,7 @@ def test_harness_result_drc_uses_private_copy_and_refuses_tampered_source(
         _cli: Path, copied: Path, _timeout: int, cwd: Path, **_kwargs: object
     ) -> dict[str, int | str]:
         observed.append((copied, cwd))
-        return {"status": "ok", "hard_violations": 0, "unconnected": 0}
+        return dict(_CLEAN_DRC)  # type: ignore[arg-type]
 
     monkeypatch.setattr(benchmark, "drc_metrics", clean_drc)
     result = benchmark.private_result_for_board(
@@ -999,7 +1135,7 @@ def test_harness_preflight_failure_confines_fallback_freerouting_result_drc(
         _cli: Path, board: Path, _timeout: int, cwd: Path, **_kwargs: object
     ) -> dict[str, int | str]:
         observed.append((board, cwd))
-        return {"status": "ok", "hard_violations": 0, "unconnected": 0}
+        return dict(_CLEAN_DRC)  # type: ignore[arg-type]
 
     monkeypatch.setattr(benchmark, "private_workspace_capability", lambda: capability)
     monkeypatch.setattr(

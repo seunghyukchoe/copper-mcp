@@ -63,9 +63,21 @@ Both halves are mechanical.
   runner took, and `drc_differential` is the sanctioned way to compute a delta — it refuses unless
   **both** sides are `repeated_agreement`.
 * `require_qualified` is the **emission gate**. It walks the whole report rather than the section
-  a runner remembered to pass, and four DRC-recording runners call it before writing:
+  a runner remembered to pass, and five DRC-recording runners call it before writing:
   `benchmark_real_board_capability.py`, `benchmark_layered_kicad_drc.py`,
-  `benchmark_public_placement_drc.py` and `benchmark_placement_drc.py`.
+  `benchmark_public_placement_drc.py`, `benchmark_placement_drc.py` and
+  `benchmark_freerouting_comparison.py`.
+* **A count is policed by the name it is published under, and this project publishes under two
+  vocabularies.** The first version of the section table carried only `DrcSummary`'s own field
+  names, so `benchmark_freerouting_comparison.py` — which renames `error_count` to
+  `hard_violations` and `unconnected_count` to `unconnected`, and adds the KiCad-GUI report's
+  `footprint_errors` — published three committed DRC sections that the sweep walked straight past
+  while reporting green. That is this policy's own failure mode arriving through the table rather
+  than through a missing runner, and it is why the table's comment now names the review obligation
+  explicitly: a runner that publishes a count under a new key must add the key here, and a name
+  that is *not* an observation must stay out. `expected_hard_violations` is the worked example of
+  the second half — a fixture's declared baseline read out of a provenance file, where demanding a
+  comparability literal would qualify a constant.
 * **The fifth is deferred, with the reason recorded rather than the runner quietly skipped.**
   `benchmark_route_bundle.py` cannot be wired yet: its committed artifact records `script_sha256`
   **of the runner itself**, so editing the runner invalidates a published binding between the
@@ -74,6 +86,14 @@ Both halves are mechanical.
   the emission call now would trade a real binding for a gate the artifact sweep already provides
   for the same file. It sits in `DEFERRED_RUNNERS` with the reason and the event that lifts it,
   and a test asserts the pin that is the reason still exists.
+* **`benchmark_freerouting_comparison.py` was checked against that same reason and does not have
+  it, so it is wired rather than deferred.** Its committed artifact records no `script_sha256` and
+  no `script` field at all: its only self-binding is `run_id`, a digest of the artifact's own
+  content, which the emission call cannot disturb because it neither edits the committed file nor
+  changes what a re-run of the unmodified runner would compute from the same inputs. A deferral is
+  a cost paid to protect a real binding; there was none here to protect, so deferring would have
+  been a hole wearing a record's clothes. A test pins the absence of the pin, so a future
+  regeneration that adds one has to re-take the decision rather than inherit it.
 * `scripts/check_drc_comparability.py` is the **repository gate**, in `make lint` and in CI. It
   sweeps every committed artifact, fails on an unqualified DRC section, fails on a delta published
   beside a non-`repeated_agreement` literal, and requires each registered runner to import the
@@ -133,15 +153,18 @@ mechanism behind the caps is inferred from their values.
 what justifies it. `R-154` carries the open risk — `R-146` covers corpus decay, which is a
 different hazard and would mask this one.
 
-**Evidence.** 18 committed mutants,
+**Evidence.** 25 committed mutants,
 [`docs/mutants/2026-08-14-drc-comparability.json`](../mutants/2026-08-14-drc-comparability.json),
 covering the literal omitted, a `single_invocation` count admitted into a differential, the
 prohibition neutered, the count that moved excluded from the comparison, an aggregate taking the
 strongest rather than the weakest, the sweep losing its list descent, the exemption list becoming a
-suppression mechanism, a runner dropping the gate, and the live schema being widened — **18
-mutants, 18 killed, 0 survivors, 0 `not_run`**, run through `scripts/mutation_harness.py` per
+suppression mechanism, a runner dropping the gate, the live schema being widened, **either half of
+the second count vocabulary dropping out of the section table**, a declared fixture baseline being
+policed as if it were an observation, and the FreeRouting runner losing its registry entry, its
+emission call or either of its two derived literals — **25 mutants, 25 killed, 0 survivors,
+0 `not_run`**, run through `scripts/mutation_harness.py` per
 ADR-0098; Python 3.12.13 on macOS-26.5.2-arm64, `baseline_returncode: 0`, spec
-`sha256:2c6d18f8684e9434c27c1b5942a1365f06211b101d66a797fd8ccfa2da5e24a1`. Read the mapping and
+`sha256:b5dc822f6c4bbc1ad172f63357f35a9ae696462054513aec02f8ca2a37663165`. Read the mapping and
 not the count: **DC04 and DC08 are the pair that matters.** DC04 widens the admissible set to
 include `single_invocation`, which is the prohibition failing open; DC08 adds `error_count` to
 the keys excluded from the agreement comparison, which is the *literal* failing open — a section

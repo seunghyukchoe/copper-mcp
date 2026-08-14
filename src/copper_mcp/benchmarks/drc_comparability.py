@@ -87,6 +87,19 @@ REPETITIONS_KEY: Final[str] = "drc_repetitions"
 #: The table is closed on purpose: a count published under a name that is not here is not
 #: policed, which is the way to defeat this module and the reason `COUNT_KEYS` below is reviewed
 #: whenever a runner publishes a new DRC field.
+#:
+#: **This project publishes KiCad DRC counts under two vocabularies, not one**, and the first
+#: version of this table carried only the first -- which is exactly the hole the policy exists to
+#: close, because a table that names some of the vocabulary polices some of the counts and reads
+#: as if it policed all of them. `benchmark_real_board_capability.py` and the three placement and
+#: layered runners project `DrcSummary`'s own field names (`error_count`, `warning_count`,
+#: `unconnected_count`, ...). `benchmark_freerouting_comparison.py` renames the same three
+#: quantities on the way out -- `hard_violations` is `DrcSummary.error_count`, `unconnected` is
+#: `DrcSummary.unconnected_count`, and `footprint_errors` is the KiCad-GUI report's own section
+#: heading -- so its counts are the same KiCad answers under different keys and inherit exactly
+#: the instability `B-107` measured. `expected_hard_violations` is deliberately **absent**: it is
+#: a fixture's declared baseline read out of a provenance file, not an observation of a DRC run,
+#: so demanding a comparability literal of it would qualify a constant.
 SECTION_KEYS: Final[frozenset[str]] = frozenset(
     {
         "clean_drc_runs",
@@ -95,8 +108,11 @@ SECTION_KEYS: Final[frozenset[str]] = frozenset(
         "drc_reported",
         "error_count",
         "exclusion_count",
+        "footprint_errors",
+        "hard_violations",
         "ignored_check_count",
         "passed_drc_runs",
+        "unconnected",
         "unconnected_count",
         "violation_type_counts",
         "warning_count",

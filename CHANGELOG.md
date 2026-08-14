@@ -28,10 +28,15 @@ All notable changes are documented here. The format follows
 - **A DRC comparability gate**, `scripts/check_drc_comparability.py`, in `make lint` and in CI. It
   sweeps every committed benchmark artifact for an unqualified DRC section, refuses a published
   delta beside a non-`repeated_agreement` count, and requires each registered DRC-recording runner
-  to import the enforcement module. Four runners are wired;
+  to import the enforcement module. Five runners are wired;
   `scripts/benchmark_route_bundle.py` is **deferred with its reason recorded** rather than wired,
   because its committed artifact pins `script_sha256` of the runner itself — editing it would
-  invalidate a published binding to buy a gate the artifact sweep already provides. Its pre-policy
+  invalidate a published binding to buy a gate the artifact sweep already provides.
+  `scripts/benchmark_freerouting_comparison.py` was checked against that same reason, does **not**
+  pin its own bytes, and is therefore wired rather than deferred. The section table names both of
+  this project's count vocabularies: `DrcSummary`'s own field names and the FreeRouting runner's
+  renamings of them (`hard_violations`, `unconnected`, `footprint_errors`), whose three committed
+  sections the first version of the table swept past in silence. Its pre-policy
   exemption table is keyed
   `(artifact, section path)`, each entry naming `B-111`, and an entry that matches nothing fails
   the run.
@@ -49,7 +54,13 @@ All notable changes are documented here. The format follows
   the adapter's own vocabulary. **The ceilings are the single-layer path's own numbers** — 32,768
   islands and 1,000,000 vertices per island — and deliberately not the adapter's 4,096, which
   [issue #167](https://github.com/seunghyukchoe/copper-mcp/issues/167) files as an over-refusal
-  that 14 of 18 corpus boards already exceed. No well-formed input changes behaviour.
+  that 14 of 18 corpus boards already exceed. Those two ceilings **multiply**, and a Python tuple
+  aliases, so a third bounds the validation walk itself: the vertices of every island together may
+  not exceed `AStarSettings`'s domain ceiling on `max_obstacle_checks` (10,000,000), which is the
+  most geometric predicates one request may ever buy. That refusal is
+  `obstacle_check_budget_exceeded` and not `unsupported_geometry`, because the input it stops is
+  well formed and merely too large to examine. No well-formed input any real board offers changes
+  behaviour: the largest pour measured anywhere in the corpus is 130,305 vertices.
 
 - **`preview_layered_route` accepts `include_fill_authority`, and reports what the evidence did**
   ([ADR-0106](docs/adr/0106-layered-fill-authority-is-public-and-bound.md),

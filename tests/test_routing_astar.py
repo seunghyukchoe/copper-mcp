@@ -57,6 +57,7 @@ from copper_mcp.routing import (
 from copper_mcp.routing.astar import (
     _MAX_VERIFIED_FILL_ISLAND_VERTICES,
     _MAX_VERIFIED_FILL_ISLANDS,
+    _MAX_VERIFIED_FILL_VERTICES,
     OFF_GRID_MESSAGE_LEAD,
     _arc_envelope,
     _arc_sagitta_bound_nm,
@@ -75,6 +76,7 @@ from copper_mcp.routing.astar import (
     _typed_identity,
     _via_cores,
     _WorkBudget,
+    verified_fill_over_check_budget,
 )
 from copper_mcp.routing.oracle import DijkstraResult, run_dijkstra_oracle
 
@@ -4048,3 +4050,187 @@ def test_the_two_fill_ceilings_are_this_paths_own_numbers(
 
     assert _MAX_VERIFIED_FILL_ISLAND_VERTICES != layered_board_adapter._MAX_FILL_VERTICES
     assert _MAX_VERIFIED_FILL_ISLANDS != layered_board_adapter._MAX_OBSTACLES
+
+
+# ---------------------------------------------------------------------------
+# The shape walk is bounded across islands, not only within one.
+#
+# Every input below is built by tuple *aliasing*: one island object repeated,
+# one vertex object repeated. That is what makes the adversarial case cheap for
+# a caller to construct and expensive for the gate to walk, and it is why the
+# ceiling has to be aggregate. Nothing here measures wall clock; the claim is
+# arithmetic about the ceilings, and the refusal that enforces it.
+# ---------------------------------------------------------------------------
+
+
+def _aliased_island(vertices: int) -> VerifiedFill:
+    """One island of ``vertices`` references to a single `PointNM`."""
+
+    return _well_shaped_island(points=(PointNM(3_000, 6_000),) * vertices)
+
+
+#: The smallest number of maximal islands whose vertices cross the aggregate ceiling.
+_ISLANDS_TO_CROSS = _MAX_VERIFIED_FILL_VERTICES // _MAX_VERIFIED_FILL_ISLAND_VERTICES + 1
+
+
+def _pour_over_the_aggregate_ceiling() -> tuple[VerifiedFill, ...]:
+    """The cheapest well-formed pour above the aggregate ceiling: aliased maximal islands."""
+
+    island = _aliased_island(_MAX_VERIFIED_FILL_ISLAND_VERTICES)
+    return cast("tuple[VerifiedFill, ...]", (island,) * _ISLANDS_TO_CROSS)
+
+
+def test_the_two_per_path_ceilings_multiply_and_the_aggregate_ceiling_is_what_stops_it() -> None:
+    """The arithmetic the guard exists for, stated rather than timed.
+
+    The per-island and per-count ceilings bound a *product*, and a tuple aliases, so the product
+    is reachable for the price of one island and one vertex. The aggregate ceiling replaces the
+    product with a sum, and it is an existing declared constant -- `AStarSettings`'s domain
+    ceiling on `max_obstacle_checks`, the most exact geometric predicates one request may buy.
+    """
+
+    from copper_mcp.routing import contracts
+
+    unbounded = _MAX_VERIFIED_FILL_ISLANDS * _MAX_VERIFIED_FILL_ISLAND_VERTICES
+
+    assert unbounded == 32_768_000_000
+    assert _MAX_VERIFIED_FILL_VERTICES == contracts._MAX_OBSTACLE_CHECKS
+    assert unbounded // _MAX_VERIFIED_FILL_VERTICES == 3_276
+
+    # Strictly larger than the per-island ceiling, so the per-island clause is not subsumed into
+    # this one. Equal, every over-ceiling ring would cross the aggregate first and the per-island
+    # refusal would become unreachable -- the dead-code outcome ADR-0108 refused elsewhere.
+    assert _MAX_VERIFIED_FILL_VERTICES > _MAX_VERIFIED_FILL_ISLAND_VERTICES
+    assert AStarSettings().max_obstacle_checks <= _MAX_VERIFIED_FILL_VERTICES
+
+
+def test_the_aggregate_ceiling_refuses_a_pour_no_island_of_which_is_over_the_ceiling() -> None:
+    """Every island under the per-island ceiling, over the aggregate ceiling together.
+
+    Before the aggregate ceiling this input was walked in full and then judged on something
+    else entirely, so the size that made it expensive was never the thing refused.
+    """
+
+    snapshot = _fill_snapshot()
+
+    result = AStarRouter().propose(
+        snapshot, _request(snapshot), verified_fill=_pour_over_the_aggregate_ceiling()
+    )
+
+    _assert_failure(result, RouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED)
+    assert result.diagnostic is not None
+    assert result.diagnostic.message == (
+        "verified fill vertex count exceeds the fill-validation ceiling "
+        f"(max_verified_fill_vertices={_MAX_VERIFIED_FILL_VERTICES})"
+    )
+
+
+def test_replay_carries_the_same_aggregate_ceiling() -> None:
+    """`replay` has no `_WorkBudget` at all, so the ceiling is the only meter this seam has."""
+
+    snapshot = _fill_snapshot()
+    candidate = _candidate(AStarRouter().propose(snapshot, _request(snapshot)))
+
+    result = AStarRouter().replay(
+        snapshot, candidate, verified_fill=_pour_over_the_aggregate_ceiling()
+    )
+
+    _assert_failure(result, RouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED)
+
+
+def test_the_maximal_aliased_pour_is_refused_after_a_bounded_number_of_reads() -> None:
+    """32,768 references to one 1,000,000-vertex ring: the input the guard exists for.
+
+    Unguarded this is 3.27e10 vertex predicates with no meter and no cancellation, because
+    `propose` has not built its `_WorkBudget` yet. The pre-pass reads one `len` per island and
+    stops as soon as the running total crosses, so the refusal is reached without a single vertex
+    being examined -- asserted by the number of islands the pre-pass could have needed, never by
+    timing it.
+    """
+
+    snapshot = _fill_snapshot()
+    island = _aliased_island(_MAX_VERIFIED_FILL_ISLAND_VERTICES)
+    fill = cast("tuple[VerifiedFill, ...]", (island,) * _MAX_VERIFIED_FILL_ISLANDS)
+
+    assert verified_fill_over_check_budget(fill) is not None
+    # Eleven of the 32,768 islands already cross the ceiling, so no read of the other 32,757 and
+    # no vertex predicate at all can be owed before the refusal.
+    assert _ISLANDS_TO_CROSS == 11
+    assert _ISLANDS_TO_CROSS * _MAX_VERIFIED_FILL_ISLAND_VERTICES > _MAX_VERIFIED_FILL_VERTICES
+
+    result = AStarRouter().propose(snapshot, _request(snapshot), verified_fill=fill)
+
+    _assert_failure(result, RouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED)
+
+
+def test_the_aggregate_ceiling_reports_size_and_never_malformedness() -> None:
+    """The division of labour, in both directions.
+
+    A malformed input the pre-pass cannot measure is declined by it (`None`) and named by the
+    shape gate; a size the shape gate cannot see is named by the pre-pass. Neither may answer for
+    the other, or one of the two refusals stops being reachable.
+    """
+
+    assert verified_fill_over_check_budget([_well_shaped_island()]) is None
+    assert verified_fill_over_check_budget(("not-an-island",)) is None
+    assert (
+        verified_fill_over_check_budget((_well_shaped_island(points=[PointNM(0, 0)] * 3),)) is None
+    )
+    assert (
+        verified_fill_over_check_budget((_well_shaped_island(),) * (_MAX_VERIFIED_FILL_ISLANDS + 1))
+        is None
+    )
+    # Exactly at the aggregate ceiling is admitted and one vertex more is refused, so this pins
+    # the number rather than its direction.
+    maximal = _aliased_island(_MAX_VERIFIED_FILL_ISLAND_VERTICES)
+    at_ceiling = (maximal,) * (_MAX_VERIFIED_FILL_VERTICES // _MAX_VERIFIED_FILL_ISLAND_VERTICES)
+    assert verified_fill_over_check_budget(at_ceiling) is None
+    assert verified_fill_over_check_budget((*at_ceiling, _aliased_island(1))) is not None
+
+
+def test_a_single_over_ceiling_ring_is_still_the_per_island_refusal() -> None:
+    """The per-island clause is not subsumed: one ring above its own ceiling is malformedness.
+
+    This is the reachability the aggregate ceiling is sized to preserve. A single 1,000,001-vertex
+    ring is under the aggregate ceiling, so the size pass declines it and the shape gate names it
+    -- `unsupported_geometry`, not a budget refusal.
+    """
+
+    snapshot = _fill_snapshot()
+    fill = cast(
+        "tuple[VerifiedFill, ...]", (_aliased_island(_MAX_VERIFIED_FILL_ISLAND_VERTICES + 1),)
+    )
+
+    assert verified_fill_over_check_budget(fill) is None
+
+    result = AStarRouter().propose(snapshot, _request(snapshot), verified_fill=fill)
+
+    _assert_failure(result, RouteFailureCode.UNSUPPORTED_GEOMETRY)
+    assert result.diagnostic is not None
+    assert result.diagnostic.message == "verified fill island is not a bounded polygon"
+
+
+def test_a_real_sized_pour_passes_the_boundary_and_is_left_to_the_metered_budget() -> None:
+    """Direction of error, and the boundary not pre-empting the meter.
+
+    `B-108` measured the corpus's widest single island at 43,889 vertices and the largest whole
+    board pour at 130,305 -- both an order of magnitude under this ceiling, so the guard costs no
+    real board a route. What happens to such a pour afterwards is `_WorkBudget`'s business and
+    not the boundary's: `max_obstacle_checks` still meters the bounding-box scan in `_prepare`,
+    and that refusal names the *setting* the caller can raise. The boundary's names its own
+    constant, which the caller cannot, so the two are told apart by their message.
+    """
+
+    widest_corpus_island = 43_889
+    largest_corpus_pour = 130_305
+    assert largest_corpus_pour * 7 < _MAX_VERIFIED_FILL_VERTICES
+
+    snapshot = _fill_snapshot()
+    islands = largest_corpus_pour // widest_corpus_island
+    fill = cast("tuple[VerifiedFill, ...]", (_aliased_island(widest_corpus_island),) * islands)
+
+    assert verified_fill_over_check_budget(fill) is None
+    result = AStarRouter().propose(snapshot, _request(snapshot), verified_fill=fill)
+
+    assert result.diagnostic is not None
+    assert "max_verified_fill_vertices" not in result.diagnostic.message

@@ -73,6 +73,7 @@ ADMISSIBLE_IN_DIFFERENTIAL = "repeated_agreement"
 #: docstring for why a checker cannot derive this set, and for what catches an omission.
 DRC_RECORDING_RUNNERS: frozenset[str] = frozenset(
     {
+        "scripts/benchmark_freerouting_comparison.py",
         "scripts/benchmark_layered_kicad_drc.py",
         "scripts/benchmark_placement_drc.py",
         "scripts/benchmark_public_placement_drc.py",
@@ -89,6 +90,15 @@ DRC_RECORDING_RUNNERS: frozenset[str] = frozenset(
 #: already provides** for the same file. The entry is here rather than absent so that the omission
 #: is a record and not a gap; `tests/test_check_drc_comparability.py` asserts the file exists and
 #: still carries the pin that is the reason.
+#:
+#: **`benchmark_freerouting_comparison.py` was checked against this same reason and does not have
+#: it**, so it is registered above rather than deferred here. Its committed artifact
+#: (`benchmarks/results/routing/2026-08-05-freerouting-common-two-pad.json`) records no
+#: `script_sha256` and no `script` field of any kind: its only self-binding is `run_id`, a digest
+#: of the artifact's *own* content, which the emission call does not touch because it neither
+#: edits the committed file nor changes what a re-run of the unmodified runner would compute from
+#: the same inputs. A deferral is a cost paid to protect a real binding; there is no binding here
+#: to protect, so deferring would have been a hole wearing a record's clothes.
 DEFERRED_RUNNERS: dict[str, str] = {
     "scripts/benchmark_route_bundle.py": (
         "its committed artifact pins script_sha256; wire at the next version-bump regeneration"
@@ -134,6 +144,22 @@ PRE_POLICY: dict[tuple[str, str], str] = {
         "benchmarks/results/routing/2026-08-05-route-bundle-v1.json",
         "/authoritative_kicad_drc",
     ): "B-111: B-103's route-bundle authority counts predate the literal",
+    # The FreeRouting comparison publishes its KiCad counts under the second vocabulary
+    # (`hard_violations` / `unconnected` / `footprint_errors`). The first version of ADR-0109's
+    # section table named only the first vocabulary, so these three sections were swept over in
+    # silence; they are exempted here on exactly the same terms as the six artifacts above --
+    # `single_invocation` in fact, qualified by `B-111`, bytes untouched because `run_id` is a
+    # digest of the artifact's own content.
+    **{
+        (
+            "benchmarks/results/routing/2026-08-05-freerouting-common-two-pad.json",
+            path,
+        ): (
+            "B-111: B-069's FreeRouting comparison DRC counts predate the literal, and its "
+            "count vocabulary predates the section table that now recognises it"
+        )
+        for path in ("/results[0]/drc", "/results[1]/drc", "/source_drc")
+    },
 }
 
 
