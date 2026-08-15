@@ -91,7 +91,7 @@ Each capability below is bound to tests and, where it touches KiCad, to recorded
 confinement, including protection against parent-path and symlink escapes. SHA-256 board revisions
 and versioned JSON schemas throughout.
 
-**Represent a board exactly.** Immutable Board IR `0.3.0` with exact integer units, typed
+**Represent a board exactly.** Immutable Board IR `0.4.0` with exact integer units, typed
 constraints, canonical digests, first-class footprint pose/side/lock/pad ownership, simple closed
 octilinear courtyard rings and exact-integer-radius courtyard circles held **per courtyard layer**
 — a footprint may draw on the layer opposite its own side, and that geometry keeps out on the layer
@@ -100,7 +100,7 @@ fail-closed converter for a documented KiCad subset. The 0.1 schema
 remains available as immutable compatibility evidence; [migration](docs/migrations/board-ir-0.2.md)
 re-converts the original board rather than inventing parents.
 
-**Observe a board semantically.** Circuit Scene IR `0.3.0` over MCP and the CLI. A mandatory region
+**Observe a board semantically.** Circuit Scene IR `0.4.0` over MCP and the CLI. A mandatory region
 returns full-precision integer geometry for overlapping objects, split into `static` (outline,
 footprints, pads, keepouts, rules) and `mutable` (segments, arcs, vias, zones) so code meaning to
 read only the givens cannot iterate over both. Objects are named by the Board IR references they
@@ -175,7 +175,7 @@ unsupported property refuses before a single byte is written.
 **Watch a live editor, read-only.** An optional official `kicad-python` IPC observer and KiCad
 PCB-editor plugin that report only a live board digest, version compatibility, and bounded object
 counts, plus an `observe_live_board_scene` bridge that converts the exact active-editor snapshot
-into Circuit Scene `0.3.0` geometry. They never mutate KiCad or expose board text, net names, UUIDs,
+into Circuit Scene `0.4.0` geometry. They never mutate KiCad or expose board text, net names, UUIDs,
 or geometry beyond the scene contract. Reaching a running editor is an outbound action, so it is off
 by default behind the exact `COPPER_MCP_ALLOW_LIVE_IPC` flag; with it off the live tools stay listed
 and refuse, and no IPC socket is read from the environment or opened. The plugin half installs from

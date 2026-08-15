@@ -2765,6 +2765,19 @@ class _Converter:
                 # *counted* after the skip, below, which is why validation and counting are two
                 # steps rather than one.
                 has_fabrication_property = self._require_supported_pad_property(pad, locator)
+                # Custom aperture pads are discarded below, but their primitive geometry still
+                # crosses the trust boundary. Validate and budget-charge it before the discard;
+                # copper custom pads reuse the same envelope so it is parsed exactly once.
+                size_x: int | None = None
+                size_y: int | None = None
+                copper_envelope: PadCopperEnvelope | None = None
+                if is_custom:
+                    size = self._values(pad, "size", locator, minimum=2, maximum=2)
+                    size_x = self._mm(size[0], f"{locator}.size.x")
+                    size_y = self._mm(size[1], f"{locator}.size.y")
+                    copper_envelope = self._custom_pad_envelope(
+                        pad, locator, size_x_nm=size_x, size_y_nm=size_y
+                    )
                 # A pad with no copper is a stencil aperture, not copper the router may attach to
                 # or must avoid. It is skipped only once every condition in `_is_aperture_pad`
                 # holds; anything else with no copper layer refuses there. The skip sits after the
@@ -2811,19 +2824,10 @@ class _Converter:
                 rotation = self._rotation(
                     pad_at[2] if len(pad_at) == 3 else "0", f"{locator}.at.rotation"
                 )
-                size = self._values(pad, "size", locator, minimum=2, maximum=2)
-                size_x = self._mm(size[0], f"{locator}.size.x")
-                size_y = self._mm(size[1], f"{locator}.size.y")
-                copper_envelope = (
-                    self._custom_pad_envelope(
-                        pad,
-                        locator,
-                        size_x_nm=size_x,
-                        size_y_nm=size_y,
-                    )
-                    if is_custom
-                    else None
-                )
+                if size_x is None or size_y is None:
+                    size = self._values(pad, "size", locator, minimum=2, maximum=2)
+                    size_x = self._mm(size[0], f"{locator}.size.x")
+                    size_y = self._mm(size[1], f"{locator}.size.y")
                 radius: int | None = None
                 if shape is PadShape.ROUNDRECT:
                     ratio = self._values(

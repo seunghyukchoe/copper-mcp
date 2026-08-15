@@ -28,8 +28,8 @@
     {
       "id": "CPG03-custom-envelope-dropped",
       "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "                copper_envelope = (\n                    self._custom_pad_envelope(\n                        pad,\n                        locator,\n                        size_x_nm=size_x,\n                        size_y_nm=size_y,\n                    )\n                    if is_custom\n                    else None\n                )",
-      "replacement": "                copper_envelope = None",
+      "anchor": "                    copper_envelope = self._custom_pad_envelope(\n                        pad, locator, size_x_nm=size_x, size_y_nm=size_y\n                    )",
+      "replacement": "                    copper_envelope = None",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_kicad_board_ir.py::test_a_custom_pad_carries_a_separate_anchor_core_and_copper_envelope"
@@ -104,6 +104,17 @@
       "expectation": "killed",
       "killing_tests": [
         "tests/test_kicad_board_ir.py::test_custom_pad_polygons_respect_aggregate_vertex_budget"
+      ]
+    },
+    {
+      "id": "CPG11-custom-aperture-geometry-validation-skipped",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                if is_custom:\n                    size = self._values(pad, \"size\", locator, minimum=2, maximum=2)",
+      "replacement": "                if False and is_custom:\n                    size = self._values(pad, \"size\", locator, minimum=2, maximum=2)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_custom_aperture_rejects_over_budget_gr_poly",
+        "tests/test_kicad_board_ir.py::test_custom_aperture_rejects_malformed_primitive_before_skip"
       ]
     }
   ]

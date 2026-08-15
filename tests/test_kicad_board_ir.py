@@ -3340,6 +3340,83 @@ def test_a_malformed_aperture_pad_is_still_refused_before_it_can_be_skipped() ->
     assert result.diagnostics[0].code == "unsupported.construct"
 
 
+def _custom_aperture_pad(primitives: bytes = b"") -> bytes:
+    """A custom pad carrying only paste aperture layers."""
+
+    return (
+        _custom_pad(primitives)
+        .replace(b'    (pad "9" smd custom', b'    (pad "" smd custom', 1)
+        .replace(b'(layers "F.Cu" "F.Mask" "F.Paste")', b'(layers "F.Paste")', 1)
+    )
+
+
+def test_custom_aperture_validates_and_discards_primitive_geometry() -> None:
+    baseline = parse_success(SUBSET_BOARD.read_bytes(), constraint_profile(assign_signal=True))
+    result = parse_kicad_bytes(
+        _with_pad(_custom_aperture_pad()),
+        constraint_profile(assign_signal=True),
+        ParseLimits(max_vertices_per_ring=4, max_total_vertices=100),
+    )
+    assert result.snapshot is not None
+    assert result.snapshot.content.pads == baseline.content.pads
+    assert result.snapshot.content.footprints == baseline.content.footprints
+    assert result.snapshot.content.nets == baseline.content.nets
+    assert len(baseline.content.pads) == 2
+    assert all(pad.copper_envelope is None for pad in result.snapshot.content.pads)
+
+
+def test_custom_aperture_rejects_over_budget_gr_poly() -> None:
+    primitives = (
+        b"      (primitives (gr_poly (pts (xy 0 0) (xy 4 0) (xy 4 4) "
+        b"(xy 0 4) (xy 2 6)) (width 0) (fill yes)))\n"
+    )
+    result = parse_kicad_bytes(
+        _with_pad(_custom_aperture_pad(primitives)),
+        constraint_profile(assign_signal=True),
+        ParseLimits(max_vertices_per_ring=4, max_total_vertices=100),
+    )
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "budget.exceeded.vertices_per_ring"
+
+
+def test_custom_aperture_rejects_over_budget_aggregate_vertices() -> None:
+    polygon = b"(gr_poly (pts (xy 0 0) (xy 4 0) (xy 4 4) (xy 0 4)) (width 0) (fill yes))"
+    primitives = b"      (primitives " + polygon + b")\n"
+    exact = parse_kicad_bytes(
+        _with_pad(_custom_aperture_pad(primitives)),
+        constraint_profile(assign_signal=True),
+        ParseLimits(max_vertices_per_ring=4, max_total_vertices=16),
+    )
+    assert exact.snapshot is not None
+    assert len(exact.snapshot.content.pads) == 2
+
+    over = parse_kicad_bytes(
+        _with_pad(_custom_aperture_pad(primitives)),
+        constraint_profile(assign_signal=True),
+        ParseLimits(max_vertices_per_ring=4, max_total_vertices=15),
+    )
+    assert over.snapshot is None
+    assert over.diagnostics[0].code == "budget.exceeded.total_vertices"
+
+
+def test_custom_aperture_rejects_malformed_primitive_before_skip() -> None:
+    result = parse_kicad_bytes(
+        _with_pad(_custom_aperture_pad(b"      (primitives (gr_poly))\n")),
+        constraint_profile(assign_signal=True),
+    )
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "syntax.missing_field"
+
+
+def test_custom_aperture_rejects_unknown_primitive_before_skip() -> None:
+    result = parse_kicad_bytes(
+        _with_pad(_custom_aperture_pad(b"      (primitives (gr_unknown))\n")),
+        constraint_profile(assign_signal=True),
+    )
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+
+
 def test_the_footprint_placement_status_flag_is_accepted_as_metadata() -> None:
     """`placed` is autoplacement bookkeeping: no geometry, no layer, no constraint.
 
