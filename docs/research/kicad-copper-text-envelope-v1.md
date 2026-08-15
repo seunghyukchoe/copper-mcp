@@ -318,6 +318,48 @@ result.
 
 Until then, the honest model of copper lettering is a refusal that says so.
 
+### 5.2 — Step-4 live-IPC follow-up and measured stop
+
+The KiCad 9/10 IPC surface changes what a future **live-session** adapter might be able to prove:
+with board context available, KiCad can expand text and expose `GetTextAsShapes`. That is a
+plausible evidence path for obtaining the outlines from the same editor session that will later
+plot the board. It is not evidence that the current offline adapter may consume. CopperMCP does
+not yet bind the IPC session, project text variables, selected font, and font-build identity to a
+source revision, nor does it have a tested contract for carrying those inputs into its conservative
+envelope. The existing refusal therefore remains unchanged.
+
+In particular, none of ADR-0095's five exit conditions is currently satisfied. Offline conversion
+still cannot establish the rendered string for project/path/clock variables; `gr_text_box` still
+has unresolved layout semantics; knockout and other text effects remain unresolved; volatile or
+unresolved variables remain unsafe; and face fonts still lack trusted, revision-bound outlines.
+`GetTextAsShapes` is a research lead, not a reason to weaken any of those conditions.
+
+The required B-114 paired probe was run before implementation: on the six candidates that reached
+the pair, remove exactly the `Edge.Cuts` curve gate and the `.Cu` text refusal, while retaining the
+other four boards' recorded first-pass refusals. **Zero of the six newly converted, so the
+ten-board corpus remained 0 → 0 of 10.** That observation fixes the prediction for a hypothetical
+paired implementation at zero conversions. The premise that these two obvious gates would produce
+a first end-to-end import is therefore refuted, and implementation stops here; no code before/after
+differential is claimed.
+Conversion stops at the first refusal, so the newly visible blockers are recorded as findings,
+not regressions:
+
+| Board probe | Curves / `.Cu` text masked | First refusal after the mask |
+|---|---:|---|
+| TinyTapeout | 4 / 4 | non-copper `gr_text.layer` has invalid arity |
+| LPDDR4 | 7 / 1 | `setup.stackup` |
+| M.2 | 3 / 2 | unsupported `kicad_pcb.setup` semantic field |
+| ov9281 | 0 / 1 | root dimensions |
+| Amalthea | 15 / 4 | root dimensions |
+| Cynthion | 4 / 6 | root dimensions |
+
+The M.2 and Amalthea probes were corrected from initially over-broad masks and rerun with the exact
+layer-filtered masks against the B-114 artifacts; their outcomes were unchanged. No transformed
+board bytes were committed. The remaining B-114 boards retain their previously recorded first refusals.
+This result does not establish anything behind those blockers, nor does it establish live IPC,
+DRC, routing, placement, fabrication, or performance capability. It records a successful
+refutation of the Step-4 conversion premise and leaves ADR-0095's refusal policy in force.
+
 ## 6 — Reproducing every figure above
 
 Each measurement is one synthetic board of this shape, with `BODY` replaced by the row under test,
@@ -375,5 +417,7 @@ right.
 - [`BOARD::ResolveTextVar`, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/pcbnew/board.cpp#L510)
 - [`EDA_TEXT::HasTextVars`, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/include/eda_text.h#L128)
 - [`FONTCONFIG::FindFont` substitution report, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/common/font/fontconfig.cpp#L374-L380)
+- [`GetTextAsShapes` IPC message, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/api/proto/common/commands/base_commands.proto#L68-L86)
+- [`GetTextAsShapes` and project-context `ExpandTextVariables` handlers, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/common/api/api_handler_common.cpp#L197-L293)
 - [KiCad board file format: graphic items and text effects](https://dev-docs.kicad.org/en/file-formats/sexpr-pcb/)
 - [ADR-0011](../adr/0011-existing-copper-obstacles.md), [ADR-0013](../adr/0013-polygon-zone-obstacles.md), [ADR-0070](../adr/0070-layered-fill-aware-obstacles.md), [ADR-0072](../adr/0072-conservative-arc-track-envelopes.md), [ADR-0075](../adr/0075-courtyard-oracle-parity.md), [ADR-0090](../adr/0090-root-level-board-groups.md)
