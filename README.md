@@ -234,22 +234,17 @@ modelled as a one-value literal (`not_run`, `not_modelled`, `inconclusive`) rath
 **Board conversion.**
 
 - **Not every real KiCad board converts to Board IR.** The converter is a documented subset and
-  fails closed on everything outside it. Re-measured on the private working corpus on 2026-08-13
-  (`B-107`): **13 of the 18 saves in that corpus convert.** Those 18 files hold 17 distinct board
-  contents — one pair is byte-identical across two save directories, and that pair is not among the
-  boards that moved — so the same result reads as 13 of 17 distinct boards, and neither figure is
-  the frozen 12-board set the
-  [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116) survey measured. Five saves refuse,
-  each with a typed refusal naming one construct, never a partial or repaired board: a custom-shape
-  SMD pad on four, which has a derivable envelope and nowhere in a Board IR `Pad` to put it
-  ([#153](https://github.com/seunghyukchoe/copper-mcp/issues/153),
-  [ADR-0100](docs/adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md)), and copper text
-  on one, which is refused **by decision** and not by omission
-  ([#141](https://github.com/seunghyukchoe/copper-mcp/issues/141),
-  [ADR-0095](docs/adr/0095-copper-text-has-no-derivable-envelope.md)). The pad-level `property`
-  refusal that blocked two of those saves is gone — seven of KiCad's eight `PAD_PROP` fabrication
-  tokens now convert, one save converted on it and the other advanced onto the custom pad behind it
-  ([ADR-0099](docs/adr/0099-pad-fabrication-properties-and-named-pad-refusals.md)). **A refusal
+  fails closed on everything outside it. Re-measured on the frozen private selection on 2026-08-15
+  (`B-117`): **15 of the 18 saves in that corpus convert.** The custom-pad anchor/envelope split
+  added the two conversions predicted before implementation without changing any source board.
+  This is not the frozen 12-board set the
+  [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116) survey measured. Three saves now
+  refuse, each with a typed refusal naming one construct, never a partial or repaired board: one
+  disjoint `Edge.Cuts` topology and two courtyard topologies. The accepted custom pads retain their
+  KiCad anchor as an under-approximating attachment core and carry a separate conservative copper
+  envelope for obstacle readers ([ADR-0111](docs/adr/0111-custom-pad-anchor-and-envelope.md)).
+  Copper text remains refused **by decision** on the separate third-party corpus, not by omission
+  ([ADR-0095](docs/adr/0095-copper-text-has-no-derivable-envelope.md)). **A refusal
   names the first blocker in document order and nothing more**: every gap closed since that survey
   advanced the refusal on at least one board instead of converting it, so read a refusal as an
   existential and never as a universal. **No "converts every board" result is claimed at any

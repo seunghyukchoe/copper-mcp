@@ -121,8 +121,8 @@
     {
       "id": "PP12-allowlist-closed-against-property",
       "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "        \"pintype\",\n        \"property\",\n        \"remove_unused_layers\",",
-      "replacement": "        \"pintype\",\n        \"remove_unused_layers\",",
+      "anchor": "        \"pintype\",\n        \"property\",\n        \"primitives\",\n        \"remove_unused_layers\",",
+      "replacement": "        \"pintype\",\n        \"primitives\",\n        \"remove_unused_layers\",",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_kicad_board_ir.py::test_an_accepted_pad_property_converts_to_an_identical_board",
@@ -154,8 +154,8 @@
     {
       "id": "PP15-named-table-loses-an-adr-0091-head",
       "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "    \"primitives\",\n    \"rect_delta\",",
-      "replacement": "    \"rect_delta\",",
+      "anchor": "    \"padstack\",\n    \"rect_delta\",\n    \"sim_electrical_type\",",
+      "replacement": "    \"padstack\",\n    \"sim_electrical_type\",",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_kicad_board_ir.py::test_the_other_overriding_pad_fields_still_refuse_and_name_themselves",

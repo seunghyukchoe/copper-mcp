@@ -8,6 +8,7 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- **Board IR 0.4 adds conservative custom-pad copper envelopes** ([migration note](docs/migrations/board-ir-0.4.md)). The optional `Pad.copper_envelope` field records the local AABB needed by obstacle readers while the existing pad shape and size remain the attachment core used by connectivity and keep-in claims. The 0.3.0 schema is frozen; the active decoder accepts 0.4.0 only. Ordinary boards retain their content and snapshot digests, while custom-pad content addresses include the envelope. Scene 0.4 discloses anchor and envelope geometry together with `copper_envelope_frame: "pad_local"`. On B-117's dated, frozen 18-save selection, conversion measured **13→15** as predicted; this is an envelope representation, not an exact custom-primitive or KiCad-parity claim.
 - **Placement boundary verdicts now preserve the proof gap instead of publishing false KiCad
   violations** ([ADR-0110](docs/adr/0110-placement-boundary-verdicts-bracket-kicad-parity.md),
   [issue #187](https://github.com/seunghyukchoe/copper-mcp/issues/187), `D-206`, `R-159`,

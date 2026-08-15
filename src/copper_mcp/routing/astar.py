@@ -26,6 +26,7 @@ from copper_mcp.board_ir import (
     Zone,
     verify_snapshot,
 )
+from copper_mcp.board_ir.pad_geometry import pad_obstacle_bounds
 from copper_mcp.routing.contracts import (
     _MAX_OBSTACLE_CHECKS,
     BATCHED_ONE_STEINER_ORDERING,
@@ -705,6 +706,23 @@ def _pad_extent(pad: Pad) -> tuple[int, int] | None:
     if quarter_turns % 2 == 1:
         size_x, size_y = size_y, size_x
     return (size_x + 1) // 2, (size_y + 1) // 2
+
+
+def _pad_obstacle_rect(pad: Pad) -> _Rect | None:
+    """Return the exact custom envelope AABB or the legacy symmetric pad obstacle."""
+
+    if pad.copper_envelope is not None:
+        return pad_obstacle_bounds(pad)
+    extent = _pad_extent(pad)
+    if extent is None:
+        return None
+    half_x_nm, half_y_nm = extent
+    return (
+        pad.center.x - half_x_nm,
+        pad.center.y - half_y_nm,
+        pad.center.x + half_x_nm,
+        pad.center.y + half_y_nm,
+    )
 
 
 def _segment_extent(segment: Segment) -> _Rect | None:
@@ -1982,20 +2000,14 @@ def _prepare(
     for index, pad in enumerate(blocking_pads):
         if index % 64 == 0:
             work.checkpoint()
-        pad_extent = _pad_extent(pad)
-        if pad_extent is None:
+        pad_obstacle = _pad_obstacle_rect(pad)
+        if pad_obstacle is None:
             raise _fail(
                 RouteFailureCode.UNSUPPORTED_GEOMETRY,
                 "a selected-layer pad is rotated off axis and is not modeled exactly",
             )
-        half_x_nm, half_y_nm = pad_extent
         add_rect_obstacle(
-            (
-                pad.center.x - half_x_nm,
-                pad.center.y - half_y_nm,
-                pad.center.x + half_x_nm,
-                pad.center.y + half_y_nm,
-            ),
+            pad_obstacle,
             governing_clearance_nm(pad.net_id),
         )
 

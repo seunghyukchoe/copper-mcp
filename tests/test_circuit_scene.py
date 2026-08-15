@@ -1,4 +1,4 @@
-"""Circuit Scene IR v0.3: footprint-aware scoping, ceilings, references, and quarantine.
+"""Circuit Scene IR v0.4: footprint-aware scoping, ceilings, references, and quarantine.
 
 The quarantine test is the load-bearing one. It does not check that the hostile strings are
 labelled correctly in the place we chose to put them — it greps the entire serialized response
@@ -17,16 +17,18 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from copper_mcp.board_ir import Pad, PadCopperEnvelope, PadKind, PadShape, PointNM
 from copper_mcp.circuit_scene import (
     SCENE_VERSION,
     CircuitSceneError,
     SceneAnnotation,
     WithheldKind,
+    _pad_object,
     observe_board_scene,
     parse_circuit_scene_request,
 )
 from copper_mcp.config import Settings
-from copper_mcp.mcp_contracts import CircuitSceneToolResponse
+from copper_mcp.mcp_contracts import CircuitSceneToolResponse, PadGeometryContract
 from copper_mcp.request_boundary import MAX_JSON_SAFE_INTEGER
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -634,6 +636,35 @@ class ProvenanceTests(unittest.TestCase):
         self.assertRegex(document["board_revision"], r"^sha256:[0-9a-f]{64}$")
         self.assertRegex(document["snapshot_digest"], r"^sha256:[0-9a-f]{64}$")
         self.assertEqual(document["request"]["constraints"], CONSTRAINTS)
+
+    def test_custom_pad_scene_discloses_anchor_and_obstacle_envelope_separately(self) -> None:
+        pad = Pad(
+            id="pad:custom",
+            net_id=None,
+            center=PointNM(10, 20),
+            rotation_udeg=0,
+            shape=PadShape.RECT,
+            kind=PadKind.SMD,
+            size_x_nm=200,
+            size_y_nm=100,
+            roundrect_radius_nm=None,
+            drill_x_nm=None,
+            drill_y_nm=None,
+            layer_ids=("layer:F.Cu",),
+            copper_envelope=PadCopperEnvelope(-100, -100, 500, 100),
+        )
+
+        geometry = _pad_object(pad).geometry
+        self.assertEqual(geometry["size_nm"], [200, 100])
+        self.assertEqual(geometry["copper_envelope_nm"], [-100, -100, 500, 100])
+        self.assertEqual(geometry["copper_envelope_frame"], "pad_local")
+        self.assertEqual(geometry["geometry_model"], "anchor_with_custom_copper_envelope")
+        PadGeometryContract.model_validate(geometry)
+
+        incomplete = dict(geometry)
+        del incomplete["copper_envelope_frame"]
+        with self.assertRaisesRegex(ValueError, "must be present together"):
+            PadGeometryContract.model_validate(incomplete)
 
 
 class CopperToneScaleTests(unittest.TestCase):

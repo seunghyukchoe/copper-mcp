@@ -1,4 +1,4 @@
-"""Frozen Board IR v0.2 domain types and exact unit conversions."""
+"""Board IR 0.4 domain types and exact unit conversions."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 BOARD_IR_SCHEMA = "copper.board-ir"
-BOARD_IR_SCHEMA_VERSION = "0.3.0"
+BOARD_IR_SCHEMA_VERSION = "0.4.0"
 JSON_SAFE_INTEGER = (1 << 53) - 1
 NM_PER_MM = 1_000_000
 UDEG_PER_DEGREE = 1_000_000
@@ -428,8 +428,29 @@ class PadShape(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class PadCopperEnvelope:
+    """Pad-local AABB that contains all copper when the anchor shape is not the whole pad."""
+
+    min_x_nm: int
+    min_y_nm: int
+    max_x_nm: int
+    max_y_nm: int
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("minimum x", self.min_x_nm),
+            ("minimum y", self.min_y_nm),
+            ("maximum x", self.max_x_nm),
+            ("maximum y", self.max_y_nm),
+        ):
+            _integer(f"pad copper envelope {name}", value, minimum=-JSON_SAFE_INTEGER)
+        if self.min_x_nm >= self.max_x_nm or self.min_y_nm >= self.max_y_nm:
+            raise ValueError("pad copper envelope must have positive area")
+
+
+@dataclass(frozen=True, slots=True)
 class Pad:
-    """One exact pad access object."""
+    """One pad anchor plus an optional containing custom-copper envelope."""
 
     id: str
     net_id: str | None
@@ -444,6 +465,7 @@ class Pad:
     drill_y_nm: int | None
     layer_ids: tuple[str, ...]
     locked: bool = False
+    copper_envelope: PadCopperEnvelope | None = None
 
     def __post_init__(self) -> None:
         _typed_id("pad ID", self.id, "pad:")
@@ -456,6 +478,18 @@ class Pad:
         _integer("pad rotation", self.rotation_udeg, minimum=0, maximum=FULL_ROTATION_UDEG - 1)
         _positive("pad width", self.size_x_nm)
         _positive("pad height", self.size_y_nm)
+        if self.copper_envelope is not None:
+            if not isinstance(self.copper_envelope, PadCopperEnvelope):
+                raise ValueError("pad copper envelope must use the Board IR envelope type")
+            half_x = (self.size_x_nm + 1) // 2
+            half_y = (self.size_y_nm + 1) // 2
+            if (
+                self.copper_envelope.min_x_nm > -half_x
+                or self.copper_envelope.min_y_nm > -half_y
+                or self.copper_envelope.max_x_nm < half_x
+                or self.copper_envelope.max_y_nm < half_y
+            ):
+                raise ValueError("pad copper envelope must contain the complete anchor shape")
         if self.shape is PadShape.CIRCLE and self.size_x_nm != self.size_y_nm:
             raise ValueError("circle pad dimensions must be equal")
         if self.shape is PadShape.ROUNDRECT:

@@ -18,6 +18,7 @@ from copper_mcp.board_ir import (
     NetClassAssignment,
     OutlineContour,
     Pad,
+    PadCopperEnvelope,
     PadKind,
     PadShape,
     PointNM,
@@ -222,6 +223,47 @@ def test_same_layer_board_ir_route_is_deterministic_and_content_addressed() -> N
     another_seed = _candidate(router.propose(snapshot, replace(request, seed=1)))
     assert another_seed.patch == first.patch
     assert another_seed.candidate_id != first.candidate_id
+
+
+def test_custom_pad_copper_envelope_is_a_routing_obstacle_beyond_anchor() -> None:
+    """Over-reader rule: primitive-only copper must block the layered route."""
+
+    base = _two_layer_snapshot()
+    blocking_pad = Pad(
+        id="pad:custom-blocker",
+        net_id=None,
+        center=PointNM(5_000, 5_000),
+        rotation_udeg=0,
+        shape=PadShape.RECT,
+        kind=PadKind.SMD,
+        size_x_nm=400,
+        size_y_nm=400,
+        roundrect_radius_nm=None,
+        drill_x_nm=None,
+        drill_y_nm=None,
+        layer_ids=(LAYER_ID,),
+        copper_envelope=PadCopperEnvelope(-1_500, -1_500, 1_500, 1_500),
+    )
+    footprint = base.content.footprints[0]
+    snapshot = make_snapshot(
+        replace(
+            base.content,
+            footprints=(replace(footprint, pad_ids=(*footprint.pad_ids, blocking_pad.id)),),
+            pads=(*base.content.pads, blocking_pad),
+        )
+    )
+
+    candidate = _candidate(LayeredBoardRouter().propose(snapshot, _request(snapshot)))
+
+    assert candidate.patch.paths[0].vertices != (
+        PointNM(1_000, 5_000),
+        PointNM(9_000, 5_000),
+    )
+    assert all(
+        not (3_500 <= point.x <= 6_500 and 3_500 <= point.y <= 6_500)
+        for path in candidate.patch.paths
+        for point in path.vertices
+    )
 
 
 def test_track_keepout_routes_on_back_layer_and_emits_two_vias() -> None:

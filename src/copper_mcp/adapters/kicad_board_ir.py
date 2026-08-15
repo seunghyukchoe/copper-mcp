@@ -37,6 +37,7 @@ from copper_mcp.board_ir.types import (
     NetClassAssignment,
     OutlineContour,
     Pad,
+    PadCopperEnvelope,
     PadKind,
     PadShape,
     PointNM,
@@ -347,9 +348,7 @@ _UNSUPPORTED_PAD_FIELDS = (
     "front_post_machining",
     "keep_end_layers",
     "offset",
-    "options",
     "padstack",
-    "primitives",
     "rect_delta",
     "sim_electrical_type",
     "solder_mask_margin",
@@ -415,9 +414,11 @@ _SUPPORTED_PAD_FIELDS = frozenset(
         "layers",
         "locked",
         "net",
+        "options",
         "pinfunction",
         "pintype",
         "property",
+        "primitives",
         "remove_unused_layers",
         "roundrect_rratio",
         "size",
@@ -433,23 +434,25 @@ _SUPPORTED_PAD_FIELDS = frozenset(
 #: byte into a diagnostic -- SEC-133 and SEC-136, same mechanism.
 _REFUSED_PAD_PROPERTY = "pad_prop_castellated"
 
-# Pad shape tokens KiCad's writer emits that Board IR v0.2 does not model, mapped to the refusal
+# Pad shape tokens KiCad's writer emits that Board IR does not model, mapped to the refusal
 # each earns.  Same rule as `_UNMODELLED_ROOT_HEADS` and `_UNMODELLED_COPPER_GRAPHIC_HEADS`: the
 # sentence is a *value from this table*, selected by an equality test against the source token and
 # never built from it, so the refusal names the construct without echoing one byte of the board.
 # A token absent from this table and from `PadShape` is not a documented pad shape at all and
 # refuses unnamed through `PadShape(...)` below, with the indexed locator still saying which pad.
 #
-# The domain is exactly KiCad's six writer tokens minus Board IR's four `PadShape` members.
+# The domain is KiCad's six writer tokens minus Board IR's four anchor-shape members and the
+# separately dispatched `custom` token.
 # `pcb_io_kicad_sexpr.cpp:1643-1649` is the whole vocabulary -- `circle`, `rect`, `oval`,
 # `trapezoid`, `roundrect` (written for both `ROUNDRECT` and `CHAMFERED_RECT`) and `custom` -- so
-# the two names below are the complete unmodelled remainder, and
+# the name below is the complete unmodelled remainder, and
 # `test_the_unmodelled_pad_shape_table_is_kicads_tokens_minus_board_irs` asserts that partition
-# rather than probing tokens someone thought to write down.  This is a two-entry table with
-# something left to name, which is why it is a table and not the dead one-entry lookup ADR-0096
-# deleted from the pad-kind path.
+# rather than probing tokens someone thought to write down. `custom` is handled before this table:
+# its anchor remains under-approximating attachment geometry while its primitive union is carried
+# separately as a containing obstacle envelope.
 #
-# `custom` is the entry this table exists for, and its message says *why* rather than *that*.  A
+# `custom` was the entry this table originally existed for. Board IR 0.4 resolves that refusal by
+# carrying the two direction-typed regions separately. A
 # KiCad custom pad is an anchor rect-or-circle of `size` **unioned** with a list of drawn
 # primitives -- established twice over in `pad.cpp:3275-3315`, where `MergePrimitivesAsPolygon`
 # seeds the polygon with the anchor at 3284-3296 and then `BooleanAdd`s the primitives at 3312,
@@ -462,14 +465,14 @@ _REFUSED_PAD_PROPERTY = "pad_prop_castellated"
 # primitive heads carries exact millimetre geometry in the document and admits an exact integer
 # nanometre containing box, `gr_curve` included -- a cubic Bezier is a convex combination of its
 # four control points at every parameter value, so it cannot leave their bounding box.  The
-# refusal is therefore **not** ADR-0095's "no envelope exists".  It is that Board IR's `Pad` has
-# nowhere to put one: `routing/astar.py::_pad_extent` and
+# earlier refusal was therefore **not** ADR-0095's "no envelope exists". It was that the prior
+# Board IR `Pad` had nowhere to put one: `routing/astar.py::_pad_extent` and
 # `routing/layered_board_adapter.py::_pad_bounds` read `shape`, `size_x_nm` and `size_y_nm` in the
 # **over**-approximating direction to build the obstacle, while
 # `routing/astar.py::_pad_core_extent` reads *the same three fields* in the **under**-approximating
 # direction to build the attachment core -- and for `PadShape.RECT` the two collapse to one
 # rectangle to within a nanometre.  Any `Pad` accepted for a custom pad would therefore have to
-# both contain and be contained by the pad's copper, which forces the copper to *be* that
+# both contain and be contained by the pad's copper, which forced the copper to *be* that
 # axis-aligned rectangle.  Sizing it to the union's bounding box keeps the obstacle sound and makes
 # the attachment core claim copper that is not there, which is the defect `_pad_cores` already
 # names as "the one direction an attachment core may never err in"; sizing it to the anchor keeps
@@ -486,8 +489,9 @@ _REFUSED_PAD_PROPERTY = "pad_prop_castellated"
 # contract.  Three more read pad geometry in a direction they do not get today, all in
 # `placement/legalizer.py` and all reached through the stored `_PlacedPad.bounds` rather than
 # through any field name here.  The argument above is strengthened by that count and not weakened:
-# one rectangle cannot serve 18 readers if it cannot serve 3.  What the survey changes is the cost
-# of the revisit, which is why `D-203` stopped at the measurement rather than proceeding to P3.3.
+# one rectangle cannot serve 18 readers if it cannot serve 3. Board IR 0.4 performs that reader
+# split: obstacle consumers use `copper_envelope`, attachment consumers keep the anchor, and
+# canonical/codec/scene consumers carry or disclose both without claiming exact primitive parity.
 #
 # `trapezoid` earns a different sentence for a weaker reason and the difference is deliberate:
 # a trapezoid is a convex quadrilateral derivable from `size` and `(rect_delta ...)`, so both
@@ -495,12 +499,12 @@ _REFUSED_PAD_PROPERTY = "pad_prop_castellated"
 # to tell those two apart from the message alone, which is the whole complaint issue #153 opens
 # with.
 _UNMODELLED_PAD_SHAPES: dict[str, str] = {
-    "custom": (
-        "a custom pad shape has no single region that both contains its copper and is contained "
-        "by it, and is unsupported"
-    ),
     "trapezoid": "trapezoid pad shapes are unsupported in Board IR adapter v0.2",
 }
+
+_CUSTOM_PAD_PRIMITIVE_HEADS = frozenset(
+    {"gr_line", "gr_arc", "gr_circle", "gr_rect", "gr_poly", "gr_curve", "gr_bbox", "gr_vector"}
+)
 
 # KiCad's `ZONE_CONNECTION` enum as a pad writes it: 0 NONE, 1 THERMAL, 2 FULL, 3 THT_THERMAL.
 # `INHERITED` (-1) is never written -- an absent token *is* inheritance. 1, 2 and 3 all attach the
@@ -2363,6 +2367,238 @@ class _Converter:
             )
         return _PAD_KIND_BY_TOKEN[raw_kind]
 
+    def _custom_pad_anchor_shape(self, pad: SExpr, locator: str) -> PadShape:
+        options = self._one(pad, "options", locator)
+        assert options is not None
+        self._validate_direct_atoms(
+            options, positional_atoms=0, allowed=frozenset(), locator=locator
+        )
+        self._reject_unknown_children(options, frozenset({"clearance", "anchor"}), locator)
+        clearance = self._values(options, "clearance", locator, minimum=1, maximum=1)
+        if clearance[0] not in {"outline", "convexhull"}:
+            self.fail(
+                "unsupported.construct",
+                "custom pad zone-clearance option is unsupported",
+                locator,
+                object_kind="pad",
+            )
+        anchor = self._values(options, "anchor", locator, minimum=1, maximum=1)
+        if anchor == ("rect",):
+            return PadShape.RECT
+        if anchor == ("circle",):
+            return PadShape.CIRCLE
+        self.fail(
+            "unsupported.construct",
+            "custom pad anchor shape is unsupported",
+            locator,
+            object_kind="pad",
+        )
+
+    def _primitive_point(self, expression: SExpr, head: str, locator: str) -> tuple[int, int]:
+        values = self._values(expression, head, locator, minimum=2, maximum=2)
+        return (
+            self._mm(values[0], f"{locator}.{head}.x"),
+            self._mm(values[1], f"{locator}.{head}.y"),
+        )
+
+    def _primitive_points(
+        self, expression: SExpr, locator: str, *, minimum: int, maximum: int | None = None
+    ) -> tuple[tuple[int, int], ...]:
+        points = self._one(expression, "pts", locator)
+        assert points is not None
+        self._validate_direct_atoms(
+            points, positional_atoms=0, allowed=frozenset(), locator=locator
+        )
+        self._reject_unknown_children(points, frozenset({"xy"}), locator)
+        xy_items = children(points, "xy")
+        upper = minimum if maximum is None else maximum
+        if not minimum <= len(xy_items) <= upper:
+            self.fail("syntax.invalid", "custom pad primitive point count is invalid", locator)
+        result: list[tuple[int, int]] = []
+        for index, point in enumerate(xy_items):
+            try:
+                values = atoms(point)
+            except SExprError as error:
+                self.fail(error.code, error.message, f"byte:{error.offset}")
+            if len(values) != 2:
+                self.fail("syntax.invalid", "custom pad primitive point is malformed", locator)
+            result.append(
+                (
+                    self._mm(values[0], f"{locator}.pts[{index}].x"),
+                    self._mm(values[1], f"{locator}.pts[{index}].y"),
+                )
+            )
+        return tuple(result)
+
+    @staticmethod
+    def _ceil_sqrt(value: int) -> int:
+        root = isqrt(value)
+        return root if root * root == value else root + 1
+
+    @staticmethod
+    def _ceil_div(numerator: int, denominator: int) -> int:
+        return -((-numerator) // denominator)
+
+    def _primitive_width(self, expression: SExpr, locator: str) -> int:
+        value = self._mm(
+            self._values(expression, "width", locator, minimum=1, maximum=1)[0],
+            f"{locator}.width",
+        )
+        if value < 0:
+            self.fail("syntax.invalid", "custom pad primitive width cannot be negative", locator)
+        return value
+
+    def _validate_primitive_fill(self, expression: SExpr, locator: str) -> None:
+        fill = self._values(expression, "fill", locator, minimum=1, maximum=1, required=False)
+        if fill and fill[0] not in {"yes", "no"}:
+            self.fail("syntax.invalid", "custom pad primitive fill is malformed", locator)
+
+    def _primitive_envelope(
+        self, primitive: SExpr, locator: str
+    ) -> tuple[int, int, int, int] | None:
+        head = primitive.head
+        if head not in _CUSTOM_PAD_PRIMITIVE_HEADS:
+            self.fail(
+                "unsupported.construct",
+                "custom pad primitive is unsupported",
+                locator,
+                object_kind="pad",
+            )
+        self._validate_direct_atoms(
+            primitive, positional_atoms=0, allowed=frozenset(), locator=locator
+        )
+        if head in {"gr_bbox", "gr_vector"}:
+            # KiCad marks these as proxy items and both effective-shape builders skip them.
+            # They still cross the trust boundary, so validate their closed syntax before
+            # discarding them; a proxy must not become a container for arbitrary child heads.
+            self._reject_unknown_children(
+                primitive, frozenset({"start", "end", "width", "fill"}), locator
+            )
+            self._primitive_point(primitive, "start", locator)
+            self._primitive_point(primitive, "end", locator)
+            proxy_width = self._values(
+                primitive, "width", locator, minimum=1, maximum=1, required=False
+            )
+            if proxy_width and self._mm(proxy_width[0], f"{locator}.width") < 0:
+                self.fail(
+                    "syntax.invalid", "custom pad primitive width cannot be negative", locator
+                )
+            self._validate_primitive_fill(primitive, locator)
+            return None
+
+        common = frozenset({"width", "fill"})
+        points: tuple[tuple[int, int], ...]
+        if head == "gr_line":
+            self._reject_unknown_children(primitive, common | {"start", "end"}, locator)
+            points = (
+                self._primitive_point(primitive, "start", locator),
+                self._primitive_point(primitive, "end", locator),
+            )
+        elif head == "gr_rect":
+            self._reject_unknown_children(primitive, common | {"start", "end"}, locator)
+            points = (
+                self._primitive_point(primitive, "start", locator),
+                self._primitive_point(primitive, "end", locator),
+            )
+        elif head == "gr_poly":
+            self._reject_unknown_children(primitive, common | {"pts"}, locator)
+            points = self._primitive_points(primitive, locator, minimum=3, maximum=250_000)
+        elif head == "gr_curve":
+            self._reject_unknown_children(primitive, common | {"pts"}, locator)
+            points = self._primitive_points(primitive, locator, minimum=4, maximum=4)
+        elif head == "gr_circle":
+            self._reject_unknown_children(primitive, common | {"center", "end"}, locator)
+            center = self._primitive_point(primitive, "center", locator)
+            end = self._primitive_point(primitive, "end", locator)
+            radius = self._ceil_sqrt((end[0] - center[0]) ** 2 + (end[1] - center[1]) ** 2)
+            points = (
+                (center[0] - radius, center[1] - radius),
+                (center[0] + radius, center[1] + radius),
+            )
+        else:
+            assert head == "gr_arc"
+            self._reject_unknown_children(primitive, common | {"start", "mid", "end"}, locator)
+            start = self._primitive_point(primitive, "start", locator)
+            mid = self._primitive_point(primitive, "mid", locator)
+            end = self._primitive_point(primitive, "end", locator)
+            determinant = 2 * (
+                start[0] * (mid[1] - end[1])
+                + mid[0] * (end[1] - start[1])
+                + end[0] * (start[1] - mid[1])
+            )
+            if determinant == 0:
+                points = (start, mid, end)
+            else:
+                start_sq = start[0] ** 2 + start[1] ** 2
+                mid_sq = mid[0] ** 2 + mid[1] ** 2
+                end_sq = end[0] ** 2 + end[1] ** 2
+                center_x_num = (
+                    start_sq * (mid[1] - end[1])
+                    + mid_sq * (end[1] - start[1])
+                    + end_sq * (start[1] - mid[1])
+                )
+                center_y_num = (
+                    start_sq * (end[0] - mid[0])
+                    + mid_sq * (start[0] - end[0])
+                    + end_sq * (mid[0] - start[0])
+                )
+                if determinant < 0:
+                    determinant = -determinant
+                    center_x_num = -center_x_num
+                    center_y_num = -center_y_num
+                dx_num = center_x_num - start[0] * determinant
+                dy_num = center_y_num - start[1] * determinant
+                radius_num = self._ceil_sqrt(dx_num * dx_num + dy_num * dy_num)
+                points = (
+                    (
+                        (center_x_num - radius_num) // determinant,
+                        (center_y_num - radius_num) // determinant,
+                    ),
+                    (
+                        self._ceil_div(center_x_num + radius_num, determinant),
+                        self._ceil_div(center_y_num + radius_num, determinant),
+                    ),
+                )
+
+        width = self._primitive_width(primitive, locator)
+        self._validate_primitive_fill(primitive, locator)
+        inflation = (width + 1) // 2
+        return (
+            min(point[0] for point in points) - inflation,
+            min(point[1] for point in points) - inflation,
+            max(point[0] for point in points) + inflation,
+            max(point[1] for point in points) + inflation,
+        )
+
+    def _custom_pad_envelope(
+        self, pad: SExpr, locator: str, *, size_x_nm: int, size_y_nm: int
+    ) -> PadCopperEnvelope:
+        primitives = self._one(pad, "primitives", locator)
+        assert primitives is not None
+        self._validate_direct_atoms(
+            primitives, positional_atoms=0, allowed=frozenset(), locator=locator
+        )
+        self._reject_unknown_children(primitives, _CUSTOM_PAD_PRIMITIVE_HEADS, locator)
+        half_x = (size_x_nm + 1) // 2
+        half_y = (size_y_nm + 1) // 2
+        bounds = (-half_x, -half_y, half_x, half_y)
+        for index, primitive in enumerate(
+            item for item in primitives.items[1:] if isinstance(item, SExpr)
+        ):
+            primitive_bounds = self._primitive_envelope(primitive, f"{locator}.primitives[{index}]")
+            if primitive_bounds is None:
+                continue
+            bounds = (
+                min(bounds[0], primitive_bounds[0]),
+                min(bounds[1], primitive_bounds[1]),
+                max(bounds[2], primitive_bounds[2]),
+                max(bounds[3], primitive_bounds[3]),
+            )
+        try:
+            return PadCopperEnvelope(*bounds)
+        except ValueError as error:
+            self.fail("integer.overflow", str(error), locator, object_kind="pad")
+
     def _pad_shape(self, raw_shape: str, locator: str) -> PadShape:
         """Resolve one pad's KiCad shape token, or refuse -- by name where there is a name.
 
@@ -2439,17 +2675,12 @@ class _Converter:
                 # custom pad on a real board was told that `options` is unsupported.  That is a
                 # true sentence about the wrong object: `options` is a mandatory sub-field of the
                 # shape, and a reader who goes and removes it gets a malformed pad rather than a
-                # converting board.  Deciding kind and shape first means the refusal names the
-                # construct that cannot be modelled, which is the same correction #152 made to the
-                # pad refusals and the same one ADR-0093 made for off-grid geometry.
+                # converting board. Deciding kind and shape first now dispatches the closed custom
+                # subgrammar before the general pad-field allowlist.
                 #
-                # The field loop stays, and `options` and `primitives` stay in it, because neither
-                # is dead: KiCad's *parser* accepts `T_options` and `T_primitives` on a pad of any
-                # shape (`pcb_io_kicad_sexpr_parser.cpp:6315-6323`), so a hand-edited or
-                # third-party file can carry either on a `roundrect` pad, where the shape refusal
-                # above does not fire and only the field loop stands between that file and a
-                # snapshot.  `test_pad_field_refusals_are_still_reachable_on_a_modelled_shape`
-                # pins that reachability so the entries are not deleted as unreachable later.
+                # KiCad's parser accepts `options` and `primitives` on any pad shape, so the
+                # explicit non-custom branch below keeps those hand-edited forms fail-closed even
+                # though both heads belong to the global closed allowlist.
                 self._validate_direct_atoms(
                     pad,
                     positional_atoms=3,
@@ -2463,7 +2694,19 @@ class _Converter:
                     )
                 number, raw_kind, raw_shape = header
                 kind = self._pad_kind(raw_kind, locator)
-                shape = self._pad_shape(raw_shape, locator)
+                is_custom = raw_shape == "custom"
+                shape = (
+                    self._custom_pad_anchor_shape(pad, locator)
+                    if is_custom
+                    else self._pad_shape(raw_shape, locator)
+                )
+                if not is_custom and (children(pad, "options") or children(pad, "primitives")):
+                    self.fail(
+                        "unsupported.construct",
+                        "custom pad fields are unsupported on a non-custom pad",
+                        locator,
+                        object_kind="pad",
+                    )
                 for unsupported_head in _UNSUPPORTED_PAD_FIELDS:
                     if children(pad, unsupported_head):
                         self.fail(
@@ -2541,6 +2784,16 @@ class _Converter:
                 size = self._values(pad, "size", locator, minimum=2, maximum=2)
                 size_x = self._mm(size[0], f"{locator}.size.x")
                 size_y = self._mm(size[1], f"{locator}.size.y")
+                copper_envelope = (
+                    self._custom_pad_envelope(
+                        pad,
+                        locator,
+                        size_x_nm=size_x,
+                        size_y_nm=size_y,
+                    )
+                    if is_custom
+                    else None
+                )
                 radius: int | None = None
                 if shape is PadShape.ROUNDRECT:
                     ratio = self._values(
@@ -2606,6 +2859,7 @@ class _Converter:
                     drill_y_nm=drill_y,
                     layer_ids=self._layer_ids(pad, locator),
                     locked=footprint_locked or self._locked(pad, positional_atoms=3),
+                    copper_envelope=copper_envelope,
                 )
                 pads.append(pad_item)
                 owned_pad_ids.append(pad_item.id)

@@ -166,7 +166,7 @@ def _footprint(item: Footprint) -> dict[str, JsonValue]:
 
 
 def _pad(item: Pad, order: dict[str, int]) -> dict[str, JsonValue]:
-    return {
+    payload: dict[str, JsonValue] = {
         "center": _point(item.center),
         "drill_x_nm": item.drill_x_nm,
         "drill_y_nm": item.drill_y_nm,
@@ -181,6 +181,14 @@ def _pad(item: Pad, order: dict[str, int]) -> dict[str, JsonValue]:
         "size_x_nm": item.size_x_nm,
         "size_y_nm": item.size_y_nm,
     }
+    if item.copper_envelope is not None:
+        payload["copper_envelope"] = {
+            "max_x_nm": item.copper_envelope.max_x_nm,
+            "max_y_nm": item.copper_envelope.max_y_nm,
+            "min_x_nm": item.copper_envelope.min_x_nm,
+            "min_y_nm": item.copper_envelope.min_y_nm,
+        }
+    return payload
 
 
 def _via(item: Via) -> dict[str, JsonValue]:

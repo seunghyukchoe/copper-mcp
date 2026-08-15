@@ -194,7 +194,7 @@ it is not mistaken for a widening: a custom pad carrying `zone_connect 0` now re
 shape's name rather than ADR-0091's. Both refuse.
 
 **The refusal is mutation-checked in the direction that matters.** Six mutants under
-`docs/mutants/2026-08-13-custom-pad-shape-refusal.json`, run through the committed harness of
+`docs/mutants/retired/2026-08-13-custom-pad-shape-refusal.json`, run through the committed harness of
 ADR-0098 — which purges `__pycache__` around every application, requires each anchor to match
 exactly once, refuses to apply a mutant until the unmutated killing tests pass, and counts only
 pytest exit 1 as a kill. All six were killed on Python 3.12.13:

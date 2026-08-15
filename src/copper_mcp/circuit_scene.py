@@ -37,6 +37,7 @@ from copper_mcp.board_ir import (
     Via,
     Zone,
 )
+from copper_mcp.board_ir.pad_geometry import pad_obstacle_bounds
 from copper_mcp.config import Settings
 from copper_mcp.kicad_ipc import capture_live_board
 from copper_mcp.models import SCHEMA_VERSION
@@ -58,7 +59,7 @@ from copper_mcp.request_boundary import (
 from copper_mcp.scene_render import SceneRenderEvidence
 from copper_mcp.security import read_workspace_file
 
-SCENE_VERSION = "0.3.0"
+SCENE_VERSION = "0.4.0"
 
 #: Objects the router treats as given, versus objects a proposal could add or change.
 _STATIC_KINDS = ("outline", "footprints", "pads", "keepouts", "rules")
@@ -361,6 +362,12 @@ def _pad_half_extents(pad: Pad) -> tuple[int, int]:
     to compute exactly.
     """
 
+    if pad.copper_envelope is not None:
+        bounds = pad_obstacle_bounds(pad)
+        return (
+            max(pad.center.x - bounds[0], bounds[2] - pad.center.x),
+            max(pad.center.y - bounds[1], bounds[3] - pad.center.y),
+        )
     if pad.rotation_udeg % _QUARTER_UDEG == 0:
         half_x, half_y = (pad.size_x_nm + 1) // 2, (pad.size_y_nm + 1) // 2
         if pad.rotation_udeg // _QUARTER_UDEG % 2 == 1:
@@ -599,20 +606,30 @@ def _selected(layer_ids: Iterable[str], requested: tuple[str, ...]) -> bool:
 
 
 def _pad_object(pad: Pad) -> SceneObject:
+    geometry: dict[str, Any] = {
+        "center_nm": [pad.center.x, pad.center.y],
+        "size_nm": [pad.size_x_nm, pad.size_y_nm],
+        "rotation_udeg": pad.rotation_udeg,
+        "shape": str(pad.shape),
+        "kind": str(pad.kind),
+        "net_id": pad.net_id,
+        "roundrect_radius_nm": pad.roundrect_radius_nm,
+        "drill_nm": (None if pad.drill_x_nm is None else [pad.drill_x_nm, pad.drill_y_nm]),
+    }
+    if pad.copper_envelope is not None:
+        geometry["copper_envelope_nm"] = [
+            pad.copper_envelope.min_x_nm,
+            pad.copper_envelope.min_y_nm,
+            pad.copper_envelope.max_x_nm,
+            pad.copper_envelope.max_y_nm,
+        ]
+        geometry["copper_envelope_frame"] = "pad_local"
+        geometry["geometry_model"] = "anchor_with_custom_copper_envelope"
     return SceneObject(
         ref_id=pad.id,
         kind="pad",
         layer_ids=tuple(pad.layer_ids),
-        geometry={
-            "center_nm": [pad.center.x, pad.center.y],
-            "size_nm": [pad.size_x_nm, pad.size_y_nm],
-            "rotation_udeg": pad.rotation_udeg,
-            "shape": str(pad.shape),
-            "kind": str(pad.kind),
-            "net_id": pad.net_id,
-            "roundrect_radius_nm": pad.roundrect_radius_nm,
-            "drill_nm": (None if pad.drill_x_nm is None else [pad.drill_x_nm, pad.drill_y_nm]),
-        },
+        geometry=geometry,
         ref_stability=_ref_stability(pad.id),
         locked=pad.locked,
     )

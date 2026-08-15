@@ -662,6 +662,24 @@ class PadGeometryContract(_ClosedContract):
     net_id: NetRefId | None
     roundrect_radius_nm: PositiveNanometres | None
     drill_nm: Annotated[list[PositiveNanometres], Field(min_length=2, max_length=2)] | None
+    #: Present together for Board IR 0.4 custom pads. The four signed values are a pad-local
+    #: ``[min_x, min_y, max_x, max_y]`` AABB; ``center_nm`` and ``rotation_udeg`` place it.
+    copper_envelope_nm: Annotated[list[Nanometres], Field(min_length=4, max_length=4)] | None = None
+    copper_envelope_frame: Literal["pad_local"] | None = None
+    geometry_model: Literal["anchor_with_custom_copper_envelope"] | None = None
+
+    @model_validator(mode="after")
+    def _custom_envelope_fields_move_together(self) -> PadGeometryContract:
+        fields = (
+            self.copper_envelope_nm,
+            self.copper_envelope_frame,
+            self.geometry_model,
+        )
+        if any(value is not None for value in fields) and not all(
+            value is not None for value in fields
+        ):
+            raise ValueError("custom pad envelope fields must be present together")
+        return self
 
 
 class ScenePadContract(_SceneObjectContract):
@@ -902,7 +920,7 @@ class CircuitSceneToolResponse(_ClosedContract):
     """Strict structured output contract for ``observe_board_scene``."""
 
     schema_version: str
-    scene_version: Literal["0.3.0"]
+    scene_version: Literal["0.4.0"]
     board_path: str
     board_revision: Digest
     snapshot_digest: Digest | None

@@ -20,7 +20,7 @@
 | `inspect_live_board` | None | Optional `kicad-python` IPC observation of the first open PCB; returns numeric versions, a SHA-256 digest, byte count, bounded object counts, and a nullable opaque session CAS. |
 | `observe_board_scene` | None, or a process-local render artifact when `include_render` is set | Bounded, region-scoped semantic scene of one board, with board text quarantined. |
 | `observe_post_placement` | None | Read-only exact-revision observation: one file/context capture supplies both bounded semantic scene and aggregate redacted KiCad DRC. No token, candidate, render, or mutation input is accepted. |
-| `observe_live_board_scene` | None | Bounded Circuit Scene `0.3.0` from the active KiCad IPC document; uses `board: "live"` and optional stale-digest compare values. |
+| `observe_live_board_scene` | None | Bounded Circuit Scene `0.4.0` from the active KiCad IPC document; uses `board: "live"` and optional stale-digest compare values. |
 | `preview_live_route` | None | Revision-bound, ref-anchored route proposal over one active KiCad IPC snapshot; never writes, runs DRC/fill, or grants apply authority. |
 | `preview_layered_route` | None | Revision-bound, pad-ref-anchored two-signal-layer proposal with explicit full-stack vias and opt-in candidate-bound aggregate DRC evidence; still no refill, serialization, export, or apply authority. |
 | `preview_live_layered_route` | None | Session-, source-, and Board IR-revision-bound via-capable proposal over one active KiCad IPC snapshot; candidate-only, with no DRC, refill, serialization, export, or apply authority. |
@@ -99,7 +99,7 @@ but requires the literal `board: "live"` and refuses `include_render`. It captur
 IPC serialization, checks that its digest and byte count remain paired, and runs that exact source
 through Board IR and Circuit Scene conversion. Optional `expect_board_revision` and
 `expect_snapshot_digest` values provide compare-and-swap semantics for a caller re-observing the
-same editor; either mismatch is a typed refusal. The output reuses the closed Scene `0.3.0`
+same editor; either mismatch is a typed refusal. The output reuses the closed Scene `0.4.0`
 contract with `board_path: "live"`, so it exposes exact geometry and typed references but no raw
 serialization, socket path, or token. Revision-bound live proposal gates now exist for placement and
 routing. These are read-only proposal surfaces: DRC, fill, editor mutation, and apply remain
@@ -145,6 +145,13 @@ kinds. Kinds are offered the budget in ascending object count with the fixed dec
 breaking ties, which is deterministic for a board revision and request and puts the outline and the
 rules - what a caller needs in order to bound a follow-up request - ahead of the numerous kinds.
 See [ADR-0088](../adr/0088-complete-or-withheld-scene-kinds.md).
+
+Custom-pad scene geometry discloses both the anchor and, when present, `copper_envelope_nm`, with
+`copper_envelope_frame: "pad_local"` and
+`geometry_model: "anchor_with_custom_copper_envelope"`. These three fields occur together. The
+envelope is the obstacle over-approximation; the anchor is the under-approximating attachment
+core. This is bounded disclosure of the accepted envelope, not a claim of exact KiCad primitive
+parity. Non-quarter-turn obstacle transforms remain deliberately conservative.
 
 Object bounds over-approximate on purpose. An arc is bounded including the bulge between its
 sample points, and a pad rotated off the quarter turns is bounded by its circumscribed circle, both

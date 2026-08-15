@@ -21,7 +21,6 @@
       "gr_text_box": "copper text has no envelope derivable from the board and is unsupported [text]"
     },
     "_UNMODELLED_PAD_SHAPES": {
-      "custom": "a custom pad shape has no single region that both contains its copper and is contained by it, and is unsupported",
       "trapezoid": "trapezoid pad shapes are unsupported in Board IR adapter v0.2"
     },
     "_UNMODELLED_ROOT_HEADS": {
@@ -42,9 +41,7 @@
       "front_post_machining": "pad field 'front_post_machining' is unsupported",
       "keep_end_layers": "pad field 'keep_end_layers' is unsupported",
       "offset": "pad field 'offset' is unsupported",
-      "options": "pad field 'options' is unsupported",
       "padstack": "pad field 'padstack' is unsupported",
-      "primitives": "pad field 'primitives' is unsupported",
       "rect_delta": "pad field 'rect_delta' is unsupported",
       "sim_electrical_type": "pad field 'sim_electrical_type' is unsupported",
       "solder_mask_margin": "pad field 'solder_mask_margin' is unsupported",

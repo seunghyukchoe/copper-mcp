@@ -26,7 +26,7 @@ Authoritative DRC remains required before routing through vias can be marked com
 
 | Surface | First-slice contract |
 |---|---|
-| Snapshot | Canonical, digest-verified Board IR `0.3.0` |
+| Snapshot | Canonical, digest-verified Board IR `0.4.0` |
 | Request | One stable net ID, one stable signal-layer ID, exact base revision, seed, integer settings |
 | Connectivity | Exactly two pads belonging to the net; both accessible on the selected layer |
 | Constraints | One net-class width/clearance assignment; no selected-net length or differential-pair rule |
@@ -83,6 +83,12 @@ v0.2 admits through vias only, so every via provably crosses the routed layer. D
 ignored because copper, not the hole, is what a track must clear. A via on the routed net still
 refuses *routing*, because a layer change is not something this single-layer search can model, but
 it no longer hides the net: it is a connectivity joint, as described under vias below.
+
+A foreign pad carrying a custom copper envelope contributes the envelope's transformed containing
+box as an obstacle. The anchor remains the only under-approximating attachment core; the router
+never terminates in primitive-only copper. Arbitrary pad rotation uses the documented containing
+farthest-corner circle, so it may refuse a legal route but cannot cross-read copper. Exact primitive
+parity with KiCad is not claimed.
 
 A foreign-net solid zone on the selected layer contributes its exact simple polygon as a
 conservative boundary envelope. The entire interior is treated as potentially occupied because

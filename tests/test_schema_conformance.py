@@ -109,7 +109,7 @@ _SCHEMA_COVERAGE: dict[str, _Proof] = {
         kind=_EMITTED,
         note="DrcSummary.to_dict(), the payload issue #11 found the schema rejecting",
     ),
-    "board-ir/0.3.0.schema.json": _Proof(
+    "board-ir/0.4.0.schema.json": _Proof(
         module="tests/test_board_ir_schema.py",
         test="test_adapter_output_matches_golden_fixture_and_schema",
         kind=_EMITTED,
@@ -119,6 +119,12 @@ _SCHEMA_COVERAGE: dict[str, _Proof] = {
             "test_schema_accepts_an_emitted_far_side_courtyard_payload_and_closes_it in the "
             "same module, which the subset board cannot exercise"
         ),
+    ),
+    "board-ir/0.3.0.schema.json": _Proof(
+        module="tests/test_board_ir_schema.py",
+        test="test_the_frozen_v0_3_0_schema_still_accepts_the_envelope_it_was_published_beside",
+        kind=_LEGACY,
+        note="byte-frozen after the 0.4.0 custom-pad accepted-set widening",
     ),
     "board-ir/0.2.0.schema.json": _Proof(
         module="tests/test_board_ir_schema.py",

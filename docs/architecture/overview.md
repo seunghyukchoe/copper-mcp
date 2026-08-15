@@ -52,7 +52,7 @@ live revision before it can release the synchronous connection.
 | `routing/jobs.py` / `routing/job_worker.py` / `routing/candidate_store.py` | Transport-independent revision-safe job records, bounded single-worker lease/recovery, and redacted candidate manifests; no route-geometry export or MCP Tasks adapter. |
 | `mcp_server.py` | MCP tools/resources and transport configuration. |
 
-Board IR `0.3.0` is the domain and source-adapter foundation. It adds immutable footprint pose,
+Board IR `0.4.0` is the domain and source-adapter foundation. It adds immutable footprint pose,
 side, lock state, total pad ownership, and bounded board-frame simple closed octilinear courtyard
 rings and exact-integer-radius courtyard circles to the geometry already used by routing.
 A narrow deterministic
@@ -100,12 +100,14 @@ process exit; no secure memory-erasure claim is made. See the
 
 ## High-fidelity circuit perception and placement north star
 
-Circuit Scene IR `0.3.0` is the current bounded structured board observation contract
+Circuit Scene IR `0.4.0` is the current bounded structured board observation contract
 (`circuit_scene.SCENE_VERSION`). It exposes
 revision-bound footprint pose, side, lock state, pad ownership, and supported courtyard rings beside
 the existing pads and copper. Region scoping, typed reference durability, object/detail ceilings,
 and quarantined board-author text keep the observation explicit; an optional normalized render is
-an advisory orientation aid, never geometry authority. It does not yet join Board IR with logical
+an advisory orientation aid, never geometry authority. Custom pads disclose an anchor plus a
+separate copper envelope: obstacle readers use the envelope, attachment readers use the anchor,
+and exact primitive parity is not claimed. It does not yet join Board IR with logical
 Circuit Intent, so that semantic fusion remains a north star rather than a current claim.
 
 Observed net identities are directly actionable by `preview_route`: the caller copies a scene

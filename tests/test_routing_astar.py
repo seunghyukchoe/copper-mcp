@@ -24,6 +24,7 @@ from copper_mcp.board_ir import (
     NetClassAssignment,
     OutlineContour,
     Pad,
+    PadCopperEnvelope,
     PadKind,
     PadShape,
     PointNM,
@@ -66,6 +67,7 @@ from copper_mcp.routing.astar import (
     _digest_shape,
     _off_grid_evidence,
     _pad_cores,
+    _pad_obstacle_rect,
     _point_segment_distance_lt,
     _prepare,
     _Problem,
@@ -2965,6 +2967,27 @@ def test_every_pad_core_rectangle_lies_inside_the_pad(
                 offset_y = max(abs(corner_y) - spine[1], 0)
                 inside = offset_x * offset_x + offset_y * offset_y <= short * short
             assert inside, (shape, (corner_x, corner_y))
+
+
+def test_custom_pad_obstacle_uses_the_envelope_but_connectivity_uses_only_the_anchor() -> None:
+    """One custom pad must serve over- and under-readers in opposite safe directions."""
+
+    custom = replace(
+        _pad("pad:custom", (1_000, 2_000)),
+        copper_envelope=PadCopperEnvelope(
+            min_x_nm=-200,
+            min_y_nm=-300,
+            max_x_nm=2_000,
+            max_y_nm=500,
+        ),
+    )
+
+    assert _pad_obstacle_rect(custom) == (800, 1_700, 3_000, 2_500)
+    assert _pad_cores(custom) == ((800, 1_800, 1_200, 2_200),)
+    assert not any(
+        left <= 3_000 <= right and bottom <= 2_000 <= top
+        for left, bottom, right, top in _pad_cores(custom) or ()
+    )
 
 
 def test_a_stadium_roundrect_pad_is_not_mistaken_for_a_round_pad() -> None:

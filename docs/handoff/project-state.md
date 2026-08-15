@@ -34,8 +34,8 @@ the package version:
 
 | Contract | Version | Constant that decides it | Note |
 |---|---|---|---|
-| Board IR | `0.3.0` | `board_ir.types.BOARD_IR_SCHEMA_VERSION` | `0.2.0` and `0.1.0` remain as **immutable legacy** schemas, kept as compatibility evidence; `0.2.0` is byte-frozen by [ADR-0105](../adr/0105-a-schema-version-moves-with-its-accepted-set.md) and, as published, spans three accepted sets across `v0.5.0`–`v0.8.0`. Old snapshots are re-converted from the source board, never auto-migrated — see [the 0.1 → 0.2 migration](../migrations/board-ir-0.2.md), [the 0.9.0 note](../migrations/copper-mcp-0.9.0.md) and [the Board IR contract](../architecture/board-ir.md). |
-| Circuit Scene | `0.3.0` | `circuit_scene.SCENE_VERSION` | There is no compatibility mode. A truncated scene now withholds a whole object kind rather than returning an empty array. |
+| Board IR | `0.4.0` | `board_ir.types.BOARD_IR_SCHEMA_VERSION` | `0.3.0` and earlier remain immutable legacy schemas. Custom pads now carry separate anchor/core and conservative copper-envelope roles; old snapshots are re-converted from source, never auto-migrated — see [the 0.4 migration](../migrations/board-ir-0.4.md) and [ADR-0111](../adr/0111-custom-pad-anchor-and-envelope.md). |
+| Circuit Scene | `0.4.0` | `circuit_scene.SCENE_VERSION` | Custom-pad envelopes are explicitly labelled in pad-local coordinates. There is no compatibility mode. |
 | Circuit Intent IR | `0.1.0` | `circuit_ir.types.CIRCUIT_INTENT_SCHEMA_VERSION` | See [the Circuit Intent contract](../architecture/circuit-intent.md). |
 | Router | `astar-grid/0.7.0` | `routing.astar.ROUTER_VERSION` | Advanced in `0.7.0`; every stored candidate and bundle identity must be re-derived. No path geometry changed. Candidates recorded under `0.4.0`–`0.6.0` still select their historical search behaviour for replay. |
 
@@ -76,21 +76,17 @@ apply tool requires its own single-use token in addition to its operator gate, a
 | M4 — Scene, policy, and evaluation | 3 | 0 | **complete as an accounting fact**, not as a claim that every `[~]` under it is finished |
 | M5 — Performance and physics | 0 | 6 | nothing has landed |
 
-M1's sole remaining tracked issue is #116, retitled from the original real-board conversion survey
-to the M1 conversion tracker it had become ([D-191](../ledgers/decision-ledger.md)). The two
-conversion gaps that kept it open —
-[#152](https://github.com/seunghyukchoe/copper-mcp/issues/152) and
-[#153](https://github.com/seunghyukchoe/copper-mcp/issues/153) — are now **closed**, and
-[#141](https://github.com/seunghyukchoe/copper-mcp/issues/141) is answered by decision and staying
-refused. **Unmilestoned work is still invisible to every count above**: #141, #164, #166, #167,
-#170 and #172 are open and carry no milestone. [The roadmap](../roadmap.md) describes each
-milestone as outcomes; **GitHub is the source of truth over both**, so read it with
+M1's two remaining tracked issues are #116, retitled from the original real-board conversion survey
+to the M1 conversion tracker it had become ([D-191](../ledgers/decision-ledger.md)), and #188, the
+copper-text/curved-outline third-party conversion arc. #152, #153 and #172 are closed; ADR-0111
+resolves the custom-pad front blocker and B-117 measures 15/18. [The roadmap](../roadmap.md)
+describes each milestone as outcomes; **GitHub is the source of truth over both**, so read it with
 `gh issue list -R seunghyukchoe/copper-mcp` and
 `gh api repos/seunghyukchoe/copper-mcp/milestones` rather than trusting a checkbox.
 
-**Record ranges.** ADR-0001 … ADR-0107, next unused **0108**; six numbers (0027, 0082, 0083, 0085,
-0086, 0105) are spent or held by an open branch and never recycled. Ledgers: `D-199`, `R-153`,
-`SEC-146`, `B-110` are the highest allocated (`B-109` was declined under rule 4 and is spent). Allocate in the pull request that lands the entry, never before, per
+**Record ranges.** ADR-0001 … ADR-0111, next unused **0112**; five numbers (0027, 0082, 0083, 0085,
+0086) are spent and never recycled. Ledgers: `D-207`, `R-160`, `SEC-146`, `B-117` are the highest
+allocated (`B-109` was declined under rule 4 and is spent). Allocate in the pull request that lands the entry, never before, per
 [the ID convention](../ledgers/README.md) — and read the two checkers' own output
 (`scripts/check_adr_numbers.py`, `scripts/check_ledgers.py`) rather than this paragraph, which is
 one release away from being wrong by construction.
@@ -205,29 +201,20 @@ worse than none, because it will be ignored.
 
 ## 5. Known limitations, stated plainly
 
-- **Not every real board converts, and a refusal names only the *first* blocker.** Re-measured on
-  the private working corpus on 2026-08-13 (`B-107`, reproducing `B-103`): **13 of the 18 saves in
-  that corpus convert.** The 18 files hold **17 distinct board contents** — one pair is
-  byte-identical across two save directories, and that pair is not among the boards that moved — so
-  the same result is 13 of 17 distinct boards; state which denominator you mean. Neither is the
-  frozen 12-board set the survey measured, and **no count from this corpus is stable**: it is a live
-  tree the designer edits during long runs, so every measurement is bracketed by a conversion-only
-  digest sweep and reported with the digests. B-107 excluded one save outright because the designer
-  saved it twice mid-run. Five saves refuse, each with one typed refusal: a custom-shape SMD pad on
-  four ([#153](https://github.com/seunghyukchoe/copper-mcp/issues/153),
-  [ADR-0100](../adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md)) and copper text on
-  one ([#141](https://github.com/seunghyukchoe/copper-mcp/issues/141), answered by
-  [ADR-0095](../adr/0095-copper-text-has-no-derivable-envelope.md) and refused **by decision**, not
-  by omission). **The five is measured; the four-and-one split is composed from two runs** — ADR-0100
-  measured three custom-pad refusals, and ADR-0099 then converted one pad-`property` save and
-  advanced the other onto the same custom pad. **Read a refusal as an existential, never a
-  universal**: conversion stops at the first error, so "and nothing else" cannot be inferred from
+- **Not every real board converts, and a refusal names only the *first* blocker.** B-117 measured
+  the frozen private selection on 2026-08-15 at **15 of 18 saves**, the predicted 13→15 change,
+  with all source hashes equal before and after. The two newly converting saves use Board IR 0.4's
+  anchor plus `copper_envelope_frame: "pad_local"` envelope model. Three saves refuse at the newly
+  exposed topology blockers: one disjoint `Edge.Cuts` loop set and two courtyard shapes. Copper
+  text remains refused by ADR-0095 on the separate third-party corpus. **Read a refusal as
+  existential, never universal**: conversion stops at the first error, so "and nothing else" cannot be inferred from
   one diagnostic — every gap closed since the survey advanced a refusal on at least one board rather
   than converting it, five times in three days. **No "converts every board" result is claimed at any
   count**, converting is not routing, placing or appliability, and no further count should be stated
   until a re-measured survey supports it.
 - **Real-board routing is a small, candidate-only result, not a product claim — and every figure
-  from this corpus has a short shelf life.** The current measurement is `B-107`, 2026-08-13, over
+  from this corpus has a short shelf life.** The latest routing-only measurement remains `B-107`,
+  2026-08-13, over
   the 13 converting saves: **16 of 465 first-40-net previews routed**, with **324
   `already_connected`**, 46 `invalid_two_pin_net`, 35 `off_grid`, 31 `no_path`, 6
   `no_path_in_region`, 3 `obstacle_budget_exceeded`, 3 `unsupported_geometry` and 1
@@ -295,8 +282,8 @@ worse than none, because it will be ignored.
    construction. The honest close-out is a fresh survey plus an explicit statement of what stays
    refused and why. **Expect a stack** if you take another construct: every gap closed since the
    survey advanced the refusal on at least one board instead of converting it — #116's own courtyard
-   causes, then #140, then #151, then the pad `property` field, and now the custom pad behind it,
-   five times in three days. **#141 is answered and is not a gap to take**: copper text has no
+   causes, then #140, then #151, then the pad `property` field, then the custom pad, and now three
+   topology blockers. **#141 is answered and is not a gap to take**: copper text has no
    envelope derivable from the board document, measured against `kicad-cli`, so it stays refused by
    decision rather than by omission
    ([ADR-0095](../adr/0095-copper-text-has-no-derivable-envelope.md)) — the board it blocks stays

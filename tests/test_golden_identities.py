@@ -140,15 +140,16 @@ BOARD_IR_V02_SOURCE_REVISION = (
 BOARD_IR_V02_ENCODED_BYTES = 4_280
 
 # **Did not move for ADR-0105** (issue #172), which bumped `BOARD_IR_SCHEMA_VERSION` from `0.2.0`
-# to `0.3.0`.  Not one of the four pins above moved, and that is the finding the decision rests
+# to `0.3.0`, and remains unchanged for the active 0.4.0 envelope. Not one of
+# the four pins above moved, and that is the finding the decision rests
 # on rather than a coincidence: the digest is taken over `_content_payload`, which carries no
 # schema version, and the version appears only in the envelope.  The byte count is unchanged too,
-# because `"0.2.0"` and `"0.3.0"` are the same width.  The `V02` in these names records the
+# because all three version strings are the same width. The `V02` in these names records the
 # release the pins were taken in; it is not a claim about the envelope's declared version.
 #
-# What did move is the committed envelope's *bytes*, at exactly one index (4,182, `2` -> `3`) --
-# the last assertion below.  `tests/test_board_ir_schema.py` proves the move by construction:
-# substituting `0.2.0` back reproduces the `0.2.0`-as-published bytes exactly.
+# What did move is the committed envelope's *bytes*, at exactly one version index for each
+# publication (`2` -> `3`, then `3` -> `4`). `tests/test_board_ir_schema.py` proves each move by
+# construction, while this test keeps the active fixture's encoded bytes bound to its digest.
 
 # The 0.1 snapshot digest can no longer be recomputed: the active codec refuses a 0.1 envelope
 # by design (see tests/test_board_ir_schema.py).  The pin therefore guards the committed legacy
