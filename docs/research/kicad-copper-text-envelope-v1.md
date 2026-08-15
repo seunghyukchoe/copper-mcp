@@ -421,6 +421,7 @@ right.
 - [`EDA_TEXT::HasTextVars`, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/include/eda_text.h#L128)
 - [`FONTCONFIG::FindFont` substitution report, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/common/font/fontconfig.cpp#L374-L380)
 - [`GetTextAsShapes` IPC message, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/api/proto/common/commands/base_commands.proto#L68-L86)
-- [`GetTextAsShapes` and project-context `ExpandTextVariables` handlers, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/common/api/api_handler_common.cpp#L197-L293)
+- [`GetTextAsShapes` handler, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/common/api/api_handler_common.cpp#L197-L271)
+- [Board-context `ExpandTextVariables` handler, KiCad 10.0.5](https://github.com/KiCad/kicad-source-mirror/blob/10.0.5/pcbnew/api/api_handler_pcb.cpp#L1434-L1458)
 - [KiCad board file format: graphic items and text effects](https://dev-docs.kicad.org/en/file-formats/sexpr-pcb/)
 - [ADR-0011](../adr/0011-existing-copper-obstacles.md), [ADR-0013](../adr/0013-polygon-zone-obstacles.md), [ADR-0070](../adr/0070-layered-fill-aware-obstacles.md), [ADR-0072](../adr/0072-conservative-arc-track-envelopes.md), [ADR-0075](../adr/0075-courtyard-oracle-parity.md), [ADR-0090](../adr/0090-root-level-board-groups.md)
