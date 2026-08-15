@@ -63,8 +63,8 @@
     {
       "id": "SD6-working-tree-never-compared",
       "file": "scripts/check_schema_sets.py",
-      "anchor": "    working_tree = _working_tree_schemas()\n    _compare(WORKING_TREE, previous, working_tree, failures, used)\n",
-      "replacement": "    working_tree = _working_tree_schemas()\n",
+      "anchor": "        working_tree = _working_tree_schemas()\n        _compare(WORKING_TREE, previous, working_tree, failures, used)\n",
+      "replacement": "        working_tree = _working_tree_schemas()\n",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_check_schema_sets.py::test_the_working_tree_is_compared_against_the_newest_release_tag",
@@ -148,8 +148,8 @@
     {
       "id": "SD12-stale-release-tag-list-goes-unnoticed",
       "file": "scripts/check_schema_sets.py",
-      "anchor": "    _check_tags_are_current(failures)\n",
-      "replacement": "",
+      "anchor": "    unlisted = sorted(repository_tags - set(RELEASE_TAGS))\n",
+      "replacement": "    unlisted: list[str] = []\n",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_check_schema_sets.py::test_a_release_tag_this_checker_has_never_heard_of_fails_the_run"

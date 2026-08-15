@@ -67,24 +67,57 @@ def test_a_release_tag_this_checker_has_never_heard_of_fails_the_run(
 ) -> None:
     """The tag list is explicit, so it has to be unable to go stale quietly.
 
-    The working-tree half compares against `RELEASE_TAGS[-1]`. If a release is
-    tagged and not listed, "the newest tag" silently stops being the newest.
+    The working-tree half compares against the newest listed tag that exists.
+    If a release is tagged and not listed, that anchor silently stops being newest.
     """
 
+    repository_tags = check_schema_sets._repository_release_tags()
     monkeypatch.setattr(
         check_schema_sets,
         "_repository_release_tags",
-        lambda: {*check_schema_sets.RELEASE_TAGS, "v0.9.0"},
+        lambda: {*repository_tags, "v0.10.0"},
     )
 
     with pytest.raises(SystemExit) as caught:
         check_schema_sets.main()
 
-    assert "RELEASE_TAGS omits v0.9.0" in str(caught.value)
+    assert "RELEASE_TAGS omits v0.10.0" in str(caught.value)
 
 
-def test_the_listed_tags_are_exactly_the_repositorys_release_tags() -> None:
-    assert set(check_schema_sets.RELEASE_TAGS) == check_schema_sets._repository_release_tags()
+def test_the_listed_tags_are_the_repository_tags_plus_at_most_the_current_pending_tag() -> None:
+    repository_tags = check_schema_sets._repository_release_tags()
+    assert repository_tags <= set(check_schema_sets.RELEASE_TAGS)
+    assert set(check_schema_sets.RELEASE_TAGS) - repository_tags in (
+        set(),
+        {check_schema_sets._current_project_tag()},
+    )
+
+
+def test_only_the_final_current_version_tag_may_be_pending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository_tags = set(check_schema_sets.RELEASE_TAGS) - {"v0.8.0", "v0.9.0"}
+    monkeypatch.setattr(check_schema_sets, "_repository_release_tags", lambda: repository_tags)
+
+    with pytest.raises(SystemExit) as caught:
+        check_schema_sets.main()
+
+    assert "listed historical release tag(s) are missing: v0.8.0, v0.9.0" in str(caught.value)
+
+
+def test_pending_final_tag_must_match_the_project_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository_tags = set(check_schema_sets.RELEASE_TAGS) - {"v0.9.0"}
+    monkeypatch.setattr(check_schema_sets, "_repository_release_tags", lambda: repository_tags)
+    monkeypatch.setattr(check_schema_sets, "_current_project_tag", lambda: "v0.10.0")
+
+    with pytest.raises(SystemExit) as caught:
+        check_schema_sets.main()
+
+    assert "pending final tag v0.9.0 does not match project version tag v0.10.0" in str(
+        caught.value
+    )
 
 
 def test_every_exemption_names_the_record_that_carries_its_break() -> None:

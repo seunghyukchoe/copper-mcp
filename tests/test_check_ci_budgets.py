@@ -479,12 +479,11 @@ def test_every_committed_job_that_runs_the_suite_declares_a_budget() -> None:
 
 
 def test_the_calibration_file_records_the_hosted_runs_it_claims_to() -> None:
-    """The measurement itself, pinned: the release gate is 2,099 s on a hosted runner.
+    """The release boundary pins the newest successful CI pair and last release run.
 
-    The number this replaces is 20m29s, which is a local `make check` recorded in
-    the `0.8.0` authorization row. It is not wrong; it is about a different
-    machine, and using it as a CI budget input is the mistake `P0.3a` exists to
-    stop repeating.
+    The CI sample is PR #193 plus its post-merge `main` push, all three matrix
+    legs from each because one job-level budget bounds them. The release sample
+    remains v0.8.0, the latest completed tag-triggered workflow before v0.9.0.
     """
 
     document = json.loads((ROOT / check_ci_budgets.CALIBRATION).read_text(encoding="utf-8"))
@@ -495,8 +494,12 @@ def test_the_calibration_file_records_the_hosted_runs_it_claims_to() -> None:
     assert verify["observations"][0]["run_id"] == 31729552824
 
     ci = by_job[(".github/workflows/ci.yml", "test")]
-    assert len(ci["observations"]) == 27
-    assert max(observation["seconds"] for observation in ci["observations"]) == 2088
+    assert len(ci["observations"]) == 6
+    assert {observation["run_id"] for observation in ci["observations"]} == {
+        31876755445,
+        31878318849,
+    }
+    assert max(observation["seconds"] for observation in ci["observations"]) == 2178
 
     # Every committed observation is a completed successful run, which is the only
     # kind the checker will calibrate from.

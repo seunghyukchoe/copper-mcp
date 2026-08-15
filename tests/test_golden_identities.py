@@ -411,12 +411,12 @@ def test_route_bundle_identity_matches_its_committed_golden_value(tmp_path: Path
 # the artifact bytes — and therefore this digest — change on every release.  Re-pin it in the
 # release commit that bumps the version; that is not a contract change, and it is why the byte
 # length is pinned separately (it stays 7,715 only while the version string keeps its length).
-# Pinned at CopperMCP 0.8.0.
+# Pinned at CopperMCP 0.9.0.
 CIRCUIT_INTENT_SNAPSHOT_DIGEST = (
     "sha256:06383cabd428aa52585b1e0f0c82dea6e6f434e55d154f6d2ee87e3879f49795"
 )
 SCHEMATIC_ARTIFACT_DIGEST = (
-    "sha256:0aa948a1bdf4db22058e3939f6a7785591add6aa8e75f1b4f3e0bfa8380cfccf"
+    "sha256:1a5232edc34359f3274b67a89d94834fadeaf404bbd5752a53c12e9f25c35dce"
 )
 SCHEMATIC_ARTIFACT_BYTES = 7_715
 

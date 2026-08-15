@@ -59,6 +59,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -69,10 +70,10 @@ SCHEMA_DIR = "schemas"
 # file first seen at `v0.5.0` is compared from there and never against absence.
 #
 # This list is explicit rather than derived, so that adding a release is a
-# reviewed edit -- and `_check_tags_are_current` fails the run when a `v*` tag
-# exists that is not listed, so it cannot go stale unnoticed. That matters: the
-# working-tree half compares against `RELEASE_TAGS[-1]`, and a stale last entry
-# would quietly mean "newest tag" is not the newest tag.
+# reviewed edit. During a release cut the final entry may be the one pending tag
+# named by `pyproject.toml`; every earlier listed tag must already exist, and any
+# repository tag not listed still fails. That lets pre-tag CI compare against the
+# newest *published* tag without making the tag-triggered gate stale.
 RELEASE_TAGS = (
     "v0.1.0",
     "v0.2.0",
@@ -82,6 +83,7 @@ RELEASE_TAGS = (
     "v0.6.0",
     "v0.7.0",
     "v0.8.0",
+    "v0.9.0",
 )
 
 # The four in-place accepted-set changes that were published before this checker
@@ -298,15 +300,43 @@ def _repository_release_tags() -> set[str]:
     return {line for line in result.stdout.decode("utf-8").split("\n") if line}
 
 
-def _check_tags_are_current(failures: list[str]) -> None:
-    """A release tag this checker has never heard of is a hole, so it fails."""
+def _current_project_tag() -> str:
+    metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    return f"v{metadata['project']['version']}"
 
-    unlisted = sorted(_repository_release_tags() - set(RELEASE_TAGS))
+
+def _published_tags_for_comparison(failures: list[str]) -> tuple[str, ...]:
+    """Return listed tags that exist, allowing only the current final tag to be pending.
+
+    Pre-tag CI has to know the release tag it is preparing, while the tag-triggered
+    release gate has to compare that same tag once it exists. The only missing
+    listed tag therefore permitted is the final entry, and it must match the
+    project version being cut. A deleted historical tag or an unlisted new tag is
+    still a hard failure.
+    """
+
+    repository_tags = _repository_release_tags()
+    unlisted = sorted(repository_tags - set(RELEASE_TAGS))
     if unlisted:
         failures.append(
             f"{Path(__file__).name}: RELEASE_TAGS omits {', '.join(unlisted)}; the working-tree "
             "comparison would run against a tag that is no longer the newest"
         )
+
+    missing = [tag for tag in RELEASE_TAGS if tag not in repository_tags]
+    pending = _current_project_tag()
+    if missing and missing != [RELEASE_TAGS[-1]]:
+        failures.append(
+            f"{Path(__file__).name}: listed historical release tag(s) are missing: "
+            f"{', '.join(missing)}"
+        )
+    elif missing and missing[0] != pending:
+        failures.append(
+            f"{Path(__file__).name}: pending final tag {missing[0]} does not match "
+            f"project version tag {pending}"
+        )
+
+    return tuple(tag for tag in RELEASE_TAGS if tag in repository_tags)
 
 
 def _check_exemptions_are_keyed_to_history(failures: list[str]) -> None:
@@ -429,15 +459,19 @@ def main() -> int:
     failures: list[str] = []
     used: set[tuple[str, str, str]] = set()
 
-    _check_tags_are_current(failures)
+    published_tags = _published_tags_for_comparison(failures)
     _check_exemptions_are_keyed_to_history(failures)
-    previous = _snapshot_at(RELEASE_TAGS[0])
-    for tag in RELEASE_TAGS[1:]:
-        current = _snapshot_at(tag)
-        _compare(tag, previous, current, failures, used)
-        previous = current
-    working_tree = _working_tree_schemas()
-    _compare(WORKING_TREE, previous, working_tree, failures, used)
+    if not published_tags:
+        failures.append("no listed release tag exists to anchor the working-tree comparison")
+        working_tree = _working_tree_schemas()
+    else:
+        previous = _snapshot_at(published_tags[0])
+        for tag in published_tags[1:]:
+            current = _snapshot_at(tag)
+            _compare(tag, previous, current, failures, used)
+            previous = current
+        working_tree = _working_tree_schemas()
+        _compare(WORKING_TREE, previous, working_tree, failures, used)
 
     for key in sorted(set(EXEMPT_DRIFT) - used):
         path, version, tag = key
@@ -453,7 +487,8 @@ def main() -> int:
         raise SystemExit("Schema accepted-set check failed:\n- " + "\n- ".join(failures))
     print(
         f"Schema accepted-set check passed ({len(working_tree)} schemas across "
-        f"{len(RELEASE_TAGS)} release tags and the working tree; "
+        f"{len(published_tags)} published release tags, "
+        f"{len(RELEASE_TAGS) - len(published_tags)} pending tag(s), and the working tree; "
         f"recorded published-break exemptions: {len(EXEMPT_DRIFT)})."
     )
     return 0

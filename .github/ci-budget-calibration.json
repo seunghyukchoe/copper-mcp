@@ -1,268 +1,79 @@
 {
   "schema": "ci-budget-calibration/1",
   "repository": "seunghyukchoe/copper-mcp",
-  "recorded": "2026-08-14",
-  "why": "The v0.7.0 release run was cancelled by its own 20-minute budget and the release shipped without provenance (D-196). The budget was never wrong about the machine it was measured on -- it was measured on the wrong machine. A local `make check` at 20m29s says nothing about a hosted ubuntu-latest runner, where the same gate takes 34m59s. This file is the measurement the budget is derived from, so that `scripts/check_ci_budgets.py` compares a declared ceiling against a recorded duration rather than against a memory.",
-  "source": "GitHub Actions REST API, read-only: GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs. `seconds` is completed_at - started_at for the hosted job, which includes runner setup, checkout and the post-steps -- the same wall clock `timeout-minutes` bounds.",
-  "half_rule": "A budget must be at least twice the longest recorded duration of the job it bounds. Stated the other way, which is how the release workflow's own comment states it: when the measured gate exceeds half of a CI timeout budget, raise the budget in the same pull request that grew the gate. A timeout is a calibrated ceiling like max_fill_vertices, not a constant.",
-  "update": "Re-record before raising or lowering any budget, and whenever a change is expected to move a job's duration: read the durations from the API for the newest completed runs of the affected job, replace that job's `observations` list, and re-run `python scripts/check_ci_budgets.py`. Append rather than replace only when the older runs are still evidence about the current tree. Every recorded observation binds, not just the newest one, so a stale slow run keeps the budget honest rather than being averaged away. See docs/development.md, `CI budgets are calibrated, not chosen`.",
-  "conclusion": "Every observation records the run's `conclusion` and only `success` calibrates a budget; the checker rejects any other value by name rather than skipping it. A failed or cancelled run stopped early, so its duration bounds the work from below instead of measuring it -- recording a two-minute setup failure would otherwise justify a four-minute ceiling for a job that needs thirty-five. Every run recorded below completed successfully.",
-  "not_claimed": "This is a sample, not a distribution with a tail. The CI job's 27 observations span 12 hours on one runner pool; the two release-workflow jobs have n=1 each, because v0.8.0 is the only release run to complete since the budget moved. The half-rule margin is what covers the difference between a sample maximum and a real worst case, and it is a margin rather than a percentile because nobody has measured a percentile here.",
+  "recorded": "2026-08-16",
+  "why": "The v0.7.0 release run was cancelled by its own 20-minute budget and the release shipped without provenance (D-196). The suite has since grown from 2,776 to more than 2,860 tests, so the ceilings are re-measured from completed hosted jobs before v0.9.0 rather than inherited from the previous release.",
+  "source": "GitHub Actions REST API, read-only: GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs and GET /repos/{owner}/{repo}/actions/jobs/{job_id}. `seconds` is completed_at - started_at for the hosted job, including runner setup, checkout and post-steps -- the same wall clock bounded by job-level `timeout-minutes`.",
+  "half_rule": "A budget must be at least twice the longest recorded duration of the job it bounds. Equivalently, when a measured gate exceeds half of an explicit timeout budget, raise or re-measure that budget before release.",
+  "update": "Re-record before raising or lowering any budget and before every release wave that materially grows the suite. Use only completed jobs whose GitHub conclusion is exactly `success`; failed and cancelled runs stop early and therefore do not measure the work. Replace the affected job's observations with the newest representative successful sample, then run `python scripts/check_ci_budgets.py`.",
+  "conclusion": "Every observation below records conclusion `success`. No failed, skipped or cancelled job is used for calibration.",
+  "not_claimed": "This is a small operational sample, not a latency distribution or percentile estimate. The half-rule margin, rather than an inferred percentile, separates the observed maximum from the declared ceiling.",
   "jobs": [
     {
       "workflow": ".github/workflows/ci.yml",
       "job": "test",
-      "note": "Three matrix legs per run (Python 3.11, 3.12, 3.13) share one job-level budget, so all three are recorded and the budget is checked against the slowest. Nine runs spanning 2026-08-13T20:41Z to 2026-08-14T08:30Z, every push and pull-request run since v0.8.0.",
+      "note": "The two newest successful ci.yml runs at the release boundary: the PR #193 head and its post-merge main push. All three Python matrix legs are recorded because they share one job-level budget.",
       "observations": [
         {
-          "run_id": 31784160677,
-          "job_id": 94716234310,
+          "run_id": 31878318849,
+          "job_id": 94997179067,
           "hosted_job_name": "Python 3.13",
-          "started_at": "2026-08-14T08:30:20Z",
-          "completed_at": "2026-08-14T08:58:51Z",
+          "started_at": "2026-08-15T09:57:54Z",
+          "completed_at": "2026-08-15T10:27:04Z",
           "conclusion": "success",
-          "seconds": 1711
+          "seconds": 1750
         },
         {
-          "run_id": 31784160677,
-          "job_id": 94716234102,
-          "hosted_job_name": "Python 3.12",
-          "started_at": "2026-08-14T08:30:19Z",
-          "completed_at": "2026-08-14T09:04:00Z",
-          "conclusion": "success",
-          "seconds": 2021
-        },
-        {
-          "run_id": 31784160677,
-          "job_id": 94716234205,
+          "run_id": 31878318849,
+          "job_id": 94997179079,
           "hosted_job_name": "Python 3.11",
-          "started_at": "2026-08-14T08:30:19Z",
-          "completed_at": "2026-08-14T09:00:18Z",
+          "started_at": "2026-08-15T09:57:54Z",
+          "completed_at": "2026-08-15T10:28:05Z",
           "conclusion": "success",
-          "seconds": 1799
+          "seconds": 1811
         },
         {
-          "run_id": 31781724326,
-          "job_id": 94708790764,
+          "run_id": 31878318849,
+          "job_id": 94997179083,
+          "hosted_job_name": "Python 3.12",
+          "started_at": "2026-08-15T09:57:54Z",
+          "completed_at": "2026-08-15T10:32:54Z",
+          "conclusion": "success",
+          "seconds": 2100
+        },
+        {
+          "run_id": 31876755445,
+          "job_id": 94993532674,
+          "hosted_job_name": "Python 3.12",
+          "started_at": "2026-08-15T09:20:48Z",
+          "completed_at": "2026-08-15T09:57:06Z",
+          "conclusion": "success",
+          "seconds": 2178
+        },
+        {
+          "run_id": 31876755445,
+          "job_id": 94993532691,
+          "hosted_job_name": "Python 3.11",
+          "started_at": "2026-08-15T09:20:47Z",
+          "completed_at": "2026-08-15T09:51:44Z",
+          "conclusion": "success",
+          "seconds": 1857
+        },
+        {
+          "run_id": 31876755445,
+          "job_id": 94993532776,
           "hosted_job_name": "Python 3.13",
-          "started_at": "2026-08-14T07:54:15Z",
-          "completed_at": "2026-08-14T08:21:52Z",
+          "started_at": "2026-08-15T09:20:47Z",
+          "completed_at": "2026-08-15T09:49:59Z",
           "conclusion": "success",
-          "seconds": 1657
-        },
-        {
-          "run_id": 31781724326,
-          "job_id": 94708790853,
-          "hosted_job_name": "Python 3.12",
-          "started_at": "2026-08-14T07:54:15Z",
-          "completed_at": "2026-08-14T08:29:03Z",
-          "conclusion": "success",
-          "seconds": 2088
-        },
-        {
-          "run_id": 31781724326,
-          "job_id": 94708790710,
-          "hosted_job_name": "Python 3.11",
-          "started_at": "2026-08-14T07:54:15Z",
-          "completed_at": "2026-08-14T08:17:03Z",
-          "conclusion": "success",
-          "seconds": 1368
-        },
-        {
-          "run_id": 31780140913,
-          "job_id": 94703921570,
-          "hosted_job_name": "Python 3.13",
-          "started_at": "2026-08-14T07:29:54Z",
-          "completed_at": "2026-08-14T07:56:46Z",
-          "conclusion": "success",
-          "seconds": 1612
-        },
-        {
-          "run_id": 31780140913,
-          "job_id": 94703921663,
-          "hosted_job_name": "Python 3.12",
-          "started_at": "2026-08-14T07:29:53Z",
-          "completed_at": "2026-08-14T08:04:17Z",
-          "conclusion": "success",
-          "seconds": 2064
-        },
-        {
-          "run_id": 31780140913,
-          "job_id": 94703921542,
-          "hosted_job_name": "Python 3.11",
-          "started_at": "2026-08-14T07:29:53Z",
-          "completed_at": "2026-08-14T07:59:16Z",
-          "conclusion": "success",
-          "seconds": 1763
-        },
-        {
-          "run_id": 31778392514,
-          "job_id": 94698618627,
-          "hosted_job_name": "Python 3.12",
-          "started_at": "2026-08-14T07:02:09Z",
-          "completed_at": "2026-08-14T07:28:31Z",
-          "conclusion": "success",
-          "seconds": 1582
-        },
-        {
-          "run_id": 31778392514,
-          "job_id": 94698618675,
-          "hosted_job_name": "Python 3.13",
-          "started_at": "2026-08-14T07:02:08Z",
-          "completed_at": "2026-08-14T07:28:39Z",
-          "conclusion": "success",
-          "seconds": 1591
-        },
-        {
-          "run_id": 31778392514,
-          "job_id": 94698618749,
-          "hosted_job_name": "Python 3.11",
-          "started_at": "2026-08-14T07:02:08Z",
-          "completed_at": "2026-08-14T07:19:30Z",
-          "conclusion": "success",
-          "seconds": 1042
-        },
-        {
-          "run_id": 31776449089,
-          "job_id": 94692768083,
-          "hosted_job_name": "Python 3.12",
-          "started_at": "2026-08-14T06:29:19Z",
-          "completed_at": "2026-08-14T07:04:05Z",
-          "conclusion": "success",
-          "seconds": 2086
-        },
-        {
-          "run_id": 31776449089,
-          "job_id": 94692768189,
-          "hosted_job_name": "Python 3.11",
-          "started_at": "2026-08-14T06:29:19Z",
-          "completed_at": "2026-08-14T06:57:27Z",
-          "conclusion": "success",
-          "seconds": 1688
-        },
-        {
-          "run_id": 31776449089,
-          "job_id": 94692768112,
-          "hosted_job_name": "Python 3.13",
-          "started_at": "2026-08-14T06:29:18Z",
-          "completed_at": "2026-08-14T06:56:48Z",
-          "conclusion": "success",
-          "seconds": 1650
-        },
-        {
-          "run_id": 31776343985,
-          "job_id": 94692450133,
-          "hosted_job_name": "Python 3.13",
-          "started_at": "2026-08-14T06:27:28Z",
-          "completed_at": "2026-08-14T06:54:01Z",
-          "conclusion": "success",
-          "seconds": 1593
-        },
-        {
-          "run_id": 31776343985,
-          "job_id": 94692450148,
-          "hosted_job_name": "Python 3.11",
-          "started_at": "2026-08-14T06:27:28Z",
-          "completed_at": "2026-08-14T06:57:22Z",
-          "conclusion": "success",
-          "seconds": 1794
-        },
-        {
-          "run_id": 31776343985,
-          "job_id": 94692450151,
-          "hosted_job_name": "Python 3.12",
-          "started_at": "2026-08-14T06:27:27Z",
-          "completed_at": "2026-08-14T07:02:00Z",
-          "conclusion": "success",
-          "seconds": 2073
-        },
-        {
-          "run_id": 31774833983,
-          "job_id": 94688004814,
-          "hosted_job_name": "Python 3.13",
-          "started_at": "2026-08-14T06:00:42Z",
-          "completed_at": "2026-08-14T06:21:19Z",
-          "conclusion": "success",
-          "seconds": 1237
-        },
-        {
-          "run_id": 31774833983,
-          "job_id": 94688004541,
-          "hosted_job_name": "Python 3.12",
-          "started_at": "2026-08-14T06:00:42Z",
-          "completed_at": "2026-08-14T06:35:00Z",
-          "conclusion": "success",
-          "seconds": 2058
-        },
-        {
-          "run_id": 31774833983,
-          "job_id": 94688004456,
-          "hosted_job_name": "Python 3.11",
-          "started_at": "2026-08-14T06:00:42Z",
-          "completed_at": "2026-08-14T06:30:34Z",
-          "conclusion": "success",
-          "seconds": 1792
-        },
-        {
-          "run_id": 31774493463,
-          "job_id": 94687021920,
-          "hosted_job_name": "Python 3.13",
-          "started_at": "2026-08-14T05:54:27Z",
-          "completed_at": "2026-08-14T06:22:40Z",
-          "conclusion": "success",
-          "seconds": 1693
-        },
-        {
-          "run_id": 31774493463,
-          "job_id": 94687021919,
-          "hosted_job_name": "Python 3.12",
-          "started_at": "2026-08-14T05:54:27Z",
-          "completed_at": "2026-08-14T06:27:36Z",
-          "conclusion": "success",
-          "seconds": 1989
-        },
-        {
-          "run_id": 31774493463,
-          "job_id": 94687021994,
-          "hosted_job_name": "Python 3.11",
-          "started_at": "2026-08-14T05:54:27Z",
-          "completed_at": "2026-08-14T06:22:43Z",
-          "conclusion": "success",
-          "seconds": 1696
-        },
-        {
-          "run_id": 31742132797,
-          "job_id": 94587849762,
-          "hosted_job_name": "Python 3.13",
-          "started_at": "2026-08-13T20:41:52Z",
-          "completed_at": "2026-08-13T21:07:06Z",
-          "conclusion": "success",
-          "seconds": 1514
-        },
-        {
-          "run_id": 31742132797,
-          "job_id": 94587849911,
-          "hosted_job_name": "Python 3.12",
-          "started_at": "2026-08-13T20:41:52Z",
-          "completed_at": "2026-08-13T21:14:56Z",
-          "conclusion": "success",
-          "seconds": 1984
-        },
-        {
-          "run_id": 31742132797,
-          "job_id": 94587849941,
-          "hosted_job_name": "Python 3.11",
-          "started_at": "2026-08-13T20:41:52Z",
-          "completed_at": "2026-08-13T21:11:56Z",
-          "conclusion": "success",
-          "seconds": 1804
+          "seconds": 1752
         }
       ]
     },
     {
       "workflow": ".github/workflows/release.yml",
       "job": "verify",
-      "note": "One observation: the v0.8.0 tag run, the only release run to complete since the budget was recalibrated from 20 to 120 minutes. Its `Run release gate` step alone took 2,068 s of the job's 2,099 s. The local 20m29s figure recorded in the 0.8.0 authorization row is a different machine and is not an input here.",
+      "note": "The latest completed release workflow, v0.8.0. Its release gate ran to completion and the job conclusion was success.",
       "observations": [
         {
           "run_id": 31729552824,
@@ -278,7 +89,7 @@
     {
       "workflow": ".github/workflows/release.yml",
       "job": "publish",
-      "note": "One observation: the v0.8.0 tag run. It downloads an artifact, attests it and creates the release, so it is bounded by network time rather than by the suite.",
+      "note": "The latest completed release workflow, v0.8.0. This job downloaded the distributions, attested them and created the release.",
       "observations": [
         {
           "run_id": 31729552824,
