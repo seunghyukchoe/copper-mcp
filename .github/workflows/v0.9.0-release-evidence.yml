@@ -23,7 +23,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release-logs
-          tar -xJf .github/release-evidence/v0.9.0-source-overlay.tar.xz -C . \
+          base64 --decode .github/release-evidence/v0.9.0-source-overlay.tar.xz \
+            > /tmp/v0.9.0-source-overlay.tar.xz
+          xz -t /tmp/v0.9.0-source-overlay.tar.xz \
+            > release-logs/validate-overlay.log 2>&1
+          cat release-logs/validate-overlay.log
+          tar -xJf /tmp/v0.9.0-source-overlay.tar.xz -C . \
             > release-logs/apply-overlay.log 2>&1
           cat release-logs/apply-overlay.log
 
