@@ -199,9 +199,12 @@ never copper dropped — and sizing that ceiling belongs to
   schemas `board-ir/0.1.0`, `board-ir/0.2.0` and `board-ir/0.3.0` carry byte-integrity protection;
   an accepted-set gate alone cannot enforce a byte freeze, and a review proved it by rewriting all
   2,046 lines of `0.2.0` while everything stayed green.
-  **No content address moves:** the snapshot digest, the constraint digest and the source revision
-  are byte-identical, the encoded envelope is 4,280 bytes before and after, and it differs at
-  exactly one byte — proved by construction, not asserted. The migration note states plainly that
+  **At the first `0.2.0` → `0.3.0` hop, no content address moves:** the snapshot digest, the
+  constraint digest and the source revision are byte-identical, the encoded envelope is 4,280
+  bytes before and after, and it differs at exactly one byte — proved by construction, not
+  asserted. The second hop is intentionally different: custom-pad snapshots gain
+  `copper_envelope`, so their content addresses move; ordinary-pad snapshots do not. The migration
+  note states plainly that
   **`0.2.0` as published spans three accepted sets across `v0.5.0`–`v0.8.0`** and that the
   authoritative copy for a snapshot is the one shipped alongside the release that produced it.
   ([ADR-0105](docs/adr/0105-a-schema-version-moves-with-its-accepted-set.md), `D-197`,
