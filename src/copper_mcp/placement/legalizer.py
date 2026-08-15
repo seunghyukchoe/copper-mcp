@@ -326,6 +326,7 @@ def _place(
                 drill_y_nm=pad.drill_y_nm,
                 layer_ids=pad.layer_ids,
                 locked=pad.locked,
+                copper_envelope=pad.copper_envelope,
             )
             bounds = pad_bounds(spun)
             pads.append(

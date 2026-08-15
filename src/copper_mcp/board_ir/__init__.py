@@ -1,4 +1,4 @@
-"""Canonical, MCP-independent Board IR v0.2 contracts."""
+"""Canonical, MCP-independent Board IR 0.4 contracts."""
 
 from copper_mcp.board_ir.canonical import (
     canonical_content_bytes,
@@ -29,6 +29,7 @@ from copper_mcp.board_ir.types import (
     NetClassAssignment,
     OutlineContour,
     Pad,
+    PadCopperEnvelope,
     PadKind,
     PadShape,
     PointNM,
@@ -70,6 +71,7 @@ __all__ = [
     "NetClassAssignment",
     "OutlineContour",
     "Pad",
+    "PadCopperEnvelope",
     "PadKind",
     "PadShape",
     "ParseBudget",

@@ -19,6 +19,7 @@ from copper_mcp.board_ir import (
     NetClassAssignment,
     OutlineContour,
     Pad,
+    PadCopperEnvelope,
     PadKind,
     PadShape,
     PointNM,
@@ -39,6 +40,7 @@ from copper_mcp.routing.layered_candidate_verifier import (
     LayeredCandidateVerificationCode,
     LayeredCandidateVerificationLimits,
     LayeredPhysicalValidation,
+    _point_in_pad_envelope,
     verify_layered_candidate,
 )
 
@@ -148,6 +150,26 @@ def _simple_candidate() -> tuple[BoardIRSnapshot, object]:
     )
     assert result.candidate is not None
     return snapshot, result.candidate
+
+
+def test_verifier_detects_via_in_custom_copper_only_area() -> None:
+    """The conservative endpoint check must include custom primitive copper."""
+
+    snapshot = _simple_snapshot()
+    pad = replace(
+        snapshot.content.pads[0],
+        copper_envelope=PadCopperEnvelope(-2_000, -1_000, 2_000, 1_000),
+    )
+    custom_pad = pad
+
+    # The point is outside the 400 nm anchor but inside the custom copper envelope.
+    anchor_edge = (custom_pad.size_x_nm + 1) // 2
+    envelope_only_point = PointNM(custom_pad.center.x + 1_500, custom_pad.center.y)
+    assert envelope_only_point.x > custom_pad.center.x + anchor_edge
+    assert _point_in_pad_envelope(envelope_only_point, custom_pad)
+    assert not _point_in_pad_envelope(
+        PointNM(custom_pad.center.x + 2_500, custom_pad.center.y), custom_pad
+    )
 
 
 def _blocked_candidate(*, end_on_back: bool) -> tuple[BoardIRSnapshot, object]:

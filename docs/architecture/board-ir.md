@@ -1,7 +1,7 @@
 # Board IR and KiCad Adapter Contracts
 
 Board IR is the deterministic board snapshot shared by routing, replay, placement, benchmark, and
-MCP application layers. The current contract is `copper.board-ir` version `0.3.0`. It is implemented
+MCP application layers. The current contract is `copper.board-ir` version `0.4.0`. It is implemented
 as a pure domain package, strict JSON codec, JSON Schema, and a narrow read-only KiCad converter.
 
 See [ADR-0005](../adr/0005-canonical-board-ir.md) for the original integer/digest contract and
@@ -14,9 +14,10 @@ See [ADR-0005](../adr/0005-canonical-board-ir.md) for the original integer/diges
 | `copper_mcp.board_ir.types` | Immutable typed units, geometry, constraints, items, and snapshot envelope. |
 | `copper_mcp.board_ir.validation` | Reference, identity, budget, degeneracy, and exact polygon-topology checks. |
 | `copper_mcp.board_ir.canonical` | Normalization, canonical JSON bytes, constraint digest, and snapshot digest. |
-| `copper_mcp.board_ir.codec` | Strict bounded decoding of untrusted `0.3.0` JSON. |
+| `copper_mcp.board_ir.codec` | Strict bounded decoding of untrusted `0.4.0` JSON. |
 | `copper_mcp.adapters.kicad_board_ir` | Fail-closed conversion of the documented KiCad subset from bytes. |
-| [`0.3.0.schema.json`](../../schemas/board-ir/0.3.0.schema.json) | Active portable serialized-envelope contract. |
+| [`0.4.0.schema.json`](../../schemas/board-ir/0.4.0.schema.json) | Active portable serialized-envelope contract. |
+| [`0.3.0.schema.json`](../../schemas/board-ir/0.3.0.schema.json) | Byte-frozen predecessor; it cannot carry custom-pad copper envelopes. |
 | [`0.2.0.schema.json`](../../schemas/board-ir/0.2.0.schema.json) | Byte-frozen by ADR-0105; the copy a `v0.5.0`–`v0.8.0` consumer holds. |
 | [`0.1.0.schema.json`](../../schemas/board-ir/0.1.0.schema.json) | Immutable legacy compatibility contract. |
 
@@ -30,7 +31,7 @@ The serialized shape is:
 ```json
 {
   "schema": "copper.board-ir",
-  "schema_version": "0.3.0",
+  "schema_version": "0.4.0",
   "snapshot_digest": "sha256:<64 lowercase hex characters>",
   "content": {
     "units": {"distance": "nm", "angle": "udeg"},
@@ -162,6 +163,12 @@ board. The schema is the field-level reference.
   outline holes.
 - Circle pads have equal axes. SMD pads are drill-free, through-hole and NPTH pads require exact
   drill dimensions, and NPTH pads cannot carry an electrical net.
+- A custom pad keeps its KiCad anchor (`shape`, `size_x_nm`, and `size_y_nm`) as the attachment
+  core and carries a separate `copper_envelope` local AABB containing the anchor and every accepted
+  custom primitive. Obstacle readers use that envelope (over-approximation); connectivity and
+  attachment readers use only the anchor core (under-approximation). Exact primitive parity with
+  KiCad is not claimed. For non-quarter-turn rotations, the obstacle helper uses a containing
+  farthest-corner circle, intentionally widening the AABB rather than risking an under-read.
 
 ## Typed model coverage
 
@@ -283,20 +290,18 @@ including:
   courtyard layers. A courtyard on the layer *opposite* the footprint's side is no longer refused:
   it is modelled as the footprint's far-side keep-out and constrains that layer
   ([ADR-0097](../adr/0097-courtyard-layer-decides-the-side.md));
-- custom or other unmodeled pad shapes and custom pad primitives. Pad **kind** and pad **shape**
+- trapezoid or other unmodeled pad shapes. Pad **kind** and pad **shape**
   are two separate refusals, because one message covering both positional tokens of a pad header
   named neither, and both are decided **before** the pad's field checks so the message names the
   construct rather than a mandatory sub-field of it. All four of KiCad's documented kinds
   (`PAD_ATTRIB`: PTH, SMD, CONN, NPTH) are now modelled, so a refused kind token is not a
   documented pad kind at all and refuses without being named, with the indexed locator still
-  saying which pad. Two of KiCad's six documented **shape** tokens are unmodelled, and each refuses
-  from a closed two-entry table with its own sentence: `trapezoid`, which is unmodell**ed**, and
-  `custom`, which is unmodell**able** through today's `Pad` — an envelope for a custom pad *is*
-  derivable from the document (the primitives union with the anchor, and every primitive head has
-  an exact integer-nanometre containing box, `gr_curve` by the Bézier convex-hull property), but a
-  `Pad` is read over-approximating for its obstacle and under-approximating for its attachment core
-  from the same `shape`/`size_x_nm`/`size_y_nm`, and no single rectangle can be both
-  ([ADR-0100](../adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md)). A shape token in
+  saying which pad. One of KiCad's six documented **shape** tokens remains unmodelled:
+  `trapezoid`, which refuses from its closed table. `custom` is now accepted only when its closed
+  primitive grammar yields a bounded
+  `copper_envelope`; the anchor remains the under-approximating attachment core and the envelope
+  serves over-approximating obstacle readers ([ADR-0100](../adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md)).
+  Exact primitive/parity equivalence with KiCad is not claimed. A shape token in
   neither the table nor `PadShape` refuses without being named. A **copper-less `connect` pad** is
   the one kind form that still refuses: the paste/mask aperture skip tests the source token and
   requires literally `smd`, so an aperture-shaped edge-connector pad is refused rather than read
@@ -411,8 +416,9 @@ updated. Unknown Board IR versions and unknown fields remain errors.
 > again at `v0.8.0` by ADR-0097 (`far_side_courtyards`, `far_side_courtyard_circles`), which is
 > #172's instance.
 >
-> **The decision:** `BOARD_IR_SCHEMA_VERSION` is `0.3.0`; `0.2.0.schema.json` is **frozen
-> permanently** at its `v0.8.0` bytes and is not corrected retroactively, because a correction
+> **The decision:** `BOARD_IR_SCHEMA_VERSION` is now `0.4.0`; `0.3.0.schema.json` is frozen as
+> the predecessor without custom-pad envelopes. `0.2.0.schema.json` remains **frozen permanently**
+> at its `v0.8.0` bytes and is not corrected retroactively, because a correction
 > cannot reach a downloaded copy and would produce a fourth accepted set for one version string.
 > **`0.2.0` as published therefore spans three accepted sets across `v0.5.0`–`v0.8.0`, and the
 > authoritative copy for a snapshot is the one shipped alongside the release that produced it.**

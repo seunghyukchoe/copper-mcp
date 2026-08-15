@@ -21,16 +21,17 @@ from copper_mcp.board_ir import (
 TEST_ROOT = Path(__file__).parent
 # The directory names the era the boards under it were authored in, not the envelope version its
 # golden carries.  `board-ir-v0.1/subset.kicad_pcb` has been the source board for the active
-# golden since `0.2.0`, and after ADR-0105 the active golden in `board-ir-v0.2/` is a `0.3.0`
+# golden since `0.2.0`, and the active golden in `board-ir-v0.2/` is now a `0.4.0`
 # envelope.  Renaming would move a dozen `.kicad_pcb` paths that no version bump touches.
 ACTIVE_FIXTURE_ROOT = TEST_ROOT / "fixtures" / "board-ir-v0.2"
 LEGACY_FIXTURE_ROOT = TEST_ROOT / "fixtures" / "board-ir-v0.1"
 SCHEMA_ROOT = TEST_ROOT.parent / "schemas" / "board-ir"
-SCHEMA_PATH = SCHEMA_ROOT / "0.3.0.schema.json"
+SCHEMA_PATH = SCHEMA_ROOT / "0.4.0.schema.json"
 LEGACY_SCHEMA_PATH = SCHEMA_ROOT / "0.1.0.schema.json"
 # `0.2.0` is byte-frozen by ADR-0105 and no longer the accepted set for a new document.  It is
 # kept, and checked below, as the copy a consumer of a v0.5.0-v0.8.0 release is holding.
 FROZEN_V0_2_0_SCHEMA_PATH = SCHEMA_ROOT / "0.2.0.schema.json"
+FROZEN_V0_3_0_SCHEMA_PATH = SCHEMA_ROOT / "0.3.0.schema.json"
 VALID_FIXTURE = ACTIVE_FIXTURE_ROOT / "schema-valid.json"
 INVALID_FIXTURE = ACTIVE_FIXTURE_ROOT / "schema-invalid.json"
 LEGACY_VALID_FIXTURE = LEGACY_FIXTURE_ROOT / "schema-valid.json"
@@ -126,8 +127,8 @@ def test_the_version_bump_moved_the_envelope_by_its_version_string_and_nothing_e
 
     active = VALID_FIXTURE.read_bytes()
 
-    assert active.count(b'"0.3.0"') == 1
-    published = active.replace(b'"0.3.0"', b'"0.2.0"')
+    assert active.count(b'"0.4.0"') == 1
+    published = active.replace(b'"0.4.0"', b'"0.2.0"')
 
     assert len(published) == len(active) == PUBLISHED_V0_2_0_ENVELOPE_BYTES
     assert hashlib.sha256(published).hexdigest() == PUBLISHED_V0_2_0_ENVELOPE_SHA256
@@ -151,6 +152,10 @@ FROZEN_SCHEMA_DIGESTS = {
     ),
     "0.2.0.schema.json": (
         "7653de48a5b289bf671b44770f32d6bc7b2df7d5d653c74f38bc407168029c3c",
+        24_040,
+    ),
+    "0.3.0.schema.json": (
+        "37d395c7491824c9568b06ab91e01bc2062204305720d77ef18a135ff432a486",
         24_040,
     ),
 }
@@ -178,7 +183,7 @@ def test_a_frozen_published_schema_keeps_the_exact_bytes_it_shipped_with(name: s
 
 
 def test_the_active_schema_is_not_pinned_by_byte_and_says_why() -> None:
-    """The pin above is deliberately not extended to `0.3.0`, and that is a decision.
+    """The pin above is deliberately not extended to `0.4.0`, and that is a decision.
 
     A frozen schema may not change at all, so its bytes are the contract. The **active** schema
     is expected to change -- that is what a version bump is for -- and pinning its bytes would
@@ -189,6 +194,7 @@ def test_the_active_schema_is_not_pinned_by_byte_and_says_why() -> None:
 
     assert SCHEMA_PATH.name not in FROZEN_SCHEMA_DIGESTS
     assert FROZEN_V0_2_0_SCHEMA_PATH.name in FROZEN_SCHEMA_DIGESTS
+    assert FROZEN_V0_3_0_SCHEMA_PATH.name in FROZEN_SCHEMA_DIGESTS
 
 
 def test_the_frozen_v0_2_0_schema_still_accepts_the_envelope_it_was_published_beside() -> None:
@@ -198,11 +204,24 @@ def test_the_frozen_v0_2_0_schema_still_accepts_the_envelope_it_was_published_be
     frozen copy still accepts the documents it accepted when it shipped.
     """
 
-    published = VALID_FIXTURE.read_bytes().replace(b'"0.3.0"', b'"0.2.0"')
+    published = VALID_FIXTURE.read_bytes().replace(b'"0.4.0"', b'"0.2.0"')
     frozen = Draft202012Validator(_load_json(FROZEN_V0_2_0_SCHEMA_PATH))
 
     assert list(frozen.iter_errors(json.loads(published))) == []
     # And the active schema rejects it, on the version and only on the version.
+    errors = list(_validator().iter_errors(json.loads(published)))
+    assert [(error.validator, list(error.absolute_path)) for error in errors] == [
+        ("const", ["schema_version"])
+    ]
+
+
+def test_the_frozen_v0_3_0_schema_still_accepts_the_envelope_it_was_published_beside() -> None:
+    """The prior active schema and its ordinary-pad envelope are immutable after 0.4.0."""
+
+    published = VALID_FIXTURE.read_bytes().replace(b'"0.4.0"', b'"0.3.0"')
+    frozen = Draft202012Validator(_load_json(FROZEN_V0_3_0_SCHEMA_PATH))
+
+    assert list(frozen.iter_errors(json.loads(published))) == []
     errors = list(_validator().iter_errors(json.loads(published)))
     assert [(error.validator, list(error.absolute_path)) for error in errors] == [
         ("const", ["schema_version"])
@@ -223,7 +242,7 @@ def test_the_codec_refuses_a_persisted_v0_2_0_envelope_with_a_discriminated_code
     and must be told which version this build accepts.
     """
 
-    persisted = VALID_FIXTURE.read_bytes().replace(b'"0.3.0"', b'"0.2.0"')
+    persisted = VALID_FIXTURE.read_bytes().replace(b'"0.4.0"', b'"0.2.0"')
 
     with pytest.raises(BoardIRValidationError) as caught:
         decode_snapshot_json(persisted)
@@ -232,7 +251,7 @@ def test_the_codec_refuses_a_persisted_v0_2_0_envelope_with_a_discriminated_code
     assert caught.value.source_locator == "snapshot.schema_version"
     assert caught.value.message == (
         "Board IR envelope declares a superseded or unknown schema version; this build accepts "
-        "0.3.0 only, and an envelope at any other version must be re-converted from its source "
+        "0.4.0 only, and an envelope at any other version must be re-converted from its source "
         "board"
     )
 
@@ -245,7 +264,7 @@ def test_the_version_refusal_never_echoes_the_version_the_document_declared() ->
     """
 
     secret = "9." + "7" * 200 + ".0"
-    forged = VALID_FIXTURE.read_bytes().replace(b'"0.3.0"', f'"{secret}"'.encode())
+    forged = VALID_FIXTURE.read_bytes().replace(b'"0.4.0"', f'"{secret}"'.encode())
 
     with pytest.raises(BoardIRValidationError) as caught:
         decode_snapshot_json(forged)
@@ -261,7 +280,7 @@ def test_the_version_code_separates_a_stale_version_from_bytes_that_are_not_boar
     A code that fires on everything is not a discriminated code.
     """
 
-    not_board_ir = b'{"schema":"something.else","schema_version":"0.3.0",'
+    not_board_ir = b'{"schema":"something.else","schema_version":"0.4.0",'
     not_board_ir += b'"snapshot_digest":"sha256:' + b"0" * 64 + b'","content":{}}'
 
     with pytest.raises(BoardIRValidationError) as caught:
@@ -381,6 +400,24 @@ def test_schema_enforces_pad_kind_drill_and_npth_net_rules() -> None:
     through_pad["kind"] = "np_through_hole"
     assert through_pad["net_id"] is not None
     assert list(_validator().iter_errors(connected_npth))
+
+
+def test_schema_accepts_and_closes_the_custom_pad_copper_envelope() -> None:
+    payload = deepcopy(_load_json(VALID_FIXTURE))
+    pad = payload["content"]["items"]["pads"][0]
+    pad["copper_envelope"] = {
+        "min_x_nm": -1_000_000,
+        "min_y_nm": -500_000,
+        "max_x_nm": 4_000_000,
+        "max_y_nm": 500_000,
+    }
+
+    assert list(_validator().iter_errors(payload)) == []
+
+    pad["copper_envelope"]["unexpected"] = True
+    assert any(
+        error.validator == "additionalProperties" for error in _validator().iter_errors(payload)
+    )
 
 
 def test_schema_requires_positive_dimensions_for_thermal_zone_connections() -> None:

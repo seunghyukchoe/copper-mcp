@@ -223,12 +223,16 @@ affected items carry UUIDs and coordinates, none of which crosses the boundary. 
 written, so no user project can weaken the verdict, and equally the verdict is not necessarily what
 that user's project would report.
 
-Circuit Scene IR `0.3.0` is a current disclosure boundary: structured observation and its optional
+Circuit Scene IR `0.4.0` is a current disclosure boundary: structured observation and its optional
 render can reveal placement and connectivity without returning source files. Scene requests are
 region-scoped and revision-bound; objects and footprint pad relationships/courtyard vertices consume
 explicit object/detail ceilings, reference durability is typed, and board-author text is quarantined
 as untrusted annotation data. The normalized render is digest-bound and advisory rather than
-geometric authority.
+geometric authority. Custom-pad observations disclose an anchor and a bounded copper envelope;
+the envelope is used only for over-approximating obstacle checks, while attachment/connectivity
+uses the anchor core. Exact primitive parity is not claimed, and arbitrary-rotation envelopes may
+be wider by design. Both representations are untrusted derived geometry and remain subject to
+revision binding and deterministic validation.
 
 `inspect_live_board` additionally returns the fixed-format, process-local PBKDF2 session CAS when
 KiCad supplied a plugin token, or explicit `null` when it did not. This bounded derived value is

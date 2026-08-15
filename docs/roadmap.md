@@ -11,12 +11,11 @@ disagree, believe this table and file the discrepancy. Read live with
 `gh issue list -R seunghyukchoe/copper-mcp` and
 `gh api repos/seunghyukchoe/copper-mcp/milestones`.
 
-As of 2026-08-14, after the dispositions recorded in
-[the post-0.8.0 audit](audit/2026-08-14-post-0.8.0-audit.md):
+As of 2026-08-15, checked against the live GitHub milestone API:
 
 | Milestone | Closed | Open | State |
 |---|---|---|---|
-| M1 — KiCad inspection completion | 7 | 2 | Open: [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116), the conversion tracker retitled from the original real-board survey ([D-191](ledgers/decision-ledger.md)), and [#172](https://github.com/seunghyukchoe/copper-mcp/issues/172), the schema-versioning decision that now gates the custom-pad conversion arc. |
+| M1 — KiCad inspection completion | 9 | 2 | Open: [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116), the conversion tracker retitled from the original real-board survey ([D-191](ledgers/decision-ledger.md)), and [#188](https://github.com/seunghyukchoe/copper-mcp/issues/188), the copper-text/curved-outline third-party conversion arc. #172 is closed by ADR-0105. |
 | M2 — Routing depth | 4 | 3 | Open: [#65](https://github.com/seunghyukchoe/copper-mcp/issues/65) benchmark comparison against open baselines, [#164](https://github.com/seunghyukchoe/copper-mcp/issues/164) the layered fill-authority contract, and [#53](https://github.com/seunghyukchoe/copper-mcp/issues/53) parked behind an operator gate. [#63](https://github.com/seunghyukchoe/copper-mcp/issues/63) closed as already delivered ([ADR-0101](adr/0101-fill-currency-is-not-in-the-document.md)). |
 | M3 — Safe application completion | 0 | 3 | Open: [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68) IPC one-undo-commit apply, [#170](https://github.com/seunghyukchoe/copper-mcp/issues/170) DRC reproducibility, and [#52](https://github.com/seunghyukchoe/copper-mcp/issues/52) placement apply, whose file-backed half has shipped. **Entry criteria, not a start date** — see [M3](#m3--safe-candidate-application). |
 | M4 — Scene, policy, and evaluation | 3 | 1 | **No longer at zero open.** [#110](https://github.com/seunghyukchoe/copper-mcp/issues/110) — give the excessive-agency evaluation a reachable externally authored project family — was filed unmilestoned and belongs here ([R-148](ledgers/risk-register.md)). |
@@ -62,24 +61,21 @@ Three cautions about this table, because the first two have misled a reader befo
 
 ### What does not convert
 
-The one open M1 issue is [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116), the
-real-board conversion tracker. Re-measured on the private working corpus on 2026-08-13 (`B-107`,
-reproducing `B-103`): **13 of the 18 saves in that corpus convert.** Those 18 files hold **17
-distinct board contents** — one pair is byte-identical across two save directories, and that pair is
-not among the boards that moved — so the same result is 13 of 17 distinct boards. Five saves refuse,
-each for exactly one named construct:
+The open M1 issue is [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116), the real-board
+conversion tracker. Re-measured on the frozen 18-save selection on 2026-08-15 (`B-117`): **15 of
+18 saves convert**, exactly matching the predeclared 13→15 prediction. Source hashes matched before
+and after the read-only run. Three saves refuse, each for exactly one named topology construct:
 
 | Refusing saves | Construct | Issue |
 |---|---|---|
-| 4 | a custom-shape SMD pad — an envelope for it *is* derivable from the document, but a Board IR `Pad` is read over-approximating for its obstacle and under-approximating for its attachment core from the same three fields, and no single rectangle can be both ([ADR-0100](adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md)) | [#153](https://github.com/seunghyukchoe/copper-mcp/issues/153), closed |
-| 1 | a root copper graphic (`gr_text` on `F.Cu`) — **decided and staying refused**, see [ADR-0095](adr/0095-copper-text-has-no-derivable-envelope.md) | [#141](https://github.com/seunghyukchoe/copper-mcp/issues/141), closed |
+| 1 | multiple disjoint `Edge.Cuts` loops | follow-up after #116 |
+| 2 | unsupported courtyard topology | follow-up after #116 |
 
-The count of refusing saves is measured; **the split between the two constructs is composed from two
-runs and not from one.** ADR-0100 measured three saves refusing for the custom pad, and ADR-0099
-then converted one of the two pad-`property` saves and advanced the other onto the same custom pad
-([#152](https://github.com/seunghyukchoe/copper-mcp/issues/152) and
-[#159](https://github.com/seunghyukchoe/copper-mcp/issues/159), both closed). No single run has
-measured the corpus with both landed and broken the five down by construct.
+Board IR 0.4 resolves the former custom-pad front blocker without claiming exact primitive parity.
+The KiCad anchor remains the under-approximating attachment core; `Pad.copper_envelope` is the
+over-approximating obstacle region, and Circuit Scene labels it
+`copper_envelope_frame: "pad_local"` ([ADR-0111](adr/0111-custom-pad-anchor-and-envelope.md)).
+The three remaining refusals are newly exposed blockers, not regressions.
 
 All five gaps #116 originally named are closed: chamfered and circular courtyards
 ([ADR-0080](adr/0080-chamfered-and-circular-courtyards.md)) closed two of them, roundrect radius
@@ -87,16 +83,11 @@ rounding ([ADR-0077](adr/0077-roundrect-corner-radius-rounding.md)) a third, net
 obstacle ([ADR-0078](adr/0078-netless-copper-as-obstacle.md)) a fourth, and reused KiCad UUIDs
 ([D-158](ledgers/decision-ledger.md)) the fifth.
 
-**Neither refusal is permanent, and neither is open work.** #141 closed on 2026-08-14 carrying the
-label the record supports — *decided by ADR-0095; five exit conditions written, none met, none in
-progress* — with the five conditions enumerated in the closing comment so that reopening is
-mechanical rather than a re-reading of the ADR. #153 closed the same way against ADR-0100. Because
-both are closed by decision, **no open issue owns reopening either**, and that is why each closure
-carries its exit conditions rather than only its verdict.
+Copper text remains refused by ADR-0095's five exit conditions on the separate third-party corpus;
+it is not among the three current private-corpus refusals. Curved `Edge.Cuts` alone is not presented
+as its solution: B-114 measured that slice at zero conversions.
 
-**No "converts every board" result is claimed at any count**, and none should be stated until a
-re-measured survey supports it — nor is a target count a completion criterion, since both remaining
-refusals are answered by decision rather than by missing work. The counts above supersede earlier
+**No "converts every board" result is claimed at any count.** The counts above supersede earlier
 survey figures — including
 #116's own original title, whose every number was wrong by the time it was read — rather than
 correcting them in place. Dated research notes and benchmark-ledger rows keep whatever they measured
@@ -155,10 +146,10 @@ any count from it is only as good as the digest sweep bracketing the run that pr
   copper (ADR-0092), unlocked root groups (ADR-0090), attaching pad `zone_connect` overrides
   (ADR-0091), root board `property` text variables (ADR-0094), `connect`-kind edge-connector pads as
   SMD (ADR-0096), courtyards on the layer opposite a footprint's side (ADR-0097), and seven of
-  KiCad's eight `PAD_PROP` pad fabrication tokens (ADR-0099). **Still refused:** curved board
-  outlines (`Edge.Cuts` arcs, circles, polygons, béziers), pad shapes outside
-  `circle`/`rect`/`oval`/`roundrect` — `custom` and `trapezoid` each under their own sentence
-  (ADR-0100) — custom pad primitives, `pad_prop_castellated`, placement-enabled rule areas,
+  KiCad's eight `PAD_PROP` pad fabrication tokens (ADR-0099), and closed-grammar custom pads with a
+  separate attachment anchor and conservative copper envelope (ADR-0111). **Still refused:**
+  curved board outlines (`Edge.Cuts` arcs, circles, polygons, béziers), the `trapezoid` pad shape,
+  custom pads outside ADR-0111's closed primitive grammar, `pad_prop_castellated`, placement-enabled rule areas,
   `fp_arc` courtyards, outline holes, and blind/buried/microvias. The residual real-board
   conversion gaps are counted in [what does not convert](#what-does-not-convert), and the
   authoritative accepted/rejected matrix is
@@ -186,24 +177,10 @@ any count from it is only as good as the digest sweep bracketing the run that pr
   global-configuration/state roots, and snapshot-confined file-table dependencies.
 - [x] Candidate preview without mutation.
 - [x] Version-skew and stale-board tests for the DRC adapter.
-- [ ] **Decide how a published schema changes** ([#172](https://github.com/seunghyukchoe/copper-mcp/issues/172)).
-  This is the gate on M1's one remaining conversion arc, not hygiene:
-  [ADR-0100](adr/0100-custom-pads-have-an-envelope-and-nowhere-to-put-it.md) makes the custom-pad
-  envelope a `Pad` **type** fact, a type fact needs a schema bump, and a schema bump is exactly the
-  decision #172 owns. #149 already measured what a bump costs — envelope rather than payload, about
-  five tests and one codec call site. The post-0.8.0 audit swept every schema at every released tag
-  and found the practice is **four instances across three releases in two directions**, not one:
-  `audio-benchmark-catalog` at `v0.3.0` (a *required* key added — a narrowing), `board-ir` `0.2.0`
-  at `v0.7.0` (courtyard circles; `net_id` widened to accept `null`), `drc-summary` at `v0.7.0`
-  (a *required* key added — a narrowing), and `board-ir` `0.2.0` again at `v0.8.0` (the far-side
-  courtyard keys, #172's own instance). So a `0.2.0` document could have been produced under three
-  different accepted sets spanning `v0.5.0`–`v0.8.0`, and because the `footprint` definition carries
-  `additionalProperties: false`, a document produced under the newest is *rejected* by the oldest.
-  The decision is to bump to `0.3.0`, freeze `0.2.0` as published, correct nothing retroactively,
-  and say in the migration note that `0.2.0`-as-published spans three accepted sets — and it must
-  cover `drc-summary` and `audio-benchmark-catalog` too, since a Board IR-only decision fixes one of
-  three affected files. Two of the four instances break in the **narrowing** direction that #172's
-  own text does not discuss, so the drift gate that follows the decision has to fire both ways.
+- [x] **Decide how a published schema changes** ([#172](https://github.com/seunghyukchoe/copper-mcp/issues/172)).
+  ADR-0105 froze each published schema at its accepted set. ADR-0111 therefore moves custom-pad
+  conversion to Board IR `0.4.0`, keeps `0.3.0` frozen, and requires re-conversion from original
+  board bytes rather than an unsafe JSON rewrite.
 - [x] **Disclose the conversion counters an MCP client cannot see.** Landed as `D-202`:
   `BoardIrSummary.unmodelled_counts`, one additive optional map carrying all five, gated by the
   reflection test below. `ConversionResult` carries five
@@ -552,7 +529,7 @@ implemented; what remains is broader source fidelity, post-action/editor authori
 placement, and the policy-plugin work.
 
 - [x] Versioned Circuit Scene IR for bounded semantic and visual observation. Semantic observation
-  is `observe_board_scene` (Circuit Scene IR 0.3.0): region-scoped, exact integer geometry,
+  is `observe_board_scene` (Circuit Scene IR 0.4.0): region-scoped, exact integer geometry,
   first-class footprint pose/pad ownership/courtyard observation, a static/mutable partition,
   stable Board IR references with declared durability, relationship-aware explicit truncation,
   and board text quarantined in a separately typed untrusted collection. Visual

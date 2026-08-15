@@ -241,22 +241,23 @@ def test_a_working_tree_required_key_addition_fails_as_a_narrowing(
     assert "[narrowing]" in message
 
 
-def test_the_new_0_3_0_schema_is_not_reported_as_drift_against_0_2_0() -> None:
+def test_the_new_0_4_0_schema_is_not_reported_as_drift_against_0_3_0() -> None:
     """A first publication breaks no promise, so the bump itself must be silent.
 
     This is the control for the gate's own change: ADR-0105 added a file rather
-    than editing one, and a gate that fired on that would be unusable.
+    than editing one, and a gate that fired on that would be unusable. The
+    0.3.0 schema remains frozen; 0.4.0 is the active publication.
     """
 
     documents = check_schema_sets._working_tree_schemas()
-    active = documents["schemas/board-ir/0.3.0.schema.json"]
-    frozen = documents["schemas/board-ir/0.2.0.schema.json"]
+    active = documents["schemas/board-ir/0.4.0.schema.json"]
+    frozen = documents["schemas/board-ir/0.3.0.schema.json"]
 
-    assert check_schema_sets.declared_version("schemas/board-ir/0.3.0.schema.json", active) == (
-        "0.3.0"
+    assert check_schema_sets.declared_version("schemas/board-ir/0.4.0.schema.json", active) == (
+        "0.4.0"
     )
-    assert check_schema_sets.declared_version("schemas/board-ir/0.2.0.schema.json", frozen) == (
-        "0.2.0"
+    assert check_schema_sets.declared_version("schemas/board-ir/0.3.0.schema.json", frozen) == (
+        "0.3.0"
     )
     assert check_schema_sets.main() == 0
 

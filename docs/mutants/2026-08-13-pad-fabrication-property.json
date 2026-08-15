@@ -101,8 +101,8 @@
     {
       "id": "PP10-check-after-the-aperture-skip",
       "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "                has_fabrication_property = self._require_supported_pad_property(pad, locator)\n                # A pad with no copper is a stencil aperture, not copper the router may attach to\n                # or must avoid. It is skipped only once every condition in `_is_aperture_pad`\n                # holds; anything else with no copper layer refuses there. The skip sits after the\n                # structural checks above, so a malformed aperture is still a typed refusal.\n                if self._is_aperture_pad(pad, number, raw_kind, locator):\n                    continue\n",
-      "replacement": "                if self._is_aperture_pad(pad, number, raw_kind, locator):\n                    continue\n                has_fabrication_property = self._require_supported_pad_property(pad, locator)\n",
+      "anchor": "                has_fabrication_property = self._require_supported_pad_property(pad, locator)\n                # Custom aperture pads are discarded below, but their primitive geometry still\n                # crosses the trust boundary. Validate and budget-charge it before the discard;\n                # copper custom pads reuse the same envelope so it is parsed exactly once.\n                size_x: int | None = None\n                size_y: int | None = None\n                copper_envelope: PadCopperEnvelope | None = None\n                if is_custom:\n                    size = self._values(pad, \"size\", locator, minimum=2, maximum=2)\n                    size_x = self._mm(size[0], f\"{locator}.size.x\")\n                    size_y = self._mm(size[1], f\"{locator}.size.y\")\n                    copper_envelope = self._custom_pad_envelope(\n                        pad, locator, size_x_nm=size_x, size_y_nm=size_y\n                    )\n                # A pad with no copper is a stencil aperture, not copper the router may attach to\n                # or must avoid. It is skipped only once every condition in `_is_aperture_pad`\n                # holds; anything else with no copper layer refuses there. The skip sits after the\n                # structural checks above, so a malformed aperture is still a typed refusal.\n                if self._is_aperture_pad(pad, number, raw_kind, locator):\n                    continue\n",
+      "replacement": "                # Custom aperture pads are discarded below, but their primitive geometry still\n                # crosses the trust boundary. Validate and budget-charge it before the discard;\n                # copper custom pads reuse the same envelope so it is parsed exactly once.\n                size_x: int | None = None\n                size_y: int | None = None\n                copper_envelope: PadCopperEnvelope | None = None\n                if is_custom:\n                    size = self._values(pad, \"size\", locator, minimum=2, maximum=2)\n                    size_x = self._mm(size[0], f\"{locator}.size.x\")\n                    size_y = self._mm(size[1], f\"{locator}.size.y\")\n                    copper_envelope = self._custom_pad_envelope(\n                        pad, locator, size_x_nm=size_x, size_y_nm=size_y\n                    )\n                if self._is_aperture_pad(pad, number, raw_kind, locator):\n                    continue\n                has_fabrication_property = self._require_supported_pad_property(pad, locator)\n",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_kicad_board_ir.py::test_a_skipped_aperture_pad_cannot_smuggle_a_castellated_property"
@@ -121,8 +121,8 @@
     {
       "id": "PP12-allowlist-closed-against-property",
       "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "        \"pintype\",\n        \"property\",\n        \"remove_unused_layers\",",
-      "replacement": "        \"pintype\",\n        \"remove_unused_layers\",",
+      "anchor": "        \"pintype\",\n        \"property\",\n        \"primitives\",\n        \"remove_unused_layers\",",
+      "replacement": "        \"pintype\",\n        \"primitives\",\n        \"remove_unused_layers\",",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_kicad_board_ir.py::test_an_accepted_pad_property_converts_to_an_identical_board",
@@ -154,8 +154,8 @@
     {
       "id": "PP15-named-table-loses-an-adr-0091-head",
       "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "    \"primitives\",\n    \"rect_delta\",",
-      "replacement": "    \"rect_delta\",",
+      "anchor": "    \"padstack\",\n    \"rect_delta\",\n    \"sim_electrical_type\",",
+      "replacement": "    \"padstack\",\n    \"sim_electrical_type\",",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_kicad_board_ir.py::test_the_other_overriding_pad_fields_still_refuse_and_name_themselves",

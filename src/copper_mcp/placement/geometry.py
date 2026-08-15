@@ -22,6 +22,7 @@ from itertools import pairwise
 from math import isqrt
 
 from copper_mcp.board_ir import CourtyardCircle, Pad, PadShape, PointNM, Ring, signed_double_area
+from copper_mcp.board_ir.pad_geometry import pad_obstacle_bounds
 
 QUARTER_UDEG = 90_000_000
 FULL_UDEG = 360_000_000
@@ -638,6 +639,12 @@ def pad_half_extents(pad: Pad) -> tuple[int, int]:
     rectangle's circumscribed circle, which contains it at every rotation without trigonometry.
     """
 
+    if pad.copper_envelope is not None:
+        bounds = pad_obstacle_bounds(pad)
+        return (
+            max(pad.center.x - bounds[0], bounds[2] - pad.center.x),
+            max(pad.center.y - bounds[1], bounds[3] - pad.center.y),
+        )
     if pad.rotation_udeg % QUARTER_UDEG == 0:
         half_x, half_y = (pad.size_x_nm + 1) // 2, (pad.size_y_nm + 1) // 2
         if pad.rotation_udeg // QUARTER_UDEG % 2 == 1:
@@ -650,9 +657,17 @@ def pad_half_extents(pad: Pad) -> tuple[int, int]:
 def pad_bounds(pad: Pad, origin: PointNM | None = None) -> Rect:
     """Over-approximating box for one pad, optionally re-centred on ``origin``."""
 
-    centre = origin if origin is not None else pad.center
-    half_x, half_y = pad_half_extents(pad)
-    return (centre.x - half_x, centre.y - half_y, centre.x + half_x, centre.y + half_y)
+    bounds = pad_obstacle_bounds(pad)
+    if origin is None:
+        return bounds
+    delta_x = origin.x - pad.center.x
+    delta_y = origin.y - pad.center.y
+    return (
+        bounds[0] + delta_x,
+        bounds[1] + delta_y,
+        bounds[2] + delta_x,
+        bounds[3] + delta_y,
+    )
 
 
 def pad_core(pad: Pad, origin: PointNM | None = None) -> Rect | None:

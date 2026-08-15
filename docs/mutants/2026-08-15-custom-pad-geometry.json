@@ -1,0 +1,121 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "CPG01-custom-fields-removed-from-allowlist",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        \"net\",\n        \"options\",\n        \"pinfunction\",\n        \"pintype\",\n        \"property\",\n        \"primitives\",",
+      "replacement": "        \"net\",\n        \"pinfunction\",\n        \"pintype\",\n        \"property\",",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_custom_pad_carries_a_separate_anchor_core_and_copper_envelope"
+      ]
+    },
+    {
+      "id": "CPG02-custom-dispatch-disabled",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                is_custom = raw_shape == \"custom\"",
+      "replacement": "                is_custom = False",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_custom_pad_carries_a_separate_anchor_core_and_copper_envelope"
+      ]
+    },
+    {
+      "id": "CPG03-custom-envelope-dropped",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                    copper_envelope = self._custom_pad_envelope(\n                        pad, locator, size_x_nm=size_x, size_y_nm=size_y\n                    )",
+      "replacement": "                    copper_envelope = None",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_custom_pad_carries_a_separate_anchor_core_and_copper_envelope"
+      ]
+    },
+    {
+      "id": "CPG04-obstacle-reader-uses-anchor-only",
+      "file": "src/copper_mcp/board_ir/pad_geometry.py",
+      "anchor": "    if pad.copper_envelope is not None:\n        return pad.copper_envelope",
+      "replacement": "    if False and pad.copper_envelope is not None:\n        return pad.copper_envelope",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_custom_pad_carries_a_separate_anchor_core_and_copper_envelope",
+        "tests/test_routing_astar.py::test_custom_pad_obstacle_uses_the_envelope_but_connectivity_uses_only_the_anchor"
+      ]
+    },
+    {
+      "id": "CPG05-connectivity-core-expanded-to-envelope",
+      "file": "src/copper_mcp/routing/astar.py",
+      "anchor": "    size_x, size_y = pad.size_x_nm, pad.size_y_nm\n    if pad.rotation_udeg // _QUARTER_ROTATION_UDEG % 2 == 1:",
+      "replacement": "    size_x, size_y = pad.size_x_nm, pad.size_y_nm\n    if pad.copper_envelope is not None:\n        size_x = pad.copper_envelope.max_x_nm - pad.copper_envelope.min_x_nm\n        size_y = pad.copper_envelope.max_y_nm - pad.copper_envelope.min_y_nm\n    if pad.rotation_udeg // _QUARTER_ROTATION_UDEG % 2 == 1:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_astar.py::test_custom_pad_obstacle_uses_the_envelope_but_connectivity_uses_only_the_anchor"
+      ]
+    },
+    {
+      "id": "CPG06-scene-envelope-disclosure-dropped",
+      "file": "src/copper_mcp/circuit_scene.py",
+      "anchor": "    if pad.copper_envelope is not None:\n        geometry[\"copper_envelope_nm\"] = [\n            pad.copper_envelope.min_x_nm,\n            pad.copper_envelope.min_y_nm,\n            pad.copper_envelope.max_x_nm,\n            pad.copper_envelope.max_y_nm,\n        ]\n        geometry[\"copper_envelope_frame\"] = \"pad_local\"\n        geometry[\"geometry_model\"] = \"anchor_with_custom_copper_envelope\"",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_circuit_scene.py::ProvenanceTests::test_custom_pad_scene_discloses_anchor_and_obstacle_envelope_separately"
+      ]
+    },
+    {
+      "id": "CPG07-schema-envelope-property-removed",
+      "file": "schemas/board-ir/0.4.0.schema.json",
+      "anchor": "        \"locked\": {\n          \"type\": \"boolean\"\n        },\n        \"copper_envelope\": {",
+      "replacement": "        \"locked\": {\n          \"type\": \"boolean\"\n        },\n        \"removed_copper_envelope\": {",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir_schema.py::test_schema_accepts_and_closes_the_custom_pad_copper_envelope"
+      ]
+    },
+    {
+      "id": "CPG08-custom-polygon-ring-budget-disabled",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            points = self._primitive_points(primitive, locator, minimum=3, ring_budget=True)",
+      "replacement": "            points = self._primitive_points(primitive, locator, minimum=3, maximum=250_000)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_custom_pad_gr_poly_respects_per_ring_vertex_budget"
+      ]
+    },
+    {
+      "id": "CPG09-custom-primitive-vertex-charge-dropped",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        self._charge_custom_pad_vertices(len(xy_items), locator)",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_custom_pad_polygons_respect_aggregate_vertex_budget"
+      ]
+    },
+    {
+      "id": "CPG10-custom-vertices-not-reserved-from-board-ir-budget",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        remaining_vertices = limits.max_total_vertices - converter.custom_pad_primitive_vertex_count",
+      "replacement": "        remaining_vertices = limits.max_total_vertices",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_custom_pad_polygons_respect_aggregate_vertex_budget"
+      ]
+    },
+    {
+      "id": "CPG11-custom-aperture-geometry-validation-skipped",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                if is_custom:\n                    size = self._values(pad, \"size\", locator, minimum=2, maximum=2)",
+      "replacement": "                if False and is_custom:\n                    size = self._values(pad, \"size\", locator, minimum=2, maximum=2)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_custom_aperture_rejects_over_budget_gr_poly",
+        "tests/test_kicad_board_ir.py::test_custom_aperture_rejects_malformed_primitive_before_skip"
+      ]
+    }
+  ]
+}

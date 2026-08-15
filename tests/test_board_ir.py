@@ -30,6 +30,7 @@ from copper_mcp.board_ir import (
     NetClassAssignment,
     OutlineContour,
     Pad,
+    PadCopperEnvelope,
     PadKind,
     PadShape,
     ParseLimits,
@@ -638,6 +639,44 @@ def test_codec_round_trip_preserves_frozen_snapshot() -> None:
 
     with pytest.raises(ValueError):
         Ring([PointNM(0, 0), PointNM(1, 0), PointNM(0, 1)])  # type: ignore[arg-type]
+
+
+def test_custom_pad_envelope_is_canonical_content_and_round_trips() -> None:
+    """The obstacle envelope is explicit 0.4 content; the anchor remains independently typed."""
+
+    content = sample_content()
+    envelope = PadCopperEnvelope(
+        min_x_nm=-1_000_000,
+        min_y_nm=-2_000_000,
+        max_x_nm=4_000_000,
+        max_y_nm=2_000_000,
+    )
+    snapshot = make_snapshot(
+        replace(
+            content,
+            pads=(replace(content.pads[0], copper_envelope=envelope), *content.pads[1:]),
+        )
+    )
+    encoded = encode_snapshot(snapshot)
+
+    assert b'"copper_envelope"' in encoded
+    assert decode_snapshot_json(encoded) == snapshot
+    assert encode_snapshot(decode_snapshot_json(encoded)) == encoded
+
+
+def test_custom_pad_envelope_must_contain_the_complete_anchor() -> None:
+    pad = sample_content().pads[0]
+
+    with pytest.raises(ValueError, match="contain the complete anchor"):
+        replace(
+            pad,
+            copper_envelope=PadCopperEnvelope(
+                min_x_nm=-999_999,
+                min_y_nm=-500_000,
+                max_x_nm=1_000_000,
+                max_y_nm=500_000,
+            ),
+        )
 
 
 def test_constraint_digest_is_sensitive_only_to_constraint_projection() -> None:

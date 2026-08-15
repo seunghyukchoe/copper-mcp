@@ -62,7 +62,7 @@ def test_describes_a_supported_board_without_disclosing_content(tmp_path: Path) 
     assert summary.constraint_digest is not None
     # A one-value literal, not `BOARD_IR_SCHEMA_VERSION`: this asserts what the MCP surface
     # publishes, so importing the constant would make the assertion agree with itself.
-    assert summary.ir_schema_version == "0.3.0"
+    assert summary.ir_schema_version == "0.4.0"
     assert summary.distance_unit == "nm"
     assert summary.angle_unit == "udeg"
     assert summary.copper_layer_ids == ("layer:B.Cu", "layer:F.Cu")
@@ -371,7 +371,7 @@ def test_a_supported_summary_missing_a_measured_count_is_refused() -> None:
             snapshot_digest="sha256:" + "1" * 64,
             constraint_digest="sha256:" + "2" * 64,
             ir_schema="board-ir",
-            ir_schema_version="0.3.0",
+            ir_schema_version="0.4.0",
             distance_unit="nm",
             angle_unit="udeg",
             copper_layer_ids=("layer:F.Cu",),

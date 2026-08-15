@@ -1,4 +1,4 @@
-"""Strict JSON decoder for the versioned Board IR v0.2 envelope."""
+"""Strict JSON decoder for the versioned Board IR 0.4 envelope."""
 
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ from copper_mcp.board_ir.types import (
     NetClassAssignment,
     OutlineContour,
     Pad,
+    PadCopperEnvelope,
     PadKind,
     PadShape,
     PointNM,
@@ -349,6 +350,20 @@ def _ring(value: object, path: str) -> Ring:
     )
 
 
+def _pad_copper_envelope(value: object, path: str) -> PadCopperEnvelope:
+    item = _object(
+        value,
+        required={"min_x_nm", "min_y_nm", "max_x_nm", "max_y_nm"},
+        path=path,
+    )
+    return PadCopperEnvelope(
+        min_x_nm=_integer(item["min_x_nm"], f"{path}.min_x_nm"),
+        min_y_nm=_integer(item["min_y_nm"], f"{path}.min_y_nm"),
+        max_x_nm=_integer(item["max_x_nm"], f"{path}.max_x_nm"),
+        max_y_nm=_integer(item["max_y_nm"], f"{path}.max_y_nm"),
+    )
+
+
 T = TypeVar("T")
 
 
@@ -636,6 +651,11 @@ def _decode_content(value: object) -> BoardIRContent:
                 )
             ),
             locked=_boolean(entry["locked"], f"{entry_path}.locked"),
+            copper_envelope=(
+                _pad_copper_envelope(entry["copper_envelope"], f"{entry_path}.copper_envelope")
+                if "copper_envelope" in entry
+                else None
+            ),
         )
         for index, raw in enumerate(_array(items["pads"], "content.items.pads"))
         for entry_path in (f"content.items.pads[{index}]",)
@@ -657,6 +677,7 @@ def _decode_content(value: object) -> BoardIRContent:
                     "layer_ids",
                     "locked",
                 },
+                optional={"copper_envelope"},
                 path=entry_path,
             ),
         )

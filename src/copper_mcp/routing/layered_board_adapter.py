@@ -30,6 +30,7 @@ from copper_mcp.board_ir import (
     Segment,
     verify_snapshot,
 )
+from copper_mcp.board_ir.pad_geometry import pad_obstacle_bounds
 from copper_mcp.board_ir.types import Layer, NetClass
 from copper_mcp.routing.astar import VerifiedFill, fill_binding_for
 from copper_mcp.routing.layered_astar import (
@@ -259,6 +260,8 @@ def _axis_aligned_rectangle(ring: Ring) -> _Rect | None:
 
 
 def _pad_bounds(pad: Pad) -> _Rect:
+    if pad.copper_envelope is not None:
+        return pad_obstacle_bounds(pad)
     if pad.rotation_udeg:
         # The sum-of-sides envelope is conservative for arbitrary rotation. Exact polygon
         # projection belongs to the KiCad adapter, not this proposal seam.
