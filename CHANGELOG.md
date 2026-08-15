@@ -187,15 +187,18 @@ never copper dropped — and sizing that ceiling belongs to
 - The layered preview response gains a `fill_authority` key on every outcome (`null` except on a
   routed proposal that asked for one), and the layered candidate document gains `fill_binding`
   (`null` in the ordinary case).
-- **`BOARD_IR_SCHEMA_VERSION` moves from `0.2.0` to `0.3.0`, and `0.2.0` is frozen where it
-  stands.** `schemas/board-ir/0.3.0.schema.json` is the accepted set for a new document;
-  `schemas/board-ir/0.2.0.schema.json` is byte-frozen at its `v0.8.0` bytes and is **not** corrected
-  retroactively. A persisted `0.2.0` envelope no longer decodes — the codec refuses it with a typed
-  discriminated `schema.version` code — so re-convert from the source `.kicad_pcb`; there is no
-  auto-migration, exactly as `0.1` → `0.2` had none. `BoardIrSummary.ir_schema_version` now reports
-  `0.3.0`. Both frozen schemas, `board-ir/0.1.0` and `board-ir/0.2.0`, carry a **sha256 pin of
-  their published bytes**: an accepted-set gate cannot enforce a byte freeze, and a review proved
-  it by rewriting all 2,046 lines of `0.2.0` while everything stayed green.
+- **The first 0.9.0 accepted-set hop moves `BOARD_IR_SCHEMA_VERSION` from `0.2.0` to
+  `0.3.0`; the later custom-pad hop moves it again to the shipped `0.4.0`.**
+  `schemas/board-ir/0.3.0.schema.json` is the frozen intermediate accepted set, while
+  `schemas/board-ir/0.4.0.schema.json` is the accepted set for every new 0.9.0 document.
+  `schemas/board-ir/0.2.0.schema.json` remains byte-frozen at its `v0.8.0` bytes and is **not**
+  corrected retroactively. Persisted `0.2.0` and `0.3.0` envelopes no longer decode — the codec
+  refuses them with a typed discriminated `schema.version` code — so re-convert from the source
+  `.kicad_pcb`; there is no auto-migration, exactly as `0.1` → `0.2` had none.
+  `BoardIrSummary.ir_schema_version` now reports the final shipped literal `0.4.0`. The frozen
+  schemas `board-ir/0.1.0`, `board-ir/0.2.0` and `board-ir/0.3.0` carry byte-integrity protection;
+  an accepted-set gate alone cannot enforce a byte freeze, and a review proved it by rewriting all
+  2,046 lines of `0.2.0` while everything stayed green.
   **No content address moves:** the snapshot digest, the constraint digest and the source revision
   are byte-identical, the encoded envelope is 4,280 bytes before and after, and it differs at
   exactly one byte — proved by construction, not asserted. The migration note states plainly that
