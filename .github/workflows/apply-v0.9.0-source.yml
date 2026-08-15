@@ -1,0 +1,72 @@
+name: Apply v0.9.0 source commit
+
+on:
+  push:
+    branches:
+      - "agent/source-export-v0.9.0"
+    paths:
+      - ".github/workflows/apply-v0.9.0-source.yml"
+      - ".github/release-evidence/v0.9.0-source.patch.gz.b64"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-v0.9.0-source
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Apply clean release source commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out clean release branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: release/v0.9.0
+          fetch-depth: 0
+      - name: Check out control material
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: agent/source-export-v0.9.0
+          path: _release-control
+          fetch-depth: 1
+      - name: Decode and validate the source patch
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/v0.9.0-apply-logs
+          base64 --decode _release-control/.github/release-evidence/v0.9.0-source.patch.gz.b64 > /tmp/v0.9.0-source.patch.gz
+          gzip --decompress --stdout /tmp/v0.9.0-source.patch.gz > /tmp/v0.9.0-source.patch
+          sha256sum /tmp/v0.9.0-source.patch > /tmp/v0.9.0-apply-logs/patch-sha256.log
+          cat /tmp/v0.9.0-apply-logs/patch-sha256.log
+          grep -Fx "97cb4b04332e1b546971ef5655a6978833ee94a0d37d6b9ee64e83e2cf3c4a33  /tmp/v0.9.0-source.patch" /tmp/v0.9.0-apply-logs/patch-sha256.log
+          rm -rf _release-control
+          git apply --check /tmp/v0.9.0-source.patch > /tmp/v0.9.0-apply-logs/apply-check.log 2>&1
+          cat /tmp/v0.9.0-apply-logs/apply-check.log
+          git apply /tmp/v0.9.0-source.patch > /tmp/v0.9.0-apply-logs/apply.log 2>&1
+          cat /tmp/v0.9.0-apply-logs/apply.log
+          git diff --check > /tmp/v0.9.0-apply-logs/diff-check.log 2>&1
+          cat /tmp/v0.9.0-apply-logs/diff-check.log
+          git status --short > /tmp/v0.9.0-apply-logs/status.log
+          cat /tmp/v0.9.0-apply-logs/status.log
+      - name: Stage the exact source cut
+        run: git add -A
+      - name: Commit the release source cut
+        run: git commit -m "chore(release): prepare v0.9.0"
+      - name: Confirm the commit subject
+        run: |
+          git log --oneline -1 > /tmp/v0.9.0-apply-logs/commit.log
+          cat /tmp/v0.9.0-apply-logs/commit.log
+          grep -E '^[0-9a-f]+ chore\(release\): prepare v0\.9\.0$' /tmp/v0.9.0-apply-logs/commit.log
+      - name: Push the release branch
+        run: git push origin HEAD:release/v0.9.0
+      - name: Upload application evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: v0.9.0-source-application
+          path: /tmp/v0.9.0-apply-logs/
+          if-no-files-found: warn
+          retention-days: 14
