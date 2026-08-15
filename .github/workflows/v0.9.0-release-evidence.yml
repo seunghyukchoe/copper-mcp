@@ -6,40 +6,60 @@ on:
       - release/v0.9.0-evidence
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   evidence:
-    name: Regenerate KiCad evidence and run the release gate
+    name: Regenerate KiCad evidence and prepare the source branch
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out repository
+      - name: Check out disposable evidence branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - name: Apply the prospective v0.9.0 source overlay
+      - name: Reconstruct and apply the prospective source patch
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p release-logs
-          base64 --decode .github/release-evidence/v0.9.0-source-overlay.tar.xz \
-            > /tmp/v0.9.0-source-overlay.tar.xz
-          xz -t /tmp/v0.9.0-source-overlay.tar.xz \
-            > release-logs/validate-overlay.log 2>&1
-          cat release-logs/validate-overlay.log
-          tar -xJf /tmp/v0.9.0-source-overlay.tar.xz -C . \
-            > release-logs/apply-overlay.log 2>&1
-          cat release-logs/apply-overlay.log
+          cat .github/release-evidence/v0.9.0-source-patch.part-* \
+            > /tmp/v0.9.0-source-patch.xz.b64
+          base64 --decode /tmp/v0.9.0-source-patch.xz.b64 \
+            > /tmp/v0.9.0-source-patch.xz
+          printf '%s  %s\n' \
+            '23200431e5e9468706f0c2cf74277bd441bbbdde433f451f44e59b94a8d83ad5' \
+            '/tmp/v0.9.0-source-patch.xz' \
+            > /tmp/v0.9.0-source-patch.sha256
+          sha256sum --check /tmp/v0.9.0-source-patch.sha256 \
+            > release-logs/patch-checksum.log 2>&1
+          cat release-logs/patch-checksum.log
+          xz --test /tmp/v0.9.0-source-patch.xz \
+            > release-logs/patch-xz-test.log 2>&1
+          cat release-logs/patch-xz-test.log
+          xz --decompress --stdout /tmp/v0.9.0-source-patch.xz \
+            > /tmp/v0.9.0-source.patch
+          cp .github/ci-budget-calibration.json /tmp/ci-budget-calibration.json
+          cp .github/workflows/ci.yml /tmp/ci.yml
+          git checkout --detach origin/main \
+            > release-logs/checkout-main.log 2>&1
+          cat release-logs/checkout-main.log
+          test "$(git rev-parse HEAD)" = '795415cef8788bfbc2030fdbff5c08dbd0a4c030'
+          patch --batch --strip=1 < /tmp/v0.9.0-source.patch \
+            > release-logs/apply-source-patch.log 2>&1
+          cat release-logs/apply-source-patch.log
+          install -m 0644 /tmp/ci-budget-calibration.json \
+            .github/ci-budget-calibration.json
+          install -m 0644 /tmp/ci.yml .github/workflows/ci.yml
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: "3.12"
+          python-version: '3.12'
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Install KiCad 10.0.5
+      - name: Install the exact KiCad evidence authority
         shell: bash
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -55,24 +75,19 @@ jobs:
           cat release-logs/apt-kicad-ppa.log
           sudo apt-get update > release-logs/apt-kicad-update.log 2>&1
           cat release-logs/apt-kicad-update.log
-          sudo apt-get install --yes --no-install-recommends kicad \
+          candidate="$(apt-cache policy kicad | awk '/Candidate:/ {print $2}')"
+          printf '%s\n' "$candidate" > release-logs/kicad-candidate.log
+          cat release-logs/kicad-candidate.log
+          case "$candidate" in
+            10.0.5*) ;;
+            *) printf 'expected a KiCad 10.0.5 package, got %s\n' "$candidate" >&2; exit 1 ;;
+          esac
+          sudo apt-get install --yes --no-install-recommends "kicad=${candidate}" \
             > release-logs/apt-kicad-install.log 2>&1
           cat release-logs/apt-kicad-install.log
-          python - <<'PY' > release-logs/kicad-version.log 2>&1
-          import subprocess
-
-          completed = subprocess.run(
-              ["kicad-cli", "--version"],
-              check=True,
-              capture_output=True,
-              text=True,
-          )
-          version = completed.stdout.strip()
-          print(version)
-          if not version.startswith("10.0.5"):
-              raise SystemExit(f"expected KiCad 10.0.5, got {version!r}")
-          PY
+          kicad-cli --version > release-logs/kicad-version.log 2>&1
           cat release-logs/kicad-version.log
+          grep -Eq '^10\.0\.5([.-]|$)' release-logs/kicad-version.log
 
       - name: Install the complete release toolchain
         shell: bash
@@ -80,7 +95,7 @@ jobs:
           set -euo pipefail
           python -m pip install --upgrade pip > release-logs/pip-upgrade.log 2>&1
           cat release-logs/pip-upgrade.log
-          python -m pip install -e ".[dev,security]" > release-logs/pip-install.log 2>&1
+          python -m pip install -e '.[dev,security]' > release-logs/pip-install.log 2>&1
           cat release-logs/pip-install.log
 
       - name: Regenerate and bind the route-bundle artifact
@@ -94,18 +109,18 @@ jobs:
           import json
           from pathlib import Path
 
-          path = Path("benchmarks/results/routing/2026-08-05-route-bundle-v1.json")
-          report = json.loads(path.read_text(encoding="utf-8"))
-          authority = report["authoritative_kicad_drc"]
-          assert report["copper_mcp_version"] == "0.9.0", report
-          assert authority["status"] == "completed", authority
-          assert authority["kicad_version"] == "10.0.5", authority
-          assert authority["passed"] is True, authority
+          path = Path('benchmarks/results/routing/2026-08-05-route-bundle-v1.json')
+          report = json.loads(path.read_text(encoding='utf-8'))
+          authority = report['authoritative_kicad_drc']
+          assert report['copper_mcp_version'] == '0.9.0', report
+          assert authority['status'] == 'completed', authority
+          assert authority['kicad_version'] == '10.0.5', authority
+          assert authority['passed'] is True, authority
           print(json.dumps(authority, indent=2, sort_keys=True))
           PY
           cat release-logs/route-bundle-assert.log
 
-      - name: Run every release gate with file-backed output
+      - name: Run every source gate with file-backed output
         shell: bash
         run: |
           set -euo pipefail
@@ -129,21 +144,100 @@ jobs:
           run_logged check-doc-links python scripts/check_doc_links.py
           run_logged check-schema-sets python scripts/check_schema_sets.py
           run_logged check-ci-budgets python scripts/check_ci_budgets.py
-          run_logged check-drc-comparability python scripts/check_drc_comparability.py
-          run_logged pytest python -m pytest
+          run_logged check-drc-comparability env PYTHONPATH=src python scripts/check_drc_comparability.py
+          run_logged check-audio-benchmarks python scripts/check_audio_benchmarks.py
+          run_logged check-circuit-intents env PYTHONPATH=src python scripts/check_circuit_intents.py
+          run_logged pytest env PYTHONPATH=src python -m pytest
           run_logged secret-scan python scripts/check_secrets.py
           run_logged pip-audit python -m pip_audit .
           rm -rf build dist
           run_logged build python -m build
+          run_logged pcm python scripts/build_pcm_package.py --expect-version v0.9.0
 
-      - name: Upload evidence and generated distributions
+      - name: Commit and push the verified source branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .coverage .mypy_cache .pytest_cache .ruff_cache build dist
+          python - <<'PY' > release-logs/changed-paths.log 2>&1
+          import subprocess
+
+          expected = {
+              '.github/ci-budget-calibration.json',
+              '.github/workflows/ci.yml',
+              'CHANGELOG.md',
+              'CITATION.cff',
+              'benchmarks/results/routing/2026-08-05-route-bundle-v1.json',
+              'docs/migrations/copper-mcp-0.9.0.md',
+              'hardware/kicad-ipc-plugin/pcm/metadata.json',
+              'pyproject.toml',
+              'scripts/check_schema_sets.py',
+              'src/copper_mcp/__init__.py',
+              'tests/test_check_ci_budgets.py',
+              'tests/test_check_schema_sets.py',
+              'tests/test_golden_identities.py',
+              'tests/test_route_bundle_benchmark.py',
+          }
+          lines = subprocess.run(
+              ['git', 'status', '--porcelain=v1'],
+              check=True,
+              capture_output=True,
+              text=True,
+          ).stdout.splitlines()
+          actual = {line[3:] for line in lines}
+          print('\n'.join(lines))
+          if actual != expected:
+              raise SystemExit(
+                  f'unexpected release paths: missing={sorted(expected-actual)!r} '
+                  f'extra={sorted(actual-expected)!r}'
+              )
+          PY
+          cat release-logs/changed-paths.log
+          git switch --create release/v0.9.0-source \
+            > release-logs/git-switch.log 2>&1
+          cat release-logs/git-switch.log
+          git config user.name 'CopperMCP Release Automation'
+          git config user.email 'seunghyukchoe@users.noreply.github.com'
+          git add \
+            .github/ci-budget-calibration.json \
+            .github/workflows/ci.yml \
+            CHANGELOG.md \
+            CITATION.cff \
+            benchmarks/results/routing/2026-08-05-route-bundle-v1.json \
+            docs/migrations/copper-mcp-0.9.0.md \
+            hardware/kicad-ipc-plugin/pcm/metadata.json \
+            pyproject.toml \
+            scripts/check_schema_sets.py \
+            src/copper_mcp/__init__.py \
+            tests/test_check_ci_budgets.py \
+            tests/test_check_schema_sets.py \
+            tests/test_golden_identities.py \
+            tests/test_route_bundle_benchmark.py
+          set +e
+          git commit -m 'chore(release): prepare v0.9.0' \
+            > release-logs/git-commit.log 2>&1
+          commit_status=$?
+          set -e
+          cat release-logs/git-commit.log
+          if [ "$commit_status" -ne 0 ]; then
+            exit "$commit_status"
+          fi
+          git log --oneline -1 > release-logs/git-log.log 2>&1
+          cat release-logs/git-log.log
+          git log -1 --pretty=%s > release-logs/git-subject.log 2>&1
+          cat release-logs/git-subject.log
+          grep -Fxq 'chore(release): prepare v0.9.0' release-logs/git-subject.log
+          git push --force-with-lease origin HEAD:refs/heads/release/v0.9.0-source \
+            > release-logs/git-push.log 2>&1
+          cat release-logs/git-push.log
+
+      - name: Upload source-gate evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: v0.9.0-release-evidence
+          name: v0.9.0-source-gate-evidence
           path: |
             release-logs/
             benchmarks/results/routing/2026-08-05-route-bundle-v1.json
-            dist/
           if-no-files-found: warn
           retention-days: 14
