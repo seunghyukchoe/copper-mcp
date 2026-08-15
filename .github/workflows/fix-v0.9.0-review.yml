@@ -38,34 +38,29 @@ jobs:
           from pathlib import Path
 
           path = Path("CHANGELOG.md")
-          text = path.read_text()
-          old = '''- **`BOARD_IR_SCHEMA_VERSION` moves from `0.2.0` to `0.3.0`, and `0.2.0` is frozen where it
-  stands.** `schemas/board-ir/0.3.0.schema.json` is the accepted set for a new document;
-  `schemas/board-ir/0.2.0.schema.json` is byte-frozen at its `v0.8.0` bytes and is **not** corrected
-  retroactively. A persisted `0.2.0` envelope no longer decodes — the codec refuses it with a typed
-  discriminated `schema.version` code — so re-convert from the source `.kicad_pcb`; there is no
-  auto-migration, exactly as `0.1` → `0.2` had none. `BoardIrSummary.ir_schema_version` now reports
-  `0.3.0`. Both frozen schemas, `board-ir/0.1.0` and `board-ir/0.2.0`, carry a **sha256 pin of
-  their published bytes**: an accepted-set gate cannot enforce a byte freeze, and a review proved
-  it by rewriting all 2,046 lines of `0.2.0` while everything stayed green.
-'''
-          new = '''- **The first 0.9.0 accepted-set hop moves `BOARD_IR_SCHEMA_VERSION` from `0.2.0` to
-  `0.3.0`; the later custom-pad hop moves it again to the shipped `0.4.0`.**
-  `schemas/board-ir/0.3.0.schema.json` is the frozen intermediate accepted set, while
-  `schemas/board-ir/0.4.0.schema.json` is the accepted set for every new 0.9.0 document.
-  `schemas/board-ir/0.2.0.schema.json` remains byte-frozen at its `v0.8.0` bytes and is **not**
-  corrected retroactively. Persisted `0.2.0` and `0.3.0` envelopes no longer decode — the codec
-  refuses them with a typed discriminated `schema.version` code — so re-convert from the source
-  `.kicad_pcb`; there is no auto-migration, exactly as `0.1` → `0.2` had none.
-  `BoardIrSummary.ir_schema_version` now reports the final shipped literal `0.4.0`. The frozen
-  schemas `board-ir/0.1.0`, `board-ir/0.2.0` and `board-ir/0.3.0` carry byte-integrity protection;
-  an accepted-set gate alone cannot enforce a byte freeze, and a review proved it by rewriting all
-  2,046 lines of `0.2.0` while everything stayed green.
-'''
-          count = text.count(old)
-          if count != 1:
-              raise SystemExit(f"expected one stale paragraph, found {count}")
-          path.write_text(text.replace(old, new))
+          lines = path.read_text().splitlines()
+          start_text = "- **`BOARD_IR_SCHEMA_VERSION` moves from `0.2.0` to `0.3.0`, and `0.2.0` is frozen where it"
+          end_text = "  it by rewriting all 2,046 lines of `0.2.0` while everything stayed green."
+          starts = [index for index, line in enumerate(lines) if line == start_text]
+          ends = [index for index, line in enumerate(lines) if line == end_text]
+          if len(starts) != 1 or len(ends) != 1 or ends[0] < starts[0]:
+              raise SystemExit(f"unexpected stale paragraph bounds: starts={starts}, ends={ends}")
+          replacement = [
+              "- **The first 0.9.0 accepted-set hop moves `BOARD_IR_SCHEMA_VERSION` from `0.2.0` to",
+              "  `0.3.0`; the later custom-pad hop moves it again to the shipped `0.4.0`.**",
+              "  `schemas/board-ir/0.3.0.schema.json` is the frozen intermediate accepted set, while",
+              "  `schemas/board-ir/0.4.0.schema.json` is the accepted set for every new 0.9.0 document.",
+              "  `schemas/board-ir/0.2.0.schema.json` remains byte-frozen at its `v0.8.0` bytes and is **not**",
+              "  corrected retroactively. Persisted `0.2.0` and `0.3.0` envelopes no longer decode — the codec",
+              "  refuses them with a typed discriminated `schema.version` code — so re-convert from the source",
+              "  `.kicad_pcb`; there is no auto-migration, exactly as `0.1` → `0.2` had none.",
+              "  `BoardIrSummary.ir_schema_version` now reports the final shipped literal `0.4.0`. The frozen",
+              "  schemas `board-ir/0.1.0`, `board-ir/0.2.0` and `board-ir/0.3.0` carry byte-integrity protection;",
+              "  an accepted-set gate alone cannot enforce a byte freeze, and a review proved it by rewriting all",
+              "  2,046 lines of `0.2.0` while everything stayed green.",
+          ]
+          lines[starts[0] : ends[0] + 1] = replacement
+          path.write_text("\n".join(lines) + "\n")
           PY
           git diff --check > /tmp/v0.9.0-review-fix/diff-check.log 2>&1
           cat /tmp/v0.9.0-review-fix/diff-check.log
