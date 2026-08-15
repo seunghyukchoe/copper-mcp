@@ -6,7 +6,6 @@ on:
       - "agent/source-export-v0.9.0"
     paths:
       - ".github/workflows/apply-v0.9.0-source.yml"
-      - ".github/release-evidence/v0.9.0-source.patch.gz.b64"
   workflow_dispatch:
 
 permissions:
@@ -33,11 +32,18 @@ jobs:
           ref: agent/source-export-v0.9.0
           path: _release-control
           fetch-depth: 1
-      - name: Decode and validate the source patch
+      - name: Reconstruct and validate the source patch
         run: |
           set -euo pipefail
           mkdir -p /tmp/v0.9.0-apply-logs
-          base64 --decode _release-control/.github/release-evidence/v0.9.0-source.patch.gz.b64 > /tmp/v0.9.0-source.patch.gz
+          cat _release-control/.github/release-evidence/v0.9.0-source.patch.part* > /tmp/v0.9.0-source.patch.gz.b64
+          wc -c /tmp/v0.9.0-source.patch.gz.b64 > /tmp/v0.9.0-apply-logs/base64-size.log
+          cat /tmp/v0.9.0-apply-logs/base64-size.log
+          grep -Fx "29425 /tmp/v0.9.0-source.patch.gz.b64" /tmp/v0.9.0-apply-logs/base64-size.log
+          sha256sum /tmp/v0.9.0-source.patch.gz.b64 > /tmp/v0.9.0-apply-logs/base64-sha256.log
+          cat /tmp/v0.9.0-apply-logs/base64-sha256.log
+          grep -Fx "7f4c9cb96896dcb89d186f82a223b9a93caf02d8e670f9f824ac517a96617632  /tmp/v0.9.0-source.patch.gz.b64" /tmp/v0.9.0-apply-logs/base64-sha256.log
+          base64 --decode /tmp/v0.9.0-source.patch.gz.b64 > /tmp/v0.9.0-source.patch.gz
           gzip --decompress --stdout /tmp/v0.9.0-source.patch.gz > /tmp/v0.9.0-source.patch
           sha256sum /tmp/v0.9.0-source.patch > /tmp/v0.9.0-apply-logs/patch-sha256.log
           cat /tmp/v0.9.0-apply-logs/patch-sha256.log
@@ -51,6 +57,10 @@ jobs:
           cat /tmp/v0.9.0-apply-logs/diff-check.log
           git status --short > /tmp/v0.9.0-apply-logs/status.log
           cat /tmp/v0.9.0-apply-logs/status.log
+      - name: Configure release author
+        run: |
+          git config user.name "studio dawol"
+          git config user.email "seunghyukchoe@gmail.com"
       - name: Stage the exact source cut
         run: git add -A
       - name: Commit the release source cut
