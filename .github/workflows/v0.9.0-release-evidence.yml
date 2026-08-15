@@ -82,6 +82,7 @@ jobs:
       - name: Run every release gate from a file
         shell: bash
         run: |
+          set +e
           set -u
           : > release-logs/gate-summary.log
           failures=0
