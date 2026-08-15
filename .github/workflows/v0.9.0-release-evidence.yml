@@ -8,13 +8,70 @@ on:
 permissions:
   contents: write
 
+env:
+  TARGET_SHA: 2bd62f8c12e5b28ce0baa35707914c8f3d417f8e
+  OLD_B64: ICAqKk5vIGNvbnRlbnQgYWRkcmVzcyBtb3ZlczoqKiB0aGUgc25hcHNob3QgZGlnZXN0LCB0aGUgY29uc3RyYWludCBkaWdlc3QgYW5kIHRoZSBzb3VyY2UgcmV2aXNpb24KICBhcmUgYnl0ZS1pZGVudGljYWwsIHRoZSBlbmNvZGVkIGVudmVsb3BlIGlzIDQsMjgwIGJ5dGVzIGJlZm9yZSBhbmQgYWZ0ZXIsIGFuZCBpdCBkaWZmZXJzIGF0CiAgZXhhY3RseSBvbmUgYnl0ZSDigJQgcHJvdmVkIGJ5IGNvbnN0cnVjdGlvbiwgbm90IGFzc2VydGVkLiBUaGUgbWlncmF0aW9uIG5vdGUgc3RhdGVzIHBsYWlubHkgdGhhdAo=
+  NEW_B64: ICAqKkF0IHRoZSBmaXJzdCBgMC4yLjBgIOKGkiBgMC4zLjBgIGhvcCwgbm8gY29udGVudCBhZGRyZXNzIG1vdmVzOioqIHRoZSBzbmFwc2hvdCBkaWdlc3QsIHRoZQogIGNvbnN0cmFpbnQgZGlnZXN0IGFuZCB0aGUgc291cmNlIHJldmlzaW9uIGFyZSBieXRlLWlkZW50aWNhbCwgdGhlIGVuY29kZWQgZW52ZWxvcGUgaXMgNCwyODAKICBieXRlcyBiZWZvcmUgYW5kIGFmdGVyLCBhbmQgaXQgZGlmZmVycyBhdCBleGFjdGx5IG9uZSBieXRlIOKAlCBwcm92ZWQgYnkgY29uc3RydWN0aW9uLCBub3QKICBhc3NlcnRlZC4gVGhlIHNlY29uZCBob3AgaXMgaW50ZW50aW9uYWxseSBkaWZmZXJlbnQ6IGN1c3RvbS1wYWQgc25hcHNob3RzIGdhaW4KICBgY29wcGVyX2VudmVsb3BlYCwgc28gdGhlaXIgY29udGVudCBhZGRyZXNzZXMgbW92ZTsgb3JkaW5hcnktcGFkIHNuYXBzaG90cyBkbyBub3QuIFRoZSBtaWdyYXRpb24KICBub3RlIHN0YXRlcyBwbGFpbmx5IHRoYXQK
+
 jobs:
-  probe:
-    name: Probe workflow write policy
+  correct:
+    name: Correct schema-hop identity wording
     runs-on: ubuntu-24.04
     steps:
-      - name: Report token permission context
+      - name: Check out the exact release head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: release/v0.9.0
+          fetch-depth: 0
+
+      - name: Bind and edit
         shell: bash
         run: |
           set -euo pipefail
-          printf 'workflow parsed and runner allocated\n'
+          mkdir -p release-fix-logs
+          git rev-parse HEAD > release-fix-logs/source-sha.log 2>&1
+          cat release-fix-logs/source-sha.log
+          test "$(cat release-fix-logs/source-sha.log)" = "${TARGET_SHA}"
+          python -c "import base64, os; from pathlib import Path; p=Path('CHANGELOG.md'); t=p.read_text(); old=base64.b64decode(os.environ['OLD_B64']).decode(); new=base64.b64decode(os.environ['NEW_B64']).decode(); assert t.count(old)==1, t.count(old); p.write_text(t.replace(old,new))" > release-fix-logs/edit.log 2>&1
+          cat release-fix-logs/edit.log
+          git diff --check > release-fix-logs/diff-check.log 2>&1
+          cat release-fix-logs/diff-check.log
+          git status --porcelain=v1 > release-fix-logs/status.log 2>&1
+          cat release-fix-logs/status.log
+          test "$(cat release-fix-logs/status.log)" = ' M CHANGELOG.md'
+
+      - name: Commit correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'CopperMCP Release Automation'
+          git config user.email 'seunghyukchoe@users.noreply.github.com'
+          git add CHANGELOG.md
+          git commit -m 'docs(release): distinguish schema-hop identities' > release-fix-logs/git-commit.log 2>&1
+          cat release-fix-logs/git-commit.log
+
+      - name: Verify commit subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          git log --oneline -1 > release-fix-logs/git-log.log 2>&1
+          cat release-fix-logs/git-log.log
+          git log -1 --pretty=%s > release-fix-logs/git-subject.log 2>&1
+          cat release-fix-logs/git-subject.log
+          grep -Fxq 'docs(release): distinguish schema-hop identities' release-fix-logs/git-subject.log
+
+      - name: Push correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin HEAD:refs/heads/release/v0.9.0 > release-fix-logs/git-push.log 2>&1
+          cat release-fix-logs/git-push.log
+
+      - name: Upload correction evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: v0.9.0-release-note-correction
+          path: release-fix-logs/
+          if-no-files-found: warn
+          retention-days: 14
