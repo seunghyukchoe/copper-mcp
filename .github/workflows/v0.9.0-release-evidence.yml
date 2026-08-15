@@ -9,82 +9,12 @@ permissions:
   contents: write
 
 jobs:
-  correct:
-    name: Correct schema-hop identity wording
+  probe:
+    name: Probe workflow write policy
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out the release branch
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: release/v0.9.0
-          fetch-depth: 0
-
-      - name: Apply the single anchored correction
+      - name: Report token permission context
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p release-fix-logs
-          git rev-parse HEAD > release-fix-logs/source-sha.log 2>&1
-          cat release-fix-logs/source-sha.log
-          test "$(cat release-fix-logs/source-sha.log)" = '2bd62f8c12e5b28ce0baa35707914c8f3d417f8e'
-          python - <<'PY' > release-fix-logs/edit.log 2>&1
-          from pathlib import Path
-
-          path = Path('CHANGELOG.md')
-          text = path.read_text(encoding='utf-8')
-          old = '''  **No content address moves:** the snapshot digest, the constraint digest and the source revision
-  are byte-identical, the encoded envelope is 4,280 bytes before and after, and it differs at
-  exactly one byte — proved by construction, not asserted. The migration note states plainly that
-'''
-          new = '''  **At the first `0.2.0` → `0.3.0` hop, no content address moves:** the snapshot digest, the
-  constraint digest and the source revision are byte-identical, the encoded envelope is 4,280
-  bytes before and after, and it differs at exactly one byte — proved by construction, not
-  asserted. The second hop is intentionally different: custom-pad snapshots gain
-  `copper_envelope`, so their content addresses move; ordinary-pad snapshots do not. The migration
-  note states plainly that
-'''
-          matches = text.count(old)
-          if matches != 1:
-              raise SystemExit(f'expected one changelog identity anchor, found {matches}')
-          path.write_text(text.replace(old, new), encoding='utf-8')
-          print('updated exactly one schema-hop identity passage')
-          PY
-          cat release-fix-logs/edit.log
-          git diff --check > release-fix-logs/diff-check.log 2>&1
-          cat release-fix-logs/diff-check.log
-          git status --porcelain=v1 > release-fix-logs/status.log 2>&1
-          cat release-fix-logs/status.log
-          grep -Fxq ' M CHANGELOG.md' release-fix-logs/status.log
-          test "$(wc -l < release-fix-logs/status.log)" -eq 1
-
-      - name: Commit and push the correction
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'CopperMCP Release Automation'
-          git config user.email 'seunghyukchoe@users.noreply.github.com'
-          git add CHANGELOG.md
-          set +e
-          git commit -m 'docs(release): distinguish schema-hop identities' > release-fix-logs/git-commit.log 2>&1
-          commit_status=$?
-          set -e
-          cat release-fix-logs/git-commit.log
-          if [ "$commit_status" -ne 0 ]; then
-            exit "$commit_status"
-          fi
-          git log --oneline -1 > release-fix-logs/git-log.log 2>&1
-          cat release-fix-logs/git-log.log
-          git log -1 --pretty=%s > release-fix-logs/git-subject.log 2>&1
-          cat release-fix-logs/git-subject.log
-          grep -Fxq 'docs(release): distinguish schema-hop identities' release-fix-logs/git-subject.log
-          git push origin HEAD:refs/heads/release/v0.9.0 > release-fix-logs/git-push.log 2>&1
-          cat release-fix-logs/git-push.log
-
-      - name: Upload correction evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: v0.9.0-release-note-correction
-          path: release-fix-logs/
-          if-no-files-found: warn
-          retention-days: 14
+          printf 'workflow parsed and runner allocated\n'
