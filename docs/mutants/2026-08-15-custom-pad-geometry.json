@@ -75,6 +75,36 @@
       "killing_tests": [
         "tests/test_board_ir_schema.py::test_schema_accepts_and_closes_the_custom_pad_copper_envelope"
       ]
+    },
+    {
+      "id": "CPG08-custom-polygon-ring-budget-disabled",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            points = self._primitive_points(primitive, locator, minimum=3, ring_budget=True)",
+      "replacement": "            points = self._primitive_points(primitive, locator, minimum=3, maximum=250_000)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_custom_pad_gr_poly_respects_per_ring_vertex_budget"
+      ]
+    },
+    {
+      "id": "CPG09-custom-primitive-vertex-charge-dropped",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        self._charge_custom_pad_vertices(len(xy_items), locator)",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_custom_pad_polygons_respect_aggregate_vertex_budget"
+      ]
+    },
+    {
+      "id": "CPG10-custom-vertices-not-reserved-from-board-ir-budget",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        remaining_vertices = limits.max_total_vertices - converter.custom_pad_primitive_vertex_count",
+      "replacement": "        remaining_vertices = limits.max_total_vertices",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_custom_pad_polygons_respect_aggregate_vertex_budget"
+      ]
     }
   ]
 }

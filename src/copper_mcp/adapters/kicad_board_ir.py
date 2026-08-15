@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import isqrt
 from typing import Never
 
@@ -608,6 +608,10 @@ class _Converter:
         # derived zone-fill spokes, not the pad envelope represented by Board IR, so the token is
         # accepted as a typed non-claim and disclosed rather than silently discarded.
         self.unmodelled_thermal_bridge_angle_pad_count = 0
+        # Custom-pad primitive vertices are reduced to an envelope and therefore disappear before
+        # Board IR validation counts serialized rings.  Retain only their count so caller-provided
+        # vertex budgets still cover the complete accepted source geometry.
+        self.custom_pad_primitive_vertex_count = 0
         # Root ``(property ...)`` expressions accepted as board metadata and not modelled, on the
         # same measured-and-reported footing as the group count above.
         self.root_board_property_count = 0
@@ -2394,15 +2398,32 @@ class _Converter:
             object_kind="pad",
         )
 
+    def _charge_custom_pad_vertices(self, count: int, locator: str) -> None:
+        self.custom_pad_primitive_vertex_count += count
+        if self.custom_pad_primitive_vertex_count > self.limits.max_total_vertices:
+            self.fail(
+                ParseBudget.TOTAL_VERTICES.value,
+                "total vertex budget exceeded",
+                locator,
+                object_kind="pad",
+            )
+
     def _primitive_point(self, expression: SExpr, head: str, locator: str) -> tuple[int, int]:
         values = self._values(expression, head, locator, minimum=2, maximum=2)
+        self._charge_custom_pad_vertices(1, locator)
         return (
             self._mm(values[0], f"{locator}.{head}.x"),
             self._mm(values[1], f"{locator}.{head}.y"),
         )
 
     def _primitive_points(
-        self, expression: SExpr, locator: str, *, minimum: int, maximum: int | None = None
+        self,
+        expression: SExpr,
+        locator: str,
+        *,
+        minimum: int,
+        maximum: int | None = None,
+        ring_budget: bool = False,
     ) -> tuple[tuple[int, int], ...]:
         points = self._one(expression, "pts", locator)
         assert points is not None
@@ -2411,9 +2432,18 @@ class _Converter:
         )
         self._reject_unknown_children(points, frozenset({"xy"}), locator)
         xy_items = children(points, "xy")
-        upper = minimum if maximum is None else maximum
+        if ring_budget and len(xy_items) > self.limits.max_vertices_per_ring:
+            self.fail(
+                ParseBudget.VERTICES_PER_RING.value,
+                "ring vertex budget exceeded",
+                locator,
+                object_kind="pad",
+            )
+        upper = self.limits.max_vertices_per_ring if ring_budget else maximum
+        upper = minimum if upper is None else upper
         if not minimum <= len(xy_items) <= upper:
             self.fail("syntax.invalid", "custom pad primitive point count is invalid", locator)
+        self._charge_custom_pad_vertices(len(xy_items), locator)
         result: list[tuple[int, int]] = []
         for index, point in enumerate(xy_items):
             try:
@@ -2502,7 +2532,7 @@ class _Converter:
             )
         elif head == "gr_poly":
             self._reject_unknown_children(primitive, common | {"pts"}, locator)
-            points = self._primitive_points(primitive, locator, minimum=3, maximum=250_000)
+            points = self._primitive_points(primitive, locator, minimum=3, ring_budget=True)
         elif head == "gr_curve":
             self._reject_unknown_children(primitive, common | {"pts"}, locator)
             points = self._primitive_points(primitive, locator, minimum=4, maximum=4)
@@ -3905,9 +3935,18 @@ def parse_kicad_bytes(
     limits = limits or ParseLimits()
     try:
         root = parse_sexpr(source, limits)
-        conversion = _Converter(source, root, profile, limits).convert()
+        converter = _Converter(source, root, profile, limits)
+        conversion = converter.convert()
         assert conversion.snapshot is not None
-        validate_content(conversion.snapshot.content, limits)
+        remaining_vertices = limits.max_total_vertices - converter.custom_pad_primitive_vertex_count
+        if remaining_vertices < 1:
+            raise BoardIRValidationError(
+                ParseBudget.TOTAL_VERTICES.value, "total vertex budget exceeded"
+            )
+        validate_content(
+            conversion.snapshot.content,
+            replace(limits, max_total_vertices=remaining_vertices),
+        )
         return conversion
     except _ConversionError as error:
         return ConversionResult(

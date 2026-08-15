@@ -4993,6 +4993,54 @@ def test_every_custom_pad_primitive_head_converts_to_a_containing_envelope() -> 
         assert any(pad.copper_envelope is not None for pad in converted.snapshot.content.pads), name
 
 
+def test_custom_pad_gr_poly_respects_per_ring_vertex_budget() -> None:
+    """A custom-pad polygon may use the exact ring budget, but not exceed it."""
+
+    four_points = b"(xy 0 0) (xy 4 0) (xy 4 4) (xy 0 4)"
+    five_points = four_points + b" (xy 2 6)"
+    exact = _custom_pad(
+        b"      (primitives (gr_poly (pts " + four_points + b") (width 0) (fill yes)))\n"
+    )
+    accepted = parse_kicad_bytes(
+        _with_pad(exact),
+        constraint_profile(assign_signal=True),
+        ParseLimits(max_vertices_per_ring=4, max_total_vertices=100),
+    )
+    assert accepted.snapshot is not None
+
+    exceeded = _custom_pad(
+        b"      (primitives (gr_poly (pts " + five_points + b") (width 0) (fill yes)))\n"
+    )
+    refused = parse_kicad_bytes(
+        _with_pad(exceeded),
+        constraint_profile(assign_signal=True),
+        ParseLimits(max_vertices_per_ring=4, max_total_vertices=100),
+    )
+    assert refused.snapshot is None
+    assert refused.diagnostics[0].code == "budget.exceeded.vertices_per_ring"
+
+
+def test_custom_pad_polygons_respect_aggregate_vertex_budget() -> None:
+    """Custom-pad points and serialized rings share one exact aggregate limit."""
+
+    polygon = b"(gr_poly (pts (xy 0 0) (xy 4 0) (xy 4 4) (xy 0 4)) (width 0) (fill yes))"
+    exact = _custom_pad(b"      (primitives " + polygon + b")\n")
+    accepted = parse_kicad_bytes(
+        _with_pad(exact),
+        constraint_profile(assign_signal=True),
+        ParseLimits(max_vertices_per_ring=4, max_total_vertices=16),
+    )
+    assert accepted.snapshot is not None
+
+    refused = parse_kicad_bytes(
+        _with_pad(exact),
+        constraint_profile(assign_signal=True),
+        ParseLimits(max_vertices_per_ring=4, max_total_vertices=15),
+    )
+    assert refused.snapshot is None
+    assert refused.diagnostics[0].code == "budget.exceeded.total_vertices"
+
+
 def test_malformed_custom_pad_geometry_fails_closed_before_snapshot_publication() -> None:
     """Every newly accepted custom-pad subgrammar remains closed at the adapter boundary."""
 
