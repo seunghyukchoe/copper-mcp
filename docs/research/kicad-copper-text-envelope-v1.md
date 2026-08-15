@@ -337,7 +337,7 @@ any of those conditions.
 
 The required B-114 paired probe was run before implementation: on the six candidates that reached
 the pair, remove exactly the `Edge.Cuts` curve gate and the `.Cu` text refusal, while retaining the
-other four boards' recorded first-pass refusals. **Zero of the six newly converted, so the
+other four boards' recorded pass-two refusals. **Zero of the six newly converted, so the
 ten-board corpus remained 0 → 0 of 10.** That observation fixes the prediction for a hypothetical
 paired implementation at zero conversions. The premise that these two obvious gates would produce
 a first end-to-end import is therefore refuted, and implementation stops here; no code before/after
