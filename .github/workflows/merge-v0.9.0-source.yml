@@ -1,0 +1,82 @@
+name: Merge v0.9.0 source PR
+
+on:
+  push:
+    branches:
+      - "agent/source-export-v0.9.0"
+    paths:
+      - ".github/workflows/merge-v0.9.0-source.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: merge-v0.9.0-source-pr
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    name: Guard and merge PR 194
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Read and validate exact PR state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/v0.9.0-source-merge
+          gh pr view 194 --repo seunghyukchoe/copper-mcp --json state,mergeable,headRefOid,statusCheckRollup > /tmp/v0.9.0-source-merge/before.json
+          cat /tmp/v0.9.0-source-merge/before.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path('/tmp/v0.9.0-source-merge/before.json').read_text())
+          if data['state'] != 'OPEN':
+              raise SystemExit(f"PR state is {data['state']}, not OPEN")
+          if data['headRefOid'] != '2736cad4746bba43fed02a6dcb182348aa1ce5ea':
+              raise SystemExit(f"unexpected head {data['headRefOid']}")
+          if data['mergeable'] != 'MERGEABLE':
+              raise SystemExit(f"PR is not mergeable: {data['mergeable']}")
+          failures = []
+          for check in data['statusCheckRollup']:
+              conclusion = check.get('conclusion')
+              status = check.get('status')
+              name = check.get('name') or check.get('context') or 'unnamed'
+              if status != 'COMPLETED' or conclusion not in {'SUCCESS', 'SKIPPED', 'NEUTRAL'}:
+                  failures.append((name, status, conclusion))
+          if failures:
+              raise SystemExit(f"non-success checks: {failures}")
+          PY
+      - name: Merge the exact source PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr merge 194 --repo seunghyukchoe/copper-mcp --merge --match-head-commit 2736cad4746bba43fed02a6dcb182348aa1ce5ea --subject "chore(release): prepare v0.9.0 (#194)" --body "Clean v0.9.0 source cut from the post-#193 main head."
+      - name: Confirm merged state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr view 194 --repo seunghyukchoe/copper-mcp --json state,mergedAt,mergeCommit,headRefOid > /tmp/v0.9.0-source-merge/after.json
+          cat /tmp/v0.9.0-source-merge/after.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path('/tmp/v0.9.0-source-merge/after.json').read_text())
+          if data['state'] != 'MERGED':
+              raise SystemExit(f"PR did not merge: {data}")
+          if data['headRefOid'] != '2736cad4746bba43fed02a6dcb182348aa1ce5ea':
+              raise SystemExit(f"merged unexpected head {data['headRefOid']}")
+          PY
+      - name: Upload merge evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: v0.9.0-source-merge-evidence
+          path: /tmp/v0.9.0-source-merge/
+          if-no-files-found: warn
+          retention-days: 14
