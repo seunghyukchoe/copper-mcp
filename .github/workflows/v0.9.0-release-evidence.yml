@@ -6,72 +6,152 @@ on:
       - release/v0.9.0-evidence
 
 permissions:
-  contents: write
-
-env:
-  TARGET_SHA: 2bd62f8c12e5b28ce0baa35707914c8f3d417f8e
-  OLD_B64: ICAqKk5vIGNvbnRlbnQgYWRkcmVzcyBtb3ZlczoqKiB0aGUgc25hcHNob3QgZGlnZXN0LCB0aGUgY29uc3RyYWludCBkaWdlc3QgYW5kIHRoZSBzb3VyY2UgcmV2aXNpb24KICBhcmUgYnl0ZS1pZGVudGljYWwsIHRoZSBlbmNvZGVkIGVudmVsb3BlIGlzIDQsMjgwIGJ5dGVzIGJlZm9yZSBhbmQgYWZ0ZXIsIGFuZCBpdCBkaWZmZXJzIGF0CiAgZXhhY3RseSBvbmUgYnl0ZSDigJQgcHJvdmVkIGJ5IGNvbnN0cnVjdGlvbiwgbm90IGFzc2VydGVkLiBUaGUgbWlncmF0aW9uIG5vdGUgc3RhdGVzIHBsYWlubHkgdGhhdAo=
-  NEW_B64: ICAqKkF0IHRoZSBmaXJzdCBgMC4yLjBgIOKGkiBgMC4zLjBgIGhvcCwgbm8gY29udGVudCBhZGRyZXNzIG1vdmVzOioqIHRoZSBzbmFwc2hvdCBkaWdlc3QsIHRoZQogIGNvbnN0cmFpbnQgZGlnZXN0IGFuZCB0aGUgc291cmNlIHJldmlzaW9uIGFyZSBieXRlLWlkZW50aWNhbCwgdGhlIGVuY29kZWQgZW52ZWxvcGUgaXMgNCwyODAKICBieXRlcyBiZWZvcmUgYW5kIGFmdGVyLCBhbmQgaXQgZGlmZmVycyBhdCBleGFjdGx5IG9uZSBieXRlIOKAlCBwcm92ZWQgYnkgY29uc3RydWN0aW9uLCBub3QKICBhc3NlcnRlZC4gVGhlIHNlY29uZCBob3AgaXMgaW50ZW50aW9uYWxseSBkaWZmZXJlbnQ6IGN1c3RvbS1wYWQgc25hcHNob3RzIGdhaW4KICBgY29wcGVyX2VudmVsb3BlYCwgc28gdGhlaXIgY29udGVudCBhZGRyZXNzZXMgbW92ZTsgb3JkaW5hcnktcGFkIHNuYXBzaG90cyBkbyBub3QuIFRoZSBtaWdyYXRpb24KICBub3RlIHN0YXRlcyBwbGFpbmx5IHRoYXQK
+  contents: read
 
 jobs:
-  correct:
-    name: Correct schema-hop identity wording
+  evidence:
+    name: File-backed full gate on the exact v0.9.0 head
     runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      TARGET_SHA: 5a049dd8bec464b49d85f59698d2bdc491cf4d8f
     steps:
-      - name: Check out the exact release head
+      - name: Check out the exact release source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: release/v0.9.0
+          ref: ${{ env.TARGET_SHA }}
           fetch-depth: 0
 
-      - name: Bind and edit
+      - name: Bind the gate to the requested commit
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p release-fix-logs
-          git rev-parse HEAD > release-fix-logs/source-sha.log 2>&1
-          cat release-fix-logs/source-sha.log
-          test "$(cat release-fix-logs/source-sha.log)" = "${TARGET_SHA}"
-          python -c "import base64, os; from pathlib import Path; p=Path('CHANGELOG.md'); t=p.read_text(); old=base64.b64decode(os.environ['OLD_B64']).decode(); new=base64.b64decode(os.environ['NEW_B64']).decode(); assert t.count(old)==1, t.count(old); p.write_text(t.replace(old,new))" > release-fix-logs/edit.log 2>&1
-          cat release-fix-logs/edit.log
-          git diff --check > release-fix-logs/diff-check.log 2>&1
-          cat release-fix-logs/diff-check.log
-          git status --porcelain=v1 > release-fix-logs/status.log 2>&1
-          cat release-fix-logs/status.log
-          test "$(cat release-fix-logs/status.log)" = ' M CHANGELOG.md'
+          mkdir -p release-logs
+          git rev-parse HEAD > release-logs/source-sha.log 2>&1
+          cat release-logs/source-sha.log
+          test "$(cat release-logs/source-sha.log)" = "${TARGET_SHA}"
+          git log --oneline -1 > release-logs/source-subject.log 2>&1
+          cat release-logs/source-subject.log
+          git diff --exit-code > release-logs/source-diff-before.log 2>&1
+          cat release-logs/source-diff-before.log
 
-      - name: Commit correction
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install KiCad 10.0.5
+        shell: bash
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          set -euo pipefail
+          sudo apt-get update > release-logs/apt-base-update.log 2>&1
+          cat release-logs/apt-base-update.log
+          sudo apt-get install --yes software-properties-common > release-logs/apt-software-properties.log 2>&1
+          cat release-logs/apt-software-properties.log
+          sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases > release-logs/apt-kicad-ppa.log 2>&1
+          cat release-logs/apt-kicad-ppa.log
+          sudo apt-get update > release-logs/apt-kicad-update.log 2>&1
+          cat release-logs/apt-kicad-update.log
+          apt-cache policy kicad > release-logs/apt-kicad-policy.log 2>&1
+          cat release-logs/apt-kicad-policy.log
+          candidate="$(awk '/Candidate:/ {print $2}' release-logs/apt-kicad-policy.log)"
+          printf '%s\n' "$candidate" > release-logs/kicad-candidate.log
+          cat release-logs/kicad-candidate.log
+          case "$candidate" in
+            10.0.5*) ;;
+            *) printf 'expected KiCad 10.0.5, got %s\n' "$candidate" > release-logs/kicad-version-error.log; cat release-logs/kicad-version-error.log; exit 1 ;;
+          esac
+          sudo apt-get install --yes --no-install-recommends "kicad=${candidate}" > release-logs/apt-kicad-install.log 2>&1
+          cat release-logs/apt-kicad-install.log
+          kicad-cli --version > release-logs/kicad-version.log 2>&1
+          cat release-logs/kicad-version.log
+          grep -Eq '^10\.0\.5([.-]|$)' release-logs/kicad-version.log
+
+      - name: Install the complete release toolchain
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'CopperMCP Release Automation'
-          git config user.email 'seunghyukchoe@users.noreply.github.com'
-          git add CHANGELOG.md
-          git commit -m 'docs(release): distinguish schema-hop identities' > release-fix-logs/git-commit.log 2>&1
-          cat release-fix-logs/git-commit.log
+          python -m pip install --upgrade pip > release-logs/pip-upgrade.log 2>&1
+          cat release-logs/pip-upgrade.log
+          python -m pip install -e '.[dev,security]' > release-logs/pip-install.log 2>&1
+          cat release-logs/pip-install.log
 
-      - name: Verify commit subject
+      - name: Run every release gate from a file
         shell: bash
         run: |
-          set -euo pipefail
-          git log --oneline -1 > release-fix-logs/git-log.log 2>&1
-          cat release-fix-logs/git-log.log
-          git log -1 --pretty=%s > release-fix-logs/git-subject.log 2>&1
-          cat release-fix-logs/git-subject.log
-          grep -Fxq 'docs(release): distinguish schema-hop identities' release-fix-logs/git-subject.log
+          set +e
+          set -u
+          : > release-logs/gate-summary.log
+          failures=0
 
-      - name: Push correction
-        shell: bash
-        run: |
-          set -euo pipefail
-          git push origin HEAD:refs/heads/release/v0.9.0 > release-fix-logs/git-push.log 2>&1
-          cat release-fix-logs/git-push.log
+          run_logged() {
+            local name="$1"
+            shift
+            "$@" > "release-logs/${name}.log" 2>&1
+            local status=$?
+            cat "release-logs/${name}.log"
+            if [ "$status" -eq 0 ]; then
+              printf 'PASS %s\n' "$name" >> release-logs/gate-summary.log
+            else
+              printf 'FAIL %s exit=%s\n' "$name" "$status" >> release-logs/gate-summary.log
+              failures=1
+            fi
+          }
 
-      - name: Upload correction evidence
+          run_logged ruff-check python -m ruff check .
+          run_logged ruff-format python -m ruff format --check .
+          run_logged mypy python -m mypy src
+          run_logged check-version python scripts/check_version.py
+          run_logged check-version-tag python scripts/check_version.py --tag v0.9.0
+          run_logged check-ledgers python scripts/check_ledgers.py
+          run_logged check-adr-numbers python scripts/check_adr_numbers.py
+          run_logged check-doc-links python scripts/check_doc_links.py
+          run_logged check-schema-sets python scripts/check_schema_sets.py
+          run_logged check-ci-budgets python scripts/check_ci_budgets.py
+          run_logged check-drc-comparability env PYTHONPATH=src python scripts/check_drc_comparability.py
+          run_logged check-audio-benchmarks python scripts/check_audio_benchmarks.py
+          run_logged check-circuit-intents env PYTHONPATH=src python scripts/check_circuit_intents.py
+          run_logged pytest env PYTHONPATH=src python -m pytest
+          run_logged secret-scan python scripts/check_secrets.py
+          run_logged pip-audit python -m pip_audit .
+          rm -rf build dist
+          run_logged build python -m build
+          run_logged pcm-package python scripts/build_pcm_package.py --expect-version v0.9.0
+          run_logged tracked-diff git diff --exit-code
+
+          python - <<'PY' > release-logs/dist-sha256.log 2>&1
+          from hashlib import sha256
+          from pathlib import Path
+
+          files = sorted(path for path in Path("dist").iterdir() if path.is_file())
+          if not files:
+              raise SystemExit("dist/ contains no release artifacts")
+          for path in files:
+              print(f"sha256:{sha256(path.read_bytes()).hexdigest()}  {path.name}")
+          PY
+          manifest_status=$?
+          cat release-logs/dist-sha256.log
+          if [ "$manifest_status" -eq 0 ]; then
+            printf 'PASS dist-sha256\n' >> release-logs/gate-summary.log
+          else
+            printf 'FAIL dist-sha256 exit=%s\n' "$manifest_status" >> release-logs/gate-summary.log
+            failures=1
+          fi
+
+          cat release-logs/gate-summary.log
+          exit "$failures"
+
+      - name: Upload full-gate evidence and distributions
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: v0.9.0-release-note-correction
-          path: release-fix-logs/
+          name: v0.9.0-exact-head-full-gate
+          path: |
+            release-logs/
+            dist/
           if-no-files-found: warn
           retention-days: 14
