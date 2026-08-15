@@ -49,7 +49,7 @@ detail; what follows is the shape, not the contract.
 | Verb | Tools | What it is bound to |
 |---|---|---|
 | See (structure) | `inspect_board`, `inspect_board_ir` | counts and digests only, no geometry disclosure |
-| See (semantics) | `observe_board_scene`, `observe_live_board_scene`, `observe_post_placement` | Circuit Scene `0.3.0`, region-scoped, stable ref ids, board text quarantined |
+| See (semantics) | `observe_board_scene`, `observe_live_board_scene`, `observe_post_placement` | Circuit Scene `0.4.0`, region-scoped, stable ref ids, board text quarantined |
 | See (live editor) | `inspect_live_board`, `inspect_live_editor_context` | read-only local KiCad IPC, operator-gated, redacted |
 | Look | `observe_board_scene` with `include_render` | normalized SVG, digest-bound, **stdio only** |
 | Trace | `preview_route`, `preview_layered_route`, `preview_route_bundle`, `preview_live_route`, `preview_live_layered_route` | exact integer geometry, revision-bound, optional authoritative KiCad DRC evidence |
@@ -380,11 +380,11 @@ src/copper_mcp/
   request_boundary.py, security.py     untrusted input validation; workspace confinement,
                                        descriptor-anchored reads, create-only and replace writes
   config.py, parse_budgets.py          settings and the discriminated, operator-set parse budgets
-  board_ir/, board_ir_service.py       canonical Board IR 0.2: footprints, geometry, validation, digests
+  board_ir/, board_ir_service.py       canonical Board IR 0.4.0: footprints, geometry, validation, digests
   adapters/                            KiCad parsers and serializers, CST span splicing, ERC/parity
   routing/                             exact-integer A*, layered A*, congestion, jobs, oracle
   circuit_ir/, circuit_intent_service  Circuit Intent IR and deterministic schematic build
-  circuit_scene.py, scene_render.py    typed scene observation (0.3.0) and normalized renders
+  circuit_scene.py, scene_render.py    typed scene observation (0.4.0) and normalized renders
   placement/, placement_preview.py     intent language, legalizer, route-aware scoring, preview
   apply/, live_apply.py                tokens, pure engines, mutating file service, live refusal
   kicad_ipc*.py, live_*.py             read-only IPC observation and live proposal surfaces

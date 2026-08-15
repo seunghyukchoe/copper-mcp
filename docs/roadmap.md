@@ -529,7 +529,7 @@ implemented; what remains is broader source fidelity, post-action/editor authori
 placement, and the policy-plugin work.
 
 - [x] Versioned Circuit Scene IR for bounded semantic and visual observation. Semantic observation
-  is `observe_board_scene` (Circuit Scene IR 0.3.0): region-scoped, exact integer geometry,
+  is `observe_board_scene` (Circuit Scene IR 0.4.0): region-scoped, exact integer geometry,
   first-class footprint pose/pad ownership/courtyard observation, a static/mutable partition,
   stable Board IR references with declared durability, relationship-aware explicit truncation,
   and board text quarantined in a separately typed untrusted collection. Visual
