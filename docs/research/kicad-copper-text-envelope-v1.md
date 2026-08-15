@@ -328,11 +328,12 @@ not yet bind the IPC session, project text variables, selected font, and font-bu
 source revision, nor does it have a tested contract for carrying those inputs into its conservative
 envelope. The existing refusal therefore remains unchanged.
 
-In particular, none of ADR-0095's five exit conditions is currently satisfied. Offline conversion
-still cannot establish the rendered string for project/path/clock variables; `gr_text_box` still
-has unresolved layout semantics; knockout and other text effects remain unresolved; volatile or
-unresolved variables remain unsafe; and face fonts still lack trusted, revision-bound outlines.
-`GetTextAsShapes` is a research lead, not a reason to weaken any of those conditions.
+In particular, none of ADR-0095's five exit conditions is currently satisfied. Project text
+variables are not included in the source revision and path- or clock-derived variables do not
+refuse; face fonts do not carry trusted, freshness-bound outlines; built-in glyph extents are not
+read and pinned by digest; a font-build mismatch does not refuse; and `gr_text_box` corners still
+do not contain the plotted copper. `GetTextAsShapes` is a research lead, not a reason to weaken
+any of those conditions.
 
 The required B-114 paired probe was run before implementation: on the six candidates that reached
 the pair, remove exactly the `Edge.Cuts` curve gate and the `.Cu` text refusal, while retaining the
@@ -355,7 +356,9 @@ not regressions:
 
 The M.2 and Amalthea probes were corrected from initially over-broad masks and rerun with the exact
 layer-filtered masks against the B-114 artifacts; their outcomes were unchanged. No transformed
-board bytes were committed. The remaining B-114 boards retain their previously recorded first refusals.
+board bytes were committed. The remaining four boards retain B-114's recorded **pass-two**
+refusals: copper layer kind, graphic without one explicit layer, root dimensions, and an unsupported
+root semantic construct.
 This result does not establish anything behind those blockers, nor does it establish live IPC,
 DRC, routing, placement, fabrication, or performance capability. It records a successful
 refutation of the Step-4 conversion premise and leaves ADR-0095's refusal policy in force.
