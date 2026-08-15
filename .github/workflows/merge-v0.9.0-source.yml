@@ -55,7 +55,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh pr merge 194 --repo seunghyukchoe/copper-mcp --merge --match-head-commit 2736cad4746bba43fed02a6dcb182348aa1ce5ea --subject "chore(release): prepare v0.9.0 (#194)" --body "Clean v0.9.0 source cut from the post-#193 main head."
+          gh pr merge 194 --repo seunghyukchoe/copper-mcp --merge --admin --match-head-commit 2736cad4746bba43fed02a6dcb182348aa1ce5ea --subject "chore(release): prepare v0.9.0 (#194)" --body "Clean v0.9.0 source cut from the post-#193 main head."
       - name: Confirm merged state
         env:
           GH_TOKEN: ${{ github.token }}
