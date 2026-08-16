@@ -255,7 +255,13 @@ def _compress(vertices: list[PointNM]) -> tuple[PointNM, ...]:
     for point in vertices:
         if len(compressed) >= 2:
             first, middle = compressed[-2:]
-            if (first.x == middle.x == point.x) or (first.y == middle.y == point.y):
+            monotonic_vertical = first.x == middle.x == point.x and (
+                first.y <= middle.y <= point.y or point.y <= middle.y <= first.y
+            )
+            monotonic_horizontal = first.y == middle.y == point.y and (
+                first.x <= middle.x <= point.x or point.x <= middle.x <= first.x
+            )
+            if monotonic_vertical or monotonic_horizontal:
                 compressed[-1] = point
                 continue
         compressed.append(point)

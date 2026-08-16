@@ -199,6 +199,23 @@ def test_accepts_a_deterministic_route_without_exposing_geometry() -> None:
     assert not ({"segments", "vias", "geometry", "apply_token"} & rendered.keys())
 
 
+def test_collinear_reversal_is_not_compressed_out_of_validation() -> None:
+    snapshot = _snapshot()
+    request = _request(snapshot)
+    reversal = _document(request)
+    reversal["segments"] = [
+        _segment((1_000_000, 5_000_000), (1_000_000, -1_000_000)),
+        _segment((1_000_000, -1_000_000), (1_000_000, 1_000_000)),
+        _segment((1_000_000, 1_000_000), (9_000_000, 1_000_000)),
+        _segment((9_000_000, 1_000_000), (9_000_000, 5_000_000)),
+    ]
+
+    result = _verify(snapshot, request, reversal)
+
+    assert result.failure is ExternalCandidateFailure.INVALID_CANDIDATE
+    assert result.candidate_id is None
+
+
 def test_four_foreign_perturbation_classes_have_distinct_refusals() -> None:
     snapshot = _snapshot()
     request = _request(snapshot)

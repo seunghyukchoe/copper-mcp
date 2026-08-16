@@ -43,6 +43,8 @@ recomputes its canonical identity, and delegates legality to `validate_candidate
 The v1 geometry subset is orthogonal and single-layer. A via naming an absent layer is
 `undeclared_layer`; a via whose layers exist is `unsupported_geometry`. Discontinuity, endpoint
 mismatch, stale revision, obstacle violation and resource exhaustion remain distinct refusals.
+Collinear vertices are compressed only when motion remains monotonic; a reversal is retained and
+refused rather than deleting an excursion from the geometry that reaches validation.
 The validator also exposes one bounded exact-edge wrapper for the special case in which the main
 lattice gate reports an orthogonal path off-grid: only a physically proven collision upgrades the
 result to `obstacle_violation`; a legal off-grid path remains `unsupported_geometry`, and both
