@@ -6,152 +6,113 @@ on:
       - release/v0.9.0-evidence
 
 permissions:
-  contents: read
+  contents: write
+
+env:
+  SOURCE_SHA: d5affff0d404bef987d691f1ea50917f7ba5bc48
+  AUTH_BRANCH: release/v0.9.0-authorization
+  CI_RUN: "31916332506"
+  SECURITY_RUN: "31916332504"
+  CODEQL_RUN: "31916332501"
+  SCORECARD_RUN: "31916332548"
+  INSERT_B64: >-
+    fCAwLjkuMCB8IDIwMjYtMDgtMTYgfCBgZDVhZmZmZjBkNDA0YmVmOTg3ZDY5MWYxZWE1MDkxN2Y3YmE1YmM0OGAgfCBFeGFjdC1zb3VyY2UgZmlsZS1iYWNrZWQgcmVsZWFzZSBnYXRlIFtydW4gMzE5MTQ1NjI4NTddKGh0dHBzOi8vZ2l0aHViLmNvbS9zZXVuZ2h5dWtjaG9lL2NvcHBlci1tY3AvYWN0aW9ucy9ydW5zLzMxOTE0NTYyODU3KSBib3VuZCBpdHNlbGYgdG8gdGhpcyBzb3VyY2UgYW5kIEtpQ2FkIDEwLjAuNSwgaW5zdGFsbGVkIGAuW2RldixzZWN1cml0eV1gLCBhbmQgcGFzc2VkIFJ1ZmYgbGludCwgUnVmZiBmb3JtYXQgb3ZlciA1MjAgZmlsZXMsIHN0cmljdCBteXB5IG92ZXIgOTkgc291cmNlIGZpbGVzLCBgY2hlY2tfdmVyc2lvbmAsIGBjaGVja19sZWRnZXJzYCwgYGNoZWNrX2Fkcl9udW1iZXJzYCwgYGNoZWNrX2RvY19saW5rc2AsIGBjaGVja19zY2hlbWFfc2V0c2AsIGBjaGVja19jaV9idWRnZXRzYCwgYGNoZWNrX2RyY19jb21wYXJhYmlsaXR5YCwgdGhlIGF1ZGlvIGFuZCBDaXJjdWl0IEludGVudCBjaGVja2VycywgdGhlIHNlY3JldCBzY2FuLCBgcGlwLWF1ZGl0YCB3aXRoIG5vIGtub3duIHZ1bG5lcmFiaWxpdGllcywgdGhlIGlzb2xhdGVkIHdoZWVsL3NkaXN0IGJ1aWxkLCB0aGUgUENNIHBhY2thZ2UgYnVpbGQgYW5kIGEgY2xlYW4gdHJhY2tlZCBkaWZmLiBUaGUgZnVsbCByZWFsLUtpQ2FkIHN1aXRlIHBhc3NlZCAqKjIsOTU5IHRlc3RzIHdpdGggNTMgZW52aXJvbm1lbnQgc2tpcHMqKiBpbiAyLDE5NC4xNiBzLiBUaGUgcnVuIGFsc28gZW1pdHRlZCBTSEEtMjU2IG1hbmlmZXN0cyBmb3IgdGhlIHdoZWVsIChgZTJmZDVlNjLigKZgKSwgc2Rpc3QgKGAwNWZiY2NmNeKApmApLCBQQ00gbWV0YWRhdGEgKGAwZWU2NTFhZOKApmApIGFuZCBQQ00gemlwIChgNGQ5OThlMTnigKZgKS4gVGhlIHNvbGUgZmFpbGluZyBjb21tYW5kIHdhcyBgY2hlY2tfdmVyc2lvbi5weSAtLXRhZyB2MC45LjBgLCB3aGljaCBjb3JyZWN0bHkgcmVmdXNlZCBiZWNhdXNlIG5vIGBSZWFkeWAgYXV0aG9yaXphdGlvbiByb3cgZXhpc3RlZCB5ZXQuIFRoZSBzb3VyY2UgaXMgdGhlcmVmb3JlIHZlcmlmaWVkIGJ1dCBkZWxpYmVyYXRlbHkgbm90IHRhZ2dhYmxlIGF0IHRoaXMgcm93LiB8IEJsb2NrZWQgfAp8IDAuOS4wIHwgMjAyNi0wOC0xNiB8IGBkNWFmZmZmMGQ0MDRiZWY5ODdkNjkxZjFlYTUwOTE3ZjdiYTViYzQ4YCB8IEV4YWN0LXNvdXJjZSBwdXNoIGV2aWRlbmNlIG9uIGBtYWluYCBwYXNzZWQgZm9yIHRoaXMgcmVsZWFzZSB0cmVlOiBbQ0kgcnVuIDMxOTE2MzMyNTA2XShodHRwczovL2dpdGh1Yi5jb20vc2V1bmdoeXVrY2hvZS9jb3BwZXItbWNwL2FjdGlvbnMvcnVucy8zMTkxNjMzMjUwNikgb24gUHl0aG9uIDMuMTEsIDMuMTIgYW5kIDMuMTMgd2l0aCB0aGUgZnVsbCBob3N0ZWQgc3VpdGUsIG1ldGFkYXRhL3NjaGVtYS9EUkMvYnVkZ2V0IGNoZWNrZXJzLCBzZWNyZXQgc2NhbiBhbmQgdGhlIFB5dGhvbiAzLjEyIHdoZWVsL3NkaXN0IGJ1aWxkOyBbU2VjdXJpdHkgcnVuIDMxOTE2MzMyNTA0XShodHRwczovL2dpdGh1Yi5jb20vc2V1bmdoeXVrY2hvZS9jb3BwZXItbWNwL2FjdGlvbnMvcnVucy8zMTkxNjMzMjUwNCksIGluY2x1ZGluZyB0aGUgZGVwZW5kZW5jeSBhdWRpdDsgW0NvZGVRTCBydW4gMzE5MTYzMzI1MDFdKGh0dHBzOi8vZ2l0aHViLmNvbS9zZXVuZ2h5dWtjaG9lL2NvcHBlci1tY3AvYWN0aW9ucy9ydW5zLzMxOTE2MzMyNTAxKTsgYW5kIFtPcGVuU1NGIFNjb3JlY2FyZCBydW4gMzE5MTYzMzI1NDhdKGh0dHBzOi8vZ2l0aHViLmNvbS9zZXVuZ2h5dWtjaG9lL2NvcHBlci1tY3AvYWN0aW9ucy9ydW5zLzMxOTE2MzMyNTQ4KS4gUFIgIzE5NCdzIGV4YWN0IGhlYWQgY2FycmllZCB0aGUgYnl0ZS1pZGVudGljYWwgdHJlZSBhbmQgaXRzIENJLCBTZWN1cml0eSBhbmQgQ29kZVFMIHJ1bnMgYWxzbyBwYXNzZWQuIFRoZSBwcmVjZWRpbmcgYEJsb2NrZWRgIHJvdydzIG1pc3NpbmcgYXV0aG9yaXphdGlvbiBwcmVyZXF1aXNpdGUgaXMgc3VwZXJzZWRlZCBieSB0aGlzIHJvdy4gVGhpcyBtZXRhZGF0YSBjb21taXQgYXV0aG9yaXplcyBgdjAuOS4wYCBvbmx5IGFmdGVyIGEgZnVsbCBmaWxlLWJhY2tlZCBnYXRlIHBhc3NlcyBvbiB0aGUgY29tbWl0IHRoYXQgd2lsbCBiZSB0YWdnZWQ7IHB1YmxpY2F0aW9uIG11c3QgdGhlbiBjb21lIGZyb20gdGhlIHRhZy10cmlnZ2VyZWQgcmVsZWFzZSB3b3JrZmxvdywgYW5kIGF1dGhvcml6YXRpb24gcmVtYWlucyBpbmNvbXBsZXRlIHVudGlsIGEgc2FtZS1kYXkgcHVibGlzaGVkLXJlbGVhc2Ugcm93IHJlY29yZHMgdGhlIHdvcmtmbG93IHJ1biBhbmQgYXR0ZXN0YXRpb24tdmVyaWZpY2F0aW9uIHZlcmRpY3QuIHwgUmVhZHkgfAo+Cj4gKipPdXRzdGFuZGluZyBwdWJsaWNhdGlvbiDigJQgMC45LjA6KiogdjAuOS4wIGlzIGF1dGhvcml6ZWQgYnV0IG5vdCB5ZXQgdGFnZ2VkLiBSZW1vdmUgdGhpcyBtYXJrZXIgb25seSBhZnRlciB0aGUgdGFnLXRyaWdnZXJlZCByZWxlYXNlIHdvcmtmbG93IGhhcyBwdWJsaXNoZWQgdGhlIGFydGlmYWN0cywgYm90aCBhcnRpZmFjdCBjbGFzc2VzIGhhdmUgYmVlbiB2ZXJpZmllZCBhZ2FpbnN0IEdpdEh1YiBhcnRpZmFjdCBhdHRlc3RhdGlvbnMsIGFuZCB0aGUgc2FtZS1kYXkgcHVibGlzaGVkLXJlbGVhc2Ugcm93IHJlY29yZHMgdGhlIHdvcmtmbG93IHJ1biBJRCBhbmQgdmVyaWZpY2F0aW9uIHZlcmRpY3QuCgo=
+  ANCHOR_B64: PiAqKnYwLjUuMCBhdXRob3JpemF0aW9uIGNvcnJlY3Rpb24=
 
 jobs:
-  evidence:
-    name: File-backed full gate on the exact v0.9.0 head
+  authorize:
+    name: Wait for exact main gates and append authorization
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    env:
-      TARGET_SHA: 5a049dd8bec464b49d85f59698d2bdc491cf4d8f
     steps:
-      - name: Check out the exact release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ env.TARGET_SHA }}
-          fetch-depth: 0
-
-      - name: Bind the gate to the requested commit
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p release-logs
-          git rev-parse HEAD > release-logs/source-sha.log 2>&1
-          cat release-logs/source-sha.log
-          test "$(cat release-logs/source-sha.log)" = "${TARGET_SHA}"
-          git log --oneline -1 > release-logs/source-subject.log 2>&1
-          cat release-logs/source-subject.log
-          git diff --exit-code > release-logs/source-diff-before.log 2>&1
-          cat release-logs/source-diff-before.log
-
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-
-      - name: Install KiCad 10.0.5
+      - name: Wait for exact-source main workflows
         shell: bash
         env:
-          DEBIAN_FRONTEND: noninteractive
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          sudo apt-get update > release-logs/apt-base-update.log 2>&1
-          cat release-logs/apt-base-update.log
-          sudo apt-get install --yes software-properties-common > release-logs/apt-software-properties.log 2>&1
-          cat release-logs/apt-software-properties.log
-          sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases > release-logs/apt-kicad-ppa.log 2>&1
-          cat release-logs/apt-kicad-ppa.log
-          sudo apt-get update > release-logs/apt-kicad-update.log 2>&1
-          cat release-logs/apt-kicad-update.log
-          apt-cache policy kicad > release-logs/apt-kicad-policy.log 2>&1
-          cat release-logs/apt-kicad-policy.log
-          candidate="$(awk '/Candidate:/ {print $2}' release-logs/apt-kicad-policy.log)"
-          printf '%s\n' "$candidate" > release-logs/kicad-candidate.log
-          cat release-logs/kicad-candidate.log
-          case "$candidate" in
-            10.0.5*) ;;
-            *) printf 'expected KiCad 10.0.5, got %s\n' "$candidate" > release-logs/kicad-version-error.log; cat release-logs/kicad-version-error.log; exit 1 ;;
-          esac
-          sudo apt-get install --yes --no-install-recommends "kicad=${candidate}" > release-logs/apt-kicad-install.log 2>&1
-          cat release-logs/apt-kicad-install.log
-          kicad-cli --version > release-logs/kicad-version.log 2>&1
-          cat release-logs/kicad-version.log
-          grep -Eq '^10\.0\.5([.-]|$)' release-logs/kicad-version.log
+          mkdir -p authorization-logs
+          for run_id in "${CI_RUN}" "${SECURITY_RUN}" "${CODEQL_RUN}" "${SCORECARD_RUN}"; do
+            while true; do
+              gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" > "authorization-logs/run-${run_id}.json" 2>&1
+              cat "authorization-logs/run-${run_id}.json"
+              head_sha="$(jq -r '.head_sha' "authorization-logs/run-${run_id}.json")"
+              status="$(jq -r '.status' "authorization-logs/run-${run_id}.json")"
+              conclusion="$(jq -r '.conclusion // ""' "authorization-logs/run-${run_id}.json")"
+              test "$head_sha" = "${SOURCE_SHA}"
+              if [ "$status" = completed ]; then
+                if [ "$conclusion" != success ]; then
+                  printf 'run %s completed with %s\n' "$run_id" "$conclusion" > "authorization-logs/run-${run_id}-failure.log"
+                  cat "authorization-logs/run-${run_id}-failure.log"
+                  exit 1
+                fi
+                break
+              fi
+              sleep 30
+            done
+          done
 
-      - name: Install the complete release toolchain
+      - name: Check out the authorization branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.AUTH_BRANCH }}
+          fetch-depth: 0
+
+      - name: Bind source and append ledger rows
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip > release-logs/pip-upgrade.log 2>&1
-          cat release-logs/pip-upgrade.log
-          python -m pip install -e '.[dev,security]' > release-logs/pip-install.log 2>&1
-          cat release-logs/pip-install.log
+          git rev-parse HEAD > authorization-logs/source-sha.log 2>&1
+          cat authorization-logs/source-sha.log
+          test "$(cat authorization-logs/source-sha.log)" = "${SOURCE_SHA}"
+          python -c "import base64, os; from pathlib import Path; p=Path('docs/ledgers/release-ledger.md'); t=p.read_text(); a=base64.b64decode(os.environ['ANCHOR_B64']).decode(); i=base64.b64decode(os.environ['INSERT_B64']).decode(); assert t.count(a)==1, t.count(a); assert '| 0.9.0 |' not in t; assert 'Outstanding publication — 0.9.0' not in t; p.write_text(t.replace(a, i+a, 1))" > authorization-logs/edit-ledger.log 2>&1
+          cat authorization-logs/edit-ledger.log
+          git diff --check > authorization-logs/diff-check.log 2>&1
+          cat authorization-logs/diff-check.log
+          git status --porcelain=v1 > authorization-logs/status.log 2>&1
+          cat authorization-logs/status.log
+          test "$(cat authorization-logs/status.log)" = ' M docs/ledgers/release-ledger.md'
 
-      - name: Run every release gate from a file
+      - name: Validate authorization metadata
         shell: bash
         run: |
-          set +e
-          set -u
-          : > release-logs/gate-summary.log
-          failures=0
+          set -euo pipefail
+          python scripts/check_ledgers.py > authorization-logs/check-ledgers.log 2>&1
+          cat authorization-logs/check-ledgers.log
+          python scripts/check_version.py --tag v0.9.0 > authorization-logs/check-version-tag.log 2>&1
+          cat authorization-logs/check-version-tag.log
 
-          run_logged() {
-            local name="$1"
-            shift
-            "$@" > "release-logs/${name}.log" 2>&1
-            local status=$?
-            cat "release-logs/${name}.log"
-            if [ "$status" -eq 0 ]; then
-              printf 'PASS %s\n' "$name" >> release-logs/gate-summary.log
-            else
-              printf 'FAIL %s exit=%s\n' "$name" "$status" >> release-logs/gate-summary.log
-              failures=1
-            fi
-          }
+      - name: Commit authorization metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'CopperMCP Release Automation'
+          git config user.email 'seunghyukchoe@users.noreply.github.com'
+          git add docs/ledgers/release-ledger.md
+          git commit -m 'chore(release): authorize v0.9.0' > authorization-logs/git-commit.log 2>&1
+          cat authorization-logs/git-commit.log
 
-          run_logged ruff-check python -m ruff check .
-          run_logged ruff-format python -m ruff format --check .
-          run_logged mypy python -m mypy src
-          run_logged check-version python scripts/check_version.py
-          run_logged check-version-tag python scripts/check_version.py --tag v0.9.0
-          run_logged check-ledgers python scripts/check_ledgers.py
-          run_logged check-adr-numbers python scripts/check_adr_numbers.py
-          run_logged check-doc-links python scripts/check_doc_links.py
-          run_logged check-schema-sets python scripts/check_schema_sets.py
-          run_logged check-ci-budgets python scripts/check_ci_budgets.py
-          run_logged check-drc-comparability env PYTHONPATH=src python scripts/check_drc_comparability.py
-          run_logged check-audio-benchmarks python scripts/check_audio_benchmarks.py
-          run_logged check-circuit-intents env PYTHONPATH=src python scripts/check_circuit_intents.py
-          run_logged pytest env PYTHONPATH=src python -m pytest
-          run_logged secret-scan python scripts/check_secrets.py
-          run_logged pip-audit python -m pip_audit .
-          rm -rf build dist
-          run_logged build python -m build
-          run_logged pcm-package python scripts/build_pcm_package.py --expect-version v0.9.0
-          run_logged tracked-diff git diff --exit-code
+      - name: Verify commit subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          git log --oneline -1 > authorization-logs/git-log.log 2>&1
+          cat authorization-logs/git-log.log
+          git log -1 --pretty=%s > authorization-logs/git-subject.log 2>&1
+          cat authorization-logs/git-subject.log
+          grep -Fxq 'chore(release): authorize v0.9.0' authorization-logs/git-subject.log
 
-          python - <<'PY' > release-logs/dist-sha256.log 2>&1
-          from hashlib import sha256
-          from pathlib import Path
+      - name: Push authorization branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin "HEAD:refs/heads/${AUTH_BRANCH}" > authorization-logs/git-push.log 2>&1
+          cat authorization-logs/git-push.log
 
-          files = sorted(path for path in Path("dist").iterdir() if path.is_file())
-          if not files:
-              raise SystemExit("dist/ contains no release artifacts")
-          for path in files:
-              print(f"sha256:{sha256(path.read_bytes()).hexdigest()}  {path.name}")
-          PY
-          manifest_status=$?
-          cat release-logs/dist-sha256.log
-          if [ "$manifest_status" -eq 0 ]; then
-            printf 'PASS dist-sha256\n' >> release-logs/gate-summary.log
-          else
-            printf 'FAIL dist-sha256 exit=%s\n' "$manifest_status" >> release-logs/gate-summary.log
-            failures=1
-          fi
-
-          cat release-logs/gate-summary.log
-          exit "$failures"
-
-      - name: Upload full-gate evidence and distributions
+      - name: Upload authorization evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: v0.9.0-exact-head-full-gate
-          path: |
-            release-logs/
-            dist/
+          name: v0.9.0-authorization-evidence
+          path: authorization-logs/
           if-no-files-found: warn
           retention-days: 14
