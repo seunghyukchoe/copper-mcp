@@ -15,7 +15,7 @@ import sys
 import tempfile
 import time
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -28,6 +28,7 @@ from copper_mcp.adapters.kicad_layered_route_patch import (
 )
 from copper_mcp.adapters.kicad_route_patch import (
     KiCadRoutePatchError,
+    _render_kicad_disposed_candidate_board,
     render_kicad_candidate_board,
 )
 from copper_mcp.adapters.kicad_schematic import MAX_RENDERED_SCHEMATIC_BYTES
@@ -1937,21 +1938,17 @@ def run_source_to_board_parity(
     )
 
 
-def run_route_candidate_drc(
+def _run_route_candidate_drc(
     requested_path: str,
     candidate: RouteCandidate,
     profile: KiCadConstraintProfile,
     settings: Settings,
     *,
     verified_fill: tuple[VerifiedFill, ...] = (),
+    render_candidate: Callable[..., bytes],
+    serialization_failure: str,
 ) -> RouteCandidateDrcEvidence:
-    """Bind an exact replayed candidate to authoritative DRC without exposing board bytes.
-
-    ``verified_fill`` is the freshness-bound zone fill the candidate was routed under. The
-    serialization boundary replays the candidate before rendering it, and a replay under a
-    different obstacle model is not a replay, so a candidate shaped by exact fill can only be
-    bound to DRC by the caller that still holds that fill.
-    """
+    """Shared candidate-bound DRC flow after its caller selects the validation authority."""
 
     if not isinstance(candidate, RouteCandidate):
         raise KiCadCliError("route candidate is malformed")
@@ -1981,7 +1978,7 @@ def run_route_candidate_drc(
     if candidate.base_revision != snapshot.snapshot_digest:
         raise KiCadCliError("route candidate is stale for the captured Board IR snapshot")
     try:
-        patched_board = render_kicad_candidate_board(
+        patched_board = render_candidate(
             source,
             snapshot,
             candidate,
@@ -1990,7 +1987,7 @@ def run_route_candidate_drc(
             verified_fill=verified_fill,
         )
     except KiCadRoutePatchError as error:
-        raise KiCadCliError("route candidate failed replay-verified KiCad serialization") from error
+        raise KiCadCliError(serialization_failure) from error
 
     patched_context = _candidate_drc_context(
         captured_context,
@@ -2023,6 +2020,51 @@ def run_route_candidate_drc(
         patched_board_revision=patched_board_revision,
         patched_drc_context_revision=patched_drc_context_revision,
         summary=summary,
+    )
+
+
+def run_route_candidate_drc(
+    requested_path: str,
+    candidate: RouteCandidate,
+    profile: KiCadConstraintProfile,
+    settings: Settings,
+    *,
+    verified_fill: tuple[VerifiedFill, ...] = (),
+) -> RouteCandidateDrcEvidence:
+    """Bind an exact replayed reference-router candidate to authoritative KiCad DRC."""
+
+    return _run_route_candidate_drc(
+        requested_path,
+        candidate,
+        profile,
+        settings,
+        verified_fill=verified_fill,
+        render_candidate=render_kicad_candidate_board,
+        serialization_failure="route candidate failed replay-verified KiCad serialization",
+    )
+
+
+def run_disposed_route_candidate_drc(
+    requested_path: str,
+    disposition: object,
+    profile: KiCadConstraintProfile,
+    settings: Settings,
+) -> RouteCandidateDrcEvidence:
+    """Bind one exact external-disposer acceptance to authoritative KiCad DRC."""
+
+    from copper_mcp.external_candidate_drc import _ExternalCandidateDisposition
+
+    if type(disposition) is not _ExternalCandidateDisposition or disposition.candidate is None:
+        raise KiCadCliError("external route candidate disposition is malformed or refused")
+    if not disposition.verification.accepted:
+        raise KiCadCliError("external route candidate disposition is inconsistent")
+    return _run_route_candidate_drc(
+        requested_path,
+        disposition.candidate,
+        profile,
+        settings,
+        render_candidate=_render_kicad_disposed_candidate_board,
+        serialization_failure="external route candidate failed disposer-verified serialization",
     )
 
 

@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0114**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0115**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -189,15 +189,16 @@ never silently widens it.
 | [0111](0111-custom-pad-anchor-and-envelope.md) | Carry custom-pad copper separately from its attachment anchor | Accepted |
 | [0112](0112-external-route-candidates-enter-through-a-disposer.md) | External route candidates enter through a bounded disposer | Accepted |
 | [0113](0113-external-route-patches-preserve-multi-pin-topology.md) | External route patches preserve multi-pin topology | Accepted |
+| [0114](0114-external-candidates-continue-to-private-kicad-drc.md) | Accepted external candidates continue to private KiCad DRC | Accepted |
 
-One hundred and thirteen numbers allocated, one hundred and eight records, no duplicates — and
+One hundred and fourteen numbers allocated, one hundred and nine records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
 its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
 the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
 and 0086 are unused; see **Known gaps** above. 0107 was allocated over the live claims 0105 and
 0106 rather than racing them, the mechanism the [ledger README](../ledgers/README.md) describes for
 `D-`/`R-`/`B-` numbers. Both have since landed — 0106 with issue #164's record and 0105 with issue
-#172's — so neither is a gap, and all of 0100 through 0112 are real records in the index above.
+#172's — so neither is a gap, and all of 0100 through 0114 are real records in the index above.
 
 ## Reading order
 
@@ -324,3 +325,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0111: Carry custom-pad copper separately from its attachment anchor](0111-custom-pad-anchor-and-envelope.md)
 - [ADR-0112: External route candidates enter through a bounded disposer](0112-external-route-candidates-enter-through-a-disposer.md)
 - [ADR-0113: External route patches preserve multi-pin topology](0113-external-route-patches-preserve-multi-pin-topology.md)
+- [ADR-0114: Accepted external candidates continue to private KiCad DRC](0114-external-candidates-continue-to-private-kicad-drc.md)

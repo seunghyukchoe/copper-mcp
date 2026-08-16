@@ -678,9 +678,13 @@ it.
   represent 0/70 without deleting topology. B-120 now re-expresses all 70: **70/70 accepted**, and
   the fixed 1 nm obstacle incursion, dropped segment, wrong-pad endpoint and undeclared-layer via
   refuse as `obstacle_violation`, `discontinuous_path`, `endpoint_mismatch` and `undeclared_layer`.
-  Input and result sets are digest-bound and the artifact stores no geometry. The seam is still not
-  exposed through MCP or CLI, and authoritative KiCad DRC remains absent with
-  `physical_validation: not_run`; those are the remaining #99 capability gates.
+  Input and result sets are digest-bound and the artifact stores no geometry. ADR-0114 now adds a
+  production-only file-backed continuation: an accepted v1 two-pad path or v2 multi-pin tree is
+  serialized on a private board and bound to authoritative KiCad DRC evidence, while a structural
+  refusal never executes KiCad. Real KiCad 10.0.5 tests cover both shapes and source immutability;
+  completed evidence is explicitly one invocation, not a reproducible differential. The seam is
+  still not exposed through MCP or CLI, so a deliberately versioned public intake and its
+  transport-level resource/disclosure tests are the remaining #99 machine capability gate.
 - [~] **Local exact repair for bounded congestion windows, parked behind #99**
   ([#90](https://github.com/seunghyukchoe/copper-mcp/issues/90)). The standalone deterministic
   operator and predeclared 5 × 5 detour regression exist (B-067), but negotiated-router integration
