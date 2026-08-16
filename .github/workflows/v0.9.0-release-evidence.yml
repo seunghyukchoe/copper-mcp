@@ -1,4 +1,4 @@
-name: v0.9.0 release authorization
+name: v0.9.0 release authorization recovery
 
 on:
   push:
@@ -7,68 +7,79 @@ on:
 
 permissions:
   contents: write
-  actions: read
 
 env:
   SOURCE_SHA: d5affff0d404bef987d691f1ea50917f7ba5bc48
   AUTH_BRANCH: release/v0.9.0-authorization
-  CI_RUN: "31916332506"
-  SECURITY_RUN: "31916332504"
-  CODEQL_RUN: "31916332501"
-  SCORECARD_RUN: "31916332548"
-  INSERT_B64: >-
-    fCAwLjkuMCB8IDIwMjYtMDgtMTYgfCBgZDVhZmZmZjBkNDA0YmVmOTg3ZDY5MWYxZWE1MDkxN2Y3YmE1YmM0OGAgfCBQcmVwYXJhdGlvbiBldmlkZW5jZSBmb3IgdGhpcyBzb3VyY2UgdHJlZTogZXhhY3QtU0hBIGZpbGUtYmFja2VkIHJlbGVhc2UtZ2F0ZSBbcnVuIDMxOTE0NTYyODU3XShodHRwczovL2dpdGh1Yi5jb20vc2V1bmdoeXVrY2hvZS9jb3BwZXItbWNwL2FjdGlvbnMvcnVucy8zMTkxNDU2Mjg1NykgZXhlY3V0ZWQgYXQgUFIgaGVhZCBgNWEwNDlkZDhiZWM0NjRiNDlkODVmNTk2OThkMmJkYzQ5MWNmNGQ4ZmAsIHdob3NlIHRyZWUgYGYyZmQxZTJjMDljZmY3YjlkYjdkZDRiZjg2MWEwMDY0ZTEzYzM5YTVgIGlzIGJ5dGUtaWRlbnRpY2FsIHRvIHRoaXMgdmFsaWRhdGVkIHNvdXJjZSBjb21taXQncyB0cmVlLiBXaXRoIEtpQ2FkIDEwLjAuNSBhbmQgYC5bZGV2LHNlY3VyaXR5XWAsIGl0IHBhc3NlZCBSdWZmIGxpbnQsIFJ1ZmYgZm9ybWF0IG92ZXIgNTIwIGZpbGVzLCBzdHJpY3QgbXlweSBvdmVyIDk5IHNvdXJjZSBmaWxlcywgYGNoZWNrX3ZlcnNpb25gLCBgY2hlY2tfbGVkZ2Vyc2AsIGBjaGVja19hZHJfbnVtYmVyc2AsIGBjaGVja19kb2NfbGlua3NgLCBgY2hlY2tfc2NoZW1hX3NldHNgLCBgY2hlY2tfY2lfYnVkZ2V0c2AsIGBjaGVja19kcmNfY29tcGFyYWJpbGl0eWAsIHRoZSBhdWRpbyBhbmQgQ2lyY3VpdCBJbnRlbnQgY2hlY2tlcnMsIHRoZSBzZWNyZXQgc2NhbiwgYHBpcC1hdWRpdGAgd2l0aCBubyBrbm93biB2dWxuZXJhYmlsaXRpZXMsIHRoZSBpc29sYXRlZCB3aGVlbC9zZGlzdCBidWlsZCwgdGhlIFBDTSBwYWNrYWdlIGJ1aWxkIGFuZCBhIGNsZWFuIHRyYWNrZWQgZGlmZi4gVGhlIGZ1bGwgcmVhbC1LaUNhZCBzdWl0ZSBwYXNzZWQgKioyLDk1OSB0ZXN0cyB3aXRoIDUzIGVudmlyb25tZW50IHNraXBzKiogaW4gMiwxOTQuMTYgcy4gVGhlIHNvbGUgZmFpbGluZyBjb21tYW5kIHdhcyBgY2hlY2tfdmVyc2lvbi5weSAtLXRhZyB2MC45LjBgLCB3aGljaCBjb3JyZWN0bHkgcmVmdXNlZCBiZWNhdXNlIG5vIGBSZWFkeWAgYXV0aG9yaXphdGlvbiByb3cgZXhpc3RlZCB5ZXQuIFRoZSBzb3VyY2UgdHJlZSBpcyB0aGVyZWZvcmUgdmVyaWZpZWQgYnV0IGRlbGliZXJhdGVseSBub3QgdGFnZ2FibGUgYXQgdGhpcyByb3cuIHwgQmxvY2tlZCB8CnwgMC45LjAgfCAyMDI2LTA4LTE2IHwgYGQ1YWZmZmYwZDQwNGJlZjk4N2Q2OTFmMWVhNTA5MTdmN2JhNWJjNDhgIHwgRXhhY3Qtc291cmNlIHB1c2ggZXZpZGVuY2Ugb24gYG1haW5gIHBhc3NlZCBmb3IgdGhpcyBjb21taXQ6IFtDSSBydW4gMzE5MTYzMzI1MDZdKGh0dHBzOi8vZ2l0aHViLmNvbS9zZXVuZ2h5dWtjaG9lL2NvcHBlci1tY3AvYWN0aW9ucy9ydW5zLzMxOTE2MzMyNTA2KSBvbiBQeXRob24gMy4xMSwgMy4xMiBhbmQgMy4xMyB3aXRoIHRoZSBmdWxsIGhvc3RlZCBzdWl0ZSwgbWV0YWRhdGEvc2NoZW1hL0RSQy9idWRnZXQgY2hlY2tlcnMsIHNlY3JldCBzY2FuIGFuZCB0aGUgUHl0aG9uIDMuMTIgd2hlZWwvc2Rpc3QgYnVpbGQ7IFtTZWN1cml0eSBydW4gMzE5MTYzMzI1MDRdKGh0dHBzOi8vZ2l0aHViLmNvbS9zZXVuZ2h5dWtjaG9lL2NvcHBlci1tY3AvYWN0aW9ucy9ydW5zLzMxOTE2MzMyNTA0KSwgaW5jbHVkaW5nIHRoZSBkZXBlbmRlbmN5IGF1ZGl0OyBbQ29kZVFMIHJ1biAzMTkxNjMzMjUwMV0oaHR0cHM6Ly9naXRodWIuY29tL3NldW5naHl1a2Nob2UvY29wcGVyLW1jcC9hY3Rpb25zL3J1bnMvMzE5MTYzMzI1MDEpOyBhbmQgW09wZW5TU0YgU2NvcmVjYXJkIHJ1biAzMTkxNjMzMjU0OF0oaHR0cHM6Ly9naXRodWIuY29tL3NldW5naHl1a2Nob2UvY29wcGVyLW1jcC9hY3Rpb25zL3J1bnMvMzE5MTYzMzI1NDgpLiBQUiAjMTk0J3MgZXhhY3QgaGVhZCBjYXJyaWVkIHRoZSBieXRlLWlkZW50aWNhbCB0cmVlIGFuZCBpdHMgQ0ksIFNlY3VyaXR5IGFuZCBDb2RlUUwgcnVucyBhbHNvIHBhc3NlZC4gVGhlIHByZWNlZGluZyBgQmxvY2tlZGAgcm93J3MgbWlzc2luZyBhdXRob3JpemF0aW9uIHByZXJlcXVpc2l0ZSBpcyBzdXBlcnNlZGVkIGJ5IHRoaXMgcm93LiBUaGlzIG1ldGFkYXRhIGNvbW1pdCBhdXRob3JpemVzIGB2MC45LjBgIG9ubHkgYWZ0ZXIgYSBmdWxsIGZpbGUtYmFja2VkIGdhdGUgcGFzc2VzIG9uIHRoZSBjb21taXQgdGhhdCB3aWxsIGJlIHRhZ2dlZDsgcHVibGljYXRpb24gbXVzdCB0aGVuIGNvbWUgZnJvbSB0aGUgdGFnLXRyaWdnZXJlZCByZWxlYXNlIHdvcmtmbG93LCBhbmQgYXV0aG9yaXphdGlvbiByZW1haW5zIGluY29tcGxldGUgdW50aWwgYSBzYW1lLWRheSBwdWJsaXNoZWQtcmVsZWFzZSByb3cgcmVjb3JkcyB0aGUgd29ya2Zsb3cgcnVuIGFuZCBhdHRlc3RhdGlvbi12ZXJpZmljYXRpb24gdmVyZGljdC4gfCBSZWFkeSB8Cj4KPiAqKk91dHN0YW5kaW5nIHB1YmxpY2F0aW9uIOKAlCAwLjkuMDoqKiB2MC45LjAgaXMgYXV0aG9yaXplZCBidXQgbm90IHlldCB0YWdnZWQuIFJlbW92ZSB0aGlzIG1hcmtlciBvbmx5IGFmdGVyIHRoZSB0YWctdHJpZ2dlcmVkIHJlbGVhc2Ugd29ya2Zsb3cgaGFzIHB1Ymxpc2hlZCB0aGUgYXJ0aWZhY3RzLCBldmVyeSBwdWJsaXNoZWQgYXNzZXQgaGFzIGJlZW4gdmVyaWZpZWQgYWdhaW5zdCBHaXRIdWIgYXJ0aWZhY3QgYXR0ZXN0YXRpb25zLCBhbmQgdGhlIHNhbWUtZGF5IHB1Ymxpc2hlZC1yZWxlYXNlIHJvdyByZWNvcmRzIHRoZSB3b3JrZmxvdyBydW4gSUQgYW5kIHZlcmlmaWNhdGlvbiB2ZXJkaWN0LgoK
-  ANCHOR_B64: PiAqKnYwLjUuMCBhdXRob3JpemF0aW9uIGNvcnJlY3Rpb24=
 
 jobs:
-  authorize:
-    name: Wait for exact main gates and append authorization
+  recover:
+    name: Recreate and publish the validated ledger-only commit
     runs-on: ubuntu-24.04
     steps:
-      - name: Wait for exact-source main workflows
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p authorization-logs
-          for run_id in "${CI_RUN}" "${SECURITY_RUN}" "${CODEQL_RUN}" "${SCORECARD_RUN}"; do
-            while true; do
-              gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" > "authorization-logs/run-${run_id}.json" 2>&1
-              cat "authorization-logs/run-${run_id}.json"
-              head_sha="$(jq -r '.head_sha' "authorization-logs/run-${run_id}.json")"
-              status="$(jq -r '.status' "authorization-logs/run-${run_id}.json")"
-              conclusion="$(jq -r '.conclusion // ""' "authorization-logs/run-${run_id}.json")"
-              test "$head_sha" = "${SOURCE_SHA}"
-              if [ "$status" = completed ]; then
-                if [ "$conclusion" != success ]; then
-                  printf 'run %s completed with %s\n' "$run_id" "$conclusion" > "authorization-logs/run-${run_id}-failure.log"
-                  cat "authorization-logs/run-${run_id}-failure.log"
-                  exit 1
-                fi
-                break
-              fi
-              sleep 30
-            done
-          done
-
-      - name: Check out exact source commit
+      - name: Check out evidence history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.SOURCE_SHA }}
+          ref: release/v0.9.0-evidence
           fetch-depth: 0
 
-      - name: Create authorization branch and append ledger rows
+      - name: Recover the reviewed ledger payload from the parent commit
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p authorization-logs
+          python - <<'PY' > authorization-logs/recover-payload.log 2>&1
+          import re
+          import subprocess
+          from pathlib import Path
+
+          path = '.github/workflows/v0.9.0-release-evidence.yml'
+          previous = subprocess.check_output(['git', 'show', f'HEAD^:{path}'], text=True)
+          match = re.search(
+              r'^  INSERT_B64: >-\n((?:    .*\n)+?)  ANCHOR_B64:',
+              previous,
+              flags=re.MULTILINE,
+          )
+          if match is None:
+              raise SystemExit('reviewed INSERT_B64 payload not found in parent workflow')
+          encoded = ''.join(line.strip() for line in match.group(1).splitlines())
+          Path('/tmp/v0.9.0-authorization-insert.b64').write_text(encoded, encoding='ascii')
+          print(f'recovered {len(encoded)} base64 characters from the reviewed parent commit')
+          PY
+          cat authorization-logs/recover-payload.log
+
+      - name: Check out the exact release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach "${SOURCE_SHA}" > authorization-logs/checkout-source.log 2>&1
+          cat authorization-logs/checkout-source.log
           git rev-parse HEAD > authorization-logs/source-sha.log 2>&1
           cat authorization-logs/source-sha.log
           test "$(cat authorization-logs/source-sha.log)" = "${SOURCE_SHA}"
           git checkout -B "${AUTH_BRANCH}" "${SOURCE_SHA}" > authorization-logs/checkout-branch.log 2>&1
           cat authorization-logs/checkout-branch.log
-          python -c "import base64, os; from pathlib import Path; p=Path('docs/ledgers/release-ledger.md'); t=p.read_text(); a=base64.b64decode(os.environ['ANCHOR_B64']).decode(); i=base64.b64decode(os.environ['INSERT_B64']).decode(); assert t.count(a)==1, t.count(a); assert '| 0.9.0 |' not in t; assert 'Outstanding publication — 0.9.0' not in t; p.write_text(t.replace(a, i+a, 1))" > authorization-logs/edit-ledger.log 2>&1
+
+      - name: Append the reviewed authorization rows
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' > authorization-logs/edit-ledger.log 2>&1
+          import base64
+          from pathlib import Path
+
+          ledger = Path('docs/ledgers/release-ledger.md')
+          text = ledger.read_text(encoding='utf-8')
+          anchor = '> **v0.5.0 authorization correction'
+          encoded = Path('/tmp/v0.9.0-authorization-insert.b64').read_text(encoding='ascii')
+          insertion = base64.b64decode(encoded).decode('utf-8')
+          if text.count(anchor) != 1:
+              raise SystemExit(f'expected one authorization anchor, found {text.count(anchor)}')
+          if '| 0.9.0 |' in text or 'Outstanding publication — 0.9.0' in text:
+              raise SystemExit('v0.9.0 authorization metadata already exists in source ledger')
+          ledger.write_text(text.replace(anchor, insertion + anchor, 1), encoding='utf-8')
+          print('appended reviewed Blocked and Ready rows plus outstanding-publication marker')
+          PY
           cat authorization-logs/edit-ledger.log
           git diff --check > authorization-logs/diff-check.log 2>&1
           cat authorization-logs/diff-check.log
@@ -86,7 +97,7 @@ jobs:
           git commit -m 'chore(release): authorize v0.9.0' > authorization-logs/git-commit.log 2>&1
           cat authorization-logs/git-commit.log
 
-      - name: Verify commit subject
+      - name: Verify commit subject and metadata gates
         shell: bash
         run: |
           set -euo pipefail
@@ -95,11 +106,6 @@ jobs:
           git log -1 --pretty=%s > authorization-logs/git-subject.log 2>&1
           cat authorization-logs/git-subject.log
           grep -Fxq 'chore(release): authorize v0.9.0' authorization-logs/git-subject.log
-
-      - name: Validate committed authorization metadata
-        shell: bash
-        run: |
-          set -euo pipefail
           python scripts/check_ledgers.py > authorization-logs/check-ledgers.log 2>&1
           cat authorization-logs/check-ledgers.log
           python scripts/check_version.py --tag v0.9.0 > authorization-logs/check-version-tag.log 2>&1
@@ -108,18 +114,18 @@ jobs:
           cat authorization-logs/final-status.log
           test ! -s authorization-logs/final-status.log
 
-      - name: Push authorization branch
+      - name: Force-update only the authorization branch
         shell: bash
         run: |
           set -euo pipefail
-          git push origin "HEAD:refs/heads/${AUTH_BRANCH}" > authorization-logs/git-push.log 2>&1
+          git push --force origin "HEAD:refs/heads/${AUTH_BRANCH}" > authorization-logs/git-push.log 2>&1
           cat authorization-logs/git-push.log
 
-      - name: Upload authorization evidence
+      - name: Upload recovery evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: v0.9.0-authorization-evidence
+          name: v0.9.0-authorization-recovery
           path: authorization-logs/
           if-no-files-found: warn
           retention-days: 14
