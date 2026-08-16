@@ -595,9 +595,19 @@ def test_the_committed_release_ledger_publishes_every_version_it_authorizes() ->
     rows = check_ledgers._read_release_ledger(
         (check_ledgers.ROOT / RELEASE).read_text(encoding="utf-8")
     )
-    assert set(rows.ready) == {"0.2.0", "0.3.0", "0.4.0", "0.5.0", "0.6.0", "0.7.0", "0.8.0"}
-    assert set(rows.ready) <= set(rows.published)
-    assert rows.outstanding == {}
+    expected_ready = {
+        "0.2.0",
+        "0.3.0",
+        "0.4.0",
+        "0.5.0",
+        "0.6.0",
+        "0.7.0",
+        "0.8.0",
+        "0.9.0",
+    }
+
+    assert set(rows.ready) == expected_ready
+    assert set(rows.ready) - set(rows.published) == set(rows.outstanding)
 
 
 def test_main_runs_the_published_release_gate(monkeypatch: pytest.MonkeyPatch) -> None:
