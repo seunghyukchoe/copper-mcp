@@ -1,0 +1,421 @@
+{
+  "committed_board_bytes": 0,
+  "configuration": {
+    "adapter": "copper_mcp.adapters.parse_kicad_bytes",
+    "apply_or_board_write": false,
+    "mask": {
+      "application": "CST spans deleted from immutable bytes in memory only; no transformed board written",
+      "copper_text": {
+        "heads": [
+          "gr_text",
+          "gr_text_box"
+        ],
+        "requires_exactly_one_atomic_layer_suffix": ".Cu"
+      },
+      "edge_cuts": {
+        "heads": [
+          "gr_arc",
+          "gr_bezier",
+          "gr_circle",
+          "gr_curve"
+        ],
+        "requires_exactly_one_atomic_layer": "Edge.Cuts"
+      },
+      "root_dimension": {
+        "heads": [
+          "dimension"
+        ]
+      },
+      "scope": "direct root children only"
+    },
+    "memory_budget": "ParseLimits only; peak memory not measured",
+    "operation": "read-only conversion-only counterfactual probe",
+    "parse_limits": {
+      "max_atom_chars": 4096,
+      "max_children_per_list": 500000,
+      "max_depth": 128,
+      "max_diagnostics": 100,
+      "max_input_bytes": 16777216,
+      "max_intersection_tests": 2000000,
+      "max_nodes": 3000000,
+      "max_objects": 250000,
+      "max_tokens": 4000000,
+      "max_total_vertices": 2000000,
+      "max_vertices_per_ring": 100000
+    },
+    "policy_or_model_digest": null,
+    "profile": {
+      "clearance_nm": 200000,
+      "default_net_class_id": "class:request",
+      "track_width_nm": 250000,
+      "via_diameter_nm": 600000,
+      "via_drill_nm": 300000
+    },
+    "router": null,
+    "seed": null,
+    "time_budget": "not applicable; not a performance measurement"
+  },
+  "dataset": {
+    "boards": 10,
+    "distinct_upstream_repositories": 10,
+    "licence_provenance": "per-board upstream commit/path and licence determination inherited from B-118",
+    "name": "B-114 ten-board licence-clean open-hardware corpus",
+    "selection": "four boards whose B-118 first refusal was a root dimension",
+    "source_artifact": "benchmarks/results/board-ir/2026-08-15-step4-third-pass-refutation-v1.json",
+    "source_run_id": "sha256:f8c0fc31a3c76c192c6c73e32e7845ca0c2c508bc84f6e89efb2e168f81aa021",
+    "split": "no train/test split; fixed capability census"
+  },
+  "dirty": false,
+  "environment": {
+    "cpu": "Apple M3 Pro",
+    "dependencies": {
+      "mcp": "2.0.0",
+      "pydantic": "2.13.4"
+    },
+    "dependency_manifest": {
+      "path": "pyproject.toml",
+      "sha256": "11064ed99bcda38ac4b616abf7c9848dd2a2bc234ec941ff757b14a96c5d720d"
+    },
+    "gpu": "not used",
+    "kicad": {
+      "derived_board_format_version": "20260206",
+      "input_resaved_by": "KiCad 10.0.5 (B-114)",
+      "invoked": false
+    },
+    "physical_memory_bytes": 38654705664,
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13",
+    "source_project_version": "0.9.0"
+  },
+  "interpretation": "The predeclared four-board root-dimension slice failed its prediction; the stop rule applies and no capability implementation is justified.",
+  "metrics": {
+    "aggregate_corpus_boards": 10,
+    "aggregate_corpus_converted": 0,
+    "boards": [
+      {
+        "derived_input": {
+          "board_format_version": "20260206",
+          "bytes": 7991561,
+          "sha256": "8a2452d8bfe0992b2aec1a55da6942cd767fd54a8a1c8c8327595988e3fa6485"
+        },
+        "fourth_pass": {
+          "inherited_b118_first_refusal": {
+            "message": "layer field has an invalid arity",
+            "object_kind": null,
+            "source_locator": "kicad_pcb.graphic",
+            "verdict": "syntax.invalid"
+          },
+          "probed": false,
+          "reason": "B-118 first refusal is not a root dimension"
+        },
+        "licence": {
+          "hardware_coverage": "explicit",
+          "licence_file": "LICENSE",
+          "spdx_id": "Apache-2.0"
+        },
+        "upstream_commit": "293a3e216aa00c69c30838bb283a3f2f5d20779b",
+        "upstream_path": "tinytapeout-demo.kicad_pcb",
+        "upstream_repository": "https://github.com/TinyTapeout/tt-demo-pcb"
+      },
+      {
+        "derived_input": {
+          "board_format_version": "20260206",
+          "bytes": 5429842,
+          "sha256": "ddc82e9f12311caa7aecf2dd93051aa874f2d2828790b9a57a92cad50763d245"
+        },
+        "fourth_pass": {
+          "inherited_b118_first_refusal": {
+            "message": "expression contains an unsupported semantic field",
+            "object_kind": null,
+            "source_locator": "kicad_pcb.setup",
+            "verdict": "unsupported.construct"
+          },
+          "probed": false,
+          "reason": "B-118 first refusal is not a root dimension"
+        },
+        "licence": {
+          "hardware_coverage": "repo_scope",
+          "licence_file": "LICENSE",
+          "spdx_id": "Apache-2.0"
+        },
+        "upstream_commit": "93e67cfc3f267443d9b637073688457e8f5c1f91",
+        "upstream_path": "lpddr4-testbed.kicad_pcb",
+        "upstream_repository": "https://github.com/antmicro/lpddr4-testbed"
+      },
+      {
+        "derived_input": {
+          "board_format_version": "20260206",
+          "bytes": 1883290,
+          "sha256": "6dfe7a68f671f345ec92277abd21261c2f8207b8dd1462473a4483feebb1f674"
+        },
+        "fourth_pass": {
+          "inherited_b118_first_refusal": {
+            "message": "expression contains an unsupported semantic field",
+            "object_kind": null,
+            "source_locator": "kicad_pcb.setup",
+            "verdict": "unsupported.construct"
+          },
+          "probed": false,
+          "reason": "B-118 first refusal is not a root dimension"
+        },
+        "licence": {
+          "hardware_coverage": "explicit",
+          "licence_file": "LICENSE",
+          "spdx_id": "Apache-2.0"
+        },
+        "upstream_commit": "11844f18ce14393043affde9e7aa8d51c0cd3ba7",
+        "upstream_path": "m2-pcie-adapter.kicad_pcb",
+        "upstream_repository": "https://github.com/antmicro/m2-pcie-adapter"
+      },
+      {
+        "derived_input": {
+          "board_format_version": "20260206",
+          "bytes": 5782039,
+          "sha256": "49b569aa3977fb524f703d9847279e041a7984234dce29ecb997d3a4bd4fc8ce"
+        },
+        "fourth_pass": {
+          "mask": {
+            "counts_by_root_head": {
+              "dimension": 2,
+              "gr_text": 1
+            },
+            "masked_sha256": "207f4004a018d0143740b44440f219a656c4e3c20ab17ff597b685a1d6dbf43e",
+            "total_expressions": 3
+          },
+          "outcome": {
+            "message": "expression contains an unsupported semantic field",
+            "object_kind": null,
+            "source_locator": "kicad_pcb.setup",
+            "verdict": "unsupported.construct"
+          },
+          "probed": true,
+          "source_sha256_after": "49b569aa3977fb524f703d9847279e041a7984234dce29ecb997d3a4bd4fc8ce",
+          "source_sha256_before": "49b569aa3977fb524f703d9847279e041a7984234dce29ecb997d3a4bd4fc8ce",
+          "source_unchanged": true
+        },
+        "licence": {
+          "hardware_coverage": "repo_scope",
+          "licence_file": "LICENSE",
+          "spdx_id": "Apache-2.0"
+        },
+        "upstream_commit": "ea69666fa06f66a0691e50eebff9356cc2a08e32",
+        "upstream_path": "ov9281-dual-camera-board.kicad_pcb",
+        "upstream_repository": "https://github.com/antmicro/ov9281-camera-board"
+      },
+      {
+        "derived_input": {
+          "board_format_version": "20260206",
+          "bytes": 484103,
+          "sha256": "9cd1f4623efb589de2daff685f42842ef7aa94d5147127aa064aca914866f680"
+        },
+        "fourth_pass": {
+          "mask": {
+            "counts_by_root_head": {
+              "dimension": 31,
+              "gr_arc": 15,
+              "gr_text": 4
+            },
+            "masked_sha256": "f9c6b965d574c6ee4a620e09b9666b655662ca5e78e62f8b4eae74209975d4e1",
+            "total_expressions": 50
+          },
+          "outcome": {
+            "message": "expression contains an unsupported semantic field",
+            "object_kind": null,
+            "source_locator": "kicad_pcb.setup",
+            "verdict": "unsupported.construct"
+          },
+          "probed": true,
+          "source_sha256_after": "9cd1f4623efb589de2daff685f42842ef7aa94d5147127aa064aca914866f680",
+          "source_sha256_before": "9cd1f4623efb589de2daff685f42842ef7aa94d5147127aa064aca914866f680",
+          "source_unchanged": true
+        },
+        "licence": {
+          "hardware_coverage": "explicit_in_file",
+          "licence_file": "LICENSE",
+          "spdx_id": "CERN-OHL-P-2.0"
+        },
+        "upstream_commit": "b1027cf452365fd1572cb8df8dfed4d3004ec8c2",
+        "upstream_path": "amalthea.kicad_pcb",
+        "upstream_repository": "https://github.com/greatscottgadgets/amalthea-hardware"
+      },
+      {
+        "derived_input": {
+          "board_format_version": "20260206",
+          "bytes": 5992291,
+          "sha256": "d603deadae7751e6954cf53c607da1f59228d1e19ba75cfcb40b2e7eb7133695"
+        },
+        "fourth_pass": {
+          "mask": {
+            "counts_by_root_head": {
+              "dimension": 42,
+              "gr_arc": 4,
+              "gr_text": 6
+            },
+            "masked_sha256": "90d0982ed64f27c128439b6aa8cb39364fc7ddb623ea803cdaba058d053184ca",
+            "total_expressions": 52
+          },
+          "outcome": {
+            "message": "expression contains an unsupported semantic field",
+            "object_kind": null,
+            "source_locator": "kicad_pcb.setup",
+            "verdict": "unsupported.construct"
+          },
+          "probed": true,
+          "source_sha256_after": "d603deadae7751e6954cf53c607da1f59228d1e19ba75cfcb40b2e7eb7133695",
+          "source_sha256_before": "d603deadae7751e6954cf53c607da1f59228d1e19ba75cfcb40b2e7eb7133695",
+          "source_unchanged": true
+        },
+        "licence": {
+          "hardware_coverage": "repo_scope",
+          "licence_file": "LICENSE",
+          "spdx_id": "CERN-OHL-P-2.0"
+        },
+        "upstream_commit": "13aa71c2fb0be3837cd2ec580ee5d2c25fc1c678",
+        "upstream_path": "cynthion.kicad_pcb",
+        "upstream_repository": "https://github.com/greatscottgadgets/cynthion-hardware"
+      },
+      {
+        "derived_input": {
+          "board_format_version": "20260206",
+          "bytes": 8217442,
+          "sha256": "d9c775ec58100560dcceed92bf18cb719ffd0fd8116ab123976c83928c3df9b6"
+        },
+        "fourth_pass": {
+          "inherited_b118_first_refusal": {
+            "message": "copper layer kind is unsupported",
+            "verdict": "unsupported.construct"
+          },
+          "probed": false,
+          "reason": "B-118 first refusal is not a root dimension"
+        },
+        "licence": {
+          "hardware_coverage": "repo_scope",
+          "licence_file": "LICENSE",
+          "spdx_id": "CERN-OHL-P-2.0"
+        },
+        "upstream_commit": "359b98f2451395408bc25dae64efa9fc518e93d0",
+        "upstream_path": "praline.kicad_pcb",
+        "upstream_repository": "https://github.com/greatscottgadgets/hackrf-pro"
+      },
+      {
+        "derived_input": {
+          "board_format_version": "20260206",
+          "bytes": 3112089,
+          "sha256": "a5e2134a92202a95e13e7a4fb90d88f330d05d92effd1a4fafe8038bb7dcf7f8"
+        },
+        "fourth_pass": {
+          "inherited_b118_first_refusal": {
+            "message": "graphic without one explicit layer is unsupported",
+            "verdict": "unsupported.construct"
+          },
+          "probed": false,
+          "reason": "B-118 first refusal is not a root dimension"
+        },
+        "licence": {
+          "hardware_coverage": "repo_scope",
+          "licence_file": "LICENSE.txt",
+          "spdx_id": "MIT"
+        },
+        "upstream_commit": "984cb91ef5d5e1b03571d9ab189e3f19bce9ca7e",
+        "upstream_path": "bfo9000.kicad_pcb",
+        "upstream_repository": "https://github.com/keebio/bfo9000-pcb"
+      },
+      {
+        "derived_input": {
+          "board_format_version": "20260206",
+          "bytes": 1640863,
+          "sha256": "88251112829454882e2be1f11377df10aeb86cb9cbf9ed399e8fee630c98489f"
+        },
+        "fourth_pass": {
+          "inherited_b118_first_refusal": {
+            "message": "root expression contains an unsupported semantic construct",
+            "verdict": "unsupported.construct"
+          },
+          "probed": false,
+          "reason": "B-118 first refusal is not a root dimension"
+        },
+        "licence": {
+          "hardware_coverage": "custom_licence",
+          "licence_file": "LICENSE.md",
+          "spdx_id": "NOASSERTION"
+        },
+        "upstream_commit": "88f30799b1f6242a76a2c719c7d475dfa27ea3d5",
+        "upstream_path": "pcb/v0/lakritz.kicad_pcb",
+        "upstream_repository": "https://github.com/machdyne/lakritz"
+      },
+      {
+        "derived_input": {
+          "board_format_version": "20260206",
+          "bytes": 4395237,
+          "sha256": "c5fa235dc467ad4b0055f11f613f976b0bd47384d538591ddd9caae7750f0548"
+        },
+        "fourth_pass": {
+          "mask": {
+            "counts_by_root_head": {
+              "dimension": 2,
+              "gr_arc": 4
+            },
+            "masked_sha256": "38c16d954f74b986b81f666b0fea8ab764d2918006cd15660c88bb31ad725cfc",
+            "total_expressions": 6
+          },
+          "outcome": {
+            "message": "expression contains an unsupported semantic field",
+            "object_kind": null,
+            "source_locator": "kicad_pcb.setup",
+            "verdict": "unsupported.construct"
+          },
+          "probed": true,
+          "source_sha256_after": "c5fa235dc467ad4b0055f11f613f976b0bd47384d538591ddd9caae7750f0548",
+          "source_sha256_before": "c5fa235dc467ad4b0055f11f613f976b0bd47384d538591ddd9caae7750f0548",
+          "source_unchanged": true
+        },
+        "licence": {
+          "hardware_coverage": "explicit_in_file",
+          "licence_file": "LICENSE.md",
+          "spdx_id": "NOASSERTION"
+        },
+        "upstream_commit": "652b28c950ed04ca41f0d8aa98d9b1be2f310f76",
+        "upstream_path": "hardware/mainboard/mainboard.kicad_pcb",
+        "upstream_repository": "https://github.com/wntrblm/Castor_and_Pollux"
+      }
+    ],
+    "committed_board_bytes": 0,
+    "fourth_pass_candidates": 4,
+    "fourth_pass_converted": 0,
+    "fourth_pass_probed": 4,
+    "fourth_pass_refused": 4,
+    "prediction_met": false,
+    "source_hashes_unchanged": true
+  },
+  "not_claimed": [
+    "no CopperMCP support for Edge.Cuts curves, copper text, or root dimensions was implemented",
+    "not a code before/after differential and not a conversion correctness claim",
+    "not a routing, DRC, placement, electrical, fabrication, timing, runtime, or memory result",
+    "not a claim that any refused board is unconvertible in principle; conversion stops at the next refusal",
+    "not a population sample or a general conversion rate",
+    "KiCad, IPC, and the GUI were not invoked by this fourth-pass probe",
+    "no source or transformed board was written or committed"
+  ],
+  "predeclaration": {
+    "aggregate_corpus_boards": 10,
+    "predicted_aggregate_converted": 4,
+    "predicted_boards": [
+      "https://github.com/antmicro/ov9281-camera-board",
+      "https://github.com/greatscottgadgets/amalthea-hardware",
+      "https://github.com/greatscottgadgets/cynthion-hardware",
+      "https://github.com/wntrblm/Castor_and_Pollux"
+    ],
+    "predicted_subset_boards": 4,
+    "predicted_subset_converted": 4,
+    "question": "Does masking the exact accumulated Edge.Cuts curve, copper-text, and root-dimension gates convert every B-118 board whose current first refusal is a root dimension?",
+    "recorded_at_utc": "2026-08-16T15:26:08Z",
+    "sha256": "cb7ab825f31003e84531c59fcd2b995b58707c26d853b0e72f94edc5de4bba8f",
+    "source_commit": "c9d39a06867f28a3a282fd5302cc45115b7072f2",
+    "source_run_id": "sha256:f8c0fc31a3c76c192c6c73e32e7845ca0c2c508bc84f6e89efb2e168f81aa021",
+    "stop_rule": "If fewer than all four predicted boards convert, record the next refusals and do not implement the capability slice."
+  },
+  "recorded_at_utc": "2026-08-16T15:27:52.646368+00:00",
+  "run_id": "sha256:a3b761c04cd116d7df1bda8f045da4a288c4cf9aa14d87aefa677b9bbba098b1",
+  "schema": "copper-mcp/benchmark/step4-fourth-pass-root-dimension/v1",
+  "source_commit": "c9d39a06867f28a3a282fd5302cc45115b7072f2"
+}
