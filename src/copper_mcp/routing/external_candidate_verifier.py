@@ -18,7 +18,9 @@ from typing import Final
 from copper_mcp.board_ir import BoardIRContent, BoardIRSnapshot, PointNM, verify_snapshot
 from copper_mcp.routing.astar import canonical_candidate_bytes
 from copper_mcp.routing.candidate_path_validator import (
+    EXTERNAL_PATCH_TREE_ORDERING,
     CandidatePathValidationFailure,
+    validate_candidate_patch_with_exact_off_grid_obstacle_fallback,
     validate_candidate_path_with_exact_off_grid_obstacle_fallback,
 )
 from copper_mcp.routing.contracts import (
@@ -35,12 +37,17 @@ from copper_mcp.routing.contracts import (
 CancellationCheck = Callable[[], bool]
 
 EXTERNAL_ROUTE_CANDIDATE_SCHEMA: Final = "copper-mcp/external-route-candidate/v1"
+EXTERNAL_ROUTE_PATCH_SCHEMA: Final = "copper-mcp/external-route-patch/v2"
 _JSON_SAFE_INTEGER: Final = (1 << 53) - 1
 _MAX_SEGMENTS: Final = 4_096
 _EMPTY_DIGEST: Final = f"sha256:{'0' * 64}"
 _DOCUMENT_KEYS: Final = frozenset(
     {"schema", "problem_revision", "start_pad_id", "end_pad_id", "segments", "vias"}
 )
+_PATCH_DOCUMENT_KEYS: Final = frozenset(
+    {"schema", "problem_revision", "start_pad_id", "end_pad_id", "paths", "vias"}
+)
+_PATH_KEYS: Final = frozenset({"segments"})
 _SEGMENT_KEYS: Final = frozenset({"layer_id", "width_nm", "start", "end"})
 _POINT_KEYS: Final = frozenset({"x_nm", "y_nm"})
 _VIA_KEYS: Final = frozenset({"start_layer_id", "end_layer_id", "at"})
@@ -320,6 +327,57 @@ def _candidate(
     return replace(unsigned, candidate_id=f"sha256:{digest}")
 
 
+def _patch_candidate(
+    request: RouteRequest,
+    *,
+    start_pad_id: str,
+    end_pad_id: str,
+    width_nm: int,
+    paths: tuple[RoutePath, ...],
+    pad_count: int,
+) -> RouteCandidate:
+    patch = RoutePatch(
+        net_id=request.net_id,
+        layer_id=request.layer_id,
+        width_nm=width_nm,
+        paths=paths,
+    )
+    bend_cost = patch.bend_count * request.settings.bend_penalty_nm
+    unsigned = RouteCandidate(
+        candidate_id=_EMPTY_DIGEST,
+        base_revision=request.board_revision,
+        start_pad_id=start_pad_id,
+        end_pad_id=end_pad_id,
+        patch=patch,
+        cost=RouteCost(
+            length_nm=patch.length_nm,
+            bend_count=patch.bend_count,
+            bend_cost_nm=bend_cost,
+            proximity_steps=0,
+            proximity_cost_nm=0,
+            via_cost_nm=0,
+            total_cost_nm=patch.length_nm + bend_cost,
+        ),
+        metrics=RouteMetrics(
+            hard_internal_violations=0,
+            unrouted_connections=0,
+            vias=0,
+            wire_length_nm=patch.length_nm,
+            expanded_states=0,
+            peak_frontier_states=1,
+            obstacle_checks=0,
+        ),
+        settings=request.settings,
+        router_version="external-candidate-verifier-v2",
+        policy="external-candidate-disposer-v2",
+        seed=request.seed,
+        pad_count=pad_count,
+        ordering_policy=EXTERNAL_PATCH_TREE_ORDERING,
+    )
+    digest = hashlib.sha256(canonical_candidate_bytes(unsigned)).hexdigest()
+    return replace(unsigned, candidate_id=f"sha256:{digest}")
+
+
 _VALIDATOR_FAILURES: Final = {
     CandidatePathValidationFailure.INVALID_REQUEST: ExternalCandidateFailure.INVALID_REQUEST,
     CandidatePathValidationFailure.INVALID_CANDIDATE: ExternalCandidateFailure.INVALID_CANDIDATE,
@@ -335,6 +393,135 @@ _VALIDATOR_FAILURES: Final = {
     CandidatePathValidationFailure.CANCELLED: ExternalCandidateFailure.CANCELLED,
     CandidatePathValidationFailure.DEADLINE_EXCEEDED: ExternalCandidateFailure.DEADLINE_EXCEEDED,
 }
+
+
+def _verify_external_patch(
+    snapshot: BoardIRSnapshot,
+    request: RouteRequest,
+    document: dict[object, object],
+    *,
+    start_pad_id: str,
+    end_pad_id: str,
+    pad_count: int,
+    layers: set[str],
+    max_obstacle_checks: int,
+    max_path_edges: int,
+    cancelled: CancellationCheck | None,
+    deadline_check: CancellationCheck | None,
+) -> ExternalCandidateVerificationResult:
+    raw_paths = document.get("paths")
+    if type(raw_paths) is not list or not 2 <= len(raw_paths) <= _MAX_SEGMENTS:
+        return _refused(ExternalCandidateFailure.INVALID_CANDIDATE)
+    if len(raw_paths) > pad_count - 1:
+        return _refused(ExternalCandidateFailure.INVALID_CANDIDATE)
+
+    paths: list[RoutePath] = []
+    width_nm: int | None = None
+    segment_count = 0
+    for raw_path in raw_paths:
+        stopped = _stopped(cancelled, deadline_check)
+        if stopped is not None:
+            return _refused(stopped, segment_count=segment_count)
+        if not _closed_dict(raw_path, _PATH_KEYS):
+            return _refused(
+                ExternalCandidateFailure.INVALID_CANDIDATE,
+                segment_count=segment_count,
+            )
+        assert isinstance(raw_path, dict)
+        raw_segments = raw_path.get("segments")
+        if type(raw_segments) is not list or not raw_segments:
+            return _refused(
+                ExternalCandidateFailure.INVALID_CANDIDATE,
+                segment_count=segment_count,
+            )
+        if len(raw_segments) > _MAX_SEGMENTS or segment_count + len(raw_segments) > max_path_edges:
+            return _refused(
+                ExternalCandidateFailure.BUDGET_EXCEEDED,
+                segment_count=segment_count,
+            )
+        parsed: list[tuple[PointNM, PointNM]] = []
+        for segment in raw_segments:
+            stopped = _stopped(cancelled, deadline_check)
+            if stopped is not None:
+                return _refused(stopped, segment_count=segment_count + len(parsed))
+            if not _closed_dict(segment, _SEGMENT_KEYS):
+                return _refused(
+                    ExternalCandidateFailure.INVALID_CANDIDATE,
+                    segment_count=segment_count + len(parsed),
+                )
+            assert isinstance(segment, dict)
+            layer_id = segment.get("layer_id")
+            if not _typed_id(layer_id, "layer:"):
+                return _refused(ExternalCandidateFailure.INVALID_CANDIDATE)
+            if layer_id not in layers:
+                return _refused(ExternalCandidateFailure.UNDECLARED_LAYER)
+            if layer_id != request.layer_id:
+                return _refused(ExternalCandidateFailure.UNSUPPORTED_GEOMETRY)
+            width = _integer(segment.get("width_nm"), minimum=1)
+            start = _point(segment.get("start"))
+            end = _point(segment.get("end"))
+            if width is None or start is None or end is None or start == end:
+                return _refused(ExternalCandidateFailure.INVALID_CANDIDATE)
+            if start.x != end.x and start.y != end.y:
+                return _refused(ExternalCandidateFailure.UNSUPPORTED_GEOMETRY)
+            if width_nm is None:
+                width_nm = width
+            elif width != width_nm:
+                return _refused(ExternalCandidateFailure.INVALID_CANDIDATE)
+            parsed.append((start, end))
+        segment_count += len(parsed)
+        if any(first[1] != second[0] for first, second in pairwise(parsed)):
+            return _refused(
+                ExternalCandidateFailure.DISCONTINUOUS_PATH,
+                segment_count=segment_count,
+            )
+        try:
+            paths.append(RoutePath(vertices=_compress([parsed[0][0], *(end for _, end in parsed)])))
+        except (TypeError, ValueError):
+            return _refused(
+                ExternalCandidateFailure.INVALID_CANDIDATE,
+                segment_count=segment_count,
+            )
+
+    try:
+        candidate = _patch_candidate(
+            request,
+            start_pad_id=start_pad_id,
+            end_pad_id=end_pad_id,
+            width_nm=width_nm if width_nm is not None else 0,
+            paths=tuple(paths),
+            pad_count=pad_count,
+        )
+    except (TypeError, ValueError):
+        return _refused(
+            ExternalCandidateFailure.INVALID_CANDIDATE,
+            segment_count=segment_count,
+        )
+    validation = validate_candidate_patch_with_exact_off_grid_obstacle_fallback(
+        snapshot,
+        request,
+        candidate,
+        max_obstacle_checks=max_obstacle_checks,
+        max_path_edges=max_path_edges,
+        cancelled=cancelled,
+        deadline_check=deadline_check,
+    )
+    if validation.failure is not None:
+        return _refused(
+            _VALIDATOR_FAILURES[validation.failure],
+            segment_count=segment_count,
+            edge_checks=validation.edge_checks,
+            obstacle_checks=validation.obstacle_checks,
+        )
+    return ExternalCandidateVerificationResult(
+        status="accepted",
+        candidate_id=candidate.candidate_id,
+        failure=None,
+        diagnostic=None,
+        segment_count=segment_count,
+        edge_checks=validation.edge_checks,
+        obstacle_checks=validation.obstacle_checks,
+    )
 
 
 def verify_external_route_candidate(
@@ -379,13 +566,17 @@ def verify_external_route_candidate(
         verify_snapshot(snapshot)
     except Exception:
         return _refused(ExternalCandidateFailure.INVALID_REQUEST)
-    if not _closed_dict(document, _DOCUMENT_KEYS):
+    if type(document) is not dict or len(document) != len(_DOCUMENT_KEYS):
         return _refused(ExternalCandidateFailure.INVALID_CANDIDATE)
     assert isinstance(document, dict)
-    if (
-        type(document.get("schema")) is not str
-        or document.get("schema") != EXTERNAL_ROUTE_CANDIDATE_SCHEMA
-    ):
+    schema = document.get("schema")
+    if schema == EXTERNAL_ROUTE_CANDIDATE_SCHEMA:
+        document_keys = _DOCUMENT_KEYS
+    elif schema == EXTERNAL_ROUTE_PATCH_SCHEMA:
+        document_keys = _PATCH_DOCUMENT_KEYS
+    else:
+        return _refused(ExternalCandidateFailure.INVALID_CANDIDATE)
+    if not all(key in document for key in document_keys):
         return _refused(ExternalCandidateFailure.INVALID_CANDIDATE)
     if not _digest(document.get("problem_revision")):
         return _refused(ExternalCandidateFailure.INVALID_CANDIDATE)
@@ -400,6 +591,17 @@ def verify_external_route_candidate(
 
     layers = {layer.id for layer in snapshot.content.copper_layers}
     pads = {pad.id: pad for pad in snapshot.content.pads}
+    net_pads = tuple(
+        sorted(
+            (
+                pad
+                for pad in snapshot.content.pads
+                if pad.net_id == checked_request.net_id
+                and checked_request.layer_id in pad.layer_ids
+            ),
+            key=lambda pad: pad.id,
+        )
+    )
     start_pad = pads.get(start_pad_id)
     end_pad = pads.get(end_pad_id)
     if (
@@ -429,6 +631,23 @@ def verify_external_route_candidate(
             return _refused(ExternalCandidateFailure.UNDECLARED_LAYER)
     if raw_vias:
         return _refused(ExternalCandidateFailure.UNSUPPORTED_GEOMETRY)
+
+    if schema == EXTERNAL_ROUTE_PATCH_SCHEMA:
+        if len(net_pads) <= 2 or start_pad_id != net_pads[0].id or end_pad_id != net_pads[-1].id:
+            return _refused(ExternalCandidateFailure.INVALID_REQUEST)
+        return _verify_external_patch(
+            snapshot,
+            checked_request,
+            document,
+            start_pad_id=start_pad_id,
+            end_pad_id=end_pad_id,
+            pad_count=len(net_pads),
+            layers=layers,
+            max_obstacle_checks=max_obstacle_checks,
+            max_path_edges=max_path_edges,
+            cancelled=cancelled,
+            deadline_check=deadline_check,
+        )
 
     raw_segments = document.get("segments")
     if type(raw_segments) is not list or not raw_segments:
@@ -508,6 +727,7 @@ def verify_external_route_candidate(
 
 __all__ = [
     "EXTERNAL_ROUTE_CANDIDATE_SCHEMA",
+    "EXTERNAL_ROUTE_PATCH_SCHEMA",
     "ExternalCandidateFailure",
     "ExternalCandidateVerificationResult",
     "verify_external_route_candidate",

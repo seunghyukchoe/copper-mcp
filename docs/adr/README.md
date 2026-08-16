@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0113**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0114**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -188,8 +188,9 @@ never silently widens it.
 | [0110](0110-placement-boundary-verdicts-bracket-kicad-parity.md) | Placement boundary verdicts bracket KiCad parity | Accepted |
 | [0111](0111-custom-pad-anchor-and-envelope.md) | Carry custom-pad copper separately from its attachment anchor | Accepted |
 | [0112](0112-external-route-candidates-enter-through-a-disposer.md) | External route candidates enter through a bounded disposer | Accepted |
+| [0113](0113-external-route-patches-preserve-multi-pin-topology.md) | External route patches preserve multi-pin topology | Accepted |
 
-One hundred and eleven numbers allocated, one hundred and six records, no duplicates — and
+One hundred and thirteen numbers allocated, one hundred and eight records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
 its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
 the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
@@ -322,3 +323,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0110: Placement boundary verdicts bracket KiCad parity](0110-placement-boundary-verdicts-bracket-kicad-parity.md)
 - [ADR-0111: Carry custom-pad copper separately from its attachment anchor](0111-custom-pad-anchor-and-envelope.md)
 - [ADR-0112: External route candidates enter through a bounded disposer](0112-external-route-candidates-enter-through-a-disposer.md)
+- [ADR-0113: External route patches preserve multi-pin topology](0113-external-route-patches-preserve-multi-pin-topology.md)
