@@ -52,9 +52,13 @@ def test_artifact_meets_both_halves_of_the_predeclared_gate() -> None:
 def test_artifact_records_digests_and_results_without_geometry() -> None:
     report = _artifact()
     keys = _keys(report)
+    bound_files = {
+        name: "sha256:" + hashlib.sha256((benchmark.ROOT / name).read_bytes()).hexdigest()
+        for name in benchmark.BOUND_FILES
+    }
 
     assert report["configuration"]["source_benchmark_run_id"].startswith("sha256:")
-    assert set(report["configuration"]["bound_file_sha256"]) == set(benchmark.BOUND_FILES)
+    assert report["configuration"]["bound_file_sha256"] == bound_files
     assert "input_set_digest" in keys
     assert "result_set_digest" in keys
     assert not ({"x_nm", "y_nm", "segments", "paths", "vias", "apply_token"} & keys)
