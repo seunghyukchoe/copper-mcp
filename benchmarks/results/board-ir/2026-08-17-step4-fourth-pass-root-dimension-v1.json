@@ -409,13 +409,13 @@
     "predicted_subset_converted": 4,
     "question": "Does masking the exact accumulated Edge.Cuts curve, copper-text, and root-dimension gates convert every B-118 board whose current first refusal is a root dimension?",
     "recorded_at_utc": "2026-08-16T15:26:08Z",
-    "sha256": "cb7ab825f31003e84531c59fcd2b995b58707c26d853b0e72f94edc5de4bba8f",
+    "sha256": "04fc51980f13fdc5f48254ebf6352b6d9caf567f0a890a36cbf31b71b720e119",
     "source_commit": "c9d39a06867f28a3a282fd5302cc45115b7072f2",
     "source_run_id": "sha256:f8c0fc31a3c76c192c6c73e32e7845ca0c2c508bc84f6e89efb2e168f81aa021",
     "stop_rule": "If fewer than all four predicted boards convert, record the next refusals and do not implement the capability slice."
   },
   "recorded_at_utc": "2026-08-16T15:27:52.646368+00:00",
-  "run_id": "sha256:a3b761c04cd116d7df1bda8f045da4a288c4cf9aa14d87aefa677b9bbba098b1",
+  "run_id": "sha256:19747f5d92dc6513062132fec1d3060bffd8abf644a93e12aa7831b5a1f6e4a1",
   "schema": "copper-mcp/benchmark/step4-fourth-pass-root-dimension/v1",
   "source_commit": "c9d39a06867f28a3a282fd5302cc45115b7072f2"
 }

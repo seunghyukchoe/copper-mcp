@@ -1,10 +1,25 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT = ROOT / "benchmarks/results/board-ir/2026-08-17-step4-fourth-pass-root-dimension-v1.json"
+
+
+def test_embedded_predeclaration_authenticates_its_exact_canonical_bytes() -> None:
+    report = json.loads(ARTIFACT.read_text(encoding="utf-8"))
+    predeclared = dict(report["predeclaration"])
+    recorded = predeclared.pop("sha256")
+    canonical = json.dumps(
+        predeclared,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode()
+
+    assert recorded == hashlib.sha256(canonical).hexdigest()
 
 
 def test_fourth_pass_artifact_applies_the_predeclared_stop_rule() -> None:
