@@ -673,14 +673,14 @@ it.
   production-core disposer now exists under [ADR-0112](adr/0112-external-route-candidates-enter-through-a-disposer.md):
   it accepts one closed single-layer document, reconstructs identity from coordinator-owned state,
   delegates to the Board IR path validator, and has focused evidence for one accepted route plus
-  four distinct perturbation refusals. It is not exposed through MCP or CLI. The committed
-  tscircuit corpus still **carries no solution traces** — all 20 samples hold obstacles,
-  connections, bounds, layer count and minimum trace width, and no routed result — so the full
-  slice still has to re-express B-088's 70 routed nets. Its predeclared result remains two-sided:
-  every unperturbed candidate accepted, **and** a 1 nm obstacle incursion, dropped segment,
-  wrong-pad endpoint and undeclared-layer via each refused with a distinct typed code. **The
-  acceptance count alone is explicitly not the result**, so #99 remains open until that artifact
-  exists.
+  four distinct perturbation refusals. [ADR-0113](adr/0113-external-route-patches-preserve-multi-pin-topology.md)
+  adds a closed multi-path v2 after measuring that all 70 B-088 routes carry 2–20 paths and v1 can
+  represent 0/70 without deleting topology. B-120 now re-expresses all 70: **70/70 accepted**, and
+  the fixed 1 nm obstacle incursion, dropped segment, wrong-pad endpoint and undeclared-layer via
+  refuse as `obstacle_violation`, `discontinuous_path`, `endpoint_mismatch` and `undeclared_layer`.
+  Input and result sets are digest-bound and the artifact stores no geometry. The seam is still not
+  exposed through MCP or CLI, and authoritative KiCad DRC remains absent with
+  `physical_validation: not_run`; those are the remaining #99 capability gates.
 - [~] **Local exact repair for bounded congestion windows, parked behind #99**
   ([#90](https://github.com/seunghyukchoe/copper-mcp/issues/90)). The standalone deterministic
   operator and predeclared 5 × 5 detour regression exist (B-067), but negotiated-router integration

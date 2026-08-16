@@ -28,6 +28,7 @@ from copper_mcp.board_ir import (
 from copper_mcp.routing.contracts import AStarSettings, RouteRequest
 from copper_mcp.routing.external_candidate_verifier import (
     EXTERNAL_ROUTE_CANDIDATE_SCHEMA,
+    EXTERNAL_ROUTE_PATCH_SCHEMA,
     ExternalCandidateFailure,
     verify_external_route_candidate,
 )
@@ -37,6 +38,7 @@ ROUTE_NET = "net:route"
 FOREIGN_NET = "net:foreign"
 START_PAD = "pad:route-left"
 END_PAD = "pad:route-right"
+MIDDLE_PAD = "pad:route-middle"
 SOURCE = f"sha256:{'d' * 64}"
 
 
@@ -141,6 +143,49 @@ def _request(snapshot) -> RouteRequest:
     )
 
 
+def _three_pad_snapshot():
+    snapshot = _snapshot(foreign_segment=False)
+    middle = _pad(MIDDLE_PAD, ROUTE_NET, PointNM(5_000_000, 8_000_000))
+    footprint = replace(
+        snapshot.content.footprints[0],
+        pad_ids=(START_PAD, MIDDLE_PAD, END_PAD),
+    )
+    return make_snapshot(
+        replace(
+            snapshot.content,
+            footprints=(footprint,),
+            pads=tuple(sorted((*snapshot.content.pads, middle), key=lambda pad: pad.id)),
+        )
+    )
+
+
+def _partially_routed_three_pad_snapshot():
+    snapshot = _three_pad_snapshot()
+    return make_snapshot(
+        replace(
+            snapshot.content,
+            segments=(
+                Segment(
+                    id="segment:route-left-to-branch",
+                    net_id=ROUTE_NET,
+                    layer_id=LAYER,
+                    start=PointNM(1_000_000, 5_000_000),
+                    end=PointNM(5_000_000, 5_000_000),
+                    width_nm=200_000,
+                ),
+                Segment(
+                    id="segment:route-branch-to-middle",
+                    net_id=ROUTE_NET,
+                    layer_id=LAYER,
+                    start=PointNM(5_000_000, 5_000_000),
+                    end=PointNM(5_000_000, 8_000_000),
+                    width_nm=200_000,
+                ),
+            ),
+        )
+    )
+
+
 def _point(x_nm: int, y_nm: int) -> dict[str, int]:
     return {"x_nm": x_nm, "y_nm": y_nm}
 
@@ -166,6 +211,20 @@ def _document(request: RouteRequest) -> dict[str, object]:
             _segment((1_000_000, 5_000_000), (1_000_000, 1_000_000)),
             _segment((1_000_000, 1_000_000), (9_000_000, 1_000_000)),
             _segment((9_000_000, 1_000_000), (9_000_000, 5_000_000)),
+        ],
+        "vias": [],
+    }
+
+
+def _patch_document(request: RouteRequest) -> dict[str, object]:
+    return {
+        "schema": EXTERNAL_ROUTE_PATCH_SCHEMA,
+        "problem_revision": request.board_revision,
+        "start_pad_id": START_PAD,
+        "end_pad_id": END_PAD,
+        "paths": [
+            {"segments": [_segment((1_000_000, 5_000_000), (9_000_000, 5_000_000))]},
+            {"segments": [_segment((5_000_000, 8_000_000), (5_000_000, 5_000_000))]},
         ],
         "vias": [],
     }
@@ -214,6 +273,84 @@ def test_collinear_reversal_is_not_compressed_out_of_validation() -> None:
 
     assert result.failure is ExternalCandidateFailure.INVALID_CANDIDATE
     assert result.candidate_id is None
+
+
+def test_accepts_a_deterministic_multi_path_tree_without_exposing_paths() -> None:
+    snapshot = _three_pad_snapshot()
+    request = _request(snapshot)
+    document = _patch_document(request)
+
+    results = tuple(_verify(snapshot, request, document) for _ in range(3))
+
+    assert results == (results[0],) * 3
+    assert results[0].accepted
+    assert results[0].segment_count == 2
+    assert results[0].edge_checks == 11
+    rendered = results[0].to_dict()
+    assert not ({"paths", "segments", "vias", "geometry", "apply_token"} & rendered.keys())
+
+
+def test_accepts_one_path_that_completes_a_partially_routed_multi_pin_net() -> None:
+    snapshot = _partially_routed_three_pad_snapshot()
+    request = _request(snapshot)
+    document = _patch_document(request)
+    document["paths"] = [
+        {
+            "segments": [
+                _segment((5_000_000, 8_000_000), (9_000_000, 8_000_000)),
+                _segment((9_000_000, 8_000_000), (9_000_000, 5_000_000)),
+            ]
+        }
+    ]
+
+    result = _verify(snapshot, request, document)
+
+    assert result.accepted
+    assert result.segment_count == 2
+    assert result.candidate_id is not None
+
+
+def test_multi_path_tree_requires_every_submitted_path_to_join_every_pad_component() -> None:
+    snapshot = _three_pad_snapshot()
+    request = _request(snapshot)
+    disconnected = _patch_document(request)
+    disconnected["paths"][1] = {
+        "segments": [_segment((5_000_000, 8_000_000), (5_000_000, 6_000_000))]
+    }
+
+    result = _verify(snapshot, request, disconnected)
+
+    assert result.failure is ExternalCandidateFailure.INFEASIBLE
+    assert result.candidate_id is None
+
+
+def test_multi_path_nested_shape_and_aggregate_segment_budget_are_closed() -> None:
+    snapshot = _three_pad_snapshot()
+    request = _request(snapshot)
+    extra_key = _patch_document(request)
+    extra_key["paths"][0]["foreign_policy"] = "trust-me"
+
+    assert (
+        _verify(snapshot, request, extra_key).failure is ExternalCandidateFailure.INVALID_CANDIDATE
+    )
+    calls = 0
+
+    def cancelled_after_preflight() -> bool:
+        nonlocal calls
+        calls += 1
+        return calls >= 5
+
+    assert (
+        _verify(
+            snapshot,
+            request,
+            _patch_document(request),
+            max_path_edges=1,
+            cancelled=cancelled_after_preflight,
+        ).failure
+        is ExternalCandidateFailure.BUDGET_EXCEEDED
+    )
+    assert calls == 4
 
 
 def test_four_foreign_perturbation_classes_have_distinct_refusals() -> None:
@@ -470,7 +607,9 @@ def test_production_verifier_is_exported_from_the_routing_core() -> None:
     from copper_mcp.routing import (
         EXTERNAL_ROUTE_CANDIDATE_SCHEMA as EXPORTED_SCHEMA,
     )
+    from copper_mcp.routing import EXTERNAL_ROUTE_PATCH_SCHEMA as EXPORTED_PATCH_SCHEMA
     from copper_mcp.routing import verify_external_route_candidate as exported_verifier
 
     assert EXPORTED_SCHEMA == EXTERNAL_ROUTE_CANDIDATE_SCHEMA
+    assert EXPORTED_PATCH_SCHEMA == EXTERNAL_ROUTE_PATCH_SCHEMA
     assert exported_verifier is verify_external_route_candidate
