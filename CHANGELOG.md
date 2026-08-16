@@ -6,6 +6,15 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A production-core external route-candidate disposer accepts a closed, revision-bound,
+  single-layer v1 document, reconstructs candidate identity from trusted coordinator state, and
+  returns a typed redacted acceptance or refusal after bounded Board IR validation. It is exported
+  from `copper_mcp.routing` but is deliberately not exposed through MCP, CLI, apply, persistence or
+  benchmark code in this slice ([ADR-0112](docs/adr/0112-external-route-candidates-enter-through-a-disposer.md),
+  [issue #99](https://github.com/seunghyukchoe/copper-mcp/issues/99), `D-209`, `R-161`, `SEC-150`).
+
 ### Fixed
 
 - Ordered-layer verified-fill validation now refuses aggregate polygon walks above the existing

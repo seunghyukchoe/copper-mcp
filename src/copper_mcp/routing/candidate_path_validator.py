@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from itertools import pairwise
-from typing import Final
+from typing import Final, cast
 
 from copper_mcp.board_ir import BoardIRSnapshot, PointNM
 from copper_mcp.routing.astar import (
@@ -470,7 +470,10 @@ def validate_candidate_path(
     ):
         return _result(None, 0, CandidatePathValidationFailure.INVALID_REQUEST)
 
-    stop = _StopChecks(cancelled=cancelled, deadline_check=deadline_check)
+    checked_snapshot = snapshot
+    checked_cancelled = cast(CancellationCheck | None, cancelled)
+    checked_deadline = cast(CancellationCheck | None, deadline_check)
+    stop = _StopChecks(cancelled=checked_cancelled, deadline_check=checked_deadline)
     stopped = stop.check()
     if stopped is not None:
         return _result(None, 0, stopped)
@@ -515,7 +518,7 @@ def validate_candidate_path(
     )
     work = _WorkBudget(settings=bounded_request.settings, cancelled=stop)
     try:
-        problem = _prepare(snapshot, bounded_request, work)
+        problem = _prepare(checked_snapshot, bounded_request, work)
     except _ExpectedFailureError as error:
         return _result(work, 0, _failure_from_router(error, stop))
     except Exception:  # pragma: no cover - the private reference boundary must not escape
@@ -588,8 +591,90 @@ def validate_candidate_path(
     return _result(work, edge_checks, None)
 
 
+def validate_candidate_path_with_exact_off_grid_obstacle_fallback(
+    snapshot: object,
+    request: object,
+    candidate: object,
+    *,
+    max_obstacle_checks: object,
+    max_path_edges: object,
+    cancelled: object = None,
+    deadline_check: object = None,
+) -> CandidatePathValidationResult:
+    """Preserve exact obstacle refusals for orthogonal paths that miss the request lattice.
+
+    The normal validator remains authoritative and runs first. Only an otherwise valid candidate
+    whose vertices are off-grid reaches the fallback. It re-prepares the same immutable Board IR
+    model with only the coordinator budget left by the first pass, then checks the candidate's
+    compressed orthogonal edges with the reference predicate. A proven collision is reported as
+    ``obstacle_violation``; a legal off-grid path remains ``unsupported_geometry``.
+
+    This wrapper exists so callers never need the router's private preparation or obstacle symbols.
+    It is still read-only, bounded, cooperative, and returns no geometry.
+    """
+
+    primary = validate_candidate_path(
+        snapshot,
+        request,
+        candidate,
+        max_obstacle_checks=max_obstacle_checks,
+        max_path_edges=max_path_edges,
+        cancelled=cancelled,
+        deadline_check=deadline_check,
+    )
+    if primary.failure is not CandidatePathValidationFailure.UNSUPPORTED_GEOMETRY:
+        return primary
+    # Reaching this branch proves these scalar types and ranges were accepted by the main gate.
+    assert isinstance(max_obstacle_checks, int) and not isinstance(max_obstacle_checks, bool)
+    remaining_checks = max_obstacle_checks - primary.obstacle_checks
+    if remaining_checks < 1:
+        return CandidatePathValidationResult(
+            edge_checks=primary.edge_checks,
+            obstacle_checks=primary.obstacle_checks,
+            failure=CandidatePathValidationFailure.BUDGET_EXHAUSTED,
+        )
+
+    checked_snapshot = cast(BoardIRSnapshot, snapshot)
+    checked_cancelled = cast(CancellationCheck | None, cancelled)
+    checked_deadline = cast(CancellationCheck | None, deadline_check)
+    stop = _StopChecks(cancelled=checked_cancelled, deadline_check=checked_deadline)
+    checked_request = _canonical_request(request, stop)
+    checked_candidate = _canonical_candidate(candidate, stop)
+    if checked_request is None or checked_candidate is None:
+        return CandidatePathValidationResult(
+            edge_checks=primary.edge_checks,
+            obstacle_checks=primary.obstacle_checks,
+            failure=stop.observed or CandidatePathValidationFailure.INVALID_CANDIDATE,
+        )
+    bounded_request = replace(
+        checked_request,
+        settings=replace(
+            checked_request.settings,
+            max_obstacle_checks=remaining_checks,
+        ),
+    )
+    work = _WorkBudget(settings=bounded_request.settings, cancelled=stop)
+    failure = CandidatePathValidationFailure.UNSUPPORTED_GEOMETRY
+    try:
+        problem = _prepare(checked_snapshot, bounded_request, work)
+        for start, end in pairwise(checked_candidate.patch.paths[0].vertices):
+            if not _edge_is_legal(start, end, problem, work):
+                failure = CandidatePathValidationFailure.OBSTACLE_VIOLATION
+                break
+    except _ExpectedFailureError as error:
+        failure = _failure_from_router(error, stop)
+    except Exception:  # pragma: no cover - the private reference boundary must not escape
+        failure = CandidatePathValidationFailure.INVALID_CANDIDATE
+    return CandidatePathValidationResult(
+        edge_checks=primary.edge_checks,
+        obstacle_checks=primary.obstacle_checks + work.obstacle_checks,
+        failure=failure,
+    )
+
+
 __all__ = [
     "CandidatePathValidationFailure",
     "CandidatePathValidationResult",
     "validate_candidate_path",
+    "validate_candidate_path_with_exact_off_grid_obstacle_fallback",
 ]

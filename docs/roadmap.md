@@ -669,18 +669,18 @@ it.
   of that gate — candidate generation dominating, the CPU path failing to close the gap — is
   established, because no end-to-end profile exists. Reopens on the profile plus a CPU attempt.
 - [~] **Verification harness for externally generated candidates**
-  ([#99](https://github.com/seunghyukchoe/copper-mcp/issues/99)) — the milestone's centre. Two
-  things are true today and both shape the first slice. The **disposer seam does not exist yet**:
-  `validate_candidate` normalizes an untrusted manifest and returns `valid` without reading
-  geometry, consulting a board or producing a verdict. And the committed tscircuit corpus
-  **carries no solution traces** — all 20 samples hold obstacles, connections, bounds, layer count
-  and minimum trace width, and no routed result — so the first foreign candidate must be
-  re-expressed from a run this project already made rather than read out of the corpus. The first
-  slice re-expresses B-088's 70 routed nets as foreign input, and its predeclared result has two
-  halves: every unperturbed candidate accepted, **and** four predeclared perturbations each refused
-  with a **distinct** typed code — a 1 nm shift into an obstacle, a dropped segment, a wrong-pad
-  endpoint, an undeclared-layer via. **The acceptance count alone is explicitly not the result**: a
-  seam that accepts all 70 and refuses nothing has demonstrated only that it parses.
+  ([#99](https://github.com/seunghyukchoe/copper-mcp/issues/99)) — the milestone's centre. The
+  production-core disposer now exists under [ADR-0112](adr/0112-external-route-candidates-enter-through-a-disposer.md):
+  it accepts one closed single-layer document, reconstructs identity from coordinator-owned state,
+  delegates to the Board IR path validator, and has focused evidence for one accepted route plus
+  four distinct perturbation refusals. It is not exposed through MCP or CLI. The committed
+  tscircuit corpus still **carries no solution traces** — all 20 samples hold obstacles,
+  connections, bounds, layer count and minimum trace width, and no routed result — so the full
+  slice still has to re-express B-088's 70 routed nets. Its predeclared result remains two-sided:
+  every unperturbed candidate accepted, **and** a 1 nm obstacle incursion, dropped segment,
+  wrong-pad endpoint and undeclared-layer via each refused with a distinct typed code. **The
+  acceptance count alone is explicitly not the result**, so #99 remains open until that artifact
+  exists.
 - [~] **Local exact repair for bounded congestion windows, parked behind #99**
   ([#90](https://github.com/seunghyukchoe/copper-mcp/issues/90)). The standalone deterministic
   operator and predeclared 5 × 5 detour regression exist (B-067), but negotiated-router integration
