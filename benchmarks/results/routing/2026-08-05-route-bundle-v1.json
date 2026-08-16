@@ -1,7 +1,7 @@
 {
   "authoritative_kicad_drc": {
-    "base_revision": "sha256:664b70afba5413b4fcd3e3f76f7e6494b96192ee227b7dd425ccbc405913bb06",
-    "drc_context_revision": "sha256:6f4108f767e540b48db8f078fe7a5fc30b73d8ee755ca9a9415d60c57414c650",
+    "base_revision": "sha256:13e3c36873aafcc4f1378400880c893b0fffe0ecf90cdc55855436039d3c6a53",
+    "drc_context_revision": "sha256:aebf490d4cce7a79bc904ae0681e8e58c7a3f1fb8bcde60342d0778746ab60f6",
     "drc_schema": "https://schemas.kicad.org/drc.v1.json",
     "error_count": 0,
     "exclusion_count": 0,
@@ -29,7 +29,7 @@
     "total_wire_length_nm": 26000000
   },
   "candidate_applied": false,
-  "copper_mcp_version": "0.8.0",
+  "copper_mcp_version": "0.9.0",
   "fixture": "benchmarks/audio/fixtures/negotiated-crossing-v1.kicad_pcb",
   "fixture_origin": "CopperMCP-original committed public fixture",
   "fixture_sha256": "dbbfc5179cca7f644b90303ff3bc695f191ba94f7e5bbc8b4b1437d810ec83c7",
@@ -45,8 +45,8 @@
     "fabrication_readiness",
     "general_board_scaling"
   ],
-  "recorded_at_utc": "2026-08-13T15:35:07+00:00",
-  "run_id": "sha256:fcb698bed67f2ee10d42d5ea80c9e757f6da4d1f00b0b850e01be8c92297164b",
+  "recorded_at_utc": "2026-08-15T16:11:51+00:00",
+  "run_id": "sha256:8c3d902eb18fbb2761929cd3fd37bfa787cb06fd3d09b6a984a5665ffa8c2cbf",
   "schema": "copper-mcp/benchmark/route-bundle/v1",
   "script": "scripts/benchmark_route_bundle.py",
   "script_sha256": "cadb5e760d23d6d742f1f812d67b35fd5e645cba5bb946877ce7bbd5e448b402",

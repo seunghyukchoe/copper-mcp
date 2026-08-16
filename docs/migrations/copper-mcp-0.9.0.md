@@ -1,127 +1,195 @@
-# Migrating a deployment to CopperMCP 0.9.0
+# Migrating a deployment from CopperMCP 0.8.0 to 0.9.0
 
-> This note is being written as 0.9.0 is assembled. It currently covers one change; further
-> sections are appended by the pull requests that land them.
+CopperMCP 0.9.0 ships the contracts already present on `main`; it does not add a new capability
+wave. It does, however, move the active Board IR accepted set **twice** relative to 0.8.0 and changes
+several public output and refusal literals. Treat this as a stored-data and caller-compatibility
+migration, not as a package-only upgrade.
 
-## 1. `BOARD_IR_SCHEMA_VERSION` moves from `0.2.0` to `0.3.0`
+## 1. Required action: re-convert Board IR from `0.2.0` to `0.4.0`
 
-This is the change most likely to break a 0.8.0 deployment, and unlike everything in the 0.8.0
-note it is a **decision** rather than a compatibility fix. It is
-[ADR-0105](../adr/0105-a-schema-version-moves-with-its-accepted-set.md), filed out of
-[issue #172](https://github.com/seunghyukchoe/copper-mcp/issues/172), recorded as `D-197`.
+A 0.8.0 deployment writes Board IR `0.2.0`. A 0.9.0 deployment accepts Board IR `0.4.0` only. The
+end-to-end journey is therefore:
+
+| Stage in the release delta | Active Board IR | What changes | Operator consequence |
+|---|---:|---|---|
+| CopperMCP 0.8.0 | `0.2.0` | Starting persisted envelope | Preserve the source `.kicad_pcb` and the conversion constraint profile. |
+| First accepted-set move on `main` | `0.3.0` | Version ownership and typed version refusal; accepted model unchanged | Understand the first break, but do **not** manufacture or retain an intermediate envelope. |
+| CopperMCP 0.9.0 | `0.4.0` | Optional `Pad.copper_envelope` widens the accepted model for custom pads | Run the 0.9.0 converter once, directly from the source board, and persist only `0.4.0`. |
+
+There is **no auto-migration for either hop** and no safe supported JSON transformation from
+`0.2.0` or `0.3.0` to `0.4.0`. The two hops explain the complete contract delta; they are not two
+operator conversion passes. Re-run conversion once with CopperMCP 0.9.0 from the original
+`.kicad_pcb` bytes and the same constraint profile. A persisted `0.2.0` or `0.3.0` envelope
+presented to 0.9.0 is refused.
+
+Do not delete the source board after conversion. Board IR is a derived representation; the source
+board is the migration authority.
+
+### Deployment sequence
+
+1. Stop writers that can create new 0.8.0 Board IR envelopes.
+2. Back up each source `.kicad_pcb`, its conversion constraints, and any candidate/cache inventory
+   keyed by snapshot digest.
+3. Upgrade the CopperMCP package and all workers that decode Board IR.
+4. Re-convert each source board directly with 0.9.0, producing `0.4.0`.
+5. Rebind or invalidate candidates and cached scenes whose base revision changed, as described in
+   section 3.
+6. Resume writers only after every caller accepts the output and refusal literals in sections
+   2–11.
+
+## 2. First hop: Board IR `0.2.0` to `0.3.0`
+
+This hop is governed by
+[ADR-0105](../adr/0105-a-schema-version-moves-with-its-accepted-set.md). It separates a version
+mismatch from malformed Board IR without changing the modelled board content.
 
 ### What breaks
 
-**A persisted `0.2.0` Board IR envelope no longer decodes.** There is no auto-migration and none is
-offered, exactly as `0.1` → `0.2` had none: **re-convert from the source `.kicad_pcb`**. The
-conversion is deterministic, so the snapshot digest you get back is the one you had.
+- A persisted `0.2.0` envelope no longer decodes. Re-convert from source; do not edit the
+  `schema_version` string.
+- The diagnostic code for a well-formed envelope at an unsupported version is now
+  `schema.version`, at locator `snapshot.schema_version`. It previously arrived as
+  `schema.invalid`. This also changes the refusal for old `0.1` envelopes. Callers branching on
+  the old literal must add `schema.version`.
+- `BoardIrSummary.ir_schema_version` reports the active version rather than `0.2.0`. In the final
+  0.9.0 build that literal is `0.4.0`, because the second hop has also landed.
 
-**The diagnostic vocabulary gains one code: `schema.version`.** An envelope that is well-formed
-Board IR at a version this build does not accept now refuses with `schema.version` at locator
-`snapshot.schema_version`, where it previously refused with `schema.invalid`. **This affects `0.1`
-envelopes too**, which have always taken that path. If you branch on the code, add the new one;
-`schema.invalid` now means what it says — the bytes are not Board IR.
+### What does not break at this hop
 
-The reason is worth a sentence, because it is the same class as the rest of this note. A persisted
-`0.2.0` envelope conforms to `0.2.0`-as-published *exactly*; it is refused **because** it does, at a
-superseded version. The old message — "JSON does not conform to Board IR v0.2" — told the caller the
-opposite of the truth. The new one names the version this build accepts and tells you to
-re-convert, and it is derived from the version constant so it cannot go stale the way its
-predecessor did. It never repeats the version your document declared: that string is
-caller-controlled, and no CopperMCP diagnostic echoes caller-controlled bytes.
+The `0.3.0` accepted model is the `0.2.0` model with a new owned version. For an ordinary board,
+the snapshot digest, constraint digest, source revision, and downstream identities do not move
+merely because the envelope wrapper says `0.3.0`. The first-hop encoded envelope differs only in
+the version string.
 
-**`BoardIrSummary.ir_schema_version` now reports `0.3.0`.** A client asserting the literal `0.2.0`
-fails. A client that reads it and moves on is unaffected.
+### Historical `0.2.0` copies are not interchangeable
 
-### What does not break, and this is the point
+`0.2.0` was published with three different accepted sets across `v0.5.0`–`v0.8.0`. The
+corresponding schema shipped with the release that produced a snapshot is the authoritative copy
+for that snapshot.
 
-**No content address moves.** The snapshot digest is `sha256:157661bf…` before and after —
-identical — and so are the constraint digest and the source revision. The digest is taken over
-`_content_payload`, which carries no schema version; the version appears only in the envelope.
-Downstream identities bind `base_revision = snapshot_digest`, so **there is no cascade**: every
-stored route candidate, layered candidate, placement candidate and bundle still binds to the same
-base revision it always did.
-
-The encoded envelope is **4,280 bytes before and after** — `"0.2.0"` and `"0.3.0"` are the same
-width — and differs at **exactly one byte**. This is verified rather than asserted: substituting
-`0.2.0` back into a `0.3.0` envelope reproduces the `v0.8.0` bytes exactly, and
-`tests/test_board_ir_schema.py::test_the_version_bump_moved_the_envelope_by_its_version_string_and_nothing_else`
-checks that against a recorded digest on every run.
-
-**The accepted set is unchanged.** `schemas/board-ir/0.3.0.schema.json` differs from `0.2.0` in
-three strings: `$id`, `title`, and the `schema_version` `const`. No modelled field, type or
-invariant moves. If your board converted under 0.8.0 it converts identically now.
-
-### `0.2.0`-as-published spans three accepted sets, and this is the part to read carefully
-
-`schemas/board-ir/0.2.0.schema.json` is **frozen permanently** at its `v0.8.0` bytes. It is not
-corrected retroactively, and the reason is that a correction cannot reach the copies that matter —
-they are in eight release tags, in the sdist and wheel on PyPI, and in whatever you downloaded.
-Editing it would produce a *fourth* accepted set for one version string.
-
-So, plainly:
-
-> **`0.2.0` as published spans three different accepted sets across `v0.5.0`–`v0.8.0`.** They are
-> not interchangeable. The authoritative copy for any snapshot you hold is **the one shipped
-> alongside the release that produced it** — not the newest copy, and not simply the one whose
-> version string matches.
-
-| The `0.2.0` schema as published at | Accepts a `$defs/footprint` carrying |
+| Release carrying `0.2.0` | `$defs/footprint` accepts |
 |---|---|
 | `v0.5.0`, `v0.6.0` | `courtyards` only |
-| `v0.7.0` | `+ courtyard_circles`; `net_id` may be `null` on via, segment and arc |
+| `v0.7.0` | `+ courtyard_circles`; nullable `net_id` on via, segment and arc |
 | `v0.8.0` | `+ far_side_courtyards`, `+ far_side_courtyard_circles` |
 
-`$defs/footprint` sets `additionalProperties: false`, so the incompatibility runs one way: a
-document produced at `v0.8.0` carrying a far-side courtyard is **rejected** by the `v0.5.0` copy.
-The reverse is fine. If you validate stored snapshots, pin the schema copy to the release that
-produced them; `git show v0.7.0:schemas/board-ir/0.2.0.schema.json` retrieves any of the three.
+The frozen `0.2.0` schema in 0.9.0 is the `v0.8.0` copy. It is historical evidence, not an active
+decoder target and not a universal validator for every older `0.2.0` document.
 
-**This is not confined to Board IR.** The same in-place practice produced two more instances, and
-one of them breaks in the *other* direction — a required-key addition, which invalidates documents
-already written rather than making an old consumer over-refuse:
+## 3. Second hop: Board IR `0.3.0` to `0.4.0` and `Pad.copper_envelope`
 
-| Release | Schema | Change | Direction |
-|---|---|---|---|
-| `v0.3.0` | `audio-benchmark-catalog/0.1.0` | `expected_pad_count` became a **required** key; a `multi-pin-route-preview` enum member was added | **narrowing** and widening |
-| `v0.7.0` | `drc-summary` | `clean` became a **required** key | **narrowing** |
+The final 0.9.0 Board IR migration is described in the dedicated
+[Board IR 0.4 note](board-ir-0.4.md). The `0.3.0` schema is frozen and the active decoder accepts
+`0.4.0` only.
 
-Neither file is versioned forward here — no document under either has been re-emitted — but both are
-inside the rule from now on, and both are inside the gate.
+### Accepted-set and digest changes
 
-### What stops the next one
+`Pad` gains an optional `copper_envelope`, a conservative pad-local axis-aligned copper envelope
+for obstacle readers. The existing shape, size and centre remain the attachment core for
+connectivity and under-approximating keep-in claims; the envelope must contain that core.
 
-`scripts/check_schema_sets.py`, in `make lint` and in CI. It fails when any `schemas/**/*.json`
-accepted set changes while the declared version does not, in **either** direction, and it names
-which. The four historical instances are carried as exemptions keyed `(file, version, tag)`, each
-naming `D-197`; an exemption that matches no real drift fails the run, so the list cannot become a
-suppression mechanism.
+- **Ordinary pads:** no envelope member is emitted. Their canonical content payload, snapshot
+  digest and downstream candidate identities remain unchanged. Only the outer Board IR version
+  wrapper moves.
+- **Custom pads:** the envelope is part of canonical content. Their content and snapshot digests
+  are new addresses. Invalidate route candidates, layered candidates, placement candidates and
+  cached scenes bound to the old snapshot, then regenerate or rebind them against the new one.
+- **Parse budgets:** every custom primitive vertex is still charged against the caller's per-ring
+  and aggregate parse ceilings even though Board IR retains only the conservative envelope.
 
-It also fails when a published schema is deleted, and when a release tag exists that its own tag
-list omits. An exemption may only name a **release tag** — a live break cannot be waved through by
-keying one to the working tree — and its recorded direction must be one the comparison actually
-observed.
+This is not an exact custom-primitive model and not a KiCad-parity claim. It is a bounded obstacle
+envelope. The frozen 18-save measurement moved conversion from 13 to 15 boards.
 
-**An accepted-set gate cannot enforce a byte freeze**, so it does not pretend to. Both frozen
-schemas, `board-ir/0.1.0` and `board-ir/0.2.0`, additionally carry a **sha256 pin of their exact
-published bytes**. That is what closes the three silent routes an accepted-set comparison cannot
-see: deletion, a cosmetic rewrite, and an edit to a keyword it does not watch. The active `0.3.0` is
-deliberately not pinned — it is expected to change, with its version.
+### Circuit Scene output changes
 
-It is a floor rather than a proof, and `R-151` records what it cannot see: a tightened `pattern`, a
-lowered `maximum`, a re-pointed `$ref`. A green run means no *watched* keyword moved.
+Circuit Scene moves to `0.4.0` for these boards and emits the following fields together:
 
-### What is deliberately unchanged
+- `copper_envelope_nm`
+- `copper_envelope_frame: "pad_local"`
+- `geometry_model: "anchor_with_custom_copper_envelope"`
 
-About twenty refusal messages still read `Board IR v0.2`. They name the IR **model generation**,
-which this release does not move — no modelled field, type or invariant changes — and rewriting them
-would be a blanket replacement across a published refusal surface for a change about the envelope's
-version alone. If you match on those strings, they are stable. ADR-0105 does not claim they are
-unambiguous to a reader holding only the string.
+Scene consumers must transform the local envelope for conservative obstacle checks and must use
+the attachment anchor/core for connectivity or inside claims. A client asserting the previous
+scene-version or geometry-model literal must be updated.
 
-## 2. `inspect_board_ir` gains an additive `unmodelled_counts` map
+## 4. Placement boundary verdicts preserve the proof gap
 
-`BoardIrSummary` — the value `inspect_board_ir` returns — now carries one more field:
+`preview_placement` no longer publishes a false `violated` verdict when the available geometry can
+prove neither legality nor illegality.
+
+- `outline_containment` now permits `inconclusive` between a core-proven edge crossing and a
+  bounds-proven inside result.
+- `keepout_respect` now permits `inconclusive` between a core-proven intrusion and a bounds-proven
+  clear result.
+- Region `keep_in` evaluates a pad's attachment core; region `keep_out` evaluates its obstacle
+  envelope. Alignment and symmetry use exact object centres.
+
+**Caller impact:** results that 0.8.0 could publish as the literal `violated` may now be
+`inconclusive`. Any caller that branches on `violated`, treats every non-`proven_*` result as a
+violation, or assumes candidate publication/apply authorization proves boundary legality must be
+changed. Inspect every verdict independently; `inconclusive` is neither pass nor violation.
+
+No Board IR type, schema, accepted board construct, board byte or content address changes in this
+section.
+
+## 5. Pad `thermal_bridge_angle` is accepted as a typed non-claim
+
+The KiCad adapter now validates and accepts a pad-level `thermal_bridge_angle` instead of refusing
+the board solely because that token is present.
+
+The accepted source value must be one bare exact decimal with at most microdegree precision.
+Duplicate, quoted, exponent, nested and malformed forms fail closed. The token is preserved exactly
+when route and placement splices edit the source board.
+
+This acceptance does **not** add the angle to `Pad`, the Board IR schema, the codec, canonical
+content or any content address. CopperMCP continues to use the whole zone outline as the
+conservative routing obstacle, while exact-fill routing consumes freshness-verified KiCad fill
+polygons generated from the original board bytes. Snapshot-only reproduction of thermal spokes is
+not claimed.
+
+A converted board discloses the accepted-but-unmodelled token through
+`unmodelled_counts.unmodelled_thermal_bridge_angle_pad_count`. Callers that require a fully
+self-contained snapshot must treat a non-zero value as a non-claim, not as proof that the angle was
+modelled.
+
+## 6. Benchmark DRC counts carry a comparability literal
+
+Every DRC section in a benchmark artifact now carries exactly one `comparability` literal:
+
+- `single_invocation`
+- `repeated_agreement`
+- `repeated_disagreement`
+
+Aggregates inherit the weakest literal among their inputs. `drc_differential` now refuses unless
+both sides are `repeated_agreement`; a numeric tolerance is not substituted for repeated evidence.
+The live `schemas/drc-summary.schema.json` payload is unchanged.
+
+`scripts/benchmark_real_board_capability.py --drc-repetitions N` controls how the literal is earned
+and defaults to `1`. Benchmark consumers must stop comparing bare counts without reading
+`comparability`, and automation expecting a differential from a single or disagreeing invocation
+must handle the typed refusal.
+
+## 7. Single-layer `verified_fill` malformed evidence has typed refusals
+
+The single-layer route `propose` and `replay` boundaries now reject malformed `verified_fill`
+evidence with `unsupported_geometry` instead of accepting some list-shaped impostors or allowing
+an uncaught `AttributeError`.
+
+Valid evidence that is too large to validate is distinct:
+
+- at most 32,768 islands;
+- at most 1,000,000 vertices per island; and
+- at most 10,000,000 aggregate validation-walk obstacle checks.
+
+Crossing the aggregate validation-work ceiling returns `obstacle_check_budget_exceeded`, not
+`unsupported_geometry`, because the evidence is structurally valid but too expensive to inspect.
+Callers should branch on these typed codes and must not retry either refusal unchanged. Well-formed
+real-board evidence below the ceilings is unchanged.
+
+## 8. `inspect_board_ir` adds `unmodelled_counts`
+
+`BoardIrSummary`, returned by `inspect_board_ir`, gains an additive `unmodelled_counts` map. In the
+final 0.9.0 contract a supported board reports all six measured entries, including zeros:
 
 ```json
 "unmodelled_counts": {
@@ -129,51 +197,130 @@ unambiguous to a reader holding only the string.
   "max_roundrect_rounding_nm": 0,
   "unmodelled_board_property_count": 1,
   "unmodelled_group_count": 0,
-  "unmodelled_pad_property_count": 0
+  "unmodelled_pad_property_count": 0,
+  "unmodelled_thermal_bridge_angle_pad_count": 1
 }
 ```
 
-### Nothing breaks
+The first five keys disclose accepted source constructs or rounding that were already measured
+inside conversion but did not previously reach MCP clients; the sixth is the typed non-claim from
+section 5. An unsupported board reports `{}` because no conversion measurement occurred.
 
-It is an **additive output field**. A client that does not read it is unaffected; no existing field
-moves, changes type, or changes meaning; no digest, revision or identity is involved, because
-nothing here is inside a content address. `models.SCHEMA_VERSION` stays `1.0`, which is what that
-module's own contract already permits: *a field may be added but not silently repurposed*. And this
-is not a `schemas/**/*.json` accepted set, so [ADR-0105](../adr/0105-a-schema-version-moves-with-its-accepted-set.md)'s
-version rule and the drift gate that enforces it do not reach it — verified, not assumed: the gate
-is green on this change and no exemption was added for it.
+This is additive: no existing field moves, no content address is involved and
+`models.SCHEMA_VERSION` remains `1.0`. Strict decoders that reject unknown output keys must be
+widened before deployment. Do not interpret a count as an identity set: the map does not name the
+pads, groups or properties involved.
 
-### What it discloses, and why the absence was the defect
+## 9. Layered routing exposes fill authority and binds candidates to it
 
-The KiCad adapter accepts several constructs it cannot model and **counts** what it discarded rather
-than refusing the board over them. Four risk rows — `R-134` (groups), `R-139` (root board
-properties), `R-141` (edge-connector pads), `R-144` (pad fabrication properties) — each say in their
-own words that the conversion loses a token and that *the count is the disclosure*.
+`preview_layered_route` accepts `include_fill_authority`. When true, CopperMCP refills a disposable
+private board copy with KiCad, admits cached fill only when the fresh refill reproduces it exactly,
+and routes with the verified islands.
 
-Until now those counts stopped at an in-process return value. From an MCP client the discard was
-**silent**, so four recorded mitigations rested on a channel no published surface carried. The
-direction of error was under-disclosure, and this closes it.
+### Request, response and literal changes
 
-Read them as follows.
+- Every layered preview response now has a `fill_authority` key. It is `null` except on a routed
+  proposal that requested and used verified fill.
+- A successful authority record includes one closed `routing_effect` literal from the same four
+  labels used by `preview_route`, selected over the signal layers the layered search reached.
+- A cached fill that the fresh KiCad refill does not reproduce returns the layered `stale_fill`
+  diagnostic rather than routing from either version.
+- `include_drc` and `include_fill_authority` may be requested together.
+- The ordered-layer adapter still refuses any one verified-fill island above 4,096 vertices with
+  `invalid_request`; it refuses the request rather than silently falling back to the zone envelope.
+  This limit affected 14 of 18 measured corpus boards, so callers opting in must handle that result.
 
-| Key | Means |
-|---|---|
-| `max_roundrect_rounding_nm` | The largest number of nanometres any roundrect corner radius was rounded **up** by. Zero on a board whose radii are already exact nanometres. A magnitude, not a count. |
-| `unmodelled_group_count` | Root `(group …)` expressions accepted and not modelled. A caller that moves one member breaks a grouping nothing told it about. A *locked* group refuses the board instead, so it never appears here. |
-| `edge_connector_pad_count` | Pads whose source token was `connect` and which converted as `smd`. Reading `kind == "smd"` cannot tell you the designer wrote `connect`. |
-| `unmodelled_board_property_count` | Root `(property "<key>" "<value>")` **expressions** — not KiCad map entries, so a document with a duplicate key has more expressions than entries. |
-| `unmodelled_pad_property_count` | Pad `(property <token>)` fabrication annotations on converted pads. |
+### Candidate and replay changes
 
-Every value is a non-negative integer. **None of them names anything**: not which pads, not which
-keys, not which groups. A count is not a set, and no CopperMCP surface refuses an operation on a
-board carrying one.
+`LayeredRouteCandidate` gains `fill_binding`, the content address of the verified fill that produced
+the route. Replay with different fill evidence refuses with
+`fill_evidence_mismatch` (`LayeredRouteFailureCode.FILL_EVIDENCE_MISMATCH`). The equality check is
+required in both directions: a stricter model can change the route, and a looser model can confirm
+geometry the router never proved.
 
-An **unsupported** board reports `{}` rather than zeros. A refused conversion measured nothing, and
-zeros would claim it measured zero.
+When `fill_binding` is `null`, the field is omitted from canonical identity and all previously
+pinned layered candidate identities remain unchanged. When it is non-null, persist and replay the
+matching fill evidence with the candidate.
 
-### The shape is one map on purpose
+### Surfaces that deliberately refuse the flag
 
-There are five counters and one field, because this set grew from two to five without anyone
-noticing that none of them reached a client. A sixth counter is now an **entry** rather than a
-contract change: `tests/test_board_ir_service.py::test_every_measured_conversion_field_appears_in_the_summary_map`
-reflects over `ConversionResult` and fails until the new counter is mapped.
+- Durable routing jobs reject `include_fill_authority` and reject a fill-bound candidate, because
+  the durable job record cannot carry the replay evidence required downstream.
+- `preview_live_layered_route` pins the flag to `false` and refuses an explicit `true`, because
+  file-cache freshness cannot prove the fill of a possibly unsaved IPC editor snapshot.
+
+Closed request/response decoders must accept the new preview input, response key, candidate field,
+`stale_fill` diagnostic and `fill_evidence_mismatch` replay code. Do not send the flag to live or
+durable layered surfaces.
+
+## 10. Evaluation and cross-router benchmark artifact outputs
+
+### Excessive-agency evaluation records an unconvertible family
+
+The excessive-agency evaluator no longer aborts the whole artifact at the first board family that
+cannot convert. It records every scenario in that family as:
+
+- status `not_run`; and
+- reason `board_does_not_convert_to_board_ir`.
+
+To prevent a quiet all-skipped family from looking healthy, the artifact gains a fourth coverage
+control literal: `every-accepted-format-family-is-actually-exercised`. Evaluation consumers that
+expect an exception, only three controls, or a closed set without the new reason must be updated.
+
+### Cross-router comparison is a typed artifact, including `not_run` rows
+
+`scripts/benchmark_cross_router_comparison.py` publishes one row for every declared baseline. A
+baseline that was not measured remains present with a typed `not_run` result and a reason derived
+from the licence or environment precondition that was actually unmet. Consumers must not treat a
+missing measurement as a missing row or retain a stale reason after the environment changes.
+
+The artifact also publishes `measured_rows: 1` and `comparison_supported: false`; those literals
+mean the one measured CopperMCP row supports no comparative conclusion. Its metric set deliberately
+contains no DRC field. This is a new benchmark artifact rather than a runtime MCP contract, but any
+closed artifact reader must accept its typed rows and non-claim fields.
+
+## 11. CI and release-operator behavior
+
+The repository's release accepted state is stricter in 0.9.0. Operators carrying the upstream
+workflows or running `make check` must account for these gates:
+
+- `scripts/check_ci_budgets.py` requires every explicit job-level `timeout-minutes` to have hosted
+  success-only calibration and to satisfy the half rule. Failed or cancelled jobs cannot calibrate
+  a ceiling. At this release boundary the declared budgets are 120 minutes for CI, 120 minutes for
+  release verification and 10 minutes for release publication.
+- `scripts/check_ledgers.py` now refuses a `Ready` authorization that has neither a matching
+  published-release row nor an explicit outstanding-publication marker. Record publication the
+  same day rather than leaving the authorization open.
+- `scripts/check_commit_message.py --range` validates pull-request commits server-side; an empty or
+  unresolvable range is a failure. Do not rely only on the local `commit-msg` hook.
+- `scripts/check_schema_sets.py` and `scripts/check_drc_comparability.py` are release gates, and the
+  audio-benchmark and Circuit Intent checkers now run in hosted CI as well as locally. During a
+  release cut, only the final tag matching `pyproject.toml` may be listed but not yet present;
+  historical missing tags and any unlisted repository tag still fail. Once the final tag exists,
+  it joins the historical comparison automatically.
+- The release environment must install `.[dev,security]`. `pip-audit` is in the `security` extra,
+  not the `dev` extra.
+
+The refusal-message golden set is a regression detector, not a promise that the prose is a stable
+public literal. Continue branching on typed codes rather than message text.
+
+## 12. Release and deployment checklist
+
+Before switching traffic to 0.9.0, verify all of the following:
+
+- all persisted Board IR was regenerated from source `.kicad_pcb` to `0.4.0`;
+- candidate and scene caches were invalidated where a custom-pad snapshot digest moved;
+- Board IR clients handle `schema.version` and report `ir_schema_version: "0.4.0"`;
+- Scene clients accept Scene `0.4.0` and the custom-envelope geometry literals;
+- placement clients handle `inconclusive` without treating it as either proof or violation;
+- Board IR inspection clients accept the additive six-entry `unmodelled_counts` map;
+- routing clients handle `unsupported_geometry`, `obstacle_check_budget_exceeded`, `stale_fill`
+  and `fill_evidence_mismatch` at the surfaces described above;
+- benchmark consumers require DRC `comparability` before computing a differential;
+- layered preview clients persist matching fill evidence when `fill_binding` is non-null; and
+- release operators keep `.github/ci-budget-calibration.json` synchronized with successful hosted
+  durations and install `.[dev,security]` so the release gate includes `pip-audit`.
+
+The remaining Unreleased CHANGELOG entries are measurements, research records, licensing
+corrections or documentation. They do not change a runtime output, public literal, accepted set or
+release gate and therefore require no deployment migration.

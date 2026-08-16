@@ -6,6 +6,14 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-16
+
+Upgrading from 0.8.0: see the
+[0.9.0 migration note](docs/migrations/copper-mcp-0.9.0.md). A deployment moves from Board IR
+`0.2.0` to `0.4.0` through two non-automatic accepted-set moves; after installing 0.9.0,
+re-convert once from each source `.kicad_pcb`, then update callers for the public output and refusal
+literals documented there.
+
 ### Added
 
 - **Board IR 0.4 adds conservative custom-pad copper envelopes** ([migration note](docs/migrations/board-ir-0.4.md)). The optional `Pad.copper_envelope` field records the local AABB needed by obstacle readers while the existing pad shape and size remain the attachment core used by connectivity and keep-in claims. The 0.3.0 schema is frozen; the active decoder accepts 0.4.0 only. Ordinary boards retain their content and snapshot digests, while custom-pad content addresses include the envelope. Scene 0.4 discloses anchor and envelope geometry together with `copper_envelope_frame: "pad_local"`. Custom primitive vertices are charged against the caller's per-ring and aggregate parse budgets even though only their envelope survives in Board IR. On B-117's dated, frozen 18-save selection, conversion measured **13→15** as predicted; this is an envelope representation, not an exact custom-primitive or KiCad-parity claim.
@@ -96,14 +104,15 @@ All notable changes are documented here. The format follows
   behaviour: the largest pour measured anywhere in the corpus is 130,305 vertices.
 
 - **`inspect_board_ir` discloses what the conversion accepted and did not model.** `BoardIrSummary`
-  gains one `unmodelled_counts` map carrying all five `ConversionResult` measured fields —
-  roundrect rounding, unmodelled groups, edge-connector pads, unmodelled root board properties and
-  unmodelled pad fabrication properties. Four of the five are the disclosure `R-134`, `R-139`,
-  `R-141` and `R-144` each name as their mitigation, and until now **none of them reached an MCP
-  client**, so four recorded mitigations were partial and the direction of error was
-  under-disclosure. It is an **additive optional output field**: no existing field moves, no
-  content address is involved, and `models.SCHEMA_VERSION` stays `1.0`. One map rather than five
-  fields, so a sixth counter is an entry rather than a contract change — a contract test reflects
+  gains one `unmodelled_counts` map carrying all six `ConversionResult` measured fields —
+  roundrect rounding, unmodelled groups, edge-connector pads, unmodelled root board properties,
+  unmodelled pad fabrication properties and pad thermal-bridge-angle overrides. Five of the six are
+  the disclosures `R-134`, `R-139`, `R-141`, `R-144` and `R-158` each name as their mitigation;
+  before this release the first four reached no MCP client, so those recorded mitigations were
+  partial and the direction of error was under-disclosure. It is an **additive optional output
+  field**: no existing field moves, no content address is involved, and `models.SCHEMA_VERSION`
+  stays `1.0`. One map rather than six
+  fields, so a seventh counter is an entry rather than a contract change — a contract test reflects
   over `ConversionResult` and fails until a new counter is mapped. An unsupported board reports
   `{}`, because a refused conversion measured nothing and zeros would claim it measured zero. See
   [the 0.9.0 migration note](docs/migrations/copper-mcp-0.9.0.md).
@@ -118,7 +127,7 @@ All notable changes are documented here. The format follows
     from [`.github/ci-budget-calibration.json`](.github/ci-budget-calibration.json). The `v0.7.0`
     release run was cancelled by a 20-minute budget derived from a *local* 20m29s measurement; the
     hosted gate takes 34m59s. `ci.yml` gains its first timeout budget ever, 120 minutes against a
-    measured worst leg of 34m48s.
+    measured worst leg of 36m18s at the 0.9.0 release boundary.
   - `scripts/check_commit_message.py` gains a `--range` mode and runs in CI over the pull request's
     own commits. It previously existed only as a client-side `commit-msg` hook, whose swallowed
     rejection reached `main` twice. An unresolvable **or empty** range is a failure, not a pass.
@@ -178,18 +187,24 @@ never copper dropped — and sizing that ceiling belongs to
 - The layered preview response gains a `fill_authority` key on every outcome (`null` except on a
   routed proposal that asked for one), and the layered candidate document gains `fill_binding`
   (`null` in the ordinary case).
-- **`BOARD_IR_SCHEMA_VERSION` moves from `0.2.0` to `0.3.0`, and `0.2.0` is frozen where it
-  stands.** `schemas/board-ir/0.3.0.schema.json` is the accepted set for a new document;
-  `schemas/board-ir/0.2.0.schema.json` is byte-frozen at its `v0.8.0` bytes and is **not** corrected
-  retroactively. A persisted `0.2.0` envelope no longer decodes — the codec refuses it with a typed
-  discriminated `schema.version` code — so re-convert from the source `.kicad_pcb`; there is no
-  auto-migration, exactly as `0.1` → `0.2` had none. `BoardIrSummary.ir_schema_version` now reports
-  `0.3.0`. Both frozen schemas, `board-ir/0.1.0` and `board-ir/0.2.0`, carry a **sha256 pin of
-  their published bytes**: an accepted-set gate cannot enforce a byte freeze, and a review proved
-  it by rewriting all 2,046 lines of `0.2.0` while everything stayed green.
-  **No content address moves:** the snapshot digest, the constraint digest and the source revision
-  are byte-identical, the encoded envelope is 4,280 bytes before and after, and it differs at
-  exactly one byte — proved by construction, not asserted. The migration note states plainly that
+- **The first 0.9.0 accepted-set hop moves `BOARD_IR_SCHEMA_VERSION` from `0.2.0` to
+  `0.3.0`; the later custom-pad hop moves it again to the shipped `0.4.0`.**
+  `schemas/board-ir/0.3.0.schema.json` is the frozen intermediate accepted set, while
+  `schemas/board-ir/0.4.0.schema.json` is the accepted set for every new 0.9.0 document.
+  `schemas/board-ir/0.2.0.schema.json` remains byte-frozen at its `v0.8.0` bytes and is **not**
+  corrected retroactively. Persisted `0.2.0` and `0.3.0` envelopes no longer decode — the codec
+  refuses them with a typed discriminated `schema.version` code — so re-convert from the source
+  `.kicad_pcb`; there is no auto-migration, exactly as `0.1` → `0.2` had none.
+  `BoardIrSummary.ir_schema_version` now reports the final shipped literal `0.4.0`. The frozen
+  schemas `board-ir/0.1.0`, `board-ir/0.2.0` and `board-ir/0.3.0` carry byte-integrity protection;
+  an accepted-set gate alone cannot enforce a byte freeze, and a review proved it by rewriting all
+  2,046 lines of `0.2.0` while everything stayed green.
+  **At the first `0.2.0` → `0.3.0` hop, no content address moves:** the snapshot digest, the
+  constraint digest and the source revision are byte-identical, the encoded envelope is 4,280
+  bytes before and after, and it differs at exactly one byte — proved by construction, not
+  asserted. The second hop is intentionally different: custom-pad snapshots gain
+  `copper_envelope`, so their content addresses move; ordinary-pad snapshots do not. The migration
+  note states plainly that
   **`0.2.0` as published spans three accepted sets across `v0.5.0`–`v0.8.0`** and that the
   authoritative copy for a snapshot is the one shipped alongside the release that produced it.
   ([ADR-0105](docs/adr/0105-a-schema-version-moves-with-its-accepted-set.md), `D-197`,
@@ -235,6 +250,16 @@ never copper dropped — and sizing that ceiling belongs to
   list omits. Twenty-two committed mutants — 21 killed, 1 survived and declared equivalent with its
   argument
   ([`docs/mutants/2026-08-14-schema-set-drift.json`](docs/mutants/2026-08-14-schema-set-drift.json)).
+
+### Fixed
+
+- **The schema accepted-set gate can now validate both sides of the first release that ships it.**
+  The explicit release-tag list may end with exactly one pending tag, and only when that tag matches
+  the project version. Pre-tag CI compares the working tree with the newest published tag; after the
+  tag exists, the same gate includes it in the historical sweep. Missing historical tags and
+  unlisted repository tags still fail. Without this release-boundary case, adding `v0.9.0` to the
+  reviewed list made pre-tag validation try to read a tag that the mandated sequence had not yet
+  created, while omitting it made the tag-triggered release gate reject the new tag.
 
 ### Documentation
 
@@ -3537,7 +3562,10 @@ reproducible only by the version that recorded it.
   lifetimes, timeouts, strict contract parsing, and before/after DRC-context revision checks.
 - The development dependency floor excludes pytest versions affected by `PYSEC-2026-1845`.
 
-[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.3.0...v0.4.0
