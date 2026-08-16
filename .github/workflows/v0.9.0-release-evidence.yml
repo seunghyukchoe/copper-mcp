@@ -1,4 +1,4 @@
-name: v0.9.0 release evidence
+name: v0.9.0 release authorization
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 env:
   SOURCE_SHA: d5affff0d404bef987d691f1ea50917f7ba5bc48
@@ -16,7 +17,7 @@ env:
   CODEQL_RUN: "31916332501"
   SCORECARD_RUN: "31916332548"
   INSERT_B64: >-
-    fCAwLjkuMCB8IDIwMjYtMDgtMTYgfCBgZDVhZmZmZjBkNDA0YmVmOTg3ZDY5MWYxZWE1MDkxN2Y3YmE1YmM0OGAgfCBFeGFjdC1zb3VyY2UgZmlsZS1iYWNrZWQgcmVsZWFzZSBnYXRlIFtydW4gMzE5MTQ1NjI4NTddKGh0dHBzOi8vZ2l0aHViLmNvbS9zZXVuZ2h5dWtjaG9lL2NvcHBlci1tY3AvYWN0aW9ucy9ydW5zLzMxOTE0NTYyODU3KSBib3VuZCBpdHNlbGYgdG8gdGhpcyBzb3VyY2UgYW5kIEtpQ2FkIDEwLjAuNSwgaW5zdGFsbGVkIGAuW2RldixzZWN1cml0eV1gLCBhbmQgcGFzc2VkIFJ1ZmYgbGludCwgUnVmZiBmb3JtYXQgb3ZlciA1MjAgZmlsZXMsIHN0cmljdCBteXB5IG92ZXIgOTkgc291cmNlIGZpbGVzLCBgY2hlY2tfdmVyc2lvbmAsIGBjaGVja19sZWRnZXJzYCwgYGNoZWNrX2Fkcl9udW1iZXJzYCwgYGNoZWNrX2RvY19saW5rc2AsIGBjaGVja19zY2hlbWFfc2V0c2AsIGBjaGVja19jaV9idWRnZXRzYCwgYGNoZWNrX2RyY19jb21wYXJhYmlsaXR5YCwgdGhlIGF1ZGlvIGFuZCBDaXJjdWl0IEludGVudCBjaGVja2VycywgdGhlIHNlY3JldCBzY2FuLCBgcGlwLWF1ZGl0YCB3aXRoIG5vIGtub3duIHZ1bG5lcmFiaWxpdGllcywgdGhlIGlzb2xhdGVkIHdoZWVsL3NkaXN0IGJ1aWxkLCB0aGUgUENNIHBhY2thZ2UgYnVpbGQgYW5kIGEgY2xlYW4gdHJhY2tlZCBkaWZmLiBUaGUgZnVsbCByZWFsLUtpQ2FkIHN1aXRlIHBhc3NlZCAqKjIsOTU5IHRlc3RzIHdpdGggNTMgZW52aXJvbm1lbnQgc2tpcHMqKiBpbiAyLDE5NC4xNiBzLiBUaGUgcnVuIGFsc28gZW1pdHRlZCBTSEEtMjU2IG1hbmlmZXN0cyBmb3IgdGhlIHdoZWVsIChgZTJmZDVlNjLigKZgKSwgc2Rpc3QgKGAwNWZiY2NmNeKApmApLCBQQ00gbWV0YWRhdGEgKGAwZWU2NTFhZOKApmApIGFuZCBQQ00gemlwIChgNGQ5OThlMTnigKZgKS4gVGhlIHNvbGUgZmFpbGluZyBjb21tYW5kIHdhcyBgY2hlY2tfdmVyc2lvbi5weSAtLXRhZyB2MC45LjBgLCB3aGljaCBjb3JyZWN0bHkgcmVmdXNlZCBiZWNhdXNlIG5vIGBSZWFkeWAgYXV0aG9yaXphdGlvbiByb3cgZXhpc3RlZCB5ZXQuIFRoZSBzb3VyY2UgaXMgdGhlcmVmb3JlIHZlcmlmaWVkIGJ1dCBkZWxpYmVyYXRlbHkgbm90IHRhZ2dhYmxlIGF0IHRoaXMgcm93LiB8IEJsb2NrZWQgfAp8IDAuOS4wIHwgMjAyNi0wOC0xNiB8IGBkNWFmZmZmMGQ0MDRiZWY5ODdkNjkxZjFlYTUwOTE3ZjdiYTViYzQ4YCB8IEV4YWN0LXNvdXJjZSBwdXNoIGV2aWRlbmNlIG9uIGBtYWluYCBwYXNzZWQgZm9yIHRoaXMgcmVsZWFzZSB0cmVlOiBbQ0kgcnVuIDMxOTE2MzMyNTA2XShodHRwczovL2dpdGh1Yi5jb20vc2V1bmdoeXVrY2hvZS9jb3BwZXItbWNwL2FjdGlvbnMvcnVucy8zMTkxNjMzMjUwNikgb24gUHl0aG9uIDMuMTEsIDMuMTIgYW5kIDMuMTMgd2l0aCB0aGUgZnVsbCBob3N0ZWQgc3VpdGUsIG1ldGFkYXRhL3NjaGVtYS9EUkMvYnVkZ2V0IGNoZWNrZXJzLCBzZWNyZXQgc2NhbiBhbmQgdGhlIFB5dGhvbiAzLjEyIHdoZWVsL3NkaXN0IGJ1aWxkOyBbU2VjdXJpdHkgcnVuIDMxOTE2MzMyNTA0XShodHRwczovL2dpdGh1Yi5jb20vc2V1bmdoeXVrY2hvZS9jb3BwZXItbWNwL2FjdGlvbnMvcnVucy8zMTkxNjMzMjUwNCksIGluY2x1ZGluZyB0aGUgZGVwZW5kZW5jeSBhdWRpdDsgW0NvZGVRTCBydW4gMzE5MTYzMzI1MDFdKGh0dHBzOi8vZ2l0aHViLmNvbS9zZXVuZ2h5dWtjaG9lL2NvcHBlci1tY3AvYWN0aW9ucy9ydW5zLzMxOTE2MzMyNTAxKTsgYW5kIFtPcGVuU1NGIFNjb3JlY2FyZCBydW4gMzE5MTYzMzI1NDhdKGh0dHBzOi8vZ2l0aHViLmNvbS9zZXVuZ2h5dWtjaG9lL2NvcHBlci1tY3AvYWN0aW9ucy9ydW5zLzMxOTE2MzMyNTQ4KS4gUFIgIzE5NCdzIGV4YWN0IGhlYWQgY2FycmllZCB0aGUgYnl0ZS1pZGVudGljYWwgdHJlZSBhbmQgaXRzIENJLCBTZWN1cml0eSBhbmQgQ29kZVFMIHJ1bnMgYWxzbyBwYXNzZWQuIFRoZSBwcmVjZWRpbmcgYEJsb2NrZWRgIHJvdydzIG1pc3NpbmcgYXV0aG9yaXphdGlvbiBwcmVyZXF1aXNpdGUgaXMgc3VwZXJzZWRlZCBieSB0aGlzIHJvdy4gVGhpcyBtZXRhZGF0YSBjb21taXQgYXV0aG9yaXplcyBgdjAuOS4wYCBvbmx5IGFmdGVyIGEgZnVsbCBmaWxlLWJhY2tlZCBnYXRlIHBhc3NlcyBvbiB0aGUgY29tbWl0IHRoYXQgd2lsbCBiZSB0YWdnZWQ7IHB1YmxpY2F0aW9uIG11c3QgdGhlbiBjb21lIGZyb20gdGhlIHRhZy10cmlnZ2VyZWQgcmVsZWFzZSB3b3JrZmxvdywgYW5kIGF1dGhvcml6YXRpb24gcmVtYWlucyBpbmNvbXBsZXRlIHVudGlsIGEgc2FtZS1kYXkgcHVibGlzaGVkLXJlbGVhc2Ugcm93IHJlY29yZHMgdGhlIHdvcmtmbG93IHJ1biBhbmQgYXR0ZXN0YXRpb24tdmVyaWZpY2F0aW9uIHZlcmRpY3QuIHwgUmVhZHkgfAo+Cj4gKipPdXRzdGFuZGluZyBwdWJsaWNhdGlvbiDigJQgMC45LjA6KiogdjAuOS4wIGlzIGF1dGhvcml6ZWQgYnV0IG5vdCB5ZXQgdGFnZ2VkLiBSZW1vdmUgdGhpcyBtYXJrZXIgb25seSBhZnRlciB0aGUgdGFnLXRyaWdnZXJlZCByZWxlYXNlIHdvcmtmbG93IGhhcyBwdWJsaXNoZWQgdGhlIGFydGlmYWN0cywgYm90aCBhcnRpZmFjdCBjbGFzc2VzIGhhdmUgYmVlbiB2ZXJpZmllZCBhZ2FpbnN0IEdpdEh1YiBhcnRpZmFjdCBhdHRlc3RhdGlvbnMsIGFuZCB0aGUgc2FtZS1kYXkgcHVibGlzaGVkLXJlbGVhc2Ugcm93IHJlY29yZHMgdGhlIHdvcmtmbG93IHJ1biBJRCBhbmQgdmVyaWZpY2F0aW9uIHZlcmRpY3QuCgo=
+    fCAwLjkuMCB8IDIwMjYtMDgtMTYgfCBgZDVhZmZmZjBkNDA0YmVmOTg3ZDY5MWYxZWE1MDkxN2Y3YmE1YmM0OGAgfCBFeGFjdC1zb3VyY2UgZmlsZS1iYWNrZWQgcmVsZWFzZSBnYXRlIFtydW4gMzE5MTQ1NjI4NTddKGh0dHBzOi8vZ2l0aHViLmNvbS9zZXVuZ2h5dWtjaG9lL2NvcHBlci1tY3AvYWN0aW9ucy9ydW5zLzMxOTE0NTYyODU3KSBib3VuZCBpdHNlbGYgdG8gdGhpcyBzb3VyY2UgYW5kIEtpQ2FkIDEwLjAuNSwgaW5zdGFsbGVkIGAuW2RldixzZWN1cml0eV1gLCBhbmQgcGFzc2VkIFJ1ZmYgbGludCwgUnVmZiBmb3JtYXQgb3ZlciA1MjAgZmlsZXMsIHN0cmljdCBteXB5IG92ZXIgOTkgc291cmNlIGZpbGVzLCBgY2hlY2tfdmVyc2lvbmAsIGBjaGVja19sZWRnZXJzYCwgYGNoZWNrX2Fkcl9udW1iZXJzYCwgYGNoZWNrX2RvY19saW5rc2AsIGBjaGVja19zY2hlbWFfc2V0c2AsIGBjaGVja19jaV9idWRnZXRzYCwgYGNoZWNrX2RyY19jb21wYXJhYmlsaXR5YCwgdGhlIGF1ZGlvIGFuZCBDaXJjdWl0IEludGVudCBjaGVja2VycywgdGhlIHNlY3JldCBzY2FuLCBgcGlwLWF1ZGl0YCB3aXRoIG5vIGtub3duIHZ1bG5lcmFiaWxpdGllcywgdGhlIGlzb2xhdGVkIHdoZWVsL3NkaXN0IGJ1aWxkLCB0aGUgUENNIHBhY2thZ2UgYnVpbGQgYW5kIGEgY2xlYW4gdHJhY2tlZCBkaWZmLiBUaGUgZnVsbCByZWFsLUtpQ2FkIHN1aXRlIHBhc3NlZCAqKjIsOTU5IHRlc3RzIHdpdGggNTMgZW52aXJvbm1lbnQgc2tpcHMqKiBpbiAyLDE5NC4xNiBzLiBUaGUgcnVuIGFsc28gZW1pdHRlZCBTSEEtMjU2IG1hbmlmZXN0cyBmb3IgdGhlIHdoZWVsIChgZTJmZDVlNjLigKZgKSwgc2Rpc3QgKGAwNWZiY2NmNeKApmApLCBQQ00gbWV0YWRhdGEgKGAwZWU2NTFhZOKApmApIGFuZCBQQ00gemlwIChgNGQ5OThlMTnigKZgKS4gVGhlIHNvbGUgZmFpbGluZyBjb21tYW5kIHdhcyBgY2hlY2tfdmVyc2lvbi5weSAtLXRhZyB2MC45LjBgLCB3aGljaCBjb3JyZWN0bHkgcmVmdXNlZCBiZWNhdXNlIG5vIGBSZWFkeWAgYXV0aG9yaXphdGlvbiByb3cgZXhpc3RlZCB5ZXQuIFRoZSBzb3VyY2UgaXMgdGhlcmVmb3JlIHZlcmlmaWVkIGJ1dCBkZWxpYmVyYXRlbHkgbm90IHRhZ2dhYmxlIGF0IHRoaXMgcm93LiB8IEJsb2NrZWQgfAp8IDAuOS4wIHwgMjAyNi0wOC0xNiB8IGBkNWFmZmZmMGQ0MDRiZWY5ODdkNjkxZjFlYTUwOTE3ZjdiYTViYzQ4YCB8IEV4YWN0LXNvdXJjZSBwdXNoIGV2aWRlbmNlIG9uIGBtYWluYCBwYXNzZWQgZm9yIHRoaXMgcmVsZWFzZSB0cmVlOiBbQ0kgcnVuIDMxOTE2MzMyNTA2XShodHRwczovL2dpdGh1Yi5jb20vc2V1bmdoeXVrY2hvZS9jb3BwZXItbWNwL2FjdGlvbnMvcnVucy8zMTkxNjMzMjUwNikgb24gUHl0aG9uIDMuMTEsIDMuMTIgYW5kIDMuMTMgd2l0aCB0aGUgZnVsbCBob3N0ZWQgc3VpdGUsIG1ldGFkYXRhL3NjaGVtYS9EUkMvYnVkZ2V0IGNoZWNrZXJzLCBzZWNyZXQgc2NhbiBhbmQgUHl0aG9uIDMuMTIgd2hlZWwvc2Rpc3QgYnVpbGQ7IFtTZWN1cml0eSBydW4gMzE5MTYzMzI1MDRdKGh0dHBzOi8vZ2l0aHViLmNvbS9zZXVuZ2h5dWtjaG9lL2NvcHBlci1tY3AvYWN0aW9ucy9ydW5zLzMxOTE2MzMyNTA0KSwgaW5jbHVkaW5nIHRoZSBkZXBlbmRlbmN5IGF1ZGl0OyBbQ29kZVFMIHJ1biAzMTkxNjMzMjUwMV0oaHR0cHM6Ly9naXRodWIuY29tL3NldW5naHl1a2Nob2UvY29wcGVyLW1jcC9hY3Rpb25zL3J1bnMvMzE5MTYzMzI1MDEpOyBhbmQgW09wZW5TU0YgU2NvcmVjYXJkIHJ1biAzMTkxNjMzMjU0OF0oaHR0cHM6Ly9naXRodWIuY29tL3NldW5naHl1a2Nob2UvY29wcGVyLW1jcC9hY3Rpb25zL3J1bnMvMzE5MTYzMzI1NDgpLiBQUiAjMTk0J3MgYnl0ZS1pZGVudGljYWwgZXhhY3QgaGVhZCBhbHNvIHBhc3NlZCBDSSBbMzE5MTQ0NzYzMjNdKGh0dHBzOi8vZ2l0aHViLmNvbS9zZXVuZ2h5dWtjaG9lL2NvcHBlci1tY3AvYWN0aW9ucy9ydW5zLzMxOTE0NDc2MzIzKSwgU2VjdXJpdHkgWzMxOTE0NDc2MzAzXShodHRwczovL2dpdGh1Yi5jb20vc2V1bmdoeXVrY2hvZS9jb3BwZXItbWNwL2FjdGlvbnMvcnVucy8zMTkxNDQ3NjMwMyksIGFuZCBDb2RlUUwgWzMxOTE0NDc2MzMwXShodHRwczovL2dpdGh1Yi5jb20vc2V1bmdoeXVrY2hvZS9jb3BwZXItbWNwL2FjdGlvbnMvcnVucy8zMTkxNDQ3NjMzMCkuIFRoaXMgbWV0YWRhdGEgY29tbWl0IGF1dGhvcml6ZXMgYHYwLjkuMGAgb25seSBhZnRlciBhIGZ1bGwgZmlsZS1iYWNrZWQgZ2F0ZSBwYXNzZXMgb24gdGhlIGNvbW1pdCB0aGF0IHdpbGwgYmUgdGFnZ2VkOyBwdWJsaWNhdGlvbiBtdXN0IHRoZW4gY29tZSBmcm9tIHRoZSB0YWctdHJpZ2dlcmVkIHJlbGVhc2Ugd29ya2Zsb3csIGFuZCBhdXRob3JpemF0aW9uIHJlbWFpbnMgaW5jb21wbGV0ZSB1bnRpbCBhIHNhbWUtZGF5IHB1Ymxpc2hlZC1yZWxlYXNlIHJvdyByZWNvcmRzIHRoZSB3b3JrZmxvdyBydW4gSUQgYW5kIGF0dGVzdGF0aW9uLXZlcmlmaWNhdGlvbiB2ZXJkaWN0LiB8IFJlYWR5IHwKCj4gKipPdXRzdGFuZGluZyBwdWJsaWNhdGlvbiDigJQgMC45LjA6KiogdjAuOS4wIGlzIGF1dGhvcml6ZWQgYnV0IG5vdCB5ZXQgdGFnZ2VkLiBSZW1vdmUgdGhpcyBtYXJrZXIgb25seSBhZnRlciB0aGUgdGFnLXRyaWdnZXJlZCByZWxlYXNlIHdvcmtmbG93IGhhcyBwdWJsaXNoZWQgdGhlIGFydGlmYWN0cywgYm90aCBhcnRpZmFjdCBjbGFzc2VzIGhhdmUgYmVlbiB2ZXJpZmllZCBhZ2FpbnN0IEdpdEh1YiBhcnRpZmFjdCBhdHRlc3RhdGlvbnMsIGFuZCB0aGUgc2FtZS1kYXkgcHVibGlzaGVkLXJlbGVhc2Ugcm93IHJlY29yZHMgdGhlIHdvcmtmbG93IHJ1biBJRCBhbmQgdmVyaWZpY2F0aW9uIHZlcmRpY3QuCgo=
   ANCHOR_B64: PiAqKnYwLjUuMCBhdXRob3JpemF0aW9uIGNvcnJlY3Rpb24=
 
 jobs:
@@ -40,18 +41,14 @@ jobs:
               conclusion="$(jq -r '.conclusion // ""' "authorization-logs/run-${run_id}.json")"
               test "$head_sha" = "${SOURCE_SHA}"
               if [ "$status" = completed ]; then
-                if [ "$conclusion" != success ]; then
-                  printf 'run %s completed with %s\n' "$run_id" "$conclusion" > "authorization-logs/run-${run_id}-failure.log"
-                  cat "authorization-logs/run-${run_id}-failure.log"
-                  exit 1
-                fi
+                test "$conclusion" = success
                 break
               fi
               sleep 30
             done
           done
 
-      - name: Check out the authorization branch
+      - name: Check out authorization branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.AUTH_BRANCH }}
@@ -61,6 +58,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p authorization-logs
           git rev-parse HEAD > authorization-logs/source-sha.log 2>&1
           cat authorization-logs/source-sha.log
           test "$(cat authorization-logs/source-sha.log)" = "${SOURCE_SHA}"
@@ -71,15 +69,6 @@ jobs:
           git status --porcelain=v1 > authorization-logs/status.log 2>&1
           cat authorization-logs/status.log
           test "$(cat authorization-logs/status.log)" = ' M docs/ledgers/release-ledger.md'
-
-      - name: Validate authorization metadata
-        shell: bash
-        run: |
-          set -euo pipefail
-          python scripts/check_ledgers.py > authorization-logs/check-ledgers.log 2>&1
-          cat authorization-logs/check-ledgers.log
-          python scripts/check_version.py --tag v0.9.0 > authorization-logs/check-version-tag.log 2>&1
-          cat authorization-logs/check-version-tag.log
 
       - name: Commit authorization metadata
         shell: bash
@@ -100,6 +89,18 @@ jobs:
           git log -1 --pretty=%s > authorization-logs/git-subject.log 2>&1
           cat authorization-logs/git-subject.log
           grep -Fxq 'chore(release): authorize v0.9.0' authorization-logs/git-subject.log
+
+      - name: Validate committed authorization metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/check_ledgers.py > authorization-logs/check-ledgers.log 2>&1
+          cat authorization-logs/check-ledgers.log
+          python scripts/check_version.py --tag v0.9.0 > authorization-logs/check-version-tag.log 2>&1
+          cat authorization-logs/check-version-tag.log
+          git status --porcelain=v1 > authorization-logs/final-status.log 2>&1
+          cat authorization-logs/final-status.log
+          test ! -s authorization-logs/final-status.log
 
       - name: Push authorization branch
         shell: bash
