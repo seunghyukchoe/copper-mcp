@@ -1,0 +1,60 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "LFV01-aggregate-ceiling-removed",
+      "file": "src/copper_mcp/routing/layered_board_adapter.py",
+      "anchor": "        total_vertices += len(island.points)\n        if total_vertices > _MAX_VERIFIED_FILL_VERTICES:\n",
+      "replacement": "        total_vertices += len(island.points)\n        if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_board_adapter.py::test_verified_fill_aggregate_walk_has_an_exact_obstacle_check_ceiling"
+      ]
+    },
+    {
+      "id": "LFV02-aggregate-ceiling-collapses-per-island-gate",
+      "file": "src/copper_mcp/routing/layered_board_adapter.py",
+      "anchor": "_MAX_VERIFIED_FILL_VERTICES = _MAX_OBSTACLE_CHECKS\n",
+      "replacement": "_MAX_VERIFIED_FILL_VERTICES = _MAX_FILL_VERTICES\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_board_adapter.py::test_verified_fill_aggregate_walk_has_an_exact_obstacle_check_ceiling",
+        "tests/test_layered_board_adapter.py::test_unbounded_verified_fill_is_refused_before_any_bounding_box_work"
+      ]
+    },
+    {
+      "id": "LFV03-propose-skips-aggregate-preflight",
+      "file": "src/copper_mcp/routing/layered_board_adapter.py",
+      "anchor": "        over_budget = _verified_fill_over_check_budget(request.verified_fill)\n        if over_budget is not None:\n            return _diagnostic(\n                LayeredRouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED,\n                over_budget,\n            )\n        malformed = _invalid_verified_fill(request.verified_fill)\n        if malformed is not None:\n            return _diagnostic(LayeredRouteFailureCode.INVALID_REQUEST, malformed)\n        snapshot_obj: object = snapshot\n",
+      "replacement": "        malformed = _invalid_verified_fill(request.verified_fill)\n        if malformed is not None:\n            return _diagnostic(LayeredRouteFailureCode.INVALID_REQUEST, malformed)\n        snapshot_obj: object = snapshot\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_board_adapter.py::test_verified_fill_aggregate_budget_is_typed_and_matches_replay_without_echo"
+      ]
+    },
+    {
+      "id": "LFV04-replay-skips-aggregate-preflight",
+      "file": "src/copper_mcp/routing/layered_board_adapter.py",
+      "anchor": "        over_budget = _verified_fill_over_check_budget(request.verified_fill)\n        if over_budget is not None:\n            return _diagnostic(\n                LayeredRouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED,\n                over_budget,\n            )\n        malformed = _invalid_verified_fill(request.verified_fill)\n        if malformed is not None:\n            return _diagnostic(LayeredRouteFailureCode.INVALID_REQUEST, malformed)\n        if fill_binding_for(request.verified_fill) != candidate.fill_binding:\n",
+      "replacement": "        malformed = _invalid_verified_fill(request.verified_fill)\n        if malformed is not None:\n            return _diagnostic(LayeredRouteFailureCode.INVALID_REQUEST, malformed)\n        if fill_binding_for(request.verified_fill) != candidate.fill_binding:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_board_adapter.py::test_verified_fill_aggregate_budget_is_typed_and_matches_replay_without_echo"
+      ]
+    },
+    {
+      "id": "LFV05-preview-loses-safe-budget-message",
+      "file": "src/copper_mcp/layered_route_preview.py",
+      "anchor": "        LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,\n        LayeredRouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED,\n        LayeredRouteFailureCode.SEARCH_BUDGET_EXCEEDED,\n",
+      "replacement": "        LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,\n        LayeredRouteFailureCode.SEARCH_BUDGET_EXCEEDED,\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_route_preview.py::test_obstacle_check_budget_refusal_uses_the_safe_preview_message"
+      ]
+    }
+  ]
+}

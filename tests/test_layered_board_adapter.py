@@ -911,6 +911,76 @@ def test_unbounded_verified_fill_is_refused_before_any_bounding_box_work() -> No
         assert expected in refusal.diagnostic.message
 
 
+def test_verified_fill_aggregate_walk_has_an_exact_obstacle_check_ceiling() -> None:
+    import copper_mcp.routing.layered_board_adapter as adapter
+
+    points = (PointNM(0, 0),) * 4_096
+    island = VerifiedFill(
+        net_id=FILL_NET_ID,
+        layer_id=LAYER_ID,
+        points=points,
+        source_revision=FIXTURE_REVISION,
+    )
+
+    assert adapter._verified_fill_over_check_budget((island,) * 2_441) is None
+    assert adapter._verified_fill_over_check_budget((island,) * 2_442) is not None
+    assert adapter._verified_fill_over_check_budget([island]) is None
+    assert adapter._verified_fill_over_check_budget(("secret",)) is None
+
+
+def test_verified_fill_aggregate_preflight_reads_lengths_without_touching_vertices() -> None:
+    import copper_mcp.routing.layered_board_adapter as adapter
+
+    class LengthOnlyPoints(tuple[PointNM, ...]):
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            raise AssertionError("aggregate preflight iterated fill vertices")
+
+        def __getitem__(self, index):  # type: ignore[no-untyped-def]
+            raise AssertionError("aggregate preflight accessed a fill vertex")
+
+    points = LengthOnlyPoints((PointNM(0, 0),) * 4_096)
+    island = VerifiedFill(
+        net_id=FILL_NET_ID,
+        layer_id=LAYER_ID,
+        points=points,
+        source_revision=FIXTURE_REVISION,
+    )
+
+    assert adapter._verified_fill_over_check_budget((island,) * 2_441) is None
+    assert adapter._verified_fill_over_check_budget((island,) * 2_442) is not None
+
+
+def test_verified_fill_aggregate_budget_is_typed_and_matches_replay_without_echo() -> None:
+    snapshot = _fill_snapshot()
+    router = LayeredBoardRouter()
+    candidate = _candidate(router.propose(snapshot, _request(snapshot)))
+    points = (PointNM(0, 0),) * 4_096
+    island = VerifiedFill(
+        net_id=FILL_NET_ID,
+        layer_id=LAYER_ID,
+        points=points,
+        source_revision=FIXTURE_REVISION,
+    )
+    request = _request(snapshot, verified_fill=(island,) * 2_442)
+
+    proposed = router.propose(snapshot, request)
+    replayed = router.replay(snapshot, candidate, request)
+    malformed = router.propose(snapshot, replace(request, seed=-1))
+
+    for refusal in (proposed, replayed):
+        assert refusal.candidate is None
+        assert refusal.diagnostic is not None
+        assert refusal.diagnostic.code is LayeredRouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED
+        assert refusal.diagnostic.message == (
+            "verified fill vertex count exceeds the fill-validation ceiling "
+            "(max_verified_fill_vertices=10000000)"
+        )
+        assert FILL_NET_ID not in refusal.diagnostic.message
+    assert malformed.diagnostic is not None
+    assert malformed.diagnostic.code is LayeredRouteFailureCode.INVALID_REQUEST
+    assert malformed.diagnostic.message == "seed is malformed"
+
+
 def test_verified_fill_envelopes_are_charged_against_the_obstacle_budget() -> None:
     """Two islands cost more budget than the single envelope they replaced, and are billed.
 

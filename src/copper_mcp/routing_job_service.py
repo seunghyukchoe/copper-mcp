@@ -375,6 +375,9 @@ def _failure_code(code: LayeredRouteFailureCode) -> RoutingJobFailureCode:
         LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED: (
             RoutingJobFailureCode.OBSTACLE_BUDGET_EXCEEDED
         ),
+        LayeredRouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED: (
+            RoutingJobFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED
+        ),
         LayeredRouteFailureCode.GRID_BUDGET_EXCEEDED: RoutingJobFailureCode.SEARCH_BUDGET_EXCEEDED,
         LayeredRouteFailureCode.CANCELLED: RoutingJobFailureCode.CANCELLED,
     }

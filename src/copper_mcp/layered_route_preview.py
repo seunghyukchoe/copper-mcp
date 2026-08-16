@@ -252,6 +252,7 @@ def _safe_router_message(code: LayeredRouteFailureCode) -> str:
     if code in {
         LayeredRouteFailureCode.GRID_BUDGET_EXCEEDED,
         LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+        LayeredRouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED,
         LayeredRouteFailureCode.SEARCH_BUDGET_EXCEEDED,
     }:
         return "layered route search reached its configured budget"

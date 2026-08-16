@@ -6,6 +6,14 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Ordered-layer verified-fill validation now refuses aggregate polygon walks above the existing
+  10,000,000 obstacle-check ceiling before inspecting vertices. The O(islands) preflight preserves
+  the independent 4,096-vertex per-island refusal and propagates the typed
+  `obstacle_check_budget_exceeded` result through preview and durable-job contracts
+  ([issue #189](https://github.com/seunghyukchoe/copper-mcp/issues/189), `D-208`, `SEC-149`).
+
 ## [0.9.0] - 2026-08-16
 
 Upgrading from 0.8.0: see the
