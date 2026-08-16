@@ -14,8 +14,9 @@ All notable changes are documented here. The format follows
   from `copper_mcp.routing` but is deliberately not exposed through MCP, CLI, apply, persistence or
   benchmark code in this slice ([ADR-0112](docs/adr/0112-external-route-candidates-enter-through-a-disposer.md),
   [issue #99](https://github.com/seunghyukchoe/copper-mcp/issues/99), `D-209`, `R-161`, `SEC-150`).
-- The disposer now also accepts a closed multi-path v2 route patch and proves that every submitted
-  path joins every coordinator-derived pad component. B-120 replays all 70 routed B-088 nets at
+- The disposer now also accepts a closed multi-path v2 route patch, including a single-leg
+  completion of a partially routed multi-pin net, and proves that every submitted path joins every
+  coordinator-derived pad component. B-120 replays all 70 routed B-088 nets at
   70/70 acceptance and preserves four distinct predeclared perturbation refusals; geometry remains
   absent from the self-digested result artifact and physical validation remains `not_run`
   ([ADR-0113](docs/adr/0113-external-route-patches-preserve-multi-pin-topology.md), `D-210`,

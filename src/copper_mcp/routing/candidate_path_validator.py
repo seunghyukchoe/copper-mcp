@@ -755,7 +755,7 @@ def validate_candidate_patch(
         or checked_candidate.pad_count <= 2
         or checked_candidate.ordering_policy != EXTERNAL_PATCH_TREE_ORDERING
         or checked_candidate.fill_binding is not None
-        or len(checked_candidate.patch.paths) < 2
+        or not checked_candidate.patch.paths
         or checked_candidate.metrics.vias != 0
     ):
         return _result(None, 0, CandidatePathValidationFailure.INVALID_CANDIDATE)

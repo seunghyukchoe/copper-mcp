@@ -410,7 +410,7 @@ def _verify_external_patch(
     deadline_check: CancellationCheck | None,
 ) -> ExternalCandidateVerificationResult:
     raw_paths = document.get("paths")
-    if type(raw_paths) is not list or not 2 <= len(raw_paths) <= _MAX_SEGMENTS:
+    if type(raw_paths) is not list or not 1 <= len(raw_paths) <= _MAX_SEGMENTS:
         return _refused(ExternalCandidateFailure.INVALID_CANDIDATE)
     if len(raw_paths) > pad_count - 1:
         return _refused(ExternalCandidateFailure.INVALID_CANDIDATE)

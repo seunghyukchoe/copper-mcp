@@ -30,6 +30,9 @@ the coordinator-derived pad components under the same obstacle-check work meter.
 requires one component containing every pad component and every submitted path. A disconnected
 branch is `infeasible`; malformed continuity, endpoints, layers and obstacle collisions retain the
 existing typed codes. The exact off-grid fallback still upgrades only a physically proven collision.
+The bounded path list may contain one through `pad_count - 1` paths: existing same-net copper can
+leave a multi-pin net only one merge short, and the connectivity proof—not an assumed minimum path
+count—decides whether that single submitted leg completes the tree.
 
 The production seam remains core-only and read-only. MCP, CLI, persistence, apply, repair, KiCad
 DRC and physical validation remain outside this increment.

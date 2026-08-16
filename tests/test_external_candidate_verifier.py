@@ -159,6 +159,33 @@ def _three_pad_snapshot():
     )
 
 
+def _partially_routed_three_pad_snapshot():
+    snapshot = _three_pad_snapshot()
+    return make_snapshot(
+        replace(
+            snapshot.content,
+            segments=(
+                Segment(
+                    id="segment:route-left-to-branch",
+                    net_id=ROUTE_NET,
+                    layer_id=LAYER,
+                    start=PointNM(1_000_000, 5_000_000),
+                    end=PointNM(5_000_000, 5_000_000),
+                    width_nm=200_000,
+                ),
+                Segment(
+                    id="segment:route-branch-to-middle",
+                    net_id=ROUTE_NET,
+                    layer_id=LAYER,
+                    start=PointNM(5_000_000, 5_000_000),
+                    end=PointNM(5_000_000, 8_000_000),
+                    width_nm=200_000,
+                ),
+            ),
+        )
+    )
+
+
 def _point(x_nm: int, y_nm: int) -> dict[str, int]:
     return {"x_nm": x_nm, "y_nm": y_nm}
 
@@ -261,6 +288,26 @@ def test_accepts_a_deterministic_multi_path_tree_without_exposing_paths() -> Non
     assert results[0].edge_checks == 11
     rendered = results[0].to_dict()
     assert not ({"paths", "segments", "vias", "geometry", "apply_token"} & rendered.keys())
+
+
+def test_accepts_one_path_that_completes_a_partially_routed_multi_pin_net() -> None:
+    snapshot = _partially_routed_three_pad_snapshot()
+    request = _request(snapshot)
+    document = _patch_document(request)
+    document["paths"] = [
+        {
+            "segments": [
+                _segment((5_000_000, 8_000_000), (9_000_000, 8_000_000)),
+                _segment((9_000_000, 8_000_000), (9_000_000, 5_000_000)),
+            ]
+        }
+    ]
+
+    result = _verify(snapshot, request, document)
+
+    assert result.accepted
+    assert result.segment_count == 2
+    assert result.candidate_id is not None
 
 
 def test_multi_path_tree_requires_every_submitted_path_to_join_every_pad_component() -> None:
