@@ -24,7 +24,7 @@ from copper_mcp.layered_route_preview import (
     preview_layered_route,
 )
 from copper_mcp.models import DrcSummary
-from copper_mcp.routing import fill_binding_for
+from copper_mcp.routing import LayeredRouteFailureCode, fill_binding_for
 
 FIXTURE = Path(__file__).parent / "fixtures" / "route-candidate" / "two-pad.kicad_pcb"
 BLOCKED_PAD_FIXTURE = (
@@ -85,6 +85,13 @@ def _request(
     }
     request.update(overrides)
     return request
+
+
+def test_obstacle_check_budget_refusal_uses_the_safe_preview_message() -> None:
+    assert (
+        layered_preview._safe_router_message(LayeredRouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED)
+        == "layered route search reached its configured budget"
+    )
 
 
 def test_routed_result_is_deterministic_and_contains_only_canonical_geometry(

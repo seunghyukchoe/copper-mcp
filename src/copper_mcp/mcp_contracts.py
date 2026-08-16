@@ -1621,6 +1621,7 @@ class LayeredRouteDiagnosticContract(_ClosedContract):
         "off_grid",
         "grid_budget_exceeded",
         "obstacle_budget_exceeded",
+        "obstacle_check_budget_exceeded",
         "search_budget_exceeded",
         "cancelled",
         #: ``fill_evidence_mismatch`` is deliberately absent, exactly as it is absent from
@@ -1833,6 +1834,7 @@ class RoutingJobToolResponse(_ClosedContract):
             "no_path",
             "search_budget_exceeded",
             "obstacle_budget_exceeded",
+            "obstacle_check_budget_exceeded",
             "worker_error",
             "cancelled",
         ]

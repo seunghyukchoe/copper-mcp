@@ -76,6 +76,7 @@ _MAX_NODES = 500_000
 _MAX_OBSTACLES = 4_096
 _MAX_OBSTACLE_CHECKS = 10_000_000
 _MAX_FILL_VERTICES = 4_096
+_MAX_VERIFIED_FILL_VERTICES = _MAX_OBSTACLE_CHECKS
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,7 +194,30 @@ def _invalid_request(request: object) -> str | None:
         or not 0 <= settings_obj.max_vias <= MAX_EXPLICIT_VIAS
     ):
         return "via budget must be a non-negative integer"
-    return _invalid_verified_fill(request.verified_fill)
+    return None
+
+
+def _verified_fill_over_check_budget(fill: object) -> str | None:
+    """Bound the aggregate fill walk without inspecting a single vertex.
+
+    Structural mistakes are left to :func:`_invalid_verified_fill`, which owns malformed-input
+    diagnostics.  This pass reads at most one length per admitted island and stops at the first
+    prefix that exceeds the existing obstacle-check domain ceiling.
+    """
+
+    if not isinstance(fill, tuple) or len(fill) > _MAX_OBSTACLES:
+        return None
+    total_vertices = 0
+    for island in fill:
+        if not isinstance(island, VerifiedFill) or not isinstance(island.points, tuple):
+            return None
+        total_vertices += len(island.points)
+        if total_vertices > _MAX_VERIFIED_FILL_VERTICES:
+            return (
+                "verified fill vertex count exceeds the fill-validation ceiling "
+                f"(max_verified_fill_vertices={_MAX_VERIFIED_FILL_VERTICES})"
+            )
+    return None
 
 
 def _invalid_verified_fill(fill: object) -> str | None:
@@ -532,6 +556,22 @@ class LayeredBoardRouter:
             return _diagnostic(
                 LayeredRouteFailureCode.INVALID_REQUEST, "request must be a LayeredRouteRequest"
             )
+        malformed = _invalid_request(request)
+        if malformed is not None:
+            if (
+                request.expected_revision is not None
+                and _digest(request.board_revision)
+                and _digest(request.expected_revision)
+                and request.expected_revision != request.board_revision
+            ):
+                return _diagnostic(LayeredRouteFailureCode.STALE_REVISION, malformed)
+            return _diagnostic(LayeredRouteFailureCode.INVALID_REQUEST, malformed)
+        over_budget = _verified_fill_over_check_budget(request.verified_fill)
+        if over_budget is not None:
+            return _diagnostic(
+                LayeredRouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED,
+                over_budget,
+            )
         malformed = _invalid_verified_fill(request.verified_fill)
         if malformed is not None:
             return _diagnostic(LayeredRouteFailureCode.INVALID_REQUEST, malformed)
@@ -560,6 +600,15 @@ class LayeredBoardRouter:
                 and request.expected_revision != request.board_revision
             ):
                 return _diagnostic(LayeredRouteFailureCode.STALE_REVISION, malformed)
+            return _diagnostic(LayeredRouteFailureCode.INVALID_REQUEST, malformed)
+        over_budget = _verified_fill_over_check_budget(request.verified_fill)
+        if over_budget is not None:
+            return _diagnostic(
+                LayeredRouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED,
+                over_budget,
+            )
+        malformed = _invalid_verified_fill(request.verified_fill)
+        if malformed is not None:
             return _diagnostic(LayeredRouteFailureCode.INVALID_REQUEST, malformed)
         snapshot_obj: object = snapshot
         if not isinstance(snapshot_obj, BoardIRSnapshot):

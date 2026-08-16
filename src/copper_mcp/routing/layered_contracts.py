@@ -221,6 +221,7 @@ class LayeredRouteFailureCode(StrEnum):
     OFF_GRID = "off_grid"
     GRID_BUDGET_EXCEEDED = "grid_budget_exceeded"
     OBSTACLE_BUDGET_EXCEEDED = "obstacle_budget_exceeded"
+    OBSTACLE_CHECK_BUDGET_EXCEEDED = "obstacle_check_budget_exceeded"
     SEARCH_BUDGET_EXCEEDED = "search_budget_exceeded"
     CANCELLED = "cancelled"
     STALE_FILL = "stale_fill"

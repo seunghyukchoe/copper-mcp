@@ -27,6 +27,7 @@ from copper_mcp.routing.astar import canonical_candidate_bytes
 from copper_mcp.routing.candidate_path_validator import (
     CandidatePathValidationFailure,
     validate_candidate_path,
+    validate_candidate_path_with_exact_off_grid_obstacle_fallback,
 )
 from copper_mcp.routing.contracts import (
     SINGLE_PATH_ORDERING,
@@ -255,6 +256,54 @@ def test_candidate_path_validator_rejects_an_adversarial_foreign_copper_crossing
     assert result.failure is CandidatePathValidationFailure.OBSTACLE_VIOLATION
     assert result.edge_checks == 4
     assert result.diagnostic == "candidate path violates the Board IR obstacle authority"
+
+
+def test_exact_off_grid_fallback_only_upgrades_a_proven_one_nanometre_incursion() -> None:
+    snapshot = _snapshot(foreign_segment=True)
+    request = replace(
+        _request(snapshot),
+        settings=replace(_settings(), grid_step_nm=100_000, max_grid_nodes=20_000),
+    )
+    boundary_vertices = (
+        PointNM(1_000_000, 5_000_000),
+        PointNM(1_000_000, 2_700_000),
+        PointNM(9_000_000, 2_700_000),
+        PointNM(9_000_000, 5_000_000),
+    )
+    incursion = _candidate(
+        request,
+        tuple(
+            PointNM(point.x, point.y + 1 if point.y == 2_700_000 else point.y)
+            for point in boundary_vertices
+        ),
+    )
+    legal_off_grid = _candidate(
+        request,
+        tuple(
+            PointNM(point.x, point.y - 1 if point.y == 2_700_000 else point.y)
+            for point in boundary_vertices
+        ),
+    )
+
+    intruding = validate_candidate_path_with_exact_off_grid_obstacle_fallback(
+        snapshot,
+        request,
+        incursion,
+        max_obstacle_checks=10_000,
+        max_path_edges=256,
+    )
+    legal = validate_candidate_path_with_exact_off_grid_obstacle_fallback(
+        snapshot,
+        request,
+        legal_off_grid,
+        max_obstacle_checks=10_000,
+        max_path_edges=256,
+    )
+
+    assert intruding.failure is CandidatePathValidationFailure.OBSTACLE_VIOLATION
+    assert legal.failure is CandidatePathValidationFailure.UNSUPPORTED_GEOMETRY
+    assert intruding.obstacle_checks <= 10_000
+    assert legal.obstacle_checks <= 10_000
 
 
 def test_candidate_path_validator_accepts_a_legal_same_net_attachment_node() -> None:

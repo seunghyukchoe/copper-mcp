@@ -113,6 +113,7 @@ class RoutingJobFailureCode(StrEnum):
     NO_PATH = "no_path"
     SEARCH_BUDGET_EXCEEDED = "search_budget_exceeded"
     OBSTACLE_BUDGET_EXCEEDED = "obstacle_budget_exceeded"
+    OBSTACLE_CHECK_BUDGET_EXCEEDED = "obstacle_check_budget_exceeded"
     WORKER_ERROR = "worker_error"
     CANCELLED = "cancelled"
 
@@ -124,6 +125,9 @@ _FIXED_FAILURE_MESSAGES: Final[dict[RoutingJobFailureCode, str]] = {
     RoutingJobFailureCode.NO_PATH: "routing search found no path",
     RoutingJobFailureCode.SEARCH_BUDGET_EXCEEDED: "routing search budget was exceeded",
     RoutingJobFailureCode.OBSTACLE_BUDGET_EXCEEDED: "routing obstacle budget was exceeded",
+    RoutingJobFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED: (
+        "routing obstacle-check budget was exceeded"
+    ),
     RoutingJobFailureCode.WORKER_ERROR: "routing worker failed",
 }
 
