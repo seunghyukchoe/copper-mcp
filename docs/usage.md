@@ -162,13 +162,14 @@ supported. **`preview_live_layered_route` pins the flag to `false`** and refuses
 the proof is about a file's cache, and a live proposal routes an unsaved editor snapshot. Durable
 routing jobs refuse it too.
 
-Expect it to refuse on many real boards. The ordered-layer router refuses any single fill island
-above 4,096 vertices, and it refuses the whole request rather than falling back to the zone
-outline, so a densely poured board returns `invalid_request` rather than a fill-aware route
-(`R-152`, [issue #167](https://github.com/seunghyukchoe/copper-mcp/issues/167)). That is the safe
-direction — an island refused is an envelope kept — but it is the outcome to plan for. **No route
-quality is claimed for any of this**: the measured effect of fill-aware routing on a real-board
-corpus was zero changed verdicts (`B-105`). What it buys is honest provenance at the boundary.
+The ordered-layer router accepts at most 500,000 vertices in one fill island and 10,000,000 across
+the request. A larger island returns `invalid_request` before bounds scans or identity hashing;
+aggregate overflow returns `obstacle_check_budget_exceeded`. The measured ceiling admits the
+widest recorded 43,889-vertex corpus island, but remains a finite resource boundary rather than a
+route-quality claim ([ADR-0116](adr/0116-layered-fill-islands-have-a-measured-source-boundary.md)).
+**No route quality is claimed for any of this**: the measured effect of fill-aware routing on a
+real-board corpus was zero changed verdicts (`B-105`). What it buys is honest provenance at the
+boundary.
 
 ## Preview a placement
 

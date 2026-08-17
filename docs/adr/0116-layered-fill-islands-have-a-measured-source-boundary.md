@@ -23,9 +23,9 @@ Consequently the source-validation/hash boundary and the search boundary need se
 
 B-123 priced the source boundary in isolated subprocesses on the committed synthetic layered-fill
 fixture. The predeclared 1,000,000-vertex gate required both one island and an equal-total ten-island
-shape to complete proposal plus replay within 20 seconds. The split case took 20.24 seconds and
-failed. The fallback 500,000 case took 10.15 seconds with 110,431,900 incremental traced bytes and
-passed its 12-second/512,000,000-byte gate. The widest recorded corpus island took 1.50 seconds with
+shape to complete proposal plus replay within 20 seconds. The single and split cases took 20.43 and
+20.94 seconds and failed. The fallback 500,000 case took 10.59 seconds with 110,431,900 incremental
+traced bytes and passed its 12-second/512,000,000-byte gate. The widest recorded corpus island took 1.09 seconds with
 9,713,819 incremental traced bytes and passed its 5-second/256,000,000-byte gate. These timings are
 one-host calibration evidence, not cross-machine guarantees.
 

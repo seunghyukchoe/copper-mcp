@@ -66,6 +66,11 @@ def test_artifact_keeps_performance_and_physics_claims_bounded() -> None:
     }
 
 
+def test_process_max_rss_is_normalized_to_bytes() -> None:
+    assert benchmark._process_max_rss_bytes(123, platform_name="darwin") == 123
+    assert benchmark._process_max_rss_bytes(123, platform_name="linux") == 123 * 1_024
+
+
 def test_widest_recorded_island_replays_under_the_selected_cap() -> None:
     result = benchmark._worker(
         "widest_recorded_corpus_island",

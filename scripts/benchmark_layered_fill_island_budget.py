@@ -65,6 +65,15 @@ def _canonical_digest(value: object) -> str:
     )
 
 
+def _process_max_rss_bytes(max_rss: int, *, platform_name: str = sys.platform) -> int:
+    """Normalize ``ru_maxrss`` to bytes on the benchmark's supported hosts."""
+    if platform_name.startswith("linux"):
+        return max_rss * 1_024
+    if platform_name == "darwin":
+        return max_rss
+    raise RuntimeError(f"unsupported ru_maxrss unit on {platform_name}")
+
+
 def _points(size: int, *, offset: int) -> tuple[PointNM, ...]:
     if size < 4:
         raise ValueError("a calibration island needs at least four points")
@@ -148,7 +157,9 @@ def _worker(name: str, size: int, count: int, counterfactual_cap: int) -> dict[s
             "replay_identity_matches": replay_identity_matches,
             "obstacle_checks": obstacle_checks,
             "incremental_traced_peak_bytes": peak - baseline,
-            "process_max_rss_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+            "process_max_rss_bytes": _process_max_rss_bytes(
+                resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            ),
             "source_per_island_cap": original_cap,
             "counterfactual_per_island_cap": counterfactual_cap,
         }
