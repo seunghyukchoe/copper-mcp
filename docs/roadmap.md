@@ -416,11 +416,18 @@ route-quality claim attaches to the work — `B-105` measured zero changed verdi
     item asks for is still not measured** — FreeRouting is recorded as `not_run`, and a
     SimpleRouteJson-to-DSN bridge, a common corpus neither router helped define, and an equivalent
     performance protocol all remain required.
-  - [ ] Position CopperMCP as a verification harness for externally generated route candidates
+  - [~] Position CopperMCP as a verification harness for externally generated route candidates
     (starting with tscircuit / SimpleRouteJson solution output): convert an external candidate to
     CopperMCP's own candidate identity and run the full verification stack — exact clearance,
     structural verification, real KiCad DRC — returning accepted/refused with typed diagnostics
-    and evidence, never a silently repaired route.
+    and evidence, never a silently repaired route. The
+    [v1 integration contract](research/tscircuit-output-validation-contract-v1.md) now fixes the
+    boundary between tscircuit whole-output validation and per-net CopperMCP disposal. The internal
+    import-side adapter now converts the exact-source-bound, wire-only subset into the existing
+    v1/v2 documents with typed refusals and no production-core dependency. Synthetic #1964/#2058
+    contract fixtures plus a separate upstream validator and Pipeline 7 opt-in patch are locally
+    implemented and validated but not published or merged. DRC-grade via diagnosis and tscircuit
+    Core's custom `algorithmFn` integration remain unimplemented.
 
 - [~] Emit candidate DRC evidence as a deterministic, unsigned in-toto Statement payload using
   Link v0.3, with digest-bound subjects/materials and aggregate redacted byproducts. DSSE signing,
