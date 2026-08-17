@@ -234,6 +234,72 @@ was measured as orientation-dependent.
 **The preview never applies a placement and is not bound to KiCad DRC evidence.** A placement also
 invalidates any route candidate bound to the same board revision.
 
+## Verify an externally generated route over MCP
+
+`verify_external_route_candidate` is an MCP-only, read-only intake for geometry proposed outside
+CopperMCP. There is no CLI equivalent. The MCP tool wrapper contains exactly one `request`; the
+inner object is a closed, independently versioned `1.0` envelope:
+
+```json
+{
+  "request": {
+    "schema_version": "1.0",
+    "request": {
+      "board": "example.kicad_pcb",
+      "layer": "F.Cu",
+      "constraints": {
+        "clearance_nm": 250000,
+        "track_width_nm": 250000,
+        "via_diameter_nm": 800000,
+        "via_drill_nm": 400000
+      },
+      "net_ref_id": "net:name:0123456789abcdef0123456789abcdef",
+      "expect_board_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expect_snapshot_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "document": {
+      "schema": "copper-mcp/external-route-candidate/v1",
+      "problem_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "start_pad_id": "pad:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "end_pad_id": "pad:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "segments": [
+        {
+          "layer_id": "layer:F.Cu",
+          "width_nm": 250000,
+          "start": {"x_nm": 1000000, "y_nm": 1000000},
+          "end": {"x_nm": 2000000, "y_nm": 1000000}
+        }
+      ],
+      "vias": []
+    },
+    "start_pad_id": "pad:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "end_pad_id": "pad:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  }
+}
+```
+
+The document may instead use the existing closed
+`copper-mcp/external-route-patch/v2` multi-path shape. In both versions, the selector is
+reference-only: `net_ref_id`, `expect_board_revision`, and `expect_snapshot_digest` are required,
+and no net-name alternative exists. Unknown keys are refused. Foreign identity, metrics, policy,
+evidence, settings and budgets are not accepted inside the document. The coordinator request may
+optionally carry the bounded route `seed` and `settings`; the server reconstructs candidate identity,
+uses the validated obstacle-check ceiling, and caps the derived edge ceiling at 4,096. No standalone
+budget field is accepted.
+
+Authoritative KiCad DRC is mandatory. There is no `include_drc` switch and no structural-only
+public acceptance. A structural refusal returns `status: "refused"`, `physical_validation:
+"not_run"`, a typed fixed diagnostic and bounded aggregate counts, and it does not execute KiCad.
+An acceptance returns the recomputed `candidate_id`, `physical_validation: "completed"`, aggregate
+candidate-bound `drc_evidence`, and `drc_comparability: "single_invocation"`.
+
+Read that result literally. `completed` says the command completed, not that the result is clean;
+inspect `drc_evidence.summary.passed` and `.clean` independently. `single_invocation` is not a
+reproducible differential. Neither variant returns submitted geometry, paths, coordinates, board
+bytes or names, a workspace path, token, capability, repair, apply or mutation claim. The call
+creates only a private disposable board/report, never changes the source board, and has no
+persistence, live-IPC or apply mode.
+
 ## Apply a route candidate
 
 Apply a previewed route candidate to a board. **This is the only CLI command that changes a board

@@ -1972,6 +1972,7 @@ def _run_route_candidate_drc(
     render_candidate: Callable[..., bytes],
     serialization_failure: str,
     deadline: float | None = None,
+    expected_source_revision: str | None = None,
 ) -> RouteCandidateDrcEvidence:
     """Shared candidate-bound DRC flow after its caller selects the validation authority."""
 
@@ -1996,6 +1997,8 @@ def _run_route_candidate_drc(
     original_context_revision = _context_revision(captured_context)
     source = captured_context[board_relative]
     source_revision = _revision(source)
+    if expected_source_revision is not None and source_revision != expected_source_revision:
+        raise KiCadCliError("route candidate source changed before authoritative DRC")
 
     phase_settings = _candidate_drc_deadline_settings(settings, deadline)
     parse_limits = parse_limits_for(phase_settings)
@@ -2084,6 +2087,7 @@ def run_disposed_route_candidate_drc(
     profile: KiCadConstraintProfile,
     settings: Settings,
     *,
+    expected_source_revision: str,
     deadline: float | None = None,
 ) -> RouteCandidateDrcEvidence:
     """Bind one exact external-disposer acceptance to authoritative KiCad DRC."""
@@ -2096,6 +2100,10 @@ def run_disposed_route_candidate_drc(
         raise KiCadCliError("external route candidate disposition is inconsistent")
     if disposition.candidate.candidate_id != disposition.verification.candidate_id:
         raise KiCadCliError("external route candidate disposition is bound to another candidate")
+    if not isinstance(expected_source_revision, str) or not _SHA256_ID.fullmatch(
+        expected_source_revision
+    ):
+        raise KiCadCliError("external route candidate source revision is malformed")
     return _run_route_candidate_drc(
         requested_path,
         disposition.candidate,
@@ -2104,6 +2112,7 @@ def run_disposed_route_candidate_drc(
         render_candidate=_render_kicad_disposed_candidate_board,
         serialization_failure="external route candidate failed disposer-verified serialization",
         deadline=deadline,
+        expected_source_revision=expected_source_revision,
     )
 
 

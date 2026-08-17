@@ -27,6 +27,15 @@ All notable changes are documented here. The format follows
   `single_invocation`. MCP, CLI, persistence and apply remain unexposed
   ([ADR-0114](docs/adr/0114-external-candidates-continue-to-private-kicad-drc.md), `D-211`,
   `R-163`, `SEC-152`, [issue #99](https://github.com/seunghyukchoe/copper-mcp/issues/99)).
+- The versioned read-only MCP tool `verify_external_route_candidate` now accepts only a closed
+  `1.0` envelope around the existing v1/v2 documents, requires reference-bound source and snapshot
+  preconditions, derives candidate identity and work ceilings from bounded coordinator settings,
+  and always continues
+  an accepted structural disposition through authoritative KiCad DRC. Its accepted/refused union
+  is redacted and carries no geometry, board bytes or names, token, capability or mutation claim;
+  `completed` records execution rather than a clean verdict. There is no CLI, persistence, repair,
+  apply or live-IPC peer ([ADR-0115](docs/adr/0115-external-route-verification-is-a-versioned-read-only-mcp-boundary.md),
+  `D-212`, `R-164`, `SEC-153`, [issue #99](https://github.com/seunghyukchoe/copper-mcp/issues/99)).
 
 ### Fixed
 

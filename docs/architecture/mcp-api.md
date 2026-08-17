@@ -34,6 +34,7 @@
 | `apply_placement_candidate` | **Replaces the board file**; disabled by default | Separately authorized bounded placement-pose mutation. Requires an operator flag and a placement-scoped single-use token. |
 | `preview_placement` | None, or a short-lived placement capability when explicitly requested | Deterministic legality preview for a proposed footprint placement. `include_drc: true` may request aggregate DRC evidence for the file-backed serializer subset; `include_apply_token: true` may request a placement token. Neither flag writes the source board or grants live authority. |
 | `preview_route` | None, or a temporary report when `include_drc` is set | Bounded, non-mutating two-pin route proposal on the documented Board IR subset. |
+| `verify_external_route_candidate` | Temporary private board and DRC report only | Dispose one closed v1/v2 foreign route against an exact reference-bound snapshot and always continue an acceptance through authoritative KiCad DRC. Returns no geometry or authority. |
 | `preview_route_bundle` | None | Bounded revision-bound composition of two through eight known net references; it never returns a partial plan, DRC artifact, derivative, token, or apply authority. |
 | `render_circuit_schematic` | Process-local artifact only; stdio only | Validate structured Circuit Intent, require deterministic replay, and issue one opaque schematic resource capability. |
 | `validate_candidate` | None | Validate and normalize candidate metadata. |
@@ -305,6 +306,30 @@ as route apply. It refuses side flips, locked footprints, unsupported properties
 graphics/library identity/3D-model pose, derived identities, and no-op candidates before a
 replacement. Its response reports `footprints_moved` and `bytes_changed`; KiCad-open and DRC
 stages remain `not_run` until independently verified.
+
+`verify_external_route_candidate` is a deliberately separate read-only MCP boundary. Its tool
+wrapper has exactly one key, `request`; that value is a closed `schema_version: "1.0"` envelope
+containing a reference-only route selector, one existing closed v1 or v2 external route document,
+and coordinator endpoint pad IDs. The selector requires `net_ref_id`, `expect_board_revision`, and
+`expect_snapshot_digest`; it has no net-name selector and may optionally carry bounded `seed` and
+routing `settings`. The document may describe only its declared segments, paths and optional vias.
+Candidate identity, net binding, metrics and policy are reconstructed by the server. Obstacle work
+uses the validated coordinator setting and edge work uses its grid-node ceiling capped at 4,096;
+neither has a standalone field and neither can be supplied by the foreign document.
+
+Authoritative DRC is mandatory and has no request switch. Structural refusal executes no KiCad
+process and returns `status: "refused"`, `physical_validation: "not_run"`, a typed fixed diagnostic
+and bounded counts. Acceptance continues through a private source-preserving board and returns
+`status: "accepted"`, the recomputed `candidate_id`, `physical_validation: "completed"`,
+candidate-bound aggregate `drc_evidence`, and `drc_comparability: "single_invocation"`.
+`completed` says that KiCad completed, not that the summary is `passed` or `clean`; consumers must
+read both summary fields. The result never contains geometry, paths, segments, vias, coordinates,
+board bytes or names, workspace paths, tokens, capabilities, or mutation claims.
+
+This surface is MCP-only over both stdio and streamable HTTP. It creates no persistent artifact,
+has no CLI, repair, apply or live-IPC mode, and never modifies the source board. Its envelope and
+result version are independent of the foreign v1/v2 document versions; accepted-set changes require
+a new public version under [ADR-0115](../adr/0115-external-route-verification-is-a-versioned-read-only-mcp-boundary.md).
 
 `preview_route` takes one request object with a workspace-relative `board`, a copper `layer` name,
 integer `constraints` for the applied net class, and **exactly one** net selector. `net` is the
