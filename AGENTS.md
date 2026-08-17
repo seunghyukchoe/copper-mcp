@@ -16,6 +16,12 @@ bounded operations, but must never bypass validation or apply model-generated co
    security reviews, or releases.
 6. Add or update tests before claiming a behavior works.
 
+## Agent coordination
+
+- Use only Codex's built-in subagent and collaboration capabilities for delegated work.
+- Do not invoke or depend on the external Orca application, CLI, runtime, or orchestration skills.
+- The primary agent creates and supervises every worker directly; nested delegation is not allowed.
+
 ## Commands
 
 - `make test`: dependency-light unit tests.
