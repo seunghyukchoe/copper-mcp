@@ -152,11 +152,16 @@ def test_accepted_external_candidate_continues_to_redacted_candidate_bound_drc(
         profile: object,
         settings: Settings,
         *,
+        expected_source_revision: str,
         deadline: float | None = None,
     ) -> RouteCandidateDrcEvidence:
         assert requested_path == board.name
         assert profile == request.profile()
         assert settings.workspace == tmp_path
+        assert (
+            expected_source_revision
+            == f"sha256:{external_drc.hashlib.sha256(board.read_bytes()).hexdigest()}"
+        )
         assert deadline is not None
         candidate = getattr(disposition, "candidate", None)
         assert isinstance(candidate, RouteCandidate)
@@ -271,11 +276,15 @@ def test_disposed_kicad_seam_selects_the_non_replay_renderer(
         disposition,
         request.profile(),
         Settings(workspace=tmp_path),
+        expected_source_revision=f"sha256:{external_drc.hashlib.sha256(board.read_bytes()).hexdigest()}",
         deadline=123.0,
     )
 
     assert captured["render_candidate"] is _render_kicad_disposed_candidate_board
     assert captured["deadline"] == 123.0
+    assert captured["expected_source_revision"] == (
+        f"sha256:{external_drc.hashlib.sha256(board.read_bytes()).hexdigest()}"
+    )
 
 
 def test_disposed_kicad_seam_rejects_a_forged_capability(tmp_path: Path) -> None:
@@ -285,6 +294,7 @@ def test_disposed_kicad_seam_rejects_a_forged_capability(tmp_path: Path) -> None
             object(),
             _request("two-pad.kicad_pcb").profile(),
             Settings(workspace=tmp_path),
+            expected_source_revision=_DIGEST,
         )
 
 
@@ -350,11 +360,13 @@ def test_external_coordinator_rejects_drc_finishing_after_its_deadline(
         profile: object,
         settings: Settings,
         *,
+        expected_source_revision: str,
         deadline: float | None = None,
     ) -> RouteCandidateDrcEvidence:
         assert requested_path == request.board
         assert profile == request.profile()
         assert deadline == 130.0
+        assert expected_source_revision.startswith("sha256:")
         accepted = getattr(disposition, "candidate", None)
         assert isinstance(accepted, RouteCandidate)
         clock[0] = 131.0
@@ -362,6 +374,49 @@ def test_external_coordinator_rejects_drc_finishing_after_its_deadline(
 
     monkeypatch.setattr(external_drc, "run_disposed_route_candidate_drc", finish_late)
     with pytest.raises(ExternalCandidateDrcError, match="expired during authoritative DRC"):
+        verify_external_route_candidate_drc(
+            request,
+            document,
+            Settings(workspace=tmp_path),
+            start_pad_id=candidate.start_pad_id,
+            end_pad_id=candidate.end_pad_id,
+            max_obstacle_checks=request.settings.max_obstacle_checks,
+            max_path_edges=4_096,
+        )
+
+
+def test_source_byte_change_between_public_check_and_drc_is_discarded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    board, request, candidate, document = _workspace(tmp_path)
+    request = _request(
+        request.board,
+        expect_board_revision=f"sha256:{external_drc.hashlib.sha256(board.read_bytes()).hexdigest()}",
+    )
+    original = kicad_cli.run_disposed_route_candidate_drc
+
+    def mutate_then_run(
+        requested_path: str,
+        disposition: object,
+        profile: object,
+        settings: Settings,
+        *,
+        expected_source_revision: str,
+        deadline: float | None = None,
+    ) -> RouteCandidateDrcEvidence:
+        board.write_bytes(board.read_bytes() + b"\n")
+        return original(
+            requested_path,
+            disposition,
+            profile,  # type: ignore[arg-type]
+            settings,
+            expected_source_revision=expected_source_revision,
+            deadline=deadline,
+        )
+
+    monkeypatch.setattr(external_drc, "run_disposed_route_candidate_drc", mutate_then_run)
+    with pytest.raises(ExternalCandidateDrcError, match="could not verify"):
         verify_external_route_candidate_drc(
             request,
             document,

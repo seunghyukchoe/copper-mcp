@@ -286,6 +286,7 @@ def verify_external_route_candidate_drc(
             disposition,
             profile,
             settings,
+            expected_source_revision=source_revision,
             deadline=deadline,
         )
     except KiCadCliError as error:

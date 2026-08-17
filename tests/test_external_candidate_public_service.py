@@ -167,9 +167,10 @@ def test_public_service_accepts_v1_and_v2_without_leaks_or_workspace_changes(
         profile: object,
         settings: Settings,
         *,
+        expected_source_revision: str,
         deadline: float | None = None,
     ) -> RouteCandidateDrcEvidence:
-        del path, profile, settings, deadline
+        del path, profile, settings, expected_source_revision, deadline
         accepted = getattr(disposition, "candidate", None)
         assert isinstance(accepted, RouteCandidate)
         disposed_candidates.append(accepted)
@@ -361,9 +362,10 @@ def test_non_clean_drc_is_completed_evidence_not_a_structural_refusal(
         profile: object,
         settings: Settings,
         *,
+        expected_source_revision: str,
         deadline: float | None = None,
     ) -> RouteCandidateDrcEvidence:
-        del path, profile, settings, deadline
+        del path, profile, settings, expected_source_revision, deadline
         accepted = getattr(disposition, "candidate", None)
         assert isinstance(accepted, RouteCandidate)
         return _evidence(accepted, error_count=1)

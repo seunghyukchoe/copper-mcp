@@ -63,6 +63,8 @@ accepted-set change to the envelope or result requires a new public version unde
 acceptance remains deliberately broad at the MCP framework layer while the application boundary
 parses the advertised closed shape, preventing framework validation errors from echoing hostile
 coordinates or board-private values. The outer wrapper is separately closed with a fixed error.
+The source revision checked at intake is passed into the authoritative DRC continuation and must
+match its second file capture, even when a byte-only edit leaves the Board IR snapshot unchanged.
 
 The machine capability in issue #99 may be closed only after the transport tests prove schema
 closure, annotations, stdio/HTTP inventory, fixed non-echoing errors, server-derived budgets, the
