@@ -695,13 +695,15 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   closed only when its stdio/HTTP schema, resource and disclosure tests plus the full local gate are
   green. That closure does not establish electrical, SI/PI/EMC, thermal, DFM, fabrication or
   hardware validity; those human and physical gates remain open.
-- [~] **Local exact repair for bounded congestion windows, parked behind #99**
-  ([#90](https://github.com/seunghyukchoe/copper-mcp/issues/90)). The standalone deterministic
-  operator and predeclared 5 × 5 detour regression exist (B-067), but negotiated-router integration
-  does not. Parked rather than scheduled because repair is a **proposer**, and integrating one into
-  the deterministic core before the core can dispose a proposal inverts the invariant the project is
-  built on. Coordinator-derived window provenance, Board IR/candidate binding, physical-clearance
-  and reference replay gates, plus broader held-out evidence, all remain required afterwards.
+- [~] **Local exact repair for bounded congestion windows**
+  ([#90](https://github.com/seunghyukchoe/copper-mcp/issues/90)). ADR-0117 adds the first internal,
+  opt-in negotiated transaction: the coordinator derives and binds a bounded window plus Board IR
+  and same-pass occupancy, meters projection/local/validator work, independently validates and
+  reidentifies the repaired candidate, then reruns the whole-set physical gate. No-option result
+  shape and candidate identity remain unchanged, and every refusal is atomic. The transaction is a
+  safe proposer/disposer seam, not evidence of better routing: the predeclared crossing fixture
+  already finishes without repair. Issue closure still requires broader held-out improvement and
+  deterministic reference replay evidence without weakening physical or work gates.
 - [ ] **SI/PI/thermal/DFM surrogate hooks with authoritative signoff, parked behind #99**
   ([#91](https://github.com/seunghyukchoe/copper-mcp/issues/91)). The half of this that carries the
   safety property is the signoff, not the surrogate — any claim surfaced to a caller comes from an

@@ -8,6 +8,13 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- An internal opt-in negotiated local-repair transaction now derives immutable Board IR and
+  rejected-allocation provenance, meters projection, search and candidate-validation work, and
+  disposes repaired geometry through the Board IR path validator plus the ordinary whole-set
+  physical-clearance gate before publication. Legacy no-repair result shapes and candidate
+  identities remain unchanged. This adds no public repair or apply authority and makes no routing
+  quality claim ([ADR-0117](docs/adr/0117-local-exact-repair-is-an-opt-in-verified-transaction.md),
+  [issue #90](https://github.com/seunghyukchoe/copper-mcp/issues/90), `D-214`, `R-166`, `SEC-155`).
 - A clean-worktree parse-inclusive performance profile now measures the largest redistributable
   committed KiCad board through the complete Board IR read and attributes nested cumulative cost
   to S-expression parsing, tokenization, and typed conversion. B-122 selects the parser/tokenizer

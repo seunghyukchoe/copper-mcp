@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0117**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0118**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -192,15 +192,16 @@ never silently widens it.
 | [0114](0114-external-candidates-continue-to-private-kicad-drc.md) | Accepted external candidates continue to private KiCad DRC | Accepted |
 | [0115](0115-external-route-verification-is-a-versioned-read-only-mcp-boundary.md) | External route verification is a versioned read-only MCP boundary | Accepted |
 | [0116](0116-layered-fill-islands-have-a-measured-source-boundary.md) | Layered fill islands have a measured source boundary | Accepted |
+| [0117](0117-local-exact-repair-is-an-opt-in-verified-transaction.md) | Local exact repair is an opt-in verified transaction | Accepted |
 
-One hundred and sixteen numbers allocated, one hundred and eleven records, no duplicates — and
+One hundred and seventeen numbers allocated, one hundred and twelve records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
 its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
 the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
 and 0086 are unused; see **Known gaps** above. 0107 was allocated over the live claims 0105 and
 0106 rather than racing them, the mechanism the [ledger README](../ledgers/README.md) describes for
 `D-`/`R-`/`B-` numbers. Both have since landed — 0106 with issue #164's record and 0105 with issue
-#172's — so neither is a gap, and all of 0100 through 0116 are real records in the index above.
+#172's — so neither is a gap, and all of 0100 through 0117 are real records in the index above.
 
 ## Reading order
 
@@ -330,3 +331,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0114: Accepted external candidates continue to private KiCad DRC](0114-external-candidates-continue-to-private-kicad-drc.md)
 - [ADR-0115: External route verification is a versioned read-only MCP boundary](0115-external-route-verification-is-a-versioned-read-only-mcp-boundary.md)
 - [ADR-0116: Layered fill islands have a measured source boundary](0116-layered-fill-islands-have-a-measured-source-boundary.md)
+- [ADR-0117: Local exact repair is an opt-in verified transaction](0117-local-exact-repair-is-an-opt-in-verified-transaction.md)
