@@ -8,6 +8,11 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- A clean-worktree parse-inclusive performance profile now measures the largest redistributable
+  committed KiCad board through the complete Board IR read and attributes nested cumulative cost
+  to S-expression parsing, tokenization, and typed conversion. B-122 selects the parser/tokenizer
+  seam for any future bounded experiment while adding no acceleration or public-contract change
+  ([issue #87](https://github.com/seunghyukchoe/copper-mcp/issues/87)).
 - A production-core external route-candidate disposer accepts a closed, revision-bound,
   single-layer v1 document, reconstructs candidate identity from trusted coordinator state, and
   returns a typed redacted acceptance or refusal after bounded Board IR validation. It is exported

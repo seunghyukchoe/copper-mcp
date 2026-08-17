@@ -74,6 +74,9 @@ When adding a document, add it to the list below in the same sentence form — *
   only between negotiation passes. It claims no R-tree comparison and no performance result.
 - [Performance profile v1](./performance-profile-v1.md) records the clean-worktree routing,
   placement, and Circuit Scene measurement prerequisite for any future acceleration work.
+- [Performance parse profile v2](./performance-parse-profile-v2.md) extends that prerequisite with
+  a committed parse-heavy complete-board read and nested stage attribution before #87 selects any
+  acceleration experiment.
 - [Ordered-layer routing v1](./ordered-layer-routing-v1.md) records the 2..8 signal-layer,
   full-stack-via proposal boundary and its serialization/DRC promotion gates.
 - [Layered fill-aware obstacles v1](./layered-fill-aware-obstacles-v1.md) records how production

@@ -11,15 +11,16 @@ disagree, believe this table and file the discrepancy. Read live with
 `gh issue list -R seunghyukchoe/copper-mcp` and
 `gh api repos/seunghyukchoe/copper-mcp/milestones`.
 
-As of 2026-08-15, checked against the live GitHub milestone API:
+As updated on 2026-08-17, checked against the live GitHub milestone API. A row carried in a pull
+request includes the issue that pull request closes, so its count is the expected post-merge state:
 
 | Milestone | Closed | Open | State |
 |---|---|---|---|
-| M1 — KiCad inspection completion | 9 | 2 | Open: [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116), the conversion tracker retitled from the original real-board survey ([D-191](ledgers/decision-ledger.md)), and [#188](https://github.com/seunghyukchoe/copper-mcp/issues/188), the copper-text/curved-outline third-party conversion arc. #172 is closed by ADR-0105. |
-| M2 — Routing depth | 4 | 3 | Open: [#65](https://github.com/seunghyukchoe/copper-mcp/issues/65) benchmark comparison against open baselines, [#164](https://github.com/seunghyukchoe/copper-mcp/issues/164) the layered fill-authority contract, and [#53](https://github.com/seunghyukchoe/copper-mcp/issues/53) parked behind an operator gate. [#63](https://github.com/seunghyukchoe/copper-mcp/issues/63) closed as already delivered ([ADR-0101](adr/0101-fill-currency-is-not-in-the-document.md)). |
-| M3 — Safe application completion | 0 | 3 | Open: [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68) IPC one-undo-commit apply, [#170](https://github.com/seunghyukchoe/copper-mcp/issues/170) DRC reproducibility, and [#52](https://github.com/seunghyukchoe/copper-mcp/issues/52) placement apply, whose file-backed half has shipped. **Entry criteria, not a start date** — see [M3](#m3--safe-candidate-application). |
-| M4 — Scene, policy, and evaluation | 3 | 1 | **No longer at zero open.** [#110](https://github.com/seunghyukchoe/copper-mcp/issues/110) — give the excessive-agency evaluation a reachable externally authored project family — was filed unmilestoned and belongs here ([R-148](ledgers/risk-register.md)). |
-| M5 — Verification and physics | 2 | 5 | Renamed from "Performance and physics". Open: [#87](https://github.com/seunghyukchoe/copper-mcp/issues/87) re-scoped to profiling, [#90](https://github.com/seunghyukchoe/copper-mcp/issues/90) and [#91](https://github.com/seunghyukchoe/copper-mcp/issues/91) parked behind [#99](https://github.com/seunghyukchoe/copper-mcp/issues/99), which is now the milestone's centre, and [#167](https://github.com/seunghyukchoe/copper-mcp/issues/167). [#88](https://github.com/seunghyukchoe/copper-mcp/issues/88) and [#89](https://github.com/seunghyukchoe/copper-mcp/issues/89) are closed by their own profiling gates. |
+| M1 — KiCad inspection completion | 10 | 1 | Open: [#188](https://github.com/seunghyukchoe/copper-mcp/issues/188), the measured third-party conversion wall. #116 and #172 are closed. |
+| M2 — Routing depth | 6 | 1 | The milestone itself is closed. [#53](https://github.com/seunghyukchoe/copper-mcp/issues/53) remains open and operator-blocked for a contained FreeRouting comparison provider; it is not agent-executable. |
+| M3 — Safe application completion | 2 | 2 | Open: [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68) IPC one-undo-commit apply and [#52](https://github.com/seunghyukchoe/copper-mcp/issues/52) placement apply, whose file-backed half has shipped. Both remaining halves wait on a real-editor operator gate. |
+| M4 — Scene, policy, and evaluation | 4 | 0 | Complete as a tracked accounting fact. The `[~]` items below continue to state narrower capability boundaries rather than hidden open issues. |
+| M5 — Verification and physics | 5 | 3 | Open after this slice: [#90](https://github.com/seunghyukchoe/copper-mcp/issues/90), [#91](https://github.com/seunghyukchoe/copper-mcp/issues/91), and [#167](https://github.com/seunghyukchoe/copper-mcp/issues/167). [#87](https://github.com/seunghyukchoe/copper-mcp/issues/87) closes on B-122's parse-inclusive profile without selecting an acceleration; [#99](https://github.com/seunghyukchoe/copper-mcp/issues/99) closes on ADR-0115 and the green public verification intake. |
 | Audio Board Lab #001 — Physical validation | 0 | 1 | Open: [#8](https://github.com/seunghyukchoe/copper-mcp/issues/8). See [the Audio Board Lab gate](#audio-board-lab-001--physical-validation) — as written the issue would validate the board, and the thing that needs validating is the tool. |
 
 Three cautions about this table, because the first two have misled a reader before:
@@ -644,22 +645,27 @@ Renamed on 2026-08-14 from "Performance and physics". The old name promised acce
 nothing in the milestone had begun and that its own issues gated behind a profile nobody had taken.
 What the milestone actually contains, once those gates are honoured, is verification.
 
-Tracker state: 2 closed, 5 open. [#99](https://github.com/seunghyukchoe/copper-mcp/issues/99) is now
-the centre; [#88](https://github.com/seunghyukchoe/copper-mcp/issues/88) and
-[#89](https://github.com/seunghyukchoe/copper-mcp/issues/89) are closed **by their own stated
-gates**, not by a judgement against multicore or GPU work, and each names the evidence that reopens
-it.
+Tracker state after this slice: 5 closed, 3 open — [#90](https://github.com/seunghyukchoe/copper-mcp/issues/90),
+[#91](https://github.com/seunghyukchoe/copper-mcp/issues/91), and
+[#167](https://github.com/seunghyukchoe/copper-mcp/issues/167). #87, #88, and #89 close by their
+stated evidence gates rather than by a judgement that acceleration can never help; each names the
+evidence that would justify a new optimization issue. #99 closes on the production disposer,
+candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
 
-- [~] **Profile-guided acceleration, re-scoped to profiling**
+- [x] **Profile-guided acceleration, re-scoped to profiling**
   ([#87](https://github.com/seunghyukchoe/copper-mcp/issues/87)). B-068 establishes only the
   clean-worktree measurement prerequisite: fixed routing, placement, and Circuit Scene fixtures;
   invariant output digests; unprofiled timing samples; and a separate bounded cumulative profile. No
   Rust, SIMD, GPU, speedup, cross-machine comparison, or public-contract change exists. The
   re-scoping is forced by a measurement: [D-195](ledgers/decision-ledger.md) recorded **20.9 s of a
   complete read's 24.2 s** on the largest corpus board spent in the parse rather than in the router,
-  and B-068's fixtures omit the parser entirely — so the milestone's one measurement prerequisite
-  does not measure the dominant cost. Extending the fixture set to cover the parse path, and
-  recording a profile that attributes cost by stage, is what this item is now.
+  and B-068's fixtures omit the parser entirely. B-122 closes the missing measurement with the
+  committed `166,070`-byte CopperTone board: five unprofiled complete reads have a `43.02 ms` median
+  on the recorded host, while the separate instrumented pass assigns `69.54%` of complete-read
+  cumulative time to `parse_sexpr`, `51.40%` to its nested tokenizer, and `29.61%` to typed model
+  conversion. The values are nested and non-additive. This selects the S-expression/tokenizer seam
+  for any future bounded experiment; it does not select Rust or claim a speedup, and no acceleration
+  lands under this issue.
 - [x] ~~Conflict-aware multicore scheduling~~ — **closed as a non-goal by its own gate**
   (#88, closed 2026-08-14). The issue was "blocked on profiling evidence from the Rust-acceleration
   issue to know where parallelism pays", and that evidence does not exist. Reopens if the profile
