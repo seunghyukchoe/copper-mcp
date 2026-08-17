@@ -660,9 +660,9 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   re-scoping is forced by a measurement: [D-195](ledgers/decision-ledger.md) recorded **20.9 s of a
   complete read's 24.2 s** on the largest corpus board spent in the parse rather than in the router,
   and B-068's fixtures omit the parser entirely. B-122 closes the missing measurement with the
-  committed `166,070`-byte CopperTone board: five unprofiled complete reads have a `41.80 ms` median
-  on the recorded host, while the separate instrumented pass assigns `68.59%` of complete-read
-  cumulative time to `parse_sexpr`, `50.51%` to its nested tokenizer, and `30.40%` to typed model
+  committed `166,070`-byte CopperTone board: five unprofiled complete reads have a `43.02 ms` median
+  on the recorded host, while the separate instrumented pass assigns `69.54%` of complete-read
+  cumulative time to `parse_sexpr`, `51.40%` to its nested tokenizer, and `29.61%` to typed model
   conversion. The values are nested and non-additive. This selects the S-expression/tokenizer seam
   for any future bounded experiment; it does not select Rust or claim a speedup, and no acceleration
   lands under this issue.

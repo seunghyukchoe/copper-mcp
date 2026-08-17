@@ -59,11 +59,11 @@ module or published contract.
 
 ## Recorded result
 
-B-122 records the clean `64835f6` run. All eight executions (two warmups, five unprofiled samples,
+B-122 records the clean `9c9c6eb` run. All eight executions (two warmups, five unprofiled samples,
 and one profiled pass) returned the same snapshot digest. The five unprofiled samples measured a
-`41,795,417 ns` median (`41,201,750`–`46,787,000 ns`). In the separate instrumented pass, the
-complete read was `133,444,667 ns`; `parse_sexpr` was the largest named child at `685,938 ppm`,
-tokenization was nested beneath it at `505,139 ppm`, and typed model conversion was `303,980 ppm`.
+`43,017,666 ns` median (`42,908,459`–`48,699,958 ns`). In the separate instrumented pass, the
+complete read was `135,512,625 ns`; `parse_sexpr` was the largest named child at `695,444 ppm`,
+tokenization was nested beneath it at `513,997 ppm`, and typed model conversion was `296,054 ppm`.
 The predeclared prediction therefore passed.
 
 The next optimization experiment, if one is scheduled, belongs at the S-expression/tokenizer seam
