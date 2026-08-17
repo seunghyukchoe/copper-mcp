@@ -1,0 +1,59 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "LFIB01-per-island-ceiling-restored-to-4096",
+      "file": "src/copper_mcp/routing/layered_board_adapter.py",
+      "anchor": "_MAX_FILL_VERTICES = 500_000\n",
+      "replacement": "_MAX_FILL_VERTICES = 4_096\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_board_adapter.py::test_calibrated_fill_island_sizes_pass_shape_validation"
+      ]
+    },
+    {
+      "id": "LFIB02-per-island-ceiling-removed",
+      "file": "src/copper_mcp/routing/layered_board_adapter.py",
+      "anchor": "_MAX_FILL_VERTICES = 500_000\n",
+      "replacement": "_MAX_FILL_VERTICES = 10_000_000\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_board_adapter.py::test_fill_island_above_calibrated_ceiling_is_refused_before_bounds_or_hashing"
+      ]
+    },
+    {
+      "id": "LFIB03-propose-maps-shape-refusal-to-obstacle-check-budget",
+      "file": "src/copper_mcp/routing/layered_board_adapter.py",
+      "anchor": "        malformed = _invalid_verified_fill(request.verified_fill)\n        if malformed is not None:\n            return _diagnostic(LayeredRouteFailureCode.INVALID_REQUEST, malformed)\n        snapshot_obj: object = snapshot\n",
+      "replacement": "        malformed = _invalid_verified_fill(request.verified_fill)\n        if malformed is not None:\n            return _diagnostic(\n                LayeredRouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED, malformed\n            )\n        snapshot_obj: object = snapshot\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_board_adapter.py::test_fill_island_above_calibrated_ceiling_is_refused_before_bounds_or_hashing"
+      ]
+    },
+    {
+      "id": "LFIB04-replay-maps-shape-refusal-to-obstacle-check-budget",
+      "file": "src/copper_mcp/routing/layered_board_adapter.py",
+      "anchor": "        malformed = _invalid_verified_fill(request.verified_fill)\n        if malformed is not None:\n            return _diagnostic(LayeredRouteFailureCode.INVALID_REQUEST, malformed)\n        if fill_binding_for(request.verified_fill) != candidate.fill_binding:\n",
+      "replacement": "        malformed = _invalid_verified_fill(request.verified_fill)\n        if malformed is not None:\n            return _diagnostic(\n                LayeredRouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED, malformed\n            )\n        if fill_binding_for(request.verified_fill) != candidate.fill_binding:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_board_adapter.py::test_fill_island_above_calibrated_ceiling_is_refused_before_bounds_or_hashing"
+      ]
+    },
+    {
+      "id": "LFIB05-fill-island-envelopes-bypass-obstacle-meter",
+      "file": "src/copper_mcp/routing/layered_board_adapter.py",
+      "anchor": "            if not add_obstacle(\n                rectangle,\n                layer_index[island.layer_id],\n                half_width + island_clearance,\n            ) or not add_obstacle(\n                rectangle,\n                layer_index[island.layer_id],\n                via_half + island_clearance,\n                via=True,\n            ):\n",
+      "replacement": "            if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_layered_board_adapter.py::test_verified_fill_envelopes_are_charged_against_the_obstacle_budget"
+      ]
+    }
+  ]
+}
