@@ -21,6 +21,12 @@ All notable changes are documented here. The format follows
   absent from the self-digested result artifact and physical validation remains `not_run`
   ([ADR-0113](docs/adr/0113-external-route-patches-preserve-multi-pin-topology.md), `D-210`,
   `R-162`, `SEC-151`).
+- A production-only file-backed continuation now binds an accepted v1/v2 external candidate to
+  authoritative KiCad DRC on a private source-preserving board. Structural refusals never execute
+  KiCad; successful output carries only revision-bound redacted evidence and labels the live count
+  `single_invocation`. MCP, CLI, persistence and apply remain unexposed
+  ([ADR-0114](docs/adr/0114-external-candidates-continue-to-private-kicad-drc.md), `D-211`,
+  `R-163`, `SEC-152`, [issue #99](https://github.com/seunghyukchoe/copper-mcp/issues/99)).
 
 ### Fixed
 

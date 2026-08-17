@@ -196,7 +196,7 @@ def _replay_candidate(
         raise KiCadRoutePatchError("candidate does not match a deterministic router replay")
 
 
-def render_kicad_candidate_board(
+def _render_kicad_candidate_board(
     source: bytes,
     snapshot: BoardIRSnapshot,
     candidate: RouteCandidate,
@@ -204,19 +204,9 @@ def render_kicad_candidate_board(
     *,
     limits: ParseLimits | None = None,
     verified_fill: tuple[VerifiedFill, ...] = (),
+    require_router_replay: bool,
 ) -> bytes:
-    """Render a verified candidate into new bytes without mutating or writing its source board.
-
-    This function is a serialization boundary, not an apply operation and not DRC evidence. It
-    accepts only a source/profile pair that reproduces ``snapshot`` exactly and only the byte-exact
-    candidate reproduced by the bounded reference router. The returned bytes are parsed again and
-    must differ from the input Board IR solely by source revision, CopperMCP writer provenance, and
-    the appended track segments.
-
-    ``verified_fill`` is the freshness-bound zone fill the candidate was routed under, which the
-    caller that routed it already holds.  The replay refuses unless it is the same evidence, so
-    supplying nothing verifies a candidate routed under nothing.
-    """
+    """Shared source-preserving renderer after either replay or disposer validation."""
 
     limits = limits or ParseLimits()
     if not isinstance(source, bytes):
@@ -242,7 +232,8 @@ def render_kicad_candidate_board(
         verify_candidate_id(candidate)
     except ValueError as error:
         raise KiCadRoutePatchError("candidate identity verification failed") from error
-    _replay_candidate(snapshot, candidate, verified_fill)
+    if require_router_replay:
+        _replay_candidate(snapshot, candidate, verified_fill)
 
     nets = {item.id: item for item in snapshot.content.nets}
     layers = {item.id: item for item in snapshot.content.copper_layers}
@@ -329,3 +320,53 @@ def render_kicad_candidate_board(
             "rendered candidate board changed content outside its route patch"
         )
     return rendered_board
+
+
+def render_kicad_candidate_board(
+    source: bytes,
+    snapshot: BoardIRSnapshot,
+    candidate: RouteCandidate,
+    profile: KiCadConstraintProfile,
+    *,
+    limits: ParseLimits | None = None,
+    verified_fill: tuple[VerifiedFill, ...] = (),
+) -> bytes:
+    """Render one byte-exact reference-router replay without mutating its source board."""
+
+    return _render_kicad_candidate_board(
+        source,
+        snapshot,
+        candidate,
+        profile,
+        limits=limits,
+        verified_fill=verified_fill,
+        require_router_replay=True,
+    )
+
+
+def _render_kicad_disposed_candidate_board(
+    source: bytes,
+    snapshot: BoardIRSnapshot,
+    candidate: RouteCandidate,
+    profile: KiCadConstraintProfile,
+    *,
+    limits: ParseLimits | None = None,
+    verified_fill: tuple[VerifiedFill, ...] = (),
+) -> bytes:
+    """Render a candidate already accepted by the bounded external disposer.
+
+    The caller must retain the disposer capability object.  This private serializer still verifies
+    candidate identity, snapshot/source equality, native identities, budgets, and the exact Board
+    IR round trip; only reference-router replay is inapplicable to foreign geometry.
+    """
+
+    if verified_fill:
+        raise KiCadRoutePatchError("external candidate carries unsupported fill evidence")
+    return _render_kicad_candidate_board(
+        source,
+        snapshot,
+        candidate,
+        profile,
+        limits=limits,
+        require_router_replay=False,
+    )
