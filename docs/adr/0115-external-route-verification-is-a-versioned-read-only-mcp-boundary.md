@@ -67,7 +67,9 @@ coordinates or board-private values. The outer wrapper is separately closed with
 The machine capability in issue #99 may be closed only after the transport tests prove schema
 closure, annotations, stdio/HTTP inventory, fixed non-echoing errors, server-derived budgets, the
 accepted/refused union and output leak exclusions, and the full local validation gate is green.
-B-120 remains the corpus evidence for the disposer; no B-121 is created by publishing a transport.
+B-120 remains the corpus evidence for the disposer. B-121 separately records the required
+excessive-agency replay after the public tool changed the server's declared non-claim inventory;
+it is transport-boundary evidence, not another routing-quality measurement.
 
 No result is electrical, SI, PI, EMC, thermal, DFM, fabrication or hardware validation. Human
 benchmark calibration and physical-board testing remain outside this boundary.
