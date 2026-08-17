@@ -8,6 +8,13 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- An internal, non-public authoritative-signoff seam now records closed,
+  candidate- and revision-bound SI/PI/thermal/DFM evidence vocabulary with typed refusal and
+  non-claim outcomes. No bounded authoritative executor is configured, so production cannot
+  produce `SIGNED_OFF`; surrogate or advisory output cannot sign off, and no MCP or CLI surface is
+  exposed. Issue #91 remains open for a coordinator-owned bounded executor and its evidence gates
+  ([ADR-0118](docs/adr/0118-authoritative-signoff-stays-closed-until-a-bounded-executor-exists.md),
+  [issue #91](https://github.com/seunghyukchoe/copper-mcp/issues/91), `D-215`, `R-167`, `SEC-156`).
 - An internal opt-in negotiated local-repair transaction now derives immutable Board IR and
   rejected-allocation provenance, meters projection, search and candidate-validation work, and
   disposes repaired geometry through the Board IR path validator plus the ordinary whole-set

@@ -710,6 +710,11 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   authoritative tool run or is declared a non-claim — and that is the same evidence-binding contract
   #99 has to define first. Design the hook contract against #99's vocabulary rather than inventing a
   second one.
+  Current slice disposition (2026-08-17): the private core seam now carries closed,
+  candidate/revision-bound SI/PI/thermal/DFM evidence vocabulary and surrogate non-claim/refusal
+  behavior. A bounded authoritative executor is not configured, so production cannot create
+  `SIGNED_OFF`; there is no MCP or CLI exposure. #91 remains open for the coordinator-owned
+  executor, fixed-backend evidence binding, and its acceptance tests.
 - [x] **The ordered-layer per-island fill ceiling**
   ([#167](https://github.com/seunghyukchoe/copper-mcp/issues/167)). ADR-0116 and B-123 separate the
   two costs the issue originally conflated. Each polygon is validated, bounded and canonicalized
