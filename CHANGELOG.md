@@ -46,9 +46,16 @@ All notable changes are documented here. The format follows
 
 - Ordered-layer verified-fill validation now refuses aggregate polygon walks above the existing
   10,000,000 obstacle-check ceiling before inspecting vertices. The O(islands) preflight preserves
-  the independent 4,096-vertex per-island refusal and propagates the typed
+  an independent per-island refusal and propagates the typed
   `obstacle_check_budget_exceeded` result through preview and durable-job contracts
   ([issue #189](https://github.com/seunghyukchoe/copper-mcp/issues/189), `D-208`, `SEC-149`).
+- The ordered-layer per-island verified-fill boundary is now a measured 500,000 vertices instead
+  of an uncalibrated 4,096. B-123 rejected a one-million-vertex alternative when its split-island
+  proposal plus replay exceeded the predeclared time gate; 500,001 still refuses before bounds or
+  identity hashing, while the independent aggregate and rectangle-search meters remain unchanged
+  ([ADR-0116](docs/adr/0116-layered-fill-islands-have-a-measured-source-boundary.md),
+  [issue #167](https://github.com/seunghyukchoe/copper-mcp/issues/167), `D-213`, `R-165`,
+  `SEC-154`, `B-123`).
 
 ## [0.9.0] - 2026-08-16
 

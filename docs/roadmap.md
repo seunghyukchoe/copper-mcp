@@ -20,7 +20,7 @@ request includes the issue that pull request closes, so its count is the expecte
 | M2 — Routing depth | 6 | 1 | The milestone itself is closed. [#53](https://github.com/seunghyukchoe/copper-mcp/issues/53) remains open and operator-blocked for a contained FreeRouting comparison provider; it is not agent-executable. |
 | M3 — Safe application completion | 2 | 2 | Open: [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68) IPC one-undo-commit apply and [#52](https://github.com/seunghyukchoe/copper-mcp/issues/52) placement apply, whose file-backed half has shipped. Both remaining halves wait on a real-editor operator gate. |
 | M4 — Scene, policy, and evaluation | 4 | 0 | Complete as a tracked accounting fact. The `[~]` items below continue to state narrower capability boundaries rather than hidden open issues. |
-| M5 — Verification and physics | 5 | 3 | Open after this slice: [#90](https://github.com/seunghyukchoe/copper-mcp/issues/90), [#91](https://github.com/seunghyukchoe/copper-mcp/issues/91), and [#167](https://github.com/seunghyukchoe/copper-mcp/issues/167). [#87](https://github.com/seunghyukchoe/copper-mcp/issues/87) closes on B-122's parse-inclusive profile without selecting an acceleration; [#99](https://github.com/seunghyukchoe/copper-mcp/issues/99) closes on ADR-0115 and the green public verification intake. |
+| M5 — Verification and physics | 6 | 2 | Open after this slice: [#90](https://github.com/seunghyukchoe/copper-mcp/issues/90) and [#91](https://github.com/seunghyukchoe/copper-mcp/issues/91). [#167](https://github.com/seunghyukchoe/copper-mcp/issues/167) closes on ADR-0116's measured 500,000-vertex source boundary; [#87](https://github.com/seunghyukchoe/copper-mcp/issues/87) and [#99](https://github.com/seunghyukchoe/copper-mcp/issues/99) are closed. |
 | Audio Board Lab #001 — Physical validation | 0 | 1 | Open: [#8](https://github.com/seunghyukchoe/copper-mcp/issues/8). See [the Audio Board Lab gate](#audio-board-lab-001--physical-validation) — as written the issue would validate the board, and the thing that needs validating is the tool. |
 
 Three cautions about this table, because the first two have misled a reader before:
@@ -645,9 +645,8 @@ Renamed on 2026-08-14 from "Performance and physics". The old name promised acce
 nothing in the milestone had begun and that its own issues gated behind a profile nobody had taken.
 What the milestone actually contains, once those gates are honoured, is verification.
 
-Tracker state after this slice: 5 closed, 3 open — [#90](https://github.com/seunghyukchoe/copper-mcp/issues/90),
-[#91](https://github.com/seunghyukchoe/copper-mcp/issues/91), and
-[#167](https://github.com/seunghyukchoe/copper-mcp/issues/167). #87, #88, and #89 close by their
+Tracker state after this slice: 6 closed, 2 open — [#90](https://github.com/seunghyukchoe/copper-mcp/issues/90)
+and [#91](https://github.com/seunghyukchoe/copper-mcp/issues/91). #87, #88, and #89 close by their
 stated evidence gates rather than by a judgement that acceleration can never help; each names the
 evidence that would justify a new optimization issue. #99 closes on the production disposer,
 candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
@@ -709,17 +708,17 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   authoritative tool run or is declared a non-claim — and that is the same evidence-binding contract
   #99 has to define first. Design the hook contract against #99's vocabulary rather than inventing a
   second one.
-- [ ] **The ordered-layer per-island fill ceiling**
-  ([#167](https://github.com/seunghyukchoe/copper-mcp/issues/167)), parked with a paired-calibration
-  requirement: the per-island ceiling and `max_obstacle_checks` must be sized **together**, in the
-  style of B-094 and B-108, because the pairwise-contact cost is linear in ring vertices per test.
-  **No route-quality justification is admissible** — B-105 measured the single-layer fill shrink's
-  benefit on the corpus at zero (2 connectivity improvements, 6 budget regressions, 0 routes
-  unlocked). One correction to the issue's own text, recorded in its comment thread: an over-ceiling
-  island does **not** fall back to the zone's conservative outline envelope — the layered adapter
-  validates fill at the input boundary before any snapshot work, so a single over-ceiling island
-  refuses the **whole request**. The direction stays refusal-side and safe, but the graceful
-  per-island degradation the issue describes would have to be built, not preserved.
+- [x] **The ordered-layer per-island fill ceiling**
+  ([#167](https://github.com/seunghyukchoe/copper-mcp/issues/167)). ADR-0116 and B-123 separate the
+  two costs the issue originally conflated. Each polygon is validated, bounded and canonicalized
+  before search; the search sees only a track and via rectangle per relevant island and charges
+  rectangle relations to `max_obstacle_checks`. A 1,000,000-vertex counterfactual failed its
+  predeclared 20-second proposal-plus-replay gate on the equal-total split shape. The selected
+  fixed 500,000 ceiling passed its 12-second/512 MB gate, while the widest recorded 43,889-vertex
+  island passed with wide margin. Exact 500,000 is accepted, 500,001 remains `invalid_request`
+  before bounds or hashing, aggregate overflow remains `obstacle_check_budget_exceeded`, and fill
+  envelopes remain charged to `max_obstacles`. This closes the real-board over-refusal without a
+  route-quality claim; B-105's 0 routes unlocked result remains unchanged.
 
 ## Audio Board Lab #001 — Physical validation
 
