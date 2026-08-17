@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 from copper_mcp.adapters import parse_kicad_bytes
@@ -53,6 +53,11 @@ class _ExternalCandidateDisposition:
     def __post_init__(self) -> None:
         if self.verification.accepted != (self.candidate is not None):
             raise ValueError("external candidate disposition is inconsistent")
+        if (
+            self.candidate is not None
+            and self.candidate.candidate_id != self.verification.candidate_id
+        ):
+            raise ValueError("external candidate disposition is bound to another candidate")
 
 
 def _dispose_external_route_candidate(
@@ -171,18 +176,6 @@ class ExternalCandidateDrcResult:
         return payload
 
 
-def _drc_settings(settings: Settings, deadline: float) -> Settings:
-    remaining = int(deadline - time.monotonic())
-    if remaining < 1:
-        raise ExternalCandidateDrcError(
-            "the external candidate deadline expired before authoritative DRC could run"
-        )
-    return replace(
-        settings,
-        kicad_timeout_seconds=min(settings.kicad_timeout_seconds, remaining),
-    )
-
-
 def verify_external_route_candidate_drc(
     request: RoutePreviewRequest,
     document: object,
@@ -265,12 +258,17 @@ def verify_external_route_candidate_drc(
             relative_path,
             disposition,
             profile,
-            _drc_settings(settings, deadline),
+            settings,
+            deadline=deadline,
         )
     except KiCadCliError as error:
         raise ExternalCandidateDrcError(
             "authoritative KiCad DRC could not verify the external candidate"
         ) from error
+    if time.monotonic() >= deadline:
+        raise ExternalCandidateDrcError(
+            "the external candidate deadline expired during authoritative DRC"
+        )
     return ExternalCandidateDrcResult(
         verification=disposition.verification,
         drc_evidence=evidence,

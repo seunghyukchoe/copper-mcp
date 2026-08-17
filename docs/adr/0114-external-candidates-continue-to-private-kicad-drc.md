@@ -52,8 +52,10 @@ literal.
 Closed v1 two-pad and v2 four-pad tree documents now pass from untrusted bytes through Board IR
 acceptance, source-preserving private serialization and real KiCad 10.0.5 DRC without changing the
 workspace file or entries. Candidate, source, patched-board and DRC-context revisions remain bound.
-The five committed mutants covering opt-in, physical completion, evidence binding, serializer
-selection and disposition type checks are all killed.
+The seven committed mutants covering opt-in, physical completion, evidence binding, serializer
+selection, disposition type and candidate binding, and the post-DRC deadline check are all killed.
+Review additionally bound every context scan and the KiCad subprocess to the remaining absolute
+preview deadline, then rechecks the deadline after report parsing before publishing evidence.
 
 This is still not a public intake. Nothing is exported through MCP, CLI, persistence or apply, and
 no new mutation authority exists. Issue #99 remains open for a deliberately versioned public

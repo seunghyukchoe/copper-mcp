@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from dataclasses import replace
 from itertools import pairwise
 from pathlib import Path
 
@@ -150,10 +151,13 @@ def test_accepted_external_candidate_continues_to_redacted_candidate_bound_drc(
         disposition: object,
         profile: object,
         settings: Settings,
+        *,
+        deadline: float | None = None,
     ) -> RouteCandidateDrcEvidence:
         assert requested_path == board.name
         assert profile == request.profile()
         assert settings.workspace == tmp_path
+        assert deadline is not None
         candidate = getattr(disposition, "candidate", None)
         assert isinstance(candidate, RouteCandidate)
         calls.append(candidate)
@@ -267,9 +271,11 @@ def test_disposed_kicad_seam_selects_the_non_replay_renderer(
         disposition,
         request.profile(),
         Settings(workspace=tmp_path),
+        deadline=123.0,
     )
 
     assert captured["render_candidate"] is _render_kicad_disposed_candidate_board
+    assert captured["deadline"] == 123.0
 
 
 def test_disposed_kicad_seam_rejects_a_forged_capability(tmp_path: Path) -> None:
@@ -279,6 +285,91 @@ def test_disposed_kicad_seam_rejects_a_forged_capability(tmp_path: Path) -> None
             object(),
             _request("two-pad.kicad_pcb").profile(),
             Settings(workspace=tmp_path),
+        )
+
+
+def test_disposition_rejects_a_candidate_not_bound_to_its_acceptance(tmp_path: Path) -> None:
+    board, request, candidate, document = _workspace(tmp_path)
+    snapshot = parse_kicad_bytes(board.read_bytes(), request.profile()).snapshot
+    assert snapshot is not None
+    disposition = _dispose_external_route_candidate(
+        snapshot,
+        RouteRequest(
+            board_revision=snapshot.snapshot_digest,
+            net_id=request.net_id,
+            layer_id=request.layer_id,
+            seed=request.seed,
+            settings=request.settings,
+        ),
+        document,
+        start_pad_id=candidate.start_pad_id,
+        end_pad_id=candidate.end_pad_id,
+        max_obstacle_checks=request.settings.max_obstacle_checks,
+        max_path_edges=4_096,
+    )
+    assert disposition.candidate is not None
+
+    with pytest.raises(ValueError, match="bound to another candidate"):
+        external_drc._ExternalCandidateDisposition(
+            verification=disposition.verification,
+            candidate=replace(disposition.candidate, candidate_id=_DIGEST),
+        )
+
+
+def test_candidate_drc_deadline_reduces_every_phase_budget(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = 100.25
+    monkeypatch.setattr(kicad_cli.time, "monotonic", lambda: clock)
+    settings = Settings(
+        workspace=tmp_path,
+        kicad_timeout_seconds=120,
+        max_drc_context_scan_seconds=10,
+    )
+
+    limited = kicad_cli._candidate_drc_deadline_settings(settings, 105.9)
+
+    assert limited.kicad_timeout_seconds == 5
+    assert limited.max_drc_context_scan_seconds == 5
+    with pytest.raises(KiCadCliError, match="deadline exceeded"):
+        kicad_cli._candidate_drc_deadline_settings(settings, 101.0)
+
+
+def test_external_coordinator_rejects_drc_finishing_after_its_deadline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, request, candidate, document = _workspace(tmp_path)
+    clock = [100.0]
+    monkeypatch.setattr(external_drc.time, "monotonic", lambda: clock[0])
+
+    def finish_late(
+        requested_path: str,
+        disposition: object,
+        profile: object,
+        settings: Settings,
+        *,
+        deadline: float | None = None,
+    ) -> RouteCandidateDrcEvidence:
+        assert requested_path == request.board
+        assert profile == request.profile()
+        assert deadline == 130.0
+        accepted = getattr(disposition, "candidate", None)
+        assert isinstance(accepted, RouteCandidate)
+        clock[0] = 131.0
+        return _evidence(accepted)
+
+    monkeypatch.setattr(external_drc, "run_disposed_route_candidate_drc", finish_late)
+    with pytest.raises(ExternalCandidateDrcError, match="expired during authoritative DRC"):
+        verify_external_route_candidate_drc(
+            request,
+            document,
+            Settings(workspace=tmp_path),
+            start_pad_id=candidate.start_pad_id,
+            end_pad_id=candidate.end_pad_id,
+            max_obstacle_checks=request.settings.max_obstacle_checks,
+            max_path_edges=4_096,
         )
 
 

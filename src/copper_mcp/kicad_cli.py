@@ -844,14 +844,31 @@ def _parse_drc_report(
     )
 
 
+def _candidate_drc_deadline_settings(settings: Settings, deadline: float | None) -> Settings:
+    """Return per-phase limits that cannot outlive an external candidate deadline."""
+
+    if deadline is None:
+        return settings
+    remaining = int(deadline - time.monotonic())
+    if remaining < 1:
+        raise KiCadCliError("route candidate DRC deadline exceeded")
+    return replace(
+        settings,
+        kicad_timeout_seconds=min(settings.kicad_timeout_seconds, remaining),
+        max_drc_context_scan_seconds=min(settings.max_drc_context_scan_seconds, remaining),
+    )
+
+
 def _run_captured_drc(
     context: dict[str, bytes],
     *,
     board_relative: str,
     settings: Settings,
+    deadline: float | None = None,
 ) -> DrcSummary:
     """Consume one bounded context through the sole fixed KiCad DRC command path."""
 
+    settings = _candidate_drc_deadline_settings(settings, deadline)
     if board_relative not in context:
         raise KiCadCliError("captured KiCad DRC context is missing its source board")
     base_revision = _revision(context[board_relative])
@@ -882,6 +899,7 @@ def _run_captured_drc(
         snapshot_board = (workspace_snapshot / board_relative).resolve(strict=True)
         report_path = temporary_root / "drc.json"
         private_state = temporary_root / "process-state"
+        settings = _candidate_drc_deadline_settings(settings, deadline)
         try:
             child_environment = _private_kicad_environment(private_state)
         except OSError as error:
@@ -923,6 +941,7 @@ def _run_captured_drc(
             )
         except subprocess.TimeoutExpired as error:
             raise KiCadCliError("KiCad DRC timed out") from error
+        settings = _candidate_drc_deadline_settings(settings, deadline)
         _validate_private_kicad_state(private_state, settings)
         _validate_snapshot_tree(workspace_snapshot, expected_snapshot_files, settings)
         if completed.returncode == -signal.SIGXFSZ:
@@ -932,7 +951,10 @@ def _run_captured_drc(
         try:
             private_context_after = _drc_context(
                 snapshot_board,
-                replace(settings, workspace=workspace_snapshot),
+                replace(
+                    _candidate_drc_deadline_settings(settings, deadline),
+                    workspace=workspace_snapshot,
+                ),
             )
         except (KiCadCliError, OSError) as error:
             raise KiCadCliError("private KiCad DRC context changed during DRC") from error
@@ -953,13 +975,15 @@ def _run_captured_drc(
                 raise KiCadCliError("KiCad DRC did not create a report") from error
             raise KiCadCliError("KiCad DRC report exceeds the configured limit") from error
 
-    return _parse_drc_report(
+    summary = _parse_drc_report(
         report,
         return_code=completed.returncode,
         base_revision=base_revision,
         drc_context_revision=drc_context_revision,
         expected_source=Path(board_relative).name,
     )
+    _candidate_drc_deadline_settings(settings, deadline)
+    return summary
 
 
 @dataclass(frozen=True, slots=True)
@@ -1947,6 +1971,7 @@ def _run_route_candidate_drc(
     verified_fill: tuple[VerifiedFill, ...] = (),
     render_candidate: Callable[..., bytes],
     serialization_failure: str,
+    deadline: float | None = None,
 ) -> RouteCandidateDrcEvidence:
     """Shared candidate-bound DRC flow after its caller selects the validation authority."""
 
@@ -1955,20 +1980,25 @@ def _run_route_candidate_drc(
     if not isinstance(profile, KiCadConstraintProfile):
         raise KiCadCliError("KiCad constraint profile is malformed")
 
+    phase_settings = _candidate_drc_deadline_settings(settings, deadline)
     board = read_workspace_file(
-        settings.workspace,
+        phase_settings.workspace,
         requested_path,
         allowed_suffixes={".kicad_pcb"},
-        max_bytes=settings.max_board_bytes,
+        max_bytes=phase_settings.max_board_bytes,
     )
+    phase_settings = _candidate_drc_deadline_settings(settings, deadline)
     board_path = board.path
-    captured_context = _drc_context(board_path, settings, board)
-    board_relative = board_path.relative_to(settings.workspace.resolve(strict=True)).as_posix()
+    captured_context = _drc_context(board_path, phase_settings, board)
+    board_relative = board_path.relative_to(
+        phase_settings.workspace.resolve(strict=True)
+    ).as_posix()
     original_context_revision = _context_revision(captured_context)
     source = captured_context[board_relative]
     source_revision = _revision(source)
 
-    parse_limits = parse_limits_for(settings)
+    phase_settings = _candidate_drc_deadline_settings(settings, deadline)
+    parse_limits = parse_limits_for(phase_settings)
     conversion = parse_kicad_bytes(source, profile, parse_limits)
     if conversion.snapshot is None or conversion.diagnostics:
         raise KiCadCliError("captured KiCad board cannot be represented by the supported Board IR")
@@ -1989,11 +2019,12 @@ def _run_route_candidate_drc(
     except KiCadRoutePatchError as error:
         raise KiCadCliError(serialization_failure) from error
 
+    phase_settings = _candidate_drc_deadline_settings(settings, deadline)
     patched_context = _candidate_drc_context(
         captured_context,
         board_relative=board_relative,
         patched_board=patched_board,
-        settings=settings,
+        settings=phase_settings,
     )
     patched_board_revision = _revision(patched_board)
     patched_drc_context_revision = _context_revision(patched_context)
@@ -2002,17 +2033,20 @@ def _run_route_candidate_drc(
     summary = _run_captured_drc(
         patched_context,
         board_relative=board_relative,
-        settings=settings,
+        settings=_candidate_drc_deadline_settings(settings, deadline),
+        deadline=deadline,
     )
     if (
         summary.base_revision != patched_board_revision
         or summary.drc_context_revision != patched_drc_context_revision
     ):
         raise KiCadCliError("KiCad DRC summary revision binding is inconsistent")
-    if _context_revision(_drc_context(board_path, settings)) != original_context_revision:
+    phase_settings = _candidate_drc_deadline_settings(settings, deadline)
+    if _context_revision(_drc_context(board_path, phase_settings)) != original_context_revision:
         raise KiCadCliError(
             "board or DRC rules changed while candidate DRC was running; result discarded"
         )
+    _candidate_drc_deadline_settings(settings, deadline)
     return RouteCandidateDrcEvidence(
         candidate_id=candidate.candidate_id,
         candidate_base_revision=candidate.base_revision,
@@ -2049,6 +2083,8 @@ def run_disposed_route_candidate_drc(
     disposition: object,
     profile: KiCadConstraintProfile,
     settings: Settings,
+    *,
+    deadline: float | None = None,
 ) -> RouteCandidateDrcEvidence:
     """Bind one exact external-disposer acceptance to authoritative KiCad DRC."""
 
@@ -2058,6 +2094,8 @@ def run_disposed_route_candidate_drc(
         raise KiCadCliError("external route candidate disposition is malformed or refused")
     if not disposition.verification.accepted:
         raise KiCadCliError("external route candidate disposition is inconsistent")
+    if disposition.candidate.candidate_id != disposition.verification.candidate_id:
+        raise KiCadCliError("external route candidate disposition is bound to another candidate")
     return _run_route_candidate_drc(
         requested_path,
         disposition.candidate,
@@ -2065,6 +2103,7 @@ def run_disposed_route_candidate_drc(
         settings,
         render_candidate=_render_kicad_disposed_candidate_board,
         serialization_failure="external route candidate failed disposer-verified serialization",
+        deadline=deadline,
     )
 
 
