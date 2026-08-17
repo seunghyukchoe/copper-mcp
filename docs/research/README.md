@@ -64,6 +64,10 @@ When adding a document, add it to the list below in the same sentence form — *
 - [Route-bundle preview](./route-bundle-v1.md) records the read-only, twice-composed plan contract
   for two to eight two-pin nets on one lattice, published only when both compositions agree. It
   claims no multilayer capacity, no vias or zones, and no authority to apply the plan.
+- [tscircuit output-validation integration contract](./tscircuit-output-validation-contract-v1.md)
+  separates whole-output DRC from per-net CopperMCP disposal, freezes the first fail-closed SRJ
+  conversion subset, and refuses to infer cross-candidate, via, KiCad, or mutation claims from a
+  one-candidate acceptance.
 - [Bounded local exact repair](./bounded-local-exact-repair.md) defines the standalone verified
   lattice operator and the gates still required before negotiated-routing integration.
 - [Exact local-repair negotiated-integration gate](./exact-local-repair-negotiated-integration-gate.md)
