@@ -631,6 +631,101 @@ LiveRoutePreviewToolRequest = Annotated[
 ]
 
 
+class ExternalRouteVerificationRequestContract(_ClosedContract):
+    """Coordinator-owned inputs for disposing one foreign route document."""
+
+    board: Annotated[
+        str,
+        Field(min_length=1, max_length=4096, pattern=r"^[^\u0000-\u001f\u007f]+$"),
+    ]
+    layer: Annotated[
+        str,
+        Field(pattern=r"^(?:F\.Cu|B\.Cu|In(?:[1-9]|[12][0-9]|3[0-2])\.Cu)$"),
+    ]
+    constraints: RouteConstraintsContract
+    net_ref_id: NetRefId
+    expect_board_revision: Digest
+    expect_snapshot_digest: Digest
+    seed: NonNegativeInteger = 0
+    settings: RouteSettingsContract = Field(default_factory=RouteSettingsContract)
+
+
+class ExternalRoutePointContract(_ClosedContract):
+    """One integer-nanometre point in an untrusted route document."""
+
+    x_nm: Nanometres
+    y_nm: Nanometres
+
+
+class ExternalRouteSegmentContract(_ClosedContract):
+    """One closed, single-layer segment supplied by an external proposer."""
+
+    layer_id: LayerId
+    width_nm: PositiveNanometres
+    start: ExternalRoutePointContract
+    end: ExternalRoutePointContract
+
+
+class ExternalRouteViaContract(_ClosedContract):
+    """A via-shaped value accepted only so the disposer can classify its refusal."""
+
+    start_layer_id: LayerId
+    end_layer_id: LayerId
+    at: ExternalRoutePointContract
+
+
+class ExternalRoutePathContract(_ClosedContract):
+    """One ordered path in the v2 multi-pin patch document."""
+
+    segments: Annotated[list[ExternalRouteSegmentContract], Field(min_length=1, max_length=4096)]
+
+
+class ExternalRouteCandidateDocumentContract(_ClosedContract):
+    """Closed v1 external two-pad route document."""
+
+    schema_: Literal["copper-mcp/external-route-candidate/v1"] = Field(alias="schema")
+    problem_revision: Digest
+    start_pad_id: PadRefId
+    end_pad_id: PadRefId
+    segments: Annotated[list[ExternalRouteSegmentContract], Field(min_length=1, max_length=4096)]
+    vias: Annotated[list[ExternalRouteViaContract], Field(max_length=4096)]
+
+
+class ExternalRoutePatchDocumentContract(_ClosedContract):
+    """Closed v2 external multi-pin route-patch document."""
+
+    schema_: Literal["copper-mcp/external-route-patch/v2"] = Field(alias="schema")
+    problem_revision: Digest
+    start_pad_id: PadRefId
+    end_pad_id: PadRefId
+    paths: Annotated[list[ExternalRoutePathContract], Field(min_length=1, max_length=4096)]
+    vias: Annotated[list[ExternalRouteViaContract], Field(max_length=4096)]
+
+
+class ExternalRouteDocumentContract(
+    RootModel[ExternalRouteCandidateDocumentContract | ExternalRoutePatchDocumentContract]
+):
+    """Advertised exclusive union of the immutable v1 and v2 document sets."""
+
+
+class ExternalRouteVerificationEnvelopeContract(_ClosedContract):
+    """Versioned public request envelope for external route verification."""
+
+    schema_version: Literal["1.0"]
+    request: ExternalRouteVerificationRequestContract
+    document: ExternalRouteDocumentContract
+    start_pad_id: PadRefId
+    end_pad_id: PadRefId
+
+
+# Runtime acceptance is broad so framework errors cannot echo hostile coordinates or board values.
+# The application boundary parses the same closed shape and emits fixed diagnostics.
+ExternalRouteVerificationToolRequest = Annotated[
+    Any,
+    WithJsonSchema(_inline_json_schema(ExternalRouteVerificationEnvelopeContract)),
+]
+
+
 class _SceneObjectContract(_ClosedContract):
     """Shared identity for every scene object. Carries no author-controlled text."""
 
@@ -1241,6 +1336,85 @@ class RouteCandidateDrcEvidenceContract(_ClosedContract):
     patched_drc_context_revision: Digest
     summary: RouteDrcSummaryContract
     statement: InTotoDrcStatementContract | None = None
+
+
+ExternalRouteVerificationFailureCode = Literal[
+    "invalid_request",
+    "invalid_candidate",
+    "stale_revision",
+    "discontinuous_path",
+    "endpoint_mismatch",
+    "undeclared_layer",
+    "unsupported_geometry",
+    "infeasible",
+    "obstacle_violation",
+    "budget_exceeded",
+    "cancelled",
+    "deadline_exceeded",
+]
+
+
+class _ExternalRouteVerificationResultCommon(_ClosedContract):
+    """Bounded aggregate work disclosed by every public disposer result."""
+
+    schema_version: Literal["1.0"]
+    segment_count: Annotated[int, Field(ge=0, le=10_000_000)]
+    edge_checks: Annotated[int, Field(ge=0, le=10_000_000)]
+    obstacle_checks: Annotated[int, Field(ge=0, le=10_000_000)]
+
+
+class AcceptedExternalRouteVerificationContract(_ExternalRouteVerificationResultCommon):
+    """Accepted candidate identity bound to completed authoritative DRC evidence."""
+
+    status: Literal["accepted"]
+    physical_validation: Literal["completed"]
+    candidate_id: Digest
+    drc_evidence: RouteCandidateDrcEvidenceContract
+    drc_comparability: Literal["single_invocation"]
+
+    @model_validator(mode="after")
+    def _candidate_matches_evidence(self) -> AcceptedExternalRouteVerificationContract:
+        if self.drc_evidence.candidate_id != self.candidate_id:
+            raise ValueError("external route DRC evidence is bound to another candidate")
+        return self
+
+
+class RefusedExternalRouteVerificationContract(_ExternalRouteVerificationResultCommon):
+    """Typed, non-echoing refusal that ran no authoritative physical validation."""
+
+    status: Literal["refused"]
+    physical_validation: Literal["not_run"]
+    code: ExternalRouteVerificationFailureCode
+    diagnostic: Annotated[str, Field(min_length=1, max_length=128)]
+    drc_evidence: Literal[None]
+
+    @model_validator(mode="after")
+    def _diagnostic_matches_code(self) -> RefusedExternalRouteVerificationContract:
+        diagnostics = {
+            "invalid_request": "external candidate verification input is invalid",
+            "invalid_candidate": "external candidate is invalid",
+            "stale_revision": "external candidate is stale",
+            "discontinuous_path": "external candidate path is discontinuous",
+            "endpoint_mismatch": "external candidate endpoints do not match",
+            "undeclared_layer": "external candidate names an undeclared layer",
+            "unsupported_geometry": "external candidate uses unsupported geometry",
+            "infeasible": "the immutable board cannot accept this candidate",
+            "obstacle_violation": "external candidate violates the Board IR obstacle authority",
+            "budget_exceeded": "external candidate verification exhausted its bounded work budget",
+            "cancelled": "external candidate verification was cancelled",
+            "deadline_exceeded": (
+                "external candidate verification exceeded its cooperative deadline"
+            ),
+        }
+        if self.diagnostic != diagnostics[self.code]:
+            raise ValueError("external route refusal diagnostic is inconsistent")
+        return self
+
+
+class ExternalRouteVerificationToolResponse(
+    RootModel[AcceptedExternalRouteVerificationContract | RefusedExternalRouteVerificationContract]
+):
+    """Strict accepted/refused public result contract for external route verification."""
 
 
 class RouteFillAuthorityContract(_ClosedContract):
@@ -2376,6 +2550,8 @@ __all__ = [
     "CircuitSceneToolResponse",
     "CircuitSchematicErcToolResponse",
     "CircuitSchematicToolResponse",
+    "ExternalRouteVerificationToolRequest",
+    "ExternalRouteVerificationToolResponse",
     "LayeredRoutePreviewToolRequest",
     "LayeredRoutePreviewToolResponse",
     "LiveApplyToolRequest",

@@ -682,9 +682,14 @@ it.
   production-only file-backed continuation: an accepted v1 two-pad path or v2 multi-pin tree is
   serialized on a private board and bound to authoritative KiCad DRC evidence, while a structural
   refusal never executes KiCad. Real KiCad 10.0.5 tests cover both shapes and source immutability;
-  completed evidence is explicitly one invocation, not a reproducible differential. The seam is
-  still not exposed through MCP or CLI, so a deliberately versioned public intake and its
-  transport-level resource/disclosure tests are the remaining #99 machine capability gate.
+  completed evidence is explicitly one invocation, not a reproducible differential. ADR-0115 now
+  publishes the remaining machine seam as the versioned, reference-only, read-only MCP tool
+  `verify_external_route_candidate`: DRC is mandatory, identity is server-derived, obstacle/edge
+  budgets derive from the bounded coordinator settings rather than foreign document fields,
+  and the accepted/refused union contains no geometry or authority. #99's machine capability is
+  closed only when its stdio/HTTP schema, resource and disclosure tests plus the full local gate are
+  green. That closure does not establish electrical, SI/PI/EMC, thermal, DFM, fabrication or
+  hardware validity; those human and physical gates remain open.
 - [~] **Local exact repair for bounded congestion windows, parked behind #99**
   ([#90](https://github.com/seunghyukchoe/copper-mcp/issues/90)). The standalone deterministic
   operator and predeclared 5 × 5 detour regression exist (B-067), but negotiated-router integration

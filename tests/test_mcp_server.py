@@ -113,6 +113,7 @@ class McpServerTests(unittest.TestCase):
                 "cancel_routing_job",
                 "export_routing_candidate",
                 "validate_candidate",
+                "verify_external_route_candidate",
                 "verify_circuit_schematic_erc",
                 "verify_source_to_board_parity",
             },
@@ -981,6 +982,7 @@ asyncio.run(main())
         # The ERC tool is deliberately available here: it returns digests and counts, and issues
         # no artifact capability, so it needs none of the stdio-only isolation.
         self.assertIn("verify_circuit_schematic_erc", inventory["tools"])
+        self.assertIn("verify_external_route_candidate", inventory["tools"])
 
     def test_schematic_erc_tool_rejects_unknown_arguments(self) -> None:
         with self.assertRaises(ToolError) as raised:

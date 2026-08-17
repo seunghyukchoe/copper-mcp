@@ -29,6 +29,7 @@ from copper_mcp import __version__
 from copper_mcp.apply.tokens import ApplyTokenAuthority
 from copper_mcp.circuit_intent_service import KICAD_SCHEMATIC_MIME_TYPE
 from copper_mcp.config import Settings
+from copper_mcp.external_candidate_drc import ExternalCandidatePublicError
 from copper_mcp.mcp_contracts import (
     ApplyCandidateToolResponse,
     CircuitIntentToolContent,
@@ -36,6 +37,8 @@ from copper_mcp.mcp_contracts import (
     CircuitSchematicErcToolResponse,
     CircuitSchematicToolResponse,
     Digest,
+    ExternalRouteVerificationToolRequest,
+    ExternalRouteVerificationToolResponse,
     LayeredRoutePreviewToolRequest,
     LayeredRoutePreviewToolResponse,
     LiveApplyToolRequest,
@@ -117,6 +120,9 @@ from copper_mcp.tools import run_board_drc as run_board_drc_service
 from copper_mcp.tools import server_info as server_info_service
 from copper_mcp.tools import validate_candidate as validate_candidate_service
 from copper_mcp.tools import verify_circuit_schematic_erc as verify_circuit_schematic_erc_service
+from copper_mcp.tools import (
+    verify_external_route_candidate as verify_external_route_candidate_service,
+)
 from copper_mcp.tools import verify_source_to_board_parity as verify_source_to_board_parity_service
 
 _SETTINGS = Settings.from_env()
@@ -209,6 +215,7 @@ class CopperMCPServer(MCPServer[None]):
                 "preview_placement",
                 "inspect_live_editor_context",
                 "start_routing",
+                "verify_external_route_candidate",
             }:
                 result.append(tool)
                 continue
@@ -235,6 +242,10 @@ class CopperMCPServer(MCPServer[None]):
             raise ToolError("route tool arguments are malformed")
         if name == "preview_route_bundle" and set(arguments) != {"request"}:
             raise ToolError("route bundle tool arguments are malformed")
+        if name == "verify_external_route_candidate" and (
+            type(arguments) is not dict or len(arguments) != 1 or "request" not in arguments
+        ):
+            raise ToolError("external route verification arguments are malformed")
         if name == "preview_live_route" and set(arguments) != {"request"}:
             raise ToolError("live route tool arguments are malformed")
         if name == "preview_layered_route" and set(arguments) != {"request"}:
@@ -479,6 +490,33 @@ def preview_route(request: RoutePreviewToolRequest) -> RoutePreviewToolResponse:
     return RoutePreviewToolResponse.model_validate(
         preview_route_service(request, _SETTINGS, _APPLY_TOKENS)
     )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def verify_external_route_candidate(
+    request: ExternalRouteVerificationToolRequest,
+) -> ExternalRouteVerificationToolResponse:
+    """Dispose one revision-bound foreign route through Board IR and authoritative KiCad DRC.
+
+    The route selector is reference-only and carries both source and snapshot preconditions.
+    Candidate identity and work ceilings are derived by the server. The result contains only a
+    typed structural disposition and aggregate, candidate-bound DRC evidence; no geometry,
+    board bytes, apply authority, repair, persistence, or mutation crosses this boundary.
+    """
+
+    try:
+        result = verify_external_route_candidate_service(request, _SETTINGS)
+    except ExternalCandidatePublicError as error:
+        raise ToolError(str(error)) from error
+    return ExternalRouteVerificationToolResponse.model_validate(result)
 
 
 @mcp.tool(

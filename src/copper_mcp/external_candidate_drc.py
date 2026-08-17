@@ -22,7 +22,11 @@ from copper_mcp.kicad_cli import (
     run_disposed_route_candidate_drc,
 )
 from copper_mcp.parse_budgets import parse_limits_for
-from copper_mcp.route_preview import RoutePreviewRequest
+from copper_mcp.route_preview import (
+    RoutePreviewError,
+    RoutePreviewRequest,
+    parse_route_preview_request,
+)
 from copper_mcp.routing.contracts import RouteCandidate, RoutePath, RouteRequest
 from copper_mcp.routing.external_candidate_verifier import (
     EXTERNAL_ROUTE_CANDIDATE_SCHEMA,
@@ -34,13 +38,36 @@ from copper_mcp.routing.external_candidate_verifier import (
     _patch_candidate,
     _point,
     _refused,
-    verify_external_route_candidate,
+)
+from copper_mcp.routing.external_candidate_verifier import (
+    verify_external_route_candidate as verify_external_route_candidate_core,
 )
 from copper_mcp.security import read_workspace_file
 
 
 class ExternalCandidateDrcError(RuntimeError):
     """Raised when the trusted file-backed continuation cannot produce DRC evidence."""
+
+
+class ExternalCandidatePublicError(RuntimeError):
+    """Fixed public failure when no authoritative external-candidate result exists."""
+
+
+_PUBLIC_SCHEMA_VERSION = "1.0"
+_PUBLIC_ERROR = "external candidate verification could not be completed"
+_PUBLIC_KEYS = frozenset({"schema_version", "request", "document", "start_pad_id", "end_pad_id"})
+_PUBLIC_REQUEST_REQUIRED_KEYS = frozenset(
+    {
+        "board",
+        "layer",
+        "constraints",
+        "net_ref_id",
+        "expect_board_revision",
+        "expect_snapshot_digest",
+    }
+)
+_PUBLIC_REQUEST_OPTIONAL_KEYS = frozenset({"seed", "settings"})
+_PUBLIC_REQUEST_KEYS = _PUBLIC_REQUEST_REQUIRED_KEYS | _PUBLIC_REQUEST_OPTIONAL_KEYS
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,7 +100,7 @@ def _dispose_external_route_candidate(
 ) -> _ExternalCandidateDisposition:
     """Verify once, then reconstruct the already-accepted immutable candidate for DRC."""
 
-    verification = verify_external_route_candidate(
+    verification = verify_external_route_candidate_core(
         snapshot,
         request,
         document,
@@ -275,8 +302,85 @@ def verify_external_route_candidate_drc(
     )
 
 
+def _invalid_public_result() -> dict[str, object]:
+    result = ExternalCandidateDrcResult(
+        verification=_refused(ExternalCandidateFailure.INVALID_REQUEST),
+        drc_evidence=None,
+    ).to_dict()
+    return {"schema_version": _PUBLIC_SCHEMA_VERSION, **result}
+
+
+def _parse_public_request(
+    payload: object,
+) -> tuple[RoutePreviewRequest, object, object, object] | None:
+    """Parse the closed public envelope before any file or geometry work."""
+
+    if (
+        type(payload) is not dict
+        or len(payload) != len(_PUBLIC_KEYS)
+        or not all(key in payload for key in _PUBLIC_KEYS)
+        or type(payload["schema_version"]) is not str
+        or payload["schema_version"] != _PUBLIC_SCHEMA_VERSION
+    ):
+        return None
+    request_payload = payload["request"]
+    if (
+        type(request_payload) is not dict
+        or not all(key in request_payload for key in _PUBLIC_REQUEST_REQUIRED_KEYS)
+        or len(request_payload)
+        != len(_PUBLIC_REQUEST_REQUIRED_KEYS)
+        + sum(key in request_payload for key in _PUBLIC_REQUEST_OPTIONAL_KEYS)
+    ):
+        return None
+    trusted_request = {
+        key: request_payload[key] for key in _PUBLIC_REQUEST_KEYS if key in request_payload
+    }
+    trusted_request.update(
+        {
+            "include_drc": True,
+            "include_fill_authority": False,
+            "include_apply_token": False,
+        }
+    )
+    try:
+        request = parse_route_preview_request(trusted_request)
+    except RoutePreviewError:
+        return None
+    return request, payload["document"], payload["start_pad_id"], payload["end_pad_id"]
+
+
+def verify_external_route_candidate_request(
+    payload: object,
+    settings: Settings,
+) -> dict[str, object]:
+    """Verify one closed public external-candidate request without mutation or geometry output."""
+
+    try:
+        parsed = _parse_public_request(payload)
+    except Exception as error:
+        raise ExternalCandidatePublicError(_PUBLIC_ERROR) from error
+    if parsed is None:
+        return _invalid_public_result()
+    request, document, start_pad_id, end_pad_id = parsed
+    try:
+        result = verify_external_route_candidate_drc(
+            request,
+            document,
+            settings,
+            start_pad_id=start_pad_id,
+            end_pad_id=end_pad_id,
+            max_obstacle_checks=request.settings.max_obstacle_checks,
+            max_path_edges=min(4_096, request.settings.max_grid_nodes),
+        )
+    except Exception as error:
+        raise ExternalCandidatePublicError(_PUBLIC_ERROR) from error
+    return {"schema_version": _PUBLIC_SCHEMA_VERSION, **result.to_dict()}
+
+
 __all__ = [
     "ExternalCandidateDrcError",
     "ExternalCandidateDrcResult",
+    "ExternalCandidatePublicError",
     "verify_external_route_candidate_drc",
+    "verify_external_route_candidate_request",
 ]
