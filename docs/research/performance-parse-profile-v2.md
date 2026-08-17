@@ -56,3 +56,16 @@ across machines.
 The existing B-068 primary-source basis remains applicable: Python's documented `perf_counter_ns`,
 `monotonic_ns`, `cProfile`, and cumulative `pstats` semantics. This increment changes no production
 module or published contract.
+
+## Recorded result
+
+B-122 records the clean `64835f6` run. All eight executions (two warmups, five unprofiled samples,
+and one profiled pass) returned the same snapshot digest. The five unprofiled samples measured a
+`41,795,417 ns` median (`41,201,750`–`46,787,000 ns`). In the separate instrumented pass, the
+complete read was `133,444,667 ns`; `parse_sexpr` was the largest named child at `685,938 ppm`,
+tokenization was nested beneath it at `505,139 ppm`, and typed model conversion was `303,980 ppm`.
+The predeclared prediction therefore passed.
+
+The next optimization experiment, if one is scheduled, belongs at the S-expression/tokenizer seam
+and must beat this same manifest while preserving the output digest. The profile does not justify a
+Rust implementation by itself: it identifies a stage, not a language or an achievable gain.

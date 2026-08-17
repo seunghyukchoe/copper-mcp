@@ -137,6 +137,11 @@ def test_parse_profile_attributes_the_complete_read_without_changing_output(
         "tokenization",
     }
     assert attribution["stages"]["complete_read"]["share_of_complete_read_ppm"] == 1_000_000
+    assert attribution["stages"]["sexpr_parse"]["share_of_complete_read_ppm"] >= 500_000
+    assert (
+        attribution["stages"]["sexpr_parse"]["cumulative_time_ns"]
+        > attribution["stages"]["model_conversion"]["cumulative_time_ns"]
+    )
     assert all(
         0 <= stage["share_of_complete_read_ppm"] <= 1_000_000
         for stage in attribution["stages"].values()
@@ -176,6 +181,9 @@ def test_committed_parse_profile_is_self_digested_and_keeps_timing_out_of_identi
         "warmups": 2,
     }
     assert report["provenance"]["clean_worktree"] is True
+    assert report["scenario"]["output_digest"] == (
+        "sha256:ef6219e861f5bcd8d18142d1a3d16a2529e4e857a5f713c62c262eb1685d0148"
+    )
     assert report["identity"]["source_provenance"] == {
         "clean_worktree": True,
         "git_head": report["provenance"]["git_head"],

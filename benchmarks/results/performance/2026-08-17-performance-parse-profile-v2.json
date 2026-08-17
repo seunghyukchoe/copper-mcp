@@ -1,0 +1,175 @@
+{
+  "identity": {
+    "fixture_manifest": {
+      "coppertone_complete_board_read": "sha256:3bcd01ec4942fccabfaf1c21bdae050a31a7bf99af7ab1bcb0dbb3d0aabcfb94"
+    },
+    "measurement_configuration": {
+      "hotspot_limit": 12,
+      "samples": 5,
+      "warmups": 2
+    },
+    "schema": "copper-mcp/performance-parse-profile/v2",
+    "script_sha256": "sha256:8c2ecedd4c18dc6a810b372dd6cfb34b056075bd55b3232a732f1fe12e51575e",
+    "source_provenance": {
+      "clean_worktree": true,
+      "git_head": "64835f6b0ab0370bc5e19dce617b51fd3dc02d5c"
+    },
+    "support_script_sha256": "sha256:0a4eeeed50e0c1d81905f3880f4ada417abefdead54a64f0ea9d3795909d9575"
+  },
+  "identity_digest": "sha256:d8b278ca0a7e2ec755fe5d8ad17376e4a83706f27bd79cd53dde26d6751e23d1",
+  "instrumentation": {
+    "hotspots": "cProfile cumulative time; bounded redacted summaries only",
+    "run_span": "time.monotonic_ns; operational span only, excluded from identity",
+    "timings": "time.perf_counter_ns; unprofiled samples, excluded from identity"
+  },
+  "monotonic_run_span_ns": 444129750,
+  "not_claimed": [
+    "an acceleration, speedup, Rust, SIMD, GPU, DRC, fabrication, or hardware result",
+    "a cross-machine timing comparison or stable nanosecond precision",
+    "a general real-board population result or a public-contract change"
+  ],
+  "provenance": {
+    "clean_worktree": true,
+    "git_head": "64835f6b0ab0370bc5e19dce617b51fd3dc02d5c",
+    "machine": "arm64",
+    "python": "3.12.13"
+  },
+  "run_id": "sha256:63a105e210187de1ceb147dfa9107a59866a70d3f2439aa0bac52b0d3ab08659",
+  "scenario": {
+    "fixture": {
+      "bytes": 166070,
+      "id": "coppertone-complete-board-read",
+      "sha256": "sha256:3bcd01ec4942fccabfaf1c21bdae050a31a7bf99af7ab1bcb0dbb3d0aabcfb94"
+    },
+    "hotspots_cumulative": [
+      {
+        "cumulative_time_ns": 133444667,
+        "function": "external:performance_parse_profile_v2.py:_parse_pipeline",
+        "primitive_calls": 1,
+        "self_time_ns": 421292,
+        "total_calls": 1
+      },
+      {
+        "cumulative_time_ns": 132873417,
+        "function": "copper_mcp:copper_mcp.adapters.kicad_board_ir:parse_kicad_bytes",
+        "primitive_calls": 1,
+        "self_time_ns": 28875,
+        "total_calls": 1
+      },
+      {
+        "cumulative_time_ns": 91534875,
+        "function": "copper_mcp:copper_mcp.adapters.sexpr:parse_sexpr",
+        "primitive_calls": 1,
+        "self_time_ns": 16893609,
+        "total_calls": 1
+      },
+      {
+        "cumulative_time_ns": 67408145,
+        "function": "copper_mcp:copper_mcp.adapters.sexpr:_tokens",
+        "primitive_calls": 32802,
+        "self_time_ns": 40564441,
+        "total_calls": 32802
+      },
+      {
+        "cumulative_time_ns": 40564583,
+        "function": "copper_mcp:copper_mcp.adapters.kicad_board_ir:convert",
+        "primitive_calls": 1,
+        "self_time_ns": 58793,
+        "total_calls": 1
+      },
+      {
+        "cumulative_time_ns": 18168375,
+        "function": "copper_mcp:copper_mcp.adapters.kicad_board_ir:_footprints_and_pads",
+        "primitive_calls": 1,
+        "self_time_ns": 1121378,
+        "total_calls": 1
+      },
+      {
+        "cumulative_time_ns": 14096661,
+        "function": "copper_mcp:copper_mcp.adapters.sexpr:children",
+        "primitive_calls": 3509,
+        "self_time_ns": 1677888,
+        "total_calls": 3509
+      },
+      {
+        "cumulative_time_ns": 12418773,
+        "function": "copper_mcp:copper_mcp.adapters.sexpr:<genexpr>",
+        "primitive_calls": 5144,
+        "self_time_ns": 5520947,
+        "total_calls": 5144
+      },
+      {
+        "cumulative_time_ns": 12008634,
+        "function": "builtins:<method 'isspace' of 'str' objects>",
+        "primitive_calls": 183967,
+        "self_time_ns": 12008634,
+        "total_calls": 183967
+      },
+      {
+        "cumulative_time_ns": 11390106,
+        "function": "copper_mcp:copper_mcp.adapters.kicad_board_ir:_values",
+        "primitive_calls": 1781,
+        "self_time_ns": 826610,
+        "total_calls": 1781
+      },
+      {
+        "cumulative_time_ns": 9161496,
+        "function": "copper_mcp:copper_mcp.adapters.kicad_board_ir:_one",
+        "primitive_calls": 1975,
+        "self_time_ns": 443848,
+        "total_calls": 1975
+      },
+      {
+        "cumulative_time_ns": 8717648,
+        "function": "copper_mcp:copper_mcp.adapters.sexpr:child",
+        "primitive_calls": 1975,
+        "self_time_ns": 659954,
+        "total_calls": 1975
+      }
+    ],
+    "output_digest": "sha256:ef6219e861f5bcd8d18142d1a3d16a2529e4e857a5f713c62c262eb1685d0148",
+    "stage_attribution_cumulative": {
+      "stages": {
+        "board_ir_conversion": {
+          "cumulative_time_ns": 132873417,
+          "function": "copper_mcp:copper_mcp.adapters.kicad_board_ir:parse_kicad_bytes",
+          "share_of_complete_read_ppm": 995719
+        },
+        "complete_read": {
+          "cumulative_time_ns": 133444667,
+          "function": "external:performance_parse_profile_v2.py:_parse_pipeline",
+          "share_of_complete_read_ppm": 1000000
+        },
+        "model_conversion": {
+          "cumulative_time_ns": 40564583,
+          "function": "copper_mcp:copper_mcp.adapters.kicad_board_ir:convert",
+          "share_of_complete_read_ppm": 303980
+        },
+        "sexpr_parse": {
+          "cumulative_time_ns": 91534875,
+          "function": "copper_mcp:copper_mcp.adapters.sexpr:parse_sexpr",
+          "share_of_complete_read_ppm": 685938
+        },
+        "tokenization": {
+          "cumulative_time_ns": 67408145,
+          "function": "copper_mcp:copper_mcp.adapters.sexpr:_tokens",
+          "share_of_complete_read_ppm": 505139
+        }
+      },
+      "values_are_nested_not_additive": true
+    },
+    "timing_perf_counter_ns": {
+      "max_ns": 46787000,
+      "median_ns": 41795417,
+      "min_ns": 41201750,
+      "samples_ns": [
+        41201750,
+        46787000,
+        41902625,
+        41795417,
+        41723833
+      ]
+    }
+  },
+  "schema": "copper-mcp/performance-parse-profile/v2"
+}

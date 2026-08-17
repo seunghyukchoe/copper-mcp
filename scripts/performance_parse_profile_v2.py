@@ -190,15 +190,33 @@ def _validate_report(document: Mapping[str, Any]) -> None:
     hotspots = scenario["hotspots_cumulative"]
     if not isinstance(hotspots, list) or not 1 <= len(hotspots) <= _TOP_FUNCTIONS:
         raise ValueError("performance parse profile hotspots are malformed")
+    ordering = [
+        (-item["cumulative_time_ns"], -item["self_time_ns"], item["function"]) for item in hotspots
+    ]
+    if ordering != sorted(ordering):
+        raise ValueError("performance parse profile hotspots are not cumulatively ranked")
     if any("/" in item["function"] or "\\" in item["function"] for item in hotspots):
         raise ValueError("performance parse profile leaks a path")
     attribution = scenario["stage_attribution_cumulative"]
+    stages = attribution.get("stages") if isinstance(attribution, dict) else None
     if (
         not isinstance(attribution, dict)
         or attribution.get("values_are_nested_not_additive") is not True
-        or set(attribution.get("stages", {})) != set(_STAGE_LABELS)
+        or not isinstance(stages, dict)
+        or set(stages) != set(_STAGE_LABELS)
     ):
         raise ValueError("performance parse profile attribution is malformed")
+    for name, stage in stages.items():
+        if not isinstance(stage, dict):
+            raise ValueError("performance parse profile attribution is malformed")
+        function = stage.get("function")
+        if (
+            not isinstance(function, str)
+            or function != _STAGE_LABELS[name]
+            or "/" in function
+            or "\\" in function
+        ):
+            raise ValueError("performance parse profile attribution is malformed")
 
 
 def build_report(*, warmups: int, samples: int) -> dict[str, Any]:
