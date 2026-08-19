@@ -1,0 +1,1567 @@
+{
+  "configuration": {
+    "adapter_version": "simple-route-json-import-v1",
+    "admission_conjuncts": [
+      {
+        "description": "a negotiated envelope carries between 2 and 32 distinct nets",
+        "name": "at_least_two_requests",
+        "stage": "envelope_construction"
+      },
+      {
+        "description": "the first negotiated slice requires one layer and one grid step across every request",
+        "name": "one_selected_layer_and_grid_step",
+        "stage": "envelope_construction"
+      },
+      {
+        "description": "each negotiated net must expose exactly two pads on the selected layer",
+        "name": "exactly_two_selected_layer_pads_per_net",
+        "stage": "coordinator_admission"
+      },
+      {
+        "description": "all negotiated pad centres must share one world-coordinate grid",
+        "name": "one_shared_world_grid",
+        "stage": "coordinator_admission"
+      }
+    ],
+    "blocking_stages": [
+      "envelope_construction",
+      "coordinator_admission",
+      "no_physical_gate_call",
+      "no_clearance_violation",
+      "clearance_violation_on_incomplete_allocation",
+      "clearance_violation_with_one_violating_net",
+      "repair_precondition_reached"
+    ],
+    "envelope_budgets": {
+      "history_penalty_nm": 5000000,
+      "max_iterations": 8,
+      "max_total_expansions": 2000000,
+      "max_total_obstacle_checks": 10000000,
+      "max_total_physical_checks": 2000000,
+      "present_penalty_nm": 20000000
+    },
+    "fixed_grid_step_nm": 250000,
+    "negotiated_routing_policy": "negotiated-congestion-v2",
+    "reference_runner_sha256": "sha256:8fb5d05fb60a75b66e4720b3aa3ba9e0b28dbd8c3377ac159a239adbc4795fed",
+    "repair_settings": null,
+    "router_limits": {
+      "max_expansions": 100000,
+      "max_grid_nodes": 250000,
+      "max_obstacle_checks": 2000000,
+      "max_obstacles": 2048
+    },
+    "router_version": "astar-grid/0.7.0",
+    "routing_policy": "orthogonal-a-star-spatial-index-v1",
+    "runner_sha256": "sha256:935d738661bcc9f0b83fbb9a81f7eeab733ead9d1faee0656c5fa08df24fbff1",
+    "seed": 0
+  },
+  "date_utc": "2026-08-20",
+  "direction_of_error": "The recorder sees the candidate tuple the gate was handed but not the connection map, so completeness is tested with the solo reference's already_connected count as an upper bound on connections. Over-counting connections can only make the completeness conjunct easier to satisfy, so a recorded zero cannot be an artefact of the bound. Under the primary configuration the bound is exact: every submitted net produced a candidate in the solo reference, so no submitted net can be already connected.",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "metrics": {
+    "configurations": {
+      "b088-routable": {
+        "blocking_stage_breakdown": {
+          "clearance_violation_on_incomplete_allocation": 0,
+          "clearance_violation_with_one_violating_net": 0,
+          "coordinator_admission": 16,
+          "envelope_construction": 4,
+          "no_clearance_violation": 0,
+          "no_physical_gate_call": 0,
+          "repair_precondition_reached": 0
+        },
+        "boards": [
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": false,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": false,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "envelope_construction",
+            "board": "ts01_led",
+            "board_revision": "sha256:328670fc7625e1feddb503c671fa355e89b0290107814c1d1ad95afe1cda6b7c",
+            "document_sha256": "82de1250c881da992b4df7356b38a51afe7962f8ef7c45afc9deb0de9c712db1",
+            "envelope_constructed": false,
+            "envelope_refusal": "at_least_two_requests",
+            "first_unmet_conjunct": "at_least_two_requests",
+            "negotiated": null,
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 0,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [],
+            "submitted_nets": 0,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": null
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": false,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "envelope_construction",
+            "board": "ts02_voltage_divider",
+            "board_revision": "sha256:0f4da15c21b8b313048c3380e96bded7b54d77f28f9269d83a88b135e3f86a6d",
+            "document_sha256": "fed0121c186d732ce20bfd0065a17be35f5a9a7d82042d57f022a147f018fe22",
+            "envelope_constructed": false,
+            "envelope_refusal": "at_least_two_requests",
+            "first_unmet_conjunct": "at_least_two_requests",
+            "negotiated": null,
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 1,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n0"
+            ],
+            "submitted_nets": 1,
+            "submitted_nets_the_reference_routed": 1,
+            "terminal_status": null
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": false,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "envelope_construction",
+            "board": "ts03_rc_filter",
+            "board_revision": "sha256:a77a0fcb88ba5c845c22294225c091fd7f5c62fc4b1733a5d978a74db715c72b",
+            "document_sha256": "f5597407c8b506a3bbb1dd53e7908995373c6f76ce7e9828b59867a02f1d79c9",
+            "envelope_constructed": false,
+            "envelope_refusal": "at_least_two_requests",
+            "first_unmet_conjunct": "at_least_two_requests",
+            "negotiated": null,
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 1,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n0"
+            ],
+            "submitted_nets": 1,
+            "submitted_nets_the_reference_routed": 1,
+            "terminal_status": null
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts04_dual_led",
+            "board_revision": "sha256:51bb8a4aca188fbb0bfef12abe64a89cf30b87eefb244fc501560a1e41d2552b",
+            "document_sha256": "777bccf69ee7d16d0b3da1c90841cf4589d7904e2d5ef38e0e82c139c6d6016d",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:1084604a833f62bab784b8f214a3c11124e6171340980569dc4b24690f475921",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "exactly_two_selected_layer_pads_per_net",
+            "negotiated": {
+              "diagnostic": "each negotiated net must expose exactly two pads on the selected layer",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 2,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n0",
+              "net:n1"
+            ],
+            "submitted_nets": 2,
+            "submitted_nets_the_reference_routed": 2,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": false,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "envelope_construction",
+            "board": "ts05_npn_switch",
+            "board_revision": "sha256:df89ec800dce22d815831650457012369a0095dd426c4167345f855dc4bbb7e6",
+            "document_sha256": "fe84c51a53238d12654a649f50bcad91da38962be439cdab90bf14429d25ad4e",
+            "envelope_constructed": false,
+            "envelope_refusal": "at_least_two_requests",
+            "first_unmet_conjunct": "at_least_two_requests",
+            "negotiated": null,
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 1,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n0"
+            ],
+            "submitted_nets": 1,
+            "submitted_nets_the_reference_routed": 1,
+            "terminal_status": null
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts06_push_pull",
+            "board_revision": "sha256:8f7de3f90572a23f908179f53acdb208da120c3ae0c0bb237a29b12c14f4e453",
+            "document_sha256": "1cd6bfc5227e0fff4166305b463215deb447d332b43644443391c60fc59d116d",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:aa46dcfd8045a880799c32a90f0241de5356539cc8c534603245fef9cc19a7bf",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "exactly_two_selected_layer_pads_per_net",
+            "negotiated": {
+              "diagnostic": "each negotiated net must expose exactly two pads on the selected layer",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 3,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n0",
+              "net:n4",
+              "net:n5"
+            ],
+            "submitted_nets": 3,
+            "submitted_nets_the_reference_routed": 3,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts07_differential_pair",
+            "board_revision": "sha256:9c62c6de2dfc7ec93db20c66cc1239add6c0568b72e08b04825bd6f1e6df2333",
+            "document_sha256": "59df862d485b8857e101cfc5ee6ffb57b4b1d773a91d20e2917d13dba4438c04",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:d668fee3cbf10f5e8387b8b4a9907c3161c3527eb968d800e3be065633c1de89",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "exactly_two_selected_layer_pads_per_net",
+            "negotiated": {
+              "diagnostic": "each negotiated net must expose exactly two pads on the selected layer",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 4,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n0",
+              "net:n2",
+              "net:n3",
+              "net:n4"
+            ],
+            "submitted_nets": 4,
+            "submitted_nets_the_reference_routed": 4,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts08_inverting_amp",
+            "board_revision": "sha256:cfac066e0622e5dd6d5924f4634626518f8bfe992f9b0e661b9348310a9f861e",
+            "document_sha256": "203cbc6c93620a84a9211250653eefe3fc6fdf730a1b385d199b454d8524e1a4",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:ee0ff9df25e4de0ed6ea262e64f978e7360181173d1c93c4e291abf57d9570f5",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "exactly_two_selected_layer_pads_per_net",
+            "negotiated": {
+              "diagnostic": "each negotiated net must expose exactly two pads on the selected layer",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 3,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n0",
+              "net:n1",
+              "net:n2"
+            ],
+            "submitted_nets": 3,
+            "submitted_nets_the_reference_routed": 3,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts09_active_filter",
+            "board_revision": "sha256:f72fb52b3557e96a91fa659a98e3f603f549ef275a7bbd0b326ba263c76b1ebe",
+            "document_sha256": "98bd691ef17f4d9938b770842af9f689d9f61e737de66aac23a73e3c6ed98a93",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:d14b61b5cd0fca6ae7fcef5f6fd9af55e85768a5a4191a0a0334d6d5218d13cc",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "exactly_two_selected_layer_pads_per_net",
+            "negotiated": {
+              "diagnostic": "each negotiated net must expose exactly two pads on the selected layer",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 5,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n0",
+              "net:n1",
+              "net:n2",
+              "net:n3",
+              "net:n4"
+            ],
+            "submitted_nets": 5,
+            "submitted_nets_the_reference_routed": 5,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts10_wheatstone_bridge",
+            "board_revision": "sha256:65c1d8c1f0f91ad7cbdf9b1a772eb26aa94e9fab5893972c12f0792ae61da51d",
+            "document_sha256": "ec66069bcc93e7f23912c2ef484f78f34e300922c952011422d8a4c422bdf9c8",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:b5ff33932bda6c0e9d048447ffa03f70be5835df60336268e9019aca13aa6623",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "exactly_two_selected_layer_pads_per_net",
+            "negotiated": {
+              "diagnostic": "each negotiated net must expose exactly two pads on the selected layer",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 4,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n0",
+              "net:n1",
+              "net:n2",
+              "net:n3"
+            ],
+            "submitted_nets": 4,
+            "submitted_nets_the_reference_routed": 4,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts11_generated",
+            "board_revision": "sha256:bf39bd24a6a8943fd674123335c6182690aef18aa779fd9e9cc2b7f3cd231e94",
+            "document_sha256": "cf3a4d551e9407809163c4c68645ddd0c262e6e2dc06a36a73e35292e5bd12d3",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:5aff85ee66cd5665b185820e54d399f10a6852bd3da6c2b0562812483c4b09fa",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "exactly_two_selected_layer_pads_per_net",
+            "negotiated": {
+              "diagnostic": "each negotiated net must expose exactly two pads on the selected layer",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 9,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n0",
+              "net:n1",
+              "net:n2",
+              "net:n3",
+              "net:n4",
+              "net:n5",
+              "net:n6",
+              "net:n7",
+              "net:n8"
+            ],
+            "submitted_nets": 9,
+            "submitted_nets_the_reference_routed": 9,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts12_generated",
+            "board_revision": "sha256:a1b37587790a905821f67012c6471d575eade684ba599e5d4357a2f3588ff36f",
+            "document_sha256": "463a0fa657d898b651e5bbd60c5e75dcbc3919b292ea4be270960d003f22b7c6",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:f3fcd556cedbb4b440bc027339c3aa288323df7e6e0ad30357ffb915b9774435",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "exactly_two_selected_layer_pads_per_net",
+            "negotiated": {
+              "diagnostic": "each negotiated net must expose exactly two pads on the selected layer",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 5,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n0",
+              "net:n1",
+              "net:n2",
+              "net:n3",
+              "net:n4"
+            ],
+            "submitted_nets": 5,
+            "submitted_nets_the_reference_routed": 5,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts13_555_blinker",
+            "board_revision": "sha256:f432c1bbb6c0879c37ae143758dfe84d2968e949c6bf12f4451467b944344da3",
+            "document_sha256": "db32b0e87b1cd2c81d85bc8c2e9a0e8cf4a80adc57c630d79bb03e2e268e4313",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:73ab512124000bb2df88c7b2b01baa291055197d495b87517fd03dcb991f2e88",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "exactly_two_selected_layer_pads_per_net",
+            "negotiated": {
+              "diagnostic": "each negotiated net must expose exactly two pads on the selected layer",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 4,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n4",
+              "net:n5",
+              "net:n6",
+              "net:n7"
+            ],
+            "submitted_nets": 4,
+            "submitted_nets_the_reference_routed": 4,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts14_usb_power",
+            "board_revision": "sha256:6406f4aebfa6977b560b1660a91ec159527a5a86fcf403cbd5895e35ff8a049b",
+            "document_sha256": "f0238a8e5ad50a9e8ac445f7d8453e344f3900853c4e26b679a7415a22233fbe",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:51c3713663a35c77bdf50ebaf52b93f3f37605b88952e2430354c0ada9e9db87",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "exactly_two_selected_layer_pads_per_net",
+            "negotiated": {
+              "diagnostic": "each negotiated net must expose exactly two pads on the selected layer",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 2,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n3",
+              "net:n5"
+            ],
+            "submitted_nets": 2,
+            "submitted_nets_the_reference_routed": 2,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts15_i2c_sensor",
+            "board_revision": "sha256:749286b39833a4f3bae156badf487804075db8f4b7f6f2981b5020995918b5bc",
+            "document_sha256": "c0f1281931e18798dcd938a03d56444385619ddc7a7931fd382b140ca765bdd6",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:635ca6fbc6c4c435fe3e515cf8aa8783067f35934eb7bab0f7d7a6ec42f86bb8",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "exactly_two_selected_layer_pads_per_net",
+            "negotiated": {
+              "diagnostic": "each negotiated net must expose exactly two pads on the selected layer",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 4,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n0",
+              "net:n1",
+              "net:n2",
+              "net:n3"
+            ],
+            "submitted_nets": 4,
+            "submitted_nets_the_reference_routed": 4,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts16_h_bridge",
+            "board_revision": "sha256:9fdde77eba04dc65c5b730585868ac717412462f00136855e09b5a0bac92dba0",
+            "document_sha256": "16354c08f72034b552ef3c432922c98c909571fb1ba13c675867025fb904b45d",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:60994d99d80f8fb122ca5bec686bdb2d75acf1e72ce2aa472b2a9642079d842e",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "exactly_two_selected_layer_pads_per_net",
+            "negotiated": {
+              "diagnostic": "each negotiated net must expose exactly two pads on the selected layer",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 2,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n0",
+              "net:n1"
+            ],
+            "submitted_nets": 2,
+            "submitted_nets_the_reference_routed": 2,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts17_attiny_minimal",
+            "board_revision": "sha256:cd945be5570cbd3a88a1ff91842906efe66327e6d572a38543b30cd83fe82627",
+            "document_sha256": "397d16aea8572fd81cc6e0d969f7aed882835823532182e0d4b51b02fe3c2f35",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:02c5ebb590b833236e7d948eb7ed9b4c3fa70a32eb29978a40b271f2d7b82d46",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "exactly_two_selected_layer_pads_per_net",
+            "negotiated": {
+              "diagnostic": "each negotiated net must expose exactly two pads on the selected layer",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 2,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n1",
+              "net:n2"
+            ],
+            "submitted_nets": 2,
+            "submitted_nets_the_reference_routed": 2,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts18_dual_reg",
+            "board_revision": "sha256:edb7cc93024a59cb90b286624b2a0eb7eadca5cffb8d21fc69c7a2167e06b63d",
+            "document_sha256": "b21648856f604934592c3e42d3adc274780f57eb7ac9e7e2118f491751a6b2e9",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:0bf2bd72582a9567c0f0cae0760359866424fb389cbf6e86cdaf826629a69aa2",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "exactly_two_selected_layer_pads_per_net",
+            "negotiated": {
+              "diagnostic": "each negotiated net must expose exactly two pads on the selected layer",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 6,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n0",
+              "net:n1",
+              "net:n10",
+              "net:n5",
+              "net:n6",
+              "net:n7"
+            ],
+            "submitted_nets": 6,
+            "submitted_nets_the_reference_routed": 6,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts19_adc_breakout",
+            "board_revision": "sha256:15cee1bb09b0ddcdcbd084aeb100fd55eb9aaf3987334e698a1c15f5507a8685",
+            "document_sha256": "16b73b6de39a4662ddd348fa8cc7d5b56820582fc85387b2adf14ae57bb87600",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:07e3e6f8473334a32682bb0e43bc14e0a028d97ecd6d1b61c3fb780420add676",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "exactly_two_selected_layer_pads_per_net",
+            "negotiated": {
+              "diagnostic": "each negotiated net must expose exactly two pads on the selected layer",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 5,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n1",
+              "net:n2",
+              "net:n3",
+              "net:n7",
+              "net:n8"
+            ],
+            "submitted_nets": 5,
+            "submitted_nets_the_reference_routed": 5,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts20_esp32_wifi",
+            "board_revision": "sha256:8cf5d3fb67e0c4a9339df3a682e950af01ab73f5fb60acac6450f1e1404348e3",
+            "document_sha256": "94d1251ee0e7f4812ab2b58b46f5e6bf81a90b49aa0b225aff0ce84b0bac2fe0",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:a6c24a42689040f56dcc22d00e30f9c40f16f98a229aae49cd02341a49b0ce37",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "exactly_two_selected_layer_pads_per_net",
+            "negotiated": {
+              "diagnostic": "each negotiated net must expose exactly two pads on the selected layer",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 7,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n16",
+              "net:n17",
+              "net:n18",
+              "net:n19",
+              "net:n20",
+              "net:n21",
+              "net:n22"
+            ],
+            "submitted_nets": 7,
+            "submitted_nets_the_reference_routed": 7,
+            "terminal_status": "invalid_request"
+          }
+        ],
+        "boards_admitted_by_the_coordinator": 0,
+        "boards_imported": 20,
+        "boards_offered": 20,
+        "boards_reaching_the_repair_precondition": 0,
+        "boards_with_a_constructible_envelope": 16,
+        "configuration": {
+          "description": "every net B-088's fixed 250,000 nm run routed, submitted as one whole-board negotiated envelope; this is the configuration issue #90's census was defined on, and its completion count is directly comparable with B-088's per-net reference baseline",
+          "name": "b088-routable"
+        },
+        "first_unmet_conjunct_breakdown": {
+          "at_least_two_requests": 4,
+          "exactly_two_selected_layer_pads_per_net": 16,
+          "none": 0,
+          "one_selected_layer_and_grid_step": 0,
+          "one_shared_world_grid": 0
+        },
+        "negotiated_nets_completed": 0,
+        "nets_submitted": 70,
+        "physical_gate_calls": 0,
+        "reference_per_net_nets_routed": 70,
+        "submitted_nets_the_reference_routed": 70,
+        "terminal_status_breakdown": {
+          "None": 4,
+          "invalid_request": 16
+        }
+      },
+      "two-pad-control": {
+        "blocking_stage_breakdown": {
+          "clearance_violation_on_incomplete_allocation": 0,
+          "clearance_violation_with_one_violating_net": 0,
+          "coordinator_admission": 6,
+          "envelope_construction": 14,
+          "no_clearance_violation": 0,
+          "no_physical_gate_call": 0,
+          "repair_precondition_reached": 0
+        },
+        "boards": [
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": false,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": false,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "envelope_construction",
+            "board": "ts01_led",
+            "board_revision": "sha256:328670fc7625e1feddb503c671fa355e89b0290107814c1d1ad95afe1cda6b7c",
+            "document_sha256": "82de1250c881da992b4df7356b38a51afe7962f8ef7c45afc9deb0de9c712db1",
+            "envelope_constructed": false,
+            "envelope_refusal": "at_least_two_requests",
+            "first_unmet_conjunct": "at_least_two_requests",
+            "negotiated": null,
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 0,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [],
+            "submitted_nets": 0,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": null
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": false,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": false,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "envelope_construction",
+            "board": "ts02_voltage_divider",
+            "board_revision": "sha256:0f4da15c21b8b313048c3380e96bded7b54d77f28f9269d83a88b135e3f86a6d",
+            "document_sha256": "fed0121c186d732ce20bfd0065a17be35f5a9a7d82042d57f022a147f018fe22",
+            "envelope_constructed": false,
+            "envelope_refusal": "at_least_two_requests",
+            "first_unmet_conjunct": "at_least_two_requests",
+            "negotiated": null,
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 1,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [],
+            "submitted_nets": 0,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": null
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": false,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": false,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "envelope_construction",
+            "board": "ts03_rc_filter",
+            "board_revision": "sha256:a77a0fcb88ba5c845c22294225c091fd7f5c62fc4b1733a5d978a74db715c72b",
+            "document_sha256": "f5597407c8b506a3bbb1dd53e7908995373c6f76ce7e9828b59867a02f1d79c9",
+            "envelope_constructed": false,
+            "envelope_refusal": "at_least_two_requests",
+            "first_unmet_conjunct": "at_least_two_requests",
+            "negotiated": null,
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 1,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [],
+            "submitted_nets": 0,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": null
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": false,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": false,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "envelope_construction",
+            "board": "ts04_dual_led",
+            "board_revision": "sha256:51bb8a4aca188fbb0bfef12abe64a89cf30b87eefb244fc501560a1e41d2552b",
+            "document_sha256": "777bccf69ee7d16d0b3da1c90841cf4589d7904e2d5ef38e0e82c139c6d6016d",
+            "envelope_constructed": false,
+            "envelope_refusal": "at_least_two_requests",
+            "first_unmet_conjunct": "at_least_two_requests",
+            "negotiated": null,
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 2,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [],
+            "submitted_nets": 0,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": null
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": false,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": false,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "envelope_construction",
+            "board": "ts05_npn_switch",
+            "board_revision": "sha256:df89ec800dce22d815831650457012369a0095dd426c4167345f855dc4bbb7e6",
+            "document_sha256": "fe84c51a53238d12654a649f50bcad91da38962be439cdab90bf14429d25ad4e",
+            "envelope_constructed": false,
+            "envelope_refusal": "at_least_two_requests",
+            "first_unmet_conjunct": "at_least_two_requests",
+            "negotiated": null,
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 1,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [],
+            "submitted_nets": 0,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": null
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": true,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts06_push_pull",
+            "board_revision": "sha256:8f7de3f90572a23f908179f53acdb208da120c3ae0c0bb237a29b12c14f4e453",
+            "document_sha256": "1cd6bfc5227e0fff4166305b463215deb447d332b43644443391c60fc59d116d",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:928001301ab8f048fb002b0435e7b2a1de808ceabfd4248e3c51394199af709e",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "one_shared_world_grid",
+            "negotiated": {
+              "diagnostic": "all negotiated pad centres must share one world-coordinate grid",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 3,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n1",
+              "net:n2",
+              "net:n3"
+            ],
+            "submitted_nets": 3,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": false,
+              "exactly_two_selected_layer_pads_per_net": true,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "envelope_construction",
+            "board": "ts07_differential_pair",
+            "board_revision": "sha256:9c62c6de2dfc7ec93db20c66cc1239add6c0568b72e08b04825bd6f1e6df2333",
+            "document_sha256": "59df862d485b8857e101cfc5ee6ffb57b4b1d773a91d20e2917d13dba4438c04",
+            "envelope_constructed": false,
+            "envelope_refusal": "at_least_two_requests",
+            "first_unmet_conjunct": "at_least_two_requests",
+            "negotiated": null,
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 4,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n1"
+            ],
+            "submitted_nets": 1,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": null
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": false,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": false,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "envelope_construction",
+            "board": "ts08_inverting_amp",
+            "board_revision": "sha256:cfac066e0622e5dd6d5924f4634626518f8bfe992f9b0e661b9348310a9f861e",
+            "document_sha256": "203cbc6c93620a84a9211250653eefe3fc6fdf730a1b385d199b454d8524e1a4",
+            "envelope_constructed": false,
+            "envelope_refusal": "at_least_two_requests",
+            "first_unmet_conjunct": "at_least_two_requests",
+            "negotiated": null,
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 3,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [],
+            "submitted_nets": 0,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": null
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": false,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": false,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "envelope_construction",
+            "board": "ts09_active_filter",
+            "board_revision": "sha256:f72fb52b3557e96a91fa659a98e3f603f549ef275a7bbd0b326ba263c76b1ebe",
+            "document_sha256": "98bd691ef17f4d9938b770842af9f689d9f61e737de66aac23a73e3c6ed98a93",
+            "envelope_constructed": false,
+            "envelope_refusal": "at_least_two_requests",
+            "first_unmet_conjunct": "at_least_two_requests",
+            "negotiated": null,
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 5,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [],
+            "submitted_nets": 0,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": null
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": false,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": false,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "envelope_construction",
+            "board": "ts10_wheatstone_bridge",
+            "board_revision": "sha256:65c1d8c1f0f91ad7cbdf9b1a772eb26aa94e9fab5893972c12f0792ae61da51d",
+            "document_sha256": "ec66069bcc93e7f23912c2ef484f78f34e300922c952011422d8a4c422bdf9c8",
+            "envelope_constructed": false,
+            "envelope_refusal": "at_least_two_requests",
+            "first_unmet_conjunct": "at_least_two_requests",
+            "negotiated": null,
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 4,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [],
+            "submitted_nets": 0,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": null
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": false,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": false,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "envelope_construction",
+            "board": "ts11_generated",
+            "board_revision": "sha256:bf39bd24a6a8943fd674123335c6182690aef18aa779fd9e9cc2b7f3cd231e94",
+            "document_sha256": "cf3a4d551e9407809163c4c68645ddd0c262e6e2dc06a36a73e35292e5bd12d3",
+            "envelope_constructed": false,
+            "envelope_refusal": "at_least_two_requests",
+            "first_unmet_conjunct": "at_least_two_requests",
+            "negotiated": null,
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 9,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [],
+            "submitted_nets": 0,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": null
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": false,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": false,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "envelope_construction",
+            "board": "ts12_generated",
+            "board_revision": "sha256:a1b37587790a905821f67012c6471d575eade684ba599e5d4357a2f3588ff36f",
+            "document_sha256": "463a0fa657d898b651e5bbd60c5e75dcbc3919b292ea4be270960d003f22b7c6",
+            "envelope_constructed": false,
+            "envelope_refusal": "at_least_two_requests",
+            "first_unmet_conjunct": "at_least_two_requests",
+            "negotiated": null,
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 5,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [],
+            "submitted_nets": 0,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": null
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": true,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts13_555_blinker",
+            "board_revision": "sha256:f432c1bbb6c0879c37ae143758dfe84d2968e949c6bf12f4451467b944344da3",
+            "document_sha256": "db32b0e87b1cd2c81d85bc8c2e9a0e8cf4a80adc57c630d79bb03e2e268e4313",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:bf398f88c8247a177bdebb196cc24630df58d9dbb15f9cf413bd0b1764028624",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "one_shared_world_grid",
+            "negotiated": {
+              "diagnostic": "all negotiated pad centres must share one world-coordinate grid",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 4,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n0",
+              "net:n1",
+              "net:n2",
+              "net:n3"
+            ],
+            "submitted_nets": 4,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": true,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts14_usb_power",
+            "board_revision": "sha256:6406f4aebfa6977b560b1660a91ec159527a5a86fcf403cbd5895e35ff8a049b",
+            "document_sha256": "f0238a8e5ad50a9e8ac445f7d8453e344f3900853c4e26b679a7415a22233fbe",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:8b0aab9bf523a61ea86fa521a8b864a3c95a4a080c70c043a8c5aaee56f044fd",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "one_shared_world_grid",
+            "negotiated": {
+              "diagnostic": "all negotiated pad centres must share one world-coordinate grid",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 2,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n0",
+              "net:n1",
+              "net:n2"
+            ],
+            "submitted_nets": 3,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": false,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": false,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "envelope_construction",
+            "board": "ts15_i2c_sensor",
+            "board_revision": "sha256:749286b39833a4f3bae156badf487804075db8f4b7f6f2981b5020995918b5bc",
+            "document_sha256": "c0f1281931e18798dcd938a03d56444385619ddc7a7931fd382b140ca765bdd6",
+            "envelope_constructed": false,
+            "envelope_refusal": "at_least_two_requests",
+            "first_unmet_conjunct": "at_least_two_requests",
+            "negotiated": null,
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 4,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [],
+            "submitted_nets": 0,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": null
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": false,
+              "exactly_two_selected_layer_pads_per_net": false,
+              "one_selected_layer_and_grid_step": false,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "envelope_construction",
+            "board": "ts16_h_bridge",
+            "board_revision": "sha256:9fdde77eba04dc65c5b730585868ac717412462f00136855e09b5a0bac92dba0",
+            "document_sha256": "16354c08f72034b552ef3c432922c98c909571fb1ba13c675867025fb904b45d",
+            "envelope_constructed": false,
+            "envelope_refusal": "at_least_two_requests",
+            "first_unmet_conjunct": "at_least_two_requests",
+            "negotiated": null,
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 2,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [],
+            "submitted_nets": 0,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": null
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": true,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts17_attiny_minimal",
+            "board_revision": "sha256:cd945be5570cbd3a88a1ff91842906efe66327e6d572a38543b30cd83fe82627",
+            "document_sha256": "397d16aea8572fd81cc6e0d969f7aed882835823532182e0d4b51b02fe3c2f35",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:bb1c9d5e9488e755fcfcba97146c042db912274be965ab9bc698e1f01a9c13d9",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "one_shared_world_grid",
+            "negotiated": {
+              "diagnostic": "all negotiated pad centres must share one world-coordinate grid",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 2,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n5",
+              "net:n6",
+              "net:n7"
+            ],
+            "submitted_nets": 3,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": true,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts18_dual_reg",
+            "board_revision": "sha256:edb7cc93024a59cb90b286624b2a0eb7eadca5cffb8d21fc69c7a2167e06b63d",
+            "document_sha256": "b21648856f604934592c3e42d3adc274780f57eb7ac9e7e2118f491751a6b2e9",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:3dc8aafd9d9ec446574e4fa3a62a2f508574fd86ecde53e983a52e0353e21bf0",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "one_shared_world_grid",
+            "negotiated": {
+              "diagnostic": "all negotiated pad centres must share one world-coordinate grid",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 6,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n11",
+              "net:n12",
+              "net:n2",
+              "net:n3",
+              "net:n4",
+              "net:n8",
+              "net:n9"
+            ],
+            "submitted_nets": 7,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": "invalid_request"
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": false,
+              "exactly_two_selected_layer_pads_per_net": true,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "envelope_construction",
+            "board": "ts19_adc_breakout",
+            "board_revision": "sha256:15cee1bb09b0ddcdcbd084aeb100fd55eb9aaf3987334e698a1c15f5507a8685",
+            "document_sha256": "16b73b6de39a4662ddd348fa8cc7d5b56820582fc85387b2adf14ae57bb87600",
+            "envelope_constructed": false,
+            "envelope_refusal": "at_least_two_requests",
+            "first_unmet_conjunct": "at_least_two_requests",
+            "negotiated": null,
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 5,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n0"
+            ],
+            "submitted_nets": 1,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": null
+          },
+          {
+            "admission_conjuncts": {
+              "at_least_two_requests": true,
+              "exactly_two_selected_layer_pads_per_net": true,
+              "one_selected_layer_and_grid_step": true,
+              "one_shared_world_grid": false
+            },
+            "blocking_stage": "coordinator_admission",
+            "board": "ts20_esp32_wifi",
+            "board_revision": "sha256:8cf5d3fb67e0c4a9339df3a682e950af01ab73f5fb60acac6450f1e1404348e3",
+            "document_sha256": "94d1251ee0e7f4812ab2b58b46f5e6bf81a90b49aa0b225aff0ce84b0bac2fe0",
+            "envelope_constructed": true,
+            "envelope_policy_digest": "sha256:7b2ee98316e6bc88479a0fd492f2a334360128871d00fbfba3abd6a4c604b041",
+            "envelope_refusal": null,
+            "first_unmet_conjunct": "one_shared_world_grid",
+            "negotiated": {
+              "diagnostic": "all negotiated pad centres must share one world-coordinate grid",
+              "iterations": 0,
+              "negotiated_candidates": 0,
+              "overflow_units": 0,
+              "ripups": 0,
+              "status": "invalid_request",
+              "total_physical_checks": 0,
+              "total_wire_length_nm": 0,
+              "unrouted_nets": []
+            },
+            "physical_gate_calls": 0,
+            "physical_gate_observations": [],
+            "reference_already_connected": 0,
+            "reference_nets_routed": 7,
+            "repair_precondition_reached": false,
+            "submitted_net_ids": [
+              "net:n0",
+              "net:n1",
+              "net:n10",
+              "net:n11",
+              "net:n12",
+              "net:n13",
+              "net:n2",
+              "net:n3",
+              "net:n4",
+              "net:n5",
+              "net:n6",
+              "net:n7",
+              "net:n8",
+              "net:n9"
+            ],
+            "submitted_nets": 14,
+            "submitted_nets_the_reference_routed": 0,
+            "terminal_status": "invalid_request"
+          }
+        ],
+        "boards_admitted_by_the_coordinator": 0,
+        "boards_imported": 20,
+        "boards_offered": 20,
+        "boards_reaching_the_repair_precondition": 0,
+        "boards_with_a_constructible_envelope": 6,
+        "configuration": {
+          "description": "every net with exactly two selected-layer pads, regardless of whether the per-net reference routed it. This configuration was added after an exploratory probe found the primary one blocked at the two-pin conjunct, and it is declared here as a control rather than a result: it can only add a refusal reason, never convert a refusal into a route",
+          "name": "two-pad-control"
+        },
+        "first_unmet_conjunct_breakdown": {
+          "at_least_two_requests": 14,
+          "exactly_two_selected_layer_pads_per_net": 0,
+          "none": 0,
+          "one_selected_layer_and_grid_step": 0,
+          "one_shared_world_grid": 6
+        },
+        "negotiated_nets_completed": 0,
+        "nets_submitted": 36,
+        "physical_gate_calls": 0,
+        "reference_per_net_nets_routed": 70,
+        "submitted_nets_the_reference_routed": 0,
+        "terminal_status_breakdown": {
+          "None": 14,
+          "invalid_request": 6
+        }
+      }
+    },
+    "corpus": {
+      "committed_boards": 20,
+      "corpus_id": "tscircuit-benchmark",
+      "license_sha256": "5e1e61463320a61ebac4a326a3c6ea5608280c75e5b95c6931497e3a14ebb632",
+      "license_spdx": "MIT",
+      "upstream_commit": "be36518b5bf51755dae92c230061ab3cf4e3e063",
+      "upstream_repository": "https://github.com/dwiel/tscircuit-benchmark",
+      "upstream_sample_count": 36
+    },
+    "deterministic_replays": true,
+    "headline": {
+      "boards_offered": 20,
+      "boards_reaching_the_repair_precondition": 0,
+      "negotiated_nets_completed": 0,
+      "physical_gate_calls": 0,
+      "reference_per_net_nets_routed": 70,
+      "two_pad_nets_offered": 36,
+      "two_pad_nets_the_reference_routed": 0
+    },
+    "reference_baseline": {
+      "artifact": "benchmarks/results/routing/2026-08-06-simple-route-json-corpus-v1.json",
+      "artifact_run_id": "sha256:facf95ee9770ffab8c1bc403a32a403e55ca79f2c56d1eabc6679eb6ec4dfca3",
+      "benchmark": "B-088",
+      "grid_policy": "fixed",
+      "nets_attempted": 117,
+      "nets_routed": 70
+    },
+    "repair_settings_enabled": false
+  },
+  "not_claimed": [
+    "any statement about the local repair transaction's effectiveness; repair is never enabled by this runner and no repaired candidate was constructed, validated, or published",
+    "a routing-quality claim about the negotiated coordinator, the reference router, or any other router; this records coordinator behaviour at the declared budgets on this corpus and nothing else",
+    "that the negotiated completion count and B-088's per-net count answer the same question: B-088 routes each net independently against the unrouted snapshot, so its candidates are not mutually compatible, while a negotiated envelope must satisfy one shared allocation",
+    "KiCad DRC, electrical correctness, signal integrity, thermal behaviour, or fabrication readiness for any imported board",
+    "board mutation, apply authority, export, or live-editor behaviour",
+    "generalisation beyond LLM-generated 2-layer tscircuit boards, or from the committed 20-board subset to the full 36-board corpus",
+    "that a different grid step, budget, layer selection, or net-selection rule would produce the same census; none was tried, and trying one to move a number is exactly what the predeclared stop rule forbids"
+  ],
+  "repair_precondition_definition": "src/copper_mcp/routing/congestion.py fires ADR-0117's local-repair transaction only when repair_settings is supplied AND the whole-set physical-clearance gate returns CLEARANCE_VIOLATION AND the allocation is complete (no unrouted net, and candidates plus connections equal the submitted requests) AND at least two nets are named as violating. This census supplies no repair_settings and records how often the other three conjuncts hold, which is the frequency that decides whether enabling repair is worth a slice.",
+  "run_id": "sha256:c72cf0a6061b90efb15cf7e61701e4caebd0e0baeb2311e6017c7ef43d6b5df2",
+  "schema": "copper-mcp/benchmark/negotiated-corpus-census/v1",
+  "source_commit": "7b6d7aa1cf40623d6d2e85fb75b615a6af46192c",
+  "timing": {
+    "mean_wall_seconds": {
+      "b088-routable": 4.592,
+      "two-pad-control": 5.63
+    },
+    "repetitions": 2
+  }
+}
