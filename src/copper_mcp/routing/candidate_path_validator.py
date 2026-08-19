@@ -12,10 +12,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from itertools import pairwise
-from typing import Final
+from typing import Final, cast
 
 from copper_mcp.board_ir import BoardIRSnapshot, PointNM
 from copper_mcp.routing.astar import (
+    _component_roots,
     _edge_is_legal,
     _ExpectedFailureError,
     _prepare,
@@ -40,6 +41,7 @@ _MAX_OBSTACLE_CHECKS: Final = 10_000_000
 _CANCELLATION_CADENCE: Final = 64
 _MAX_RAW_TEXT_LENGTH: Final = 512
 _MAX_RAW_INTEGER: Final = (1 << 53) - 1
+EXTERNAL_PATCH_TREE_ORDERING: Final = "external-patch-tree-v1"
 
 
 class CandidatePathValidationFailure(StrEnum):
@@ -470,7 +472,10 @@ def validate_candidate_path(
     ):
         return _result(None, 0, CandidatePathValidationFailure.INVALID_REQUEST)
 
-    stop = _StopChecks(cancelled=cancelled, deadline_check=deadline_check)
+    checked_snapshot = snapshot
+    checked_cancelled = cast(CancellationCheck | None, cancelled)
+    checked_deadline = cast(CancellationCheck | None, deadline_check)
+    stop = _StopChecks(cancelled=checked_cancelled, deadline_check=checked_deadline)
     stopped = stop.check()
     if stopped is not None:
         return _result(None, 0, stopped)
@@ -515,7 +520,7 @@ def validate_candidate_path(
     )
     work = _WorkBudget(settings=bounded_request.settings, cancelled=stop)
     try:
-        problem = _prepare(snapshot, bounded_request, work)
+        problem = _prepare(checked_snapshot, bounded_request, work)
     except _ExpectedFailureError as error:
         return _result(work, 0, _failure_from_router(error, stop))
     except Exception:  # pragma: no cover - the private reference boundary must not escape
@@ -588,8 +593,332 @@ def validate_candidate_path(
     return _result(work, edge_checks, None)
 
 
+def validate_candidate_path_with_exact_off_grid_obstacle_fallback(
+    snapshot: object,
+    request: object,
+    candidate: object,
+    *,
+    max_obstacle_checks: object,
+    max_path_edges: object,
+    cancelled: object = None,
+    deadline_check: object = None,
+) -> CandidatePathValidationResult:
+    """Preserve exact obstacle refusals for orthogonal paths that miss the request lattice.
+
+    The normal validator remains authoritative and runs first. Only an otherwise valid candidate
+    whose vertices are off-grid reaches the fallback. It re-prepares the same immutable Board IR
+    model with only the coordinator budget left by the first pass, then checks the candidate's
+    compressed orthogonal edges with the reference predicate. A proven collision is reported as
+    ``obstacle_violation``; a legal off-grid path remains ``unsupported_geometry``.
+
+    This wrapper exists so callers never need the router's private preparation or obstacle symbols.
+    It is still read-only, bounded, cooperative, and returns no geometry.
+    """
+
+    primary = validate_candidate_path(
+        snapshot,
+        request,
+        candidate,
+        max_obstacle_checks=max_obstacle_checks,
+        max_path_edges=max_path_edges,
+        cancelled=cancelled,
+        deadline_check=deadline_check,
+    )
+    if primary.failure is not CandidatePathValidationFailure.UNSUPPORTED_GEOMETRY:
+        return primary
+    # Reaching this branch proves these scalar types and ranges were accepted by the main gate.
+    assert isinstance(max_obstacle_checks, int) and not isinstance(max_obstacle_checks, bool)
+    remaining_checks = max_obstacle_checks - primary.obstacle_checks
+    if remaining_checks < 1:
+        return CandidatePathValidationResult(
+            edge_checks=primary.edge_checks,
+            obstacle_checks=primary.obstacle_checks,
+            failure=CandidatePathValidationFailure.BUDGET_EXHAUSTED,
+        )
+
+    checked_snapshot = cast(BoardIRSnapshot, snapshot)
+    checked_cancelled = cast(CancellationCheck | None, cancelled)
+    checked_deadline = cast(CancellationCheck | None, deadline_check)
+    stop = _StopChecks(cancelled=checked_cancelled, deadline_check=checked_deadline)
+    checked_request = _canonical_request(request, stop)
+    checked_candidate = _canonical_candidate(candidate, stop)
+    if checked_request is None or checked_candidate is None:
+        return CandidatePathValidationResult(
+            edge_checks=primary.edge_checks,
+            obstacle_checks=primary.obstacle_checks,
+            failure=stop.observed or CandidatePathValidationFailure.INVALID_CANDIDATE,
+        )
+    bounded_request = replace(
+        checked_request,
+        settings=replace(
+            checked_request.settings,
+            max_obstacle_checks=remaining_checks,
+        ),
+    )
+    work = _WorkBudget(settings=bounded_request.settings, cancelled=stop)
+    failure = CandidatePathValidationFailure.UNSUPPORTED_GEOMETRY
+    try:
+        problem = _prepare(checked_snapshot, bounded_request, work)
+        for start, end in pairwise(checked_candidate.patch.paths[0].vertices):
+            if not _edge_is_legal(start, end, problem, work):
+                failure = CandidatePathValidationFailure.OBSTACLE_VIOLATION
+                break
+    except _ExpectedFailureError as error:
+        failure = _failure_from_router(error, stop)
+    except Exception:  # pragma: no cover - the private reference boundary must not escape
+        failure = CandidatePathValidationFailure.INVALID_CANDIDATE
+    return CandidatePathValidationResult(
+        edge_checks=primary.edge_checks,
+        obstacle_checks=primary.obstacle_checks + work.obstacle_checks,
+        failure=failure,
+    )
+
+
+def _candidate_track_cores(candidate: RouteCandidate) -> tuple[tuple[int, int, int, int], ...]:
+    """Return conservative-inside connectivity cores for every candidate segment."""
+
+    half_width_nm = candidate.patch.width_nm // 2
+    cores: list[tuple[int, int, int, int]] = []
+    for path in candidate.patch.paths:
+        for start, end in pairwise(path.vertices):
+            if start.y == end.y:
+                cores.append(
+                    (
+                        min(start.x, end.x),
+                        start.y - half_width_nm,
+                        max(start.x, end.x),
+                        start.y + half_width_nm,
+                    )
+                )
+            else:
+                cores.append(
+                    (
+                        start.x - half_width_nm,
+                        min(start.y, end.y),
+                        start.x + half_width_nm,
+                        max(start.y, end.y),
+                    )
+                )
+    return tuple(cores)
+
+
+def validate_candidate_patch(
+    snapshot: object,
+    request: object,
+    candidate: object,
+    *,
+    max_obstacle_checks: object,
+    max_path_edges: object,
+    cancelled: object = None,
+    deadline_check: object = None,
+) -> CandidatePathValidationResult:
+    """Validate one immutable multi-path single-layer tree against Board IR.
+
+    This is the multi-pin counterpart of :func:`validate_candidate_path`.  Every expanded lattice
+    edge is checked against the same obstacle predicate, then exact under-approximating track cores
+    are joined with the coordinator-derived pad components.  Acceptance requires one connected
+    component containing every pad component and every submitted path.
+    """
+
+    if (
+        type(snapshot) is not BoardIRSnapshot
+        or type(candidate) is not RouteCandidate
+        or (cancelled is not None and not callable(cancelled))
+        or (deadline_check is not None and not callable(deadline_check))
+        or isinstance(max_obstacle_checks, bool)
+        or not isinstance(max_obstacle_checks, int)
+        or not 1 <= max_obstacle_checks <= _MAX_OBSTACLE_CHECKS
+        or isinstance(max_path_edges, bool)
+        or not isinstance(max_path_edges, int)
+        or not 1 <= max_path_edges <= _MAX_EDGE_CHECKS
+    ):
+        return _result(None, 0, CandidatePathValidationFailure.INVALID_REQUEST)
+    stop = _StopChecks(
+        cancelled=cast(CancellationCheck | None, cancelled),
+        deadline_check=cast(CancellationCheck | None, deadline_check),
+    )
+    stopped = stop.check()
+    if stopped is not None:
+        return _result(None, 0, stopped)
+    checked_request = _canonical_request(request, stop)
+    if checked_request is None:
+        return _result(None, 0, stop.observed or CandidatePathValidationFailure.INVALID_REQUEST)
+    checked_candidate = candidate
+    if (
+        max_obstacle_checks > checked_request.settings.max_obstacle_checks
+        or max_path_edges > checked_request.settings.max_grid_nodes
+        or checked_candidate.base_revision != checked_request.board_revision
+        or checked_candidate.patch.net_id != checked_request.net_id
+        or checked_candidate.patch.layer_id != checked_request.layer_id
+        or checked_candidate.settings != checked_request.settings
+        or checked_candidate.seed != checked_request.seed
+        or checked_candidate.pad_count <= 2
+        or checked_candidate.ordering_policy != EXTERNAL_PATCH_TREE_ORDERING
+        or checked_candidate.fill_binding is not None
+        or not checked_candidate.patch.paths
+        or checked_candidate.metrics.vias != 0
+    ):
+        return _result(None, 0, CandidatePathValidationFailure.INVALID_CANDIDATE)
+
+    compressed_edges = sum(len(path.vertices) - 1 for path in checked_candidate.patch.paths)
+    if compressed_edges > max_path_edges:
+        return _result(None, 0, CandidatePathValidationFailure.BUDGET_EXHAUSTED)
+    bounded_request = replace(
+        checked_request,
+        settings=replace(checked_request.settings, max_obstacle_checks=max_obstacle_checks),
+    )
+    work = _WorkBudget(settings=bounded_request.settings, cancelled=stop)
+    try:
+        problem = _prepare(snapshot, bounded_request, work)
+    except _ExpectedFailureError as error:
+        return _result(work, 0, _failure_from_router(error, stop))
+    except Exception:
+        return _result(work, 0, CandidatePathValidationFailure.INVALID_REQUEST)
+    if (
+        checked_candidate.patch.width_nm != problem.width_nm
+        or checked_candidate.start_pad_id != problem.start_pad.id
+        or checked_candidate.end_pad_id != problem.end_pad.id
+        or checked_candidate.pad_count != problem.pad_count
+        or len(problem.components) < 2
+    ):
+        return _result(work, 0, CandidatePathValidationFailure.INVALID_CANDIDATE)
+
+    step = checked_request.settings.grid_step_nm
+    origin = problem.start_pad.center
+    total_edges = 0
+    edge_checks = 0
+    try:
+        for path in checked_candidate.patch.paths:
+            seen = {path.vertices[0]}
+            for point in path.vertices:
+                if (point.x - origin.x) % step != 0 or (point.y - origin.y) % step != 0:
+                    return _result(
+                        work, edge_checks, CandidatePathValidationFailure.UNSUPPORTED_GEOMETRY
+                    )
+            for start, end in pairwise(path.vertices):
+                delta_x = (end.x - start.x) // step
+                delta_y = (end.y - start.y) // step
+                total_edges += abs(delta_x) + abs(delta_y)
+                if total_edges > max_path_edges:
+                    return _result(
+                        work, edge_checks, CandidatePathValidationFailure.BUDGET_EXHAUSTED
+                    )
+                unit_x = 0 if delta_x == 0 else (1 if delta_x > 0 else -1)
+                unit_y = 0 if delta_y == 0 else (1 if delta_y > 0 else -1)
+                current = start
+                for _ in range(abs(delta_x) + abs(delta_y)):
+                    stopped = stop.check()
+                    if stopped is not None:
+                        return _result(work, edge_checks, stopped)
+                    next_point = PointNM(current.x + unit_x * step, current.y + unit_y * step)
+                    if next_point in seen:
+                        return _result(
+                            work, edge_checks, CandidatePathValidationFailure.INVALID_CANDIDATE
+                        )
+                    seen.add(next_point)
+                    if not _edge_is_legal(current, next_point, problem, work):
+                        return _result(
+                            work,
+                            edge_checks + 1,
+                            CandidatePathValidationFailure.OBSTACLE_VIOLATION,
+                        )
+                    edge_checks += 1
+                    current = next_point
+
+        cores: list[tuple[int, int, int, int]] = []
+        component_offsets: list[int] = []
+        for component in problem.components:
+            component_offsets.append(len(cores))
+            cores.extend(component)
+        route_offset = len(cores)
+        cores.extend(_candidate_track_cores(checked_candidate))
+        roots = _component_roots(tuple(cores), work)
+        accepted_root = roots[component_offsets[0]]
+        if any(roots[offset] != accepted_root for offset in component_offsets) or any(
+            root != accepted_root for root in roots[route_offset:]
+        ):
+            return _result(work, edge_checks, CandidatePathValidationFailure.INFEASIBLE)
+    except _ExpectedFailureError as error:
+        return _result(work, edge_checks, _failure_from_router(error, stop))
+    except Exception:
+        return _result(work, edge_checks, CandidatePathValidationFailure.INVALID_CANDIDATE)
+    return _result(work, edge_checks, stop.check())
+
+
+def validate_candidate_patch_with_exact_off_grid_obstacle_fallback(
+    snapshot: object,
+    request: object,
+    candidate: object,
+    *,
+    max_obstacle_checks: object,
+    max_path_edges: object,
+    cancelled: object = None,
+    deadline_check: object = None,
+) -> CandidatePathValidationResult:
+    """Retain a proven obstacle refusal when one multi-path vertex is one nanometre off-grid."""
+
+    primary = validate_candidate_patch(
+        snapshot,
+        request,
+        candidate,
+        max_obstacle_checks=max_obstacle_checks,
+        max_path_edges=max_path_edges,
+        cancelled=cancelled,
+        deadline_check=deadline_check,
+    )
+    if primary.failure is not CandidatePathValidationFailure.UNSUPPORTED_GEOMETRY:
+        return primary
+    assert isinstance(max_obstacle_checks, int) and not isinstance(max_obstacle_checks, bool)
+    remaining_checks = max_obstacle_checks - primary.obstacle_checks
+    if remaining_checks < 1:
+        return CandidatePathValidationResult(
+            edge_checks=primary.edge_checks,
+            obstacle_checks=primary.obstacle_checks,
+            failure=CandidatePathValidationFailure.BUDGET_EXHAUSTED,
+        )
+    stop = _StopChecks(
+        cancelled=cast(CancellationCheck | None, cancelled),
+        deadline_check=cast(CancellationCheck | None, deadline_check),
+    )
+    checked_request = _canonical_request(request, stop)
+    if checked_request is None or type(candidate) is not RouteCandidate:
+        return CandidatePathValidationResult(
+            edge_checks=primary.edge_checks,
+            obstacle_checks=primary.obstacle_checks,
+            failure=stop.observed or CandidatePathValidationFailure.INVALID_CANDIDATE,
+        )
+    bounded_request = replace(
+        checked_request,
+        settings=replace(checked_request.settings, max_obstacle_checks=remaining_checks),
+    )
+    work = _WorkBudget(settings=bounded_request.settings, cancelled=stop)
+    failure = CandidatePathValidationFailure.UNSUPPORTED_GEOMETRY
+    try:
+        problem = _prepare(cast(BoardIRSnapshot, snapshot), bounded_request, work)
+        for path in candidate.patch.paths:
+            for start, end in pairwise(path.vertices):
+                if not _edge_is_legal(start, end, problem, work):
+                    failure = CandidatePathValidationFailure.OBSTACLE_VIOLATION
+                    break
+            if failure is CandidatePathValidationFailure.OBSTACLE_VIOLATION:
+                break
+    except _ExpectedFailureError as error:
+        failure = _failure_from_router(error, stop)
+    except Exception:
+        failure = CandidatePathValidationFailure.INVALID_CANDIDATE
+    return CandidatePathValidationResult(
+        edge_checks=primary.edge_checks,
+        obstacle_checks=primary.obstacle_checks + work.obstacle_checks,
+        failure=failure,
+    )
+
+
 __all__ = [
+    "EXTERNAL_PATCH_TREE_ORDERING",
     "CandidatePathValidationFailure",
     "CandidatePathValidationResult",
+    "validate_candidate_patch",
+    "validate_candidate_patch_with_exact_off_grid_obstacle_fallback",
     "validate_candidate_path",
+    "validate_candidate_path_with_exact_off_grid_obstacle_fallback",
 ]

@@ -1,0 +1,79 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "ECD01-drc-opt-in-disabled",
+      "file": "src/copper_mcp/external_candidate_drc.py",
+      "anchor": "    if not request.include_drc:\n        raise ExternalCandidateDrcError(\n            \"the external candidate request does not authorize authoritative DRC\"\n        )\n",
+      "replacement": "    if False:\n        raise ExternalCandidateDrcError(\n            \"the external candidate request does not authorize authoritative DRC\"\n        )\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_external_candidate_drc.py::test_drc_requires_the_typed_request_opt_in"
+      ]
+    },
+    {
+      "id": "ECD02-physical-completion-forged",
+      "file": "src/copper_mcp/external_candidate_drc.py",
+      "anchor": "        return \"completed\" if self.drc_evidence is not None else \"not_run\"\n",
+      "replacement": "        return \"completed\"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_external_candidate_drc.py::test_structural_refusal_never_invokes_kicad"
+      ]
+    },
+    {
+      "id": "ECD03-evidence-candidate-binding-disabled",
+      "file": "src/copper_mcp/external_candidate_drc.py",
+      "anchor": "            and self.drc_evidence.candidate_id != self.verification.candidate_id\n",
+      "replacement": "            and False\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_external_candidate_drc.py::test_redacted_result_rejects_evidence_for_another_candidate"
+      ]
+    },
+    {
+      "id": "ECD04-reference-replay-used-for-foreign-geometry",
+      "file": "src/copper_mcp/kicad_cli.py",
+      "anchor": "        render_candidate=_render_kicad_disposed_candidate_board,\n",
+      "replacement": "        render_candidate=render_kicad_candidate_board,\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_external_candidate_drc.py::test_disposed_kicad_seam_selects_the_non_replay_renderer"
+      ]
+    },
+    {
+      "id": "ECD05-forged-disposition-type-check-disabled",
+      "file": "src/copper_mcp/kicad_cli.py",
+      "anchor": "    if type(disposition) is not _ExternalCandidateDisposition or disposition.candidate is None:\n        raise KiCadCliError(\"external route candidate disposition is malformed or refused\")\n",
+      "replacement": "    if False:\n        raise KiCadCliError(\"external route candidate disposition is malformed or refused\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_external_candidate_drc.py::test_disposed_kicad_seam_rejects_a_forged_capability"
+      ]
+    },
+    {
+      "id": "ECD06-disposition-candidate-binding-disabled",
+      "file": "src/copper_mcp/external_candidate_drc.py",
+      "anchor": "            and self.candidate.candidate_id != self.verification.candidate_id\n",
+      "replacement": "            and False\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_external_candidate_drc.py::test_disposition_rejects_a_candidate_not_bound_to_its_acceptance"
+      ]
+    },
+    {
+      "id": "ECD07-post-drc-deadline-check-disabled",
+      "file": "src/copper_mcp/external_candidate_drc.py",
+      "anchor": "    if time.monotonic() >= deadline:\n        raise ExternalCandidateDrcError(\n            \"the external candidate deadline expired during authoritative DRC\"\n        )\n",
+      "replacement": "    if False:\n        raise ExternalCandidateDrcError(\n            \"the external candidate deadline expired during authoritative DRC\"\n        )\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_external_candidate_drc.py::test_external_coordinator_rejects_drc_finishing_after_its_deadline"
+      ]
+    }
+  ]
+}

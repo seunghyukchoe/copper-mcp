@@ -419,8 +419,11 @@ budget sits *behind* the parse it appears to guard — refusing the largest boar
 what reading it costs — so the defence against an unbounded vertex list is `ParseLimits`, which also
 caps the population at 741,375 vertices; ADR-0104 prices the change at 6.5 s and 21.6 MiB of
 adversarial headroom. Note that it meters a board's **total** pour while the ordered-layer adapter
-refuses any single island above 4,096 vertices, a ceiling real boards reach (widest observed 43,889)
-and R-150 tracks. B-021 measures the narrow fill-aware routing core on a
+independently admits at most 500,000 vertices in one island and 10,000,000 across a request. The
+per-island source boundary was calibrated across full proposal, replay, bounds scans, canonical
+identity allocation, and hashing; it admits the widest observed 43,889-vertex island while
+500,001 refuses before those expensive operations (ADR-0116). B-021 measures the narrow
+fill-aware routing core on a
 synthetic corridor: ten deterministic replays reduce wire length from 14,000 nm to 8,000 nm. The
 public preview now carries the same freshness evidence on routed candidates when
 `include_fill_authority` is set, with a typed `routing_effect` so an AI host can distinguish exact
@@ -446,8 +449,9 @@ flag rather than alongside it, because the flag is what would have made the gap 
 binding in place, `preview_layered_route` accepts `include_fill_authority` and reports a
 `routing_effect` over the signal layers the search reached. Two honest limits: no layered candidate
 identity moves, because the binding enters the canonical payload only when it exists; and the
-per-island 4,096-vertex ceiling above means the flag refuses the whole request on the 14 of 18
-corpus boards that exceed it, which is `R-152`.
+per-island 500,000-vertex and aggregate 10,000,000-vertex source boundaries above remain fixed,
+server-owned resource limits. The recorded 18-board corpus does not exceed the per-island boundary;
+that admission does not imply route quality, DRC, electrical, fabrication, or hardware validity.
 
 ## Multi-pin trees
 

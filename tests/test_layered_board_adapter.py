@@ -888,27 +888,144 @@ def test_malformed_verified_fill_is_refused_at_the_request_boundary(
     assert expected in result.diagnostic.message
 
 
-def test_unbounded_verified_fill_is_refused_before_any_bounding_box_work() -> None:
-    snapshot = _fill_snapshot()
-    huge = VerifiedFill(
+@pytest.mark.parametrize("vertex_count", [43_889, 500_000])
+def test_calibrated_fill_island_sizes_pass_shape_validation(vertex_count: int) -> None:
+    import copper_mcp.routing.layered_board_adapter as adapter
+
+    island = VerifiedFill(
         net_id=FILL_NET_ID,
         layer_id=LAYER_ID,
-        points=tuple(PointNM(index, 0) for index in range(4_097)),
+        points=(PointNM(3_000, 3_000),) * vertex_count,
         source_revision=FIXTURE_REVISION,
     )
-    island = _island((3_000, 6_000, 7_000, 7_000))
 
-    wide = LayeredBoardRouter().propose(snapshot, _request(snapshot, verified_fill=(huge,)))
-    many = LayeredBoardRouter().propose(
-        snapshot,
-        _request(snapshot, verified_fill=tuple(island for _ in range(4_097))),
+    assert adapter._invalid_verified_fill((island,)) is None
+
+
+def test_fill_island_above_calibrated_ceiling_is_refused_before_bounds_or_hashing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot = _fill_snapshot()
+    router = LayeredBoardRouter()
+    candidate = _candidate(router.propose(snapshot, _request(snapshot)))
+    over_ceiling = VerifiedFill(
+        net_id=FILL_NET_ID,
+        layer_id=LAYER_ID,
+        points=(PointNM(3_000, 3_000),) * 500_001,
+        source_revision=FIXTURE_REVISION,
     )
+    request = _request(snapshot, verified_fill=(over_ceiling,))
 
-    for refusal, expected in ((wide, "not a bounded polygon"), (many, "exceeds the obstacle")):
+    def unexpected_work(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("over-ceiling fill reached bounds or hashing")
+
+    import copper_mcp.routing.layered_board_adapter as adapter
+
+    monkeypatch.setattr(adapter, "_points_bounds", unexpected_work)
+    monkeypatch.setattr(adapter, "fill_binding_for", unexpected_work)
+    proposed = router.propose(snapshot, request)
+    replayed = router.replay(snapshot, candidate, request)
+    malformed_request = router.propose(snapshot, replace(request, seed=-1))
+
+    for refusal in (proposed, replayed):
         assert refusal.candidate is None
         assert refusal.diagnostic is not None
         assert refusal.diagnostic.code is LayeredRouteFailureCode.INVALID_REQUEST
-        assert expected in refusal.diagnostic.message
+        assert refusal.diagnostic.message == "verified fill island is not a bounded polygon"
+        assert FILL_NET_ID not in refusal.diagnostic.message
+    assert malformed_request.diagnostic is not None
+    assert malformed_request.diagnostic.code is LayeredRouteFailureCode.INVALID_REQUEST
+    assert malformed_request.diagnostic.message == "seed is malformed"
+
+
+def test_excess_verified_fill_island_count_remains_invalid() -> None:
+    snapshot = _fill_snapshot()
+    island = _island((3_000, 6_000, 7_000, 7_000))
+
+    result = LayeredBoardRouter().propose(
+        snapshot,
+        _request(snapshot, verified_fill=(island,) * 4_097),
+    )
+
+    assert result.candidate is None
+    assert result.diagnostic is not None
+    assert result.diagnostic.code is LayeredRouteFailureCode.INVALID_REQUEST
+    assert result.diagnostic.message == "verified fill island count exceeds the obstacle ceiling"
+
+
+def test_verified_fill_aggregate_walk_has_an_exact_obstacle_check_ceiling() -> None:
+    import copper_mcp.routing.layered_board_adapter as adapter
+
+    points = (PointNM(0, 0),) * 500_000
+    island = VerifiedFill(
+        net_id=FILL_NET_ID,
+        layer_id=LAYER_ID,
+        points=points,
+        source_revision=FIXTURE_REVISION,
+    )
+
+    assert adapter._verified_fill_over_check_budget((island,) * 20) is None
+    assert adapter._verified_fill_over_check_budget((island,) * 21) is not None
+    assert adapter._verified_fill_over_check_budget([island]) is None
+    assert adapter._verified_fill_over_check_budget(("secret",)) is None
+
+
+def test_unbounded_verified_fill_is_refused_before_any_bounding_box_work() -> None:
+    """Keep the immutable #189 mutation node while exercising the calibrated bounds."""
+    test_verified_fill_aggregate_walk_has_an_exact_obstacle_check_ceiling()
+
+
+def test_verified_fill_aggregate_preflight_reads_lengths_without_touching_vertices() -> None:
+    import copper_mcp.routing.layered_board_adapter as adapter
+
+    class LengthOnlyPoints(tuple[PointNM, ...]):
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            raise AssertionError("aggregate preflight iterated fill vertices")
+
+        def __getitem__(self, index):  # type: ignore[no-untyped-def]
+            raise AssertionError("aggregate preflight accessed a fill vertex")
+
+    points = LengthOnlyPoints((PointNM(0, 0),) * 500_000)
+    island = VerifiedFill(
+        net_id=FILL_NET_ID,
+        layer_id=LAYER_ID,
+        points=points,
+        source_revision=FIXTURE_REVISION,
+    )
+
+    assert adapter._verified_fill_over_check_budget((island,) * 20) is None
+    assert adapter._verified_fill_over_check_budget((island,) * 21) is not None
+
+
+def test_verified_fill_aggregate_budget_is_typed_and_matches_replay_without_echo() -> None:
+    snapshot = _fill_snapshot()
+    router = LayeredBoardRouter()
+    candidate = _candidate(router.propose(snapshot, _request(snapshot)))
+    points = (PointNM(0, 0),) * 500_000
+    island = VerifiedFill(
+        net_id=FILL_NET_ID,
+        layer_id=LAYER_ID,
+        points=points,
+        source_revision=FIXTURE_REVISION,
+    )
+    request = _request(snapshot, verified_fill=(island,) * 21)
+
+    proposed = router.propose(snapshot, request)
+    replayed = router.replay(snapshot, candidate, request)
+    malformed = router.propose(snapshot, replace(request, seed=-1))
+
+    for refusal in (proposed, replayed):
+        assert refusal.candidate is None
+        assert refusal.diagnostic is not None
+        assert refusal.diagnostic.code is LayeredRouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED
+        assert refusal.diagnostic.message == (
+            "verified fill vertex count exceeds the fill-validation ceiling "
+            "(max_verified_fill_vertices=10000000)"
+        )
+        assert FILL_NET_ID not in refusal.diagnostic.message
+    assert malformed.diagnostic is not None
+    assert malformed.diagnostic.code is LayeredRouteFailureCode.INVALID_REQUEST
+    assert malformed.diagnostic.message == "seed is malformed"
 
 
 def test_verified_fill_envelopes_are_charged_against_the_obstacle_budget() -> None:

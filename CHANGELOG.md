@@ -6,6 +6,71 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- An internal, non-public authoritative-signoff seam now records closed,
+  candidate- and revision-bound SI/PI/thermal/DFM evidence vocabulary with typed refusal and
+  non-claim outcomes. No bounded authoritative executor is configured, so production cannot
+  produce `SIGNED_OFF`; surrogate or advisory output cannot sign off, and no MCP or CLI surface is
+  exposed. Issue #91 remains open for a coordinator-owned bounded executor and its evidence gates
+  ([ADR-0118](docs/adr/0118-authoritative-signoff-stays-closed-until-a-bounded-executor-exists.md),
+  [issue #91](https://github.com/seunghyukchoe/copper-mcp/issues/91), `D-215`, `R-167`, `SEC-156`).
+- An internal opt-in negotiated local-repair transaction now derives immutable Board IR and
+  rejected-allocation provenance, meters projection, search and candidate-validation work, and
+  disposes repaired geometry through the Board IR path validator plus the ordinary whole-set
+  physical-clearance gate before publication. Legacy no-repair result shapes and candidate
+  identities remain unchanged. This adds no public repair or apply authority and makes no routing
+  quality claim ([ADR-0117](docs/adr/0117-local-exact-repair-is-an-opt-in-verified-transaction.md),
+  [issue #90](https://github.com/seunghyukchoe/copper-mcp/issues/90), `D-214`, `R-166`, `SEC-155`).
+- A clean-worktree parse-inclusive performance profile now measures the largest redistributable
+  committed KiCad board through the complete Board IR read and attributes nested cumulative cost
+  to S-expression parsing, tokenization, and typed conversion. B-122 selects the parser/tokenizer
+  seam for any future bounded experiment while adding no acceleration or public-contract change
+  ([issue #87](https://github.com/seunghyukchoe/copper-mcp/issues/87)).
+- A production-core external route-candidate disposer accepts a closed, revision-bound,
+  single-layer v1 document, reconstructs candidate identity from trusted coordinator state, and
+  returns a typed redacted acceptance or refusal after bounded Board IR validation. It is exported
+  from `copper_mcp.routing` but is deliberately not exposed through MCP, CLI, apply, persistence or
+  benchmark code in this slice ([ADR-0112](docs/adr/0112-external-route-candidates-enter-through-a-disposer.md),
+  [issue #99](https://github.com/seunghyukchoe/copper-mcp/issues/99), `D-209`, `R-161`, `SEC-150`).
+- The disposer now also accepts a closed multi-path v2 route patch, including a single-leg
+  completion of a partially routed multi-pin net, and proves that every submitted path joins every
+  coordinator-derived pad component. B-120 replays all 70 routed B-088 nets at
+  70/70 acceptance and preserves four distinct predeclared perturbation refusals; geometry remains
+  absent from the self-digested result artifact and physical validation remains `not_run`
+  ([ADR-0113](docs/adr/0113-external-route-patches-preserve-multi-pin-topology.md), `D-210`,
+  `R-162`, `SEC-151`).
+- A production-only file-backed continuation now binds an accepted v1/v2 external candidate to
+  authoritative KiCad DRC on a private source-preserving board. Structural refusals never execute
+  KiCad; successful output carries only revision-bound redacted evidence and labels the live count
+  `single_invocation`. MCP, CLI, persistence and apply remain unexposed
+  ([ADR-0114](docs/adr/0114-external-candidates-continue-to-private-kicad-drc.md), `D-211`,
+  `R-163`, `SEC-152`, [issue #99](https://github.com/seunghyukchoe/copper-mcp/issues/99)).
+- The versioned read-only MCP tool `verify_external_route_candidate` now accepts only a closed
+  `1.0` envelope around the existing v1/v2 documents, requires reference-bound source and snapshot
+  preconditions, derives candidate identity and work ceilings from bounded coordinator settings,
+  and always continues
+  an accepted structural disposition through authoritative KiCad DRC. Its accepted/refused union
+  is redacted and carries no geometry, board bytes or names, token, capability or mutation claim;
+  `completed` records execution rather than a clean verdict. There is no CLI, persistence, repair,
+  apply or live-IPC peer ([ADR-0115](docs/adr/0115-external-route-verification-is-a-versioned-read-only-mcp-boundary.md),
+  `D-212`, `R-164`, `SEC-153`, [issue #99](https://github.com/seunghyukchoe/copper-mcp/issues/99)).
+
+### Fixed
+
+- Ordered-layer verified-fill validation now refuses aggregate polygon walks above the existing
+  10,000,000 obstacle-check ceiling before inspecting vertices. The O(islands) preflight preserves
+  an independent per-island refusal and propagates the typed
+  `obstacle_check_budget_exceeded` result through preview and durable-job contracts
+  ([issue #189](https://github.com/seunghyukchoe/copper-mcp/issues/189), `D-208`, `SEC-149`).
+- The ordered-layer per-island verified-fill boundary is now a measured 500,000 vertices instead
+  of an uncalibrated 4,096. B-123 rejected a one-million-vertex alternative when its split-island
+  proposal plus replay exceeded the predeclared time gate; 500,001 still refuses before bounds or
+  identity hashing, while the independent aggregate and rectangle-search meters remain unchanged
+  ([ADR-0116](docs/adr/0116-layered-fill-islands-have-a-measured-source-boundary.md),
+  [issue #167](https://github.com/seunghyukchoe/copper-mcp/issues/167), `D-213`, `R-165`,
+  `SEC-154`, `B-123`).
+
 ## [0.9.0] - 2026-08-16
 
 Upgrading from 0.8.0: see the

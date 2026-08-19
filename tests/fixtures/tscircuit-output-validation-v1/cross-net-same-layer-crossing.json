@@ -1,0 +1,77 @@
+{
+  "case": "synthetic-cross-net-same-layer-crossing",
+  "source": {
+    "layerCount": 1,
+    "minTraceWidth": 0.1,
+    "bounds": {"minX": -6, "maxX": 6, "minY": -6, "maxY": 6},
+    "obstacles": [
+      {"type": "rect", "center": {"x": -4, "y": 0}, "width": 0.4, "height": 0.4, "layers": ["top"], "connectedTo": ["h-left"]},
+      {"type": "rect", "center": {"x": 4, "y": 0}, "width": 0.4, "height": 0.4, "layers": ["top"], "connectedTo": ["h-right"]},
+      {"type": "rect", "center": {"x": 0, "y": -4}, "width": 0.4, "height": 0.4, "layers": ["top"], "connectedTo": ["v-bottom"]},
+      {"type": "rect", "center": {"x": 0, "y": 4}, "width": 0.4, "height": 0.4, "layers": ["top"], "connectedTo": ["v-top"]}
+    ],
+    "connections": [
+      {
+        "name": "horizontal-signal",
+        "pointsToConnect": [
+          {"x": -4, "y": 0, "layer": "top", "pointId": "h-left"},
+          {"x": 4, "y": 0, "layer": "top", "pointId": "h-right"}
+        ]
+      },
+      {
+        "name": "vertical-signal",
+        "pointsToConnect": [
+          {"x": 0, "y": -4, "layer": "top", "pointId": "v-bottom"},
+          {"x": 0, "y": 4, "layer": "top", "pointId": "v-top"}
+        ]
+      }
+    ]
+  },
+  "output": {
+    "layerCount": 1,
+    "minTraceWidth": 0.1,
+    "bounds": {"minX": -6, "maxX": 6, "minY": -6, "maxY": 6},
+    "obstacles": [
+      {"type": "rect", "center": {"x": -4, "y": 0}, "width": 0.4, "height": 0.4, "layers": ["top"], "connectedTo": ["h-left"]},
+      {"type": "rect", "center": {"x": 4, "y": 0}, "width": 0.4, "height": 0.4, "layers": ["top"], "connectedTo": ["h-right"]},
+      {"type": "rect", "center": {"x": 0, "y": -4}, "width": 0.4, "height": 0.4, "layers": ["top"], "connectedTo": ["v-bottom"]},
+      {"type": "rect", "center": {"x": 0, "y": 4}, "width": 0.4, "height": 0.4, "layers": ["top"], "connectedTo": ["v-top"]}
+    ],
+    "connections": [
+      {
+        "name": "horizontal-signal",
+        "pointsToConnect": [
+          {"x": -4, "y": 0, "layer": "top", "pointId": "h-left"},
+          {"x": 4, "y": 0, "layer": "top", "pointId": "h-right"}
+        ]
+      },
+      {
+        "name": "vertical-signal",
+        "pointsToConnect": [
+          {"x": 0, "y": -4, "layer": "top", "pointId": "v-bottom"},
+          {"x": 0, "y": 4, "layer": "top", "pointId": "v-top"}
+        ]
+      }
+    ],
+    "traces": [
+      {
+        "type": "pcb_trace",
+        "pcb_trace_id": "trace-horizontal",
+        "connection_name": "horizontal-signal",
+        "route": [
+          {"route_type": "wire", "x": -4, "y": 0, "width": 0.1, "layer": "top"},
+          {"route_type": "wire", "x": 4, "y": 0, "width": 0.1, "layer": "top"}
+        ]
+      },
+      {
+        "type": "pcb_trace",
+        "pcb_trace_id": "trace-vertical",
+        "connection_name": "vertical-signal",
+        "route": [
+          {"route_type": "wire", "x": 0, "y": -4, "width": 0.1, "layer": "top"},
+          {"route_type": "wire", "x": 0, "y": 4, "width": 0.1, "layer": "top"}
+        ]
+      }
+    ]
+  }
+}

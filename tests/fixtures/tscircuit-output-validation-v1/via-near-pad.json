@@ -1,0 +1,72 @@
+{
+  "case": "synthetic-post-processed-via-near-pad",
+  "expected_geometry": {
+    "via_center": {"x": 0, "y": 0},
+    "via_outer_diameter": 0.6,
+    "neighbor_pad_center": {"x": 0, "y": 0.32},
+    "neighbor_pad_width": 0.6,
+    "neighbor_pad_height": 0.1
+  },
+  "source": {
+    "layerCount": 2,
+    "minTraceWidth": 0.1,
+    "bounds": {"minX": -5, "maxX": 5, "minY": -3, "maxY": 3},
+    "obstacles": [
+      {"type": "rect", "center": {"x": -3, "y": 0}, "width": 0.4, "height": 0.4, "layers": ["top"], "connectedTo": ["main-left"]},
+      {"type": "rect", "center": {"x": 3, "y": 0}, "width": 0.4, "height": 0.4, "layers": ["top"], "connectedTo": ["main-right"]},
+      {"type": "rect", "center": {"x": 0, "y": 0.32}, "width": 0.6, "height": 0.1, "layers": ["top"], "connectedTo": ["neighbor-pad"]}
+    ],
+    "connections": [
+      {
+        "name": "main-signal",
+        "pointsToConnect": [
+          {"x": -3, "y": 0, "layer": "top", "pointId": "main-left"},
+          {"x": 3, "y": 0, "layer": "top", "pointId": "main-right"}
+        ]
+      },
+      {
+        "name": "neighbor-signal",
+        "pointsToConnect": [
+          {"x": 0, "y": 0.32, "layer": "top", "pointId": "neighbor-pad"}
+        ]
+      }
+    ]
+  },
+  "output": {
+    "layerCount": 2,
+    "minTraceWidth": 0.1,
+    "bounds": {"minX": -5, "maxX": 5, "minY": -3, "maxY": 3},
+    "obstacles": [
+      {"type": "rect", "center": {"x": -3, "y": 0}, "width": 0.4, "height": 0.4, "layers": ["top"], "connectedTo": ["main-left"]},
+      {"type": "rect", "center": {"x": 3, "y": 0}, "width": 0.4, "height": 0.4, "layers": ["top"], "connectedTo": ["main-right"]},
+      {"type": "rect", "center": {"x": 0, "y": 0.32}, "width": 0.6, "height": 0.1, "layers": ["top"], "connectedTo": ["neighbor-pad"]}
+    ],
+    "connections": [
+      {
+        "name": "main-signal",
+        "pointsToConnect": [
+          {"x": -3, "y": 0, "layer": "top", "pointId": "main-left"},
+          {"x": 3, "y": 0, "layer": "top", "pointId": "main-right"}
+        ]
+      },
+      {
+        "name": "neighbor-signal",
+        "pointsToConnect": [
+          {"x": 0, "y": 0.32, "layer": "top", "pointId": "neighbor-pad"}
+        ]
+      }
+    ],
+    "traces": [
+      {
+        "type": "pcb_trace",
+        "pcb_trace_id": "trace-main",
+        "connection_name": "main-signal",
+        "route": [
+          {"route_type": "wire", "x": -3, "y": 0, "width": 0.1, "layer": "top"},
+          {"route_type": "via", "x": 0, "y": 0, "from_layer": "top", "to_layer": "bottom"},
+          {"route_type": "wire", "x": 3, "y": 0, "width": 0.1, "layer": "bottom"}
+        ]
+      }
+    ]
+  }
+}

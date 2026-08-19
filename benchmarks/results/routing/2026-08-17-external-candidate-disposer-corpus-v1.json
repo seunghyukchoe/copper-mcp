@@ -1,0 +1,1096 @@
+{
+  "configuration": {
+    "bound_file_sha256": {
+      "scripts/benchmark_external_candidate_disposer.py": "sha256:0753c2a8dc67519253174e43e403046c268f334850de483befd0e4c9ef0963e7",
+      "src/copper_mcp/benchmarks/simple_route_json.py": "sha256:fb64b59f5727d792de30d82b1e9c0b7eab606d071569a29c8c8bc3ff8db5ec66",
+      "src/copper_mcp/routing/candidate_path_validator.py": "sha256:2ec9a3e17d6dc56289a54750dc019f4a846fd58b6ec93d6effaa5248dbf0c097",
+      "src/copper_mcp/routing/external_candidate_verifier.py": "sha256:7974326e7c185a01132fd86f8486c801e7f6d9bf4413594a206a8555c056a5bd"
+    },
+    "source_artifact_sha256": "sha256:76c99cbd66324553b82cc243898042a362b18daec90e276dc7e88cbaa64be15f",
+    "source_benchmark_run_id": "sha256:facf95ee9770ffab8c1bc403a32a403e55ca79f2c56d1eabc6679eb6ec4dfca3"
+  },
+  "date_utc": "2026-08-17",
+  "metrics": {
+    "corpus": {
+      "committed_boards": 20,
+      "corpus_id": "tscircuit-benchmark",
+      "license_spdx": "MIT",
+      "upstream_commit": "be36518b5bf51755dae92c230061ab3cf4e3e063"
+    },
+    "perturbations": [
+      {
+        "class": "one_nm_obstacle_incursion",
+        "document_digest": "sha256:b4c5f8067720316ac3e52f00ec2450026d925b1210cc358049fa7a9a7a7802d3",
+        "result": {
+          "code": "obstacle_violation",
+          "diagnostic": "external candidate violates the Board IR obstacle authority",
+          "edge_checks": 0,
+          "obstacle_checks": 87,
+          "physical_validation": "not_run",
+          "segment_count": 7,
+          "status": "refused"
+        },
+        "source": {
+          "board": "ts19_adc_breakout.json",
+          "net_id": "net:n8"
+        }
+      },
+      {
+        "class": "dropped_middle_segment",
+        "document_digest": "sha256:289fe2f5142bccb9c88b68cb2a92dd484372d1a759becd6ef19941cce1ad6c93",
+        "result": {
+          "code": "discontinuous_path",
+          "diagnostic": "external candidate path is discontinuous",
+          "edge_checks": 0,
+          "obstacle_checks": 0,
+          "physical_validation": "not_run",
+          "segment_count": 2,
+          "status": "refused"
+        },
+        "source": {
+          "board": "ts06_push_pull.json",
+          "net_id": "net:n4"
+        }
+      },
+      {
+        "class": "wrong_pad_endpoint",
+        "document_digest": "sha256:efb167e6c2752637f84dd2fa206df030fde2d5871a9c3ecd13cc577c94b0c7b9",
+        "result": {
+          "code": "endpoint_mismatch",
+          "diagnostic": "external candidate endpoints do not match",
+          "edge_checks": 0,
+          "obstacle_checks": 0,
+          "physical_validation": "not_run",
+          "segment_count": 0,
+          "status": "refused"
+        },
+        "source": {
+          "board": "ts02_voltage_divider.json",
+          "net_id": "net:n0"
+        }
+      },
+      {
+        "class": "undeclared_layer_via",
+        "document_digest": "sha256:fb8be99d9a8c64303a6493c6a01141869e85b446983194a11546bed1e8532324",
+        "result": {
+          "code": "undeclared_layer",
+          "diagnostic": "external candidate names an undeclared layer",
+          "edge_checks": 0,
+          "obstacle_checks": 0,
+          "physical_validation": "not_run",
+          "segment_count": 0,
+          "status": "refused"
+        },
+        "source": {
+          "board": "ts02_voltage_divider.json",
+          "net_id": "net:n0"
+        }
+      }
+    ],
+    "physical_validation": "not_run",
+    "predeclared_criterion": {
+      "perturbation_codes": {
+        "dropped_middle_segment": "discontinuous_path",
+        "one_nm_obstacle_incursion": "obstacle_violation",
+        "undeclared_layer_via": "undeclared_layer",
+        "wrong_pad_endpoint": "endpoint_mismatch"
+      },
+      "unperturbed_accepted": "70/70"
+    },
+    "unperturbed": {
+      "accepted": 70,
+      "cases": [
+        {
+          "board": "ts02_voltage_divider.json",
+          "document_digest": "sha256:20e19046368a519d351e2278d09f7a9507d58276f971e38a25f936b0e31dd7bc",
+          "net_id": "net:n0",
+          "result": {
+            "candidate_id": "sha256:bde0fdd296001b62ffbfe1b1088ffe4b5e9294f6c1e00416619658502ec052cd",
+            "edge_checks": 52,
+            "obstacle_checks": 250,
+            "physical_validation": "not_run",
+            "segment_count": 3,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:931f3d18241da72cc63af77a7927526ba3c9f18d2211c1bb851fb01a51ab19fa"
+        },
+        {
+          "board": "ts03_rc_filter.json",
+          "document_digest": "sha256:cb11b1a316195957e3a6075d2af3191493a4adc7cff8e34119a07c49a8f40f87",
+          "net_id": "net:n0",
+          "result": {
+            "candidate_id": "sha256:896ffe899dfc782bfe7abbb2c16a2b6960ab223980a7257335f48e99cfffaf9a",
+            "edge_checks": 44,
+            "obstacle_checks": 218,
+            "physical_validation": "not_run",
+            "segment_count": 3,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:a868b52a81f12fdb1232366930fbd575cd130fe027fe5ff61dd9c2e208d874e1"
+        },
+        {
+          "board": "ts04_dual_led.json",
+          "document_digest": "sha256:99bb093f17ce26ef1500725993aa9c8626fcf47c9f1af56f56cc5c8292417ef2",
+          "net_id": "net:n0",
+          "result": {
+            "candidate_id": "sha256:2cccf8c8a41efa0519e94be3ca4d07243d022e4486b0222c92893b5172bdee66",
+            "edge_checks": 54,
+            "obstacle_checks": 46,
+            "physical_validation": "not_run",
+            "segment_count": 3,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:eef8dcffd0023aebdc74d2f95633f4394ac9864abcf1b46f13778ced66051797"
+        },
+        {
+          "board": "ts04_dual_led.json",
+          "document_digest": "sha256:1b23975ca1c9ae5500624592639a80f8c68fb5217c2f6e4575d5109dacc241f7",
+          "net_id": "net:n1",
+          "result": {
+            "candidate_id": "sha256:f0490768e89d0de7c97068a901ece49fe05c1df888f70d3c811e156f6665a4e2",
+            "edge_checks": 72,
+            "obstacle_checks": 39,
+            "physical_validation": "not_run",
+            "segment_count": 2,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:95e819cf7a8135d093a2b98425eeaa1805dac7b3d38dc3a265f9e8d713026a96"
+        },
+        {
+          "board": "ts05_npn_switch.json",
+          "document_digest": "sha256:260cd084760cc4621d7b87642576ec17e4b348ec0bcbbb2ce83be707603b0f87",
+          "net_id": "net:n0",
+          "result": {
+            "candidate_id": "sha256:17b1768edb32ffec90acbe378f409b03064a6d30de234ebb61ff2288b511f030",
+            "edge_checks": 92,
+            "obstacle_checks": 85,
+            "physical_validation": "not_run",
+            "segment_count": 4,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:f722978f73f83fb39848aef717b4268d3c5636784de6f46e2001f900b7973ff3"
+        },
+        {
+          "board": "ts06_push_pull.json",
+          "document_digest": "sha256:7639f2b19e8e2bbbcd6e3f688203e857e6a4d03d1cf2c74fee9836afa31a8975",
+          "net_id": "net:n0",
+          "result": {
+            "candidate_id": "sha256:22b9e343b2278902bc90295cb06e66f297f436183475f631665bc9a36984abd5",
+            "edge_checks": 58,
+            "obstacle_checks": 49,
+            "physical_validation": "not_run",
+            "segment_count": 3,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:85d3548c7b94048d113a2c6d5bd4baf95601fc903b476d4d3d974eb35cdde83d"
+        },
+        {
+          "board": "ts06_push_pull.json",
+          "document_digest": "sha256:e201075ae674e11e898b42941d6f801bafe9efb8f76c01d90608d8fdaa3fb06e",
+          "net_id": "net:n4",
+          "result": {
+            "candidate_id": "sha256:807ee333a8b9b61648ecb7b2deae8626e281ed4c3bcbac8437ff2d87cb90dbc9",
+            "edge_checks": 54,
+            "obstacle_checks": 65,
+            "physical_validation": "not_run",
+            "segment_count": 4,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:a57c66c36df3aad0afcda176b24849270f171b029f44331acfffd54ce2efd20d"
+        },
+        {
+          "board": "ts06_push_pull.json",
+          "document_digest": "sha256:13050df266d2ad5b06366a0d45c92584d92b5dd4225aea3ba0afbdbb58b76f18",
+          "net_id": "net:n5",
+          "result": {
+            "candidate_id": "sha256:af8b8ba6a9a1fce17a90dfd726631f042b50b614dc88cfd33ebb0ece30dcf283",
+            "edge_checks": 148,
+            "obstacle_checks": 170,
+            "physical_validation": "not_run",
+            "segment_count": 5,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:b1d65700cff3dbec0c4db984df8c543c12e4a8f6e2f333077cc2905136d35fbb"
+        },
+        {
+          "board": "ts07_differential_pair.json",
+          "document_digest": "sha256:ecb729cff9683f73ac5e28fd39d589a7d6ab1d1eca9f360f1c38609780a01201",
+          "net_id": "net:n0",
+          "result": {
+            "candidate_id": "sha256:35f19acc87c9e2d7e7cfc08413d51228db8560161ed39ba43265c700102c1004",
+            "edge_checks": 61,
+            "obstacle_checks": 73,
+            "physical_validation": "not_run",
+            "segment_count": 4,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:509102a4491ff40b187350955a84048e0a6af87dd8860e7ed149214660caa8d9"
+        },
+        {
+          "board": "ts07_differential_pair.json",
+          "document_digest": "sha256:e709e2989a6e9f321a4042a3c7de8e6207fe4fe395e2db93814f64ea5a7138af",
+          "net_id": "net:n2",
+          "result": {
+            "candidate_id": "sha256:f01e119f3ddd2e882b1cdba86490d903598ed8517b41326364d953f0bc123ff8",
+            "edge_checks": 80,
+            "obstacle_checks": 90,
+            "physical_validation": "not_run",
+            "segment_count": 2,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:3f2d79d6af7a3f95da68a7146a0e177d88e9fa7be5459db4328986c60c2f54a1"
+        },
+        {
+          "board": "ts07_differential_pair.json",
+          "document_digest": "sha256:5162132b354e0abb67669f906a8271584475054245afe2c1aaa2cfa2caa14f4a",
+          "net_id": "net:n3",
+          "result": {
+            "candidate_id": "sha256:caf52dada47459c4b730326ebfaee18fb1d87ed3f3403032c22a543c2539a358",
+            "edge_checks": 67,
+            "obstacle_checks": 86,
+            "physical_validation": "not_run",
+            "segment_count": 5,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:f0749271ee40ce1a679074d0b289292286776006f22ed65c05fde2a08d863e2c"
+        },
+        {
+          "board": "ts07_differential_pair.json",
+          "document_digest": "sha256:fb72572a3222192ec9e6b0a3cb2ea0b8b39dbafb59e655f2d78c98969e1442dc",
+          "net_id": "net:n4",
+          "result": {
+            "candidate_id": "sha256:9ce73a8707ad82feea63c754481e33fdc4218386fb81438cf643deb6aab8e28f",
+            "edge_checks": 56,
+            "obstacle_checks": 78,
+            "physical_validation": "not_run",
+            "segment_count": 3,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:ecf57aba3b83da7f479a9d9e8f4cbdad8856da4eb5a4034d27f57f4a3833ec4b"
+        },
+        {
+          "board": "ts08_inverting_amp.json",
+          "document_digest": "sha256:9fae96bc004f99f9e643f46cac72fcb3585a7320a360a13e474d9f247644709f",
+          "net_id": "net:n0",
+          "result": {
+            "candidate_id": "sha256:8a073e6825c9794d0663cf370bfae8113c97224c1cbae4fbc4c260a7585114d4",
+            "edge_checks": 87,
+            "obstacle_checks": 85,
+            "physical_validation": "not_run",
+            "segment_count": 4,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:004689834d9684d142f8333e83fd9800363e455ac135ec6dca55aa8ecd1fd723"
+        },
+        {
+          "board": "ts08_inverting_amp.json",
+          "document_digest": "sha256:e5f9addc7fd32627d7d8d55c4b458c11dff050b18cd79d0315da7f1c793b7082",
+          "net_id": "net:n1",
+          "result": {
+            "candidate_id": "sha256:27f09aa29358629f62a0f11a08ea369b66f7ea1118818777abbaed71bb294a1b",
+            "edge_checks": 117,
+            "obstacle_checks": 164,
+            "physical_validation": "not_run",
+            "segment_count": 9,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:c403808b4117364e9ed70a0efefe7a488ba000c87f7366aa012d1a84566a5028"
+        },
+        {
+          "board": "ts08_inverting_amp.json",
+          "document_digest": "sha256:2bce01eaad98349a135d4a9d36a369f50aaf27df84413c0fcab759bbd567bfed",
+          "net_id": "net:n2",
+          "result": {
+            "candidate_id": "sha256:d8459a6f23eacbe17d03bab1c63ea896b54189605a118c7bee3856168f7794d5",
+            "edge_checks": 51,
+            "obstacle_checks": 80,
+            "physical_validation": "not_run",
+            "segment_count": 6,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:ea0b816759a9e89aeab1d13a06991f082070c9db0d1cc60c8c5a83df55f64c00"
+        },
+        {
+          "board": "ts09_active_filter.json",
+          "document_digest": "sha256:29d4d583abc93c5b7d4d7d879bbae2f8cb7ac6f031ea7f79ff6e4e1b8768af7c",
+          "net_id": "net:n0",
+          "result": {
+            "candidate_id": "sha256:dcccc69b8bfde9b755fb26bccf7bbabb31fe27c964fa9a3bdf5d43f59d937b91",
+            "edge_checks": 136,
+            "obstacle_checks": 93,
+            "physical_validation": "not_run",
+            "segment_count": 6,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:6467fc45d29b541c34cd29e58b251b143090d359c1d75c726d043d4a9cc65ba7"
+        },
+        {
+          "board": "ts09_active_filter.json",
+          "document_digest": "sha256:0cb9aacf000ff11256a570e35df7b18e79810e1313e93f1f92152d2cbb586d3c",
+          "net_id": "net:n1",
+          "result": {
+            "candidate_id": "sha256:91b3bd184f19094eef973171f7d1460f967543e1b581ce1a1aeb5e3ad469e5de",
+            "edge_checks": 148,
+            "obstacle_checks": 166,
+            "physical_validation": "not_run",
+            "segment_count": 9,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:f231cc1b0d067f5bdc416980b8c8f071277111e808454ce4320d8a7a8881ccfe"
+        },
+        {
+          "board": "ts09_active_filter.json",
+          "document_digest": "sha256:8ff064aed80f5264d9d6a227b84a5c5aab3d1a3a59461817ab4d10c7a596d569",
+          "net_id": "net:n2",
+          "result": {
+            "candidate_id": "sha256:a073f34dba16300dac9c14342729bd3362e785d148c690b95033d6e9acf9c176",
+            "edge_checks": 69,
+            "obstacle_checks": 44,
+            "physical_validation": "not_run",
+            "segment_count": 3,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:78792784437d8ebe0014a9408f17c0b3492d4e8bbbb7df0c1963728ce060f47a"
+        },
+        {
+          "board": "ts09_active_filter.json",
+          "document_digest": "sha256:881f1fbe1fd9166d34cf15d3c6019f30657ab626c98ba2d9a4bfa8c0e293f97a",
+          "net_id": "net:n3",
+          "result": {
+            "candidate_id": "sha256:2a69fdc906902494a08f9df12b41968d2c9d11c7f0b568fd177981aadc49c789",
+            "edge_checks": 77,
+            "obstacle_checks": 54,
+            "physical_validation": "not_run",
+            "segment_count": 5,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:e9ae5df932712b8caa3a58d52f6ee41cd49dda73a72ac262ab52cf5b1c69c5a2"
+        },
+        {
+          "board": "ts09_active_filter.json",
+          "document_digest": "sha256:b79ef0670e51185d1eb17edf47470094c47ebda9105102ace5f01f8a00de481a",
+          "net_id": "net:n4",
+          "result": {
+            "candidate_id": "sha256:1487b284a81db0e3b4b3a8d73721570ce7d10ef0edb0ce44c4df00ed95a9c048",
+            "edge_checks": 92,
+            "obstacle_checks": 86,
+            "physical_validation": "not_run",
+            "segment_count": 4,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:08b4b42dbf5adf9b706bbd2e58e5ddd1eb08d1e2f5e1ba5f75349b083ec509a1"
+        },
+        {
+          "board": "ts10_wheatstone_bridge.json",
+          "document_digest": "sha256:668dbc2f5bbc1c095731b9325278061df3dfb8fd4402705f818a81ec50ba1da3",
+          "net_id": "net:n0",
+          "result": {
+            "candidate_id": "sha256:6b56d8ba576ad1336e106d680435d20635fcc57aac4ee420f54be116527e9acf",
+            "edge_checks": 74,
+            "obstacle_checks": 51,
+            "physical_validation": "not_run",
+            "segment_count": 5,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:1d13d5b0cece822dafaa7f9acb3625a89c2c9932d296db7cfd21d2ba42a24379"
+        },
+        {
+          "board": "ts10_wheatstone_bridge.json",
+          "document_digest": "sha256:756bc50001eef533c22073759673858c75b0390a8abce0ac78c2241b985c161d",
+          "net_id": "net:n1",
+          "result": {
+            "candidate_id": "sha256:4219d62406a03fd773d641b3c78e8a464334c3204936e1de41a3c98213932767",
+            "edge_checks": 70,
+            "obstacle_checks": 70,
+            "physical_validation": "not_run",
+            "segment_count": 5,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:1fcd1392ca63fbc748c85b75a3aeb0aad5a3596b05313bc9168baa6579a9db4e"
+        },
+        {
+          "board": "ts10_wheatstone_bridge.json",
+          "document_digest": "sha256:cc744f56d63b356c31059def023632f5807e5ac2ff45c63b00add36a3dcb7ca7",
+          "net_id": "net:n2",
+          "result": {
+            "candidate_id": "sha256:e21e77a9838b8ea42e9ca8632949349433541306bd2db8a2b34f87d162bb9322",
+            "edge_checks": 88,
+            "obstacle_checks": 42,
+            "physical_validation": "not_run",
+            "segment_count": 4,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:5c65ce26f418fff8e0c5279db1fa989155ec134135ddbe56cc5e208d3dc06b76"
+        },
+        {
+          "board": "ts10_wheatstone_bridge.json",
+          "document_digest": "sha256:40919d64114d87acc9e0a8ccb10adfb8d671d1d816ecf1d6a06a1a8d0582265c",
+          "net_id": "net:n3",
+          "result": {
+            "candidate_id": "sha256:7525cdd789150133fed78603054fd5f907e1659c39c40e0ee859d5fd6f254bea",
+            "edge_checks": 77,
+            "obstacle_checks": 82,
+            "physical_validation": "not_run",
+            "segment_count": 5,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:62a637c4be4110de28a4b58e7a9da3f239d091571fe6befc79238cab01eebeb6"
+        },
+        {
+          "board": "ts11_generated.json",
+          "document_digest": "sha256:1c0d6823b28ee80140ba04b9d6259e3929d0a446bedfc2b596675a42aad97f6c",
+          "net_id": "net:n0",
+          "result": {
+            "candidate_id": "sha256:119f269febd04ddaab15b6c686e98fd820702774f44d26e18124c2adf934291b",
+            "edge_checks": 211,
+            "obstacle_checks": 335,
+            "physical_validation": "not_run",
+            "segment_count": 13,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:dc6ad1e73edcc112d61900559aa5502ed6fbdc21b4af0cd43747d9fc1560b28b"
+        },
+        {
+          "board": "ts11_generated.json",
+          "document_digest": "sha256:fd53df2790ea4c3b0f1c68794af4ac6e33be8e6f8e5a0186e735c0957ac78e8c",
+          "net_id": "net:n1",
+          "result": {
+            "candidate_id": "sha256:233d60a9129800396bbab0e589e9d21d98320f4913a48083cd490d9a71326873",
+            "edge_checks": 300,
+            "obstacle_checks": 805,
+            "physical_validation": "not_run",
+            "segment_count": 18,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:562ddf1fdd3ee39db2a0eff691a5429c4d572453e2e72f26a0e92a8009a7c6b0"
+        },
+        {
+          "board": "ts11_generated.json",
+          "document_digest": "sha256:81d5ebf181ca9545d3940840eb04a15d4bfd95366b865a937772e3b81cb604d1",
+          "net_id": "net:n2",
+          "result": {
+            "candidate_id": "sha256:e1ff522eb699659f7e1cbb7c67f3dd0dbbceac37c406bad713307946f05d64cf",
+            "edge_checks": 75,
+            "obstacle_checks": 93,
+            "physical_validation": "not_run",
+            "segment_count": 6,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:a822c32e3d9aa8e2de52f17edc2b2bcd97da5e4a677f2bd41923ee2be6af3067"
+        },
+        {
+          "board": "ts11_generated.json",
+          "document_digest": "sha256:c972572074f3f6d23d5384da0523a1fe92a8c3b02491e22a73c01314adfe38ad",
+          "net_id": "net:n3",
+          "result": {
+            "candidate_id": "sha256:5852d9d3cadbab7775439e596f8b5afea9f4c8918fe6c09a5e5b83b78feb6396",
+            "edge_checks": 43,
+            "obstacle_checks": 57,
+            "physical_validation": "not_run",
+            "segment_count": 3,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:a89698e39fef64b7bed6075a47f7288bb6cb481a6b0785a69dc8175aaf110703"
+        },
+        {
+          "board": "ts11_generated.json",
+          "document_digest": "sha256:3ea8a6b1c6eda9673e52a57831578ff7d1fb473f09a17447f2171d065d10d8af",
+          "net_id": "net:n4",
+          "result": {
+            "candidate_id": "sha256:8d6f0b088dd29424e9349fe9c0c1ceffd49cca63d5eb6e38d890d4cd1562a124",
+            "edge_checks": 72,
+            "obstacle_checks": 75,
+            "physical_validation": "not_run",
+            "segment_count": 4,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:9bd3d6a74e5b3641a4012d1ce05447aac60712784b8dec5ca86d0e48dbea93f9"
+        },
+        {
+          "board": "ts11_generated.json",
+          "document_digest": "sha256:9f5ab6b0f8390aefed2daf269ddeed44d325b6f026112dd215476dbaf9500d83",
+          "net_id": "net:n5",
+          "result": {
+            "candidate_id": "sha256:b7bc94abd46d20a9466daf57101f47f508506820bb7ee00e5ebb69e20917a064",
+            "edge_checks": 51,
+            "obstacle_checks": 95,
+            "physical_validation": "not_run",
+            "segment_count": 6,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:f4dd2631e66b49ff66ff89ee07ed32bbd41eee5822257e842b2971996b015b22"
+        },
+        {
+          "board": "ts11_generated.json",
+          "document_digest": "sha256:31cc2f8f5e503c9b136599a7a3fef25bbb1deca26103b033e18b04af882856d8",
+          "net_id": "net:n6",
+          "result": {
+            "candidate_id": "sha256:88e34f5307e9caf6128195155cfc7cd28f675aad2d7efa10df2a4f5280ffe005",
+            "edge_checks": 89,
+            "obstacle_checks": 78,
+            "physical_validation": "not_run",
+            "segment_count": 5,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:a98bd02a0292a6f1cdd444cc0e9d464097c8927b3dfa60ca76d5945bf8b87cfc"
+        },
+        {
+          "board": "ts11_generated.json",
+          "document_digest": "sha256:206f346780e595060c3215d80e842409c0179015acb428e9f49148f4a6f9399b",
+          "net_id": "net:n7",
+          "result": {
+            "candidate_id": "sha256:07ad36c21a01dff85c42461b4e1029febf18c50a4141390ca3f6247632d69142",
+            "edge_checks": 64,
+            "obstacle_checks": 96,
+            "physical_validation": "not_run",
+            "segment_count": 5,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:081c9759b8cf9d2cae5fac06ed69226d7ff2ecd630718fecb51f9c229a897d85"
+        },
+        {
+          "board": "ts11_generated.json",
+          "document_digest": "sha256:1176cfc7269d0132fb909fa811ed0edff56fa14e435215431fd31e9e9e68c946",
+          "net_id": "net:n8",
+          "result": {
+            "candidate_id": "sha256:a637a16038703d83f7a0f1524ca85b717912e976ea1490eadd362da4518c46d1",
+            "edge_checks": 68,
+            "obstacle_checks": 82,
+            "physical_validation": "not_run",
+            "segment_count": 5,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:ba21e04c479a56c5c8c60ec8de58068ab3ca7786c70bbec3e6b3766ce9b7d845"
+        },
+        {
+          "board": "ts12_generated.json",
+          "document_digest": "sha256:1166d28ba96544978519492d372db6d85598b3d741f1c676b70d143f032a7bf3",
+          "net_id": "net:n0",
+          "result": {
+            "candidate_id": "sha256:bc3b9903686672f925dd08834191308be0e84fe505ff194c55e69fb561b464ab",
+            "edge_checks": 74,
+            "obstacle_checks": 86,
+            "physical_validation": "not_run",
+            "segment_count": 4,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:7fcdd2651b20a8e0505c4ddb5fd7bc4f9e5b5db5f716063f77c0298d85138a59"
+        },
+        {
+          "board": "ts12_generated.json",
+          "document_digest": "sha256:e6c599859d5966cf5f2e2bacdc0c78617fbf37fb1e57ef5db6c91af088c7be7c",
+          "net_id": "net:n1",
+          "result": {
+            "candidate_id": "sha256:22cb7c579e4c0c7343cff83ba420294dc47a8b93eb989b83ca7dde969c8d5188",
+            "edge_checks": 177,
+            "obstacle_checks": 326,
+            "physical_validation": "not_run",
+            "segment_count": 13,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:ced9f4b0593f1bacbef54798e85d53197a0d18759e390b4f40bf4fd971e795f7"
+        },
+        {
+          "board": "ts12_generated.json",
+          "document_digest": "sha256:0bbfe1bc8de3800201caf9ab2b0ac1bac675ef95f08de18f3ce7de1cce430bcf",
+          "net_id": "net:n2",
+          "result": {
+            "candidate_id": "sha256:3f7477c86bebb3ae22e68a2dbbfa9c8355857c9c124bf1c3f52bd743f6afdb6c",
+            "edge_checks": 100,
+            "obstacle_checks": 113,
+            "physical_validation": "not_run",
+            "segment_count": 6,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:648ec1fb7b5d45bf10ca6672ca9cd7e129c42de1aea7d3a64cc8d2b8b8e1b49a"
+        },
+        {
+          "board": "ts12_generated.json",
+          "document_digest": "sha256:ca745cea33f7b4e7dd38e696421fb99c8bac6c011a85e7ee7ac36bd3889d0410",
+          "net_id": "net:n3",
+          "result": {
+            "candidate_id": "sha256:2484da5b4553fbdb46b39c2394ba203bed5d563db5c363a7400c269c355fb6be",
+            "edge_checks": 78,
+            "obstacle_checks": 133,
+            "physical_validation": "not_run",
+            "segment_count": 6,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:499bf0aa24451d5b001059334fca560556d39a5aaa7173f5b2253ad3749eccc6"
+        },
+        {
+          "board": "ts12_generated.json",
+          "document_digest": "sha256:7f43feca95375a521f36d0084d58bde5487e200252a65e3282229b3e0c088d58",
+          "net_id": "net:n4",
+          "result": {
+            "candidate_id": "sha256:76fb88fe898ef2ddaf377fcb1223ae2ecebda9042a802c572dab89649daf400d",
+            "edge_checks": 32,
+            "obstacle_checks": 51,
+            "physical_validation": "not_run",
+            "segment_count": 4,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:fda5d60eeef6ccef0de6e5acbe3776a294367075c331fa0c54382bd9a5454f2c"
+        },
+        {
+          "board": "ts13_555_blinker.json",
+          "document_digest": "sha256:6e08d3dec26fc97d8a9e3b4a552bb823830c2fb74e543d0b47d3f580bbddff97",
+          "net_id": "net:n4",
+          "result": {
+            "candidate_id": "sha256:a7b262fc6af5d6435dd0479995f70398e9097054129dfba69c10c1b36659086e",
+            "edge_checks": 88,
+            "obstacle_checks": 136,
+            "physical_validation": "not_run",
+            "segment_count": 7,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:b1ed4b4e8dc2f34aa6e89f68f377a6b0a84da88389eed0f7025d0b000bb77f28"
+        },
+        {
+          "board": "ts13_555_blinker.json",
+          "document_digest": "sha256:b7085fe306b829d9de45ec7a33306aa159fa83f53267b0c2c153b18caf1642fb",
+          "net_id": "net:n5",
+          "result": {
+            "candidate_id": "sha256:7f6a2b1c03ac73d71f95b222e8230d15fb6221543f4ad46f1884ef0ea33ba140",
+            "edge_checks": 122,
+            "obstacle_checks": 168,
+            "physical_validation": "not_run",
+            "segment_count": 8,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:c34f32ae839277bdb111193d894226ee0a4f0fcf9df65a1431b6649af5be3adf"
+        },
+        {
+          "board": "ts13_555_blinker.json",
+          "document_digest": "sha256:519421310d76ff9621b8fd14f6932198040487a97f0a65c7a13303b35d783857",
+          "net_id": "net:n6",
+          "result": {
+            "candidate_id": "sha256:f44a7a95646fecd3966c4a901eb775ad9b615a1eb775afdaa9d65049960cacc0",
+            "edge_checks": 10,
+            "obstacle_checks": 36,
+            "physical_validation": "not_run",
+            "segment_count": 2,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:c0f0afc687e233bdd6aff2cd6f2d907e629d0d7307a7259d9954fbb51b292bd4"
+        },
+        {
+          "board": "ts13_555_blinker.json",
+          "document_digest": "sha256:50b794c03903531aca63d38c873bc434079408bb55d9efa0077b223378711ac4",
+          "net_id": "net:n7",
+          "result": {
+            "candidate_id": "sha256:0970eae27fbc1614e4324c461d47965db2256909665ddb29ac91e545289bd273",
+            "edge_checks": 40,
+            "obstacle_checks": 99,
+            "physical_validation": "not_run",
+            "segment_count": 8,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:c97e1897c8031b0b24851222ca82e2d4272423b4dc95e12c6bd784d63e625072"
+        },
+        {
+          "board": "ts14_usb_power.json",
+          "document_digest": "sha256:38b5e7ce51e7739e651e9d2a585b55214ac75f1dbe95f7d6d4913a052f1d5289",
+          "net_id": "net:n3",
+          "result": {
+            "candidate_id": "sha256:2ee4a4c14b4b560712d9391f5de976d98d77d7eb976850b48f2510f3f60eeb58",
+            "edge_checks": 67,
+            "obstacle_checks": 149,
+            "physical_validation": "not_run",
+            "segment_count": 8,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:9846eca8afe8c2a67b8000ab56c02e00d6ec5e53f9879985a1d7d60820e08059"
+        },
+        {
+          "board": "ts14_usb_power.json",
+          "document_digest": "sha256:ffeb1cf2e5b873b932384e911a04868df78ad15c34735df45c018dbdfcd6b30c",
+          "net_id": "net:n5",
+          "result": {
+            "candidate_id": "sha256:55ac91ec249f2c11f0c8e867e36a3f21a64354eb97c6a0937833bb0698929f80",
+            "edge_checks": 65,
+            "obstacle_checks": 85,
+            "physical_validation": "not_run",
+            "segment_count": 6,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:77e93d0114b35f2567e7ef9578604583e87c164a3371181c2813c45becb15eca"
+        },
+        {
+          "board": "ts15_i2c_sensor.json",
+          "document_digest": "sha256:62f52582d8b69d5e9e6821ba269594c968bb1251e6f376634e51a287e0c5294e",
+          "net_id": "net:n0",
+          "result": {
+            "candidate_id": "sha256:47f444c1b83e6103759b357177555901585967d9fa779c216df4d269e006ad9d",
+            "edge_checks": 66,
+            "obstacle_checks": 329,
+            "physical_validation": "not_run",
+            "segment_count": 12,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:55e11537720ba6c360063c14f17580d6dd6faa99da251d8286238378d207cf23"
+        },
+        {
+          "board": "ts15_i2c_sensor.json",
+          "document_digest": "sha256:d5137350d1b645a1088d2e44e9c7b2e36d0b081ad4c73d4351034dfbe6e70e10",
+          "net_id": "net:n1",
+          "result": {
+            "candidate_id": "sha256:9ada4d974c528f7f9d940ee4e8969b079840c54433b26eecd8b3a83adcfbe09e",
+            "edge_checks": 48,
+            "obstacle_checks": 225,
+            "physical_validation": "not_run",
+            "segment_count": 10,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:89a27b509a3fe170b50be9b963c2601895e23900c7985107eda7ee312e3bd180"
+        },
+        {
+          "board": "ts15_i2c_sensor.json",
+          "document_digest": "sha256:7b4d58bb258a4f9c4853f627b64378e1b9a9f7fd9cb5687f012aa103ebaf41e3",
+          "net_id": "net:n2",
+          "result": {
+            "candidate_id": "sha256:fa5fbc93e982bd56fe8c62b834655cbde1a9ca46d421e144b725f8f1d27ce88a",
+            "edge_checks": 55,
+            "obstacle_checks": 149,
+            "physical_validation": "not_run",
+            "segment_count": 7,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:5807e4a6b7588a6c8bcb34c11e2fef1726103bac90d206809c3767511c91dd98"
+        },
+        {
+          "board": "ts15_i2c_sensor.json",
+          "document_digest": "sha256:a72a856c2c3f1a6fdefcc282b28a3cb92d332c15572807dc608c6996b4c53363",
+          "net_id": "net:n3",
+          "result": {
+            "candidate_id": "sha256:34c4638f0aee7a395e1eb842911323db235cc448def0abd4cad41fa61f85104f",
+            "edge_checks": 40,
+            "obstacle_checks": 89,
+            "physical_validation": "not_run",
+            "segment_count": 4,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:9555b0018e075c7a5a2c71a589f9ff55b405e04824c0635472c244229b579cc0"
+        },
+        {
+          "board": "ts16_h_bridge.json",
+          "document_digest": "sha256:508e1d00d72d2d50fd62d17c0e61b2ac480f5efdc69fd6d472726fbb087c8918",
+          "net_id": "net:n0",
+          "result": {
+            "candidate_id": "sha256:128be8f6c1c20545236a8355edbaf7ae11af3a0333be189aa90fee7bcefd3a57",
+            "edge_checks": 101,
+            "obstacle_checks": 135,
+            "physical_validation": "not_run",
+            "segment_count": 8,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:1b5991a790e280b48685bb7f863036aa035afdf9eeb7cefe2af9395bf0c0392d"
+        },
+        {
+          "board": "ts16_h_bridge.json",
+          "document_digest": "sha256:2490abaff5a9dd8806ca59c1b7c815adad04677bfebb5d9a8bb15619b0fdb959",
+          "net_id": "net:n1",
+          "result": {
+            "candidate_id": "sha256:d54a2dbd4f8d717cad91d3e872fdf7ae582b597a47f8c17b21fed3fbb47d001c",
+            "edge_checks": 74,
+            "obstacle_checks": 62,
+            "physical_validation": "not_run",
+            "segment_count": 5,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:d55c06644cbed847eecfe4cb3c3b450541b888ab6b03d3a34b29b47ebe483b73"
+        },
+        {
+          "board": "ts17_attiny_minimal.json",
+          "document_digest": "sha256:dedfe8537eaf78218c5a387c9c3ced8292144939cabcdd1c3593f41dd42fd4a4",
+          "net_id": "net:n1",
+          "result": {
+            "candidate_id": "sha256:1c844b7c33f7dad117c9e8fe30bbed2c79821c909f0fdbc4c8775bf768ff8cc4",
+            "edge_checks": 140,
+            "obstacle_checks": 191,
+            "physical_validation": "not_run",
+            "segment_count": 9,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:a18fc725fcb264cb874be50368a5e01df960dba54f9090046d2eb7aa60f6bdc6"
+        },
+        {
+          "board": "ts17_attiny_minimal.json",
+          "document_digest": "sha256:3bfa3f2430311b6a9db2875c3810eea0d359afec2aeec55305a47cec3fdfe5bd",
+          "net_id": "net:n2",
+          "result": {
+            "candidate_id": "sha256:e6c8390ab736ebe07dd9fcde53072c082d72a2d6bc6a7732083ba8d8a782b786",
+            "edge_checks": 92,
+            "obstacle_checks": 69,
+            "physical_validation": "not_run",
+            "segment_count": 4,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:0bc4c2cfc6750f10b793a7cfb802b787ae32255aa6df3a7b56d2652c7bbf1644"
+        },
+        {
+          "board": "ts18_dual_reg.json",
+          "document_digest": "sha256:1e4e7999b51df78b44c7ef40bc40f5c197a7f4587595c234f2005dd5663dee6d",
+          "net_id": "net:n0",
+          "result": {
+            "candidate_id": "sha256:ef1d64b3cb54b0cbafc940085c6a736b938dbfa25e4d532ed7f7d41298ad30f3",
+            "edge_checks": 111,
+            "obstacle_checks": 108,
+            "physical_validation": "not_run",
+            "segment_count": 6,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:9be46914d2ac7a79f77ad853cfb0d0510242fc376aad5871eb688278c65f7ae2"
+        },
+        {
+          "board": "ts18_dual_reg.json",
+          "document_digest": "sha256:513e72080a2377c25b0c83011b26cecae4de38f502798cdc8e484c15a0f63ede",
+          "net_id": "net:n1",
+          "result": {
+            "candidate_id": "sha256:7c1bf0f5868f8213ee88dc953a3ffb40d51a272d5469f531fc13a270337f0491",
+            "edge_checks": 246,
+            "obstacle_checks": 1000,
+            "physical_validation": "not_run",
+            "segment_count": 23,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:b2785e414e6761911902af3b4e438fe837bd6f7a3815ee0f9a74bcf969c4d213"
+        },
+        {
+          "board": "ts18_dual_reg.json",
+          "document_digest": "sha256:6d20266d6ab18a4fe740a3ca51bbb7f1fb32593e10a122ac0ad016104f48186d",
+          "net_id": "net:n5",
+          "result": {
+            "candidate_id": "sha256:ac5086892a6a8e4a7a9d1c014c893cc0e7248396c5d20f0adddbab8fefd7d1c2",
+            "edge_checks": 35,
+            "obstacle_checks": 56,
+            "physical_validation": "not_run",
+            "segment_count": 3,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:67910b25e612bdb820917129127904aaefbcc89edfe1aeaf86ffa0e9c0dd2006"
+        },
+        {
+          "board": "ts18_dual_reg.json",
+          "document_digest": "sha256:d14edd6c28a9f4e31cecb4bd937cccf3a3f3e7a483c2e38902e94f799b97bc3a",
+          "net_id": "net:n6",
+          "result": {
+            "candidate_id": "sha256:881cb53bf04a7ec35b95dd7f901d3d0f24677cdf2beca2b876cfbff8e36c2aae",
+            "edge_checks": 182,
+            "obstacle_checks": 381,
+            "physical_validation": "not_run",
+            "segment_count": 14,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:2598ce28f80557b8f0d9f98b7a032191f87a2c36f138e4385dca315b04f31779"
+        },
+        {
+          "board": "ts18_dual_reg.json",
+          "document_digest": "sha256:253c791d36fde818c1efe90ccc6ee4bd4aa066585ec9ced2354e8d1a389958bd",
+          "net_id": "net:n7",
+          "result": {
+            "candidate_id": "sha256:2e68656bd5b4b0dafcc809f66214f6b0ef80ef55a12d33957c83024f76108c18",
+            "edge_checks": 90,
+            "obstacle_checks": 75,
+            "physical_validation": "not_run",
+            "segment_count": 4,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:43931a67019dd1f6f9936e44a8567bdba0af3950fa774c85e96a96d12e467fd4"
+        },
+        {
+          "board": "ts18_dual_reg.json",
+          "document_digest": "sha256:607a6b279bc84da6ed0e212712748e510dbb2b5be6096c76da9b67f79eba2142",
+          "net_id": "net:n10",
+          "result": {
+            "candidate_id": "sha256:3c655ccdbd790ef629e14820dbba882a0650eaa0f9093c5d669dce768cb92719",
+            "edge_checks": 116,
+            "obstacle_checks": 157,
+            "physical_validation": "not_run",
+            "segment_count": 8,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:80b0c877b35be4e14afa40d8fbbecfd4b781288565e0178e68caed9741e968e7"
+        },
+        {
+          "board": "ts19_adc_breakout.json",
+          "document_digest": "sha256:cdd59ac17c85fa1206671246a41e9d14af0ae402d63432c6f6c375808c28358b",
+          "net_id": "net:n1",
+          "result": {
+            "candidate_id": "sha256:7f9aa7b75c5a1dc1e3d83208499559cea6357c5555a20af82ce34ead5c8268fd",
+            "edge_checks": 124,
+            "obstacle_checks": 168,
+            "physical_validation": "not_run",
+            "segment_count": 9,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:6b99164c5a4a43805984596b91faacafa04bb31a171e75ebcc1992fd7ee469dc"
+        },
+        {
+          "board": "ts19_adc_breakout.json",
+          "document_digest": "sha256:f397ee5eab4bc31b6f5909f51fe9d4497e0285c5320ec7d65bb837254d2457fa",
+          "net_id": "net:n2",
+          "result": {
+            "candidate_id": "sha256:224a45588f42119618b338a2d6d979c6fba685dde92825b98a9657eb62dde249",
+            "edge_checks": 138,
+            "obstacle_checks": 473,
+            "physical_validation": "not_run",
+            "segment_count": 16,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:241b7cc3027d64a518ea17b8e25edba4527ed0545fdf88921f6c5925a92eb97a"
+        },
+        {
+          "board": "ts19_adc_breakout.json",
+          "document_digest": "sha256:883a8da0e60a47e4cb74b2255a8147ba3d5c2180ef531c08e422f486b5caf2da",
+          "net_id": "net:n3",
+          "result": {
+            "candidate_id": "sha256:9239dc89569e97268466ba584b789887d9cb321821531327c1462a2488543196",
+            "edge_checks": 97,
+            "obstacle_checks": 97,
+            "physical_validation": "not_run",
+            "segment_count": 5,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:823ab84fbf1bdef8c2faf813ca55961025e75fa5e1a6ef89c254fab6e5c14515"
+        },
+        {
+          "board": "ts19_adc_breakout.json",
+          "document_digest": "sha256:2d501d79e8cc2bb8c763ffa6a3cbe95ef87e864c1b08b89f9abf8bb5ed9a95f9",
+          "net_id": "net:n7",
+          "result": {
+            "candidate_id": "sha256:f71218bd9acf0c856b0364dfd12aab52cf91e0e86681c34074eac1197efd3402",
+            "edge_checks": 72,
+            "obstacle_checks": 80,
+            "physical_validation": "not_run",
+            "segment_count": 4,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:612357bddfcea6565b67451e81bda729a2feca057fed52c5d3da3d72b6c77807"
+        },
+        {
+          "board": "ts19_adc_breakout.json",
+          "document_digest": "sha256:6b5cabb3fe408bb2f530352245134ace42c3ae680af7a7a2013b455963517ea2",
+          "net_id": "net:n8",
+          "result": {
+            "candidate_id": "sha256:52506faaf085a04b67309178776ce07745eefaf0e39aaa9a7f687d78da8a8283",
+            "edge_checks": 92,
+            "obstacle_checks": 163,
+            "physical_validation": "not_run",
+            "segment_count": 7,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:d498fd41ee28e979cf544741873418d3b162b9cfde43d946f10fcf91e12813b6"
+        },
+        {
+          "board": "ts20_esp32_wifi.json",
+          "document_digest": "sha256:3dd8ee5290f54031f17111cc9d2d0481eedaaeb3aed64ed6cde1b751ac93e981",
+          "net_id": "net:n16",
+          "result": {
+            "candidate_id": "sha256:afec6dde3421751a2535297af72be87e951338cf7bd841d63ff8517211394cbf",
+            "edge_checks": 440,
+            "obstacle_checks": 2656,
+            "physical_validation": "not_run",
+            "segment_count": 35,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:053eae8444b3a7f792f8cb9478738bc1ed19693d8591eabfe4d340c4f1af11e0"
+        },
+        {
+          "board": "ts20_esp32_wifi.json",
+          "document_digest": "sha256:32d82e563aaba32810ff1fd387abeec7f93f67d2376c3af3a8da03b02b2192e1",
+          "net_id": "net:n17",
+          "result": {
+            "candidate_id": "sha256:430b1bad2ce39218c839e6192a18cc385d4f356c1d0df7b2ceaf92a684ff962e",
+            "edge_checks": 140,
+            "obstacle_checks": 305,
+            "physical_validation": "not_run",
+            "segment_count": 10,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:a087ca5a7eb8e4ce113da6fbe63502106cae42eff7f0874479897f779a819408"
+        },
+        {
+          "board": "ts20_esp32_wifi.json",
+          "document_digest": "sha256:32f0fe73c902f426389481d3009009fdcc41c199323217e99faee9c7d9213a0b",
+          "net_id": "net:n18",
+          "result": {
+            "candidate_id": "sha256:6afdca881a464980bfbeedac0bd2e175aab013c0e41f04271c37c47bb5422d9e",
+            "edge_checks": 129,
+            "obstacle_checks": 111,
+            "physical_validation": "not_run",
+            "segment_count": 5,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:7d87334691856ba6eac45b34183f242030de90d62061a62a04319b82b9503682"
+        },
+        {
+          "board": "ts20_esp32_wifi.json",
+          "document_digest": "sha256:35e1b510276816be6b1bf5e71d4b9ed00003f37a0ece77344a718f4476554b34",
+          "net_id": "net:n19",
+          "result": {
+            "candidate_id": "sha256:1e6b5d23d0ff3e74d2daef4d8e2b091c38d4e4d5d802d3732ea0a6d2e9b54745",
+            "edge_checks": 38,
+            "obstacle_checks": 94,
+            "physical_validation": "not_run",
+            "segment_count": 5,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:b7812dfe15c46b099ed77143ab6a35bd239b0f30f8215f2e2e1fdbaf3532fca1"
+        },
+        {
+          "board": "ts20_esp32_wifi.json",
+          "document_digest": "sha256:6ab1d158ce018775a85003de95a9bd26483bfaa2549b052d259cbaa13dcc8f08",
+          "net_id": "net:n20",
+          "result": {
+            "candidate_id": "sha256:32560091b266ba10b283b46a82178ac84494c7f5e1667a352ed540e7af6dacf6",
+            "edge_checks": 56,
+            "obstacle_checks": 102,
+            "physical_validation": "not_run",
+            "segment_count": 6,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:5995b94ae0694318d7c78240a8188d1f8e74f972ae0fbb12de18c0cd23545c09"
+        },
+        {
+          "board": "ts20_esp32_wifi.json",
+          "document_digest": "sha256:44d48a01d339328a8a555c845af1b74316f3fe561fb5842c585f3b66859e0e24",
+          "net_id": "net:n21",
+          "result": {
+            "candidate_id": "sha256:952fc666078d6b5c55c6560e2024608ece1c9835b16a6be3f45cb5ec3c072d19",
+            "edge_checks": 123,
+            "obstacle_checks": 94,
+            "physical_validation": "not_run",
+            "segment_count": 5,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:f54bfbd6e0a91d9dd5515d0cd2277847f2c8123ed2688dd9965e939f0049af62"
+        },
+        {
+          "board": "ts20_esp32_wifi.json",
+          "document_digest": "sha256:e3d4aa0414c72eb8cbf59e70be1064982452e7039a219e8a19a0b778e411c2d7",
+          "net_id": "net:n22",
+          "result": {
+            "candidate_id": "sha256:5678e9e5b295ae501378fa0bf342b976e2292595c7169dd55adaa1b5491a6e31",
+            "edge_checks": 111,
+            "obstacle_checks": 106,
+            "physical_validation": "not_run",
+            "segment_count": 4,
+            "status": "accepted"
+          },
+          "source_candidate_id": "sha256:770e3156212269f4cc529eca7b08c257891f22e31b2c86c7bf5b9245f778aa9e"
+        }
+      ],
+      "input_set_digest": "sha256:b0285b9070f9e6dfb7ed408158857cbca3f90e973392051c71e625b2d9e5b556",
+      "offered": 70,
+      "result_set_digest": "sha256:ca41def5daaa359cd7e5f987bfed4f096c06493628036e6d712561987d868664"
+    }
+  },
+  "not_claimed": [
+    "KiCad DRC, electrical correctness, fabrication readiness, or physical validation",
+    "whole-board compatibility between candidates routed independently",
+    "MCP, CLI, apply, persistence, repair, or mutation authority"
+  ],
+  "run_id": "sha256:19bb6ef928b8a4e9a05cfe4dfc12e57acd56c2a2b9994e8730fe8d2f624ef827",
+  "schema": "copper-mcp/benchmark/external-candidate-disposer-corpus/v1"
+}

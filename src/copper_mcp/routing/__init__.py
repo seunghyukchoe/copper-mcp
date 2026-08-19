@@ -61,6 +61,13 @@ from copper_mcp.routing.contracts import (
     RouteResult,
     RoutingBackend,
 )
+from copper_mcp.routing.external_candidate_verifier import (
+    EXTERNAL_ROUTE_CANDIDATE_SCHEMA,
+    EXTERNAL_ROUTE_PATCH_SCHEMA,
+    ExternalCandidateFailure,
+    ExternalCandidateVerificationResult,
+    verify_external_route_candidate,
+)
 from copper_mcp.routing.job_repository import (
     RoutingCandidateExportConflictError,
     RoutingCandidateExportStore,
@@ -149,6 +156,8 @@ from copper_mcp.routing.negotiation_plan import (
 __all__ = [
     "COMPONENT_MST_ORDERING",
     "COST_UPDATE_SLOT_SCHEMA",
+    "EXTERNAL_ROUTE_CANDIDATE_SCHEMA",
+    "EXTERNAL_ROUTE_PATCH_SCHEMA",
     "LAYERED_ROUTER_VERSION",
     "LAYERED_ROUTING_POLICY",
     "LEGACY_EQUIVALENT_PLAN",
@@ -183,6 +192,8 @@ __all__ = [
     "CongestionResource",
     "CostUpdateRule",
     "CostUpdateSlot",
+    "ExternalCandidateFailure",
+    "ExternalCandidateVerificationResult",
     "LayeredAStarRequest",
     "LayeredAStarSettings",
     "LayeredBoardRouter",
@@ -266,6 +277,7 @@ __all__ = [
     "negotiate_routes",
     "route_layered",
     "verify_candidate_id",
+    "verify_external_route_candidate",
     "verify_layered_candidate",
     "verify_layered_candidate_id",
 ]

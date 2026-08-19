@@ -36,6 +36,39 @@ _EMPTY_DIGEST: Final = f"sha256:{'0' * 64}"
 _SHA256_PREFIX_LENGTH: Final = len("sha256:") + 64
 
 
+@dataclass(frozen=True, slots=True)
+class RepairTransactionSettings:
+    """Coordinator-only ceilings for one opt-in local-repair transaction.
+
+    These are intentionally separate from :class:`LocalRepairRequest`: the latter is the
+    abstract search input, while this value authorizes the coordinator's provenance and Board-IR
+    validation work before any result can be published.
+    """
+
+    max_attempts: int = 1
+    max_window_cells: int = _MAX_WINDOW_CELLS
+    max_local_expansions: int = _MAX_EXPANSIONS
+    max_projection_cells: int = _MAX_WINDOW_CELLS
+    max_validator_path_edges: int = _MAX_WINDOW_CELLS
+    max_validator_obstacle_checks: int = _MAX_EXPANSIONS
+
+    def __post_init__(self) -> None:
+        for name, value, maximum in (
+            ("local repair attempts", self.max_attempts, 1),
+            ("local repair window cells", self.max_window_cells, _MAX_WINDOW_CELLS),
+            ("local repair expansions", self.max_local_expansions, _MAX_EXPANSIONS),
+            ("local repair projection cells", self.max_projection_cells, _MAX_WINDOW_CELLS),
+            ("local repair validator path edges", self.max_validator_path_edges, _MAX_WINDOW_CELLS),
+            (
+                "local repair validator obstacle checks",
+                self.max_validator_obstacle_checks,
+                _MAX_EXPANSIONS,
+            ),
+        ):
+            if type(value) is not int or not 1 <= value <= maximum:
+                raise ValueError(f"{name} are outside the supported range")
+
+
 class LocalRepairStatus(StrEnum):
     """Terminal state for a bounded local-repair proposal."""
 
@@ -477,6 +510,7 @@ __all__ = [
     "LocalRepairRequest",
     "LocalRepairResult",
     "LocalRepairStatus",
+    "RepairTransactionSettings",
     "exact_local_repair",
     "verify_local_repair_result",
 ]

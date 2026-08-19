@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0112**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0119**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -187,15 +187,22 @@ never silently widens it.
 | [0109](0109-a-drc-count-carries-the-comparability-it-was-taken-with.md) | A published DRC count carries the comparability it was taken with | Accepted |
 | [0110](0110-placement-boundary-verdicts-bracket-kicad-parity.md) | Placement boundary verdicts bracket KiCad parity | Accepted |
 | [0111](0111-custom-pad-anchor-and-envelope.md) | Carry custom-pad copper separately from its attachment anchor | Accepted |
+| [0112](0112-external-route-candidates-enter-through-a-disposer.md) | External route candidates enter through a bounded disposer | Accepted |
+| [0113](0113-external-route-patches-preserve-multi-pin-topology.md) | External route patches preserve multi-pin topology | Accepted |
+| [0114](0114-external-candidates-continue-to-private-kicad-drc.md) | Accepted external candidates continue to private KiCad DRC | Accepted |
+| [0115](0115-external-route-verification-is-a-versioned-read-only-mcp-boundary.md) | External route verification is a versioned read-only MCP boundary | Accepted |
+| [0116](0116-layered-fill-islands-have-a-measured-source-boundary.md) | Layered fill islands have a measured source boundary | Accepted |
+| [0117](0117-local-exact-repair-is-an-opt-in-verified-transaction.md) | Local exact repair is an opt-in verified transaction | Accepted |
+| [0118](0118-authoritative-signoff-stays-closed-until-a-bounded-executor-exists.md) | Keep authoritative signoff closed until a bounded executor exists | Accepted |
 
-One hundred and eleven numbers allocated, one hundred and six records, no duplicates — and
+One hundred and eighteen numbers allocated, one hundred and thirteen records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
 its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
 the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
 and 0086 are unused; see **Known gaps** above. 0107 was allocated over the live claims 0105 and
 0106 rather than racing them, the mechanism the [ledger README](../ledgers/README.md) describes for
 `D-`/`R-`/`B-` numbers. Both have since landed — 0106 with issue #164's record and 0105 with issue
-#172's — so neither is a gap, and all of 0100 through 0111 are real records in the index above.
+#172's — so neither is a gap, and all of 0100 through 0118 are real records in the index above.
 
 ## Reading order
 
@@ -212,7 +219,8 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - **Live KiCad IPC** — 0029, 0030, 0031, 0032, 0033, 0044, 0063, 0069, 0074.
 - **Durable jobs and persistence** — 0043, 0046, 0047, 0048.
 - **Mutation and authorization** — 0001, 0025, 0059, 0074.
-- **Evidence, evaluation, and review boundaries** — 0041, 0052, 0054, 0098, 0102, 0105, 0107, 0109.
+- **Evidence, evaluation, and review boundaries** — 0041, 0052, 0054, 0098, 0102, 0105, 0107, 0109,
+  0118.
 
 - [ADR-0001: Candidate-first mutation model](0001-candidate-first.md)
 - [ADR-0002: MCP is an external adapter](0002-mcp-adapter.md)
@@ -320,3 +328,10 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0109: A published DRC count carries the comparability it was taken with](0109-a-drc-count-carries-the-comparability-it-was-taken-with.md)
 - [ADR-0110: Placement boundary verdicts bracket KiCad parity](0110-placement-boundary-verdicts-bracket-kicad-parity.md)
 - [ADR-0111: Carry custom-pad copper separately from its attachment anchor](0111-custom-pad-anchor-and-envelope.md)
+- [ADR-0112: External route candidates enter through a bounded disposer](0112-external-route-candidates-enter-through-a-disposer.md)
+- [ADR-0113: External route patches preserve multi-pin topology](0113-external-route-patches-preserve-multi-pin-topology.md)
+- [ADR-0114: Accepted external candidates continue to private KiCad DRC](0114-external-candidates-continue-to-private-kicad-drc.md)
+- [ADR-0115: External route verification is a versioned read-only MCP boundary](0115-external-route-verification-is-a-versioned-read-only-mcp-boundary.md)
+- [ADR-0116: Layered fill islands have a measured source boundary](0116-layered-fill-islands-have-a-measured-source-boundary.md)
+- [ADR-0117: Local exact repair is an opt-in verified transaction](0117-local-exact-repair-is-an-opt-in-verified-transaction.md)
+- [ADR-0118: Keep authoritative signoff closed until a bounded executor exists](0118-authoritative-signoff-stays-closed-until-a-bounded-executor-exists.md)

@@ -33,6 +33,7 @@ from copper_mcp.circuit_scene import CircuitScene
 from copper_mcp.circuit_scene import observe_board_scene as observe_scene
 from copper_mcp.circuit_scene import observe_live_board_scene as observe_live_scene
 from copper_mcp.config import Settings
+from copper_mcp.external_candidate_drc import verify_external_route_candidate_request
 from copper_mcp.kicad_cli import run_board_drc as run_kicad_board_drc
 from copper_mcp.kicad_file import inspect_kicad_board
 from copper_mcp.kicad_ipc import inspect_live_board as inspect_live_kicad_board
@@ -105,6 +106,7 @@ def server_info() -> dict[str, Any]:
             "revision-bound live KiCad IPC editor context (read-only)",
             "revision-bound layered route proposal (read-only)",
             "opt-in authoritative DRC evidence for file-backed layered proposals",
+            "versioned external route verification with mandatory candidate-bound KiCad DRC",
             "durable file-backed layered routing jobs with bounded worker execution",
             "authorization-bound candidate geometry export",
             "revision-bound live layered route proposal (read-only)",
@@ -160,6 +162,15 @@ def run_board_drc(path: str, settings: Settings | None = None) -> dict[str, Any]
 
     active_settings = settings or Settings.from_env()
     return run_kicad_board_drc(path, active_settings).to_dict()
+
+
+def verify_external_route_candidate(
+    payload: dict[str, Any], settings: Settings | None = None
+) -> dict[str, Any]:
+    """Verify one versioned external route document with mandatory read-only KiCad DRC."""
+
+    active_settings = settings or Settings.from_env()
+    return verify_external_route_candidate_request(payload, active_settings)
 
 
 def inspect_live_board(settings: Settings | None = None) -> dict[str, Any]:

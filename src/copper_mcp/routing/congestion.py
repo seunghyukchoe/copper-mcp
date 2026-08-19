@@ -28,13 +28,21 @@ from copper_mcp.board_ir import (
     verify_snapshot,
 )
 from copper_mcp.routing.astar import AStarRouter, canonical_candidate_bytes, verify_candidate_id
+from copper_mcp.routing.candidate_path_validator import (
+    CandidatePathValidationFailure,
+    validate_candidate_path,
+)
 from copper_mcp.routing.contracts import (
     SINGLE_PATH_ORDERING,
     CancellationCheck,
     RouteCandidate,
     RouteConnection,
+    RouteCost,
     RouteDiagnostic,
     RouteFailureCode,
+    RouteMetrics,
+    RoutePatch,
+    RoutePath,
     RouteRequest,
     RouteResult,
 )
@@ -66,6 +74,16 @@ from copper_mcp.routing.policy import (
     policy_input_digest,
 )
 from copper_mcp.routing.policy_worker import evaluate_reference_policy_in_worker
+from copper_mcp.routing.repair import (
+    LocalRepairStatus,
+    RepairTransactionSettings,
+    exact_local_repair,
+    verify_local_repair_result,
+)
+from copper_mcp.routing.repair_provenance import (
+    CoordinatorRepairProvenance,
+    derive_repair_provenance,
+)
 from copper_mcp.routing.spatial_index import (
     IncrementalSpatialIndex,
     bounds_intersect,
@@ -97,6 +115,9 @@ NEGOTIATED_POLICY_EVIDENCE_SCHEMA = "copper-mcp.negotiated-policy-evidence.v1"
 PLAN_NEGOTIATED_ROUTING_POLICY = "negotiated-congestion-plan-v4"
 NEGOTIATION_PLAN_BINDING_SCHEMA = "copper-mcp.negotiation-plan-binding.v1"
 NEGOTIATION_PLAN_EVIDENCE_SCHEMA = "copper-mcp.negotiation-plan-evidence.v1"
+REPAIR_NEGOTIATED_ROUTING_POLICY = "negotiated-congestion-repair-v1"
+NEGOTIATED_REPAIR_BINDING_SCHEMA = "copper-mcp.negotiated-repair-binding.v1"
+NEGOTIATED_REPAIR_EVIDENCE_SCHEMA = "copper-mcp.negotiated-repair-evidence.v1"
 _POLICY_ID = re.compile(r"^[a-z0-9][a-z0-9._/-]{0,127}$")
 _ISOLATED_POLICY_TIMEOUT_SECONDS = 1.0
 
@@ -319,6 +340,80 @@ def _plan_binding_digest(envelope_digest: str, plan_digest: str) -> str:
     return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
 
 
+def _repair_binding_digest(
+    envelope_digest: str,
+    provenance_digest: str,
+    local_route_digest: str,
+    decision_digest: str | None,
+) -> str:
+    """Bind an accepted repair transaction without exposing its window or geometry."""
+
+    payload = {
+        "candidate_identity_policy": REPAIR_NEGOTIATED_ROUTING_POLICY,
+        "local_route_digest": local_route_digest,
+        "negotiated_envelope_digest": envelope_digest,
+        "provenance_digest": provenance_digest,
+        "repair_policy_decision_digest": decision_digest,
+        "schema": NEGOTIATED_REPAIR_BINDING_SCHEMA,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+
+
+@dataclass(frozen=True, slots=True)
+class NegotiatedRepairEvidence:
+    """Redacted, success-only evidence for one accepted local repair transaction."""
+
+    envelope_digest: str
+    provenance_digest: str
+    local_request_digest: str
+    local_route_digest: str
+    composite_digest: str
+    projection_obstacle_checks: int
+    local_expanded_states: int
+    validator_edge_checks: int
+    validator_obstacle_checks: int
+    repair_policy_decision_digest: str | None = None
+    schema: str = NEGOTIATED_REPAIR_EVIDENCE_SCHEMA
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("negotiated envelope digest", self.envelope_digest),
+            ("repair provenance digest", self.provenance_digest),
+            ("local repair request digest", self.local_request_digest),
+            ("local repair route digest", self.local_route_digest),
+            ("repair composite digest", self.composite_digest),
+        ):
+            if not isinstance(value, str) or not _SHA256.fullmatch(value):
+                raise ValueError(f"{name} is malformed")
+        if self.repair_policy_decision_digest is not None and (
+            not isinstance(self.repair_policy_decision_digest, str)
+            or not _SHA256.fullmatch(self.repair_policy_decision_digest)
+        ):
+            raise ValueError("repair policy decision digest is malformed")
+        _integer("local repair expansions", self.local_expanded_states, maximum=4_096)
+        _integer(
+            "repair projection obstacle checks",
+            self.projection_obstacle_checks,
+            maximum=_MAX_TOTAL_OBSTACLE_CHECKS,
+        )
+        _integer("repair validator edge checks", self.validator_edge_checks, maximum=4_096)
+        _integer(
+            "repair validator obstacle checks",
+            self.validator_obstacle_checks,
+            maximum=_MAX_TOTAL_OBSTACLE_CHECKS,
+        )
+        if self.schema != NEGOTIATED_REPAIR_EVIDENCE_SCHEMA:
+            raise ValueError("negotiated repair evidence schema is unsupported")
+        if self.composite_digest != _repair_binding_digest(
+            self.envelope_digest,
+            self.provenance_digest,
+            self.local_route_digest,
+            self.repair_policy_decision_digest,
+        ):
+            raise ValueError("negotiated repair composite digest is not bound to its evidence")
+
+
 def _composed_plan_digest(
     net_order_slot_digest: str, cost_update_slot_digest: str, rip_up_slot_digest: str
 ) -> str:
@@ -482,15 +577,34 @@ class PlanNegotiatedRoutingResult(NegotiatedRoutingResult):
             raise ValueError("negotiation plan evidence has a different envelope digest")
 
 
+@dataclass(frozen=True, slots=True)
+class RepairNegotiatedRoutingResult(NegotiatedRoutingResult):
+    """A completed allocation whose replacement path passed the repair transaction gates."""
+
+    repair_evidence: NegotiatedRepairEvidence | None = None
+
+    def __post_init__(self) -> None:
+        super(RepairNegotiatedRoutingResult, self).__post_init__()
+        if self.status is not NegotiatedRoutingStatus.COMPLETED:
+            raise ValueError("repair evidence is published only with a completed allocation")
+        if not isinstance(self.repair_evidence, NegotiatedRepairEvidence):
+            raise ValueError("negotiated repair evidence is malformed")
+        if self.repair_evidence.envelope_digest != self.policy_digest:
+            raise ValueError("negotiated repair evidence has a different envelope digest")
+
+
 def _published_result(
     policy_evidence: NegotiatedPolicyEvidence | None,
     plan_evidence: NegotiationPlanEvidence | None = None,
+    repair_evidence: NegotiatedRepairEvidence | None = None,
     **values: object,
 ) -> NegotiatedRoutingResult:
     """Construct the legacy, policy-enabled, or plan-enabled immutable result shape."""
 
-    if policy_evidence is not None and plan_evidence is not None:
+    if sum(item is not None for item in (policy_evidence, plan_evidence, repair_evidence)) > 1:
         raise ValueError("a negotiated result carries at most one provenance shape")
+    if repair_evidence is not None:
+        return RepairNegotiatedRoutingResult(**cast(Any, values), repair_evidence=repair_evidence)
     if plan_evidence is not None:
         return PlanNegotiatedRoutingResult(**cast(Any, values), plan_evidence=plan_evidence)
     if policy_evidence is None:
@@ -1214,6 +1328,306 @@ def _best_key(
     )
 
 
+def _compressed_points(points: tuple[PointNM, ...]) -> tuple[PointNM, ...]:
+    """Remove the local solver's unit-step interior vertices before contract construction."""
+
+    compressed: list[PointNM] = []
+    for point in points:
+        if len(compressed) >= 2:
+            first, middle = compressed[-2:]
+            if (first.x == middle.x == point.x) or (first.y == middle.y == point.y):
+                compressed[-1] = point
+                continue
+        compressed.append(point)
+    return tuple(compressed)
+
+
+def _resign_candidate(candidate: RouteCandidate) -> RouteCandidate:
+    unsigned = replace(candidate, candidate_id=_EMPTY_DIGEST)
+    signed = replace(
+        unsigned,
+        candidate_id=f"sha256:{hashlib.sha256(canonical_candidate_bytes(unsigned)).hexdigest()}",
+    )
+    verify_candidate_id(signed)
+    return signed
+
+
+def _candidate_from_local_repair(
+    target: RouteCandidate,
+    request: RouteRequest,
+    provenance: CoordinatorRepairProvenance,
+    route: tuple[tuple[int, int], ...],
+    expanded_states: int,
+) -> RouteCandidate:
+    """Rebuild one immutable two-pin candidate from only trusted local-search output."""
+
+    vertices = _compressed_points(
+        tuple(
+            PointNM(
+                provenance.grid_origin.x + cell[0] * provenance.grid_step_nm,
+                provenance.grid_origin.y + cell[1] * provenance.grid_step_nm,
+            )
+            for cell in route
+        )
+    )
+    patch = RoutePatch(
+        net_id=request.net_id,
+        layer_id=request.layer_id,
+        width_nm=target.patch.width_nm,
+        paths=(RoutePath(vertices),),
+    )
+    cost = RouteCost(
+        length_nm=patch.length_nm,
+        bend_count=patch.bend_count,
+        bend_cost_nm=patch.bend_count * request.settings.bend_penalty_nm,
+        proximity_steps=0,
+        proximity_cost_nm=0,
+        via_cost_nm=0,
+        total_cost_nm=patch.length_nm + patch.bend_count * request.settings.bend_penalty_nm,
+    )
+    candidate = RouteCandidate(
+        candidate_id=_EMPTY_DIGEST,
+        base_revision=request.board_revision,
+        start_pad_id=target.start_pad_id,
+        end_pad_id=target.end_pad_id,
+        patch=patch,
+        cost=cost,
+        metrics=RouteMetrics(
+            hard_internal_violations=0,
+            unrouted_connections=0,
+            vias=0,
+            wire_length_nm=patch.length_nm,
+            expanded_states=expanded_states,
+            peak_frontier_states=1,
+            obstacle_checks=0,
+        ),
+        settings=request.settings,
+        router_version=target.router_version,
+        policy=target.policy,
+        seed=request.seed,
+        fill_binding=None,
+    )
+    return _resign_candidate(candidate)
+
+
+def _repair_policy_selection(
+    snapshot: BoardIRSnapshot,
+    envelope: NegotiatedRoutingRequest,
+    provenances: tuple[CoordinatorRepairProvenance, ...],
+    *,
+    profile: str | None,
+) -> tuple[CoordinatorRepairProvenance | None, str | None]:
+    """Choose one supplied repair window, never allowing policy-created geometry or windows."""
+
+    if not provenances:
+        return None, None
+    if profile is None:
+        return provenances[0], None
+    if profile == ISOLATED_REFERENCE_POLICY_PROFILE:
+        return None, None
+    windows = tuple(
+        sorted(
+            (item.window for item in provenances),
+            key=lambda item: (
+                item.net_id,
+                item.bounds.min_x,
+                item.bounds.min_y,
+                item.bounds.max_x,
+                item.bounds.max_y,
+            ),
+        )
+    )
+    try:
+        neutral = _derive_policy_input(snapshot, envelope)
+        bounds = PolicyBounds(
+            min(item.bounds.min_x for item in windows),
+            min(item.bounds.min_y for item in windows),
+            max(item.bounds.max_x for item in windows),
+            max(item.bounds.max_y for item in windows),
+        )
+        policy_input = RoutingPolicyInput(
+            board_revision=neutral.board_revision,
+            bounds=bounds,
+            nets=neutral.nets,
+            repair_candidates=windows,
+        )
+        decision = _evaluate_policy_profile(profile, policy_input, cancelled=None)
+        expected_policy_id = _EXPECTED_POLICY_IDS.get(profile)
+        expected_nets = tuple(net.net_id for net in policy_input.nets)
+        if (
+            (expected_policy_id is not None and decision.policy_id != expected_policy_id)
+            or decision.input_digest != policy_input_digest(policy_input)
+            or len(decision.net_order) != len(expected_nets)
+            or set(decision.net_order) != set(expected_nets)
+            or decision.corridor_hints
+            or len(decision.repair_windows) != 1
+            or decision.repair_windows[0] not in windows
+        ):
+            return None, None
+        selected = next(item for item in provenances if item.window == decision.repair_windows[0])
+        return selected, policy_decision_digest(decision)
+    except Exception:
+        return None, None
+
+
+def _attempt_local_repair(
+    snapshot: BoardIRSnapshot,
+    envelope: NegotiatedRoutingRequest,
+    candidates: tuple[RouteCandidate, ...],
+    *,
+    iteration: int,
+    violating_nets: tuple[str, ...],
+    settings: RepairTransactionSettings,
+    policy_profile: str | None,
+    cancelled: CancellationCheck | None,
+    total_expansions: int,
+    total_obstacle_checks: int,
+) -> tuple[
+    tuple[RouteCandidate, ...] | None,
+    NegotiatedRepairEvidence | None,
+    int,
+    int,
+    bool,
+]:
+    """Run the all-or-nothing local repair transaction for one rejected complete allocation.
+
+    ``None`` means that no replacement is admissible and callers retain the ordinary rejection
+    path.  The final boolean is reserved for cancellation, whose atomic result must not publish
+    either the rejected allocation or repair evidence.
+    """
+
+    if _cancelled(cancelled):
+        return None, None, total_expansions, total_obstacle_checks, True
+    if (
+        envelope.max_total_expansions - total_expansions < settings.max_local_expansions
+        or envelope.max_total_obstacle_checks - total_obstacle_checks
+        < 2 * settings.max_validator_obstacle_checks
+    ):
+        return None, None, total_expansions, total_obstacle_checks, False
+    candidate_by_net = {item.patch.net_id: item for item in candidates}
+    requests = {item.net_id: item for item in envelope.requests}
+    targets = tuple(
+        sorted(
+            (
+                candidate_by_net[net_id]
+                for net_id in violating_nets
+                if net_id in candidate_by_net and net_id in requests
+            ),
+            key=lambda item: item.candidate_id,
+        )[: settings.max_attempts]
+    )
+    provenances: list[CoordinatorRepairProvenance] = []
+    for target in targets:
+        if _cancelled(cancelled):
+            return None, None, total_expansions, total_obstacle_checks, True
+        conflicts = tuple(
+            item
+            for item in candidates
+            if item.patch.net_id in violating_nets and item.patch.net_id != target.patch.net_id
+        )
+        try:
+            provenance = derive_repair_provenance(
+                snapshot,
+                requests[target.patch.net_id],
+                target,
+                conflicts,
+                envelope_digest=envelope.policy_digest,
+                iteration=iteration,
+                settings=settings,
+            )
+            total_obstacle_checks += provenance.projection_obstacle_checks
+            provenances.append(provenance)
+        except ValueError:
+            continue
+    selected, decision_digest = _repair_policy_selection(
+        snapshot,
+        envelope,
+        tuple(sorted(provenances, key=lambda item: item.target_candidate_id)),
+        profile=policy_profile,
+    )
+    if selected is None:
+        return None, None, total_expansions, total_obstacle_checks, False
+    if _cancelled(cancelled):
+        return None, None, total_expansions, total_obstacle_checks, True
+    request = requests[selected.target_net_id]
+    target = candidate_by_net[selected.target_net_id]
+    try:
+        # Provenance is intentionally capable-only, but it still crosses an internal boundary
+        # before entering the local solver.  A malformed/tampered or now-too-small local request
+        # is an ordinary atomic repair refusal, never an exception or partial publication.
+        local = selected.local_request(settings)
+    except (TypeError, ValueError):
+        return None, None, total_expansions, total_obstacle_checks, False
+    local_result = exact_local_repair(local, cancelled=cancelled)
+    total_expansions += local_result.expanded_states
+    if local_result.status is LocalRepairStatus.CANCELLED:
+        return None, None, total_expansions, total_obstacle_checks, True
+    if local_result.status is not LocalRepairStatus.COMPLETED or not verify_local_repair_result(
+        local, local_result
+    ):
+        return None, None, total_expansions, total_obstacle_checks, False
+    try:
+        candidate = _candidate_from_local_repair(
+            target, request, selected, local_result.route, local_result.expanded_states
+        )
+    except (TypeError, ValueError):
+        return None, None, total_expansions, total_obstacle_checks, False
+    validation = validate_candidate_path(
+        snapshot,
+        request,
+        candidate,
+        max_obstacle_checks=min(
+            settings.max_validator_obstacle_checks, request.settings.max_obstacle_checks
+        ),
+        max_path_edges=min(settings.max_validator_path_edges, request.settings.max_grid_nodes),
+        cancelled=cancelled,
+    )
+    total_obstacle_checks += validation.obstacle_checks
+    if validation.failure is CandidatePathValidationFailure.CANCELLED:
+        return None, None, total_expansions, total_obstacle_checks, True
+    if validation.failure is not None:
+        return None, None, total_expansions, total_obstacle_checks, False
+    try:
+        candidate = _resign_candidate(
+            replace(
+                candidate,
+                metrics=replace(candidate.metrics, obstacle_checks=validation.obstacle_checks),
+            )
+        )
+        composite_digest = _repair_binding_digest(
+            envelope.policy_digest, selected.digest, local_result.route_digest, decision_digest
+        )
+        repaired = tuple(
+            sorted(
+                (
+                    _reidentify_candidate(
+                        candidate if item.patch.net_id == request.net_id else item,
+                        composite_digest,
+                        identity_policy=REPAIR_NEGOTIATED_ROUTING_POLICY,
+                        truncated=False,
+                    )
+                    for item in candidates
+                ),
+                key=lambda item: item.patch.net_id,
+            )
+        )
+        evidence = NegotiatedRepairEvidence(
+            envelope_digest=envelope.policy_digest,
+            provenance_digest=selected.digest,
+            local_request_digest=local.input_digest,
+            local_route_digest=local_result.route_digest,
+            composite_digest=composite_digest,
+            projection_obstacle_checks=selected.projection_obstacle_checks,
+            local_expanded_states=local_result.expanded_states,
+            validator_edge_checks=validation.edge_checks,
+            validator_obstacle_checks=validation.obstacle_checks,
+            repair_policy_decision_digest=decision_digest,
+        )
+    except (TypeError, ValueError):
+        return None, None, total_expansions, total_obstacle_checks, False
+    return repaired, evidence, total_expansions, total_obstacle_checks, False
+
+
 def negotiate_routes(
     snapshot: object,
     envelope: object,
@@ -1222,8 +1636,10 @@ def negotiate_routes(
     router: AStarRouter | None = None,
     policy_profile: str | None = None,
     plan: object = None,
+    repair_settings: object = None,
+    repair_policy_profile: object = None,
 ) -> NegotiatedRoutingResult:
-    """Run negotiated routing under an optional closed policy profile or declared plan."""
+    """Run negotiated routing, optionally attempting one closed local repair after rejection."""
 
     if not isinstance(snapshot, BoardIRSnapshot) or not isinstance(
         envelope, NegotiatedRoutingRequest
@@ -1231,6 +1647,34 @@ def negotiate_routes(
         return _invalid_result("the negotiated snapshot or request type is invalid")
     checked_snapshot = snapshot
     checked_envelope = envelope
+    if repair_settings is not None and type(repair_settings) is not RepairTransactionSettings:
+        return _invalid_result(
+            "the negotiated local repair transaction was rejected",
+            board_revision=checked_envelope.board_revision,
+        )
+    if repair_policy_profile is not None and type(repair_policy_profile) is not str:
+        return _invalid_result(
+            "the negotiated local repair transaction was rejected",
+            board_revision=checked_envelope.board_revision,
+        )
+    if repair_settings is None and repair_policy_profile is not None:
+        return _invalid_result(
+            "the negotiated local repair transaction was rejected",
+            board_revision=checked_envelope.board_revision,
+        )
+    if repair_settings is not None and (policy_profile is not None or plan is not None):
+        # Composing optional transaction evidence needs its own reviewed identity binding.
+        return _invalid_result(
+            "the negotiated local repair transaction was rejected",
+            board_revision=checked_envelope.board_revision,
+        )
+    if repair_policy_profile == ISOLATED_REFERENCE_POLICY_PROFILE:
+        return _invalid_result(
+            "the negotiated local repair transaction was rejected",
+            board_revision=checked_envelope.board_revision,
+        )
+    checked_repair_settings = repair_settings
+    checked_repair_profile = repair_policy_profile
     if cancelled is not None and not callable(cancelled):
         return _invalid_result(
             "the negotiated cancellation hook is invalid",
@@ -1646,6 +2090,86 @@ def negotiate_routes(
                 diagnostic="negotiated physical-clearance verification was cancelled",
                 policy_digest=checked_envelope.policy_digest,
             )
+        if (
+            checked_repair_settings is not None
+            and physical.failure is PhysicalClearanceFailure.CLEARANCE_VIOLATION
+            and not unrouted_tuple
+            and len(candidates) + len(connected) == len(ordered)
+            and len(physical.violating_nets) >= 2
+        ):
+            repaired, repair_evidence, total_expansions, total_obstacle_checks, repair_cancelled = (
+                _attempt_local_repair(
+                    checked_snapshot,
+                    checked_envelope,
+                    candidates,
+                    iteration=iteration,
+                    violating_nets=physical.violating_nets,
+                    settings=checked_repair_settings,
+                    policy_profile=checked_repair_profile,
+                    cancelled=cancellation_check,
+                    total_expansions=total_expansions,
+                    total_obstacle_checks=total_obstacle_checks,
+                )
+            )
+            if repair_cancelled:
+                return NegotiatedRoutingResult(
+                    status=NegotiatedRoutingStatus.CANCELLED,
+                    board_revision=checked_envelope.board_revision,
+                    candidates=(),
+                    connections=(),
+                    unrouted_nets=tuple(item.net_id for item in ordered),
+                    iterations=iterations,
+                    ripups=ripups,
+                    overflow_resources=(),
+                    overflow_units=0,
+                    total_wire_length_nm=0,
+                    total_physical_checks=total_physical_checks,
+                    diagnostic="negotiated local repair was cancelled",
+                    policy_digest=checked_envelope.policy_digest,
+                )
+            if repaired is not None and repair_evidence is not None:
+                repaired_physical = verify_negotiated_physical_clearance(
+                    checked_snapshot,
+                    repaired,
+                    layer_id=checked_envelope.layer_id,
+                    max_pair_checks=(
+                        checked_envelope.max_total_physical_checks - total_physical_checks
+                    ),
+                    cancelled=cancellation_check,
+                )
+                total_physical_checks += repaired_physical.pair_checks
+                if repaired_physical.failure is PhysicalClearanceFailure.CANCELLED:
+                    return NegotiatedRoutingResult(
+                        status=NegotiatedRoutingStatus.CANCELLED,
+                        board_revision=checked_envelope.board_revision,
+                        candidates=(),
+                        connections=(),
+                        unrouted_nets=tuple(item.net_id for item in ordered),
+                        iterations=iterations,
+                        ripups=ripups,
+                        overflow_resources=(),
+                        overflow_units=0,
+                        total_wire_length_nm=0,
+                        total_physical_checks=total_physical_checks,
+                        diagnostic="negotiated local repair was cancelled",
+                        policy_digest=checked_envelope.policy_digest,
+                    )
+                if repaired_physical.failure is None:
+                    return _published_result(
+                        None,
+                        repair_evidence=repair_evidence,
+                        status=NegotiatedRoutingStatus.COMPLETED,
+                        board_revision=checked_envelope.board_revision,
+                        candidates=repaired,
+                        connections=connected,
+                        iterations=iterations,
+                        ripups=ripups,
+                        overflow_resources=(),
+                        overflow_units=0,
+                        total_wire_length_nm=sum(item.patch.length_nm for item in repaired),
+                        total_physical_checks=total_physical_checks,
+                        policy_digest=checked_envelope.policy_digest,
+                    )
         if physical.failure is not None:
             # A lattice-clean allocation can still be physically illegal.  Never let this
             # iteration contribute candidate copper or connection evidence to the best result or

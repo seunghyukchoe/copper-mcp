@@ -1,0 +1,49 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "ERP01-v2-discriminator-disabled",
+      "file": "src/copper_mcp/routing/external_candidate_verifier.py",
+      "anchor": "    elif schema == EXTERNAL_ROUTE_PATCH_SCHEMA:\n        document_keys = _PATCH_DOCUMENT_KEYS\n",
+      "replacement": "    elif False:\n        document_keys = _PATCH_DOCUMENT_KEYS\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_external_candidate_verifier.py::test_accepts_a_deterministic_multi_path_tree_without_exposing_paths"
+      ]
+    },
+    {
+      "id": "ERP02-connectivity-proof-disabled",
+      "file": "src/copper_mcp/routing/candidate_path_validator.py",
+      "anchor": "        if any(roots[offset] != accepted_root for offset in component_offsets) or any(\n            root != accepted_root for root in roots[route_offset:]\n        ):\n            return _result(work, edge_checks, CandidatePathValidationFailure.INFEASIBLE)\n",
+      "replacement": "        if False:\n            return _result(work, edge_checks, CandidatePathValidationFailure.INFEASIBLE)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_external_candidate_verifier.py::test_multi_path_tree_requires_every_submitted_path_to_join_every_pad_component"
+      ]
+    },
+    {
+      "id": "ERP03-off-grid-obstacle-proof-disabled",
+      "file": "src/copper_mcp/routing/candidate_path_validator.py",
+      "anchor": "        for path in candidate.patch.paths:\n            for start, end in pairwise(path.vertices):\n                if not _edge_is_legal(start, end, problem, work):\n                    failure = CandidatePathValidationFailure.OBSTACLE_VIOLATION\n                    break\n",
+      "replacement": "        for path in candidate.patch.paths:\n            for start, end in pairwise(path.vertices):\n                if False:\n                    failure = CandidatePathValidationFailure.OBSTACLE_VIOLATION\n                    break\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_external_candidate_disposer.py::test_artifact_matches_a_fresh_corpus_replay"
+      ]
+    },
+    {
+      "id": "ERP04-aggregate-segment-preflight-disabled",
+      "file": "src/copper_mcp/routing/external_candidate_verifier.py",
+      "anchor": "        if len(raw_segments) > _MAX_SEGMENTS or segment_count + len(raw_segments) > max_path_edges:\n            return _refused(\n                ExternalCandidateFailure.BUDGET_EXCEEDED,\n                segment_count=segment_count,\n            )\n",
+      "replacement": "        if False:\n            return _refused(\n                ExternalCandidateFailure.BUDGET_EXCEEDED,\n                segment_count=segment_count,\n            )\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_external_candidate_verifier.py::test_multi_path_nested_shape_and_aggregate_segment_budget_are_closed"
+      ]
+    }
+  ]
+}
