@@ -70,6 +70,13 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Route, layered-route, placement, and live preview responses now name why an apply token is
+  absent using one closed, non-echoing eight-value vocabulary. The response always carries exactly
+  one of a token and a reason, including at the public MCP contract boundary; a placement replay
+  refusal that was previously swallowed now returns `replay_refused`. Route and layered preview
+  responses move to `1.1`; placement previews move to `0.2.0` while placement candidates remain
+  `0.1.0` ([migration note](docs/migrations/preview-apply-token-reasons.md), `D-221`, `R-172`, `SEC-159`,
+  [ADR-0120](docs/adr/0120-withheld-apply-authority-has-a-closed-reason.md)).
 - Ordered-layer verified-fill validation now refuses aggregate polygon walks above the existing
   10,000,000 obstacle-check ceiling before inspecting vertices. The O(islands) preflight preserves
   an independent per-island refusal and propagates the typed

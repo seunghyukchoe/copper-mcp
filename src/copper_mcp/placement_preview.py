@@ -21,6 +21,7 @@ from copper_mcp.adapters.kicad_placement_patch import (
     render_kicad_placement_candidate_board,
 )
 from copper_mcp.apply.tokens import ApplyBinding, ApplyTokenAuthority
+from copper_mcp.apply_token_reasons import apply_token_withheld_reason
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import KiCadCliError
 from copper_mcp.kicad_ipc import capture_live_board
@@ -38,6 +39,17 @@ from copper_mcp.placement.contracts import (
 from copper_mcp.placement.view import PlacementViewError
 from copper_mcp.placement_drc import PlacementCandidateDrcEvidence, run_placement_candidate_drc
 from copper_mcp.security import read_workspace_file
+
+#: The live placement seam shares the pipeline below but mints no capability under any setting:
+#: its parser refuses ``include_apply_token`` outright. Read out of the shared order rather than
+#: typed in beside this surface, so the set stays closed.
+_LIVE_WITHHELD_REASON = apply_token_withheld_reason(
+    surface_mints_tokens=False,
+    requested=False,
+    apply_enabled=False,
+    has_candidate=False,
+)
+assert _LIVE_WITHHELD_REASON is not None
 
 
 def preview_placement(
@@ -85,11 +97,28 @@ def _preview_placement_source(
     *,
     token_authority: ApplyTokenAuthority | None = None,
     deadline: float | None = None,
+    mints_apply_tokens: bool = True,
 ) -> PlacementResult:
-    """Run the deterministic placement pipeline over one already-bound source."""
+    """Run the deterministic placement pipeline over one already-bound source.
+
+    ``mints_apply_tokens`` is false for the live surface, which shares this pipeline but can
+    never issue a capability: its parser refuses ``include_apply_token`` outright. Saying so
+    with ``unsupported_surface`` is not the same statement as ``not_requested``, and a caller
+    deciding whether to ask again needs the difference.
+    """
 
     if deadline is None:
         deadline = time.monotonic() + float(settings.max_placement_seconds)
+    apply_enabled = settings.allow_apply and isinstance(token_authority, ApplyTokenAuthority)
+    # Every return below that carries no candidate shares one reason, decided by the shared
+    # order in `copper_mcp.apply_token_reasons` rather than restated per branch.
+    withheld_without_candidate = apply_token_withheld_reason(
+        surface_mints_tokens=mints_apply_tokens,
+        requested=intent.include_apply_token,
+        apply_enabled=apply_enabled,
+        has_candidate=False,
+    )
+    assert withheld_without_candidate is not None
 
     # A caller may bind a file-backed request to a previously observed revision as well as a
     # live request.  Honor that precondition before parsing so a stale request cannot echo its
@@ -104,6 +133,7 @@ def _preview_placement_source(
                 code=PlacementFailureCode.STALE_REVISION,
                 message="board revision is stale",
             ),
+            apply_token_withheld_reason=withheld_without_candidate,
         )
 
     limits = parse_limits_for(settings)
@@ -120,6 +150,7 @@ def _preview_placement_source(
                 message="this board is outside the supported Board IR subset",
             ),
             conversion_diagnostic_counts=dict(counts),
+            apply_token_withheld_reason=withheld_without_candidate,
         )
 
     snapshot = conversion.snapshot
@@ -140,6 +171,7 @@ def _preview_placement_source(
                 code=PlacementFailureCode.STALE_REVISION,
                 message="Board IR snapshot revision is stale",
             ),
+            apply_token_withheld_reason=withheld_without_candidate,
         )
     try:
         view = build_placement_view(source, snapshot, limits=limits)
@@ -156,6 +188,7 @@ def _preview_placement_source(
                 code=PlacementFailureCode.UNSUPPORTED_GEOMETRY,
                 message=str(error),
             ),
+            apply_token_withheld_reason=withheld_without_candidate,
         )
 
     remaining_seconds = deadline - time.monotonic()
@@ -170,6 +203,7 @@ def _preview_placement_source(
                 code=PlacementFailureCode.BUDGET_EXHAUSTED,
                 message="placement preview deadline expired before legalization",
             ),
+            apply_token_withheld_reason=withheld_without_candidate,
         )
 
     result = evaluate_placement(
@@ -203,14 +237,14 @@ def _preview_placement_source(
                 "authoritative placement DRC evidence is not bound to this candidate"
             )
         result = replace(result, drc_evidence=evidence)
-    if (
-        result.status == "previewed"
-        and result.candidate is not None
-        and intent.include_apply_token
-        and settings.allow_apply
-        and isinstance(token_authority, ApplyTokenAuthority)
-        and any(item.moved for item in result.candidate.placements)
-    ):
+    if result.status != "previewed" or result.candidate is None:
+        # The legalizer builds its refusals before this surface knows what the operator permits,
+        # so the reason is stamped here rather than there.
+        return replace(result, apply_token_withheld_reason=withheld_without_candidate)
+
+    moves = any(item.moved for item in result.candidate.placements)
+    replay_accepted = True
+    if mints_apply_tokens and intent.include_apply_token and apply_enabled and moves:
         # The capability is minted only after the same pure replay used by placement DRC accepts
         # the source. A legalizer candidate outside the current source-preserving subset remains
         # previewable, but cannot accidentally receive a token that the apply path must refuse.
@@ -223,19 +257,32 @@ def _preview_placement_source(
                 limits=limits,
             )
         except KiCadPlacementPatchError:
-            pass
-        else:
-            token = token_authority.issue(
-                ApplyBinding(
-                    candidate_id=result.candidate.candidate_id,
-                    base_revision=result.candidate.base_revision,
-                    board_revision=board_revision,
-                    relative_path=relative_path,
-                    operation="placement",
-                )
-            )
-            result = replace(result, apply_token=token)
-    return result
+            # R-149 lived exactly here, as `pass`. The refusal was swallowed, the caller got
+            # `apply_token: null`, and nothing distinguished it from five other causes. The
+            # exception object is deliberately *not* carried into the reason: it names the
+            # board construct that refused, and a withheld reason discloses no board content.
+            replay_accepted = False
+    withheld = apply_token_withheld_reason(
+        surface_mints_tokens=mints_apply_tokens,
+        requested=intent.include_apply_token,
+        apply_enabled=apply_enabled,
+        has_candidate=True,
+        candidate_moves=moves,
+        replay_accepted=replay_accepted,
+    )
+    if withheld is not None:
+        return replace(result, apply_token_withheld_reason=withheld)
+    assert isinstance(token_authority, ApplyTokenAuthority)
+    token = token_authority.issue(
+        ApplyBinding(
+            candidate_id=result.candidate.candidate_id,
+            base_revision=result.candidate.base_revision,
+            board_revision=board_revision,
+            relative_path=relative_path,
+            operation="placement",
+        )
+    )
+    return replace(result, apply_token=token)
 
 
 def _placement_drc_settings(settings: Settings, deadline: float) -> Settings:
@@ -301,6 +348,7 @@ def preview_live_placement(
                 code=PlacementFailureCode.STALE_REVISION,
                 message="live board revision is stale",
             ),
+            apply_token_withheld_reason=_LIVE_WITHHELD_REASON,
         )
 
     result = _preview_placement_source(
@@ -311,6 +359,7 @@ def preview_live_placement(
         settings,
         token_authority=None,
         deadline=deadline,
+        mints_apply_tokens=False,
     )
     if (
         intent.expect_snapshot_digest is not None
@@ -327,6 +376,7 @@ def preview_live_placement(
                 code=PlacementFailureCode.STALE_REVISION,
                 message="live Board IR snapshot is stale",
             ),
+            apply_token_withheld_reason=_LIVE_WITHHELD_REASON,
         )
     return result
 

@@ -1119,6 +1119,7 @@ def test_preview_record_rejects_inconsistent_bindings(tmp_path: Path) -> None:
             snapshot_digest=preview.snapshot_digest,
             diagnostic=RouteDiagnostic(code=RouteFailureCode.NO_PATH, message="no path"),
             drc_evidence=_evidence(preview),
+            apply_token_withheld_reason="not_requested",
         )
 
 

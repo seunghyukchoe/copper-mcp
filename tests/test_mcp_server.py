@@ -597,13 +597,15 @@ class McpServerTests(unittest.TestCase):
             "include_drc": True,
         }
         response = {
-            "schema_version": "1.0",
+            "schema_version": "1.1",
             "status": "routed",
             "board_path": "two-pad.kicad_pcb",
             "board_revision": digest,
             "snapshot_digest": digest,
             "request": request,
             "conversion_diagnostic_counts": {},
+            "apply_token": None,
+            "apply_token_withheld_reason": "unsupported_surface",
             "drc_evidence": {
                 "candidate_id": digest,
                 "candidate_base_revision": digest,
@@ -1122,6 +1124,7 @@ class RouteToolSurfaceTests(unittest.TestCase):
             "conversion_diagnostic_counts",
             "drc_evidence",
             "apply_token",
+            "apply_token_withheld_reason",
             "fill_authority",
         }
         response_variants = [_resolve_local_ref(output, variant) for variant in output["anyOf"]]

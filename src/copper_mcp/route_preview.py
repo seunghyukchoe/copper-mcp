@@ -25,6 +25,11 @@ from copper_mcp.adapters import (
     parse_kicad_bytes,
 )
 from copper_mcp.apply.tokens import ApplyBinding, ApplyTokenAuthority
+from copper_mcp.apply_token_reasons import (
+    APPLY_TOKEN_WITHHELD_REASONS,
+    ApplyTokenWithheldReason,
+    apply_token_withheld_reason,
+)
 from copper_mcp.board_ir import NetClass
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import (
@@ -35,7 +40,6 @@ from copper_mcp.kicad_cli import (
     run_zone_fill_authority,
 )
 from copper_mcp.kicad_ipc import capture_live_board
-from copper_mcp.models import SCHEMA_VERSION
 from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.request_boundary import (
     CONSTRAINT_FIELDS,
@@ -63,6 +67,8 @@ from copper_mcp.routing import (
     VerifiedFill,
 )
 from copper_mcp.security import read_workspace_file
+
+ROUTE_PREVIEW_SCHEMA_VERSION = "1.1"
 
 _SHA256_ID = re.compile(r"^sha256:[a-f0-9]{64}$")
 _NET_REF_ID = re.compile(r"^net:name:[0-9a-f]{32}$")
@@ -372,7 +378,11 @@ class RoutePreview:
     conversion_diagnostic_counts: Mapping[str, int] = field(default_factory=dict)
     drc_evidence: RouteCandidateDrcEvidence | None = None
     apply_token: str | None = None
-    schema_version: str = SCHEMA_VERSION
+    #: Exactly one of ``apply_token`` and this field is set. A caller reading ``null`` used to
+    #: have no way to tell "you did not ask" from "this board can never be applied to"; the
+    #: closed set in :mod:`copper_mcp.apply_token_reasons` is now the answer (R-149).
+    apply_token_withheld_reason: ApplyTokenWithheldReason | None = None
+    schema_version: str = ROUTE_PREVIEW_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
         if not isinstance(self.status, RoutePreviewStatus):
@@ -383,7 +393,7 @@ class RoutePreview:
             raise RoutePreviewError("board revision must be content-addressed with sha256")
         if not isinstance(self.board_path, str) or not self.board_path:
             raise RoutePreviewError("preview board path is malformed")
-        if self.schema_version != SCHEMA_VERSION:
+        if self.schema_version != ROUTE_PREVIEW_SCHEMA_VERSION:
             raise RoutePreviewError("preview schema version is unsupported")
         if not isinstance(self.conversion_diagnostic_counts, Mapping):
             raise RoutePreviewError("conversion diagnostic counts must be a mapping")
@@ -463,6 +473,13 @@ class RoutePreview:
                 raise RoutePreviewError("an apply token requires a routed candidate")
             if not self.request.include_apply_token:
                 raise RoutePreviewError("an apply token was not requested")
+            if self.apply_token_withheld_reason is not None:
+                raise RoutePreviewError("an issued apply token cannot also be withheld")
+        elif self.apply_token_withheld_reason not in APPLY_TOKEN_WITHHELD_REASONS:
+            # No default, and no silence. Every construction site that returns no token states
+            # which closed reason it is returning, so an unlisted or forgotten one fails here
+            # rather than reaching a caller as an unexplained `null`.
+            raise RoutePreviewError("a withheld apply token must name a closed reason")
 
         if self.fill_authority is not None:
             if not isinstance(self.fill_authority, ZoneFillAuthority):
@@ -538,6 +555,7 @@ class RoutePreview:
             "conversion_diagnostic_counts": dict(self.conversion_diagnostic_counts),
             "drc_evidence": (None if self.drc_evidence is None else self.drc_evidence.to_dict()),
             "apply_token": self.apply_token,
+            "apply_token_withheld_reason": self.apply_token_withheld_reason,
             "fill_authority": (
                 None
                 if self.fill_authority is None
@@ -592,6 +610,16 @@ def preview_route(
         raise RoutePreviewError("preview settings are malformed")
     deadline = time.monotonic() + settings.max_route_preview_seconds
     request = parse_route_preview_request(payload)
+    apply_enabled = token_authority is not None and settings.allow_apply
+    # One reason serves every return taken before a candidate exists. What the request asked
+    # for and what this server permits are already known here, and `has_candidate=False` is
+    # what all of those returns have in common.
+    withheld_without_candidate = apply_token_withheld_reason(
+        requested=request.include_apply_token,
+        apply_enabled=apply_enabled,
+        has_candidate=False,
+    )
+    assert withheld_without_candidate is not None
 
     board = read_workspace_file(
         settings.workspace,
@@ -616,6 +644,7 @@ def preview_route(
                 code=RouteFailureCode.STALE_REVISION,
                 message="the observed scene no longer matches the current board bytes",
             ),
+            apply_token_withheld_reason=withheld_without_candidate,
         )
 
     limits = parse_limits_for(settings)
@@ -629,6 +658,7 @@ def preview_route(
             board_revision=board_revision,
             request=request,
             conversion_diagnostic_counts=counts,
+            apply_token_withheld_reason=withheld_without_candidate,
         )
 
     snapshot = conversion.snapshot
@@ -649,6 +679,7 @@ def preview_route(
                 code=RouteFailureCode.STALE_REVISION,
                 message="the observed scene no longer matches the current routing snapshot",
             ),
+            apply_token_withheld_reason=withheld_without_candidate,
         )
 
     if time.monotonic() >= deadline:
@@ -662,6 +693,7 @@ def preview_route(
                 code=RouteFailureCode.CANCELLED,
                 message="the preview deadline expired during board conversion",
             ),
+            apply_token_withheld_reason=withheld_without_candidate,
         )
 
     verified_fill: tuple[VerifiedFill, ...] = ()
@@ -686,6 +718,7 @@ def preview_route(
                     code=RouteFailureCode.STALE_FILL,
                     message="the board's cached zone fill does not match a fresh KiCad refill",
                 ),
+                apply_token_withheld_reason=withheld_without_candidate,
             )
         verified_fill = tuple(
             VerifiedFill(
@@ -723,6 +756,7 @@ def preview_route(
             fill_routing_effect=(
                 "connectivity_evidence" if result.connected.fill_polygons else None
             ),
+            apply_token_withheld_reason=withheld_without_candidate,
         )
     if result.candidate is None:
         return RoutePreview(
@@ -732,6 +766,7 @@ def preview_route(
             request=request,
             snapshot_digest=snapshot.snapshot_digest,
             diagnostic=result.diagnostic,
+            apply_token_withheld_reason=withheld_without_candidate,
         )
 
     evidence = None
@@ -745,26 +780,34 @@ def preview_route(
             _drc_settings(settings, deadline),
             verified_fill=verified_fill,
         )
+    # Issued only for a routed candidate on an *appliable* board, when apply is enabled.
+    # Gating on the flag stops a library embedder minting tokens with apply off, and gating
+    # on appliability stops a token being minted for a board whose derived geometry
+    # identities the append-only apply engine would reject - which used to surface as an
+    # uncaught crash from the destructive tool. The token is bound to the four things that
+    # make an apply unambiguous: which candidate, which snapshot, which bytes, which path.
+    #
+    # A candidate the exact pour shaped is withheld for the same reason (#163, ADR-0103):
+    # apply runs in a later process and holds no fill evidence, so it can only replay under
+    # the conservative envelope, which is not the model that produced the route. A token is
+    # a capability, and a capability whose exercise is guaranteed to refuse must not be
+    # issued. The candidate and its DRC evidence are still returned.
+    #
+    # `_board_is_appliable` walks every modeled object, so it stays behind the cheap gates the
+    # shared order already checks first: when one of those has closed, the value it would
+    # return cannot change the reason, and the scan is skipped exactly as the old `and` chain
+    # skipped it.
+    gate_open = request.include_apply_token and apply_enabled
+    withheld = apply_token_withheld_reason(
+        requested=request.include_apply_token,
+        apply_enabled=apply_enabled,
+        has_candidate=True,
+        board_appliable=not gate_open or _board_is_appliable(snapshot),
+        fill_bound=gate_open and result.candidate.fill_binding is not None,
+    )
     apply_token = None
-    if (
-        request.include_apply_token
-        and token_authority is not None
-        and settings.allow_apply
-        and _board_is_appliable(snapshot)
-        and result.candidate.fill_binding is None
-    ):
-        # Issued only for a routed candidate on an *appliable* board, when apply is enabled.
-        # Gating on the flag stops a library embedder minting tokens with apply off, and gating
-        # on appliability stops a token being minted for a board whose derived geometry
-        # identities the append-only apply engine would reject - which used to surface as an
-        # uncaught crash from the destructive tool. The token is bound to the four things that
-        # make an apply unambiguous: which candidate, which snapshot, which bytes, which path.
-        #
-        # A candidate the exact pour shaped is withheld for the same reason (#163, ADR-0103):
-        # apply runs in a later process and holds no fill evidence, so it can only replay under
-        # the conservative envelope, which is not the model that produced the route. A token is
-        # a capability, and a capability whose exercise is guaranteed to refuse must not be
-        # issued. The candidate and its DRC evidence are still returned.
+    if withheld is None:
+        assert token_authority is not None
         apply_token = token_authority.issue(
             ApplyBinding(
                 candidate_id=result.candidate.candidate_id,
@@ -793,6 +836,7 @@ def preview_route(
         ),
         drc_evidence=evidence,
         apply_token=apply_token,
+        apply_token_withheld_reason=withheld,
     )
 
 
@@ -821,6 +865,16 @@ def preview_live_route(
         raise RoutePreviewError("live route requests require a Circuit Scene net reference")
     if request.include_drc or request.include_fill_authority or request.include_apply_token:
         raise RoutePreviewError("live route proposals are read-only and cannot request actions")
+    # This surface mints nothing at all, so the reason is fixed and does not depend on the
+    # request or on the operator's apply flag: `include_apply_token` is refused above, and no
+    # setting makes a live single-layer proposal issuable.
+    live_withheld = apply_token_withheld_reason(
+        surface_mints_tokens=False,
+        requested=False,
+        apply_enabled=False,
+        has_candidate=False,
+    )
+    assert live_withheld is not None
 
     # Capture must share the preview's bounded wall-clock budget. The IPC binding accepts a
     # millisecond timeout capped at ten seconds; passing both it and the absolute deadline keeps
@@ -846,6 +900,7 @@ def preview_live_route(
                 code=RouteFailureCode.STALE_REVISION,
                 message="the observed live board no longer matches the requested revision",
             ),
+            apply_token_withheld_reason=live_withheld,
         )
 
     limits = parse_limits_for(settings)
@@ -858,6 +913,7 @@ def preview_live_route(
             board_revision=board_revision,
             request=request,
             conversion_diagnostic_counts=counts,
+            apply_token_withheld_reason=live_withheld,
         )
 
     snapshot = conversion.snapshot
@@ -879,6 +935,7 @@ def preview_live_route(
                 code=RouteFailureCode.STALE_REVISION,
                 message="the observed live Board IR snapshot is stale",
             ),
+            apply_token_withheld_reason=live_withheld,
         )
     if time.monotonic() >= deadline:
         return RoutePreview(
@@ -891,6 +948,7 @@ def preview_live_route(
                 code=RouteFailureCode.CANCELLED,
                 message="the live route proposal deadline expired during board conversion",
             ),
+            apply_token_withheld_reason=live_withheld,
         )
 
     result = AStarRouter().propose(
@@ -912,6 +970,7 @@ def preview_live_route(
             request=request,
             snapshot_digest=snapshot.snapshot_digest,
             connection=result.connected,
+            apply_token_withheld_reason=live_withheld,
         )
     if result.candidate is None:
         return RoutePreview(
@@ -921,6 +980,7 @@ def preview_live_route(
             request=request,
             snapshot_digest=snapshot.snapshot_digest,
             diagnostic=result.diagnostic,
+            apply_token_withheld_reason=live_withheld,
         )
     return RoutePreview(
         status=RoutePreviewStatus.ROUTED,
@@ -929,4 +989,5 @@ def preview_live_route(
         request=request,
         snapshot_digest=snapshot.snapshot_digest,
         candidate=result.candidate,
+        apply_token_withheld_reason=live_withheld,
     )

@@ -458,7 +458,7 @@ What replaces it is four entry criteria. **Two of them are not agent-executable.
 
 | | Criterion | Why it gates apply |
 |---|---|---|
-| **E1** | Legible reasons for a withheld apply token, as a closed literal set | [R-149](ledgers/risk-register.md): a caller cannot today distinguish "apply is off", "this board cannot be applied to", and "this candidate was routed under fill". An apply surface whose refusals are indistinguishable cannot be driven by an agent. |
+| **E1 — complete** | Legible reasons for a withheld apply token, as a closed literal set | [ADR-0120](adr/0120-withheld-apply-authority-has-a-closed-reason.md) gives all six preview surfaces one non-echoing eight-value vocabulary and enforces that every response carries exactly one of a token and a reason. |
 | **E2** | A DRC reproducibility policy ([#170](https://github.com/seunghyukchoe/copper-mcp/issues/170)) | An apply's evidence is DRC evidence, and `B-107` found DRC counts differing between two runs of identical bytes at the same commit. |
 | **E3** | One real-editor IPC observation, **or** a recorded park of #68 | `docs/handoff/project-state.md` records that no successful real-editor IPC oracle run has ever happened. **May need the operator** — the workstation IPC server is disabled, and enabling it is a change to the operator's machine. |
 | **E4** | Appliability re-measured on the frozen corpus | The current figure, 5 of 13 converting saves, is argued forward from a run on a tree that is not the current one. |

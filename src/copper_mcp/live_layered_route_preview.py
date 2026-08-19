@@ -21,6 +21,7 @@ from typing import Any
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.apply.tokens import ApplyTokenAuthority, LiveApplyBinding
+from copper_mcp.apply_token_reasons import apply_token_withheld_reason
 from copper_mcp.config import Settings
 from copper_mcp.kicad_ipc import _is_session_revision, capture_live_board
 from copper_mcp.layered_route_preview import (
@@ -116,6 +117,16 @@ def preview_live_layered_route(
     # short request budget from silently spending the default two seconds in the transport.
     deadline = time.monotonic() + settings.max_route_preview_seconds
     request = parse_live_layered_route_preview_request(payload)
+    apply_enabled = settings.allow_live_apply and token_authority is not None
+    # Every return below that carries no candidate shares one reason. The three conditions the
+    # docstring names are exactly the first three the shared order decides, so this is the same
+    # gate stated once instead of re-derived per branch.
+    withheld_without_candidate = apply_token_withheld_reason(
+        requested=request.include_apply_token,
+        apply_enabled=apply_enabled,
+        has_candidate=False,
+    )
+    assert withheld_without_candidate is not None
     remaining_ms = max(1, min(10_000, int((deadline - time.monotonic()) * 1_000)))
     captured = capture_live_board(
         settings,
@@ -141,6 +152,7 @@ def preview_live_layered_route(
             diagnostic=_diagnostic_document(
                 "stale_revision", "live IPC session revision is stale or unavailable"
             ),
+            apply_token_withheld_reason=withheld_without_candidate,
         )
     if request.expect_board_revision != board_revision:
         return _empty_result(
@@ -149,6 +161,7 @@ def preview_live_layered_route(
             "live",
             board_revision,
             diagnostic=_diagnostic_document("stale_revision", "live board revision is stale"),
+            apply_token_withheld_reason=withheld_without_candidate,
         )
 
     profile = KiCadConstraintProfile(
@@ -168,6 +181,7 @@ def preview_live_layered_route(
                 "invalid_snapshot", "live board is outside the supported Board IR subset"
             ),
             conversion_diagnostic_counts=counts,
+            apply_token_withheld_reason=withheld_without_candidate,
         )
 
     snapshot = conversion.snapshot
@@ -185,6 +199,7 @@ def preview_live_layered_route(
             diagnostic=_diagnostic_document(
                 "stale_revision", "live Board IR snapshot revision is stale"
             ),
+            apply_token_withheld_reason=withheld_without_candidate,
         )
     if not has_exactly_two_signal_layers(snapshot):
         return _empty_result(
@@ -197,6 +212,7 @@ def preview_live_layered_route(
                 LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY.value,
                 "board copper stack is outside the public two-layer live preview subset",
             ),
+            apply_token_withheld_reason=withheld_without_candidate,
         )
     if time.monotonic() >= deadline:
         return _empty_result(
@@ -209,6 +225,7 @@ def preview_live_layered_route(
                 LayeredRouteFailureCode.CANCELLED.value,
                 "live layered route proposal deadline expired during board conversion",
             ),
+            apply_token_withheld_reason=withheld_without_candidate,
         )
 
     pads = {pad.id: pad for pad in snapshot.content.pads}
@@ -225,6 +242,7 @@ def preview_live_layered_route(
                 LayeredRouteFailureCode.INVALID_REQUEST.value,
                 "route endpoints are not pads on one common net",
             ),
+            apply_token_withheld_reason=withheld_without_candidate,
         )
     net_id = start_pad.net_id
     if net_id is None or net_id != end_pad.net_id:
@@ -238,6 +256,7 @@ def preview_live_layered_route(
                 LayeredRouteFailureCode.INVALID_REQUEST.value,
                 "route endpoints are not pads on one common net",
             ),
+            apply_token_withheld_reason=withheld_without_candidate,
         )
 
     layered_request = LayeredRouteRequest(
@@ -260,11 +279,13 @@ def preview_live_layered_route(
     if result.candidate is not None:
         candidate_document = _candidate_document(result.candidate)
         apply_token: str | None = None
-        if (
-            request.include_apply_token
-            and settings.allow_live_apply
-            and token_authority is not None
-        ):
+        withheld = apply_token_withheld_reason(
+            requested=request.include_apply_token,
+            apply_enabled=apply_enabled,
+            has_candidate=True,
+        )
+        if withheld is None:
+            assert token_authority is not None
             apply_token = token_authority.issue(
                 LiveApplyBinding(
                     candidate_id=result.candidate.candidate_id,
@@ -281,6 +302,7 @@ def preview_live_layered_route(
             snapshot_digest=snapshot.snapshot_digest,
             candidate=candidate_document,
             apply_token=apply_token,
+            apply_token_withheld_reason=withheld,
         )
 
     assert result.diagnostic is not None
@@ -297,6 +319,7 @@ def preview_live_layered_route(
             expanded_states=diagnostic.expanded_states,
             obstacle_checks=diagnostic.obstacle_checks,
         ),
+        apply_token_withheld_reason=withheld_without_candidate,
     )
 
 

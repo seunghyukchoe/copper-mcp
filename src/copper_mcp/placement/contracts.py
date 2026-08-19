@@ -23,6 +23,10 @@ from types import MappingProxyType
 from typing import Any
 
 from copper_mcp.adapters import KiCadConstraintProfile
+from copper_mcp.apply_token_reasons import (
+    APPLY_TOKEN_WITHHELD_REASONS,
+    ApplyTokenWithheldReason,
+)
 from copper_mcp.board_ir import NetClass
 from copper_mcp.models import DrcSummary
 from copper_mcp.request_boundary import (
@@ -40,6 +44,7 @@ from copper_mcp.request_boundary import (
 )
 
 PLACEMENT_VERSION = "0.1.0"
+PLACEMENT_PREVIEW_VERSION = "0.2.0"
 #: How proposals are resolved and ordered. Recorded on every candidate so a later solver
 #: cannot be mistaken for this one.
 ORDERING_POLICY = "validate-snap-v1"
@@ -815,6 +820,11 @@ class PlacementResult:
     candidate: PlacementCandidate | None = None
     diagnostic: PlacementDiagnostic | None = None
     apply_token: str | None = None
+    #: Why no capability accompanies this result, from the closed set in
+    #: :mod:`copper_mcp.apply_token_reasons`. Exactly one of this and ``apply_token`` is set on
+    #: every result a caller can see; ``to_dict`` is where that is enforced, because the legalizer
+    #: builds intermediate results before the surface knows what the operator permits.
+    apply_token_withheld_reason: ApplyTokenWithheldReason | None = None
     drc_evidence: PlacementCandidateDrcEvidence | None = None
     conversion_diagnostic_counts: Mapping[str, int] = field(default_factory=dict)
 
@@ -835,6 +845,13 @@ class PlacementResult:
                 raise PlacementError("placement apply authority requires a candidate")
             if self.request is None or not self.request.include_apply_token:
                 raise PlacementError("placement apply authority was not requested")
+            if self.apply_token_withheld_reason is not None:
+                raise PlacementError("an issued placement apply token cannot also be withheld")
+        elif (
+            self.apply_token_withheld_reason is not None
+            and self.apply_token_withheld_reason not in APPLY_TOKEN_WITHHELD_REASONS
+        ):
+            raise PlacementError("a withheld placement apply token names an unlisted reason")
         if self.drc_evidence is not None:
             if self.status != "previewed" or self.candidate is None:
                 raise PlacementError("placement DRC evidence requires a candidate")
@@ -848,9 +865,13 @@ class PlacementResult:
                 raise PlacementError("placement DRC evidence is not bound to this candidate")
 
     def to_dict(self) -> dict[str, Any]:
+        if self.apply_token is None and self.apply_token_withheld_reason is None:
+            # No default, and no silence: a result reaching a caller without a token states
+            # which closed reason withheld it, or it does not reach the caller at all (R-149).
+            raise PlacementError("a withheld placement apply token must name a closed reason")
         return {
             "status": self.status,
-            "placement_version": PLACEMENT_VERSION,
+            "placement_version": PLACEMENT_PREVIEW_VERSION,
             "board_path": self.board_path,
             "request": None if self.request is None else self.request.to_dict(),
             "board_revision": self.board_revision,
@@ -858,6 +879,7 @@ class PlacementResult:
             "candidate": None if self.candidate is None else self.candidate.to_dict(),
             "diagnostic": None if self.diagnostic is None else self.diagnostic.to_dict(),
             "apply_token": self.apply_token,
+            "apply_token_withheld_reason": self.apply_token_withheld_reason,
             "drc_evidence": None if self.drc_evidence is None else self.drc_evidence.to_dict(),
             "conversion_diagnostic_counts": dict(self.conversion_diagnostic_counts),
         }
@@ -871,6 +893,7 @@ __all__ = [
     "MAX_JSON_SAFE_INTEGER",
     "ORDERING_POLICY",
     "ORIENTATIONS",
+    "PLACEMENT_PREVIEW_VERSION",
     "PLACEMENT_VERSION",
     "SIDES",
     "AlignmentRule",

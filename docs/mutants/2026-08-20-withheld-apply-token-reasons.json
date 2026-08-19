@@ -1,0 +1,163 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "WR01-order-issues-a-token-nobody-asked-for",
+      "file": "src/copper_mcp/apply_token_reasons.py",
+      "anchor": "    if not requested:\n        return \"not_requested\"\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_apply_token_withheld_reasons.py::test_route_says_not_requested_when_the_flag_is_off",
+        "tests/test_apply_token_withheld_reasons.py::test_placement_says_not_requested_when_the_flag_is_off"
+      ]
+    },
+    {
+      "id": "WR02-order-forgets-the-operator-flag",
+      "file": "src/copper_mcp/apply_token_reasons.py",
+      "anchor": "    if not apply_enabled:\n        return \"apply_disabled\"\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_apply_token_withheld_reasons.py::test_route_says_apply_disabled_when_the_operator_did_not_enable_apply",
+        "tests/test_apply_token_withheld_reasons.py::test_route_says_apply_disabled_when_no_authority_was_wired"
+      ]
+    },
+    {
+      "id": "WR03-order-forgets-board-appliability",
+      "file": "src/copper_mcp/apply_token_reasons.py",
+      "anchor": "    if not board_appliable:\n        return \"board_not_appliable\"\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_apply_token_withheld_reasons.py::test_route_says_board_not_appliable_for_a_derived_identity_board"
+      ]
+    },
+    {
+      "id": "WR04-order-forgets-the-fill-binding",
+      "file": "src/copper_mcp/apply_token_reasons.py",
+      "anchor": "    if fill_bound:\n        return \"fill_bound_candidate\"\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_apply_token_withheld_reasons.py::test_route_says_fill_bound_candidate_for_a_candidate_the_pour_shaped"
+      ]
+    },
+    {
+      "id": "WR05-order-forgets-the-refused-replay",
+      "file": "src/copper_mcp/apply_token_reasons.py",
+      "anchor": "    if not replay_accepted:\n        return \"replay_refused\"\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_apply_token_withheld_reasons.py::test_placement_says_replay_refused_and_that_used_to_be_the_swallowed_exception"
+      ]
+    },
+    {
+      "id": "WR06-order-forgets-that-a-candidate-must-move",
+      "file": "src/copper_mcp/apply_token_reasons.py",
+      "anchor": "    if not candidate_moves:\n        return \"no_move\"\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_apply_token_withheld_reasons.py::test_placement_says_no_move_when_the_candidate_writes_the_board_it_read"
+      ]
+    },
+    {
+      "id": "WR07-a-surface-that-mints-nothing-is-told-it-merely-did-not-ask",
+      "file": "src/copper_mcp/apply_token_reasons.py",
+      "anchor": "    if not surface_mints_tokens:\n        return \"unsupported_surface\"\n    if not requested:\n        return \"not_requested\"\n",
+      "replacement": "    if not requested:\n        return \"not_requested\"\n    if not surface_mints_tokens:\n        return \"unsupported_surface\"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_apply_token_withheld_reasons.py::test_file_backed_layered_route_says_unsupported_surface_on_every_outcome",
+        "tests/test_apply_token_withheld_reasons.py::test_live_route_says_unsupported_surface_because_it_mints_nothing",
+        "tests/test_apply_token_withheld_reasons.py::test_live_placement_says_unsupported_surface"
+      ]
+    },
+    {
+      "id": "WR08-placement-swallows-the-refused-replay-again",
+      "file": "src/copper_mcp/placement_preview.py",
+      "anchor": "            replay_accepted = False\n",
+      "replacement": "            pass\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_apply_token_withheld_reasons.py::test_placement_says_replay_refused_and_that_used_to_be_the_swallowed_exception"
+      ]
+    },
+    {
+      "id": "WR09-route-returns-a-bare-null-on-an-already-connected-net",
+      "file": "src/copper_mcp/route_preview.py",
+      "anchor": "                \"connectivity_evidence\" if result.connected.fill_polygons else None\n            ),\n            apply_token_withheld_reason=withheld_without_candidate,\n",
+      "replacement": "                \"connectivity_evidence\" if result.connected.fill_polygons else None\n            ),\n            apply_token_withheld_reason=None,\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_apply_token_withheld_reasons.py::test_route_says_no_candidate_when_the_net_is_already_connected"
+      ]
+    },
+    {
+      "id": "WR10-route-accepts-a-reason-that-quotes-the-board",
+      "file": "src/copper_mcp/route_preview.py",
+      "anchor": "        elif self.apply_token_withheld_reason not in APPLY_TOKEN_WITHHELD_REASONS:\n",
+      "replacement": "        elif self.apply_token_withheld_reason is None:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_apply_token_withheld_reasons.py::test_a_route_preview_refuses_a_reason_that_is_not_in_the_set"
+      ]
+    },
+    {
+      "id": "WR11-placement-serializes-a-withheld-token-with-no-reason",
+      "file": "src/copper_mcp/placement/contracts.py",
+      "anchor": "        if self.apply_token is None and self.apply_token_withheld_reason is None:\n",
+      "replacement": "        if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_apply_token_withheld_reasons.py::test_a_placement_result_with_neither_a_token_nor_a_reason_never_serializes"
+      ]
+    },
+    {
+      "id": "WR12-layered-accepts-a-token-and-a-reason-together",
+      "file": "src/copper_mcp/layered_route_preview.py",
+      "anchor": "    elif apply_token_withheld_reason is not None:\n        raise LayeredRoutePreviewError(\"an issued apply token cannot also be withheld\")\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_apply_token_withheld_reasons.py::test_a_layered_document_refuses_a_token_that_also_carries_a_reason"
+      ]
+    },
+    {
+      "id": "WR13-public-route-contract-accepts-token-and-reason",
+      "file": "src/copper_mcp/mcp_contracts.py",
+      "anchor": "        if (self.apply_token is None) == (self.apply_token_withheld_reason is None):\n            raise ValueError(\n                \"a route preview carries exactly one of apply token or withheld reason\"\n            )\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_apply_token_withheld_reasons.py::test_public_route_contract_refuses_token_reason_ambiguity"
+      ]
+    },
+    {
+      "id": "WR14-public-layered-contract-accepts-a-bare-null",
+      "file": "src/copper_mcp/mcp_contracts.py",
+      "anchor": "        if (self.apply_token is None) == (self.apply_token_withheld_reason is None):\n            raise ValueError(\n                \"a layered route preview carries exactly one of apply token or withheld reason\"\n            )\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_apply_token_withheld_reasons.py::test_public_layered_contract_refuses_missing_reason"
+      ]
+    },
+    {
+      "id": "WR15-public-placement-contract-accepts-token-and-reason",
+      "file": "src/copper_mcp/mcp_contracts.py",
+      "anchor": "        if (self.apply_token is None) == (self.apply_token_withheld_reason is None):\n            raise ValueError(\n                \"a placement preview carries exactly one of apply token or withheld reason\"\n            )\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_apply_token_withheld_reasons.py::test_public_placement_contract_refuses_token_reason_ambiguity"
+      ]
+    }
+  ]
+}
