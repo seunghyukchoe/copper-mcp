@@ -711,6 +711,20 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   safe proposer/disposer seam, not evidence of better routing: the predeclared crossing fixture
   already finishes without repair. Issue closure still requires broader held-out improvement and
   deterministic reference replay evidence without weakening physical or work gates.
+  Re-parked on measurement (2026-08-20). B-124 is the census the held-out gate was blocked on: the
+  coordinator ran whole-board, without `repair_settings`, once per board across the 20 committed
+  SimpleRouteJson boards, and the repair transaction's firing precondition was reached on
+  **0 of 20**. The reason is earlier than the precondition. The coordinator admits **no** board of
+  this corpus — 16 refused for the two-pin conjunct, 4 unable to form a two-request envelope — so it
+  makes zero physical-gate calls and never enters its negotiation loop, and the whole-board
+  negotiated completion count is 0 nets against the per-net reference baseline's 70 of 117. That
+  zero is an admission refusal, not a route. The two constraints turn out to be complementary on
+  this corpus: every net B-088 routed carries three or more pads, and every exactly-two-pad net is
+  one of B-088's 36 `off_grid` refusals. Under the stop rule fixed before the run, **no
+  repair-enablement or tuning slice follows**. What would unblock the held-out gate is now named
+  rather than assumed: a negotiated slice that admits multi-pin nets, or a redistributable corpus
+  whose two-pad nets share one world grid at a common step. Neither was attempted here, and B-124
+  supports no claim about local repair, because repair never ran.
 - [ ] **SI/PI/thermal/DFM surrogate hooks with authoritative signoff, parked behind #99**
   ([#91](https://github.com/seunghyukchoe/copper-mcp/issues/91)). The half of this that carries the
   safety property is the signoff, not the surrogate — any claim surfaced to a caller comes from an

@@ -8,6 +8,18 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- The negotiated coordinator now has its first whole-board measurement on a real corpus. B-124
+  runs `negotiate_routes` **without** `repair_settings` once per board across the 20 committed
+  SimpleRouteJson boards and records how often ADR-0117's local-repair transaction would have an
+  input. The answer is **0 of 20**, and earlier than expected: the coordinator admits no board at
+  all, makes zero physical-gate calls, and never enters its negotiation loop. The first negotiated
+  slice needs exactly two selected-layer pads per net and one shared world grid, and on this corpus
+  those conjuncts are complementary — every net B-088 routed has three or more pads, and every
+  exactly-two-pad net is one of B-088's 36 `off_grid` refusals. Whole-board negotiated completion is
+  therefore 0 nets against the per-net reference baseline's 70 of 117, as an admission refusal
+  rather than a routing result. The predeclared stop rule fires: no repair-enablement or tuning
+  slice follows and [issue #90](https://github.com/seunghyukchoe/copper-mcp/issues/90) re-parks.
+  This adds no production code, repair authority, or routing-quality claim (`B-124`, `D-218`).
 - An internal, non-public authoritative-signoff seam now records closed,
   candidate- and revision-bound SI/PI/thermal/DFM evidence vocabulary with typed refusal and
   non-claim outcomes. No bounded authoritative executor is configured, so production cannot
