@@ -1,0 +1,79 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "NCC01-any-gate-failure-counts-as-a-clearance-violation",
+      "file": "scripts/benchmark_negotiated_corpus_census.py",
+      "anchor": "        if observation.failure != PhysicalClearanceFailure.CLEARANCE_VIOLATION.value:\n            continue\n",
+      "replacement": "        if observation.failure is None and False:\n            continue\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_corpus_census.py::test_each_earlier_rung_is_reported_for_the_input_that_stops_there"
+      ]
+    },
+    {
+      "id": "NCC02-completeness-conjunct-dropped",
+      "file": "scripts/benchmark_negotiated_corpus_census.py",
+      "anchor": "        complete = observation.candidates + connectable >= submitted\n",
+      "replacement": "        complete = True\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_corpus_census.py::test_each_earlier_rung_is_reported_for_the_input_that_stops_there"
+      ]
+    },
+    {
+      "id": "NCC03-two-violating-net-conjunct-relaxed-to-one",
+      "file": "scripts/benchmark_negotiated_corpus_census.py",
+      "anchor": "        elif observation.violating_nets < 2:\n",
+      "replacement": "        elif observation.violating_nets < 1:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_corpus_census.py::test_each_earlier_rung_is_reported_for_the_input_that_stops_there"
+      ]
+    },
+    {
+      "id": "NCC04-b088-baseline-drift-check-removed",
+      "file": "scripts/benchmark_negotiated_corpus_census.py",
+      "anchor": "        if expected is None or routed_here != expected:\n            raise NegotiatedCensusError(\n",
+      "replacement": "        if expected is None and False:\n            raise NegotiatedCensusError(\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_corpus_census.py::test_a_submitted_set_that_drifts_from_the_recorded_baseline_is_refused"
+      ]
+    },
+    {
+      "id": "NCC05-observer-effect-control-removed",
+      "file": "scripts/benchmark_negotiated_corpus_census.py",
+      "anchor": "    if instrumented != control:\n        raise NegotiatedCensusError(\n",
+      "replacement": "    if instrumented != control and False:\n        raise NegotiatedCensusError(\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_corpus_census.py::test_an_observer_that_perturbs_the_published_result_is_refused"
+      ]
+    },
+    {
+      "id": "NCC06-admission-cross-check-removed",
+      "file": "scripts/benchmark_negotiated_corpus_census.py",
+      "anchor": "        if expected is None or instrumented[\"diagnostic\"] != expected:\n            raise NegotiatedCensusError(\n",
+      "replacement": "        if expected is None and False:\n            raise NegotiatedCensusError(\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_corpus_census.py::test_an_admission_predicate_that_disagrees_with_the_coordinator_is_refused"
+      ]
+    },
+    {
+      "id": "NCC07-refusal-attribution-no-longer-checked-against-the-diagnostic",
+      "file": "scripts/benchmark_negotiated_corpus_census.py",
+      "anchor": "        if expected is None or instrumented[\"diagnostic\"] != expected:\n",
+      "replacement": "        if expected is None or False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_corpus_census.py::test_a_predicate_that_names_the_wrong_conjunct_is_refused"
+      ]
+    }
+  ]
+}
