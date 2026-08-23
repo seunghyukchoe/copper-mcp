@@ -125,7 +125,7 @@ def _placement_gate(snapshot: Snapshot, conversion: Any, settings: Settings) -> 
     if conversion.snapshot is None:
         return "conversion_refused"
     content = conversion.snapshot.content
-    subjects = sorted(item.id for item in content.footprints)[:1]
+    subjects = sorted(item.id for item in content.footprints if getattr(item, "pad_ids", ()))[:1]
     if not subjects:
         return "placement_no_candidate"
     request = {"board": snapshot.relative, "constraints": dict(CONSTRAINTS), "subjects": subjects}
@@ -242,6 +242,10 @@ def _git_state(root: Path) -> tuple[str, bool]:
     return commit, dirty
 
 
+def _runner_bytes(path: Path) -> bytes:
+    return path.read_bytes()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--corpus", required=True, type=Path)
@@ -257,10 +261,22 @@ def main() -> int:
     settings = Settings(workspace=corpus)
     if settings.allow_apply or settings.allow_live_ipc or settings.allow_live_apply:
         raise SystemExit("read-only census requires apply and live IPC flags to remain disabled")
-    commit, dirty = _git_state(Path(__file__).resolve().parents[1])
+    root = Path(__file__).resolve().parents[1]
+    runner_path = Path(__file__).resolve()
+    commit, dirty = _git_state(root)
+    if dirty:
+        raise SystemExit("measurement worktree must start clean")
+    runner_source = _runner_bytes(runner_path)
     result = measure_frozen_corpus(corpus, settings, superseded=args.superseded)
+    final_commit, final_dirty = _git_state(root)
+    if final_commit != commit:
+        raise SystemExit("measurement commit changed during run")
+    if final_dirty:
+        raise SystemExit("measurement worktree became dirty during run")
+    if _runner_bytes(runner_path) != runner_source:
+        raise SystemExit("runner source changed during run")
     result.update({"benchmark": "frozen-appliability-census-v1", "commit": commit, "dirty": dirty})
-    result["runner_digest"] = "sha256:" + hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    result["runner_digest"] = "sha256:" + hashlib.sha256(runner_source).hexdigest()
     payload = json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False)
     result["run_id"] = "sha256:" + hashlib.sha256(payload.encode()).hexdigest()
     output.parent.mkdir(parents=True, exist_ok=True)

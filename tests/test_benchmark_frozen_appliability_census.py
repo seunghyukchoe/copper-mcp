@@ -97,7 +97,7 @@ def test_route_gate_preserves_typed_source_refusal(monkeypatch: pytest.MonkeyPat
 
 
 def _placement_conversion() -> SimpleNamespace:
-    footprint = SimpleNamespace(id="footprint:one")
+    footprint = SimpleNamespace(id="footprint:one", pad_ids=("pad:one",))
     return SimpleNamespace(
         snapshot=SimpleNamespace(content=SimpleNamespace(footprints=[footprint]))
     )
@@ -136,6 +136,39 @@ def test_placement_gate_accepts_production_render(monkeypatch: pytest.MonkeyPatc
     )
     assert captured["source"] == b"source"
     assert captured["relative_path"] == "b.kicad_pcb"
+
+
+def test_placement_gate_skips_lexically_first_padless_footprint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    conversion = SimpleNamespace(
+        snapshot=SimpleNamespace(
+            content=SimpleNamespace(
+                footprints=[
+                    SimpleNamespace(id="footprint:aaa", pad_ids=()),
+                    SimpleNamespace(id="footprint:bbb", pad_ids=("pad:bbb",)),
+                ]
+            )
+        )
+    )
+
+    def source_bound(intent, source, relative_path, board_revision, settings, **kwargs):
+        captured["subjects"] = intent.subject_refs
+        return SimpleNamespace(status="previewed", candidate=object())
+
+    monkeypatch.setattr(census, "_preview_placement_source", source_bound)
+    monkeypatch.setattr(
+        census, "render_kicad_placement_candidate_board", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(census, "parse_limits_for", lambda settings: object())
+    result = census._placement_gate(
+        census.Snapshot(Path("b"), "b.kicad_pcb", b"source", "0" * 64),
+        conversion,
+        SimpleNamespace(max_placement_subjects=64, max_placement_rules=256),
+    )
+    assert result == "appliable"
+    assert captured["subjects"] == ("footprint:bbb",)
 
 
 def test_placement_gate_classifies_no_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -283,6 +316,63 @@ def test_output_is_aggregate_and_self_digest_is_verifiable(
             json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
         ).hexdigest()
     )
+
+
+def test_main_refuses_commit_drift_before_writing_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    corpus, superseded = _make_corpus(tmp_path, count=18)
+    output = tmp_path / "commit-drift.json"
+    states = iter([("a" * 40, False), ("b" * 40, False)])
+    monkeypatch.setattr(census, "_git_state", lambda root: next(states))
+    monkeypatch.setattr(census, "measure_frozen_corpus", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "runner",
+            "--corpus",
+            str(corpus),
+            "--output",
+            str(output),
+            "--superseded",
+            superseded[0],
+            "--superseded",
+            superseded[1],
+        ],
+    )
+    with pytest.raises(SystemExit, match="commit changed"):
+        census.main()
+    assert not output.exists()
+
+
+def test_main_refuses_runner_source_drift_before_writing_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    corpus, superseded = _make_corpus(tmp_path, count=18)
+    output = tmp_path / "runner-drift.json"
+    runner_reads = iter([b"before", b"after"])
+    monkeypatch.setattr(census, "_git_state", lambda root: ("a" * 40, False))
+    monkeypatch.setattr(census, "_runner_bytes", lambda path: next(runner_reads))
+    monkeypatch.setattr(census, "measure_frozen_corpus", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "runner",
+            "--corpus",
+            str(corpus),
+            "--output",
+            str(output),
+            "--superseded",
+            superseded[0],
+            "--superseded",
+            superseded[1],
+        ],
+    )
+    with pytest.raises(SystemExit, match="runner source changed"):
+        census.main()
+    assert not output.exists()
 
 
 def test_alternate_existing_exclusion_pair_cannot_reuse_the_frozen_fingerprint(
