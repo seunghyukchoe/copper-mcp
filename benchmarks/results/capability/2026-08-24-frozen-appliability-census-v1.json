@@ -1,0 +1,20 @@
+{
+  "benchmark": "frozen-appliability-census-v1",
+  "cohort_count": 18,
+  "commit": "359397e02e47871228888b52b11be1fe00cb2b9b",
+  "corpus_fingerprint": "sha256:afe5d9d09b4aa89ffa8d5ae84df284ee",
+  "dirty": false,
+  "placement_gate": {
+    "conversion_refused": 3,
+    "placement_no_candidate": 1,
+    "placement_source_preservation_refused": 14
+  },
+  "route_gate": {
+    "appliable": 5,
+    "conversion_refused": 3,
+    "route_identity_refused": 10
+  },
+  "run_id": "sha256:c89dcd2adc95f6c60c6f991bf31936833f569cb5b0b7a0f4d5deda65e1aaa350",
+  "runner_digest": "sha256:e3378aebf20ea6126e1cd7fe62ebc86e6b8975f0ef4715412c00a65882587de7",
+  "source_hashes_unchanged": true
+}

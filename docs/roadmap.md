@@ -435,10 +435,10 @@ route-quality claim attaches to the work — `B-105` measured zero changed verdi
 
 ## M3 — Safe candidate application
 
-Tracker state: 3 open — [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68) the IPC
-one-undo-commit apply, [#170](https://github.com/seunghyukchoe/copper-mcp/issues/170) DRC
-reproducibility, and [#52](https://github.com/seunghyukchoe/copper-mcp/issues/52) placement apply.
-Both file-backed applies ship; the live one does not.
+Tracker state: 2 open — [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68) the IPC
+one-undo-commit apply and [#52](https://github.com/seunghyukchoe/copper-mcp/issues/52) placement
+apply. [#170](https://github.com/seunghyukchoe/copper-mcp/issues/170) is closed by the DRC
+comparability policy. Both file-backed applies ship; the live one does not.
 
 ### Entry criteria, not a start date
 
@@ -454,14 +454,14 @@ independent reasons, none of which is a re-estimate:
 - **The unit does not survive contact.** 50–80 hours is 68–109 agent runs against an observed 13
   merges in the week after `v0.7.0`. The figure was never in the same currency as the delivery rate.
 
-What replaces it is four entry criteria. **Two of them are not agent-executable.**
+What replaces it is four entry criteria. **Only E3 is not agent-executable.**
 
 | | Criterion | Why it gates apply |
 |---|---|---|
 | **E1 — complete** | Legible reasons for a withheld apply token, as a closed literal set | [ADR-0120](adr/0120-withheld-apply-authority-has-a-closed-reason.md) gives all six preview surfaces one non-echoing eight-value vocabulary and enforces that every response carries exactly one of a token and a reason. |
-| **E2** | A DRC reproducibility policy ([#170](https://github.com/seunghyukchoe/copper-mcp/issues/170)) | An apply's evidence is DRC evidence, and `B-107` found DRC counts differing between two runs of identical bytes at the same commit. |
+| **E2 — complete** | A DRC reproducibility policy ([#170](https://github.com/seunghyukchoe/copper-mcp/issues/170)) | ADR-0109 requires every published count to carry its comparability and prohibits differentials unless repeated runs agree exactly; #170 is closed. |
 | **E3** | One real-editor IPC observation, **or** a recorded park of #68 | `docs/handoff/project-state.md` records that no successful real-editor IPC oracle run has ever happened. **May need the operator** — the workstation IPC server is disabled, and enabling it is a change to the operator's machine. |
-| **E4** | Appliability re-measured on the frozen corpus | The current figure, 5 of 13 converting saves, is argued forward from a run on a tree that is not the current one. |
+| **E4 — complete** | Appliability re-measured on the frozen corpus | B-128 runs both production source-preservation gates at a clean commit over the frozen 18-save selection: 15 convert, route patching is structurally appliable on 5, and placement replay renders on 0. No apply or DRC runs. |
 
 The recommendation on E3, which the operator may take or decline, is to **park** #68: the mutation
 would be built on a transport this project has never successfully spoken to, and the protocol

@@ -8,6 +8,14 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- The M3 file-apply entry census now replays the two production source-preservation gates over
+  B-112/B-117's frozen 18-save private selection from a clean commit. Fifteen saves convert;
+  route patching remains structurally appliable on 5, while placement replay renders on 0. The
+  self-digested public artifact contains aggregate verdicts and a truncated corpus fingerprint,
+  never board names, paths, per-board digests, geometry, or bytes. The read-only runner uses the
+  bounded workspace reader, verifies all source hashes after measurement, and disables apply and
+  live IPC. This closes M3 entry criterion E4 without claiming a write, DRC result, editor undo,
+  electrical, fabrication, or hardware acceptance (`B-128`, `D-222`, `R-173`, `SEC-160`).
 - The negotiated coordinator now has its first whole-board measurement on a real corpus. B-124
   runs `negotiate_routes` **without** `repair_settings` once per board across the 20 committed
   SimpleRouteJson boards and records how often ADR-0117's local-repair transaction would have an
