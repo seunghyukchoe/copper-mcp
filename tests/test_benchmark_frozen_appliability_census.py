@@ -441,7 +441,7 @@ def test_committed_result_is_bound_redacted_and_self_digested() -> None:
     )
     assert report["cohort_count"] == 18
     assert report["dirty"] is False
-    assert report["commit"] == "dc095c4d4735f9cdd8bf1ddb03fb229fb665ffed"
+    assert report["commit"] == "359397e02e47871228888b52b11be1fe00cb2b9b"
     assert report["corpus_fingerprint"] == census.PREDECLARED_CORPUS_FINGERPRINT
     assert report["source_hashes_unchanged"] is True
     assert report["route_gate"] == {
