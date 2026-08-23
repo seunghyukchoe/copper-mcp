@@ -104,34 +104,51 @@ def _placement_conversion() -> SimpleNamespace:
 
 
 def test_placement_gate_accepts_production_render(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        census,
-        "preview_placement",
-        lambda request, settings: SimpleNamespace(status="previewed", candidate=object()),
-    )
+    captured: dict[str, object] = {}
+
+    def source_bound(intent, source, relative_path, board_revision, settings, **kwargs):
+        captured.update(
+            source=source,
+            relative_path=relative_path,
+            board_revision=board_revision,
+            intent=intent,
+            settings=settings,
+        )
+        return SimpleNamespace(status="previewed", candidate=object())
+
+    monkeypatch.setattr(census, "_preview_placement_source", source_bound)
     monkeypatch.setattr(
         census, "render_kicad_placement_candidate_board", lambda *args, **kwargs: None
     )
     monkeypatch.setattr(census, "parse_limits_for", lambda settings: object())
     assert (
         census._placement_gate(
-            census.Snapshot(Path("b"), "b.kicad_pcb", b"source", ""),
+            census.Snapshot(
+                Path("b"),
+                "b.kicad_pcb",
+                b"source",
+                __import__("hashlib").sha256(b"source").hexdigest(),
+            ),
             _placement_conversion(),
-            object(),
+            SimpleNamespace(max_placement_subjects=64, max_placement_rules=256),
         )
         == "appliable"
     )
+    assert captured["source"] == b"source"
+    assert captured["relative_path"] == "b.kicad_pcb"
 
 
 def test_placement_gate_classifies_no_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         census,
-        "preview_placement",
-        lambda request, settings: SimpleNamespace(status="refused", candidate=None),
+        "_preview_placement_source",
+        lambda *args, **kwargs: SimpleNamespace(status="refused", candidate=None),
     )
     assert (
         census._placement_gate(
-            census.Snapshot(Path("b"), "b", b"source", ""), _placement_conversion(), object()
+            census.Snapshot(Path("b"), "b.kicad_pcb", b"source", ""),
+            _placement_conversion(),
+            SimpleNamespace(max_placement_subjects=64, max_placement_rules=256),
         )
         == "placement_no_candidate"
     )
@@ -142,8 +159,8 @@ def test_placement_gate_redacts_kicad_refusal_and_unexpected_errors(
 ) -> None:
     monkeypatch.setattr(
         census,
-        "preview_placement",
-        lambda request, settings: SimpleNamespace(status="previewed", candidate=object()),
+        "_preview_placement_source",
+        lambda *args, **kwargs: SimpleNamespace(status="previewed", candidate=object()),
     )
     monkeypatch.setattr(
         census,
@@ -153,8 +170,11 @@ def test_placement_gate_redacts_kicad_refusal_and_unexpected_errors(
         ),
     )
     monkeypatch.setattr(census, "parse_limits_for", lambda settings: object())
-    snapshot = census.Snapshot(Path("b"), "b.kicad_pcb", b"source", "")
-    assert census._placement_gate(snapshot, _placement_conversion(), object()) == (
+    snapshot = census.Snapshot(
+        Path("b"), "b.kicad_pcb", b"source", __import__("hashlib").sha256(b"source").hexdigest()
+    )
+    settings = SimpleNamespace(max_placement_subjects=64, max_placement_rules=256)
+    assert census._placement_gate(snapshot, _placement_conversion(), settings) == (
         "placement_source_preservation_refused"
     )
     monkeypatch.setattr(
@@ -163,7 +183,7 @@ def test_placement_gate_redacts_kicad_refusal_and_unexpected_errors(
         lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("secret")),
     )
     assert (
-        census._placement_gate(snapshot, _placement_conversion(), object()) == "measurement_error"
+        census._placement_gate(snapshot, _placement_conversion(), settings) == "measurement_error"
     )
 
 
@@ -184,6 +204,13 @@ def test_measurement_keeps_route_result_when_placement_fails_and_detects_source_
 
     monkeypatch.setattr(census, "_route_gate", route_and_mutate)
     monkeypatch.setattr(census, "_placement_gate", lambda *args: "measurement_error")
+    expected = census._fingerprint(
+        census._snapshot(
+            census.select_frozen_corpus(corpus, superseded_phono_v2=superseded),
+            corpus,
+            max_bytes=1024,
+        )
+    )
     result = census.measure_frozen_corpus(
         corpus,
         SimpleNamespace(
@@ -193,6 +220,7 @@ def test_measurement_keeps_route_result_when_placement_fails_and_detects_source_
             allow_live_apply=False,
         ),
         superseded=superseded,
+        expected_fingerprint=expected,
     )
     assert result["route_gate"] == {"appliable": 18}
     assert result["placement_gate"] == {"measurement_error": 18}
@@ -206,6 +234,7 @@ def test_measurement_keeps_route_result_when_placement_fails_and_detects_source_
                 allow_live_apply=False,
             ),
             superseded=superseded,
+            expected_fingerprint=expected,
         )
 
 
@@ -246,7 +275,7 @@ def test_output_is_aggregate_and_self_digest_is_verifiable(
     assert not any(key in report for key in ("boards", "paths", "board_digests"))
     assert all(str(corpus) not in json.dumps(value) for value in report.values())
     payload = dict(report)
-    digest = payload.pop("self_digest")
+    digest = payload.pop("run_id")
     assert (
         digest
         == "sha256:"
@@ -254,6 +283,42 @@ def test_output_is_aggregate_and_self_digest_is_verifiable(
             json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
         ).hexdigest()
     )
+
+
+def test_alternate_existing_exclusion_pair_cannot_reuse_the_frozen_fingerprint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    corpus, superseded = _make_corpus(tmp_path, count=18)
+    expected = census._fingerprint(
+        census._snapshot(
+            census.select_frozen_corpus(corpus, superseded_phono_v2=superseded),
+            corpus,
+            max_bytes=1024,
+        )
+    )
+    for name in superseded:
+        (corpus / name).unlink()
+    (corpus / "phono-v2/pcb/board-0.kicad_pcb").unlink()
+    (corpus / "other/replacement.kicad_pcb").write_bytes(b"replacement")
+    alternate = [
+        "phono-v2/pcb/alternate-a.kicad_pcb",
+        "phono-v2/pcb/alternate-b.kicad_pcb",
+    ]
+    for name in alternate:
+        (corpus / name).write_bytes(b"alternate")
+    monkeypatch.setattr(census, "_convert", lambda *args: pytest.fail("gates must not run"))
+    with pytest.raises(RuntimeError, match="fingerprint"):
+        census.measure_frozen_corpus(
+            corpus,
+            SimpleNamespace(
+                max_board_bytes=1024,
+                allow_apply=False,
+                allow_live_ipc=False,
+                allow_live_apply=False,
+            ),
+            superseded=alternate,
+            expected_fingerprint=expected,
+        )
 
 
 def test_output_inside_corpus_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -275,6 +340,58 @@ def test_output_inside_corpus_is_refused(tmp_path: Path, monkeypatch: pytest.Mon
     )
     with pytest.raises(SystemExit, match="outside"):
         census.main()
+
+
+def test_committed_result_is_bound_redacted_and_self_digested() -> None:
+    root = Path(__file__).resolve().parents[1]
+    report = json.loads(
+        (
+            root / "benchmarks/results/capability/2026-08-24-frozen-appliability-census-v1.json"
+        ).read_text()
+    )
+    assert report["cohort_count"] == 18
+    assert report["dirty"] is False
+    assert report["commit"] == "dc095c4d4735f9cdd8bf1ddb03fb229fb665ffed"
+    assert report["corpus_fingerprint"] == census.PREDECLARED_CORPUS_FINGERPRINT
+    assert report["source_hashes_unchanged"] is True
+    assert report["route_gate"] == {
+        "appliable": 5,
+        "conversion_refused": 3,
+        "route_identity_refused": 10,
+    }
+    assert report["placement_gate"] == {
+        "conversion_refused": 3,
+        "placement_no_candidate": 1,
+        "placement_source_preservation_refused": 14,
+    }
+    assert (
+        report["runner_digest"]
+        == "sha256:"
+        + hashlib.sha256(
+            (root / "scripts/benchmark_frozen_appliability_census.py").read_bytes()
+        ).hexdigest()
+    )
+    payload = dict(report)
+    run_id = payload.pop("run_id")
+    assert (
+        run_id
+        == "sha256:"
+        + hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        ).hexdigest()
+    )
+    serialized = json.dumps(report, sort_keys=True)
+    for forbidden in (
+        ".kicad_pcb",
+        "phono",
+        "footprint",
+        "segment",
+        "coordinate",
+        "apply_token",
+        "board_bytes",
+        "/Users/",
+    ):
+        assert forbidden not in serialized
 
 
 def test_oversized_source_is_refused_before_an_output_can_be_written(tmp_path: Path) -> None:

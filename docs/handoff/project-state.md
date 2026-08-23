@@ -230,9 +230,10 @@ worse than none, because it will be ignored.
   the same bytes twice and nine boards' DRC sections still differed — an `error_count` of 936 versus
   941, `hole_clearance` 201 versus 202, a whole `tracks_crossing` type present in one run and absent
   from the other. Authoritative KiCad DRC counts are **not reproducible run to run on identical
-  bytes** ([#170](https://github.com/seunghyukchoe/copper-mcp/issues/170), open), so any published
-  count is a claim about one invocation and never about the board. Every differential in B-107 and
-  B-108 excludes the DRC section for this reason.
+  bytes**. [#170](https://github.com/seunghyukchoe/copper-mcp/issues/170) is now closed by
+  ADR-0109's comparability policy, so any published count is a claim about one invocation unless
+  repeated runs agree exactly. Every differential in B-107 and B-108 excludes the DRC section for
+  this reason.
 - **Placement preview measures legality-as-found, not quality.** The real-board sweep ran without
   rules, so a clean verdict means *legal as the board already is* and says nothing about whether
   the placement is any good. B-099's headline that the supported subset "never binds on this
@@ -244,8 +245,10 @@ worse than none, because it will be ignored.
 - **Most real boards are unappliable through the file apply gates**, wherever an `Edge.Cuts` outline
   is assembled from `gr_line` segments and any member lacks a single distinct native identity. The
   composite native identity in [ADR-0087](../adr/0087-composite-native-identity-for-assembled-outlines.md)
-  moved both gates from 0 of 11 to 3 of 11 on the surveyed corpus; the current figure is **5 of 13
-  appliable** (`B-107`, 2026-08-13), and the rest remain refused by design.
+  moved both gates from 0 of 11 to 3 of 11 on the surveyed corpus. B-128 now measures the current
+  production gates at a clean commit over the frozen 18-save selection: 15 convert, route patching
+  is structurally appliable on **5**, and placement replay renders on **0**. The remaining cases
+  are refused by design; no apply or DRC ran.
 - **Placement apply is deliberately narrow.** The file-backed service applies only replay-verified
   front-side, orthogonal, native-identity footprints with supported rectangular `F.CrtYd` syntax.
   Author text, fabrication graphics, library identity, properties, 3D-model pose, side flips,
