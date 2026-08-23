@@ -231,7 +231,7 @@ def main() -> int:
     result.update({"benchmark": "frozen-appliability-census-v1", "commit": commit, "dirty": dirty})
     result["runner_digest"] = "sha256:" + hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     payload = json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False)
-    result["self_digest"] = "sha256:" + hashlib.sha256(payload.encode()).hexdigest()
+    result["run_id"] = "sha256:" + hashlib.sha256(payload.encode()).hexdigest()
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     return 0
