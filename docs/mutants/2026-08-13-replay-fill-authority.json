@@ -154,8 +154,8 @@
     {
       "id": "TK01-token-minted-for-a-fill-routed-candidate",
       "file": "src/copper_mcp/route_preview.py",
-      "anchor": "        and _board_is_appliable(snapshot)\n        and result.candidate.fill_binding is None",
-      "replacement": "        and _board_is_appliable(snapshot)",
+      "anchor": "        fill_bound=gate_open and result.candidate.fill_binding is not None,\n",
+      "replacement": "        fill_bound=False,\n",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_route_preview.py::test_a_fill_routed_candidate_is_returned_without_an_apply_token"

@@ -23,13 +23,19 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-218` | `D-219` |
-| [Risk register](risk-register.md) | `R-` | `R-168` | `R-169` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-157` | `SEC-158` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-221` | `D-222` |
+| [Risk register](risk-register.md) | `R-` | `R-172` | `R-173` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-159` | `SEC-160` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-124` | `B-125` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
 The rules:
+
+The 2026-08-24 parallel closure wave pre-assigned `D-219`/`R-170`/`SEC-158`/`ADR-0119`
+to the authoritative-signoff lane and `D-220`/`R-171` to its sibling lane. This record therefore
+takes `D-221`/`R-172`/`SEC-159`/`ADR-0120` rather than racing either branch. `R-169` was deliberately
+spent when that wave was allocated and remains a permanent gap. If either sibling is abandoned,
+its identifiers remain spent under rule 2.
 
 1. **Allocate in the pull request that lands the entry, not before.** The "next free" numbers above
    go stale the moment another branch merges. Two concurrent branches that both reserve `D-137`

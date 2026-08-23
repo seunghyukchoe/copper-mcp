@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0119**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0121**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -194,8 +194,10 @@ never silently widens it.
 | [0116](0116-layered-fill-islands-have-a-measured-source-boundary.md) | Layered fill islands have a measured source boundary | Accepted |
 | [0117](0117-local-exact-repair-is-an-opt-in-verified-transaction.md) | Local exact repair is an opt-in verified transaction | Accepted |
 | [0118](0118-authoritative-signoff-stays-closed-until-a-bounded-executor-exists.md) | Keep authoritative signoff closed until a bounded executor exists | Accepted |
+| — | *0119 is a live parallel-branch claim and is not free; see **Adding an ADR** above.* | — |
+| [0120](0120-withheld-apply-authority-has-a-closed-reason.md) | Withheld apply authority has one closed, non-echoing reason | Accepted |
 
-One hundred and eighteen numbers allocated, one hundred and thirteen records, no duplicates — and
+One hundred and twenty numbers allocated, one hundred and fourteen records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
 its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
 the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
@@ -335,3 +337,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0116: Layered fill islands have a measured source boundary](0116-layered-fill-islands-have-a-measured-source-boundary.md)
 - [ADR-0117: Local exact repair is an opt-in verified transaction](0117-local-exact-repair-is-an-opt-in-verified-transaction.md)
 - [ADR-0118: Keep authoritative signoff closed until a bounded executor exists](0118-authoritative-signoff-stays-closed-until-a-bounded-executor-exists.md)
+- [ADR-0120: Withheld apply authority has one closed, non-echoing reason](0120-withheld-apply-authority-has-a-closed-reason.md)

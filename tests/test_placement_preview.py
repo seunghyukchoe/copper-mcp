@@ -669,6 +669,7 @@ class McpSurfaceTests(unittest.TestCase):
                 "diagnostic",
                 "conversion_diagnostic_counts",
                 "apply_token",
+                "apply_token_withheld_reason",
                 "drc_evidence",
             },
         )

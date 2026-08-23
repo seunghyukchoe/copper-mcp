@@ -14,6 +14,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, WithJsonSchema, model_validator
 
+from copper_mcp.apply_token_reasons import ApplyTokenWithheldReason
+
 
 class _ClosedContract(BaseModel):
     """Base for machine contracts that reject undocumented output fields."""
@@ -1441,7 +1443,7 @@ class RouteFillAuthorityContract(_ClosedContract):
 class _RoutePreviewResponseCommonContract(_ClosedContract):
     """Fields shared by every mutually exclusive route outcome."""
 
-    schema_version: Literal["1.0"]
+    schema_version: Literal["1.1"]
     board_path: Annotated[
         str,
         Field(
@@ -1474,7 +1476,17 @@ class RoutedRoutePreviewContract(_RoutePreviewResponseCommonContract):
     conversion_diagnostic_counts: EmptyRouteDiagnosticCounts
     drc_evidence: RouteCandidateDrcEvidenceContract | None
     apply_token: RouteApplyToken | None
+    #: Null exactly when ``apply_token`` is present, and one of the closed literals otherwise.
+    apply_token_withheld_reason: ApplyTokenWithheldReason | None
     fill_authority: RouteFillAuthorityContract | None
+
+    @model_validator(mode="after")
+    def _token_or_reason(self) -> RoutedRoutePreviewContract:
+        if (self.apply_token is None) == (self.apply_token_withheld_reason is None):
+            raise ValueError(
+                "a route preview carries exactly one of apply token or withheld reason"
+            )
+        return self
 
 
 class ConnectedRoutePreviewContract(_RoutePreviewResponseCommonContract):
@@ -1486,6 +1498,9 @@ class ConnectedRoutePreviewContract(_RoutePreviewResponseCommonContract):
     conversion_diagnostic_counts: EmptyRouteDiagnosticCounts
     drc_evidence: None
     apply_token: None
+    #: Not optional. A status that can never carry a token must always say why, which is what
+    #: makes the closed set worth having: a caller need not special-case a missing field.
+    apply_token_withheld_reason: ApplyTokenWithheldReason
     fill_authority: RouteFillAuthorityContract | None
 
 
@@ -1498,6 +1513,7 @@ class NotRoutedRoutePreviewContract(_RoutePreviewResponseCommonContract):
     conversion_diagnostic_counts: EmptyRouteDiagnosticCounts
     drc_evidence: None
     apply_token: None
+    apply_token_withheld_reason: ApplyTokenWithheldReason
     fill_authority: None
 
 
@@ -1514,6 +1530,7 @@ class StaleBeforeConversionRoutePreviewContract(_RoutePreviewResponseCommonContr
     conversion_diagnostic_counts: EmptyRouteDiagnosticCounts
     drc_evidence: None
     apply_token: None
+    apply_token_withheld_reason: ApplyTokenWithheldReason
     fill_authority: None
 
 
@@ -1526,6 +1543,7 @@ class UnsupportedRoutePreviewContract(_RoutePreviewResponseCommonContract):
     conversion_diagnostic_counts: RouteDiagnosticCounts
     drc_evidence: None
     apply_token: None
+    apply_token_withheld_reason: ApplyTokenWithheldReason
     fill_authority: None
 
 
@@ -1812,7 +1830,7 @@ class LayeredRouteDiagnosticContract(_ClosedContract):
 class _LayeredRoutePreviewResponseCommonContract(_ClosedContract):
     """Fields shared by all mutually exclusive layered preview outcomes."""
 
-    schema_version: Literal["1.0"]
+    schema_version: Literal["1.1"]
     board_path: Annotated[
         str,
         Field(
@@ -1827,7 +1845,18 @@ class _LayeredRoutePreviewResponseCommonContract(_ClosedContract):
     conversion_diagnostic_counts: dict[str, NonNegativeInteger]
     #: Present and non-null only on a live routed proposal that asked for one while live apply
     #: is enabled. The file-backed surface mints nothing and always reports ``null``.
-    apply_token: Annotated[str, Field(min_length=1, max_length=512)] | None = None
+    apply_token: Annotated[str, Field(min_length=1, max_length=512)] | None
+    #: Why the field above is null, from the closed set. The file-backed seam always reports
+    #: ``unsupported_surface`` here, which is the answer ``null`` alone never gave.
+    apply_token_withheld_reason: ApplyTokenWithheldReason | None
+
+    @model_validator(mode="after")
+    def _token_or_reason(self) -> _LayeredRoutePreviewResponseCommonContract:
+        if (self.apply_token is None) == (self.apply_token_withheld_reason is None):
+            raise ValueError(
+                "a layered route preview carries exactly one of apply token or withheld reason"
+            )
+        return self
 
 
 _EmptyLayeredDiagnosticCounts = Annotated[
@@ -1859,7 +1888,8 @@ class NotRoutedLayeredRoutePreviewContract(_LayeredRoutePreviewResponseCommonCon
     candidate: None
     diagnostic: LayeredRouteDiagnosticContract
     drc_evidence: None
-    apply_token: None = None
+    apply_token: None
+    apply_token_withheld_reason: ApplyTokenWithheldReason
     #: A refused proposal reports no fill authority, including the ``stale_fill`` refusal: the
     #: refusal is precisely the statement that no fresh fill evidence exists for this board.
     fill_authority: None
@@ -1872,7 +1902,8 @@ class StaleLayeredRoutePreviewContract(_LayeredRoutePreviewResponseCommonContrac
     candidate: None
     diagnostic: LayeredRouteDiagnosticContract
     drc_evidence: None
-    apply_token: None = None
+    apply_token: None
+    apply_token_withheld_reason: ApplyTokenWithheldReason
     fill_authority: None
     conversion_diagnostic_counts: _EmptyLayeredDiagnosticCounts
 
@@ -1882,7 +1913,8 @@ class UnsupportedLayeredRoutePreviewContract(_LayeredRoutePreviewResponseCommonC
     candidate: None
     diagnostic: LayeredRouteDiagnosticContract | None
     drc_evidence: None
-    apply_token: None = None
+    apply_token: None
+    apply_token_withheld_reason: ApplyTokenWithheldReason
     fill_authority: None
     conversion_diagnostic_counts: _LayeredDiagnosticCounts
 
@@ -2336,16 +2368,26 @@ class PlacementPreviewToolResponse(_ClosedContract):
     """Strict structured output contract for ``preview_placement``."""
 
     status: Literal["previewed", "refused", "unsupported_board"]
-    placement_version: Literal["0.1.0"]
+    placement_version: Literal["0.2.0"]
     board_path: str
     board_revision: Digest
     snapshot_digest: Digest | None
     request: PlacementRequestEchoContract | None
     candidate: PlacementCandidateContract | None
     diagnostic: PlacementDiagnosticContract | None
-    apply_token: Annotated[str, Field(min_length=1, max_length=512)] | None = None
+    apply_token: Annotated[str, Field(min_length=1, max_length=512)] | None
+    #: Null exactly when ``apply_token`` is present, and one of the closed literals otherwise.
+    apply_token_withheld_reason: ApplyTokenWithheldReason | None
     drc_evidence: PlacementCandidateDrcEvidenceContract | None
     conversion_diagnostic_counts: dict[str, int]
+
+    @model_validator(mode="after")
+    def _token_or_reason(self) -> PlacementPreviewToolResponse:
+        if (self.apply_token is None) == (self.apply_token_withheld_reason is None):
+            raise ValueError(
+                "a placement preview carries exactly one of apply token or withheld reason"
+            )
+        return self
 
 
 class ApplyVerificationContract(_ClosedContract):

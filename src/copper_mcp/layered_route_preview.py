@@ -20,6 +20,11 @@ from dataclasses import dataclass, replace
 from typing import Any, cast
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
+from copper_mcp.apply_token_reasons import (
+    APPLY_TOKEN_WITHHELD_REASONS,
+    ApplyTokenWithheldReason,
+    apply_token_withheld_reason,
+)
 from copper_mcp.board_ir import NetClass
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import (
@@ -56,6 +61,7 @@ from copper_mcp.routing import (
 from copper_mcp.routing.layered_board_adapter import has_exactly_two_signal_layers
 from copper_mcp.security import read_workspace_file
 
+LAYERED_ROUTE_PREVIEW_SCHEMA_VERSION = "1.1"
 _MAX_GRID_STEP_NM = 1_000_000_000
 _MAX_PAD_ID_CHARACTERS = 164
 _SETTINGS_FIELDS = tuple(
@@ -375,6 +381,7 @@ def _empty_result(
     conversion_diagnostic_counts: dict[str, int] | None = None,
     drc_evidence: LayeredRouteCandidateDrcEvidence | None = None,
     apply_token: str | None = None,
+    apply_token_withheld_reason: ApplyTokenWithheldReason | None = None,
     fill_authority: ZoneFillAuthority | None = None,
     fill_routing_effect: str | None = None,
 ) -> dict[str, object]:
@@ -383,8 +390,15 @@ def _empty_result(
             raise LayeredRoutePreviewError("fill routing effect requires fill authority")
     elif fill_routing_effect not in _LAYERED_FILL_ROUTING_EFFECTS:
         raise LayeredRoutePreviewError("fill authority routing effect is malformed")
+    # Exactly one of the two. The parameter has no usable default: a caller that forgets it is
+    # refused here rather than emitting an unexplained `null` to whoever asked (R-149).
+    if apply_token is None:
+        if apply_token_withheld_reason not in APPLY_TOKEN_WITHHELD_REASONS:
+            raise LayeredRoutePreviewError("a withheld apply token must name a closed reason")
+    elif apply_token_withheld_reason is not None:
+        raise LayeredRoutePreviewError("an issued apply token cannot also be withheld")
     return {
-        "schema_version": "1.0",
+        "schema_version": LAYERED_ROUTE_PREVIEW_SCHEMA_VERSION,
         "status": status,
         "board_path": board_path_value,
         "board_revision": board_revision,
@@ -392,6 +406,7 @@ def _empty_result(
         "request": request.to_dict(),
         "candidate": candidate,
         "apply_token": apply_token,
+        "apply_token_withheld_reason": apply_token_withheld_reason,
         "drc_evidence": None if drc_evidence is None else drc_evidence.to_dict(),
         "fill_authority": (
             None
@@ -401,6 +416,18 @@ def _empty_result(
         "diagnostic": diagnostic,
         "conversion_diagnostic_counts": conversion_diagnostic_counts or {},
     }
+
+
+#: The file-backed layered seam mints no capability under any setting — its parser does not even
+#: accept ``include_apply_token`` — so the reason is a constant. It is still read out of the
+#: shared order rather than typed in beside this surface, which is what keeps the set closed.
+_FILE_BACKED_WITHHELD_REASON = apply_token_withheld_reason(
+    surface_mints_tokens=False,
+    requested=False,
+    apply_enabled=False,
+    has_candidate=False,
+)
+assert _FILE_BACKED_WITHHELD_REASON is not None
 
 
 def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]:
@@ -427,6 +454,7 @@ def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]
             relative_path,
             board_revision,
             diagnostic=_diagnostic_document("stale_revision", "board revision is stale"),
+            apply_token_withheld_reason=_FILE_BACKED_WITHHELD_REASON,
         )
 
     profile = KiCadConstraintProfile(
@@ -446,6 +474,7 @@ def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]
                 "invalid_snapshot", "board is outside the supported Board IR subset"
             ),
             conversion_diagnostic_counts=counts,
+            apply_token_withheld_reason=_FILE_BACKED_WITHHELD_REASON,
         )
     snapshot = conversion.snapshot
     if request.expect_snapshot_digest != snapshot.snapshot_digest:
@@ -458,6 +487,7 @@ def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]
             diagnostic=_diagnostic_document(
                 "stale_revision", "Board IR snapshot revision is stale"
             ),
+            apply_token_withheld_reason=_FILE_BACKED_WITHHELD_REASON,
         )
     if not has_exactly_two_signal_layers(snapshot):
         return _empty_result(
@@ -470,6 +500,7 @@ def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]
                 LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY.value,
                 "board copper stack is outside the public two-layer preview subset",
             ),
+            apply_token_withheld_reason=_FILE_BACKED_WITHHELD_REASON,
         )
 
     pads = {pad.id: pad for pad in snapshot.content.pads}
@@ -485,6 +516,7 @@ def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]
             diagnostic=_diagnostic_document(
                 "invalid_request", "route endpoints are not pads on one common net"
             ),
+            apply_token_withheld_reason=_FILE_BACKED_WITHHELD_REASON,
         )
     net_id = start_pad.net_id
     if net_id is None or net_id != end_pad.net_id:
@@ -497,6 +529,7 @@ def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]
             diagnostic=_diagnostic_document(
                 "invalid_request", "route endpoints are not pads on one common net"
             ),
+            apply_token_withheld_reason=_FILE_BACKED_WITHHELD_REASON,
         )
 
     searched_layer_ids = frozenset(
@@ -533,6 +566,7 @@ def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]
                     LayeredRouteFailureCode.STALE_FILL.value,
                     "the board's cached zone fill does not match a fresh KiCad refill",
                 ),
+                apply_token_withheld_reason=_FILE_BACKED_WITHHELD_REASON,
             )
         verified_fill = tuple(
             VerifiedFill(
@@ -610,6 +644,7 @@ def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]
                 if fill_authority is not None
                 else None
             ),
+            apply_token_withheld_reason=_FILE_BACKED_WITHHELD_REASON,
         )
     assert result.diagnostic is not None
     diagnostic = result.diagnostic
@@ -628,6 +663,7 @@ def preview_layered_route(payload: Any, settings: Settings) -> dict[str, object]
             expanded_states=diagnostic.expanded_states,
             obstacle_checks=diagnostic.obstacle_checks,
         ),
+        apply_token_withheld_reason=_FILE_BACKED_WITHHELD_REASON,
     )
 
 
