@@ -28,11 +28,12 @@ from copper_mcp.adapters.kicad_route_patch import (
 from copper_mcp.config import Settings
 from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.placement.contracts import parse_placement_intent
-from copper_mcp.placement_preview import preview_placement
+from copper_mcp.placement_preview import _preview_placement_source
 from copper_mcp.security import read_workspace_file
 from scripts.benchmark_real_board_capability import CONSTRAINTS, DERIVED_STEMS, _convert
 
 EXPECTED_COHORT = 18
+PREDECLARED_CORPUS_FINGERPRINT = "sha256:afe5d9d09b4aa89ffa8d5ae84df284ee"
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +114,13 @@ def _route_gate(conversion: Any) -> str:
     return "appliable"
 
 
+def _fingerprint(snapshots: Iterable[Snapshot]) -> str:
+    aggregate = hashlib.sha256(
+        "".join(f"{item.relative}:{item.digest}\n" for item in snapshots).encode()
+    ).hexdigest()[:32]
+    return f"sha256:{aggregate}"
+
+
 def _placement_gate(snapshot: Snapshot, conversion: Any, settings: Settings) -> str:
     if conversion.snapshot is None:
         return "conversion_refused"
@@ -122,7 +130,20 @@ def _placement_gate(snapshot: Snapshot, conversion: Any, settings: Settings) -> 
         return "placement_no_candidate"
     request = {"board": snapshot.relative, "constraints": dict(CONSTRAINTS), "subjects": subjects}
     try:
-        result = preview_placement(request, settings)
+        intent = parse_placement_intent(
+            request,
+            max_subjects=settings.max_placement_subjects,
+            max_rules=settings.max_placement_rules,
+        )
+        result = _preview_placement_source(
+            intent,
+            snapshot.source,
+            snapshot.relative,
+            f"sha256:{snapshot.digest}",
+            settings,
+            token_authority=None,
+            mints_apply_tokens=False,
+        )
     except Exception:
         return "measurement_error"
     if result.status != "previewed" or result.candidate is None:
@@ -132,7 +153,7 @@ def _placement_gate(snapshot: Snapshot, conversion: Any, settings: Settings) -> 
             snapshot.source,
             conversion.snapshot,
             result.candidate,
-            parse_placement_intent(request).profile(),
+            intent.profile(),
             limits=parse_limits_for(settings),
         )
     except KiCadPlacementPatchError:
@@ -143,12 +164,25 @@ def _placement_gate(snapshot: Snapshot, conversion: Any, settings: Settings) -> 
 
 
 def measure_frozen_corpus(
-    corpus: Path, settings: Settings, *, superseded: Iterable[str]
+    corpus: Path,
+    settings: Settings,
+    *,
+    superseded: Iterable[str],
+    expected_fingerprint: str = PREDECLARED_CORPUS_FINGERPRINT,
 ) -> dict[str, Any]:
     paths = select_frozen_corpus(corpus, superseded_phono_v2=superseded)
     snapshots = _snapshot(paths, corpus, max_bytes=settings.max_board_bytes)
     if settings.allow_apply or settings.allow_live_ipc or settings.allow_live_apply:
         raise RuntimeError("read-only census requires apply and live IPC flags to remain disabled")
+    if (
+        len(expected_fingerprint) != 39
+        or not expected_fingerprint.startswith("sha256:")
+        or any(character not in "0123456789abcdef" for character in expected_fingerprint[7:])
+    ):
+        raise ValueError("predeclared corpus fingerprint is malformed")
+    actual_fingerprint = _fingerprint(snapshots)
+    if actual_fingerprint != expected_fingerprint:
+        raise RuntimeError("frozen corpus fingerprint does not match the predeclared cohort")
     route_counts: dict[str, int] = {}
     placement_counts: dict[str, int] = {}
     for item in snapshots:
@@ -181,13 +215,10 @@ def measure_frozen_corpus(
     )
     if not unchanged:
         raise RuntimeError("frozen corpus changed during measurement")
-    aggregate = hashlib.sha256(
-        "".join(f"{item.relative}:{item.digest}\n" for item in snapshots).encode()
-    ).hexdigest()[:32]
     return {
         "cohort_count": len(snapshots),
         "source_hashes_unchanged": unchanged,
-        "corpus_fingerprint": f"sha256:{aggregate}",
+        "corpus_fingerprint": actual_fingerprint,
         "route_gate": dict(sorted(route_counts.items())),
         "placement_gate": dict(sorted(placement_counts.items())),
     }
