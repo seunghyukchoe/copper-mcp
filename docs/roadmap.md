@@ -20,7 +20,7 @@ request includes the issue that pull request closes, so its count is the expecte
 | M2 — Routing depth | 6 | 1 | The milestone itself is closed. [#53](https://github.com/seunghyukchoe/copper-mcp/issues/53) remains open and operator-blocked for a contained FreeRouting comparison provider; it is not agent-executable. |
 | M3 — Safe application completion | 2 | 2 | Open: [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68) IPC one-undo-commit apply and [#52](https://github.com/seunghyukchoe/copper-mcp/issues/52) placement apply, whose file-backed half has shipped. Both remaining halves wait on a real-editor operator gate. |
 | M4 — Scene, policy, and evaluation | 4 | 0 | Complete as a tracked accounting fact. The `[~]` items below continue to state narrower capability boundaries rather than hidden open issues. |
-| M5 — Verification and physics | 6 | 2 | Open after this slice: [#90](https://github.com/seunghyukchoe/copper-mcp/issues/90) and [#91](https://github.com/seunghyukchoe/copper-mcp/issues/91). [#167](https://github.com/seunghyukchoe/copper-mcp/issues/167) closes on ADR-0116's measured 500,000-vertex source boundary; [#87](https://github.com/seunghyukchoe/copper-mcp/issues/87) and [#99](https://github.com/seunghyukchoe/copper-mcp/issues/99) are closed. |
+| M5 — Verification and physics | 6 | 2 | Open after this slice: [#90](https://github.com/seunghyukchoe/copper-mcp/issues/90) and [#91](https://github.com/seunghyukchoe/copper-mcp/issues/91) — #91 stays open with `dfm` sign-off now reachable under [ADR-0119](adr/0119-a-signoff-claim-rests-on-repeated-agreement-from-a-registered-backend.md) and SI/PI/thermal still unbacked. [#167](https://github.com/seunghyukchoe/copper-mcp/issues/167) closes on ADR-0116's measured 500,000-vertex source boundary; [#87](https://github.com/seunghyukchoe/copper-mcp/issues/87) and [#99](https://github.com/seunghyukchoe/copper-mcp/issues/99) are closed. |
 | Audio Board Lab #001 — Physical validation | 0 | 1 | Open: [#8](https://github.com/seunghyukchoe/copper-mcp/issues/8). See [the Audio Board Lab gate](#audio-board-lab-001--physical-validation) — as written the issue would validate the board, and the thing that needs validating is the tool. |
 
 Three cautions about this table, because the first two have misled a reader before:
@@ -731,11 +731,22 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   authoritative tool run or is declared a non-claim — and that is the same evidence-binding contract
   #99 has to define first. Design the hook contract against #99's vocabulary rather than inventing a
   second one.
-  Current slice disposition (2026-08-17): the private core seam now carries closed,
-  candidate/revision-bound SI/PI/thermal/DFM evidence vocabulary and surrogate non-claim/refusal
-  behavior. A bounded authoritative executor is not configured, so production cannot create
-  `SIGNED_OFF`; there is no MCP or CLI exposure. #91 remains open for the coordinator-owned
-  executor, fixed-backend evidence binding, and its acceptance tests.
+  Current slice disposition (2026-08-23): the coordinator-owned bounded executor ADR-0118 named
+  now exists, and `SIGNED_OFF` is reachable — **for `dfm` only**. The reason it is only `dfm` is
+  the reason the deferral could be lifted at all: this repository has exactly one authority that
+  answers a physics-or-fabrication question about a candidate, and ADR-0004 made it KiCad's DRC.
+  Under [ADR-0119](adr/0119-a-signoff-claim-rests-on-repeated-agreement-from-a-registered-backend.md)
+  a claim passes a fixed registry (a module constant, no `register()` call), a module-private
+  cooperative evidence-construction guard, and repeated agreement over N ≥ 2 real DRC invocations —
+  B-107's measured count instability is why one invocation cannot carry a claim, and why
+  disagreement refuses rather than downgrades. A run that skipped or excluded checks refuses even
+  when it passed.
+  **What #91 still needs, and it is the larger half:** SI, PI and thermal have no adapter and no
+  authority, so they remain unregistered non-claims. `dfm` sign-off means "KiCad DRC found
+  nothing", which is narrower than manufacturable — `R-174` carries that gap. The surrogate hooks
+  the issue's title asks for are still not built; a surrogate contributes ranking and never
+  approval. There is still no MCP or CLI exposure, and no benchmark: `B-125` was pre-assigned to
+  this slice and declined, because it opens a claim path rather than measuring one.
 - [x] **The ordered-layer per-island fill ceiling**
   ([#167](https://github.com/seunghyukchoe/copper-mcp/issues/167)). ADR-0116 and B-123 separate the
   two costs the issue originally conflated. Each polygon is validated, bounded and canonicalized

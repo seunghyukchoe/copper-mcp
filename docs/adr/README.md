@@ -195,16 +195,17 @@ never silently widens it.
 | [0117](0117-local-exact-repair-is-an-opt-in-verified-transaction.md) | Local exact repair is an opt-in verified transaction | Accepted |
 | [0118](0118-authoritative-signoff-stays-closed-until-a-bounded-executor-exists.md) | Keep authoritative signoff closed until a bounded executor exists | Accepted |
 | — | *0119 is a live parallel-branch claim and is not free; see **Adding an ADR** above.* | — |
+| [0119](0119-a-signoff-claim-rests-on-repeated-agreement-from-a-registered-backend.md) | A sign-off claim rests on repeated agreement from a registered backend | Accepted |
 | [0120](0120-withheld-apply-authority-has-a-closed-reason.md) | Withheld apply authority has one closed, non-echoing reason | Accepted |
 
-One hundred and twenty numbers allocated, one hundred and fourteen records, no duplicates — and
+One hundred and twenty-one numbers allocated, one hundred and fifteen records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
 its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
 the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
 and 0086 are unused; see **Known gaps** above. 0107 was allocated over the live claims 0105 and
 0106 rather than racing them, the mechanism the [ledger README](../ledgers/README.md) describes for
 `D-`/`R-`/`B-` numbers. Both have since landed — 0106 with issue #164's record and 0105 with issue
-#172's — so neither is a gap, and all of 0100 through 0118 are real records in the index above.
+#172's — so neither is a gap, and all of 0100 through 0119 are real records in the index above.
 
 ## Reading order
 
@@ -222,7 +223,7 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - **Durable jobs and persistence** — 0043, 0046, 0047, 0048.
 - **Mutation and authorization** — 0001, 0025, 0059, 0074.
 - **Evidence, evaluation, and review boundaries** — 0041, 0052, 0054, 0098, 0102, 0105, 0107, 0109,
-  0118.
+  0118, 0119.
 
 - [ADR-0001: Candidate-first mutation model](0001-candidate-first.md)
 - [ADR-0002: MCP is an external adapter](0002-mcp-adapter.md)
@@ -337,4 +338,5 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0116: Layered fill islands have a measured source boundary](0116-layered-fill-islands-have-a-measured-source-boundary.md)
 - [ADR-0117: Local exact repair is an opt-in verified transaction](0117-local-exact-repair-is-an-opt-in-verified-transaction.md)
 - [ADR-0118: Keep authoritative signoff closed until a bounded executor exists](0118-authoritative-signoff-stays-closed-until-a-bounded-executor-exists.md)
+- [ADR-0119: A sign-off claim rests on repeated agreement from a registered backend](0119-a-signoff-claim-rests-on-repeated-agreement-from-a-registered-backend.md)
 - [ADR-0120: Withheld apply authority has one closed, non-echoing reason](0120-withheld-apply-authority-has-a-closed-reason.md)
