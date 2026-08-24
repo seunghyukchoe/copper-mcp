@@ -145,11 +145,15 @@ def load_manifest(path: Path) -> tuple[list[CorpusEntry], str]:
             type(identity) is not str
             or not identity
             or identity in identities
+            or any(character in identity for character in ":\r\n")
+            or any(ord(character) < 0x20 for character in identity)
             or visibility not in {"public", "private"}
             or type(relative) is not str
             or not relative
+            or any(character in relative for character in ":\r\n")
+            or any(ord(character) < 0x20 for character in relative)
         ):
-            raise _fixed_error("manifest entry identity or visibility is invalid")
+            raise _fixed_error("manifest entry identity or path is invalid")
         candidate = Path(relative)
         if candidate.is_absolute() or ".." in candidate.parts or candidate.suffix != ".kicad_pcb":
             raise _fixed_error("manifest entry path is unsafe")
