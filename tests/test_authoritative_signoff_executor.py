@@ -249,6 +249,24 @@ def test_a_backend_that_cannot_run_is_a_redacted_refusal_not_an_exception(
     }
 
 
+def test_an_untrusted_workspace_path_is_a_redacted_refusal(tmp_path: Path) -> None:
+    _board, _source, profile, candidate = _workspace_board(tmp_path)
+    settings = Settings(workspace=tmp_path, max_drc_report_bytes=4096)
+
+    result = execute_dfm_signoff("missing.kicad_pcb", candidate, profile, settings)
+
+    assert result.status is SignoffStatus.REFUSED
+    assert result.code is SignoffCode.BACKEND_FAILURE
+    assert result.to_dict() == {
+        "schema": "copper-mcp/authoritative-signoff/v1",
+        "status": "refused",
+        "domain": "dfm",
+        "advisory_present": False,
+        "code": "backend_failure",
+        "diagnostic": "authoritative sign-off could not be completed",
+    }
+
+
 @pytest.mark.skipif(_DISCOVERED_KICAD_CLI is None, reason="kicad-cli is not installed")
 def test_real_kicad_drc_exercises_the_supported_signoff_path_end_to_end(tmp_path: Path) -> None:
     """End to end against the real authority, on the committed two-pad fixture.

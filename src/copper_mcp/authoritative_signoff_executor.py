@@ -56,6 +56,7 @@ from copper_mcp.routing.authoritative_signoff import (
     parse_surrogate_advisory,
 )
 from copper_mcp.routing.contracts import RouteCandidate
+from copper_mcp.security import WorkspaceViolationError
 
 #: The one domain this executor speaks for. It is a module constant rather than a parameter: the
 #: authority it runs answers design-rule questions, and pointing it at `si` would be a naming
@@ -187,7 +188,7 @@ def execute_dfm_signoff(
                     verified_fill=verified_fill,
                 )
             )
-        except KiCadCliError:
+        except (KiCadCliError, WorkspaceViolationError):
             # Deliberately no exception text: a backend's message is untrusted output, and a
             # failure to run is never evidence about the board either way.
             return _refuse(SignoffCode.BACKEND_FAILURE, advisory_present=advisory_present)
