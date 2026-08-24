@@ -86,7 +86,12 @@ obstacle ([ADR-0078](adr/0078-netless-copper-as-obstacle.md)) a fourth, and reus
 
 Copper text remains refused by ADR-0095's five exit conditions on the separate third-party corpus;
 it is not among the three current private-corpus refusals. Curved `Edge.Cuts` alone is not presented
-as its solution: B-114 measured that slice at zero conversions.
+as its solution: B-114 measured that slice at zero conversions. B-129 then removed curves, copper
+text, and root dimensions as three fixed in-memory counterfactual classes: **0 of 13 converted**.
+The ten public terminals are setup semantics 6, copper-layer kind 1, footprint graphic layer 1,
+graphic layer arity 1, and another root semantic construct 1; the three private topology controls
+remain two courtyard and one disjoint-outline refusals. The next agent-only direction is therefore
+a closed public setup-field census, not setup acceptance or another curve/text implementation.
 
 **No "converts every board" result is claimed at any count.** The counts above supersede earlier
 survey figures — including

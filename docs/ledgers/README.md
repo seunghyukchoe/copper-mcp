@@ -23,10 +23,10 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-223` | `D-224` |
-| [Risk register](risk-register.md) | `R-` | `R-174` | `R-175` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-161` | `SEC-162` |
-| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-128` | `B-129` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-224` | `D-225` |
+| [Risk register](risk-register.md) | `R-` | `R-175` | `R-176` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-162` | `SEC-163` |
+| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-129` | `B-130` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
 The rules:
@@ -127,9 +127,10 @@ release them.
    `kicad-cli`, so the only benchmark it could have written would have been a number nothing ran;
    the rows that qualify a DRC count under
    [ADR-0109](../adr/0109-a-drc-count-carries-the-comparability-it-was-taken-with.md) exist
-   precisely so that does not happen quietly. Lanes C and M were never pushed and their blocks —
-   `B-126`/`B-127`/`D-220`/`R-171` and `D-221`/`B-128`/`ADR-0120` — remain unspent live claims
-   rather than gaps until those branches land or are abandoned.
+   precisely so that does not happen quietly. M subsequently landed on reassigned main-line
+   identifiers. C now lands as `B-129`/`D-224`/`R-175`/`SEC-162` after main consumed the tail
+   beyond its original reservation. C's stale `B-126`/`B-127`/`D-220`/`R-171` block remains
+   spent under rule 2 and is not reused.
 
    Two security numbers from that round were deliberately declined and are permanent spent
    numbers. The evidence record did not take its pre-assigned `SEC-147`; it adds validation and
