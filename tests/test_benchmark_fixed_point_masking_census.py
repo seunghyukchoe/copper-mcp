@@ -89,6 +89,26 @@ def test_manifest_rejects_malformed_schema_and_unsafe_or_duplicate_entries(tmp_p
         census.load_manifest(manifest)
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("id", "opaque:variant"),
+        ("id", "opaque\nvariant"),
+        ("path", "board:variant.kicad_pcb"),
+        ("path", "board\nvariant.kicad_pcb"),
+    ],
+)
+def test_manifest_rejects_fingerprint_delimiter_variants(
+    tmp_path: Path, field: str, value: str
+) -> None:
+    _corpus, manifest = _manifest(tmp_path)
+    raw = json.loads(manifest.read_text())
+    raw["entries"][0][field] = value
+    manifest.write_text(json.dumps(raw))
+    with pytest.raises(ValueError, match="identity or path"):
+        census.load_manifest(manifest)
+
+
 def test_external_predeclared_fingerprint_is_required_before_measurement(tmp_path: Path) -> None:
     corpus, manifest = _manifest(tmp_path)
     with pytest.raises(ValueError, match="predeclared"):
