@@ -23,9 +23,9 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-222` | `D-223` |
-| [Risk register](risk-register.md) | `R-` | `R-173` | `R-174` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-160` | `SEC-161` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-223` | `D-224` |
+| [Risk register](risk-register.md) | `R-` | `R-174` | `R-175` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-161` | `SEC-162` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-128` | `B-129` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
@@ -114,6 +114,22 @@ release them.
    `D-204`/`R-157`/`B-113`/`B-114`. Pre-assignment is rule 1's stepping-over with the race removed:
    each later merge resolved this table's textual conflict instead of discovering an identifier
    collision in an already-merged document.
+
+   The 2026-08-20 wave is pre-assignment again, and it is the first round where the *unlanded*
+   half of a block leaves the record. Four lanes were opened on the same base with disjoint
+   blocks, R holding `B-124`/`D-218` and S holding `ADR-0119`/`D-219`/`SEC-158`/`B-125`/`R-170`.
+   R landed as [#210](https://github.com/seunghyukchoe/copper-mcp/pull/210). Before S landed, the
+   main line consumed later identifiers, so conflict resolution retained `ADR-0119` but reassigned
+   S to `D-223`, `SEC-161`, and `R-174`; its original allocations remain spent under rule 2. This
+   is why **`R-169` is a permanent gap** rather than an invitation to tidy the sequence. S also
+   **declined its pre-assigned `B-125`**. Its slice
+   opens a claim path rather than measuring one, and the machine it was built on has no
+   `kicad-cli`, so the only benchmark it could have written would have been a number nothing ran;
+   the rows that qualify a DRC count under
+   [ADR-0109](../adr/0109-a-drc-count-carries-the-comparability-it-was-taken-with.md) exist
+   precisely so that does not happen quietly. Lanes C and M were never pushed and their blocks —
+   `B-126`/`B-127`/`D-220`/`R-171` and `D-221`/`B-128`/`ADR-0120` — remain unspent live claims
+   rather than gaps until those branches land or are abandoned.
 
    Two security numbers from that round were deliberately declined and are permanent spent
    numbers. The evidence record did not take its pre-assigned `SEC-147`; it adds validation and

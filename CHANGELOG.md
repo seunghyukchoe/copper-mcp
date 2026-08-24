@@ -16,6 +16,25 @@ All notable changes are documented here. The format follows
   bounded workspace reader, verifies all source hashes after measurement, and disables apply and
   live IPC. This closes M3 entry criterion E4 without claiming a write, DRC result, editor undo,
   electrical, fabrication, or hardware acceptance (`B-128`, `D-222`, `R-173`, `SEC-160`).
+- Authoritative sign-off can now produce `SIGNED_OFF`, for `dfm` only, through three supported
+  gates that no request or public argument can configure. A **fixed backend registry** — a module
+  constant with no `register()` function — names `copper-mcp-authoritative-v1` for `dfm` and
+  nothing else; `si`, `pi` and `thermal` stay unregistered and answer with a non-claim. A
+  **module-private evidence capability** guards the coordinator-owned construction path; it is a
+  cooperative internal-misuse guard, not an in-process sandbox against privileged private-symbol
+  import or monkeypatching. Serialized evidence is still refused as intake. And a claim
+  requires **repeated agreement**: the executor runs the real KiCad DRC N ≥ 2 times (2–8,
+  defaulting to 2) over one immutable candidate and admits a claim only when the runs agreed
+  exactly on the whole candidate-, source-, and DRC-context-bound in-toto Statement — B-107 measured
+  byte-identical inputs producing different counts, so disagreement is a refusal rather than a
+  quietly weaker claim. A run that skipped or excluded checks refuses even when it passed. The
+  seam is still not exported through MCP or CLI, a caller-supplied backend is still refused
+  without being invoked, a surrogate still cannot sign off, backend failure is still a redacted
+  refusal, and a sign-off is **not** an authorization to write copper — the apply surfaces and
+  their tokens are untouched. Issue #91 remains open for SI, PI and thermal, which have no
+  authority behind them
+  ([ADR-0119](docs/adr/0119-a-signoff-claim-rests-on-repeated-agreement-from-a-registered-backend.md),
+  [issue #91](https://github.com/seunghyukchoe/copper-mcp/issues/91), `D-223`, `R-174`, `SEC-161`).
 - The negotiated coordinator now has its first whole-board measurement on a real corpus. B-124
   runs `negotiate_routes` **without** `repair_settings` once per board across the 20 committed
   SimpleRouteJson boards and records how often ADR-0117's local-repair transaction would have an

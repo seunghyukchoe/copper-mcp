@@ -1,24 +1,38 @@
 """Closed, non-public sign-off seam for candidate-bound physics evidence.
 
 This module is deliberately smaller than a physics engine.  It is the production-core gate
-between a candidate/evidence producer and a future authoritative SI/PI/thermal/DFM adapter.  A
+between a candidate/evidence producer and an authoritative SI/PI/thermal/DFM adapter.  A
 surrogate may rank a candidate, but it cannot enter the claim path.  The only successful result
-is evidence returned by the fixed authoritative backend and bound to exactly one candidate and
-one base revision.
+is evidence minted by a coordinator-owned executor for a backend this module has registered, and
+bound to exactly one candidate and one base revision.
+
+Three closed gates stand between a caller and ``SIGNED_OFF``, and none of them is request-shaped:
+
+* **The backend registry** is a fixed module constant.  It names which ``(backend, version)`` pair
+  may speak for which domain, and it is not extensible at runtime, by argument, or by import.  A
+  domain with no registered backend can only produce a non-claim.
+* **The evidence capability** is a private sentinel.  ``AuthoritativeEvidence`` refuses to
+  construct without it through supported intake and construction paths.  It is a cooperative
+  internal-misuse guard, not a security boundary against privileged same-process Python code.
+* **Comparability** is carried on the evidence rather than assumed of it.  Per ADR-0109 a single
+  authoritative invocation is an observation, not a comparable count, so a claim requires N >= 2
+  invocations over byte-identical inputs that agreed exactly.  Disagreement is a refusal, not a
+  silently weaker claim.
 
 The module has no MCP, persistence, process, network, geometry, board-byte, prompt, or mutation
-authority.  It is intentionally not imported by the public transport layer in this slice.
-Positive authoritative execution is deferred until a coordinator-owned adapter and registration
-boundary are reviewed; this slice can only return a typed non-claim or refusal.
+authority; it never runs the authority whose evidence it grades.  Execution lives in
+``copper_mcp.authoritative_signoff_executor``, and the seam is still not exported through MCP
+or CLI.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Final
 
 _SHA256_PREFIX: Final = "sha256:"
@@ -28,6 +42,8 @@ _SCHEMA: Final = "copper-mcp/authoritative-signoff/v1"
 _FIXED_BACKEND_ID: Final = "copper-mcp-authoritative-v1"
 _FIXED_BACKEND_VERSION: Final = "1"
 _MAX_AUTHORITATIVE_OUTPUT_BYTES: Final = 1_048_576
+_MIN_COMPARABLE_REPETITIONS: Final = 2
+_MAX_REPETITIONS: Final = 8
 
 
 class SignoffDomain(StrEnum):
@@ -37,6 +53,21 @@ class SignoffDomain(StrEnum):
     PI = "pi"
     THERMAL = "thermal"
     DFM = "dfm"
+
+
+class SignoffComparability(StrEnum):
+    """How many authoritative invocations an evidence envelope rests on, and whether they agreed.
+
+    The literals are ADR-0109's, unchanged, because the fact they describe is the same one: a
+    KiCad DRC count is not a function of the bytes it was taken over, so a single invocation is an
+    observation rather than a comparable measurement.  ADR-0109 governs what a benchmark artifact
+    may *publish*; this seam governs what a claim may *rest on*, which is the same question asked
+    at higher stakes.
+    """
+
+    SINGLE_INVOCATION = "single_invocation"
+    REPEATED_AGREEMENT = "repeated_agreement"
+    REPEATED_DISAGREEMENT = "repeated_disagreement"
 
 
 class SignoffStatus(StrEnum):
@@ -51,6 +82,7 @@ class SignoffCode(StrEnum):
     """Stable, non-echoing refusal and non-claim taxonomy."""
 
     NO_AUTHORITATIVE_BACKEND = "no_authoritative_backend"
+    NO_AUTHORITATIVE_EVIDENCE = "no_authoritative_evidence"
     SURROGATE_ONLY = "surrogate_only"
     INVALID_CANDIDATE = "invalid_candidate"
     INVALID_BACKEND = "invalid_backend"
@@ -63,6 +95,8 @@ class SignoffCode(StrEnum):
     EVIDENCE_MISMATCH = "evidence_mismatch"
     INCOMPLETE_EVIDENCE = "incomplete_evidence"
     FAILED_EVIDENCE = "failed_evidence"
+    UNCOMPARABLE_EVIDENCE = "uncomparable_evidence"
+    SUPPRESSED_EVIDENCE = "suppressed_evidence"
     BACKEND_FAILURE = "backend_failure"
     CANCELLED = "cancelled"
     DEADLINE_EXCEEDED = "deadline_exceeded"
@@ -70,6 +104,7 @@ class SignoffCode(StrEnum):
 
 _DIAGNOSTICS: Final[dict[SignoffCode, str]] = {
     SignoffCode.NO_AUTHORITATIVE_BACKEND: "authoritative sign-off is unavailable",
+    SignoffCode.NO_AUTHORITATIVE_EVIDENCE: "authoritative evidence was not produced",
     SignoffCode.SURROGATE_ONLY: "surrogate output is advisory and cannot sign off",
     SignoffCode.INVALID_CANDIDATE: "candidate binding is invalid",
     SignoffCode.INVALID_BACKEND: "authoritative backend is invalid",
@@ -82,6 +117,8 @@ _DIAGNOSTICS: Final[dict[SignoffCode, str]] = {
     SignoffCode.EVIDENCE_MISMATCH: "authoritative evidence does not match",
     SignoffCode.INCOMPLETE_EVIDENCE: "authoritative evidence is incomplete",
     SignoffCode.FAILED_EVIDENCE: "authoritative evidence did not pass",
+    SignoffCode.UNCOMPARABLE_EVIDENCE: "authoritative evidence is not repeatable",
+    SignoffCode.SUPPRESSED_EVIDENCE: "authoritative evidence skipped checks",
     SignoffCode.BACKEND_FAILURE: "authoritative sign-off could not be completed",
     SignoffCode.CANCELLED: "authoritative sign-off was cancelled",
     SignoffCode.DEADLINE_EXCEEDED: "authoritative sign-off exceeded its deadline",
@@ -90,6 +127,55 @@ _DIAGNOSTICS: Final[dict[SignoffCode, str]] = {
 CancellationCheck = Callable[[], object]
 DeadlineCheck = Callable[[], object]
 _RESULT_CAPABILITY: Final = object()
+
+#: Used by ``copper_mcp.authoritative_signoff_executor`` as a cooperative guard on the supported
+#: evidence-construction path.  A private Python name is not a sandbox: privileged same-process
+#: code can import or monkeypatch it, so hostile in-process callers require an operational or
+#: process-isolation boundary outside this module.
+_EVIDENCE_CAPABILITY: Final = object()
+
+#: The closed backend registry: which fixed ``(backend ID, backend version)`` may speak for which
+#: domain.  It is a module constant rather than a mutable registry on purpose -- a registration
+#: call would be a seam through which a caller, a plugin, or a test could install an authority,
+#: and ADR-0118 already refused every shape of that.  Adding a domain here is a source change that
+#: goes through review with the adapter that earns it.
+#:
+#: Only DFM is registered, and only because one authority already exists in this repository that
+#: can answer a DFM question about a candidate: KiCad's own DRC, which ADR-0004 made this
+#: project's authority for exactly that.  SI, PI and thermal have no such adapter, so they stay
+#: unregistered and can produce nothing but a non-claim.
+_REGISTERED_BACKENDS: Final[Mapping[tuple[str, str], frozenset[SignoffDomain]]] = MappingProxyType(
+    {(_FIXED_BACKEND_ID, _FIXED_BACKEND_VERSION): frozenset({SignoffDomain.DFM})}
+)
+
+
+def registered_signoff_domains() -> frozenset[SignoffDomain]:
+    """Return the domains some registered backend may sign off; a read, never a registration."""
+
+    admitted: set[SignoffDomain] = set()
+    for domains in _REGISTERED_BACKENDS.values():
+        admitted |= domains
+    return frozenset(admitted)
+
+
+def _registered_for(backend_id: str, backend_version: str, domain: SignoffDomain) -> bool:
+    """Whether this exact ``(ID, version)`` pair may speak for ``domain``.  The evidence gate."""
+
+    return domain in _REGISTERED_BACKENDS.get((backend_id, backend_version), frozenset())
+
+
+def _registered_id_for(backend_id: str, domain: SignoffDomain) -> bool:
+    """Whether *any* registered version of ``backend_id`` may speak for ``domain``.
+
+    A result carries the backend ID but not its version, so this is the strongest check the
+    result type can make on its own.  It is a backstop, not the gate: ``_validate_evidence_binding``
+    has already checked the exact pair against the evidence that produced the claim.
+    """
+
+    return any(
+        identifier == backend_id and domain in domains
+        for (identifier, _version), domains in _REGISTERED_BACKENDS.items()
+    )
 
 
 def _digest(name: str, value: object) -> None:
@@ -151,13 +237,18 @@ class SurrogateAdvisory:
 
 @dataclass(frozen=True, slots=True)
 class AuthoritativeEvidence:
-    """Completed, candidate-bound evidence returned by the fixed backend.
+    """Completed, candidate-bound evidence minted by the coordinator-owned executor.
 
     ``authoritative_output`` is retained only inside this private core object.  It is never
     serialized or returned.  ``evidence_revision`` is computed from those exact bytes, so it is a
     content digest rather than a caller-selected run label.
+
+    ``capability`` is the module-private sentinel used by the supported executor path.  Requiring
+    it prevents accidental or serialized-evidence construction; it does not prevent privileged
+    same-process Python code from importing private symbols.
     """
 
+    capability: object = field(repr=False, compare=False)
     backend_id: str
     backend_version: str
     domain: SignoffDomain
@@ -166,8 +257,13 @@ class AuthoritativeEvidence:
     authoritative_output: bytes = field(repr=False, compare=False)
     completed: bool
     passed: bool
+    suppressed: bool
+    comparability: SignoffComparability
+    repetitions: int
 
     def __post_init__(self) -> None:
+        if self.capability is not _EVIDENCE_CAPABILITY:
+            raise ValueError("authoritative evidence capability is invalid")
         _text("backend ID", self.backend_id)
         _text("backend version", self.backend_version, maximum=32)
         if type(self.domain) is not SignoffDomain:
@@ -179,8 +275,18 @@ class AuthoritativeEvidence:
             or not 1 <= len(self.authoritative_output) <= _MAX_AUTHORITATIVE_OUTPUT_BYTES
         ):
             raise ValueError("authoritative output is outside the supported bound")
-        if type(self.completed) is not bool or type(self.passed) is not bool:
-            raise ValueError("evidence completion flags are malformed")
+        for name in ("completed", "passed", "suppressed"):
+            if type(getattr(self, name)) is not bool:
+                raise ValueError("evidence completion flags are malformed")
+        if type(self.comparability) is not SignoffComparability:
+            raise ValueError("evidence comparability is malformed")
+        _bounded_integer(
+            "evidence repetitions", self.repetitions, minimum=1, maximum=_MAX_REPETITIONS
+        )
+        if (self.comparability is SignoffComparability.SINGLE_INVOCATION) != (
+            self.repetitions == 1
+        ):
+            raise ValueError("evidence comparability does not match its repetition count")
 
     @property
     def evidence_revision(self) -> str:
@@ -202,6 +308,9 @@ class AuthoritativeEvidence:
                 self.evidence_revision,
                 self.completed,
                 self.passed,
+                self.suppressed,
+                self.comparability.value,
+                self.repetitions,
             )
         )
 
@@ -216,6 +325,9 @@ class AuthoritativeEvidence:
             "evidence_revision": self.evidence_revision,
             "completed": self.completed,
             "passed": self.passed,
+            "suppressed": self.suppressed,
+            "comparability": self.comparability.value,
+            "repetitions": self.repetitions,
             "evidence_digest": self.evidence_digest,
         }
 
@@ -224,9 +336,11 @@ class AuthoritativeEvidence:
 class AuthoritativeSignoffResult:
     """Redacted sign-off union with no public constructor for claimable results.
 
-    The authoritative executor is intentionally absent in this slice.  Keeping the result type
-    sealed prevents a caller from manufacturing ``SIGNED_OFF`` while the evidence vocabulary is
-    reviewed and a coordinator-owned adapter is still deferred.
+    The supported construction path reaches a claim only through the evaluator and evidence for a
+    registered backend.  As with the evidence sentinel, this sealed-by-convention Python type is
+    not a security boundary against privileged same-process imports or monkeypatching.  A claim
+    carries what it rests on -- the candidate and revision it is bound to, the content address of
+    the evidence, and how many agreeing invocations produced it -- and nothing else.
     """
 
     status: SignoffStatus
@@ -236,6 +350,8 @@ class AuthoritativeSignoffResult:
     base_revision: str | None = None
     backend_id: str | None = None
     evidence_digest: str | None = None
+    comparability: SignoffComparability | None = None
+    repetitions: int | None = None
     advisory_present: bool = False
 
     def __init__(self, *args: object, **kwargs: object) -> None:
@@ -253,15 +369,12 @@ class AuthoritativeSignoffResult:
         base_revision: str | None = None,
         backend_id: str | None = None,
         evidence_digest: str | None = None,
+        comparability: SignoffComparability | None = None,
+        repetitions: int | None = None,
         advisory_present: bool = False,
     ) -> AuthoritativeSignoffResult:
         if capability is not _RESULT_CAPABILITY:
             raise ValueError("authoritative sign-off result capability is invalid")
-        if status is SignoffStatus.SIGNED_OFF:
-            # This slice has no authoritative executor.  Keeping the vocabulary is useful for
-            # the reviewed contract, but even code that imports this module's private symbols
-            # must not manufacture a claim before the coordinator-owned adapter exists.
-            raise ValueError("authoritative sign-off claims are deferred")
         result = object.__new__(cls)
         for name, value in (
             ("status", status),
@@ -271,6 +384,8 @@ class AuthoritativeSignoffResult:
             ("base_revision", base_revision),
             ("backend_id", backend_id),
             ("evidence_digest", evidence_digest),
+            ("comparability", comparability),
+            ("repetitions", repetitions),
             ("advisory_present", advisory_present),
         ):
             object.__setattr__(result, name, value)
@@ -287,15 +402,27 @@ class AuthoritativeSignoffResult:
         if self.status is SignoffStatus.SIGNED_OFF:
             if self.code is not None or self.candidate_id is None or self.base_revision is None:
                 raise ValueError("signed-off result is malformed")
-            if self.backend_id != _FIXED_BACKEND_ID or self.evidence_digest is None:
+            if self.backend_id is None or self.evidence_digest is None:
                 raise ValueError("signed-off result is not backend-bound")
+            if not _registered_id_for(self.backend_id, self.domain):
+                raise ValueError("signed-off result names an unregistered backend")
             _digest("result candidate ID", self.candidate_id)
             _digest("result base revision", self.base_revision)
             _digest("result evidence digest", self.evidence_digest)
+            if self.comparability is not SignoffComparability.REPEATED_AGREEMENT:
+                raise ValueError("signed-off result does not carry repeated agreement")
+            _bounded_integer(
+                "result repetitions",
+                self.repetitions,
+                minimum=_MIN_COMPARABLE_REPETITIONS,
+                maximum=_MAX_REPETITIONS,
+            )
         else:
             if self.code is None or self.candidate_id is not None or self.base_revision is not None:
                 raise ValueError("non-claim/refusal result is malformed")
             if self.backend_id is not None or self.evidence_digest is not None:
+                raise ValueError("non-claim/refusal result leaks backend evidence")
+            if self.comparability is not None or self.repetitions is not None:
                 raise ValueError("non-claim/refusal result leaks backend evidence")
 
     @property
@@ -310,12 +437,15 @@ class AuthoritativeSignoffResult:
             "advisory_present": self.advisory_present,
         }
         if self.claimed:
+            assert self.comparability is not None
             payload.update(
                 {
                     "candidate_id": self.candidate_id,
                     "base_revision": self.base_revision,
                     "backend_id": self.backend_id,
                     "evidence_digest": self.evidence_digest,
+                    "comparability": self.comparability.value,
+                    "repetitions": self.repetitions,
                 }
             )
         else:
@@ -380,18 +510,15 @@ def _validate_evidence_binding(
     evidence: AuthoritativeEvidence,
     expected_digest: object = None,
 ) -> SignoffCode | None:
-    """Purely validate evidence binding without creating a claimable result.
+    """Return the code that denies this evidence a claim, or ``None`` when it earns one.
 
-    This helper is intentionally unreachable from the production evaluator while no authoritative
-    executor is registered.  It preserves the reviewed candidate/revision/content binding rules
-    for a future coordinator-owned adapter without creating a test or caller-selected execution
-    seam today.
+    The order is deliberate and is the order of the questions: *who* produced this, *what* is it
+    about, *when* was it taken, *is it the artefact I was told to expect*, and only then *what
+    does it say*.  Answering the last question first would let a passing verdict from the wrong
+    authority, or about another candidate, get as far as being read.
     """
 
-    if (
-        evidence.backend_id != _FIXED_BACKEND_ID
-        or evidence.backend_version != _FIXED_BACKEND_VERSION
-    ):
+    if not _registered_for(evidence.backend_id, evidence.backend_version, evidence.domain):
         return SignoffCode.BACKEND_MISMATCH
     if evidence.domain is not domain:
         return SignoffCode.EVIDENCE_MISMATCH
@@ -410,6 +537,16 @@ def _validate_evidence_binding(
             return SignoffCode.EVIDENCE_MISMATCH
     if not evidence.completed:
         return SignoffCode.INCOMPLETE_EVIDENCE
+    if evidence.suppressed:
+        # A run that skipped checks cannot say the checks it skipped would have passed.  This is
+        # a refusal rather than a weaker claim because the caller cannot tell from the outside
+        # which checks were dropped.
+        return SignoffCode.SUPPRESSED_EVIDENCE
+    if (
+        evidence.comparability is not SignoffComparability.REPEATED_AGREEMENT
+        or evidence.repetitions < _MIN_COMPARABLE_REPETITIONS
+    ):
+        return SignoffCode.UNCOMPARABLE_EVIDENCE
     if not evidence.passed:
         return SignoffCode.FAILED_EVIDENCE
     return None
@@ -472,17 +609,19 @@ def evaluate_authoritative_signoff(
     domain: object,
     backend: object = None,
     *,
+    evidence: object = None,
     expected_evidence_digest: object = None,
     surrogate: object = None,
     cancelled: CancellationCheck | None = None,
     deadline: DeadlineCheck | None = None,
 ) -> AuthoritativeSignoffResult:
-    """Evaluate the deferred sign-off seam without executing caller-selected authority.
+    """Grade already-produced authoritative evidence; never execute a caller-selected authority.
 
-    No authoritative adapter is registered in this slice.  ``backend`` is accepted only as a
-    compatibility-shaped rejection slot so hostile callers can be refused deterministically; it
-    is never inspected for a runner and is never invoked.  A future coordinator-owned adapter must
-    be added behind a reviewed, non-request-controlled seam before ``SIGNED_OFF`` is reachable.
+    ``backend`` remains a rejection slot rather than a parameter: ADR-0118 refused caller-supplied
+    runners, and the way to keep refusing them is to keep the argument, never inspect it for a
+    callable, and refuse deterministically when it is present.  Execution happens in
+    ``copper_mcp.authoritative_signoff_executor``, which holds the evidence capability; this
+    function only decides whether what it produced is admissible.
     """
 
     checked_domain = _domain(domain)
@@ -524,10 +663,53 @@ def evaluate_authoritative_signoff(
             SignoffCode.INVALID_BACKEND,
             advisory_present=advisory_present,
         )
-    code = (
-        SignoffCode.SURROGATE_ONLY if advisory is not None else SignoffCode.NO_AUTHORITATIVE_BACKEND
+    checked_evidence = parse_authoritative_evidence(evidence) if evidence is not None else None
+    if evidence is not None and checked_evidence is None:
+        # Serialized evidence is not intake: an envelope that merely looks right is exactly what
+        # a forged claim would look like, and only the capability distinguishes them.
+        return _result(
+            SignoffStatus.REFUSED,
+            checked_domain,
+            SignoffCode.INVALID_EVIDENCE,
+            advisory_present=advisory_present,
+        )
+    if checked_evidence is None:
+        if advisory is not None:
+            # A ranking is a ranking whether or not the domain has an authority behind it.
+            code = SignoffCode.SURROGATE_ONLY
+        elif checked_domain in registered_signoff_domains():
+            code = SignoffCode.NO_AUTHORITATIVE_EVIDENCE
+        else:
+            code = SignoffCode.NO_AUTHORITATIVE_BACKEND
+        return _result(
+            SignoffStatus.NON_CLAIM, checked_domain, code, advisory_present=advisory_present
+        )
+    denial = _validate_evidence_binding(
+        checked_candidate, checked_domain, checked_evidence, expected_evidence_digest
     )
-    return _result(SignoffStatus.NON_CLAIM, checked_domain, code, advisory_present=advisory_present)
+    if denial is not None:
+        return _result(
+            SignoffStatus.REFUSED, checked_domain, denial, advisory_present=advisory_present
+        )
+    stop = _stop_code(cancelled, deadline)
+    if stop is not None:
+        # Re-checked after grading: a deadline that expired while the evidence was being read is
+        # a reason not to hand back the claim it would have earned.
+        return _result(
+            SignoffStatus.REFUSED, checked_domain, stop, advisory_present=advisory_present
+        )
+    return AuthoritativeSignoffResult._create(
+        capability=_RESULT_CAPABILITY,
+        status=SignoffStatus.SIGNED_OFF,
+        domain=checked_domain,
+        candidate_id=checked_candidate.candidate_id,
+        base_revision=checked_candidate.base_revision,
+        backend_id=checked_evidence.backend_id,
+        evidence_digest=checked_evidence.evidence_digest,
+        comparability=checked_evidence.comparability,
+        repetitions=checked_evidence.repetitions,
+        advisory_present=advisory_present,
+    )
 
 
 evaluate_signoff = evaluate_authoritative_signoff
@@ -538,6 +720,7 @@ __all__ = [
     "AuthoritativeSignoffResult",
     "CandidateBinding",
     "SignoffCode",
+    "SignoffComparability",
     "SignoffDomain",
     "SignoffStatus",
     "SurrogateAdvisory",
@@ -546,4 +729,5 @@ __all__ = [
     "parse_authoritative_evidence",
     "parse_candidate_binding",
     "parse_surrogate_advisory",
+    "registered_signoff_domains",
 ]
