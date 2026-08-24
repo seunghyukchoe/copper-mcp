@@ -8,6 +8,12 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- A bounded fixed-point masking census now measures how many of three predeclared direct-root
+  counterfactual classes precede the next conversion blocker on ten public and three private
+  boards. The fixed cohort remains 0/13 after masking; setup semantics are the terminal blocker on
+  6/10 public boards. The runner is read-only, manifest- and source-digest-bound, aggregate-only,
+  and commits no board or private identifier. This selects a public setup-field census as the next
+  agent-only direction without adding product support (`B-129`, `D-224`, `R-175`, `SEC-162`).
 - The M3 file-apply entry census now replays the two production source-preservation gates over
   B-112/B-117's frozen 18-save private selection from a clean commit. Fifteen saves convert;
   route patching remains structurally appliable on 5, while placement replay renders on 0. The
