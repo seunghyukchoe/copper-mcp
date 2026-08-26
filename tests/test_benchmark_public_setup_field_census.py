@@ -134,12 +134,18 @@ def _measure(
     settings: Settings | None = None,
     converter: census.Converter | None = _converter,
 ) -> dict[str, Any]:
-    with patch.object(census, "PREDECLARED_COHORT_FINGERPRINT", fingerprint):
+    with (
+        patch.object(census, "PREDECLARED_COHORT_FINGERPRINT", fingerprint),
+        patch.object(
+            census,
+            "PREDECLARED_SETUP_SELECTION_COMMITMENT",
+            commitment,
+        ),
+    ):
         return census.measure(
             corpus,
             manifest,
             _settings(corpus) if settings is None else settings,
-            expected_selection_commitment=commitment,
             converter=converter,
         )
 
@@ -231,6 +237,17 @@ def test_measure_requires_an_assigned_selection_commitment(tmp_path: Path) -> No
     corpus, manifest, fingerprint, _commitment = _manifest(tmp_path)
     with pytest.raises(ValueError, match="commitment is unassigned"):
         _measure(corpus, manifest, fingerprint, None)
+
+
+def test_measure_rejects_selection_commitment_caller_override(tmp_path: Path) -> None:
+    corpus, manifest, _fingerprint, commitment = _manifest(tmp_path)
+    with pytest.raises(TypeError, match="expected_selection_commitment"):
+        census.measure(
+            corpus,
+            manifest,
+            _settings(corpus),
+            **{"expected_selection_commitment": commitment},
+        )
 
 
 def test_measure_rejects_same_count_selection_membership_drift(tmp_path: Path) -> None:
@@ -435,13 +452,20 @@ def _cli_paths(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
 
 def test_cli_paths_resolve_a_new_json_output(tmp_path: Path) -> None:
     corpus, manifest, output, runner = _cli_paths(tmp_path)
-    resolved = census._resolve_cli_paths(corpus, manifest, output, runner)
-    assert resolved == (
-        corpus.resolve(),
-        manifest.resolve(),
-        output.resolve(),
-        runner.resolve(),
+    resolved_corpus, resolved_manifest, target, resolved_runner = census._resolve_cli_paths(
+        corpus,
+        manifest,
+        output,
+        runner,
     )
+    try:
+        assert resolved_corpus == corpus.resolve()
+        assert resolved_manifest == manifest.resolve()
+        assert target.path == output.resolve()
+        assert target.parent_fd >= 0
+        assert resolved_runner == runner.resolve()
+    finally:
+        target.close()
 
 
 def test_cli_paths_refuse_non_json_and_inside_corpus_outputs(tmp_path: Path) -> None:
@@ -450,6 +474,17 @@ def test_cli_paths_refuse_non_json_and_inside_corpus_outputs(tmp_path: Path) -> 
         census._resolve_cli_paths(corpus, manifest, tmp_path / "result.txt", runner)
     with pytest.raises(SystemExit, match="outside corpus"):
         census._resolve_cli_paths(corpus, manifest, corpus / "result.json", runner)
+
+
+def test_cli_paths_require_an_existing_output_parent(tmp_path: Path) -> None:
+    corpus, manifest, _output, runner = _cli_paths(tmp_path)
+    with pytest.raises(SystemExit, match="existing directory"):
+        census._resolve_cli_paths(
+            corpus,
+            manifest,
+            tmp_path / "missing" / "result.json",
+            runner,
+        )
 
 
 def test_cli_paths_refuse_output_symlinks(tmp_path: Path) -> None:
@@ -507,8 +542,49 @@ def test_cli_paths_refuse_corpus_board_hardlink(tmp_path: Path) -> None:
 
 
 def test_output_write_is_create_only(tmp_path: Path) -> None:
-    output = tmp_path / "result.json"
-    census._write_output(output, '{"first":true}\n')
-    with pytest.raises(SystemExit, match="remain a new path"):
-        census._write_output(output, '{"second":true}\n')
+    corpus, manifest, output, runner = _cli_paths(tmp_path)
+    _corpus, _manifest, target, _runner = census._resolve_cli_paths(
+        corpus,
+        manifest,
+        output,
+        runner,
+    )
+    try:
+        census._write_output(target, '{"first":true}\n')
+        with pytest.raises(SystemExit, match="remain a new path"):
+            census._write_output(target, '{"second":true}\n')
+    finally:
+        target.close()
     assert output.read_text(encoding="utf-8") == '{"first":true}\n'
+
+
+def test_output_write_stays_anchored_when_parent_is_replaced(tmp_path: Path) -> None:
+    corpus, manifest, _output, runner = _cli_paths(tmp_path)
+    output_parent = tmp_path / "output"
+    output_parent.mkdir()
+    output = output_parent / "result.json"
+    _corpus, _manifest, target, _runner = census._resolve_cli_paths(
+        corpus,
+        manifest,
+        output,
+        runner,
+    )
+
+    held_parent = tmp_path / "held-output"
+    output_parent.rename(held_parent)
+    try:
+        output_parent.symlink_to(corpus, target_is_directory=True)
+    except OSError as error:
+        target.close()
+        held_parent.rename(output_parent)
+        pytest.skip(f"symlinks unavailable: {error}")
+
+    try:
+        census._write_output(target, '{"anchored":true}\n')
+    finally:
+        target.close()
+
+    assert (held_parent / "result.json").read_text(encoding="utf-8") == (
+        '{"anchored":true}\n'
+    )
+    assert not (corpus / "result.json").exists()
