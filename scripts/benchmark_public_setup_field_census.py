@@ -31,6 +31,7 @@ EXPECTED_CAPTURED: Final = 13
 EXPECTED_PUBLIC: Final = 10
 EXPECTED_SETUP_TERMINALS: Final = 6
 OTHER: Final = "other"
+PREDECLARED_COHORT_FINGERPRINT: Final = masking.PREDECLARED_COHORT_FINGERPRINT
 SELECTION_COMMITMENT_DOMAIN: Final = (
     b"copper-mcp/public-setup-field-census/selected-manifest-entries/v1\x00"
 )
@@ -364,7 +365,6 @@ def measure(
     manifest: Path,
     settings: Settings,
     *,
-    expected_fingerprint: str | None = None,
     expected_selection_commitment: str | None = None,
     converter: Converter | None = None,
 ) -> dict[str, Any]:
@@ -375,11 +375,7 @@ def measure(
     expected_selection = _expected_selection_commitment(expected_selection_commitment)
 
     entries, fingerprint = masking.load_manifest(manifest)
-    expected = (
-        masking.PREDECLARED_COHORT_FINGERPRINT
-        if expected_fingerprint is None
-        else expected_fingerprint
-    )
+    expected = PREDECLARED_COHORT_FINGERPRINT
     if not isinstance(expected, str) or expected != fingerprint or len(expected) != 39:
         raise _fixed_error("predeclared cohort fingerprint does not match")
 
@@ -490,22 +486,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--corpus", required=True, type=Path)
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument(
-        "--expected-fingerprint",
-        default=masking.PREDECLARED_COHORT_FINGERPRINT,
-    )
     return parser
-
-
-def _paths_alias(candidate: Path, authority: Path) -> bool:
-    if candidate == authority:
-        return True
-    if not candidate.exists():
-        return False
-    try:
-        return candidate.samefile(authority)
-    except OSError as error:
-        raise SystemExit("output path alias could not be validated") from error
 
 
 def _resolve_cli_paths(
@@ -537,8 +518,8 @@ def _resolve_cli_paths(
     if output_input.is_symlink():
         raise SystemExit("output must not be a symlink")
     output = output_input.resolve(strict=False)
-    if output.exists() and not output.is_file():
-        raise SystemExit("output must be a regular file or a new path")
+    if output.exists():
+        raise SystemExit("output must be a new path")
     if output == corpus or corpus in output.parents:
         raise SystemExit("output must be outside corpus")
 
@@ -548,11 +529,16 @@ def _resolve_cli_paths(
         raise SystemExit("runner must be an existing regular file") from error
     if not runner.is_file():
         raise SystemExit("runner must be an existing regular file")
-    if _paths_alias(output, manifest):
-        raise SystemExit("output must not alias manifest")
-    if _paths_alias(output, runner):
-        raise SystemExit("output must not alias runner")
     return corpus, manifest, output, runner
+
+
+def _write_output(output: Path, payload: str) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with output.open("x", encoding="utf-8") as stream:
+            stream.write(payload)
+    except FileExistsError as error:
+        raise SystemExit("output must remain a new path") from error
 
 
 def main() -> int:
@@ -571,12 +557,7 @@ def main() -> int:
     runner_bytes = runner.read_bytes()
 
     settings = Settings(workspace=corpus)
-    result = measure(
-        corpus,
-        manifest,
-        settings,
-        expected_fingerprint=args.expected_fingerprint,
-    )
+    result = measure(corpus, manifest, settings)
 
     final_commit, final_dirty = masking._git_state(root)
     if final_commit != commit or final_dirty or runner.read_bytes() != runner_bytes:
@@ -606,8 +587,7 @@ def main() -> int:
     )
     canonical = json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False)
     result["run_id"] = "sha256:" + hashlib.sha256(canonical.encode()).hexdigest()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    _write_output(output, json.dumps(result, sort_keys=True, indent=2) + "\n")
     return 0
 
 
