@@ -7,6 +7,8 @@ import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -123,6 +125,25 @@ def _converter(source: bytes, _settings: Settings) -> SimpleNamespace:
     )
 
 
+def _measure(
+    corpus: Path,
+    manifest: Path,
+    fingerprint: str,
+    commitment: str | None,
+    *,
+    settings: Settings | None = None,
+    converter: census.Converter | None = _converter,
+) -> dict[str, Any]:
+    with patch.object(census, "PREDECLARED_COHORT_FINGERPRINT", fingerprint):
+        return census.measure(
+            corpus,
+            manifest,
+            _settings(corpus) if settings is None else settings,
+            expected_selection_commitment=commitment,
+            converter=converter,
+        )
+
+
 def test_closed_accepted_vocabulary_matches_the_adapter() -> None:
     assert census.ACCEPTED_SETUP_HEADS == census.kicad_board_ir._SETUP_METADATA_HEADS
     assert "stackup" not in census.ACCEPTED_SETUP_HEADS
@@ -209,13 +230,7 @@ def test_stackup_layer_shape_is_fail_closed(tmp_path: Path) -> None:
 def test_measure_requires_an_assigned_selection_commitment(tmp_path: Path) -> None:
     corpus, manifest, fingerprint, _commitment = _manifest(tmp_path)
     with pytest.raises(ValueError, match="commitment is unassigned"):
-        census.measure(
-            corpus,
-            manifest,
-            _settings(corpus),
-            expected_fingerprint=fingerprint,
-            converter=_converter,
-        )
+        _measure(corpus, manifest, fingerprint, None)
 
 
 def test_measure_rejects_same_count_selection_membership_drift(tmp_path: Path) -> None:
@@ -232,12 +247,11 @@ def test_measure_rejects_same_count_selection_membership_drift(tmp_path: Path) -
         return _converter(source, settings)
 
     with pytest.raises(ValueError, match="membership drifted"):
-        census.measure(
+        _measure(
             corpus,
             manifest,
-            _settings(corpus),
-            expected_fingerprint=fingerprint,
-            expected_selection_commitment=commitment,
+            fingerprint,
+            commitment,
             converter=swapped_converter,
         )
 
@@ -246,22 +260,8 @@ def test_measure_is_deterministic_aggregate_only_and_source_preserving(
     tmp_path: Path,
 ) -> None:
     corpus, manifest, fingerprint, commitment = _manifest(tmp_path)
-    result = census.measure(
-        corpus,
-        manifest,
-        _settings(corpus),
-        expected_fingerprint=fingerprint,
-        expected_selection_commitment=commitment,
-        converter=_converter,
-    )
-    again = census.measure(
-        corpus,
-        manifest,
-        _settings(corpus),
-        expected_fingerprint=fingerprint,
-        expected_selection_commitment=commitment,
-        converter=_converter,
-    )
+    result = _measure(corpus, manifest, fingerprint, commitment)
+    again = _measure(corpus, manifest, fingerprint, commitment)
 
     assert result == again
     assert result["schema"] == census.SCHEMA
@@ -317,27 +317,18 @@ def test_measure_is_deterministic_aggregate_only_and_source_preserving(
 def test_measure_rejects_fingerprint_and_setup_population_drift(tmp_path: Path) -> None:
     corpus, manifest, _fingerprint, commitment = _manifest(tmp_path)
     with pytest.raises(ValueError, match="predeclared"):
-        census.measure(
+        _measure(
             corpus,
             manifest,
-            _settings(corpus),
-            expected_fingerprint="sha256:" + "0" * 32,
-            expected_selection_commitment=commitment,
-            converter=_converter,
+            "sha256:" + "0" * 32,
+            commitment,
         )
 
     other = tmp_path / "other"
     other.mkdir()
     corpus, manifest, fingerprint, commitment = _manifest(other, setup_count=5)
     with pytest.raises(ValueError, match="population drifted"):
-        census.measure(
-            corpus,
-            manifest,
-            _settings(corpus),
-            expected_fingerprint=fingerprint,
-            expected_selection_commitment=commitment,
-            converter=_converter,
-        )
+        _measure(corpus, manifest, fingerprint, commitment)
 
 
 @pytest.mark.parametrize(
@@ -357,14 +348,7 @@ def test_selected_sources_require_one_structurally_closed_setup(
         setup_override=setup_override,
     )
     with pytest.raises(ValueError, match="setup"):
-        census.measure(
-            corpus,
-            manifest,
-            _settings(corpus),
-            expected_fingerprint=fingerprint,
-            expected_selection_commitment=commitment,
-            converter=_converter,
-        )
+        _measure(corpus, manifest, fingerprint, commitment)
 
 
 def test_source_change_after_capture_is_refused(tmp_path: Path) -> None:
@@ -379,12 +363,11 @@ def test_source_change_after_capture_is_refused(tmp_path: Path) -> None:
         return _converter(source, settings)
 
     with pytest.raises(ValueError, match="source changed"):
-        census.measure(
+        _measure(
             corpus,
             manifest,
-            _settings(corpus),
-            expected_fingerprint=fingerprint,
-            expected_selection_commitment=commitment,
+            fingerprint,
+            commitment,
             converter=mutating_converter,
         )
 
@@ -400,12 +383,11 @@ def test_private_entries_are_never_selected_even_if_converter_reports_setup(
         return _converter(source, settings)
 
     with pytest.raises(ValueError, match="expected 6, got 10"):
-        census.measure(
+        _measure(
             corpus,
             manifest,
-            _settings(corpus),
-            expected_fingerprint=fingerprint,
-            expected_selection_commitment=commitment,
+            fingerprint,
+            commitment,
             converter=all_setup,
         )
 
@@ -414,13 +396,29 @@ def test_measure_is_read_only(tmp_path: Path) -> None:
     corpus, manifest, fingerprint, commitment = _manifest(tmp_path)
     settings = Settings(workspace=corpus, allow_apply=True)
     with pytest.raises(ValueError, match="read-only"):
-        census.measure(
+        _measure(
             corpus,
             manifest,
-            settings,
-            expected_fingerprint=fingerprint,
-            expected_selection_commitment=commitment,
-            converter=_converter,
+            fingerprint,
+            commitment,
+            settings=settings,
+        )
+
+
+def test_cli_parser_refuses_fingerprint_override() -> None:
+    parser = census._build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                "--corpus",
+                "corpus",
+                "--manifest",
+                "manifest.json",
+                "--output",
+                "result.json",
+                "--expected-fingerprint",
+                "sha256:" + "0" * 32,
+            ]
         )
 
 
@@ -466,15 +464,22 @@ def test_cli_paths_refuse_output_symlinks(tmp_path: Path) -> None:
         census._resolve_cli_paths(corpus, manifest, output, runner)
 
 
-def test_cli_paths_refuse_manifest_alias_and_hardlink(tmp_path: Path) -> None:
+def test_cli_paths_refuse_existing_output_and_manifest_alias(tmp_path: Path) -> None:
     corpus, manifest, output, runner = _cli_paths(tmp_path)
-    with pytest.raises(SystemExit, match="alias manifest"):
+    output.write_text("{}", encoding="utf-8")
+    with pytest.raises(SystemExit, match="new path"):
+        census._resolve_cli_paths(corpus, manifest, output, runner)
+    with pytest.raises(SystemExit, match="new path"):
         census._resolve_cli_paths(corpus, manifest, manifest, runner)
+
+
+def test_cli_paths_refuse_manifest_hardlink(tmp_path: Path) -> None:
+    corpus, manifest, output, runner = _cli_paths(tmp_path)
     try:
         os.link(manifest, output)
     except OSError as error:
         pytest.skip(f"hardlinks unavailable: {error}")
-    with pytest.raises(SystemExit, match="alias manifest"):
+    with pytest.raises(SystemExit, match="new path"):
         census._resolve_cli_paths(corpus, manifest, output, runner)
 
 
@@ -484,5 +489,26 @@ def test_cli_paths_refuse_runner_hardlink(tmp_path: Path) -> None:
         os.link(runner, output)
     except OSError as error:
         pytest.skip(f"hardlinks unavailable: {error}")
-    with pytest.raises(SystemExit, match="alias runner"):
+    with pytest.raises(SystemExit, match="new path"):
         census._resolve_cli_paths(corpus, manifest, output, runner)
+
+
+def test_cli_paths_refuse_corpus_board_hardlink(tmp_path: Path) -> None:
+    corpus, manifest, output, runner = _cli_paths(tmp_path)
+    board = corpus / "board.kicad_pcb"
+    board.write_text("(kicad_pcb)", encoding="utf-8")
+    try:
+        os.link(board, output)
+    except OSError as error:
+        pytest.skip(f"hardlinks unavailable: {error}")
+    with pytest.raises(SystemExit, match="new path"):
+        census._resolve_cli_paths(corpus, manifest, output, runner)
+    assert board.read_text(encoding="utf-8") == "(kicad_pcb)"
+
+
+def test_output_write_is_create_only(tmp_path: Path) -> None:
+    output = tmp_path / "result.json"
+    census._write_output(output, '{"first":true}\n')
+    with pytest.raises(SystemExit, match="remain a new path"):
+        census._write_output(output, '{"second":true}\n')
+    assert output.read_text(encoding="utf-8") == '{"first":true}\n'
