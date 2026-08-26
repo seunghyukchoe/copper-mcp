@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import hmac
 import json
 import platform
 from collections import Counter
@@ -20,7 +21,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from copper_mcp.adapters import kicad_board_ir
-from copper_mcp.adapters.sexpr import SExpr, parse_sexpr
+from copper_mcp.adapters.sexpr import SExpr, is_quoted_atom, parse_sexpr
 from copper_mcp.config import Settings
 from copper_mcp.security import read_workspace_file
 from scripts import benchmark_fixed_point_masking_census as masking
@@ -30,6 +31,10 @@ EXPECTED_CAPTURED: Final = 13
 EXPECTED_PUBLIC: Final = 10
 EXPECTED_SETUP_TERMINALS: Final = 6
 OTHER: Final = "other"
+SELECTION_COMMITMENT_DOMAIN: Final = (
+    b"copper-mcp/public-setup-field-census/selected-manifest-entries/v1\x00"
+)
+PREDECLARED_SETUP_SELECTION_COMMITMENT: Final[str | None] = None
 
 ACCEPTED_SETUP_HEADS: Final = frozenset(
     {
@@ -111,7 +116,14 @@ def _fixed_error(message: str) -> ValueError:
     return ValueError(message)
 
 
-def _bucket(head: str | None, vocabulary: frozenset[str]) -> str:
+def _require_symbolic_head(node: SExpr, context: str) -> str:
+    head = node.head
+    if head is None or is_quoted_atom(head):
+        raise _fixed_error(f"{context} must have an unquoted symbolic head")
+    return head
+
+
+def _bucket(head: str, vocabulary: frozenset[str]) -> str:
     return head if head in vocabulary else OTHER
 
 
@@ -128,22 +140,27 @@ def _shape(node: SExpr) -> str:
     return "mixed"
 
 
-def _children(node: SExpr) -> tuple[SExpr, ...]:
-    return tuple(item for item in node.items[1:] if isinstance(item, SExpr))
-
-
 def _require_child_expressions(node: SExpr, context: str) -> tuple[SExpr, ...]:
+    _require_symbolic_head(node, context)
     payload = node.items[1:]
     if any(not isinstance(item, SExpr) for item in payload):
         raise _fixed_error(f"{context} must contain only child expressions")
-    return tuple(item for item in payload if isinstance(item, SExpr))
+    children = tuple(item for item in payload if isinstance(item, SExpr))
+    for child in children:
+        _require_symbolic_head(child, f"{context} child")
+    return children
 
 
 def _single_setup(source: bytes, settings: Settings) -> SExpr:
     root = parse_sexpr(source, masking.parse_limits_for(settings))
-    if root.head != "kicad_pcb":
+    if _require_symbolic_head(root, "source root") != "kicad_pcb":
         raise _fixed_error("source root must be kicad_pcb")
-    setups = tuple(child for child in _children(root) if child.head == "setup")
+    root_children = _require_child_expressions(root, "source root")
+    setups = tuple(
+        child
+        for child in root_children
+        if _require_symbolic_head(child, "source root child") == "setup"
+    )
     if len(setups) != 1:
         raise _fixed_error("each selected public source must contain exactly one direct setup")
     _require_child_expressions(setups[0], "setup")
@@ -151,11 +168,11 @@ def _single_setup(source: bytes, settings: Settings) -> SExpr:
 
 
 def _unsupported_set(fields: Sequence[SExpr]) -> str:
-    buckets = {
-        _bucket(field.head, DIRECT_SETUP_HEADS)
-        for field in fields
-        if field.head not in ACCEPTED_SETUP_HEADS
-    }
+    buckets: set[str] = set()
+    for field in fields:
+        head = _require_symbolic_head(field, "setup field")
+        if head not in ACCEPTED_SETUP_HEADS:
+            buckets.add(_bucket(head, DIRECT_SETUP_HEADS))
     if not buckets:
         return "none"
     if buckets == {"stackup"}:
@@ -166,6 +183,9 @@ def _unsupported_set(fields: Sequence[SExpr]) -> str:
 
 
 def _observe_setup(setup: SExpr) -> BoardObservation:
+    if _require_symbolic_head(setup, "setup") != "setup":
+        raise _fixed_error("setup expression must be setup")
+
     direct_occurrences: Counter[str] = Counter()
     direct_shapes: Counter[str] = Counter()
     direct_presence: set[str] = set()
@@ -179,7 +199,8 @@ def _observe_setup(setup: SExpr) -> BoardObservation:
 
     fields = _require_child_expressions(setup, "setup")
     for field in fields:
-        direct_bucket = _bucket(field.head, DIRECT_SETUP_HEADS)
+        field_head = _require_symbolic_head(field, "setup field")
+        direct_bucket = _bucket(field_head, DIRECT_SETUP_HEADS)
         direct_occurrences[direct_bucket] += 1
         direct_presence.add(direct_bucket)
         direct_shapes[f"{direct_bucket}:{_shape(field)}"] += 1
@@ -188,7 +209,8 @@ def _observe_setup(setup: SExpr) -> BoardObservation:
 
         stackup_fields = _require_child_expressions(field, "stackup")
         for stackup_field in stackup_fields:
-            stackup_bucket = _bucket(stackup_field.head, STACKUP_HEADS)
+            stackup_head = _require_symbolic_head(stackup_field, "stackup field")
+            stackup_bucket = _bucket(stackup_head, STACKUP_HEADS)
             stackup_occurrences[stackup_bucket] += 1
             stackup_presence.add(stackup_bucket)
             stackup_shapes[f"{stackup_bucket}:{_shape(stackup_field)}"] += 1
@@ -205,7 +227,8 @@ def _observe_setup(setup: SExpr) -> BoardObservation:
             layer_count += 1
             for layer_field in layer_payload[1:]:
                 assert isinstance(layer_field, SExpr)
-                layer_bucket = _bucket(layer_field.head, STACKUP_LAYER_HEADS)
+                layer_head = _require_symbolic_head(layer_field, "stackup layer field")
+                layer_bucket = _bucket(layer_head, STACKUP_LAYER_HEADS)
                 layer_field_occurrences[layer_bucket] += 1
                 layer_field_presence.add(layer_bucket)
                 layer_field_shapes[f"{layer_bucket}:{_shape(layer_field)}"] += 1
@@ -263,6 +286,35 @@ def _merge_presence(
     return merged
 
 
+def _selection_commitment(snapshots: Sequence[masking.Snapshot]) -> str:
+    digest = hashlib.sha256()
+    digest.update(SELECTION_COMMITMENT_DOMAIN)
+    digest.update(len(snapshots).to_bytes(4, "big"))
+    for snapshot in snapshots:
+        entry = snapshot.entry
+        for value in (entry.identity, entry.visibility, entry.relative, entry.digest):
+            encoded = value.encode("utf-8")
+            digest.update(len(encoded).to_bytes(8, "big"))
+            digest.update(encoded)
+    return "sha256:" + digest.hexdigest()
+
+
+def _expected_selection_commitment(explicit: str | None) -> str:
+    expected = (
+        PREDECLARED_SETUP_SELECTION_COMMITMENT if explicit is None else explicit
+    )
+    if (
+        not isinstance(expected, str)
+        or len(expected) != 71
+        or not expected.startswith("sha256:")
+        or any(character not in "0123456789abcdef" for character in expected[7:])
+    ):
+        if expected is None:
+            raise _fixed_error("predeclared setup selection commitment is unassigned")
+        raise _fixed_error("predeclared setup selection commitment is malformed")
+    return expected
+
+
 def _select_setup_terminals(
     snapshots: Sequence[masking.Snapshot],
     *,
@@ -315,12 +367,14 @@ def measure(
     settings: Settings,
     *,
     expected_fingerprint: str | None = None,
+    expected_selection_commitment: str | None = None,
     converter: Converter | None = None,
 ) -> dict[str, Any]:
     if settings.allow_apply or settings.allow_live_ipc or settings.allow_live_apply:
         raise _fixed_error("setup-field census is read-only")
     if ACCEPTED_SETUP_HEADS != kicad_board_ir._SETUP_METADATA_HEADS:
         raise _fixed_error("adapter accepted setup vocabulary drifted")
+    expected_selection = _expected_selection_commitment(expected_selection_commitment)
 
     entries, fingerprint = masking.load_manifest(manifest)
     expected = (
@@ -345,13 +399,17 @@ def measure(
         settings=settings,
         converter=converter,
     )
+    observed_selection = _selection_commitment(selected)
+    if not hmac.compare_digest(expected_selection, observed_selection):
+        raise _fixed_error("fixed-point setup-terminal membership drifted")
+
     observations = tuple(
         _observe_setup(_single_setup(snapshot.source, settings)) for snapshot in selected
     )
 
-    direct_keys = tuple(sorted(DIRECT_SETUP_HEADS)) + (OTHER,)
-    stackup_keys = tuple(sorted(STACKUP_HEADS)) + (OTHER,)
-    layer_keys = tuple(sorted(STACKUP_LAYER_HEADS)) + (OTHER,)
+    direct_keys = (*sorted(DIRECT_SETUP_HEADS), OTHER)
+    stackup_keys = (*sorted(STACKUP_HEADS), OTHER)
+    layer_keys = (*sorted(STACKUP_LAYER_HEADS), OTHER)
 
     direct_occurrences = _merge_mapping(observations, "direct_occurrences")
     direct_presence = _merge_presence(observations, "direct_presence")
@@ -443,18 +501,74 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> int:
-    args = _build_parser().parse_args()
-    corpus = args.corpus.expanduser().resolve(strict=True)
-    manifest = args.manifest.expanduser()
-    if not manifest.is_file() or manifest.is_symlink():
+def _paths_alias(candidate: Path, authority: Path) -> bool:
+    if candidate == authority:
+        return True
+    if not candidate.exists():
+        return False
+    try:
+        return candidate.samefile(authority)
+    except OSError as error:
+        raise SystemExit("output path alias could not be validated") from error
+
+
+def _resolve_cli_paths(
+    corpus_argument: Path,
+    manifest_argument: Path,
+    output_argument: Path,
+    runner_argument: Path,
+) -> tuple[Path, Path, Path, Path]:
+    try:
+        corpus = corpus_argument.expanduser().resolve(strict=True)
+    except OSError as error:
+        raise SystemExit("corpus must be an existing directory") from error
+    if not corpus.is_dir():
+        raise SystemExit("corpus must be an existing directory")
+
+    manifest_input = manifest_argument.expanduser()
+    if manifest_input.is_symlink():
         raise SystemExit("manifest must be a regular file")
-    output = args.output.expanduser().resolve()
+    try:
+        manifest = manifest_input.resolve(strict=True)
+    except OSError as error:
+        raise SystemExit("manifest must be a regular file") from error
+    if not manifest.is_file():
+        raise SystemExit("manifest must be a regular file")
+
+    output_input = output_argument.expanduser()
+    if output_input.suffix != ".json":
+        raise SystemExit("output must use a .json suffix")
+    if output_input.is_symlink():
+        raise SystemExit("output must not be a symlink")
+    output = output_input.resolve(strict=False)
+    if output.exists() and not output.is_file():
+        raise SystemExit("output must be a regular file or a new path")
     if output == corpus or corpus in output.parents:
         raise SystemExit("output must be outside corpus")
 
-    root = Path(__file__).resolve().parents[1]
-    runner = Path(__file__).resolve()
+    try:
+        runner = runner_argument.expanduser().resolve(strict=True)
+    except OSError as error:
+        raise SystemExit("runner must be an existing regular file") from error
+    if not runner.is_file():
+        raise SystemExit("runner must be an existing regular file")
+    if _paths_alias(output, manifest):
+        raise SystemExit("output must not alias manifest")
+    if _paths_alias(output, runner):
+        raise SystemExit("output must not alias runner")
+    return corpus, manifest, output, runner
+
+
+def main() -> int:
+    args = _build_parser().parse_args()
+    corpus, manifest, output, runner = _resolve_cli_paths(
+        args.corpus,
+        args.manifest,
+        args.output,
+        Path(__file__),
+    )
+
+    root = runner.parents[1]
     commit, dirty = masking._git_state(root)
     if dirty:
         raise SystemExit("measurement worktree must start clean")
