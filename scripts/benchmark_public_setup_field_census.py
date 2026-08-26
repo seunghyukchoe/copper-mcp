@@ -12,7 +12,9 @@ import argparse
 import hashlib
 import hmac
 import json
+import os
 import platform
+import stat
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -111,6 +113,19 @@ class BoardObservation:
     layer_field_occurrences: Mapping[str, int]
     layer_field_presence: frozenset[str]
     layer_field_shapes: Mapping[str, int]
+
+
+@dataclass(slots=True)
+class OutputTarget:
+    path: Path
+    parent_fd: int
+
+    def close(self) -> None:
+        if self.parent_fd < 0:
+            return
+        descriptor = self.parent_fd
+        self.parent_fd = -1
+        os.close(descriptor)
 
 
 def _fixed_error(message: str) -> ValueError:
@@ -300,8 +315,8 @@ def _selection_commitment(snapshots: Sequence[masking.Snapshot]) -> str:
     return "sha256:" + digest.hexdigest()
 
 
-def _expected_selection_commitment(explicit: str | None) -> str:
-    expected = PREDECLARED_SETUP_SELECTION_COMMITMENT if explicit is None else explicit
+def _expected_selection_commitment() -> str:
+    expected = PREDECLARED_SETUP_SELECTION_COMMITMENT
     if (
         not isinstance(expected, str)
         or len(expected) != 71
@@ -365,14 +380,13 @@ def measure(
     manifest: Path,
     settings: Settings,
     *,
-    expected_selection_commitment: str | None = None,
     converter: Converter | None = None,
 ) -> dict[str, Any]:
     if settings.allow_apply or settings.allow_live_ipc or settings.allow_live_apply:
         raise _fixed_error("setup-field census is read-only")
     if ACCEPTED_SETUP_HEADS != kicad_board_ir._SETUP_METADATA_HEADS:
         raise _fixed_error("adapter accepted setup vocabulary drifted")
-    expected_selection = _expected_selection_commitment(expected_selection_commitment)
+    expected_selection = _expected_selection_commitment()
 
     entries, fingerprint = masking.load_manifest(manifest)
     expected = PREDECLARED_COHORT_FINGERPRINT
@@ -489,12 +503,47 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _open_output_parent(parent: Path) -> int:
+    if os.open not in os.supports_dir_fd:
+        raise SystemExit("platform must support anchored output creation")
+    if not hasattr(os, "O_DIRECTORY") or not hasattr(os, "O_NOFOLLOW"):
+        raise SystemExit("platform must support anchored output creation")
+
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    try:
+        expected = parent.stat(follow_symlinks=False)
+    except OSError as error:
+        raise SystemExit("output parent must be an existing directory") from error
+    if not stat.S_ISDIR(expected.st_mode):
+        raise SystemExit("output parent must be an existing directory")
+
+    descriptor = -1
+    try:
+        descriptor = os.open(parent.anchor, flags)
+        for component in parent.parts[1:]:
+            next_descriptor = os.open(component, flags, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = next_descriptor
+    except (NotImplementedError, OSError) as error:
+        if descriptor >= 0:
+            os.close(descriptor)
+        raise SystemExit("output parent must be an anchored no-follow directory") from error
+
+    actual = os.fstat(descriptor)
+    if (actual.st_dev, actual.st_ino) != (expected.st_dev, expected.st_ino):
+        os.close(descriptor)
+        raise SystemExit("output parent changed during validation")
+    return descriptor
+
+
 def _resolve_cli_paths(
     corpus_argument: Path,
     manifest_argument: Path,
     output_argument: Path,
     runner_argument: Path,
-) -> tuple[Path, Path, Path, Path]:
+) -> tuple[Path, Path, OutputTarget, Path]:
     try:
         corpus = corpus_argument.expanduser().resolve(strict=True)
     except OSError as error:
@@ -517,8 +566,14 @@ def _resolve_cli_paths(
         raise SystemExit("output must use a .json suffix")
     if output_input.is_symlink():
         raise SystemExit("output must not be a symlink")
-    output = output_input.resolve(strict=False)
-    if output.exists():
+    try:
+        output_parent = output_input.parent.resolve(strict=True)
+    except OSError as error:
+        raise SystemExit("output parent must be an existing directory") from error
+    if not output_parent.is_dir():
+        raise SystemExit("output parent must be an existing directory")
+    output = output_parent / output_input.name
+    if output.exists() or output.is_symlink():
         raise SystemExit("output must be a new path")
     if output == corpus or corpus in output.parents:
         raise SystemExit("output must be outside corpus")
@@ -529,66 +584,96 @@ def _resolve_cli_paths(
         raise SystemExit("runner must be an existing regular file") from error
     if not runner.is_file():
         raise SystemExit("runner must be an existing regular file")
-    return corpus, manifest, output, runner
+
+    parent_fd = _open_output_parent(output_parent)
+    return corpus, manifest, OutputTarget(path=output, parent_fd=parent_fd), runner
 
 
-def _write_output(output: Path, payload: str) -> None:
-    output.parent.mkdir(parents=True, exist_ok=True)
+def _write_output(target: OutputTarget, payload: str) -> None:
+    if target.parent_fd < 0:
+        raise SystemExit("output parent descriptor is closed")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
     try:
-        with output.open("x", encoding="utf-8") as stream:
-            stream.write(payload)
+        descriptor = os.open(
+            target.path.name,
+            flags,
+            0o600,
+            dir_fd=target.parent_fd,
+        )
     except FileExistsError as error:
         raise SystemExit("output must remain a new path") from error
+    except (NotImplementedError, OSError) as error:
+        raise SystemExit("output could not be created safely") from error
+
+    try:
+        stream = os.fdopen(descriptor, "w", encoding="utf-8")
+    except Exception:
+        os.close(descriptor)
+        raise
+    with stream:
+        stream.write(payload)
 
 
 def main() -> int:
     args = _build_parser().parse_args()
-    corpus, manifest, output, runner = _resolve_cli_paths(
+    corpus, manifest, output_target, runner = _resolve_cli_paths(
         args.corpus,
         args.manifest,
         args.output,
         Path(__file__),
     )
+    try:
+        root = runner.parents[1]
+        commit, dirty = masking._git_state(root)
+        if dirty:
+            raise SystemExit("measurement worktree must start clean")
+        runner_bytes = runner.read_bytes()
 
-    root = runner.parents[1]
-    commit, dirty = masking._git_state(root)
-    if dirty:
-        raise SystemExit("measurement worktree must start clean")
-    runner_bytes = runner.read_bytes()
+        settings = Settings(workspace=corpus)
+        result = measure(corpus, manifest, settings)
 
-    settings = Settings(workspace=corpus)
-    result = measure(corpus, manifest, settings)
-
-    final_commit, final_dirty = masking._git_state(root)
-    if final_commit != commit or final_dirty or runner.read_bytes() != runner_bytes:
-        raise SystemExit("measurement inputs changed during run")
-    result.update(
-        {
-            "commit": commit,
-            "dirty": False,
-            "recorded_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
-            "runner_digest": "sha256:" + hashlib.sha256(runner_bytes).hexdigest(),
-            "environment": {
-                "platform": platform.platform(),
-                "python": platform.python_version(),
-            },
-            "configuration": {
-                "max_manifest_bytes": masking.MAX_MANIFEST_BYTES,
-                "max_source_bytes": settings.max_board_bytes,
-                "operation": "read_only_closed_setup_field_census",
-            },
-            "committed_board_bytes": 0,
-            "not_claimed": [
-                "no setup or stackup product support",
-                "no converted board, route, DRC, fabrication, or hardware result",
-                "no board write, apply authority, editor mutation, or committed source input",
-            ],
-        }
-    )
-    canonical = json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False)
-    result["run_id"] = "sha256:" + hashlib.sha256(canonical.encode()).hexdigest()
-    _write_output(output, json.dumps(result, sort_keys=True, indent=2) + "\n")
-    return 0
+        final_commit, final_dirty = masking._git_state(root)
+        if final_commit != commit or final_dirty or runner.read_bytes() != runner_bytes:
+            raise SystemExit("measurement inputs changed during run")
+        result.update(
+            {
+                "commit": commit,
+                "dirty": False,
+                "recorded_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+                "runner_digest": "sha256:" + hashlib.sha256(runner_bytes).hexdigest(),
+                "environment": {
+                    "platform": platform.platform(),
+                    "python": platform.python_version(),
+                },
+                "configuration": {
+                    "max_manifest_bytes": masking.MAX_MANIFEST_BYTES,
+                    "max_source_bytes": settings.max_board_bytes,
+                    "operation": "read_only_closed_setup_field_census",
+                },
+                "committed_board_bytes": 0,
+                "not_claimed": [
+                    "no setup or stackup product support",
+                    "no converted board, route, DRC, fabrication, or hardware result",
+                    "no board write, apply authority, editor mutation, or committed source input",
+                ],
+            }
+        )
+        canonical = json.dumps(
+            result,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        result["run_id"] = "sha256:" + hashlib.sha256(canonical.encode()).hexdigest()
+        _write_output(
+            output_target,
+            json.dumps(result, sort_keys=True, indent=2) + "\n",
+        )
+        return 0
+    finally:
+        output_target.close()
 
 
 if __name__ == "__main__":
