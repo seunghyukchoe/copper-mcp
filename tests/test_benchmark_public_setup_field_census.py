@@ -30,12 +30,7 @@ def _setup() -> str:
 
 def _board(marker: str, *, setup: str | None = None) -> bytes:
     setup_text = _setup() if setup is None else setup
-    return (
-        "(kicad_pcb "
-        "(version 20240108) "
-        f"{setup_text} "
-        f"(marker {marker}))"
-    ).encode()
+    return (f"(kicad_pcb (version 20240108) {setup_text} (marker {marker}))").encode()
 
 
 def _entries(

@@ -300,9 +300,7 @@ def _selection_commitment(snapshots: Sequence[masking.Snapshot]) -> str:
 
 
 def _expected_selection_commitment(explicit: str | None) -> str:
-    expected = (
-        PREDECLARED_SETUP_SELECTION_COMMITMENT if explicit is None else explicit
-    )
+    expected = PREDECLARED_SETUP_SELECTION_COMMITMENT if explicit is None else explicit
     if (
         not isinstance(expected, str)
         or len(expected) != 71
@@ -391,9 +389,7 @@ def measure(
         max_bytes=settings.max_board_bytes,
     )
     if len(snapshots) != EXPECTED_CAPTURED:
-        raise _fixed_error(
-            f"expected {EXPECTED_CAPTURED} captured entries, got {len(snapshots)}"
-        )
+        raise _fixed_error(f"expected {EXPECTED_CAPTURED} captured entries, got {len(snapshots)}")
     selected = _select_setup_terminals(
         snapshots,
         settings=settings,
