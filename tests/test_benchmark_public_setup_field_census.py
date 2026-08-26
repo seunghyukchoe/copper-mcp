@@ -584,7 +584,5 @@ def test_output_write_stays_anchored_when_parent_is_replaced(tmp_path: Path) -> 
     finally:
         target.close()
 
-    assert (held_parent / "result.json").read_text(encoding="utf-8") == (
-        '{"anchored":true}\n'
-    )
+    assert (held_parent / "result.json").read_text(encoding="utf-8") == ('{"anchored":true}\n')
     assert not (corpus / "result.json").exists()
