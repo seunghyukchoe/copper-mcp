@@ -32,7 +32,7 @@ def test_committed_route_bundle_artifact_binds_its_inputs_and_clean_kicad_eviden
     # that bumps the version, and both assertions must keep agreeing: the literal names the
     # release the measurement belongs to, and the equality proves the shipping source can still
     # reproduce its own committed evidence.
-    assert report["copper_mcp_version"] == "0.9.0"
+    assert report["copper_mcp_version"] == "0.10.0"
     assert report["copper_mcp_version"] == copper_mcp.__version__
     assert report["fixture"] == benchmark.FIXTURE.relative_to(benchmark.ROOT).as_posix()
     assert report["fixture_sha256"] == hashlib.sha256(benchmark.FIXTURE.read_bytes()).hexdigest()

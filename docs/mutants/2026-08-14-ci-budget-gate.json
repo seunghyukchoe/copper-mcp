@@ -111,7 +111,7 @@
     {
       "id": "CB11-the-recorded-hosted-gate-duration-is-edited-down",
       "file": ".github/ci-budget-calibration.json",
-      "anchor": "          \"seconds\": 2099\n",
+      "anchor": "          \"seconds\": 2183\n",
       "replacement": "          \"seconds\": 600\n",
       "expectation": "killed",
       "killing_tests": [
