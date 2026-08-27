@@ -6,6 +6,16 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-08-27
+
+Upgrading from 0.9.0: see the
+[0.10.0 migration note](docs/migrations/copper-mcp-0.10.0.md). No schema version moves —
+`BOARD_IR_SCHEMA_VERSION` stays `0.4.0` and no persisted snapshot needs re-conversion. What moves
+is caller-visible: one new read-only MCP tool, four preview response versions, a closed
+apply-token withheld-reason vocabulary that every preview now returns, and one verified-fill
+island ceiling that rises from 4,096 to 500,000 vertices so requests that used to refuse now
+route.
+
 ### Added
 
 - A bounded fixed-point masking census now measures how many of three predeclared direct-root
@@ -60,6 +70,25 @@ All notable changes are documented here. The format follows
   exposed. Issue #91 remains open for a coordinator-owned bounded executor and its evidence gates
   ([ADR-0118](docs/adr/0118-authoritative-signoff-stays-closed-until-a-bounded-executor-exists.md),
   [issue #91](https://github.com/seunghyukchoe/copper-mcp/issues/91), `D-215`, `R-167`, `SEC-156`).
+- A benchmark-package import-side adapter now converts one net of routed tscircuit
+  SimpleRouteJson output into the existing closed v1/v2 external route document, so a foreign
+  result can be handed to the already-published disposer without a new intake shape. It is not a
+  trust boundary: it binds the routed root to the source by replaying `import_simple_route_json`
+  over byte-exact source and requiring every non-`traces` field to be byte-equal, distinguishes a
+  literal JSON number from a quoted one, applies six server-owned ceilings a caller cannot widen,
+  binds each trace to exactly one imported net through exact declared aliases only, and admits
+  only positive-width integer-nanometre single-layer rectilinear wire paths — `via`, `jumper`,
+  `through_obstacle`, layer changes, diagonals, variable width and ambiguous net ownership are
+  typed refusals rather than dropped items. The returned document remains untrusted and must still
+  pass `verify_external_route_candidate`; the adapter never constructs a candidate and never
+  decides acceptance. **This adds no public surface**: it lives in `copper_mcp.benchmarks`, is
+  re-exported from no `__init__`, is reached by no MCP tool, CLI, script or apply path, and a
+  committed test pins that no module outside that package references it. The accompanying
+  [validation contract](docs/research/tscircuit-output-validation-contract-v1.md) records the
+  split that motivates it — a per-net gate here and a whole-output gate upstream are **not**
+  substitutable, because two candidates that each dispose cleanly are not thereby clean against
+  each other — and makes no repair, apply, DRC, whole-output, electrical, fabrication or hardware
+  claim (`D-216`, `D-217`, `R-168`, `SEC-157`).
 - An internal opt-in negotiated local-repair transaction now derives immutable Board IR and
   rejected-allocation provenance, meters projection, search and candidate-validation work, and
   disposes repaired geometry through the Board IR path validator plus the ordinary whole-set
@@ -3679,7 +3708,8 @@ reproducible only by the version that recorded it.
   lifetimes, timeouts, strict contract parsing, and before/after DRC-context revision checks.
 - The development dependency floor excludes pytest versions affected by `PYSEC-2026-1845`.
 
-[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.6.0...v0.7.0

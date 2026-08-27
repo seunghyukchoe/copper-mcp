@@ -1,8 +1,8 @@
 {
   "schema": "ci-budget-calibration/1",
   "repository": "seunghyukchoe/copper-mcp",
-  "recorded": "2026-08-16",
-  "why": "The v0.7.0 release run was cancelled by its own 20-minute budget and the release shipped without provenance (D-196). The suite has since grown from 2,776 to more than 2,860 tests, so the ceilings are re-measured from completed hosted jobs before v0.9.0 rather than inherited from the previous release.",
+  "recorded": "2026-08-27",
+  "why": "The v0.7.0 release run was cancelled by its own 20-minute budget and the release shipped without provenance (D-196). Re-measured for the v0.10.0 cut because the suite materially grew again: the external-candidate verification arc (#199-#208) and the R/S/C/M wave (#210-#214) took it from more than 2,860 tests at the v0.9.0 boundary to roughly 3,200. No budget is raised by this re-record; every ceiling still clears the half rule, and the point of re-recording is that the margin is measured rather than inherited.",
   "source": "GitHub Actions REST API, read-only: GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs and GET /repos/{owner}/{repo}/actions/jobs/{job_id}. `seconds` is completed_at - started_at for the hosted job, including runner setup, checkout and post-steps -- the same wall clock bounded by job-level `timeout-minutes`.",
   "half_rule": "A budget must be at least twice the longest recorded duration of the job it bounds. Equivalently, when a measured gate exceeds half of an explicit timeout budget, raise or re-measure that budget before release.",
   "update": "Re-record before raising or lowering any budget and before every release wave that materially grows the suite. Use only completed jobs whose GitHub conclusion is exactly `success`; failed and cancelled runs stop early and therefore do not measure the work. Replace the affected job's observations with the newest representative successful sample, then run `python scripts/check_ci_budgets.py`.",
@@ -12,91 +12,91 @@
     {
       "workflow": ".github/workflows/ci.yml",
       "job": "test",
-      "note": "The two newest successful ci.yml runs at the release boundary: the PR #193 head and its post-merge main push. All three Python matrix legs are recorded because they share one job-level budget.",
+      "note": "The two newest successful ci.yml runs at the v0.10.0 release boundary, both post-merge `main` pushes: the masking-census tip (29d19b1) and the DFM-signoff merge (2036b87). All three Python matrix legs of each are recorded because they share one job-level budget. The worst leg is Python 3.12 at 2311s (38.52 min), against 2178s (36.30 min) at the v0.9.0 boundary.",
       "observations": [
         {
-          "run_id": 31878318849,
-          "job_id": 94997179067,
-          "hosted_job_name": "Python 3.13",
-          "started_at": "2026-08-15T09:57:54Z",
-          "completed_at": "2026-08-15T10:27:04Z",
-          "conclusion": "success",
-          "seconds": 1750
-        },
-        {
-          "run_id": 31878318849,
-          "job_id": 94997179079,
+          "run_id": 32692946327,
+          "job_id": 97329765246,
           "hosted_job_name": "Python 3.11",
-          "started_at": "2026-08-15T09:57:54Z",
-          "completed_at": "2026-08-15T10:28:05Z",
+          "started_at": "2026-08-24T05:16:46Z",
+          "completed_at": "2026-08-24T05:49:17Z",
           "conclusion": "success",
-          "seconds": 1811
+          "seconds": 1951
         },
         {
-          "run_id": 31878318849,
-          "job_id": 94997179083,
+          "run_id": 32692946327,
+          "job_id": 97329765272,
           "hosted_job_name": "Python 3.12",
-          "started_at": "2026-08-15T09:57:54Z",
-          "completed_at": "2026-08-15T10:32:54Z",
+          "started_at": "2026-08-24T05:16:45Z",
+          "completed_at": "2026-08-24T05:54:41Z",
           "conclusion": "success",
-          "seconds": 2100
+          "seconds": 2276
         },
         {
-          "run_id": 31876755445,
-          "job_id": 94993532674,
-          "hosted_job_name": "Python 3.12",
-          "started_at": "2026-08-15T09:20:48Z",
-          "completed_at": "2026-08-15T09:57:06Z",
-          "conclusion": "success",
-          "seconds": 2178
-        },
-        {
-          "run_id": 31876755445,
-          "job_id": 94993532691,
-          "hosted_job_name": "Python 3.11",
-          "started_at": "2026-08-15T09:20:47Z",
-          "completed_at": "2026-08-15T09:51:44Z",
-          "conclusion": "success",
-          "seconds": 1857
-        },
-        {
-          "run_id": 31876755445,
-          "job_id": 94993532776,
+          "run_id": 32692946327,
+          "job_id": 97329765379,
           "hosted_job_name": "Python 3.13",
-          "started_at": "2026-08-15T09:20:47Z",
-          "completed_at": "2026-08-15T09:49:59Z",
+          "started_at": "2026-08-24T05:16:45Z",
+          "completed_at": "2026-08-24T05:46:54Z",
           "conclusion": "success",
-          "seconds": 1752
+          "seconds": 1809
+        },
+        {
+          "run_id": 32684372444,
+          "job_id": 97306593471,
+          "hosted_job_name": "Python 3.11",
+          "started_at": "2026-08-24T02:50:22Z",
+          "completed_at": "2026-08-24T03:25:03Z",
+          "conclusion": "success",
+          "seconds": 2081
+        },
+        {
+          "run_id": 32684372444,
+          "job_id": 97306593611,
+          "hosted_job_name": "Python 3.12",
+          "started_at": "2026-08-24T02:50:22Z",
+          "completed_at": "2026-08-24T03:28:53Z",
+          "conclusion": "success",
+          "seconds": 2311
+        },
+        {
+          "run_id": 32684372444,
+          "job_id": 97306593543,
+          "hosted_job_name": "Python 3.13",
+          "started_at": "2026-08-24T02:50:22Z",
+          "completed_at": "2026-08-24T03:22:04Z",
+          "conclusion": "success",
+          "seconds": 1902
         }
       ]
     },
     {
       "workflow": ".github/workflows/release.yml",
       "job": "verify",
-      "note": "The latest completed release workflow, v0.8.0. Its release gate ran to completion and the job conclusion was success.",
+      "note": "The latest completed release workflow, v0.9.0, replacing the v0.8.0 sample recorded at the previous boundary. Its release gate ran to completion and the job conclusion was success. 2183s (36.38 min) against v0.8.0's 2099s (34.98 min).",
       "observations": [
         {
-          "run_id": 31729552824,
-          "job_id": 94546234299,
+          "run_id": 31935636809,
+          "job_id": 95136972509,
           "hosted_job_name": "Verify and build",
-          "started_at": "2026-08-13T18:12:14Z",
-          "completed_at": "2026-08-13T18:47:13Z",
+          "started_at": "2026-08-16T08:07:10Z",
+          "completed_at": "2026-08-16T08:43:33Z",
           "conclusion": "success",
-          "seconds": 2099
+          "seconds": 2183
         }
       ]
     },
     {
       "workflow": ".github/workflows/release.yml",
       "job": "publish",
-      "note": "The latest completed release workflow, v0.8.0. This job downloaded the distributions, attested them and created the release.",
+      "note": "The latest completed release workflow, v0.9.0, replacing the v0.8.0 sample. This job downloaded the distributions, attested all four assets and created the release.",
       "observations": [
         {
-          "run_id": 31729552824,
-          "job_id": 94556213583,
+          "run_id": 31935636809,
+          "job_id": 95140827452,
           "hosted_job_name": "Publish GitHub release",
-          "started_at": "2026-08-13T18:47:16Z",
-          "completed_at": "2026-08-13T18:47:27Z",
+          "started_at": "2026-08-16T08:43:37Z",
+          "completed_at": "2026-08-16T08:43:48Z",
           "conclusion": "success",
           "seconds": 11
         }

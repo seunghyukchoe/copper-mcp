@@ -104,6 +104,10 @@ contract.
   `0.3.0` and `0.2.0` is frozen where it stands: no content address moves, a persisted `0.2.0`
   envelope stops decoding, and `0.2.0` as published spans three different accepted sets across
   `v0.5.0`–`v0.8.0`.
+- [CopperMCP 0.10.0 migration](migrations/copper-mcp-0.10.0.md) — no schema version moves and no
+  snapshot is re-converted; what moves is the new read-only `verify_external_route_candidate` tool,
+  four preview response versions carrying a closed eight-value withheld-apply-token vocabulary, and
+  the verified-fill island ceiling widening from 4,096 to a measured 500,000 vertices.
 - [Public media assets](assets/README.md) — project media, with provenance; not routing or
   benchmark evidence.
 
