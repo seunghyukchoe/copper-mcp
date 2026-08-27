@@ -22,6 +22,12 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- An apply *result* that contradicts its own contract is now reported as the defect it is, not as
+  a refusal. `ApplyResult` and `PlacementApplyResult` validated themselves with
+  `ApplyRequestError` — the same type used for malformed requests — and those checks can fire
+  after an authorized write. On the `mcp` 2.1 line that would have told a caller its request was
+  declined and its board untouched at the moment the board may have changed. They now raise
+  `ApplyResultInvariantError`, which is never translated (`ADR-0121`, `D-226`, `R-177`).
 - `validate_candidate` and `compare_candidates` refused an over-budget or malformed manifest with
   an untyped `ValueError`, which is indistinguishable from an unhandled defect at the point it is
   raised. Both now raise `models.ManifestContractError`, as does every other rejection in the

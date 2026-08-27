@@ -101,7 +101,7 @@ the wrong direction for "what is safe to ignore"; the dynamic runs cover the gap
 | `WorkspaceStaleError` *(subclass)* | pre-rename refusal; target untouched | via `WorkspaceViolationError` |
 | `PlacementError` | "an untrusted placement request violates its declared contract" | `_ANTICIPATED_REFUSALS` |
 | `PlacementPreviewError` *(subclass)* | opt-in preview cannot be honoured safely | via `PlacementError` |
-| `ApplyRequestError` | "an untrusted apply request violates its declared contract" | `_ANTICIPATED_REFUSALS` |
+| `ApplyRequestError` *(parse/bound sites only)* | "an untrusted apply request violates its declared contract" — 27 raise sites, all in `parse_apply_request`, `parse_placement_apply_request` and the `_bound_manifest` they call, all before anything is written | `_ANTICIPATED_REFUSALS` |
 | `PostPlacementObservationError` | "a fixed, non-echoing refusal for post-placement evidence" | `_ANTICIPATED_REFUSALS` |
 | `BoardFormatError` | "an input is not a supported KiCad board" | `_ANTICIPATED_REFUSALS` |
 | `KicadIpcDisabledError` | live capture attempted without the operator opt-in | `_ANTICIPATED_REFUSALS` |
@@ -120,6 +120,7 @@ add a second, laxer path for the same types.
 
 | Exception type | Why it is not an answer |
 |---|---|
+| `ApplyResultInvariantError` **(new)** | the other 15 sites the old `ApplyRequestError` covered: `ApplyResult.__post_init__` and `PlacementApplyResult.__post_init__`. These assert that a result *this code built* is coherent, and they can fire **after an authorized write** — see "The split that review found" below |
 | `LiveApplyError` | its own contract: "a caller-side programming fault, never for an untrusted request" |
 | `ApplyServiceError` | its own contract: "only for conditions that cannot be expressed as a typed refusal" |
 | `WorkspacePostRenameError` | the board has already changed; nothing about this is a refusal |
@@ -136,6 +137,72 @@ add a second, laxer path for the same types.
 `ApplyTokenError` appears in neither list because it **cannot escape a tool body**: all three of
 its raise sites are caught inside `apply/service.py` and `live_apply.py` and converted to a typed
 structured refusal before the adapter is reached.
+
+### The split that review found
+
+The first version of this table classified `ApplyRequestError` by its name and docstring and was
+wrong to. Review pointed out that the type did double duty, and the second duty is the worst case
+this whole record exists to prevent.
+
+Of its 42 raise sites, 27 are what the name says: `parse_apply_request`,
+`parse_placement_apply_request`, and the `_bound_manifest` those two call — untrusted payload,
+checked before anything is written. The other 15 were in `ApplyResult.__post_init__` and
+`PlacementApplyResult.__post_init__`, and those are not requests at all. They assert that a result
+*this code just constructed* is internally coherent: an `applied` result carrying no new revision,
+an `applied_but_unverified` result carrying no diagnostic, a `refused` result that nonetheless
+reports a new revision.
+
+**Those invariants can fire after the board has been written.** Translating them would tell a
+caller its request was declined — and, by the meaning of `refused` in this vocabulary, that its
+board was not touched — at the exact moment the board may have changed. That is the forbidden
+direction on the one surface where it costs the most, and a mutation would have been enough to
+trigger it.
+
+So `ApplyResultInvariantError` is a new type carrying those 15 sites. It is a `RuntimeError`
+rather than a `ValueError`, following `ApplyServiceError` and `LiveApplyError`, so no
+request-shaped `except` can sweep it up even after a later edit. `mcp_server._EXCLUDED_INVARIANTS`
+names it explicitly, so its exclusion is a disjointness test rather than an absence someone has to
+notice, and mutants `RC14`–`RC17` pin the split from four directions: either invariant collapsed
+back into the request type, the invariant type admitted to the audited list, and the invariant type
+made a subclass of the request type.
+
+### The same question, asked of every other audited type
+
+Review also asked whether any other audited type does the same double duty. A static pass over
+every raise site of all 16 audited types, grouped by enclosing scope, finds the dual-use shape — a
+raise inside a `__post_init__` — in seven more places. They are recorded here rather than left for
+a later reviewer to rediscover:
+
+| Module | Server-built result class | Sites |
+|---|---|---|
+| `route_preview.py` | `RoutePreview` | 31 |
+| `placement/contracts.py` | `PlacementResult`, `PlacementCandidate`, `PlacementLegality`, `RuleResult` | 18 |
+| `board_ir_service.py` | `BoardIrSummary` | 13 |
+| `route_bundle.py` | `RouteBundlePlan`, `RouteBundlePreview` | 12 |
+| `circuit_scene.py` | `SceneAnnotation`, `WithheldKind` | 4 |
+| `live_editor_context.py` | `LiveEditorContext` | 3 |
+
+Two things separate these from the apply case, and the decision rests on both.
+
+**None of them can fire after a mutation.** Every one belongs to a read-only proposal or
+observation: nothing has been written, so a misclassified crash there misreports the health of the
+server, never whether the caller's board changed. The apply pair is the only surface in the project
+where the second is possible, and that is a real line rather than a convenient one.
+
+**Their sibling classes in the same modules are genuinely caller-decoded**, so a sweep would be
+wrong as often as it was right. `BoardIrRequest`, `RouteBundleRequest`, `RoutePreviewRequest`,
+`LiveEditorContextRequest`, `PlacementIntent`, `PlacementProposal` and the seven placement rule
+classes all validate untrusted payloads in exactly the same `__post_init__` shape, and
+`models.CandidateSummary`, `DrcSummary` and `ErcSummary` are decoded straight from a caller's
+manifest by `validate_candidate`. Splitting the rest means auditing each class for whether it is
+ever built from caller input — not a mechanical rename — and it churns roughly 100 raise sites
+across six modules against tests that assert the current types 100+ times.
+
+That is its own slice, and it is carried as [`R-177`](../ledgers/risk-register.md) rather than
+done here in a review round. What this record claims is bounded accordingly: **the refusal/crash
+classification is correct on the apply surface and correct for every request-boundary type; on the
+six read-only surfaces above, a server-side invariant violation still reaches a 2.1 caller dressed
+as a refusal.**
 
 ## Consequences
 
