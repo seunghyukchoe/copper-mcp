@@ -139,6 +139,48 @@
       "killing_tests": [
         "tests/test_excessive_agency_evaluation.py::test_budget_check_rejects_a_crash_dressed_as_a_refusal"
       ]
+    },
+    {
+      "id": "RC14-post-write-invariant-collapses-back-into-the-request-type",
+      "file": "src/copper_mcp/apply/contracts.py",
+      "anchor": "                raise ApplyResultInvariantError(\n                    \"an unverified apply must report why it is unverified\"\n                )",
+      "replacement": "                raise ApplyRequestError(\n                    \"an unverified apply must report why it is unverified\"\n                )",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_an_apply_result_invariant_is_a_crash_not_a_refusal[unverified-with-no-diagnostic]"
+      ]
+    },
+    {
+      "id": "RC15-placement-post-write-invariant-collapses-back-into-the-request-type",
+      "file": "src/copper_mcp/apply/contracts.py",
+      "anchor": "            raise ApplyResultInvariantError(\"an applied placement must report its new revision\")",
+      "replacement": "            raise ApplyRequestError(\"an applied placement must report its new revision\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_an_apply_result_invariant_is_a_crash_not_a_refusal[placement-applied-with-no-new-revision]"
+      ]
+    },
+    {
+      "id": "RC16-invariant-type-admitted-to-the-audited-list",
+      "file": "src/copper_mcp/mcp_server.py",
+      "anchor": "_ANTICIPATED_REFUSALS: tuple[type[Exception], ...] = (\n    ApplyRequestError,\n",
+      "replacement": "_ANTICIPATED_REFUSALS: tuple[type[Exception], ...] = (\n    ApplyRequestError,\n    ApplyResultInvariantError,\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_the_apply_invariant_type_is_not_in_the_audited_list",
+        "tests/test_mcp_refusal_contract.py::test_a_crash_is_never_dressed_as_a_refusal[ApplyResultInvariantError]"
+      ]
+    },
+    {
+      "id": "RC17-invariant-type-made-a-subclass-of-the-request-type",
+      "file": "src/copper_mcp/apply/contracts.py",
+      "anchor": "class ApplyResultInvariantError(RuntimeError):",
+      "replacement": "class ApplyResultInvariantError(ApplyRequestError):",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_the_apply_invariant_type_is_not_in_the_audited_list",
+        "tests/test_mcp_refusal_contract.py::test_an_apply_result_invariant_is_a_crash_not_a_refusal[applied-with-no-new-revision]"
+      ]
     }
   ]
 }
