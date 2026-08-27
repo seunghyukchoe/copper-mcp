@@ -8,31 +8,32 @@
     {
       "id": "PK01-eperm-clause-removed",
       "file": "scripts/benchmark_freerouting_comparison.py",
-      "anchor": "        except PermissionError:\n            if process.poll() is None:\n                raise\n            return\n",
-      "replacement": "",
+      "anchor": "        except PermissionError as refused:\n            if process.poll() is None:\n                raise\n            state = _process_group_state(process.pid)\n",
+      "replacement": "        except PermissionError:\n            raise\n        else:\n            state = _process_group_state(process.pid)\n",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_benchmark_freerouting_comparison.py::test_kill_accepts_eperm_only_from_a_recycled_group_whose_child_is_reaped"
+        "tests/test_benchmark_freerouting_comparison.py::test_kill_accepts_eperm_only_when_the_whole_group_is_gone"
       ]
     },
     {
-      "id": "PK02-eperm-swallowed-without-proving-the-child-is-reaped",
+      "id": "PK02-eperm-swallowed-without-proving-anything",
       "file": "scripts/benchmark_freerouting_comparison.py",
-      "anchor": "            if process.poll() is None:\n                raise\n            return\n",
-      "replacement": "            return\n",
+      "anchor": "            if process.poll() is None:\n                raise\n            state = _process_group_state(process.pid)\n",
+      "replacement": "            return\n            state = _process_group_state(process.pid)\n",
       "expectation": "killed",
       "killing_tests": [
+        "tests/test_benchmark_freerouting_comparison.py::test_kill_refuses_eperm_while_any_process_remains_in_the_group",
         "tests/test_benchmark_freerouting_comparison.py::test_kill_surfaces_eperm_when_the_child_it_owns_is_still_alive"
       ]
     },
     {
-      "id": "PK03-the-reap-proof-is-read-backwards",
+      "id": "PK03-the-leader-reap-check-is-read-backwards",
       "file": "scripts/benchmark_freerouting_comparison.py",
       "anchor": "            if process.poll() is None:\n",
       "replacement": "            if process.poll() is not None:\n",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_benchmark_freerouting_comparison.py::test_kill_accepts_eperm_only_from_a_recycled_group_whose_child_is_reaped",
+        "tests/test_benchmark_freerouting_comparison.py::test_kill_accepts_eperm_only_when_the_whole_group_is_gone",
         "tests/test_benchmark_freerouting_comparison.py::test_kill_surfaces_eperm_when_the_child_it_owns_is_still_alive"
       ]
     },
@@ -43,7 +44,50 @@
       "replacement": "        except (ProcessLookupError, PermissionError):\n            return\n",
       "expectation": "killed",
       "killing_tests": [
+        "tests/test_benchmark_freerouting_comparison.py::test_kill_refuses_eperm_while_any_process_remains_in_the_group",
         "tests/test_benchmark_freerouting_comparison.py::test_kill_surfaces_eperm_when_the_child_it_owns_is_still_alive"
+      ]
+    },
+    {
+      "id": "PK05-the-group-probe-is-deleted-and-a-reaped-leader-alone-is-taken-as-proof",
+      "file": "scripts/benchmark_freerouting_comparison.py",
+      "anchor": "            state = _process_group_state(process.pid)\n            if state == \"gone\":\n                return\n",
+      "replacement": "            state = \"gone\"\n            if state == \"gone\":\n                return\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_freerouting_comparison.py::test_kill_refuses_eperm_while_any_process_remains_in_the_group"
+      ]
+    },
+    {
+      "id": "PK06-the-group-probe-result-is-inverted",
+      "file": "scripts/benchmark_freerouting_comparison.py",
+      "anchor": "    except ProcessLookupError:\n        return \"gone\"\n    except PermissionError:\n        return \"unsignalable\"\n",
+      "replacement": "    except ProcessLookupError:\n        return \"unsignalable\"\n    except PermissionError:\n        return \"gone\"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_freerouting_comparison.py::test_kill_accepts_eperm_only_when_the_whole_group_is_gone",
+        "tests/test_benchmark_freerouting_comparison.py::test_kill_refuses_eperm_while_any_process_remains_in_the_group"
+      ]
+    },
+    {
+      "id": "PK07-a-signalable-group-is-quietly-left-unkilled",
+      "file": "scripts/benchmark_freerouting_comparison.py",
+      "anchor": "            try:\n                os.killpg(process.pid, signal.SIGKILL)\n            except ProcessLookupError:\n                pass\n            return\n",
+      "replacement": "            return\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_freerouting_comparison.py::test_kill_redelivers_once_when_the_group_turns_out_to_be_signalable"
+      ]
+    },
+    {
+      "id": "PK08-the-null-probe-becomes-a-real-signal",
+      "file": "scripts/benchmark_freerouting_comparison.py",
+      "anchor": "        os.killpg(pgid, 0)\n",
+      "replacement": "        os.killpg(pgid, signal.SIGKILL)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_freerouting_comparison.py::test_kill_accepts_eperm_only_when_the_whole_group_is_gone",
+        "tests/test_benchmark_freerouting_comparison.py::test_kill_redelivers_once_when_the_group_turns_out_to_be_signalable"
       ]
     }
   ]
