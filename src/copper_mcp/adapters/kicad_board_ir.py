@@ -1080,7 +1080,11 @@ class _Converter:
             )
 
     def _check_group(self, expression: SExpr, locator: str) -> None:
-        """Accept one *unlocked* root ``(group ...)`` as editor organisation, on a closed shape.
+        """Accept one *unlocked* ``(group ...)`` as editor organisation, on a closed shape.
+
+        Serves a group at board root **and one inside a footprint**, because KiCad dispatches both
+        to the same ``parseGROUP`` and writes both through the same formatter -- there is no
+        separate footprint-group grammar to write a second validator against (D-228).
 
         The acceptance argument is about what a group *is*, and it is conditional, so each
         condition is checked and refuses rather than being assumed:
