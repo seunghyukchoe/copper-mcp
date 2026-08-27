@@ -481,25 +481,29 @@ def test_every_committed_job_that_runs_the_suite_declares_a_budget() -> None:
 def test_the_calibration_file_records_the_hosted_runs_it_claims_to() -> None:
     """The release boundary pins the newest successful CI pair and last release run.
 
-    The CI sample is PR #193 plus its post-merge `main` push, all three matrix
-    legs from each because one job-level budget bounds them. The release sample
-    remains v0.8.0, the latest completed tag-triggered workflow before v0.9.0.
+    Re-pinned at the v0.10.0 boundary. The CI sample is the two newest successful
+    post-merge `main` pushes -- the masking-census tip and the DFM-signoff merge --
+    all three matrix legs from each because one job-level budget bounds them. The
+    release sample moves to v0.9.0, the latest completed tag-triggered workflow.
+
+    This assertion is why the calibration file cannot drift silently: re-recording
+    it is a reviewed edit that must move these numbers too.
     """
 
     document = json.loads((ROOT / check_ci_budgets.CALIBRATION).read_text(encoding="utf-8"))
     by_job = {(entry["workflow"], entry["job"]): entry for entry in document["jobs"]}
 
     verify = by_job[(".github/workflows/release.yml", "verify")]
-    assert [observation["seconds"] for observation in verify["observations"]] == [2099]
-    assert verify["observations"][0]["run_id"] == 31729552824
+    assert [observation["seconds"] for observation in verify["observations"]] == [2183]
+    assert verify["observations"][0]["run_id"] == 31935636809
 
     ci = by_job[(".github/workflows/ci.yml", "test")]
     assert len(ci["observations"]) == 6
     assert {observation["run_id"] for observation in ci["observations"]} == {
-        31876755445,
-        31878318849,
+        32684372444,
+        32692946327,
     }
-    assert max(observation["seconds"] for observation in ci["observations"]) == 2178
+    assert max(observation["seconds"] for observation in ci["observations"]) == 2311
 
     # Every committed observation is a completed successful run, which is the only
     # kind the checker will calibrate from.
