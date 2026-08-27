@@ -103,11 +103,15 @@ binding of an existing candidate are untouched.
 
 ### What a 0.9.0 caller must do
 
-**Every preview response now carries both `apply_token` and `apply_token_withheld_reason`, and
-sets exactly one of them.** The contract enforces the exclusive-or in both directions.
+**The route, layered-route, and placement preview responses — including their live variants —
+now carry both `apply_token` and `apply_token_withheld_reason`, and set exactly one of them.**
+The contract enforces the exclusive-or in both directions. This does **not** apply to
+`preview_route_bundle`: its response variants stay at schema version `1.0` and carry neither
+field, so a bundle-preview client must not require the reason key or attempt to read it.
 
 1. **A closed response decoder must accept the new key.** A decoder that rejects unknown fields
-   will fail on every preview response, including ones it handled in 0.9.0.
+   will fail on every route, layered-route, and placement preview response, including ones it
+   handled in 0.9.0.
 2. **`apply_token` is no longer an optional key with a `None` default — it is always present.**
    Code that *constructs* or round-trips these responses and previously omitted `apply_token`
    now fails validation. Code that only reads them is unaffected by this half.
