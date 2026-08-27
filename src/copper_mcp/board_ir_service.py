@@ -62,6 +62,7 @@ _MEASURED_COUNT_FIELDS = (
     "unmodelled_thermal_bridge_angle_pad_count",
     "unmodelled_setup_field_count",
     "unmodelled_stackup_layer_count",
+    "unmodelled_footprint_field_count",
 )
 _OBJECT_COLLECTIONS = (
     "outline",
