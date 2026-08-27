@@ -152,6 +152,14 @@ structured refusal before the adapter is reached.
   contract was a *minor* release inside 2.x, so "a minor bump cannot move this surface" is exactly
   the assumption this history refutes. `2.0.0` and `2.1.1` are the two resolutions the full suite
   is run against, and `<2.2.0` admits every published 2.x and nothing beyond what was exercised.
+- **The maintenance rule that upper bound implies, stated so it is a rule rather than a habit:
+  admitting a new `mcp` minor means re-running the dual matrix on it — the full suite against both
+  the new resolution and the existing lower bound, plus the excessive-agency evaluation and this
+  ADR's mutation spec on each — and only then moving the bound.** The audit table above is a claim
+  about how one specific SDK classifies an escaping exception. That claim was true of 2.0.x, was
+  silently falsified by 2.1.0, and is re-established here by measurement rather than by reading a
+  changelog. A minor bump taken on the strength of semantic versioning alone would repeat exactly
+  the step `D-225` had to undo.
 - Adding a tool requires nothing new; registration carries the contract. Adding a *refusal type*
   requires an audit and an entry in the table above, which is the intended friction.
 - Twelve committed mutants under

@@ -33,6 +33,13 @@ dependencies = [
   # message replaced -- so "a minor bump cannot move this surface" is the assumption this very
   # history refutes. The full suite is run against both ends of the declared range, `2.0.0` and
   # `2.1.1`; `<2.2.0` admits every published 2.x and nothing that has not been exercised.
+  #
+  # Admitting a new minor is therefore a measurement, not an edit. Re-run the dual matrix on it --
+  # the full suite against the new resolution *and* the existing lower bound, plus the
+  # excessive-agency evaluation and `docs/mutants/2026-08-27-mcp-refusal-contract.json` on each --
+  # and move the bound only afterwards. `ADR-0121`'s audit table is a claim about how one specific
+  # SDK classifies an escaping exception; 2.1.0 falsified that claim without a major bump, so
+  # semantic versioning is not evidence here.
   "mcp>=2.0.0,<2.2.0",
   "pydantic>=2.11,<3.0",
 ]

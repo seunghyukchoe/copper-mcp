@@ -47,5 +47,12 @@ is about was changed by a *minor* release inside 2.x, so the bound tracks what h
 rather than what semantic versioning permits. Pin either end with confidence; nothing here is a
 claim about a future 2.2 or about 3.x.
 
+If you maintain a fork or an independent `mcp` pin and want to move past `2.2.0` before this
+project does, run the same dual matrix first: the full suite against the new resolution and
+against `2.0.0`, plus `scripts/evaluate_excessive_agency.py` and
+[the refusal-contract mutants](../mutants/2026-08-27-mcp-refusal-contract.json) on each. The audit
+in ADR-0121 is a claim about how one SDK version classifies an escaping exception, and 2.1.0
+changed that without a major bump.
+
 See [ADR-0121](../adr/0121-a-refusal-is-an-answer-and-a-crash-is-not.md) for the per-type audit,
 `D-226` for the decision, and `SEC-163` for the review of the refusal-message surface.
