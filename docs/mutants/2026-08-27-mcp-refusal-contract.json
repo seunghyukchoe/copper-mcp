@@ -1,0 +1,186 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": ["-q", "--no-cov"],
+  "mutants": [
+    {
+      "id": "RC01-translation-clause-deleted",
+      "file": "src/copper_mcp/mcp_server.py",
+      "anchor": "        except _ANTICIPATED_REFUSALS as error:\n            raise ToolError(str(error)) from error\n",
+      "replacement": "        except () as error:\n            raise ToolError(str(error)) from error\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_an_audited_refusal_is_re_raised_as_an_anticipated_tool_error[RequestError]",
+        "tests/test_mcp_refusal_contract.py::test_the_refusal_message_crosses_the_boundary_unchanged"
+      ]
+    },
+    {
+      "id": "RC02-blanket-except-introduced",
+      "file": "src/copper_mcp/mcp_server.py",
+      "anchor": "        except _ANTICIPATED_REFUSALS as error:\n            raise ToolError(str(error)) from error\n",
+      "replacement": "        except Exception as error:\n            raise ToolError(str(error)) from error\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_a_crash_is_never_dressed_as_a_refusal[LiveApplyError]",
+        "tests/test_mcp_refusal_contract.py::test_a_crash_is_never_dressed_as_a_refusal[ValueError]",
+        "tests/test_mcp_refusal_contract.py::test_a_crash_is_never_dressed_as_a_refusal[RecursionError]"
+      ]
+    },
+    {
+      "id": "RC03-value-error-family-caught-instead-of-audited-types",
+      "file": "src/copper_mcp/mcp_server.py",
+      "anchor": "        except _ANTICIPATED_REFUSALS as error:\n",
+      "replacement": "        except ValueError as error:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_a_crash_is_never_dressed_as_a_refusal[ValueError]",
+        "tests/test_mcp_refusal_contract.py::test_a_crash_is_never_dressed_as_a_refusal[ZoneFillError]"
+      ]
+    },
+    {
+      "id": "RC04-request-boundary-type-dropped-from-the-audited-list",
+      "file": "src/copper_mcp/mcp_server.py",
+      "anchor": "    RequestError,\n    WorkspaceViolationError,\n)",
+      "replacement": "    WorkspaceViolationError,\n)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_an_audited_refusal_is_re_raised_as_an_anticipated_tool_error[RequestError]",
+        "tests/test_mcp_refusal_contract.py::test_an_audited_refusal_is_re_raised_as_an_anticipated_tool_error[RoutePreviewError]"
+      ]
+    },
+    {
+      "id": "RC05-workspace-confinement-type-dropped-from-the-audited-list",
+      "file": "src/copper_mcp/mcp_server.py",
+      "anchor": "    RequestError,\n    WorkspaceViolationError,\n)",
+      "replacement": "    RequestError,\n)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_an_audited_refusal_is_re_raised_as_an_anticipated_tool_error[WorkspaceViolationError]",
+        "tests/test_mcp_refusal_contract.py::test_an_audited_refusal_is_re_raised_as_an_anticipated_tool_error[WorkspaceStaleError]"
+      ]
+    },
+    {
+      "id": "RC06-manifest-contract-type-dropped-from-the-audited-list",
+      "file": "src/copper_mcp/mcp_server.py",
+      "anchor": "    ManifestContractError,\n    PlacementError,\n",
+      "replacement": "    PlacementError,\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_an_audited_refusal_is_re_raised_as_an_anticipated_tool_error[ManifestContractError]"
+      ]
+    },
+    {
+      "id": "RC07-refusal-message-dropped-in-translation",
+      "file": "src/copper_mcp/mcp_server.py",
+      "anchor": "            raise ToolError(str(error)) from error\n\n    return refuse",
+      "replacement": "            raise ToolError(\"\") from error\n\n    return refuse",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_the_refusal_message_crosses_the_boundary_unchanged",
+        "tests/test_mcp_refusal_contract.py::test_an_audited_refusal_is_re_raised_as_an_anticipated_tool_error[RequestError]"
+      ]
+    },
+    {
+      "id": "RC08-registration-stops-wrapping-tool-bodies",
+      "file": "src/copper_mcp/mcp_server.py",
+      "anchor": "        def decorate(function: _ToolCallable) -> _ToolCallable:\n            return register(_refusals_as_tool_errors(function))\n",
+      "replacement": "        def decorate(function: _ToolCallable) -> _ToolCallable:\n            return register(function)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_every_registered_tool_carries_the_refusal_translation",
+        "tests/test_mcp_refusal_contract.py::test_a_workspace_refusal_names_no_path_it_was_given"
+      ]
+    },
+    {
+      "id": "RC09-candidate-batch-gate-reverts-to-an-untyped-refusal",
+      "file": "src/copper_mcp/tools.py",
+      "anchor": "        raise ManifestContractError(\"between 1 and 100 candidates are required\")",
+      "replacement": "        raise ValueError(\"between 1 and 100 candidates are required\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_compare_candidates_refuses_an_over_limit_batch_with_a_typed_refusal"
+      ]
+    },
+    {
+      "id": "RC10-manifest-decoding-reverts-to-an-untyped-refusal",
+      "file": "src/copper_mcp/models.py",
+      "anchor": "        raise ManifestContractError(f\"candidate is missing required fields: {', '.join(missing)}\")",
+      "replacement": "        raise ValueError(f\"candidate is missing required fields: {', '.join(missing)}\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_a_malformed_candidate_manifest_refuses_with_a_typed_refusal"
+      ]
+    },
+    {
+      "id": "RC11-adapter-transport-guard-reverts-to-a-crash",
+      "file": "src/copper_mcp/mcp_server.py",
+      "anchor": "        raise ToolError(\"board render delivery is available only over stdio\")",
+      "replacement": "        raise ValueError(\"board render delivery is available only over stdio\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_the_render_transport_guard_refuses_in_the_adapters_own_vocabulary"
+      ]
+    },
+    {
+      "id": "RC12-schematic-transport-guard-reverts-to-a-crash",
+      "file": "src/copper_mcp/mcp_server.py",
+      "anchor": "        raise ToolError(\"schematic artifact delivery is available only over stdio\")",
+      "replacement": "        raise ValueError(\"schematic artifact delivery is available only over stdio\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_the_schematic_transport_guard_refuses_in_the_adapters_own_vocabulary"
+      ]
+    },
+    {
+      "id": "RC13-crash-class-admitted-to-the-harness-boundary-set",
+      "file": "scripts/evaluate_excessive_agency.py",
+      "anchor": "BOUNDARY_EXCEPTIONS = frozenset({\"ToolError\", \"ValidationError\"})",
+      "replacement": "BOUNDARY_EXCEPTIONS = frozenset({\"ToolError\", \"ValidationError\", \"UnexpectedToolError\"})",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_excessive_agency_evaluation.py::test_budget_check_rejects_a_crash_dressed_as_a_refusal"
+      ]
+    },
+    {
+      "id": "RC14-post-write-invariant-collapses-back-into-the-request-type",
+      "file": "src/copper_mcp/apply/contracts.py",
+      "anchor": "                raise ApplyResultInvariantError(\n                    \"an unverified apply must report why it is unverified\"\n                )",
+      "replacement": "                raise ApplyRequestError(\n                    \"an unverified apply must report why it is unverified\"\n                )",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_an_apply_result_invariant_is_a_crash_not_a_refusal[unverified-with-no-diagnostic]"
+      ]
+    },
+    {
+      "id": "RC15-placement-post-write-invariant-collapses-back-into-the-request-type",
+      "file": "src/copper_mcp/apply/contracts.py",
+      "anchor": "            raise ApplyResultInvariantError(\"an applied placement must report its new revision\")",
+      "replacement": "            raise ApplyRequestError(\"an applied placement must report its new revision\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_an_apply_result_invariant_is_a_crash_not_a_refusal[placement-applied-with-no-new-revision]"
+      ]
+    },
+    {
+      "id": "RC16-invariant-type-admitted-to-the-audited-list",
+      "file": "src/copper_mcp/mcp_server.py",
+      "anchor": "_ANTICIPATED_REFUSALS: tuple[type[Exception], ...] = (\n    ApplyRequestError,\n",
+      "replacement": "_ANTICIPATED_REFUSALS: tuple[type[Exception], ...] = (\n    ApplyRequestError,\n    ApplyResultInvariantError,\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_the_apply_invariant_type_is_not_in_the_audited_list",
+        "tests/test_mcp_refusal_contract.py::test_a_crash_is_never_dressed_as_a_refusal[ApplyResultInvariantError]"
+      ]
+    },
+    {
+      "id": "RC17-invariant-type-made-a-subclass-of-the-request-type",
+      "file": "src/copper_mcp/apply/contracts.py",
+      "anchor": "class ApplyResultInvariantError(RuntimeError):",
+      "replacement": "class ApplyResultInvariantError(ApplyRequestError):",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_mcp_refusal_contract.py::test_the_apply_invariant_type_is_not_in_the_audited_list",
+        "tests/test_mcp_refusal_contract.py::test_an_apply_result_invariant_is_a_crash_not_a_refusal[applied-with-no-new-revision]"
+      ]
+    }
+  ]
+}

@@ -47,7 +47,33 @@ MAX_MANIFEST_COORDINATE_NM = 1_000_000_000
 
 
 class ApplyRequestError(ValueError):
-    """Raised when an untrusted apply request violates its declared contract."""
+    """Raised when an untrusted apply request violates its declared contract.
+
+    Strictly a *request* type: it is raised only while parsing or bounding a payload the
+    caller supplied, before anything is written. That restriction is what makes it safe for
+    `mcp_server` to translate into an anticipated MCP `ToolError` — a refusal the caller is
+    meant to read. See `ApplyResultInvariantError` for the other half, and `ADR-0121`.
+    """
+
+
+class ApplyResultInvariantError(RuntimeError):
+    """Raised when an apply *result* the server built contradicts its own contract.
+
+    This is never the caller's fault and never a refusal. `ApplyResult` and
+    `PlacementApplyResult` describe what happened to a board, and their `__post_init__`
+    checks are assertions about a value *this code* constructed: an `applied` result with no
+    new revision, an `applied_but_unverified` result with no diagnostic, a `refused` result
+    that nonetheless reports a new revision. Each means the apply surface produced an
+    incoherent account of its own work.
+
+    It is deliberately **not** in `mcp_server._ANTICIPATED_REFUSALS`, and it is a
+    `RuntimeError` rather than a `ValueError` so no `except` clause aimed at a request type
+    can ever sweep it up. The reason is the one direction of error this project will not take:
+    these invariants can fire *after* an authorized write, so reporting one as a deliberate
+    refusal would tell a caller its request was declined and its board untouched at the exact
+    moment the board may have changed. A crash is the honest answer, and on `mcp` 2.1 it is
+    classified as one (`ADR-0121`, `R-177`).
+    """
 
 
 class ApplyFailureCode(StrEnum):
@@ -414,24 +440,28 @@ class ApplyResult:
             MappingProxyType(dict(self.conversion_diagnostic_counts)),
         )
         if self.status not in {"applied", "refused", "applied_but_unverified"}:
-            raise ApplyRequestError("an apply status is malformed")
+            raise ApplyResultInvariantError("an apply status is malformed")
         if self.status == "applied":
             if self.diagnostic is not None:
-                raise ApplyRequestError("an applied board carries no diagnostic")
+                raise ApplyResultInvariantError("an applied board carries no diagnostic")
             if self.board_revision_after is None or self.verification is None:
-                raise ApplyRequestError(
+                raise ApplyResultInvariantError(
                     "an applied board must report its new revision and evidence"
                 )
             if self.board_revision_after == self.board_revision_before:
-                raise ApplyRequestError("an applied board must differ from the board it replaced")
+                raise ApplyResultInvariantError(
+                    "an applied board must differ from the board it replaced"
+                )
         elif self.status == "applied_but_unverified":
             if self.diagnostic is None:
-                raise ApplyRequestError("an unverified apply must report why it is unverified")
+                raise ApplyResultInvariantError(
+                    "an unverified apply must report why it is unverified"
+                )
         else:  # refused
             if self.diagnostic is None:
-                raise ApplyRequestError("a refusal must carry a diagnostic")
+                raise ApplyResultInvariantError("a refusal must carry a diagnostic")
             if self.board_revision_after is not None:
-                raise ApplyRequestError("a refusal must not report a new revision")
+                raise ApplyResultInvariantError("a refusal must not report a new revision")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -485,26 +515,26 @@ class PlacementApplyResult:
             MappingProxyType(dict(self.conversion_diagnostic_counts)),
         )
         if self.status not in {"applied", "refused", "applied_but_unverified"}:
-            raise ApplyRequestError("a placement apply status is malformed")
+            raise ApplyResultInvariantError("a placement apply status is malformed")
         if self.bytes_changed < 0 or self.footprints_moved < 0:
-            raise ApplyRequestError("placement apply metrics must be non-negative")
+            raise ApplyResultInvariantError("placement apply metrics must be non-negative")
         if self.status == "applied":
             if self.diagnostic is not None or self.verification is None:
-                raise ApplyRequestError("an applied placement carries no diagnostic")
+                raise ApplyResultInvariantError("an applied placement carries no diagnostic")
             if self.board_revision_after is None:
-                raise ApplyRequestError("an applied placement must report its new revision")
+                raise ApplyResultInvariantError("an applied placement must report its new revision")
             if self.board_revision_after == self.board_revision_before:
-                raise ApplyRequestError("an applied placement must differ from its source")
+                raise ApplyResultInvariantError("an applied placement must differ from its source")
             if self.footprints_moved < 1:
-                raise ApplyRequestError("an applied placement must move a footprint")
+                raise ApplyResultInvariantError("an applied placement must move a footprint")
         elif self.status == "applied_but_unverified":
             if self.diagnostic is None:
-                raise ApplyRequestError(
+                raise ApplyResultInvariantError(
                     "an unverified placement apply must report why it is unverified"
                 )
         else:
             if self.diagnostic is None or self.board_revision_after is not None:
-                raise ApplyRequestError("a placement refusal must report no new revision")
+                raise ApplyResultInvariantError("a placement refusal must report no new revision")
 
     def to_dict(self) -> dict[str, Any]:
         return {

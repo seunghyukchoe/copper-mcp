@@ -2,15 +2,26 @@
 
 All handlers delegate to pure application services. MCP is an adapter rather
 than the internal architecture, so routing remains usable through other hosts.
+
+This module is also the single place where a deliberate refusal is spelled in MCP's own
+vocabulary. From `mcp` 2.1.0 a tool call that raises anything but `ToolError`,
+`ResourceError` or `MCPError` is classified as a crash and its message is replaced by a
+bare `Error executing tool <name>`; through 2.0.1 every escaping exception was rewrapped as
+an anticipated `ToolError` with its text preserved. The core raises typed refusals that are
+`ValueError`s, so without translation the reason a request was refused would stop reaching
+the model on the 2.1 line. `_ANTICIPATED_REFUSALS` below names those types explicitly and
+`ADR-0121` records why the list is a closed enumeration rather than a blanket `except`.
 """
 
 from __future__ import annotations
 
+import functools
 import os
 import threading
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
-from typing import Annotated, Any, get_args
+from typing import Annotated, Any, TypeVar, get_args
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.context import Context
@@ -26,10 +37,13 @@ from mcp.types import (
 )
 
 from copper_mcp import __version__
+from copper_mcp.apply.contracts import ApplyRequestError, ApplyResultInvariantError
 from copper_mcp.apply.tokens import ApplyTokenAuthority
 from copper_mcp.circuit_intent_service import KICAD_SCHEMATIC_MIME_TYPE
 from copper_mcp.config import Settings
 from copper_mcp.external_candidate_drc import ExternalCandidatePublicError
+from copper_mcp.kicad_file import BoardFormatError
+from copper_mcp.kicad_ipc import KicadIpcDisabledError
 from copper_mcp.mcp_contracts import (
     ApplyCandidateToolResponse,
     CircuitIntentToolContent,
@@ -65,6 +79,10 @@ from copper_mcp.mcp_contracts import (
     RoutingJobToolResponse,
     SourceToBoardParityToolResponse,
 )
+from copper_mcp.models import ManifestContractError
+from copper_mcp.placement.contracts import PlacementError
+from copper_mcp.post_placement_observation import PostPlacementObservationError
+from copper_mcp.request_boundary import RequestError
 from copper_mcp.routing import RoutingJobRepository
 from copper_mcp.routing_job_service import (
     RoutingJobServiceError,
@@ -93,6 +111,7 @@ from copper_mcp.schematic_artifacts import (
     SchematicArtifactStore,
     SchematicArtifactUnavailableError,
 )
+from copper_mcp.security import WorkspaceViolationError
 from copper_mcp.tools import apply_candidate as apply_candidate_service
 from copper_mcp.tools import apply_live_candidate as apply_live_candidate_service
 from copper_mcp.tools import apply_placement_candidate as apply_placement_candidate_service
@@ -143,6 +162,70 @@ _ROUTING_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="copper
 # in a framework-generated error before that boundary runs.
 RoutingJobToolRequest = Annotated[Any, *get_args(RoutingJobRequest)[1:]]
 
+#: The exception types a tool body may raise that are *answers*, not failures: each one is a
+#: deliberate refusal of a caller's request whose message the model is meant to read. They are
+#: enumerated rather than caught as a family (`except ValueError`, `except Exception`) on
+#: purpose. The two misclassifications are not symmetric. A refusal reported as a crash costs
+#: the caller its reason, which is a loss of helpfulness; a crash reported as a refusal dresses
+#: an unhandled defect as a deliberate answer, which is a loss of truth. Only the first is an
+#: acceptable error, so this list grows one audited type at a time and never by widening a
+#: handler. `ADR-0121` carries the per-type audit and the types deliberately left out.
+#:
+#: Subclasses are covered by `except`, which is the intent: `RequestError` owns the six typed
+#: request-boundary families (`BoardIrError`, `CircuitSceneError`, `RoutePreviewError`,
+#: `RouteBundleError`, `LayeredRoutePreviewError`, `LiveEditorContextError`),
+#: `WorkspaceViolationError` owns `WorkspaceStaleError`, and `PlacementError` owns
+#: `PlacementPreviewError`.
+#: `RoutingJobServiceError` and `ExternalCandidatePublicError` are deliberately absent: both
+#: are already translated at their own handlers below, and the routing-job handlers replace the
+#: message with a fixed one rather than passing it through. Listing them here would add a
+#: second, laxer translation path for the same types.
+#:
+#: `ApplyResultInvariantError` is absent for a stronger reason, and it is the reason
+#: `ApplyRequestError` had to be split in two. The apply module once used one type for both
+#: "your request is malformed" and "the result this code just built contradicts itself". Only
+#: the first is a refusal. The second can fire *after* an authorized write, so translating it
+#: would tell a caller its request was declined and its board untouched at the moment the board
+#: may have changed — the forbidden direction, on the one surface where it costs the most.
+#: It is a `RuntimeError`, so no request-shaped `except` can sweep it up (`ADR-0121`, `R-177`).
+_ANTICIPATED_REFUSALS: tuple[type[Exception], ...] = (
+    ApplyRequestError,
+    BoardFormatError,
+    KicadIpcDisabledError,
+    ManifestContractError,
+    PlacementError,
+    PostPlacementObservationError,
+    RequestError,
+    WorkspaceViolationError,
+)
+
+#: Types whose exclusion from the list above is a decision, not an oversight. Naming them makes
+#: the negative case reviewable and testable: `_ANTICIPATED_REFUSALS` and this tuple must stay
+#: disjoint, so admitting one of these is a failing test rather than a comment someone deleted.
+_EXCLUDED_INVARIANTS: tuple[type[Exception], ...] = (ApplyResultInvariantError,)
+
+_ToolCallable = TypeVar("_ToolCallable", bound=Callable[..., Any])
+
+
+def _refusals_as_tool_errors(function: _ToolCallable) -> _ToolCallable:
+    """Re-raise an audited refusal as MCP's own anticipated failure, message unchanged.
+
+    The translation has to happen inside the tool body: the SDK classifies the exception the
+    body raises, so by the time `call_tool` returns the decision has already been made. The
+    message is passed through verbatim because these messages are the refusal — every one of
+    them is a fixed or field-name-only string that already crossed this boundary on the 2.0
+    line, so this restores a surface rather than opening one (`SEC-163`).
+    """
+
+    @functools.wraps(function)
+    def refuse(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return function(*args, **kwargs)
+        except _ANTICIPATED_REFUSALS as error:
+            raise ToolError(str(error)) from error
+
+    return refuse  # type: ignore[return-value]
+
 
 def _routing_repository() -> RoutingJobRepository:
     """Open the ignored local routing ledger lazily, so read-only imports do not write state."""
@@ -192,6 +275,23 @@ def _schedule_routing_job(job_id: str, authorization_digest: str) -> None:
 
 class CopperMCPServer(MCPServer[None]):
     """MCP server with a private-value-safe schematic argument boundary."""
+
+    def tool(self, *args: Any, **kwargs: Any) -> Callable[[_ToolCallable], _ToolCallable]:
+        """Register a tool whose audited refusals reach the caller as MCP refusals.
+
+        Wrapping here rather than at each of the ~30 `@mcp.tool()` sites is deliberate: a tool
+        added later inherits the contract instead of having to remember it, and there is one
+        place to read to know what the boundary does. The wrapper only re-types the audited
+        exceptions in `_ANTICIPATED_REFUSALS`; everything else propagates untouched and is
+        classified by the SDK as the crash it is.
+        """
+
+        register = super().tool(*args, **kwargs)
+
+        def decorate(function: _ToolCallable) -> _ToolCallable:
+            return register(_refusals_as_tool_errors(function))
+
+        return decorate
 
     async def list_tools(self) -> list[Tool]:
         """Advertise private-value-safe structured wrappers as closed argument objects."""
@@ -849,7 +949,10 @@ def observe_board_scene(request: dict[str, Any]) -> CircuitSceneToolResponse:
     # this one flag is refused off stdio, rather than withdrawing the whole tool from HTTP.
     wants_render = isinstance(request, dict) and bool(request.get("include_render"))
     if wants_render and _SETTINGS.transport != "stdio":
-        raise ValueError("board render delivery is available only over stdio")
+        # Raised as MCP's own anticipated failure rather than as a `ValueError` the wrapper
+        # would have to re-type: this refusal is written in the adapter, so it can be spelled
+        # in the adapter's vocabulary directly. No core module gains an `mcp` import for it.
+        raise ToolError("board render delivery is available only over stdio")
 
     scene = observe_board_scene_service_raw(request, _SETTINGS)
     document = scene.to_dict()
@@ -1043,7 +1146,8 @@ def render_circuit_schematic(
     """
 
     if _SETTINGS.transport != "stdio":
-        raise ValueError("schematic artifact delivery is available only over stdio")
+        # Same adapter-local refusal as `observe_board_scene`'s render flag, spelled the same way.
+        raise ToolError("schematic artifact delivery is available only over stdio")
     build = render_circuit_schematic_service(content)
     resource_uri = _SCHEMATIC_ARTIFACTS.put(build.artifact)
     response = build.to_dict()

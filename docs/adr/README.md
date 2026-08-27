@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0121**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0122**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -197,8 +197,9 @@ never silently widens it.
 | — | *0119 is a live parallel-branch claim and is not free; see **Adding an ADR** above.* | — |
 | [0119](0119-a-signoff-claim-rests-on-repeated-agreement-from-a-registered-backend.md) | A sign-off claim rests on repeated agreement from a registered backend | Accepted |
 | [0120](0120-withheld-apply-authority-has-a-closed-reason.md) | Withheld apply authority has one closed, non-echoing reason | Accepted |
+| [0121](0121-a-refusal-is-an-answer-and-a-crash-is-not.md) | A refusal is an answer and a crash is not | Accepted |
 
-One hundred and twenty-one numbers allocated, one hundred and fifteen records, no duplicates — and
+One hundred and twenty-two numbers allocated, one hundred and sixteen records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
 its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
 the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
@@ -223,7 +224,7 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - **Durable jobs and persistence** — 0043, 0046, 0047, 0048.
 - **Mutation and authorization** — 0001, 0025, 0059, 0074.
 - **Evidence, evaluation, and review boundaries** — 0041, 0052, 0054, 0098, 0102, 0105, 0107, 0109,
-  0118, 0119.
+  0118, 0119, 0121.
 
 - [ADR-0001: Candidate-first mutation model](0001-candidate-first.md)
 - [ADR-0002: MCP is an external adapter](0002-mcp-adapter.md)
@@ -340,3 +341,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0118: Keep authoritative signoff closed until a bounded executor exists](0118-authoritative-signoff-stays-closed-until-a-bounded-executor-exists.md)
 - [ADR-0119: A sign-off claim rests on repeated agreement from a registered backend](0119-a-signoff-claim-rests-on-repeated-agreement-from-a-registered-backend.md)
 - [ADR-0120: Withheld apply authority has one closed, non-echoing reason](0120-withheld-apply-authority-has-a-closed-reason.md)
+- [ADR-0121: A refusal is an answer and a crash is not](0121-a-refusal-is-an-answer-and-a-crash-is-not.md)

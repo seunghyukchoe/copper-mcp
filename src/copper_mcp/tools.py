@@ -51,7 +51,7 @@ from copper_mcp.live_editor_context import (
 from copper_mcp.live_layered_route_preview import (
     preview_live_layered_route as preview_live_layered_route_service,
 )
-from copper_mcp.models import candidate_from_dict, rank_candidates
+from copper_mcp.models import ManifestContractError, candidate_from_dict, rank_candidates
 from copper_mcp.placement.contracts import PlacementResult
 from copper_mcp.placement_preview import preview_live_placement as preview_live_placement_service
 from copper_mcp.placement_preview import preview_placement as preview_placement_service
@@ -427,7 +427,7 @@ def compare_candidates(payloads: list[dict[str, Any]]) -> dict[str, Any]:
     """Rank candidate manifests by correctness, then routing cost."""
 
     if not 1 <= len(payloads) <= 100:
-        raise ValueError("between 1 and 100 candidates are required")
+        raise ManifestContractError("between 1 and 100 candidates are required")
     ranked = rank_candidates([candidate_from_dict(payload) for payload in payloads])
     return {
         "ranking_policy": [
