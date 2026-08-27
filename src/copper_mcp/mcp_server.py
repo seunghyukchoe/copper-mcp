@@ -37,7 +37,7 @@ from mcp.types import (
 )
 
 from copper_mcp import __version__
-from copper_mcp.apply.contracts import ApplyRequestError
+from copper_mcp.apply.contracts import ApplyRequestError, ApplyResultInvariantError
 from copper_mcp.apply.tokens import ApplyTokenAuthority
 from copper_mcp.circuit_intent_service import KICAD_SCHEMATIC_MIME_TYPE
 from copper_mcp.config import Settings
@@ -180,6 +180,14 @@ RoutingJobToolRequest = Annotated[Any, *get_args(RoutingJobRequest)[1:]]
 #: are already translated at their own handlers below, and the routing-job handlers replace the
 #: message with a fixed one rather than passing it through. Listing them here would add a
 #: second, laxer translation path for the same types.
+#:
+#: `ApplyResultInvariantError` is absent for a stronger reason, and it is the reason
+#: `ApplyRequestError` had to be split in two. The apply module once used one type for both
+#: "your request is malformed" and "the result this code just built contradicts itself". Only
+#: the first is a refusal. The second can fire *after* an authorized write, so translating it
+#: would tell a caller its request was declined and its board untouched at the moment the board
+#: may have changed — the forbidden direction, on the one surface where it costs the most.
+#: It is a `RuntimeError`, so no request-shaped `except` can sweep it up (`ADR-0121`, `R-177`).
 _ANTICIPATED_REFUSALS: tuple[type[Exception], ...] = (
     ApplyRequestError,
     BoardFormatError,
@@ -190,6 +198,11 @@ _ANTICIPATED_REFUSALS: tuple[type[Exception], ...] = (
     RequestError,
     WorkspaceViolationError,
 )
+
+#: Types whose exclusion from the list above is a decision, not an oversight. Naming them makes
+#: the negative case reviewable and testable: `_ANTICIPATED_REFUSALS` and this tuple must stay
+#: disjoint, so admitting one of these is a failing test rather than a comment someone deleted.
+_EXCLUDED_INVARIANTS: tuple[type[Exception], ...] = (ApplyResultInvariantError,)
 
 _ToolCallable = TypeVar("_ToolCallable", bound=Callable[..., Any])
 

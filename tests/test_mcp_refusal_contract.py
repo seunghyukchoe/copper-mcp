@@ -23,7 +23,15 @@ import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
 from copper_mcp import mcp_server
-from copper_mcp.apply.contracts import ApplyRequestError
+from copper_mcp.apply.contracts import (
+    ApplyDiagnostic,
+    ApplyFailureCode,
+    ApplyRequestError,
+    ApplyResult,
+    ApplyResultInvariantError,
+    PlacementApplyResult,
+)
+from copper_mcp.apply.engine import ApplyVerification
 from copper_mcp.apply.service import ApplyServiceError
 from copper_mcp.circuit_scene import CircuitSceneError
 from copper_mcp.config import Settings
@@ -55,7 +63,7 @@ ANTICIPATED: tuple[tuple[str, Exception], ...] = (
     ("ManifestContractError", ManifestContractError("candidate metrics are malformed")),
     ("WorkspaceViolationError", WorkspaceViolationError("path must stay inside the workspace")),
     ("WorkspaceStaleError", WorkspaceStaleError("the target changed since it was read")),
-    ("ApplyRequestError", ApplyRequestError("an apply status is malformed")),
+    ("ApplyRequestError", ApplyRequestError("expect_board_revision must be a sha256 digest")),
     ("PlacementError", PlacementError("a placement grid must be positive")),
     ("PlacementPreviewError", PlacementPreviewError("placement DRC evidence is unavailable")),
     ("BoardFormatError", BoardFormatError("file does not begin with the kicad_pcb token")),
@@ -70,6 +78,7 @@ ANTICIPATED: tuple[tuple[str, Exception], ...] = (
 CRASHES: tuple[tuple[str, Exception], ...] = (
     ("LiveApplyError", LiveApplyError("caller-side programming fault")),
     ("ApplyServiceError", ApplyServiceError("not expressible as a typed refusal")),
+    ("ApplyResultInvariantError", ApplyResultInvariantError("an apply status is malformed")),
     ("KiCadCliError", KiCadCliError("the DRC adapter produced no valid evidence")),
     ("SceneRenderError", SceneRenderError("a render could not be canonicalized")),
     ("ZoneFillError", ZoneFillError("cached fill geometry is out of bounds")),
@@ -148,6 +157,90 @@ def test_the_audited_list_is_a_closed_enumeration_of_exception_types() -> None:
     for entry in mcp_server._ANTICIPATED_REFUSALS:
         assert isinstance(entry, type) and issubclass(entry, Exception)
         assert entry not in {Exception, BaseException, ValueError, RuntimeError, TypeError}
+
+
+def test_an_apply_request_is_still_refused_with_the_request_type() -> None:
+    """The half of the old dual use that really is a refusal, kept translating."""
+
+    from copper_mcp.apply.contracts import parse_apply_request
+
+    with pytest.raises(ApplyRequestError) as caught:
+        parse_apply_request({"board": "b.kicad_pcb"})
+    assert isinstance(caught.value, ValueError)
+    with pytest.raises(ToolError) as translated:
+        _raising(caught.value)()
+    assert str(translated.value) == str(caught.value)
+
+
+@pytest.mark.parametrize(
+    ("name", "build"),
+    [
+        (
+            "applied-with-no-new-revision",
+            lambda: ApplyResult(status="applied", board_path="b.kicad_pcb"),
+        ),
+        (
+            "unverified-with-no-diagnostic",
+            lambda: ApplyResult(status="applied_but_unverified", board_path="b.kicad_pcb"),
+        ),
+        (
+            "refusal-reporting-a-new-revision",
+            lambda: ApplyResult(
+                status="refused",
+                board_path="b.kicad_pcb",
+                board_revision_after="sha256:" + "0" * 64,
+                diagnostic=ApplyDiagnostic(ApplyFailureCode.APPLY_DISABLED, "disabled"),
+            ),
+        ),
+        (
+            "placement-unverified-with-no-diagnostic",
+            lambda: PlacementApplyResult(status="applied_but_unverified", board_path="b.kicad_pcb"),
+        ),
+        (
+            "placement-applied-with-no-new-revision",
+            # `verification` must be present, or the earlier diagnostic branch fires instead and
+            # this row would stop covering the revision check it names. A surviving mutant caught
+            # exactly that.
+            lambda: PlacementApplyResult(
+                status="applied", board_path="b.kicad_pcb", verification=ApplyVerification()
+            ),
+        ),
+    ],
+    # Explicit, because a lambda otherwise appends `-<lambda>` to the node ID and the committed
+    # mutation spec names these tests by ID.
+    ids=[
+        "applied-with-no-new-revision",
+        "unverified-with-no-diagnostic",
+        "refusal-reporting-a-new-revision",
+        "placement-unverified-with-no-diagnostic",
+        "placement-applied-with-no-new-revision",
+    ],
+)
+def test_an_apply_result_invariant_is_a_crash_not_a_refusal(name: str, build: Any) -> None:
+    """The other half. These fire *after* a write may have happened, so they must not translate.
+
+    Reporting one as a refusal would tell a caller its request was declined and its board
+    untouched at the exact moment the board may have changed.
+    """
+
+    with pytest.raises(ApplyResultInvariantError) as caught:
+        build()
+    assert not isinstance(caught.value, ValueError), name
+    assert not isinstance(caught.value, ApplyRequestError), name
+    # And the adapter must let it through untouched rather than dressing it as an answer.
+    with pytest.raises(ApplyResultInvariantError):
+        _raising(caught.value)()
+
+
+def test_the_apply_invariant_type_is_not_in_the_audited_list() -> None:
+    """Structural, so adding it back is a failing test rather than a review comment."""
+
+    assert ApplyResultInvariantError in mcp_server._EXCLUDED_INVARIANTS
+    overlap = set(mcp_server._EXCLUDED_INVARIANTS) & set(mcp_server._ANTICIPATED_REFUSALS)
+    assert overlap == set()
+    for excluded in mcp_server._EXCLUDED_INVARIANTS:
+        for audited in mcp_server._ANTICIPATED_REFUSALS:
+            assert not issubclass(excluded, audited), (excluded, audited)
 
 
 def test_compare_candidates_refuses_an_over_limit_batch_with_a_typed_refusal() -> None:
