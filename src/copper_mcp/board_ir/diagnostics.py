@@ -52,8 +52,13 @@ class ConversionResult:
     quantity the SimpleRouteJson importer reports as ``max_outward_rounding_nm``: a caller that
     needs bit-exact pad geometry can read it and decline, instead of being told nothing.
 
-    ``unmodelled_group_count`` counts the root ``(group ...)`` expressions the KiCad adapter
-    accepted and did not model.  An *unlocked* group is editor organisation with no geometry, no
+    ``unmodelled_group_count`` counts the ``(group ...)`` expressions the KiCad adapter accepted
+    and did not model, at board root **and inside a footprint**.  D-228 widened it to the second
+    case rather than adding a counter beside it: KiCad dispatches a footprint's group to the *same*
+    ``parseGROUP`` and writes it through the same formatter, so the two are one construct, and a
+    caller asking "how many groupings did I lose" wants one number.  Two would answer neither.  The
+    widening is deployer-visible and carries a migration note.
+    An *unlocked* group is editor organisation with no geometry, no
     layer and no net, so it is read past rather than refused -- but Board IR has no field for
     "these objects belong together", so a caller that moves one member breaks a grouping nothing
     told it about.  It is a count for the same reason the rounding above is: a diagnostic would
