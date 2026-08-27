@@ -162,12 +162,13 @@ structured refusal before the adapter is reached.
   the step `D-225` had to undo.
 - Adding a tool requires nothing new; registration carries the contract. Adding a *refusal type*
   requires an audit and an entry in the table above, which is the intended friction.
-- Twelve committed mutants under
+- Thirteen committed mutants under
   [`docs/mutants/2026-08-27-mcp-refusal-contract.json`](../mutants/2026-08-27-mcp-refusal-contract.json)
   pin the translation clause, the closed enumeration, the message pass-through, the registration
-  wrapping, both source-level typed refusals, and both transport guards. They are killed under
-  both `mcp` 2.0.0 and 2.1.1, because a test that only fails on one line would prove nothing about
-  the other.
+  wrapping, both source-level typed refusals, both transport guards, and the harness boundary set
+  — `RC13` admits `UnexpectedToolError` to `BOUNDARY_EXCEPTIONS` and is killed, so the decision
+  above is a test rather than a paragraph. They are killed under both `mcp` 2.0.0 and 2.1.1,
+  because a test that only fails on one line would prove nothing about the other.
 
 ## Alternatives considered
 
