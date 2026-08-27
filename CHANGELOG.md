@@ -8,6 +8,24 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Board IR converts KiCad boards that declare a physical stackup, a drill-and-place origin, an
+  editor grid origin, or solder-paste stencil defaults. `stackup`, `aux_axis_origin`,
+  `grid_origin`, `pad_to_paste_clearance` and `pad_to_paste_clearance_ratio` join the accepted
+  `setup` vocabulary as typed non-claims: none constrains copper geometry or electrical clearance,
+  each is validated and discarded, and the erasure is disclosed rather than silent. The stackup is
+  read through a **closed nested grammar**, not as a unit — `edge_plating`, `edge_connector` and
+  `castellated_pads` still refuse unless explicitly `no`, now at their own field locator instead
+  of at the whole block, and KiCad 10's `zone_defaults` stays refused because a hatched-fill phase
+  is copper geometry. This is measured, not asserted: `B-130` is the closed field census over the
+  six public boards `B-129` found blocked here, and `B-131` is the before/after
+  ([migration note](docs/migrations/board-ir-setup-fields.md), `ADR-0122`, `D-227`, `R-178`,
+  `SEC-164`, [issue #188](https://github.com/seunghyukchoe/copper-mcp/issues/188)).
+- `inspect_board_ir`'s `unmodelled_counts` map grows from six entries to eight:
+  `unmodelled_setup_field_count` and `unmodelled_stackup_layer_count`. The second is deliberately
+  comparable against `copper_layer_ids` — it counts every physical stack entry, dielectrics
+  included, so a caller can see the layers it did not receive. **The Board IR schema does not
+  move**: nothing is added to the snapshot, and `board-ir/0.4.0` is byte-unchanged (`ADR-0105`,
+  `ADR-0122`).
 - Deliberate refusals now reach the caller as MCP's own anticipated failure. `mcp_server`
   translates a closed, audited set of exception types to `ToolError` at the adapter, so a refused
   request keeps its reason on the `mcp` 2.1 line, where the SDK would otherwise have classified it

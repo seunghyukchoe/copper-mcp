@@ -37,8 +37,25 @@ PREDECLARED_COHORT_FINGERPRINT: Final = masking.PREDECLARED_COHORT_FINGERPRINT
 SELECTION_COMMITMENT_DOMAIN: Final = (
     b"copper-mcp/public-setup-field-census/selected-manifest-entries/v1\x00"
 )
-PREDECLARED_SETUP_SELECTION_COMMITMENT: Final[str | None] = None
+# Assigned once, from the exact B-129 cohort, in the pull request that first ran this instrument.
+# It is a *freeze*, not a prediction: the six entries it binds were selected by rerunning the
+# fixed-point classifier, and the constant records which six, so that any later rerun whose
+# selection differs -- a drifted classifier, a re-derived corpus, a swapped manifest row -- fails
+# instead of silently re-aggregating over a different population. `EXPECTED_SETUP_TERMINALS` alone
+# cannot catch that: a same-count membership swap keeps the count and changes the answer, which is
+# exactly what `test_measure_rejects_same_count_selection_membership_drift` exercises.
+PREDECLARED_SETUP_SELECTION_COMMITMENT: Final[str | None] = (
+    "sha256:bda70bb147c572f316f0ae218a8a0daed225e392f4c315b71947c5a88083e9e1"
+)
 
+# The adapter's accepted `setup` vocabulary **as it stood when B-130 was taken**, frozen here so
+# the artifact stays replayable.  It was a live mirror of `kicad_board_ir._SETUP_METADATA_HEADS`
+# until D-227 accepted five of the heads this census had just measured as unsupported; leaving it a
+# mirror would have made a rerun silently answer a different question -- `unsupported_head_sets`
+# would collapse to `none` and the recorded aggregate would no longer be reproducible from the same
+# cohort.  The drift guard in `measure` therefore checks *containment* rather than equality: the
+# adapter may widen past this set, which is what D-227 did, but a head accepted at B-130 and
+# refused later would invalidate the artifact's reading and fails the run.
 ACCEPTED_SETUP_HEADS: Final = frozenset(
     {
         "allow_soldermask_bridges_in_footprints",
@@ -384,7 +401,7 @@ def measure(
 ) -> dict[str, Any]:
     if settings.allow_apply or settings.allow_live_ipc or settings.allow_live_apply:
         raise _fixed_error("setup-field census is read-only")
-    if ACCEPTED_SETUP_HEADS != kicad_board_ir._SETUP_METADATA_HEADS:
+    if not ACCEPTED_SETUP_HEADS <= kicad_board_ir._SETUP_METADATA_HEADS:
         raise _fixed_error("adapter accepted setup vocabulary drifted")
     expected_selection = _expected_selection_commitment()
 
