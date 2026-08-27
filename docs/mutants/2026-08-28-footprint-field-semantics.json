@@ -39,7 +39,7 @@
     {
       "id": "FF04-skip-the-footprint-zone-connection-check",
       "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "            self._require_attaching_footprint_zone_connection(\n                footprint, f\"{locator}.zone_connect\"\n            )",
+      "anchor": "            self._require_attaching_footprint_zone_connection(footprint, f\"{locator}.zone_connect\")",
       "replacement": "            pass",
       "expectation": "killed",
       "killing_tests": [

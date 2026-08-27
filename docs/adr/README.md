@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0123**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0124**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -199,8 +199,9 @@ never silently widens it.
 | [0120](0120-withheld-apply-authority-has-a-closed-reason.md) | Withheld apply authority has one closed, non-echoing reason | Accepted |
 | [0121](0121-a-refusal-is-an-answer-and-a-crash-is-not.md) | A refusal is an answer and a crash is not | Accepted |
 | [0122](0122-the-stackup-is-read-per-field-because-three-of-its-fields-are-not-about-z.md) | The stackup is read per field, because three of its fields are not about Z | Accepted |
+| [0123](0123-a-container-refusal-that-names-no-field-is-the-defect.md) | A container refusal that names no field is the defect, not the refusal | Accepted |
 
-One hundred and twenty-three numbers allocated, one hundred and seventeen records, no duplicates — and
+One hundred and twenty-four numbers allocated, one hundred and eighteen records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
 its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
 the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
@@ -344,3 +345,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0120: Withheld apply authority has one closed, non-echoing reason](0120-withheld-apply-authority-has-a-closed-reason.md)
 - [ADR-0121: A refusal is an answer and a crash is not](0121-a-refusal-is-an-answer-and-a-crash-is-not.md)
 - [ADR-0122: The stackup is read per field, because three of its fields are not about Z](0122-the-stackup-is-read-per-field-because-three-of-its-fields-are-not-about-z.md)
+- [ADR-0123: A container refusal that names no field is the defect, not the refusal](0123-a-container-refusal-that-names-no-field-is-the-defect.md)

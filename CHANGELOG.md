@@ -8,6 +8,31 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Board IR converts KiCad boards whose footprints declare schematic provenance, per-footprint
+  solder-mask or solder-paste defaults, an attaching zone-connection default, or a footprint-local
+  group. `sheetfile`, `sheetname`, `solder_mask_margin`, `solder_paste_margin` and both spellings
+  of the paste ratio join the accepted `footprint` vocabulary as typed non-claims: none constrains
+  copper geometry or electrical clearance, each is validated through a **closed payload grammar**
+  and discarded, and the erasure is disclosed rather than silent. `zone_connect` is accepted only
+  in its attaching modes -- `0` detaches a footprint's pads from their pour and still refuses --
+  and a footprint-local group takes the same validator, lock refusal and counter a root group
+  already had. `clearance` still refuses at any value: it is a replacement rather than a maximum,
+  so ignoring one can model *less* clearance than KiCad enforces. This is measured, not asserted:
+  `B-132` is the closed field census over the six public boards `B-131` found blocked here, and
+  `B-133` is the before/after ([migration note](docs/migrations/footprint-field-acceptance.md),
+  `ADR-0123`, `D-228`, `R-179`, `SEC-165`,
+  [issue #188](https://github.com/seunghyukchoe/copper-mcp/issues/188)).
+- A refusal inside a footprint now **names the field it refused**. Twenty heads from KiCad's own
+  `parseFOOTPRINT` grammar move from the field-less `footprint contains an unsupported semantic
+  field` to `footprint field '<name>' is unsupported`. No board's verdict changes -- every one of
+  them already refused -- but the message is now actionable, and a measuring instrument can
+  decompose it, which the previous sentence made impossible (`ADR-0123`, issue #188).
+- `inspect_board_ir`'s `unmodelled_counts` map grows from eight entries to nine with
+  `unmodelled_footprint_field_count`, and `unmodelled_group_count` widens to count footprint-local
+  groups alongside root ones -- KiCad treats the two as one construct, so one number answers the
+  question the count exists for. A caller comparing a stored group count against a fresh one should
+  expect the fresh number to be larger on a board with footprint-local groups
+  ([migration note](docs/migrations/footprint-field-acceptance.md), `R-179`).
 - Board IR converts KiCad boards that declare a physical stackup, a drill-and-place origin, an
   editor grid origin, or solder-paste stencil defaults. `stackup`, `aux_axis_origin`,
   `grid_origin`, `pad_to_paste_clearance` and `pad_to_paste_clearance_ratio` join the accepted
