@@ -24,7 +24,16 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
 ]
 dependencies = [
-  "mcp>=2.0.0,<3.0.0",
+  # Held below 2.1 deliberately, not for tidiness. Through 2.0.1 `MCPServer.call_tool()` wrapped
+  # every escaping exception as `ToolError(f"Error executing tool {name}: {exc}")`. From 2.1.0 only
+  # `ToolError`/`ResourceError`/`MCPError` stay anticipated; anything else becomes
+  # `UnexpectedToolError` whose message is replaced by a bare `Error executing tool <name>`. Our
+  # deliberate boundary refusals raise `copper_mcp.request_boundary.RequestError`, a `ValueError`,
+  # so under 2.1 they are reclassified as crashes and their reason never reaches the model — and
+  # the excessive-agency harness correctly scores 15 `budget_dos` cases as unrefused. Adapting the
+  # ~30 tool paths to the new vocabulary is a security-surface change that needs its own review,
+  # so the range is narrowed to the tested surface until then (`D-225`, `R-176`).
+  "mcp>=2.0.0,<2.1.0",
   "pydantic>=2.11,<3.0",
 ]
 

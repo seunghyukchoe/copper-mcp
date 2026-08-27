@@ -23,8 +23,8 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-224` | `D-225` |
-| [Risk register](risk-register.md) | `R-` | `R-175` | `R-176` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-225` | `D-226` |
+| [Risk register](risk-register.md) | `R-` | `R-176` | `R-177` |
 | [Security review ledger](security-ledger.md) | `SEC-` | `SEC-162` | `SEC-163` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-129` | `B-130` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |

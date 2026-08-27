@@ -103,6 +103,13 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- The `mcp` dependency is now `>=2.0.0,<2.1.0` rather than `<3.0.0`. Through 2.0.1
+  `MCPServer.call_tool()` wrapped every escaping exception as `ToolError`, message included; from
+  2.1.0 only `ToolError`, `ResourceError` and `MCPError` remain anticipated and anything else
+  becomes `UnexpectedToolError` with its message replaced by a bare `Error executing tool <name>`.
+  Boundary refusals raise `RequestError`, a `ValueError`, so on 2.1 a caller stops being told why
+  a request was refused. Adopting the stricter classification means auditing every refusal path
+  and is deliberately left to its own change (`D-225`, `R-176`).
 - Route, layered-route, placement, and live preview responses now name why an apply token is
   absent using one closed, non-echoing eight-value vocabulary. The response always carries exactly
   one of a token and a reason, including at the public MCP contract boundary; a placement replay
