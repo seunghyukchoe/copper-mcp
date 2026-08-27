@@ -129,6 +129,16 @@
       "killing_tests": [
         "tests/test_mcp_refusal_contract.py::test_the_schematic_transport_guard_refuses_in_the_adapters_own_vocabulary"
       ]
+    },
+    {
+      "id": "RC13-crash-class-admitted-to-the-harness-boundary-set",
+      "file": "scripts/evaluate_excessive_agency.py",
+      "anchor": "BOUNDARY_EXCEPTIONS = frozenset({\"ToolError\", \"ValidationError\"})",
+      "replacement": "BOUNDARY_EXCEPTIONS = frozenset({\"ToolError\", \"ValidationError\", \"UnexpectedToolError\"})",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_excessive_agency_evaluation.py::test_budget_check_rejects_a_crash_dressed_as_a_refusal"
+      ]
     }
   ]
 }

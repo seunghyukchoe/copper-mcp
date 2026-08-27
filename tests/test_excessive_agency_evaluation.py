@@ -409,6 +409,10 @@ def test_budget_check_rejects_a_crash_dressed_as_a_refusal() -> None:
         )
         for crash in ("RecursionError", "MemoryError", "KeyError"):
             assert crash not in evaluation.BOUNDARY_EXCEPTIONS
+        # `mcp` 2.1's own crash class. It subclasses `ToolError`, so an `isinstance` check would
+        # readmit every crash the 2.1 line finally separates out; `_bounded` compares class
+        # *names*, and this row is what keeps the set from being widened to match (`ADR-0121`).
+        assert "UnexpectedToolError" not in evaluation.BOUNDARY_EXCEPTIONS
         with patch.object(evaluation, "_call", return_value=("raised", "RecursionError")):
             crashed = evaluation._bounded(context, "compare_candidates", {"candidates": []})
         assert crashed.disposition == "fail"
