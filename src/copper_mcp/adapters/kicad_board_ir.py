@@ -379,6 +379,48 @@ _STACKUP_LAYER_HEADS = frozenset(
         "type",
     }
 )
+# A decimal token KiCad can write for a dimension, a ratio or a material constant.  Deliberately
+# looser than `board_ir.types._DECIMAL`, which additionally enforces the nanometre precision this
+# adapter needs from a coordinate it is about to *convert*.  Nothing here is converted -- these
+# values are validated and discarded -- so the check must not refuse a well-formed board over a
+# precision this decision never claims.  Leading `+`, a bare fraction and an exponent are all
+# accepted for that reason; a quoted atom is not a number and is rejected by the caller.
+_PAYLOAD_DECIMAL = re.compile(r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$")
+_PAYLOAD_FLAGS = frozenset({"no", "yes"})
+# The closed payload grammar of every accepted non-container `setup` field, and of every leaf
+# inside an accepted `stackup`.  `(head, locator suffix) -> (minimum atoms, maximum atoms, kind,
+# trailing flag)`.
+#
+# **A counted non-claim is still a validated construct.** Accepting a field means "well formed and
+# deliberately not modelled", never "bytes nobody read". Without these grammars an accepted
+# container was an open door: `(grid_origin (zone_defaults ...))` smuggled past the very head
+# `_REFUSED_SETUP_HEADS_ON_RECORD` exists to refuse, because the head allowlist above only
+# constrains *which* children may appear and says nothing about what nests inside one.
+_NUMBER, _TEXT, _FLAG = "number", "text", "flag"
+_SETUP_SCALAR_PAYLOADS: dict[str, tuple[int, int, str, str | None]] = {
+    # KiCad stores both origins as a `VECTOR2I`, so exactly two coordinates and never a third.
+    "aux_axis_origin": (2, 2, _NUMBER, None),
+    "grid_origin": (2, 2, _NUMBER, None),
+    "pad_to_paste_clearance": (1, 1, _NUMBER, None),
+    "pad_to_paste_clearance_ratio": (1, 1, _NUMBER, None),
+}
+_STACKUP_SCALAR_PAYLOADS: dict[str, tuple[int, int, str, str | None]] = {
+    # One quoted name from KiCad's predefined finish list; the value is discarded, so the check is
+    # arity and shape rather than membership.
+    "copper_finish": (1, 1, _TEXT, None),
+    # Written through `FormatBool`, so exactly one bare `yes` or `no`.
+    "dielectric_constraints": (1, 1, _FLAG, None),
+}
+_STACKUP_LAYER_PAYLOADS: dict[str, tuple[int, int, str, str | None]] = {
+    "color": (1, 1, _TEXT, None),
+    "epsilon_r": (1, 1, _NUMBER, None),
+    "loss_tangent": (1, 1, _NUMBER, None),
+    "material": (1, 1, _TEXT, None),
+    # One dimension, plus the optional trailing `locked` KiCad writes on a dielectric whose
+    # thickness the stackup editor may not redistribute.
+    "thickness": (1, 2, _NUMBER, "locked"),
+    "type": (1, 1, _TEXT, None),
+}
 _FOOTPRINT_METADATA_HEADS = frozenset(
     {
         "at",
@@ -1076,6 +1118,7 @@ class _Converter:
                 locator="kicad_pcb.setup",
             )
             self._validate_neutral_via_treatment(setup, "kicad_pcb.setup")
+            self._validate_leaf_payloads(setup, "kicad_pcb.setup", _SETUP_SCALAR_PAYLOADS)
             self._count_unmodelled_setup_fields(setup)
             self._validate_stackup(setup)
 
@@ -1263,6 +1306,73 @@ class _Converter:
                         object_kind="via",
                     )
 
+    def _validate_leaf_payloads(
+        self,
+        parent: SExpr,
+        locator: str,
+        grammars: dict[str, tuple[int, int, str, str | None]],
+    ) -> None:
+        """Close the payload of every accepted leaf: no children, exact arity, checked tokens.
+
+        The head allowlists above decide *which* children may appear and say nothing about what
+        nests inside one, so an accepted field was an open container until this ran. Three checks,
+        and the first is the one that mattered: a leaf may hold **no child expression at all**, so
+        `(grid_origin (zone_defaults ...))` can no longer carry the exact construct
+        `_REFUSED_SETUP_HEADS_ON_RECORD` refuses one level up. Then exact arity, then the token
+        kind KiCad writes. Every refusal names the field's own locator, never the container's.
+
+        Direction of error: every one of these values is discarded, so the check can only ever
+        over-refuse. It is deliberately looser than the nanometre-precision decimal the conversion
+        path uses, because refusing a well-formed board over a precision this decision does not
+        claim would be a cost with nothing bought.
+        """
+
+        for head, (minimum, maximum, kind, trailing_flag) in grammars.items():
+            field = self._one(parent, head, locator, required=False)
+            if field is None:
+                continue
+            field_locator = f"{locator}.{head}"
+            # An empty allowlist refuses *any* child, which is what makes the leaf a leaf.
+            self._reject_unknown_children(field, frozenset(), field_locator)
+            values = self._values(
+                parent,
+                head,
+                field_locator,
+                minimum=minimum,
+                maximum=maximum,
+            )
+            for index, token in enumerate(values):
+                if trailing_flag is not None and index >= minimum:
+                    if token != trailing_flag or is_quoted_atom(token):
+                        self.fail(
+                            "unsupported.construct",
+                            "unsupported setup field value",
+                            field_locator,
+                        )
+                    continue
+                if kind is _NUMBER and (
+                    is_quoted_atom(token)
+                    or len(token) > 64
+                    or not _PAYLOAD_DECIMAL.fullmatch(token)
+                ):
+                    self.fail(
+                        "unsupported.construct",
+                        "unsupported setup field value",
+                        field_locator,
+                    )
+                if kind is _FLAG and (is_quoted_atom(token) or token not in _PAYLOAD_FLAGS):
+                    self.fail(
+                        "unsupported.construct",
+                        "unsupported setup field value",
+                        field_locator,
+                    )
+                if kind is _TEXT and len(token) > 512:
+                    self.fail(
+                        "unsupported.construct",
+                        "unsupported setup field value",
+                        field_locator,
+                    )
+
     def _count_unmodelled_setup_fields(self, setup: SExpr) -> None:
         """Count the accepted `setup` children D-227 admits and does not model.
 
@@ -1322,6 +1432,7 @@ class _Converter:
             allowed=frozenset(),
             locator=locator,
         )
+        self._validate_leaf_payloads(stackup, locator, _STACKUP_SCALAR_PAYLOADS)
         for head in _COPPER_BEARING_STACKUP_HEADS:
             values = self._values(stackup, head, locator, minimum=1, maximum=1, required=False)
             if values and (values != ("no",) or is_quoted_atom(values[0])):
@@ -1342,6 +1453,7 @@ class _Converter:
                 allowed=frozenset(),
                 locator=layer_locator,
             )
+            self._validate_leaf_payloads(layer, layer_locator, _STACKUP_LAYER_PAYLOADS)
             self.unmodelled_stackup_layer_count += 1
 
     def _point(self, expression: SExpr, head: str, locator: str) -> PointNM:

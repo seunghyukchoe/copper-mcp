@@ -1489,35 +1489,235 @@ def test_a_post_machined_via_refuses_beside_an_accepted_stackup() -> None:
     assert result.diagnostics[0].code == "unsupported.construct"
 
 
-def test_a_repeated_setup_head_counts_expressions_and_a_repeated_stackup_refuses() -> None:
-    """The two halves of what a duplicate does here, pinned because they differ.
+# --- D-227 payload grammars: an accepted container is not an unread one -------------------------
 
-    A repeated `grid_origin` **converts and counts two**. That is the same rule
-    `unmodelled_board_property_count` already states -- these are counts of *expressions*, not of
-    the entries a reader would end up with, and KiCad keeps one of the two -- and it is sound
-    because nothing is modelled from either. A repeated `stackup` **refuses**, because
-    `_validate_stackup` resolves it through `child()`, which reports an ambiguous document rather
-    than picking one. The asymmetry is real and is recorded here rather than smoothed: the
-    counted heads carry nothing, and the one that gates a nested grammar cannot be ambiguous
-    about which grammar it gated.
+
+def _stackup_with(layer_body: bytes = b"", stackup_body: bytes = b"") -> bytes:
+    return (
+        b'(stackup (layer "F.Cu" (type "copper") (thickness 0.035)'
+        + layer_body
+        + b') (copper_finish "ENIG") (dielectric_constraints no)'
+        + stackup_body
+        + b")"
+    )
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"(grid_origin 12.7 8.4)",
+        b"(grid_origin -12.7 +8.4)",
+        b"(grid_origin 0 0)",
+        b"(aux_axis_origin 100.0 50.0)",
+        b"(pad_to_paste_clearance -0.05)",
+        b"(pad_to_paste_clearance .5)",
+        b"(pad_to_paste_clearance_ratio -0.1)",
+        b"(pad_to_paste_clearance_ratio 1e-3)",
+        _stackup_with(),
+        # KiCad's optional trailing `locked` on a dielectric thickness.
+        _stackup_with(b' (material "FR4") (epsilon_r 4.5) (loss_tangent 0.02)'),
+        b'(stackup (layer "d1" (type "core") (thickness 1.51 locked)))',
+        b'(stackup (layer "F.SilkS" (type "Top Silk Screen") (color "White")))',
+    ],
+)
+def test_a_well_formed_payload_still_converts(body: bytes) -> None:
+    """The direction that must not regress: closing a grammar may not refuse a real board.
+
+    Every token here is one KiCad writes. The payload check is deliberately looser than the
+    nanometre decimal the conversion path uses, because these values are discarded and refusing a
+    well-formed board over a precision D-227 never claims would buy nothing.
     """
 
-    counted = parse_kicad_bytes(
-        _with_setup(b"(grid_origin 1 1) (grid_origin 2 2)"),
+    result = parse_kicad_bytes(_with_setup(body), constraint_profile(assign_signal=True))
+
+    assert result.diagnostics == ()
+    assert result.snapshot is not None
+
+
+@pytest.mark.parametrize(
+    ("body", "locator"),
+    [
+        # The sharpest case: an accepted container smuggling in the exact head
+        # `_REFUSED_SETUP_HEADS_ON_RECORD` refuses one level up.
+        (
+            b'(grid_origin (zone_defaults (property (layer "F.Cu"))))',
+            "kicad_pcb.setup.grid_origin",
+        ),
+        (b"(aux_axis_origin (edge_plating yes))", "kicad_pcb.setup.aux_axis_origin"),
+        (
+            b"(pad_to_paste_clearance (castellated_pads yes))",
+            "kicad_pcb.setup.pad_to_paste_clearance",
+        ),
+        (
+            b"(pad_to_paste_clearance_ratio (edge_connector bevelled))",
+            "kicad_pcb.setup.pad_to_paste_clearance_ratio",
+        ),
+        (
+            b'(stackup (copper_finish (edge_plating yes)) (layer "F.Cu" (type "copper")))',
+            "kicad_pcb.setup.stackup.copper_finish",
+        ),
+        (
+            b'(stackup (dielectric_constraints (edge_plating yes)) (layer "F.Cu" (type "copper")))',
+            "kicad_pcb.setup.stackup.dielectric_constraints",
+        ),
+        (
+            b'(stackup (layer "F.Cu" (type "copper") (thickness (edge_plating yes))))',
+            "kicad_pcb.setup.stackup.layer[0].thickness",
+        ),
+        (
+            b'(stackup (layer "F.Cu" (type (zone_defaults 1))))',
+            "kicad_pcb.setup.stackup.layer[0].type",
+        ),
+    ],
+)
+def test_no_accepted_leaf_may_carry_a_nested_child(body: bytes, locator: str) -> None:
+    """A leaf holds no child expression, at any of the three levels.
+
+    The head allowlists decide *which* children may appear and say nothing about what nests inside
+    one, so before this every accepted field was an open container.
+    """
+
+    result = parse_kicad_bytes(_with_setup(body), constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].message == "expression contains an unsupported semantic field"
+    assert result.diagnostics[0].source_locator == locator
+
+
+@pytest.mark.parametrize(
+    ("body", "locator"),
+    [
+        (b"(grid_origin)", "kicad_pcb.setup.grid_origin"),
+        (b"(grid_origin 5)", "kicad_pcb.setup.grid_origin"),
+        (b"(grid_origin 1 2 3)", "kicad_pcb.setup.grid_origin"),
+        (b"(aux_axis_origin 1)", "kicad_pcb.setup.aux_axis_origin"),
+        (b"(pad_to_paste_clearance)", "kicad_pcb.setup.pad_to_paste_clearance"),
+        (b"(pad_to_paste_clearance 1 2)", "kicad_pcb.setup.pad_to_paste_clearance"),
+        (
+            b"(pad_to_paste_clearance_ratio 1 2)",
+            "kicad_pcb.setup.pad_to_paste_clearance_ratio",
+        ),
+        (
+            b'(stackup (copper_finish "ENIG" "extra") (layer "F.Cu" (type "copper")))',
+            "kicad_pcb.setup.stackup.copper_finish",
+        ),
+        (
+            b'(stackup (dielectric_constraints yes no) (layer "F.Cu" (type "copper")))',
+            "kicad_pcb.setup.stackup.dielectric_constraints",
+        ),
+        (
+            b'(stackup (layer "F.Cu" (type "copper" "extra")))',
+            "kicad_pcb.setup.stackup.layer[0].type",
+        ),
+        (
+            b'(stackup (layer "F.Cu" (type "copper") (thickness 1 locked extra)))',
+            "kicad_pcb.setup.stackup.layer[0].thickness",
+        ),
+    ],
+)
+def test_an_accepted_leaf_has_exact_arity(body: bytes, locator: str) -> None:
+    """Wrong arity refuses at the field, not at the block."""
+
+    result = parse_kicad_bytes(_with_setup(body), constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    # `syntax.invalid`, not `unsupported.construct`: a wrong-arity field is a malformed document
+    # rather than a construct this adapter declines to model. That is `_values`' existing
+    # discrimination and the payload grammars inherit it rather than flattening it.
+    assert result.diagnostics[0].code == "syntax.invalid"
+    assert result.diagnostics[0].message.endswith("field has an invalid arity")
+    assert result.diagnostics[0].source_locator == locator
+
+
+@pytest.mark.parametrize(
+    ("body", "locator"),
+    [
+        (b"(grid_origin yes no)", "kicad_pcb.setup.grid_origin"),
+        (b'(grid_origin "1" "2")', "kicad_pcb.setup.grid_origin"),
+        (b"(aux_axis_origin 1 banana)", "kicad_pcb.setup.aux_axis_origin"),
+        (b"(pad_to_paste_clearance banana)", "kicad_pcb.setup.pad_to_paste_clearance"),
+        (
+            b'(pad_to_paste_clearance_ratio "0.1")',
+            "kicad_pcb.setup.pad_to_paste_clearance_ratio",
+        ),
+        (
+            b'(stackup (dielectric_constraints maybe) (layer "F.Cu" (type "copper")))',
+            "kicad_pcb.setup.stackup.dielectric_constraints",
+        ),
+        (
+            b'(stackup (dielectric_constraints "no") (layer "F.Cu" (type "copper")))',
+            "kicad_pcb.setup.stackup.dielectric_constraints",
+        ),
+        (
+            b'(stackup (layer "d1" (type "core") (epsilon_r banana)))',
+            "kicad_pcb.setup.stackup.layer[0].epsilon_r",
+        ),
+        (
+            b'(stackup (layer "d1" (type "core") (loss_tangent "0.02")))',
+            "kicad_pcb.setup.stackup.layer[0].loss_tangent",
+        ),
+        (
+            b'(stackup (layer "F.Cu" (type "copper") (thickness 1 unlocked)))',
+            "kicad_pcb.setup.stackup.layer[0].thickness",
+        ),
+        (
+            b'(stackup (layer "F.Cu" (type "copper") (thickness 1 "locked")))',
+            "kicad_pcb.setup.stackup.layer[0].thickness",
+        ),
+    ],
+)
+def test_an_accepted_leaf_checks_its_token_kind(body: bytes, locator: str) -> None:
+    """A number must be a number, a flag must be one of two words, and a quoted atom is neither.
+
+    The quoted cases matter on their own: a quoted atom is a different token from a bare one, and
+    `"no"` must not pass where `no` is meant -- the same distinction
+    `_validate_neutral_via_treatment` already draws.
+    """
+
+    result = parse_kicad_bytes(_with_setup(body), constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].message == "unsupported setup field value"
+    assert result.diagnostics[0].source_locator == locator
+
+
+def test_a_refused_payload_reports_no_counts() -> None:
+    """A board refused inside an accepted container published no measurement."""
+
+    result = parse_kicad_bytes(
+        _with_setup(b"(grid_origin (zone_defaults 1)) " + _stackup_with()),
         constraint_profile(assign_signal=True),
     )
 
-    assert counted.diagnostics == ()
-    assert counted.unmodelled_setup_field_count == 2
+    assert result.snapshot is None
+    assert result.unmodelled_setup_field_count == 0
+    assert result.unmodelled_stackup_layer_count == 0
 
-    ambiguous = parse_kicad_bytes(
-        _with_setup(_STACKUP + b" " + _STACKUP),
-        constraint_profile(assign_signal=True),
-    )
 
-    assert ambiguous.snapshot is None
-    assert ambiguous.unmodelled_setup_field_count == 0
-    assert ambiguous.unmodelled_stackup_layer_count == 0
+def test_a_repeated_accepted_setup_head_is_an_ambiguous_document() -> None:
+    """Closing the payload grammars removed an asymmetry D-227's first draft had to document.
+
+    Before the leaf grammars existed, a repeated `grid_origin` converted and counted two while a
+    repeated `stackup` refused -- because only the container resolved through `child()`. That
+    asymmetry was a consequence of the counted heads being unvalidated, not a decision anyone
+    made. Every accepted field now resolves through `child()`, so a duplicate of any of them is
+    reported as the ambiguous document it is, and no partial measurement is published.
+    """
+
+    for body in (
+        b"(grid_origin 1 1) (grid_origin 2 2)",
+        b"(pad_to_paste_clearance 0.1) (pad_to_paste_clearance 0.2)",
+        _stackup_with() + b" " + _stackup_with(),
+        b'(stackup (layer "F.Cu" (type "copper") (thickness 1) (thickness 2)))',
+    ):
+        result = parse_kicad_bytes(_with_setup(body), constraint_profile(assign_signal=True))
+
+        assert result.snapshot is None, body
+        assert result.diagnostics[0].code == "syntax.duplicate_field", body
+        assert result.unmodelled_setup_field_count == 0
+        assert result.unmodelled_stackup_layer_count == 0
 
 
 def test_multiple_native_identity_fields_are_rejected() -> None:

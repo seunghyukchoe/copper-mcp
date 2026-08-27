@@ -172,10 +172,25 @@ accepting something", it is "did the emitted document's accepted set change".
   a **containment** check — the adapter may widen, which is what this decision does, but a head
   accepted at B-130 and refused later invalidates the artifact's reading and fails the run. A
   rerun therefore still reproduces B-130 rather than silently answering a different question.
-- **A repeated `stackup` refuses; a repeated `grid_origin` converts and counts two.** The
-  asymmetry is real and is pinned rather than smoothed: the counted heads carry nothing, and the
-  counts are counts of *expressions* — the rule `unmodelled_board_property_count` already states —
-  while the head that gates a nested grammar cannot be ambiguous about which grammar it gated.
+- **Every accepted field carries a closed payload grammar: no nested child, exact arity, checked
+  token kind, refused at the field's own locator.** *Amended 2026-08-28, before merge, after
+  review of #225 (thread `PRRT_kwDOTrPIR86c8Hfh`).* The first draft of this record closed the
+  *head* allowlists at three levels and left every leaf's payload unread, which defeated its own
+  purpose: a head allowlist constrains **which** children may appear and says nothing about what
+  nests inside one, so `(grid_origin (zone_defaults ...))` smuggled past the very head this record
+  names as deliberately refused. All thirteen malformation classes — nested children, wrong arity,
+  non-numeric origins and constants, a quoted `"no"` where a bare flag is meant — were accepted at
+  every level, the nested stackup grammar included. **A counted non-claim is a validated
+  construct**: acceptance means "well formed and deliberately not modelled", never "bytes nobody
+  read". The grammars are in `_SETUP_SCALAR_PAYLOADS`, `_STACKUP_SCALAR_PAYLOADS` and
+  `_STACKUP_LAYER_PAYLOADS`, and they can only over-refuse, because every value they check is
+  discarded.
+- **A repeated accepted field is an ambiguous document, uniformly.** This record's first draft
+  documented an asymmetry — a repeated `stackup` refused, a repeated `grid_origin` converted and
+  counted two — and pinned it. Closing the payload grammars **removed** it: every accepted field
+  now resolves through `child()`, so any duplicate refuses with `syntax.duplicate_field` and
+  publishes no partial count. The asymmetry was a consequence of the counted heads being
+  unvalidated, not a decision; it is recorded here as retired rather than deleted.
 - **No board's first refusal moves on the public cohort.** Every one of the ten refuses in front
   of `setup`. This decision is measurable only behind B-129's masks, and B-131 records that
   differential rather than claiming a conversion this slice did not produce.

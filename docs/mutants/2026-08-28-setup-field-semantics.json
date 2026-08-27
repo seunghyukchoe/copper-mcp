@@ -176,6 +176,106 @@
       "killing_tests": [
         "tests/test_board_ir.py::test_a_refused_conversion_cannot_report_the_new_setup_counts"
       ]
+    },
+    {
+      "id": "SF18-let-an-accepted-leaf-carry-a-nested-child",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            self._reject_unknown_children(field, frozenset(), field_locator)",
+      "replacement": "            pass",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_no_accepted_leaf_may_carry_a_nested_child"
+      ]
+    },
+    {
+      "id": "SF19-drop-the-leaf-arity-bounds",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                minimum=minimum,\n                maximum=maximum,\n            )",
+      "replacement": "                minimum=0,\n                maximum=64,\n            )",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_an_accepted_leaf_has_exact_arity"
+      ]
+    },
+    {
+      "id": "SF20-drop-the-numeric-token-check",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                if kind is _NUMBER and (\n                    is_quoted_atom(token)\n                    or len(token) > 64\n                    or not _PAYLOAD_DECIMAL.fullmatch(token)\n                ):",
+      "replacement": "                if False:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_an_accepted_leaf_checks_its_token_kind"
+      ]
+    },
+    {
+      "id": "SF21-accept-a-quoted-number",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                if kind is _NUMBER and (\n                    is_quoted_atom(token)\n                    or len(token) > 64\n                    or not _PAYLOAD_DECIMAL.fullmatch(token)\n                ):",
+      "replacement": "                if kind is _NUMBER and (\n                    len(token) > 64 or not _PAYLOAD_DECIMAL.fullmatch(token.strip('\"'))\n                ):",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_an_accepted_leaf_checks_its_token_kind"
+      ]
+    },
+    {
+      "id": "SF22-drop-the-flag-token-check",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                if kind is _FLAG and (is_quoted_atom(token) or token not in _PAYLOAD_FLAGS):",
+      "replacement": "                if False:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_an_accepted_leaf_checks_its_token_kind"
+      ]
+    },
+    {
+      "id": "SF23-let-any-word-be-the-trailing-flag",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                    if token != trailing_flag or is_quoted_atom(token):",
+      "replacement": "                    if False:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_an_accepted_leaf_checks_its_token_kind"
+      ]
+    },
+    {
+      "id": "SF24-skip-payload-validation-on-direct-setup-fields",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            self._validate_leaf_payloads(setup, \"kicad_pcb.setup\", _SETUP_SCALAR_PAYLOADS)",
+      "replacement": "            pass",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_no_accepted_leaf_may_carry_a_nested_child"
+      ]
+    },
+    {
+      "id": "SF25-skip-payload-validation-on-stackup-scalars",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        self._validate_leaf_payloads(stackup, locator, _STACKUP_SCALAR_PAYLOADS)",
+      "replacement": "        pass",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_no_accepted_leaf_may_carry_a_nested_child"
+      ]
+    },
+    {
+      "id": "SF26-skip-payload-validation-on-stackup-layers",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            self._validate_leaf_payloads(layer, layer_locator, _STACKUP_LAYER_PAYLOADS)",
+      "replacement": "            pass",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_no_accepted_leaf_may_carry_a_nested_child"
+      ]
+    },
+    {
+      "id": "SF27-refuse-kicads-optional-locked-thickness",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "    \"thickness\": (1, 2, _NUMBER, \"locked\"),",
+      "replacement": "    \"thickness\": (1, 1, _NUMBER, None),",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_well_formed_payload_still_converts"
+      ]
     }
   ]
 }
