@@ -242,11 +242,29 @@ def copper_argv(
 
 
 def _kill_process(process: subprocess.Popen[bytes]) -> None:
+    """Kill the child's whole session, tolerating only a target that is provably gone.
+
+    ``killpg(2)`` raises ``EPERM`` when the process group is not ours to signal.  Under
+    load that happens benignly: the child exits, its PID -- and with it the session's
+    PGID -- is recycled onto a foreign process, and the signal we aimed at our own group
+    lands on someone else's.  The bound this kill enforces is already satisfied by that
+    exit, so there is nothing to retry.  ``EPERM`` on a *live, owned* child is the
+    opposite: the kill did not happen and swallowing it would drop the bound silently.
+
+    ``poll()`` separates the two, and is the only admissible proof: it reaps without
+    blocking and returns ``None`` for as long as the child is still running.  So the
+    handler reaps first and only then decides that ``EPERM`` was benign.
+    """
+
     if os.name == "posix":
         try:
             os.killpg(process.pid, signal.SIGKILL)
             return
         except ProcessLookupError:
+            return
+        except PermissionError:
+            if process.poll() is None:
+                raise
             return
     process.kill()
 

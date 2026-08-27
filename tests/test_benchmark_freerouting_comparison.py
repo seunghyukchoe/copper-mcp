@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 import types
 from datetime import UTC, datetime
@@ -179,6 +182,59 @@ def test_process_kills_on_bounded_output_and_never_buffers_the_full_stream(tmp_p
     )
     assert result.status == "output_limit"
     assert len(result.stdout) <= benchmark.MAX_PROCESS_OUTPUT_BYTES
+
+
+def _refuse_to_signal(_pgid: int, _number: int) -> None:
+    """Stand in for ``killpg(2)`` on a process group the caller may not signal."""
+
+    raise PermissionError(errno.EPERM, "Operation not permitted")
+
+
+def _session_child(*source: str) -> subprocess.Popen[bytes]:
+    return subprocess.Popen(  # noqa: S603 - fixed local interpreter, no shell
+        (sys.executable, "-c", *source),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=os.name == "posix",
+    )
+
+
+def test_kill_accepts_eperm_only_from_a_recycled_group_whose_child_is_reaped(
+    monkeypatch: object,
+) -> None:
+    """A child that already exited satisfies the bound; its recycled PGID is not ours."""
+
+    if os.name != "posix":
+        return
+    process = _session_child("")
+    assert process.wait(timeout=10) == 0
+
+    monkeypatch.setattr(benchmark.os, "killpg", _refuse_to_signal)
+    benchmark._kill_process(process)
+
+    assert process.returncode == 0
+
+
+def test_kill_surfaces_eperm_when_the_child_it_owns_is_still_alive(monkeypatch: object) -> None:
+    """The forbidden direction: swallowing this EPERM would drop the kill in silence."""
+
+    if os.name != "posix":
+        return
+    process = _session_child("import time; time.sleep(30)")
+    try:
+        monkeypatch.setattr(benchmark.os, "killpg", _refuse_to_signal)
+        try:
+            benchmark._kill_process(process)
+        except PermissionError as error:
+            assert error.errno == errno.EPERM
+        else:
+            raise AssertionError("EPERM on a live owned child must not be swallowed")
+        assert process.returncode is None
+    finally:
+        monkeypatch.undo()
+        process.kill()
+        process.wait(timeout=10)
 
 
 def test_process_prevents_an_oversized_child_file_before_it_can_complete(tmp_path: Path) -> None:

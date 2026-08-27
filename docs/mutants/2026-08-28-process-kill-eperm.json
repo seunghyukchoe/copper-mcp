@@ -1,0 +1,50 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "PK01-eperm-clause-removed",
+      "file": "scripts/benchmark_freerouting_comparison.py",
+      "anchor": "        except PermissionError:\n            if process.poll() is None:\n                raise\n            return\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_freerouting_comparison.py::test_kill_accepts_eperm_only_from_a_recycled_group_whose_child_is_reaped"
+      ]
+    },
+    {
+      "id": "PK02-eperm-swallowed-without-proving-the-child-is-reaped",
+      "file": "scripts/benchmark_freerouting_comparison.py",
+      "anchor": "            if process.poll() is None:\n                raise\n            return\n",
+      "replacement": "            return\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_freerouting_comparison.py::test_kill_surfaces_eperm_when_the_child_it_owns_is_still_alive"
+      ]
+    },
+    {
+      "id": "PK03-the-reap-proof-is-read-backwards",
+      "file": "scripts/benchmark_freerouting_comparison.py",
+      "anchor": "            if process.poll() is None:\n",
+      "replacement": "            if process.poll() is not None:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_freerouting_comparison.py::test_kill_accepts_eperm_only_from_a_recycled_group_whose_child_is_reaped",
+        "tests/test_benchmark_freerouting_comparison.py::test_kill_surfaces_eperm_when_the_child_it_owns_is_still_alive"
+      ]
+    },
+    {
+      "id": "PK04-eperm-folded-into-the-gone-target-arm",
+      "file": "scripts/benchmark_freerouting_comparison.py",
+      "anchor": "        except ProcessLookupError:\n            return\n",
+      "replacement": "        except (ProcessLookupError, PermissionError):\n            return\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_freerouting_comparison.py::test_kill_surfaces_eperm_when_the_child_it_owns_is_still_alive"
+      ]
+    }
+  ]
+}
