@@ -590,30 +590,56 @@ def _resolve_cli_paths(
 
 
 def _write_output(target: OutputTarget, payload: str) -> None:
+    """Publish a complete artifact or none at all.
+
+    The payload is staged in a private sibling inside the already-anchored parent, flushed and
+    fsynced, and only then linked to the final name. Writing straight into the create-exclusive
+    destination would leave a truncated JSON body behind on a full disk, a quota refusal or an
+    interruption -- and because `_resolve_cli_paths` requires a previously nonexistent output,
+    that stub would also block the retry until someone deleted it by hand. `os.link` keeps the
+    publish create-only, so the destination is still never overwritten and still never followed.
+    """
+
     if target.parent_fd < 0:
         raise SystemExit("output parent descriptor is closed")
+    if os.link not in os.supports_dir_fd:
+        raise SystemExit("platform must support anchored output creation")
+
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
     if hasattr(os, "O_CLOEXEC"):
         flags |= os.O_CLOEXEC
+    staged = f".{target.path.name}.{os.getpid()}.{os.urandom(8).hex()}.tmp"
     try:
-        descriptor = os.open(
-            target.path.name,
-            flags,
-            0o600,
-            dir_fd=target.parent_fd,
-        )
-    except FileExistsError as error:
-        raise SystemExit("output must remain a new path") from error
+        descriptor = os.open(staged, flags, 0o600, dir_fd=target.parent_fd)
     except (NotImplementedError, OSError) as error:
         raise SystemExit("output could not be created safely") from error
 
     try:
-        stream = os.fdopen(descriptor, "w", encoding="utf-8")
-    except Exception:
-        os.close(descriptor)
-        raise
-    with stream:
-        stream.write(payload)
+        try:
+            stream = os.fdopen(descriptor, "w", encoding="utf-8")
+        except BaseException:
+            os.close(descriptor)
+            raise
+        with stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            os.link(
+                staged,
+                target.path.name,
+                src_dir_fd=target.parent_fd,
+                dst_dir_fd=target.parent_fd,
+            )
+        except FileExistsError as error:
+            raise SystemExit("output must remain a new path") from error
+        except (NotImplementedError, OSError) as error:
+            raise SystemExit("output could not be published safely") from error
+    finally:
+        try:
+            os.unlink(staged, dir_fd=target.parent_fd)
+        except OSError:
+            pass
 
 
 def main() -> int:

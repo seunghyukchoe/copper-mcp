@@ -586,3 +586,30 @@ def test_output_write_stays_anchored_when_parent_is_replaced(tmp_path: Path) -> 
 
     assert (held_parent / "result.json").read_text(encoding="utf-8") == ('{"anchored":true}\n')
     assert not (corpus / "result.json").exists()
+
+
+def test_a_failed_output_write_publishes_nothing_and_stays_retryable(tmp_path: Path) -> None:
+    corpus, manifest, output, runner = _cli_paths(tmp_path)
+    _corpus, _manifest, target, _runner = census._resolve_cli_paths(
+        corpus,
+        manifest,
+        output,
+        runner,
+    )
+    before = {entry.name for entry in tmp_path.iterdir()}
+    try:
+        with patch.object(census.os, "fsync", side_effect=OSError("no space left on device")):
+            with pytest.raises(OSError, match="no space left on device"):
+                census._write_output(target, '{"partial":true}\n')
+
+        # A truncated body must never reach the final name, and the staged sibling must not
+        # survive to block the retry that `_resolve_cli_paths` would otherwise refuse.
+        assert not output.exists()
+        assert {entry.name for entry in tmp_path.iterdir()} == before
+
+        census._write_output(target, '{"complete":true}\n')
+    finally:
+        target.close()
+
+    assert output.read_text(encoding="utf-8") == '{"complete":true}\n'
+    assert {entry.name for entry in tmp_path.iterdir()} == before | {"result.json"}
