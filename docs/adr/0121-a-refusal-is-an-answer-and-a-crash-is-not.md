@@ -131,6 +131,7 @@ add a second, laxer path for the same types.
 | `ZoneFillError` | cached fill geometry could not be read within bounds |
 | `KicadIpcError` and its other subclasses | environment and transport failures, not request refusals |
 | `RuntimeError`, `TypeError`, `ValueError`, `KeyError`, `RecursionError`, `MemoryError` | untyped; provenance unknown by construction |
+| `UnicodeError` | a `ValueError` subclass, and never *raised* in this repository — it reaches the boundary only by re-raise out of a `kicad_ipc` handler, which is a decode fault, not a refusal |
 
 `ApplyTokenError` appears in neither list because it **cannot escape a tool body**: all three of
 its raise sites are caught inside `apply/service.py` and `live_apply.py` and converted to a typed
