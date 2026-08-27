@@ -12,7 +12,7 @@
   (the same shape one level up),
   [ADR-0091](0091-attaching-pad-zone-connect-overrides.md) (the `zone_connect` partition this
   reuses),
-  [ADR-0090](0090-root-groups-are-editor-organisation.md) (the group validator this reuses),
+  [ADR-0090](0090-root-level-board-groups.md) (the group validator this reuses),
   [ADR-0105](0105-a-schema-version-moves-with-its-accepted-set.md) (invoked and found not to
   apply)
 
@@ -156,7 +156,7 @@ It does mean the pad ADR's load-bearing sentence must not be restated for footpr
 
 KiCad dispatches a footprint's `(group …)` to the **same** `parseGROUP` as a root one and writes it
 from `aFootprint->Groups()` through the same formatter. So it takes the same validator
-([ADR-0090](0090-root-groups-are-editor-organisation.md)), the same closed child grammar, the same
+([ADR-0090](0090-root-level-board-groups.md)), the same closed child grammar, the same
 positional-atom check, the same **lock refusal**, and the same `unmodelled_group_count`.
 
 One counter rather than two is deliberate: a caller asking "how many groupings did I lose" wants
