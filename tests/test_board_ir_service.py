@@ -302,6 +302,8 @@ def test_a_supported_board_publishes_its_conversion_counts(tmp_path: Path) -> No
         "unmodelled_group_count": 0,
         "unmodelled_pad_property_count": 0,
         "unmodelled_thermal_bridge_angle_pad_count": 0,
+        "unmodelled_setup_field_count": 0,
+        "unmodelled_stackup_layer_count": 0,
     }
 
 

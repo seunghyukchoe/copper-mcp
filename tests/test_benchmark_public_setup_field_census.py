@@ -150,11 +150,55 @@ def _measure(
         )
 
 
-def test_closed_accepted_vocabulary_matches_the_adapter() -> None:
-    assert census.ACCEPTED_SETUP_HEADS == census.kicad_board_ir._SETUP_METADATA_HEADS
+def test_the_frozen_accepted_vocabulary_is_contained_by_the_adapters() -> None:
+    """The guard is containment, not equality, and D-227 is why.
+
+    `ACCEPTED_SETUP_HEADS` was a live mirror of the adapter's accepted set until D-227 accepted
+    five of the heads B-130 had just measured as unsupported. Left a mirror, a rerun would have
+    collapsed `unsupported_head_sets` to `none` and answered a different question under the same
+    schema name. Frozen, the artifact stays replayable — and the adapter may still only widen:
+    a head accepted at B-130 and refused later invalidates the recorded reading.
+    """
+
+    assert census.ACCEPTED_SETUP_HEADS <= census.kicad_board_ir._SETUP_METADATA_HEADS
+    assert census.ACCEPTED_SETUP_HEADS != census.kicad_board_ir._SETUP_METADATA_HEADS
     assert "stackup" not in census.ACCEPTED_SETUP_HEADS
+    assert "stackup" in census.kicad_board_ir._SETUP_METADATA_HEADS
     assert "stackup" in census.DIRECT_SETUP_HEADS
     assert census.OTHER not in census.DIRECT_SETUP_HEADS
+
+
+def test_a_widened_adapter_vocabulary_still_runs_the_census(tmp_path: Path) -> None:
+    """The half a constant comparison cannot cover, and a mutant proved it.
+
+    Asserting containment between the two constants leaves `measure`'s own guard untested: a
+    mutant restoring the old equality check survived, because the constants still differ and the
+    assertion still held. This runs the guard, on an adapter that has genuinely widened past the
+    frozen set — which is the live repository state after D-227.
+    """
+
+    assert census.ACCEPTED_SETUP_HEADS < census.kicad_board_ir._SETUP_METADATA_HEADS
+
+    corpus, manifest, fingerprint, commitment = _manifest(tmp_path)
+    result = _measure(corpus, manifest, fingerprint, commitment)
+
+    assert result["aggregates"]["boards"] == census.EXPECTED_SETUP_TERMINALS
+
+
+def test_a_narrowed_adapter_vocabulary_fails_the_census(tmp_path: Path) -> None:
+    """An absence is evidence only if the observation could report a presence.
+
+    The widening direction is exercised by the repository itself — the assertion above runs
+    against a live adapter that has already widened past the frozen set. The narrowing direction
+    has no live instance, so it is forced here.
+    """
+
+    corpus, manifest, fingerprint, commitment = _manifest(tmp_path)
+    narrowed = census.ACCEPTED_SETUP_HEADS - {"pcbplotparams"}
+
+    with patch.object(census.kicad_board_ir, "_SETUP_METADATA_HEADS", narrowed):
+        with pytest.raises(ValueError, match="accepted setup vocabulary drifted"):
+            _measure(corpus, manifest, fingerprint, commitment)
 
 
 @pytest.mark.parametrize(

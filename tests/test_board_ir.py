@@ -1092,3 +1092,42 @@ def test_a_refused_conversion_cannot_report_a_thermal_bridge_angle_pad_count() -
             diagnostics=refusal,
             unmodelled_thermal_bridge_angle_pad_count=1,
         )
+
+
+def test_a_refused_conversion_cannot_report_the_new_setup_counts() -> None:
+    """The D-227 counters obey the same rule as the five before them.
+
+    Found in the same class as the mutation that added
+    `test_an_unsupported_summary_carrying_counts_is_refused`: an invariant whose only builder
+    happens never to violate it is a comment. Both directions are here — the zeros a refusal is
+    allowed to carry, and the non-zeros it is not.
+    """
+
+    refusal = (
+        Diagnostic(
+            code="unsupported.construct",
+            severity=Severity.ERROR,
+            message="expression contains an unsupported semantic field",
+            source_locator="kicad_pcb.setup",
+        ),
+    )
+
+    empty = ConversionResult(snapshot=None, diagnostics=refusal)
+
+    assert empty.unmodelled_setup_field_count == 0
+    assert empty.unmodelled_stackup_layer_count == 0
+
+    with pytest.raises(ValueError, match="cannot report a setup field count"):
+        ConversionResult(snapshot=None, diagnostics=refusal, unmodelled_setup_field_count=1)
+    with pytest.raises(ValueError, match="cannot report a stackup layer count"):
+        ConversionResult(snapshot=None, diagnostics=refusal, unmodelled_stackup_layer_count=1)
+
+    for bad in (True, False, -1, 1.0, "1", None):
+        with pytest.raises(ValueError, match="setup field count"):
+            ConversionResult(  # type: ignore[arg-type]
+                snapshot=None, diagnostics=refusal, unmodelled_setup_field_count=bad
+            )
+        with pytest.raises(ValueError, match="stackup layer count"):
+            ConversionResult(  # type: ignore[arg-type]
+                snapshot=None, diagnostics=refusal, unmodelled_stackup_layer_count=bad
+            )
