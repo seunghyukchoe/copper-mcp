@@ -267,6 +267,16 @@ When adding a document, add it to the list below in the same sentence form — *
   `(property …)` is one entry of a text-variable map that is **not** inert: six enumerated termini
   reach real behaviour, including copper text and custom DRC rules. An enumeration is not a
   completeness proof, and it says so.
+- [KiCad setup fields](./kicad-setup-field-semantics-v1.md) establishes, per field, which
+  `(setup …)` children can reach copper geometry or clearance and which cannot: the design rules
+  left the board file in KiCad 6 and live in `.kicad_pro`/`.kicad_dru`; the two origins are an
+  editor anchor and an export offset; the paste pair adjusts stencil apertures under
+  `F_Paste`/`B_Paste` only; and the stackup is Z geometry whose layer list is derived *from* the
+  `(layers …)` section. It also records the three findings that decided the shape of the work — a
+  single KiCad-10 path (`*_post_machining`) that makes a layer thickness load-bearing for copper,
+  the removal of `castellated_pads` in KiCad 10, and three material defects in the official
+  file-format documentation for this block. It claims nothing about re-filling a zone, which needs
+  rules the board file does not carry.
 - [KiCad PCM distribution](./kicad-pcm-distribution-v1.md) records the addon package format from
   the published JSON Schema and the addons-metadata CI rather than the prose guide, listing the six
   fields on which the two disagree; the archive whitelist, icon bounds, size tolerances, and
