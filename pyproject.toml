@@ -24,16 +24,16 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
 ]
 dependencies = [
-  # Held below 2.1 deliberately, not for tidiness. Through 2.0.1 `MCPServer.call_tool()` wrapped
-  # every escaping exception as `ToolError(f"Error executing tool {name}: {exc}")`. From 2.1.0 only
-  # `ToolError`/`ResourceError`/`MCPError` stay anticipated; anything else becomes
-  # `UnexpectedToolError` whose message is replaced by a bare `Error executing tool <name>`. Our
-  # deliberate boundary refusals raise `copper_mcp.request_boundary.RequestError`, a `ValueError`,
-  # so under 2.1 they are reclassified as crashes and their reason never reaches the model — and
-  # the excessive-agency harness correctly scores 15 `budget_dos` cases as unrefused. Adapting the
-  # ~30 tool paths to the new vocabulary is a security-surface change that needs its own review,
-  # so the range is narrowed to the tested surface until then (`D-225`, `R-176`).
-  "mcp>=2.0.0,<2.1.0",
+  # The 2.1 cap `D-225` set is lifted: `mcp_server` now translates its audited refusal types to
+  # mcp `ToolError` at the adapter, so a refusal keeps its reason on both lines and a crash is
+  # classified as one on 2.1 (`ADR-0121`, `D-226`, `R-176`). The upper bound is `<2.2.0`, not
+  # `<3.0.0`, and that is an evidence boundary rather than a hold. What changed the refusal
+  # contract was a *minor* release inside 2.x -- 2.1.0 kept only `ToolError`/`ResourceError`/
+  # `MCPError` anticipated and rewrapped everything else as `UnexpectedToolError` with the
+  # message replaced -- so "a minor bump cannot move this surface" is the assumption this very
+  # history refutes. The full suite is run against both ends of the declared range, `2.0.0` and
+  # `2.1.1`; `<2.2.0` admits every published 2.x and nothing that has not been exercised.
+  "mcp>=2.0.0,<2.2.0",
   "pydantic>=2.11,<3.0",
 ]
 

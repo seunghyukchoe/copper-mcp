@@ -6,6 +6,28 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Deliberate refusals now reach the caller as MCP's own anticipated failure. `mcp_server`
+  translates a closed, audited set of exception types to `ToolError` at the adapter, so a refused
+  request keeps its reason on the `mcp` 2.1 line, where the SDK would otherwise have classified it
+  as a crash and replaced the message with a bare `Error executing tool <name>`. Behaviour on the
+  2.0 line is unchanged, and no refusal message changes on either
+  ([migration note](docs/migrations/mcp-2-1-refusal-contract.md), `ADR-0121`, `D-226`, `R-176`,
+  `SEC-163`).
+- The `mcp` dependency cap `0.10.0` set is lifted: the range moves from `mcp>=2.0.0,<2.1.0` to
+  `mcp>=2.0.0,<2.2.0`. The full suite is run against both `2.0.0` and `2.1.1`; the bound stops at
+  the tested surface rather than at `<3.0.0`, because a *minor* release inside 2.x is what moved
+  this contract in the first place (`D-226`, `D-225`).
+
+### Fixed
+
+- `validate_candidate` and `compare_candidates` refused an over-budget or malformed manifest with
+  an untyped `ValueError`, which is indistinguishable from an unhandled defect at the point it is
+  raised. Both now raise `models.ManifestContractError`, as does every other rejection in the
+  protocol-boundary manifest decoder. Callers catching `ValueError` are unaffected — it is a
+  subclass (`ADR-0121`, `D-226`).
+
 ## [0.10.0] - 2026-08-27
 
 Upgrading from 0.9.0: see the
