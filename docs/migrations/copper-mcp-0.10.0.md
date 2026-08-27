@@ -193,7 +193,37 @@ claim, and a run that skipped or excluded checks refuses even when it passed.
 [Issue #91](https://github.com/seunghyukchoe/copper-mcp/issues/91) remains open for SI, PI and
 thermal.
 
-## 6. CI and release-operator behavior
+## 6. The `mcp` dependency is capped below 2.1
+
+**`mcp` moves from `>=2.0.0,<3.0.0` to `>=2.0.0,<2.1.0`.** This is a resolver-visible constraint,
+so it is a migration item even though no CopperMCP API changes: a deployment that pins or requires
+`mcp >= 2.1` will now fail to resolve against CopperMCP 0.10.0, and one that floated to 2.1.x will
+be held back on upgrade.
+
+**The reason is a refusal-disclosure regression, not tidiness.** Through 2.0.1
+`MCPServer.call_tool()` wrapped every escaping exception as
+`ToolError(f"Error executing tool {name}: {exc}")`, message included. From 2.1.0 only `ToolError`,
+`ResourceError` and `MCPError` remain anticipated; anything else becomes `UnexpectedToolError`,
+whose message is replaced by a bare `Error executing tool <name>`.
+
+CopperMCP's deliberate boundary refusals raise `copper_mcp.request_boundary.RequestError`, which is
+a `ValueError`. Under 2.1 they are therefore reclassified as crashes and **the reason a request was
+refused stops reaching the model** — measured, not predicted: plain `main` under `mcp==2.1.1`
+reproduces eleven failures that pass under `2.0.1`, and the excessive-agency harness correctly
+scores fifteen `budget_dos` cases as unrefused rather than refused.
+
+**What a deployer must do:** nothing, if `mcp` is left to resolve. If your environment pins `mcp`
+independently, move the pin inside `>=2.0.0,<2.1.0` before upgrading. Do not override the cap to
+take 2.1: on that line CopperMCP's refusals are silent to the caller.
+
+**Stated as a non-claim, because the hold conceals something:** 2.1's classification is the better
+contract, and this is a hold rather than an endorsement of 2.0.x. Adopting it means auditing every
+refusal path in `mcp_server.py` and deciding per exception type whether it is anticipated or a
+crash — a security-surface change that earns its own review. `R-176` records the cost of waiting:
+on the pinned 2.0.x line the harness cannot tell a deliberate refusal from an unhandled crash,
+because 2.0.x collapses both into `ToolError` (`D-225`, `R-176`).
+
+## 7. CI and release-operator behavior
 
 Only operators carrying the upstream workflows or running `make check` are affected. Everything
 0.9.0 §11 said still holds. Two things move:
@@ -211,7 +241,7 @@ Only operators carrying the upstream workflows or running `make check` are affec
 The release environment must still install `.[dev,security]` — `pip-audit` is in the `security`
 extra, not `dev`.
 
-## 7. Changes that are real but reach no caller
+## 8. Changes that are real but reach no caller
 
 Each of these has a `0.10.0` CHANGELOG entry and is listed here so the audit is complete rather
 than selective. None requires deployment action.
@@ -241,7 +271,7 @@ than selective. None requires deployment action.
   production code, no acceleration and no public-contract change. They are evidence, not
   behaviour.
 
-## 8. What this release explicitly does not change
+## 9. What this release explicitly does not change
 
 Stated as non-claims, because an absent entry and a verified absence are not the same thing:
 
@@ -259,7 +289,7 @@ Stated as non-claims, because an absent entry and a verified absence are not the
   each verify cleanly are **not** thereby clean against each other: neither exists in the base
   snapshot the other was verified against.
 
-## 9. Deployment checklist
+## 10. Deployment checklist
 
 Before switching traffic to 0.10.0:
 
@@ -278,5 +308,7 @@ Before switching traffic to 0.10.0:
   `physical_validation: "completed"` as a pass;
 - **no Board IR re-conversion is scheduled for this release** — if one is pending it is 0.9.0's,
   not this one's; and
+- any independent `mcp` pin is moved inside `>=2.0.0,<2.1.0`, and the cap is not overridden to
+  take 2.1, where CopperMCP's boundary refusals stop explaining themselves; and
 - release operators keep `.github/ci-budget-calibration.json` synchronized with successful hosted
   durations and install `.[dev,security]`.
