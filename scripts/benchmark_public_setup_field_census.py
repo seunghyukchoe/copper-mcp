@@ -37,7 +37,16 @@ PREDECLARED_COHORT_FINGERPRINT: Final = masking.PREDECLARED_COHORT_FINGERPRINT
 SELECTION_COMMITMENT_DOMAIN: Final = (
     b"copper-mcp/public-setup-field-census/selected-manifest-entries/v1\x00"
 )
-PREDECLARED_SETUP_SELECTION_COMMITMENT: Final[str | None] = None
+# Assigned once, from the exact B-129 cohort, in the pull request that first ran this instrument.
+# It is a *freeze*, not a prediction: the six entries it binds were selected by rerunning the
+# fixed-point classifier, and the constant records which six, so that any later rerun whose
+# selection differs -- a drifted classifier, a re-derived corpus, a swapped manifest row -- fails
+# instead of silently re-aggregating over a different population. `EXPECTED_SETUP_TERMINALS` alone
+# cannot catch that: a same-count membership swap keeps the count and changes the answer, which is
+# exactly what `test_measure_rejects_same_count_selection_membership_drift` exercises.
+PREDECLARED_SETUP_SELECTION_COMMITMENT: Final[str | None] = (
+    "sha256:bda70bb147c572f316f0ae218a8a0daed225e392f4c315b71947c5a88083e9e1"
+)
 
 ACCEPTED_SETUP_HEADS: Final = frozenset(
     {
