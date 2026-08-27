@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 import importlib.util
 import json
+import os
+import signal
+import subprocess
 import sys
 import types
 from datetime import UTC, datetime
@@ -179,6 +183,123 @@ def test_process_kills_on_bounded_output_and_never_buffers_the_full_stream(tmp_p
     )
     assert result.status == "output_limit"
     assert len(result.stdout) <= benchmark.MAX_PROCESS_OUTPUT_BYTES
+
+
+KILL_REFUSED = "kill refused"
+PROBE_REFUSED = "probe refused"
+
+
+class _Killpg:
+    """Stand in for ``killpg(2)``, scripting the real send and the null probe apart.
+
+    Credential-dropping a descendant needs root, so the group states this exercises are
+    reached by mocking the syscall rather than by building them for real.  The stub records
+    every signal number it is asked for, which is how the tests pin the *order* of the two
+    questions ``_kill_process`` asks -- and that a question was not asked at all.
+    """
+
+    def __init__(self, *, probe: BaseException | None, refusals: int = 1) -> None:
+        self._probe = probe
+        self._refusals = refusals
+        self.signals: list[int] = []
+
+    def __call__(self, _pgid: int, number: int) -> None:
+        self.signals.append(number)
+        if number == 0:
+            if self._probe is not None:
+                raise self._probe
+            return
+        if self._refusals > 0:
+            self._refusals -= 1
+            raise PermissionError(errno.EPERM, KILL_REFUSED)
+
+
+def _session_child(*source: str) -> subprocess.Popen[bytes]:
+    return subprocess.Popen(  # noqa: S603 - fixed local interpreter, no shell
+        (sys.executable, "-c", *source),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=os.name == "posix",
+    )
+
+
+def test_kill_accepts_eperm_only_when_the_whole_group_is_gone(monkeypatch: object) -> None:
+    """Leader reaped *and* group empty: the exit already satisfies the bound."""
+
+    if os.name != "posix":
+        return
+    process = _session_child("")
+    assert process.wait(timeout=10) == 0
+    killpg = _Killpg(probe=ProcessLookupError(errno.ESRCH, "No such process"))
+
+    monkeypatch.setattr(benchmark.os, "killpg", killpg)
+    benchmark._kill_process(process)
+
+    assert killpg.signals == [signal.SIGKILL, 0]
+    assert process.returncode == 0
+
+
+def test_kill_refuses_eperm_while_any_process_remains_in_the_group(monkeypatch: object) -> None:
+    """A reaped leader is not an empty group: a surviving member keeps EPERM fatal."""
+
+    if os.name != "posix":
+        return
+    process = _session_child("")
+    assert process.wait(timeout=10) == 0
+    killpg = _Killpg(probe=PermissionError(errno.EPERM, PROBE_REFUSED))
+
+    monkeypatch.setattr(benchmark.os, "killpg", killpg)
+    try:
+        benchmark._kill_process(process)
+    except PermissionError as error:
+        assert error.errno == errno.EPERM
+        assert error.strerror == KILL_REFUSED  # the refusal of the kill, not of the probe
+    else:
+        raise AssertionError("EPERM over a non-empty group must not be swallowed")
+
+    assert killpg.signals == [signal.SIGKILL, 0]
+
+
+def test_kill_redelivers_once_when_the_group_turns_out_to_be_signalable(
+    monkeypatch: object,
+) -> None:
+    """A group that answers the probe contradicts the EPERM, so the kill is delivered."""
+
+    if os.name != "posix":
+        return
+    process = _session_child("")
+    assert process.wait(timeout=10) == 0
+    killpg = _Killpg(probe=None)
+
+    monkeypatch.setattr(benchmark.os, "killpg", killpg)
+    benchmark._kill_process(process)
+
+    assert killpg.signals == [signal.SIGKILL, 0, signal.SIGKILL]
+
+
+def test_kill_surfaces_eperm_when_the_child_it_owns_is_still_alive(monkeypatch: object) -> None:
+    """The leader check gates the probe: a live leader is fatal whatever the group says."""
+
+    if os.name != "posix":
+        return
+    process = _session_child("import time; time.sleep(30)")
+    # The probe would report an empty group. It must never be consulted for a live leader.
+    killpg = _Killpg(probe=ProcessLookupError(errno.ESRCH, "No such process"))
+    try:
+        monkeypatch.setattr(benchmark.os, "killpg", killpg)
+        try:
+            benchmark._kill_process(process)
+        except PermissionError as error:
+            assert error.errno == errno.EPERM
+        else:
+            raise AssertionError("EPERM on a live owned child must not be swallowed")
+        assert killpg.signals == [signal.SIGKILL]
+        assert process.returncode is None
+    finally:
+        monkeypatch.undo()
+        process.kill()
+        process.wait(timeout=10)
 
 
 def test_process_prevents_an_oversized_child_file_before_it_can_complete(tmp_path: Path) -> None:

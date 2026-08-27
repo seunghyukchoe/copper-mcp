@@ -28,7 +28,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import IO, Any, cast
+from typing import IO, Any, Literal, cast
 
 try:
     import resource
@@ -241,12 +241,85 @@ def copper_argv(
         raise ValueError(f"unsupported CopperMCP command placeholder: {error.args[0]}") from error
 
 
+GroupState = Literal["gone", "unsignalable", "signalable"]
+
+
+def _process_group_state(pgid: int) -> GroupState:
+    """Ask whether any process remains in ``pgid``, without delivering a signal to it.
+
+    The null signal is the specified way to ask.  POSIX `kill()
+    <https://pubs.opengroup.org/onlinepubs/9699919799/functions/kill.html>`_: "If sig is 0
+    (the null signal), error checking is performed but no signal is actually sent."  POSIX
+    `killpg() <https://pubs.opengroup.org/onlinepubs/9699919799/functions/killpg.html>`_:
+    "If pgrp is greater than 1, killpg(pgrp, sig) shall be equivalent to kill(-pgrp, sig)",
+    so signal ``0`` probes a whole group, not one process.  Linux `kill(2)
+    <https://man7.org/linux/man-pages/man2/kill.2.html>`_ says the same and names the use:
+    "existence and permission checks are still performed; this can be used to check for the
+    existence of a process ID or process group ID that the caller is permitted to signal."
+
+    Only ``ESRCH`` means empty.  POSIX: "No process or process group can be found
+    corresponding to that specified by pid" -- and Linux adds the part that makes the answer
+    usable here, that "an existing process might be a zombie", so an unreaped member still
+    counts as present.  Both ``EPERM`` wordings assert the opposite, that target processes
+    exist; they differ only in quantifier, which this function deliberately does not depend
+    on.  Linux: "The calling process does not have permission to send the signal to any of
+    the target processes."  macOS/BSD ``killpg(2)``: "one or more of the target processes has
+    an effective user ID different from that of the sending process."
+    """
+
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return "gone"
+    except PermissionError:
+        return "unsignalable"
+    return "signalable"
+
+
 def _kill_process(process: subprocess.Popen[bytes]) -> None:
+    """Kill the child's whole session, tolerating only a *group* that is provably empty.
+
+    ``killpg(2)`` reports ``EPERM`` when the group cannot be signalled, and that one answer
+    covers two opposite situations.  It is benign when the child has exited and its PID --
+    and with it the PGID of the session ``start_new_session`` gave it -- has been recycled,
+    because the bound this kill enforces is already satisfied by that exit.  It is fatal
+    when a descendant that changed credentials is still in the group, because that process
+    can still hold the pipe whose bound the kill exists to enforce.
+
+    Reaping the leader is necessary but **not sufficient**.  ``poll()`` is ``waitpid``
+    with ``WNOHANG``: it proves the session *leader* is gone and preserves its exit status,
+    and it says nothing about the rest of the group, which outlives its leader.  So the
+    handler asks about the group too, with the null signal, and only an empty group earns
+    the benign path.
+
+    The two situations are not fully separable: a recycled foreign group and an escaped
+    credential-changed descendant both present as "non-empty and unsignalable", so this
+    refuses both.  Over-refusing surfaces as a loud failure on a benchmark run and is
+    diagnosable; the other direction drops the output bound in silence, so the ambiguity is
+    resolved closed.
+    """
+
     if os.name == "posix":
         try:
             os.killpg(process.pid, signal.SIGKILL)
             return
         except ProcessLookupError:
+            return
+        except PermissionError as refused:
+            if process.poll() is None:
+                raise
+            state = _process_group_state(process.pid)
+            if state == "gone":
+                return
+            if state == "unsignalable":
+                raise refused from None
+            # Signalable now, which contradicts the EPERM just caught: the group changed
+            # between the two calls.  Deliver the kill the caller asked for, once.  A
+            # second refusal surfaces rather than being retried around a loop.
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
             return
     process.kill()
 

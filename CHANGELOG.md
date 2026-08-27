@@ -51,6 +51,18 @@ All notable changes are documented here. The format follows
   raised. Both now raise `models.ManifestContractError`, as does every other rejection in the
   protocol-boundary manifest decoder. Callers catching `ValueError` are unaffected — it is a
   subclass (`ADR-0121`, `D-226`).
+- The Freerouting benchmark runner no longer fails a run when the session it kills has already
+  been recycled. `_kill_process` handled `ProcessLookupError` but not `PermissionError`, and
+  `killpg(2)` reports `EPERM` once the child has exited and its PID — and with it the session's
+  PGID — has been reused by a process this user may not signal, a race that host load exposes.
+  The new arm is deliberately narrow, because the same `EPERM` also covers a fatal case: a
+  descendant that changed credentials outliving the leader inside the group, still holding the
+  pipe the output bound is about. So `EPERM` is accepted only against two proofs, in order —
+  `poll()` reaps the session leader and preserves its exit status, then the null signal
+  (`killpg(pgid, 0)`, POSIX's specified existence check) must report the whole *group* gone.
+  A group that still holds any process re-raises, and one that answers the probe gets the kill
+  delivered once. Every arm is pinned by tests and by eight mutants in
+  [its spec](docs/mutants/2026-08-28-process-kill-eperm.json), all killed.
 
 ## [0.10.0] - 2026-08-27
 
