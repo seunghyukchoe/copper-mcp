@@ -1,0 +1,181 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "SF01-accept-every-setup-child",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            self._reject_unknown_children(setup, _SETUP_METADATA_HEADS, \"kicad_pcb.setup\")",
+      "replacement": "            pass",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_an_unknown_setup_field_is_still_refused",
+        "tests/test_kicad_board_ir.py::test_zone_defaults_stays_refused_and_is_recorded_as_a_deliberate_absence"
+      ]
+    },
+    {
+      "id": "SF02-accept-every-stackup-child",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        self._reject_unknown_children(stackup, _STACKUP_HEADS, locator)",
+      "replacement": "        pass",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_the_stackup_grammar_is_closed_at_every_level"
+      ]
+    },
+    {
+      "id": "SF03-accept-every-stackup-layer-child",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            self._reject_unknown_children(layer, _STACKUP_LAYER_HEADS, layer_locator)",
+      "replacement": "            pass",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_the_stackup_grammar_is_closed_at_every_level"
+      ]
+    },
+    {
+      "id": "SF04-read-past-board-edge-treatment",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            if values and (values != (\"no\",) or is_quoted_atom(values[0])):",
+      "replacement": "            if False:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_board_edge_fabrication_treatment_inside_a_stackup_refuses_at_its_own_field"
+      ]
+    },
+    {
+      "id": "SF05-accept-a-quoted-neutral-edge-attribute",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            if values and (values != (\"no\",) or is_quoted_atom(values[0])):",
+      "replacement": "            if values and values != (\"no\",):",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_board_edge_fabrication_treatment_inside_a_stackup_refuses_at_its_own_field"
+      ]
+    },
+    {
+      "id": "SF06-refuse-an-explicitly-neutral-edge-attribute",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            if values and (values != (\"no\",) or is_quoted_atom(values[0])):",
+      "replacement": "            if values:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_an_explicitly_neutral_board_edge_attribute_is_accepted"
+      ]
+    },
+    {
+      "id": "SF07-drop-edge-plating-from-the-refused-set",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "_COPPER_BEARING_STACKUP_HEADS = (\"castellated_pads\", \"edge_connector\", \"edge_plating\")",
+      "replacement": "_COPPER_BEARING_STACKUP_HEADS = (\"castellated_pads\", \"edge_connector\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_board_edge_fabrication_treatment_inside_a_stackup_refuses_at_its_own_field"
+      ]
+    },
+    {
+      "id": "SF08-never-count-a-setup-field",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                self.unmodelled_setup_field_count += 1",
+      "replacement": "                self.unmodelled_setup_field_count += 0",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_setup_fields_with_no_copper_effect_convert_and_are_counted"
+      ]
+    },
+    {
+      "id": "SF09-never-count-a-stackup-layer",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            self.unmodelled_stackup_layer_count += 1",
+      "replacement": "            self.unmodelled_stackup_layer_count += 0",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_setup_fields_with_no_copper_effect_convert_and_are_counted",
+        "tests/test_kicad_board_ir.py::test_an_explicitly_neutral_board_edge_attribute_is_accepted"
+      ]
+    },
+    {
+      "id": "SF10-count-every-setup-child-not-only-the-new-ones",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            if isinstance(item, SExpr) and item.head in _UNMODELLED_SETUP_HEADS:",
+      "replacement": "            if isinstance(item, SExpr):",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_board_without_the_new_setup_fields_reports_both_counts_zero"
+      ]
+    },
+    {
+      "id": "SF11-let-a-stackup-layer-carry-a-second-positional-atom",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            self._validate_direct_atoms(\n                layer,\n                positional_atoms=1,\n                allowed=frozenset(),\n                locator=layer_locator,\n            )",
+      "replacement": "            self._validate_direct_atoms(\n                layer,\n                positional_atoms=1,\n                allowed=frozenset({\"locked\"}),\n                locator=layer_locator,\n            )",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_the_stackup_grammar_is_closed_at_every_level"
+      ]
+    },
+    {
+      "id": "SF12-let-a-stackup-carry-a-bare-atom",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        self._validate_direct_atoms(\n            stackup,\n            positional_atoms=0,\n            allowed=frozenset(),\n            locator=locator,\n        )",
+      "replacement": "        self._validate_direct_atoms(\n            stackup,\n            positional_atoms=1,\n            allowed=frozenset(),\n            locator=locator,\n        )",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_the_stackup_grammar_is_closed_at_every_level"
+      ]
+    },
+    {
+      "id": "SF13-admit-zone-defaults",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        \"stackup\",\n        \"tenting\",\n    }\n)",
+      "replacement": "        \"stackup\",\n        \"tenting\",\n        \"zone_defaults\",\n    }\n)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_zone_defaults_stays_refused_and_is_recorded_as_a_deliberate_absence"
+      ]
+    },
+    {
+      "id": "SF15-drop-the-new-counts-from-the-published-map",
+      "file": "src/copper_mcp/board_ir_service.py",
+      "anchor": "    \"unmodelled_setup_field_count\",\n    \"unmodelled_stackup_layer_count\",",
+      "replacement": "    \"unmodelled_setup_field_count\",",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir_service.py::test_every_measured_conversion_field_appears_in_the_summary_map"
+      ]
+    },
+    {
+      "id": "SF16-let-the-census-mirror-the-live-accepted-set-again",
+      "file": "scripts/benchmark_public_setup_field_census.py",
+      "anchor": "    if not ACCEPTED_SETUP_HEADS <= kicad_board_ir._SETUP_METADATA_HEADS:",
+      "replacement": "    if ACCEPTED_SETUP_HEADS != kicad_board_ir._SETUP_METADATA_HEADS:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_public_setup_field_census.py::test_a_widened_adapter_vocabulary_still_runs_the_census"
+      ]
+    },
+    {
+      "id": "SF17-let-the-census-accept-a-narrowed-adapter",
+      "file": "scripts/benchmark_public_setup_field_census.py",
+      "anchor": "    if not ACCEPTED_SETUP_HEADS <= kicad_board_ir._SETUP_METADATA_HEADS:\n        raise _fixed_error(\"adapter accepted setup vocabulary drifted\")",
+      "replacement": "    if False:\n        raise _fixed_error(\"adapter accepted setup vocabulary drifted\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_public_setup_field_census.py::test_a_narrowed_adapter_vocabulary_fails_the_census"
+      ]
+    },
+    {
+      "id": "SF14-report-a-stackup-count-on-a-refused-conversion",
+      "file": "src/copper_mcp/board_ir/diagnostics.py",
+      "anchor": "        if self.snapshot is None and self.unmodelled_stackup_layer_count:\n            raise ValueError(\"a failed conversion cannot report a stackup layer count\")",
+      "replacement": "        if False:\n            raise ValueError(\"a failed conversion cannot report a stackup layer count\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_board_ir.py::test_a_refused_conversion_cannot_report_the_new_setup_counts"
+      ]
+    }
+  ]
+}

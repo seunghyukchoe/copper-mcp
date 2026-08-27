@@ -265,10 +265,31 @@ _UNMODELLED_COPPER_GRAPHIC_HEADS: dict[str, tuple[str, str]] = {
 _SETUP_METADATA_HEADS = frozenset(
     {
         "allow_soldermask_bridges_in_footprints",
+        # The drill-and-place file origin. It is a *reporting* origin: KiCad subtracts it when
+        # writing drill and component-placement files, and nothing on the board moves. Board IR
+        # carries absolute board coordinates and makes no fabrication-output claim, so the value
+        # changes no pad, track, via, zone or outline this adapter reads. Counted, not modelled --
+        # a caller regenerating fab output from a snapshot alone would emit a different origin.
+        # See D-227 and the setup-field research note.
+        "aux_axis_origin",
         "capping",
         "covering",
         "filling",
+        # The editor's grid anchor. Pure editor state: it moves where KiCad's grid dots land and
+        # what a coordinate readout displays, and no board object's stored position depends on it.
+        # Counted for symmetry with `aux_axis_origin` rather than because anything can read it.
+        "grid_origin",
         "pad_to_mask_clearance",
+        # Solder-paste stencil aperture defaults, the paste twins of `pad_to_mask_clearance` and
+        # `solder_mask_min_width` below. They shrink or grow the F.Paste/B.Paste aperture derived
+        # from a pad; the pad's own copper, hole, layer span and clearance are untouched. Board IR
+        # models copper and makes no paste claim, so accepting them ignores nothing it would have
+        # honoured -- exactly the argument the mask pair already stands on. KiCad's own proof is
+        # `FOOTPRINT::TransformPadsToPolySet`, which adds the paste margin only under
+        # `case F_Paste: case B_Paste:` and falls through `default:` -- every copper layer -- with
+        # no adjustment at all.
+        "pad_to_paste_clearance",
+        "pad_to_paste_clearance_ratio",
         "pcbplotparams",
         "plugging",
         # Soldermask sliver minimum. Like `pad_to_mask_clearance` above it constrains mask
@@ -277,7 +298,85 @@ _SETUP_METADATA_HEADS = frozenset(
         # metadata ignores nothing it would otherwise have honoured. Found on real boards that
         # were refused outright for carrying it.
         "solder_mask_min_width",
+        # The physical stack. It is accepted as *metadata with a closed inner grammar*, never as a
+        # whole: see `_validate_stackup`. The stack describes the board in Z -- layer order,
+        # thickness, material, dielectric constant, loss tangent, surface finish -- and Board IR is
+        # an XY copper model whose layer set comes from the root `(layers ...)` section, not from
+        # here. What the stackup can carry that XY copper *does* care about is three fabrication
+        # attributes naming plated material at the board edge, and those are refused one by one
+        # rather than read past.
+        "stackup",
         "tenting",
+    }
+)
+# Deliberately **absent**, and named so the absence reads as a decision rather than an oversight.
+# `zone_defaults` is new in KiCad 10 and carries the default hatch *phase* of a hatched zone fill
+# -- copper geometry for anything that re-fills, so it stays refused. It is also the head that
+# tests whether B-130's closed vocabulary was closed for the right reason: the census buckets any
+# unlisted head as `other`, and `other` came back 0 on all six boards, so no board of that cohort
+# writes one. A seventh board that did would refuse here and be reported by that bucket, which is
+# what the bucket is for.
+_REFUSED_SETUP_HEADS_ON_RECORD = frozenset({"zone_defaults"})
+# Stackup children KiCad writes, and the only ones this adapter reads past.  `layer`,
+# `copper_finish` and `dielectric_constraints` describe the board in Z and are counted; the three
+# in `_COPPER_BEARING_STACKUP_HEADS` below are refused unless explicitly neutral.
+_STACKUP_HEADS = frozenset(
+    {
+        "castellated_pads",
+        "copper_finish",
+        "dielectric_constraints",
+        "edge_connector",
+        "edge_plating",
+        "layer",
+    }
+)
+# The three stackup attributes that assert something about conductive or removed material at the
+# board edge rather than about the stack's Z geometry.  Each names plated or bevelled material that
+# no pad, track, via, zone or graphic in the document represents, so reading past one would report
+# a board edge this adapter has understated.  A neutral `no` asserts the absence and is accepted;
+# anything else refuses, at the field rather than at the block.
+#
+# **This is deliberate over-refusal and the counter-evidence is recorded rather than omitted.**
+# KiCad derives *no geometry at all* from these three: `m_EdgePlating` and
+# `m_EdgeConnectorConstraints` are read only by `gerber_jobfile_writer.cpp`, the stackup text
+# report, the board-characteristics table and the GUI panel, with no reference anywhere in
+# `pcbnew/drc/`, the plotters, `zone_filler.cpp`, the 3D viewer or the STEP exporter; the 9.0 and
+# 10.0 manuals both say these settings "only impact the board attributes output as part of Gerber
+# job files at this time".  Refusing them is therefore a claim about the *physical* board, not
+# about KiCad's model -- and it is exactly the claim `_validate_neutral_via_treatment` already
+# makes for `capping` and `filling`, which are likewise conductive fabrication treatment KiCad
+# derives no geometry from.  Consistency with that precedent decides it, and B-130 measures the
+# price: all three occur 0 times on 0 boards of the six-board public setup-terminal cohort.
+#
+# `castellated_pads` is additionally moot at the one board format version this adapter accepts:
+# KiCad 10 removed `m_CastellatedPads` (commit `09e1fca7e4`, 2025-08-11), never emits the token,
+# and its parser consumes it as legacy compatibility.  Castellation is now derived from the pad
+# `pad_prop_castellated` property -- which this adapter already refuses -- so the stackup flag is
+# kept here to fail closed on a hand-edited or third-party-written document, not because KiCad 10
+# can produce one.
+_COPPER_BEARING_STACKUP_HEADS = ("castellated_pads", "edge_connector", "edge_plating")
+# The `setup` children D-227 newly admits and does not model, and the exact set
+# `unmodelled_setup_field_count` reports.  Deliberately *not* every accepted setup head: the count
+# discloses the erasure this decision creates, not the ones already recorded elsewhere.
+_UNMODELLED_SETUP_HEADS = frozenset(
+    {
+        "aux_axis_origin",
+        "grid_origin",
+        "pad_to_paste_clearance",
+        "pad_to_paste_clearance_ratio",
+        "stackup",
+    }
+)
+# Stackup layer children KiCad writes.  Every one is a Z-axis or appearance property of one entry
+# in the physical stack: none carries an XY coordinate, a net, or a clearance.
+_STACKUP_LAYER_HEADS = frozenset(
+    {
+        "color",
+        "epsilon_r",
+        "loss_tangent",
+        "material",
+        "thickness",
+        "type",
     }
 )
 _FOOTPRINT_METADATA_HEADS = frozenset(
@@ -608,6 +707,15 @@ class _Converter:
         # derived zone-fill spokes, not the pad envelope represented by Board IR, so the token is
         # accepted as a typed non-claim and disclosed rather than silently discarded.
         self.unmodelled_thermal_bridge_angle_pad_count = 0
+        # `setup` children D-227 admits without modelling: the stackup, the two origins and the
+        # two paste clearances.  Counted as expressions, so a document writing one twice is
+        # refused by `child()` before this ever runs and cannot inflate the number.
+        self.unmodelled_setup_field_count = 0
+        # `(layer …)` entries inside an accepted stackup, dielectric entries included.  It is a
+        # separate number from the one above because it answers a separate question: the field
+        # count says a stack was dropped, this says how big it was, and a caller comparing it
+        # against `len(copper_layers)` can see the physical entries it never received.
+        self.unmodelled_stackup_layer_count = 0
         # Custom-pad primitive vertices are reduced to an envelope and therefore disappear before
         # Board IR validation counts serialized rings.  Retain only their count so caller-provided
         # vertex budgets still cover the complete accepted source geometry.
@@ -968,6 +1076,8 @@ class _Converter:
                 locator="kicad_pcb.setup",
             )
             self._validate_neutral_via_treatment(setup, "kicad_pcb.setup")
+            self._count_unmodelled_setup_fields(setup)
+            self._validate_stackup(setup)
 
         for footprint_index, footprint in enumerate(children(self.root, "footprint")):
             locator = f"kicad_pcb.footprint[{footprint_index}]"
@@ -1152,6 +1262,87 @@ class _Converter:
                         f"{locator}.{side_head}.{side}",
                         object_kind="via",
                     )
+
+    def _count_unmodelled_setup_fields(self, setup: SExpr) -> None:
+        """Count the accepted `setup` children D-227 admits and does not model.
+
+        It counts *expressions*, and it counts only the five heads this slice newly admits --
+        never the heads that were already accepted before it. Two reasons, and the second is why
+        the partition is not arbitrary. A count is a disclosure of a specific erasure, and the
+        erasure D-227 creates is these five: `stackup`, the two origins, and the two paste
+        clearances. The heads accepted earlier already have their own recorded reasoning, and
+        folding them in would silently restate a number whose meaning nobody agreed to.
+        """
+
+        for item in setup.items[1:]:
+            if isinstance(item, SExpr) and item.head in _UNMODELLED_SETUP_HEADS:
+                self.unmodelled_setup_field_count += 1
+
+    def _validate_stackup(self, setup: SExpr) -> None:
+        """Read past the physical stack, refusing only what asserts copper at the board edge.
+
+        The whole point of doing this per field rather than per block is direction of error. The
+        stack's Z geometry -- order, thickness, material, `epsilon_r`, `loss_tangent`, finish,
+        colour -- describes the board perpendicular to everything Board IR models, so ignoring it
+        cannot shrink an obstacle or widen the routing room. `castellated_pads`, `edge_connector`
+        and `edge_plating` are different in kind: each asserts plated or removed material at the
+        board edge that no pad, track, via, zone or graphic in the document represents, so reading
+        one past would under-report copper. Those refuse.
+
+        The copper layer *set* is not read from here. It comes from the root `(layers ...)`
+        section, which this adapter already validates; a stackup entry carries no XY coordinate,
+        no net and no clearance, so it cannot introduce a layer's geometry either way. KiCad
+        agrees on the direction: its stackup parser matches each `(layer "NAME")` against the
+        already-enabled layers and `BuildDefaultStackupList` reads `GetEnabledLayers()` and
+        `GetCopperLayerCount()`, so the stack is derived *from* the layer set rather than the
+        other way round.
+
+        **One path does make a layer `thickness` load-bearing for copper, and this decision rests
+        on that path already being closed.** In KiCad 10 a pad or via carrying
+        `front_post_machining`/`back_post_machining` (counterbore or countersink) has its copper
+        on a given layer knocked out, or its countersink diameter computed, by comparing the
+        machining depth against `BOARD_STACKUP::GetLayerDistance()` -- and that result reaches
+        `GetEffectiveShape()`, every DRC clearance test, `zone_filler.cpp` and connectivity. Were
+        a post-machined pad or via ever accepted while the stack was read past, the copper this
+        adapter reports would be *larger* than the board's, which is the forbidden direction.
+        It cannot happen: `front_post_machining` and `back_post_machining` are in
+        `_UNSUPPORTED_PAD_FIELDS`, and the via allowlist refuses them too. That coupling is not
+        an incidental fact -- it is the premise -- so it is pinned by a test in both directions
+        rather than left to be rediscovered. See ADR-0122.
+        """
+
+        stackup = self._one(setup, "stackup", "kicad_pcb.setup", required=False)
+        if stackup is None:
+            return
+        locator = "kicad_pcb.setup.stackup"
+        self._reject_unknown_children(stackup, _STACKUP_HEADS, locator)
+        self._validate_direct_atoms(
+            stackup,
+            positional_atoms=0,
+            allowed=frozenset(),
+            locator=locator,
+        )
+        for head in _COPPER_BEARING_STACKUP_HEADS:
+            values = self._values(stackup, head, locator, minimum=1, maximum=1, required=False)
+            if values and (values != ("no",) or is_quoted_atom(values[0])):
+                self.fail(
+                    "unsupported.construct",
+                    "non-neutral board-edge fabrication treatment is unsupported",
+                    f"{locator}.{head}",
+                )
+        for layer_index, layer in enumerate(children(stackup, "layer")):
+            layer_locator = f"{locator}.layer[{layer_index}]"
+            self._reject_unknown_children(layer, _STACKUP_LAYER_HEADS, layer_locator)
+            # One positional atom -- the layer's name -- and no bare flags after it. A stackup
+            # entry that carried a second positional token would be a construct this grammar has
+            # not read, so it refuses rather than being counted as one that was.
+            self._validate_direct_atoms(
+                layer,
+                positional_atoms=1,
+                allowed=frozenset(),
+                locator=layer_locator,
+            )
+            self.unmodelled_stackup_layer_count += 1
 
     def _point(self, expression: SExpr, head: str, locator: str) -> PointNM:
         values = self._values(expression, head, locator, minimum=2, maximum=2)
@@ -3926,6 +4117,8 @@ class _Converter:
             unmodelled_thermal_bridge_angle_pad_count=(
                 self.unmodelled_thermal_bridge_angle_pad_count
             ),
+            unmodelled_setup_field_count=self.unmodelled_setup_field_count,
+            unmodelled_stackup_layer_count=self.unmodelled_stackup_layer_count,
         )
 
 

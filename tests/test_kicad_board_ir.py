@@ -1277,6 +1277,244 @@ def test_an_unknown_setup_field_is_still_refused() -> None:
     assert result.diagnostics[0].code == "unsupported.construct"
 
 
+# --- D-227: the setup fields B-130 measured, and the direction of error on each ------------------
+
+_STACKUP = (
+    b"(stackup "
+    b'(layer "F.Cu" (type "copper") (thickness 0.035)) '
+    b'(layer "dielectric 1" (type "core") (thickness 1.51) (material "FR4") '
+    b"(epsilon_r 4.5) (loss_tangent 0.02)) "
+    b'(layer "B.Cu" (type "copper") (thickness 0.035)) '
+    b'(copper_finish "ENIG") (dielectric_constraints no))'
+)
+
+
+def _with_setup(body: bytes) -> bytes:
+    return _replace(
+        SUBSET_BOARD.read_bytes(),
+        b'  (generator "pcbnew")',
+        b'  (generator "pcbnew")\n  (setup ' + body + b")",
+    )
+
+
+@pytest.mark.parametrize(
+    ("body", "expected_fields", "expected_layers"),
+    [
+        (b"(grid_origin 12.7 8.4)", 1, 0),
+        (b"(aux_axis_origin 100.0 50.0)", 1, 0),
+        (b"(pad_to_paste_clearance -0.05)", 1, 0),
+        (b"(pad_to_paste_clearance_ratio -0.1)", 1, 0),
+        (_STACKUP, 1, 3),
+        (
+            b"(grid_origin 12.7 8.4) (aux_axis_origin 100.0 50.0) "
+            b"(pad_to_paste_clearance -0.05) (pad_to_paste_clearance_ratio -0.1) " + _STACKUP,
+            5,
+            3,
+        ),
+    ],
+)
+def test_setup_fields_with_no_copper_effect_convert_and_are_counted(
+    body: bytes, expected_fields: int, expected_layers: int
+) -> None:
+    """Each field B-130 found is accepted, and the acceptance is disclosed rather than silent.
+
+    The two origins are reporting and editor anchors that move no board object; the two paste
+    clearances adjust stencil apertures only -- KiCad's own `TransformPadsToPolySet` adds the
+    paste margin under `F_Paste`/`B_Paste` and falls through every copper layer with no
+    adjustment. The stackup describes the board in Z. None of the five can shrink an obstacle,
+    so accepting them is the safe direction; erasing them silently would not be, which is what
+    the counts are for.
+    """
+
+    result = parse_kicad_bytes(_with_setup(body), constraint_profile(assign_signal=True))
+
+    assert result.diagnostics == ()
+    assert result.snapshot is not None
+    assert result.unmodelled_setup_field_count == expected_fields
+    assert result.unmodelled_stackup_layer_count == expected_layers
+
+
+def test_a_board_without_the_new_setup_fields_reports_both_counts_zero() -> None:
+    """The other direction: a count that is never zero discloses nothing."""
+
+    result = parse_kicad_bytes(
+        _with_setup(b"(solder_mask_min_width 0.25)"),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.diagnostics == ()
+    assert result.unmodelled_setup_field_count == 0
+    assert result.unmodelled_stackup_layer_count == 0
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        b"(edge_plating yes)",
+        b"(edge_connector yes)",
+        b"(edge_connector bevelled)",
+        b"(castellated_pads yes)",
+        b'(edge_plating "no")',
+    ],
+)
+def test_board_edge_fabrication_treatment_inside_a_stackup_refuses_at_its_own_field(
+    field: bytes,
+) -> None:
+    """The three edge attributes are the reason the stackup is read per field, not per block.
+
+    Each asserts plated or bevelled material at the board edge that no pad, track, via, zone or
+    graphic in the document represents. The refusal is deliberate over-refusal -- KiCad derives
+    no geometry from any of them -- and it follows `capping`/`filling`, which are likewise
+    conductive fabrication treatment KiCad derives no geometry from. The quoted `"no"` case is
+    here because a quoted atom is a different token from a bare one and must not pass as neutral.
+    """
+
+    source = _with_setup(
+        _STACKUP.replace(b'(copper_finish "ENIG")', field + b' (copper_finish "ENIG")')
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].message == (
+        "non-neutral board-edge fabrication treatment is unsupported"
+    )
+    assert result.diagnostics[0].source_locator.startswith("kicad_pcb.setup.stackup.")
+    assert result.diagnostics[0].source_locator != "kicad_pcb.setup"
+
+
+@pytest.mark.parametrize("field", [b"(edge_plating no)", b"(edge_connector no)"])
+def test_an_explicitly_neutral_board_edge_attribute_is_accepted(field: bytes) -> None:
+    """An assertion that the treatment is absent is not the treatment."""
+
+    source = _with_setup(
+        _STACKUP.replace(b'(copper_finish "ENIG")', field + b' (copper_finish "ENIG")')
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.diagnostics == ()
+    assert result.unmodelled_stackup_layer_count == 3
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b'(stackup (some_future_stackup_rule 5) (layer "F.Cu" (type "copper")))',
+        b'(stackup (layer "F.Cu" (type "copper") (some_future_layer_rule 5)))',
+        b'(stackup (layer "F.Cu" locked (type "copper")))',
+        b"(stackup bare_atom)",
+    ],
+)
+def test_the_stackup_grammar_is_closed_at_every_level(body: bytes) -> None:
+    """Accepting the stackup must not turn it, or its layers, into open allowlists."""
+
+    result = parse_kicad_bytes(_with_setup(body), constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+
+
+def test_zone_defaults_stays_refused_and_is_recorded_as_a_deliberate_absence() -> None:
+    """KiCad 10's hatched-fill phase is copper geometry, so it is not in the accepted set.
+
+    This is the head B-130's `other` bucket existed to catch. It measured 0 on all six boards,
+    so nothing in that cohort writes one -- but the bucket could have reported a presence, which
+    is what makes the 0 evidence rather than silence.
+    """
+
+    from copper_mcp.adapters.kicad_board_ir import (
+        _REFUSED_SETUP_HEADS_ON_RECORD,
+        _SETUP_METADATA_HEADS,
+    )
+
+    assert not _REFUSED_SETUP_HEADS_ON_RECORD & _SETUP_METADATA_HEADS
+
+    result = parse_kicad_bytes(
+        _with_setup(b'(zone_defaults (property (layer "F.Cu") (hatch_position (xy 0 0))))'),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+
+
+def test_post_machining_still_refuses_beside_an_accepted_stackup() -> None:
+    """The premise D-227 rests on, pinned rather than assumed.
+
+    In KiCad 10 a post-machined pad or via has its per-layer copper knocked out, or its
+    countersink diameter computed, by comparing the machining depth against the stackup's
+    `GetLayerDistance()`; that reaches `GetEffectiveShape()`, every DRC clearance test and
+    `zone_filler.cpp`. Reading the stack past *while* accepting such a pad would over-report
+    copper -- the forbidden direction. `front_post_machining`/`back_post_machining` are in
+    `_UNSUPPORTED_PAD_FIELDS` and the via allowlist refuses them, so the path is closed; if that
+    ever stops being true this test fails before the unsound combination ships.
+    """
+
+    assert "front_post_machining" in _UNSUPPORTED_PAD_FIELDS
+    assert "back_post_machining" in _UNSUPPORTED_PAD_FIELDS
+
+    source = _replace_after(
+        _with_setup(_STACKUP),
+        b'    (pad "1" smd roundrect',
+        b"      (roundrect_rratio 0.25)",
+        b"      (roundrect_rratio 0.25)\n"
+        b"      (front_post_machining counterbore (size 1.0) (depth 0.3))",
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+
+
+def test_a_post_machined_via_refuses_beside_an_accepted_stackup() -> None:
+    """The same premise on the other object kind that carries the token."""
+
+    source = _insert_root(
+        _with_setup(_STACKUP),
+        b'(via (at 20 20) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 0)'
+        b" (back_post_machining countersink (size 1.0) (depth 0.3) (angle 90)))",
+    )
+
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+
+
+def test_a_repeated_setup_head_counts_expressions_and_a_repeated_stackup_refuses() -> None:
+    """The two halves of what a duplicate does here, pinned because they differ.
+
+    A repeated `grid_origin` **converts and counts two**. That is the same rule
+    `unmodelled_board_property_count` already states -- these are counts of *expressions*, not of
+    the entries a reader would end up with, and KiCad keeps one of the two -- and it is sound
+    because nothing is modelled from either. A repeated `stackup` **refuses**, because
+    `_validate_stackup` resolves it through `child()`, which reports an ambiguous document rather
+    than picking one. The asymmetry is real and is recorded here rather than smoothed: the
+    counted heads carry nothing, and the one that gates a nested grammar cannot be ambiguous
+    about which grammar it gated.
+    """
+
+    counted = parse_kicad_bytes(
+        _with_setup(b"(grid_origin 1 1) (grid_origin 2 2)"),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert counted.diagnostics == ()
+    assert counted.unmodelled_setup_field_count == 2
+
+    ambiguous = parse_kicad_bytes(
+        _with_setup(_STACKUP + b" " + _STACKUP),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert ambiguous.snapshot is None
+    assert ambiguous.unmodelled_setup_field_count == 0
+    assert ambiguous.unmodelled_stackup_layer_count == 0
+
+
 def test_multiple_native_identity_fields_are_rejected() -> None:
     source = _replace(
         SUBSET_BOARD.read_bytes(),

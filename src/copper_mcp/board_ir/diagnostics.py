@@ -111,6 +111,26 @@ class ConversionResult:
     a snapshot alone cannot reproduce those spokes.  This count is the typed disclosure of that
     non-claim.  Aperture-skipped and refused pads never contribute.  See D-205 and R-158.
 
+    ``unmodelled_setup_field_count`` counts the ``(setup …)`` children D-227 admits without
+    modelling: ``stackup``, ``grid_origin``, ``aux_axis_origin``, ``pad_to_paste_clearance`` and
+    ``pad_to_paste_clearance_ratio``.  None of the five constrains copper geometry or electrical
+    clearance -- the two origins are reporting and editor anchors that move no board object, and
+    the two paste clearances adjust stencil apertures on ``F.Paste``/``B.Paste`` exactly as the
+    already-accepted mask pair adjusts soldermask.  What a snapshot alone therefore cannot
+    reproduce is a board's drill-and-place origin and its stencil defaults, and this count is the
+    typed disclosure of that.  It counts expressions and only the five heads this decision
+    admits, never the setup heads accepted before it.  See D-227 and R-178.
+
+    ``unmodelled_stackup_layer_count`` counts the ``(layer …)`` entries inside an accepted
+    ``(setup (stackup …))``, dielectric entries included.  It is separate from the field count
+    above because it answers a separate question: that count says a stack was dropped, this one
+    says how large it was, so a caller can compare it against ``len(copper_layers)`` and see the
+    physical entries -- thicknesses, materials, dielectric constants, loss tangents -- it never
+    received.  The stackup's three edge attributes are *not* counted here: ``castellated_pads``,
+    ``edge_connector`` and ``edge_plating`` each assert plated or removed material that nothing
+    else in the document represents, so a non-neutral value refuses the board rather than
+    contributing to a number.  See D-227, ADR-0122 and R-178.
+
     **Adding another measured field is one line here and one line in**
     ``board_ir_service._MEASURED_COUNT_FIELDS``, **and the test will tell you.**  Every measured
     field on this dataclass is published to MCP clients through ``BoardIrSummary``'s single
@@ -130,6 +150,8 @@ class ConversionResult:
     unmodelled_board_property_count: int = 0
     unmodelled_pad_property_count: int = 0
     unmodelled_thermal_bridge_angle_pad_count: int = 0
+    unmodelled_setup_field_count: int = 0
+    unmodelled_stackup_layer_count: int = 0
 
     def __post_init__(self) -> None:
         if self.snapshot is not None and not isinstance(self.snapshot, BoardIRSnapshot):
@@ -176,6 +198,18 @@ class ConversionResult:
             raise ValueError(
                 "conversion thermal-bridge-angle pad count must be a non-negative integer"
             )
+        if (
+            isinstance(self.unmodelled_setup_field_count, bool)
+            or not isinstance(self.unmodelled_setup_field_count, int)
+            or self.unmodelled_setup_field_count < 0
+        ):
+            raise ValueError("conversion setup field count must be a non-negative integer")
+        if (
+            isinstance(self.unmodelled_stackup_layer_count, bool)
+            or not isinstance(self.unmodelled_stackup_layer_count, int)
+            or self.unmodelled_stackup_layer_count < 0
+        ):
+            raise ValueError("conversion stackup layer count must be a non-negative integer")
         has_error = any(item.severity is Severity.ERROR for item in self.diagnostics)
         if has_error and self.snapshot is not None:
             raise ValueError("conversion errors cannot accompany a snapshot")
@@ -193,3 +227,7 @@ class ConversionResult:
             raise ValueError("a failed conversion cannot report a pad property count")
         if self.snapshot is None and self.unmodelled_thermal_bridge_angle_pad_count:
             raise ValueError("a failed conversion cannot report a thermal-bridge-angle pad count")
+        if self.snapshot is None and self.unmodelled_setup_field_count:
+            raise ValueError("a failed conversion cannot report a setup field count")
+        if self.snapshot is None and self.unmodelled_stackup_layer_count:
+            raise ValueError("a failed conversion cannot report a stackup layer count")
