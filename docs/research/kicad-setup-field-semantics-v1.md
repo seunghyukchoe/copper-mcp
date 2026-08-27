@@ -131,7 +131,7 @@ fabrication property"*, which added `BOARD::GetPadWithCastellatedAttrCount()`
 `(property pad_prop_castellated)`, and unlike the stackup flag it *does* change DRC:
 `drc/drc_test_provider_edge_clearance.cpp:210-213,396-397` allows edge collisions inside the holes
 of castellated pads. CopperMCP already refuses that pad property
-([ADR-0099](../adr/0099-pad-fabrication-properties-are-metadata.md)).
+([ADR-0099](../adr/0099-pad-fabrication-properties-and-named-pad-refusals.md)).
 
 ## 3 — The one path that makes a `thickness` load-bearing for copper
 

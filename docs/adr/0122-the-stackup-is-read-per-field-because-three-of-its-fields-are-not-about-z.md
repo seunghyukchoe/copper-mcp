@@ -9,7 +9,7 @@
   [B-130](../ledgers/benchmark-ledger.md) and B-131,
   [the setup-field research note](../research/kicad-setup-field-semantics-v1.md),
   [ADR-0105](0105-a-schema-version-moves-with-its-accepted-set.md) (invoked and found not to
-  apply), [ADR-0099](0099-pad-fabrication-properties-are-metadata.md) (the shape this follows)
+  apply), [ADR-0099](0099-pad-fabrication-properties-and-named-pad-refusals.md) (the shape this follows)
 
 ## Context
 
@@ -207,7 +207,7 @@ accepting something", it is "did the emitted document's accepted set change".
   above, with paths and line numbers from KiCad branches `9.0` and `10.0`
 - [B-130](../ledgers/benchmark-ledger.md), the closed field census; B-131, the differential
 - [ADR-0105](0105-a-schema-version-moves-with-its-accepted-set.md), invoked and found not to apply
-- [ADR-0099](0099-pad-fabrication-properties-are-metadata.md), the typed-non-claim shape this
+- [ADR-0099](0099-pad-fabrication-properties-and-named-pad-refusals.md), the typed-non-claim shape this
   follows
 - [D-227](../ledgers/decision-ledger.md), [R-178](../ledgers/risk-register.md),
   [SEC-164](../ledgers/security-ledger.md)
