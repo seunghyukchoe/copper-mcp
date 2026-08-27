@@ -84,6 +84,7 @@ RELEASE_TAGS = (
     "v0.7.0",
     "v0.8.0",
     "v0.9.0",
+    "v0.10.0",
 )
 
 # The four in-place accepted-set changes that were published before this checker
