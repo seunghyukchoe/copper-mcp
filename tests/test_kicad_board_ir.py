@@ -1427,9 +1427,14 @@ def test_zone_defaults_stays_refused_and_is_recorded_as_a_deliberate_absence() -
     from copper_mcp.adapters.kicad_board_ir import (
         _REFUSED_SETUP_HEADS_ON_RECORD,
         _SETUP_METADATA_HEADS,
+        _UNMODELLED_SETUP_HEADS,
     )
 
     assert not _REFUSED_SETUP_HEADS_ON_RECORD & _SETUP_METADATA_HEADS
+    # A counted head that is not an accepted head is a disclosure that can never fire, and the
+    # two sets are written out separately on purpose -- the accepted set is a grammar and the
+    # counted set is a claim about which erasure D-227 created.
+    assert _UNMODELLED_SETUP_HEADS < _SETUP_METADATA_HEADS
 
     result = parse_kicad_bytes(
         _with_setup(b'(zone_defaults (property (layer "F.Cu") (hatch_position (xy 0 0))))'),
