@@ -112,7 +112,8 @@ than an erasure, the footing `max_roundrect_rounding_nm` is already on.
 ## Consequences
 
 **What improves.** Copper that was refused is now modelled, in the only direction an obstacle may
-err. Two boards clear a gate. Five refusal sentences that said nothing now name their construct.
+err. Two boards clear a gate. Nine constructs that shared one field-less sentence now
+refuse through seven that name what they refused.
 
 **What becomes harder, and it is not small.** A board with stray copper is **not write-back
 capable**: the derived identity refuses both patch paths. A caller can convert it, inspect it and
