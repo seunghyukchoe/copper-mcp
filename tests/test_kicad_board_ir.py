@@ -5658,3 +5658,297 @@ def test_pad_field_refusals_are_still_reachable_on_a_modelled_shape() -> None:
             else f"pad field '{head}' is unsupported"
         )
         assert refused.diagnostics[0].message == expected, head
+
+
+# --- D-228: the footprint fields B-132 measured, and the direction of error on each --------------
+
+
+def _with_footprint_field(body: bytes) -> bytes:
+    """Inject one or more children into the fixture's first footprint."""
+
+    return _replace(
+        SUBSET_BOARD.read_bytes(),
+        b'    (uuid "10000000-0000-0000-0000-000000000001")',
+        b'    (uuid "10000000-0000-0000-0000-000000000001")\n    ' + body,
+    )
+
+
+@pytest.mark.parametrize(
+    ("body", "expected_fields"),
+    [
+        (b'(sheetfile "power.kicad_sch")', 1),
+        (b'(sheetname "/Power")', 1),
+        (b"(solder_mask_margin 0.05)", 1),
+        (b"(solder_paste_margin -0.05)", 1),
+        (b"(solder_paste_margin_ratio -0.1)", 1),
+        (b"(solder_paste_ratio -0.1)", 1),
+        (
+            b'(sheetfile "power.kicad_sch") (sheetname "/Power") '
+            b"(solder_mask_margin 0.05) (solder_paste_margin -0.05) "
+            b"(solder_paste_margin_ratio -0.1)",
+            5,
+        ),
+    ],
+)
+def test_footprint_fields_with_no_copper_effect_convert_and_are_counted(
+    body: bytes, expected_fields: int
+) -> None:
+    """Each accepted head is disclosed rather than silently erased.
+
+    The two provenance strings have no geometric read site in KiCad at all -- `GetSheetfile` has
+    six callers and none produces geometry. The four margins move solder-mask and solder-paste
+    apertures only: `FOOTPRINT::TransformPadsToPolySet` adds mask expansion under the mask arms
+    and paste under the paste arms, and every copper layer falls through `default:` with no
+    adjustment. None can shrink an obstacle, so accepting them is the safe direction; erasing them
+    without saying so would not be, which is what the count is for.
+    """
+
+    result = parse_kicad_bytes(_with_footprint_field(body), constraint_profile(assign_signal=True))
+
+    assert result.snapshot is not None
+    assert result.diagnostics == ()
+    assert result.unmodelled_footprint_field_count == expected_fields
+
+
+def test_a_board_writing_no_accepted_footprint_field_counts_zero() -> None:
+    """A count that is never zero is a constant, not a disclosure."""
+
+    result = parse_kicad_bytes(SUBSET_BOARD.read_bytes(), constraint_profile(assign_signal=True))
+
+    assert result.snapshot is not None
+    assert result.unmodelled_footprint_field_count == 0
+    assert result.unmodelled_group_count == 0
+
+
+@pytest.mark.parametrize("mode", [b"1", b"2", b"3"])
+def test_an_attaching_footprint_zone_connect_converts(mode: bytes) -> None:
+    """`1`, `2` and `3` all attach, so discarding one never claims a connection the board lacks.
+
+    `DRC_ENGINE::EvalZoneConnection` collapses `3` to thermal on a plated through-hole pad and to
+    solid on any other, so all three answer "attached". This is ADR-0091's pad partition one level
+    up, where the value governs every pad of the footprint that omits its own.
+    """
+
+    result = parse_kicad_bytes(
+        _with_footprint_field(b"(zone_connect " + mode + b")"),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is not None
+    assert result.diagnostics == ()
+    # Validated to be inert for the claim Board IR publishes, not merely discarded, so it is
+    # deliberately outside the counted set.
+    assert result.unmodelled_footprint_field_count == 0
+
+
+def test_a_detaching_footprint_zone_connect_refuses_at_its_own_field() -> None:
+    """`0` is the one written value that detaches, and it detaches *every* non-overriding pad."""
+
+    result = parse_kicad_bytes(
+        _with_footprint_field(b"(zone_connect 0)"),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].message == (
+        "footprint zone_connect 0 detaches its pads from their pour and is unsupported"
+    )
+    assert result.diagnostics[0].source_locator.endswith(".zone_connect")
+
+
+@pytest.mark.parametrize("value", [b"-1", b"4", b'"2"', b"2.0", b"yes"])
+def test_a_footprint_zone_connect_outside_the_written_domain_refuses(value: bytes) -> None:
+    """KiCad casts the token without a range check, so a reader must check the domain itself."""
+
+    result = parse_kicad_bytes(
+        _with_footprint_field(b"(zone_connect " + value + b")"),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].message == "footprint zone connection mode is unsupported"
+
+
+def test_a_footprint_clearance_refuses_and_names_the_field() -> None:
+    """The field-less container sentence is the defect; this refusal says what it refused.
+
+    `clearance` is a *replacement*, not a maximum: `DRC_ENGINE::EvalRules` resolves it through
+    `GetClearanceOverrides` before custom-rule iteration, so it beats netclass and rules alike and
+    can lower effective clearance to the board minimum. It sizes the void the pour leaves around
+    every pad of the footprint and seeds the router's worst-case radius. Ignoring a non-zero one
+    is the forbidden direction.
+    """
+
+    result = parse_kicad_bytes(
+        _with_footprint_field(b"(clearance 0.2)"),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].message == "footprint field 'clearance' is unsupported"
+
+
+@pytest.mark.parametrize(
+    "head",
+    [
+        b"thermal_gap",
+        b"thermal_width",
+        b"component_classes",
+        b"private_layers",
+        b"jumper_pad_groups",
+        b"embedded_files",
+        b"tedit",
+        b"units",
+        b"variant",
+        b"stackup",
+    ],
+)
+def test_every_remaining_footprint_head_refuses_by_name(head: bytes) -> None:
+    """Adding a head to the named table changes a message and never a verdict.
+
+    B-132 measured all ten of these at 0 occurrences on 0 boards, so the vocabulary could have
+    reported a presence and did not -- which is what makes the absence evidence rather than
+    silence.
+    """
+
+    result = parse_kicad_bytes(
+        _with_footprint_field(b"(" + head + b" 1)"),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].message == (f"footprint field {head.decode()!r} is unsupported")
+
+
+def test_an_unknown_footprint_field_is_still_refused_without_naming_it() -> None:
+    """The allowlist stays closed behind the named table, and no board byte is interpolated."""
+
+    result = parse_kicad_bytes(
+        _with_footprint_field(b"(some_future_kicad_11_head 5)"),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].message == "footprint contains an unsupported semantic field"
+    assert "some_future_kicad_11_head" not in result.diagnostics[0].message
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        # A leaf may hold no child expression at all: this is the shape that smuggled
+        # `zone_defaults` past the setup allowlist before #225's review round.
+        b"(sheetfile (clearance 0.2))",
+        b"(solder_mask_margin (zone_connect 0))",
+        # Exact arity.
+        b"(solder_paste_margin)",
+        b"(solder_paste_margin 0.1 0.2)",
+        b'(sheetname "a" "b")',
+        # Checked token kind.
+        b'(solder_mask_margin "0.05")',
+        b"(solder_paste_margin_ratio yes)",
+        b"(solder_paste_margin abc)",
+        # A repeated accepted field.
+        b'(sheetfile "a.kicad_sch") (sheetfile "b.kicad_sch")',
+    ],
+)
+def test_an_accepted_footprint_leaf_has_a_closed_payload_grammar(body: bytes) -> None:
+    """A counted non-claim is still a validated construct, never bytes nobody read.
+
+    Built in with the acceptance rather than after a review round, because #225 proved that an
+    accepted container without a payload grammar is an open door.
+    """
+
+    result = parse_kicad_bytes(_with_footprint_field(body), constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    # Arity is a syntax question and a wrong token kind is a semantic one, so the two refuse under
+    # different codes. Both are the field's own locator, never the container's.
+    assert result.diagnostics[0].code in {
+        "unsupported.construct",
+        "syntax.invalid",
+        "syntax.duplicate_field",
+    }
+    # A duplicate is caught by the pre-existing byte-offset detector before any field grammar
+    # runs; everything else refuses at the field's own locator, never the container's.
+    if result.diagnostics[0].code != "syntax.duplicate_field":
+        assert result.diagnostics[0].source_locator.startswith("kicad_pcb.footprint[0].")
+
+
+def test_a_footprint_local_group_converts_and_counts_with_the_root_groups() -> None:
+    """KiCad parses and writes both through the same code, so one counter answers the question."""
+
+    result = parse_kicad_bytes(
+        _with_footprint_field(
+            b'(group "g" (uuid "20000000-0000-0000-0000-000000000001") '
+            b'(members "10000000-0000-0000-0000-0000000000c3"))'
+        ),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is not None
+    assert result.diagnostics == ()
+    assert result.unmodelled_group_count == 1
+    # Counted as a group, never as a footprint field: splitting one construct across two counters
+    # would make neither answer "how many groupings did I lose".
+    assert result.unmodelled_footprint_field_count == 0
+
+
+def test_a_locked_footprint_local_group_refuses() -> None:
+    """Lock is a hard authorization gate, and it propagates through the group at query time.
+
+    `BOARD_ITEM::IsLocked()` consults `GetParentGroup()` when asked, so a locked group makes every
+    member locked in KiCad's own model without any member's s-expression saying so. Reading one
+    past would present its members at `locked=False` and authorize a move KiCad forbids. The
+    load-time pass ordering in `resolveGroups` happens to set the lock before members are attached,
+    but that is a consequence of one function's ordering rather than a documented guarantee, so the
+    refusal rests on the query-time derivation instead.
+    """
+
+    result = parse_kicad_bytes(
+        _with_footprint_field(
+            b'(group "g" (locked yes) (uuid "20000000-0000-0000-0000-000000000001") '
+            b'(members "10000000-0000-0000-0000-0000000000c3"))'
+        ),
+        constraint_profile(assign_signal=True),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].message == "a locked group locks its members and is unsupported"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b'(group "g" (surprise 1))',
+        b'(group "g" (members "a") (clearance 0.2))',
+        b'(group (members "a"))',
+    ],
+)
+def test_a_footprint_local_group_has_the_root_groups_closed_grammar(body: bytes) -> None:
+    result = parse_kicad_bytes(_with_footprint_field(body), constraint_profile(assign_signal=True))
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code in {"unsupported.construct", "syntax.invalid"}
+
+
+def test_the_accepted_counted_and_named_footprint_sets_are_coherent() -> None:
+    """A counted head that is not accepted is a disclosure that can never fire."""
+
+    from copper_mcp.adapters.kicad_board_ir import (
+        _FOOTPRINT_METADATA_HEADS,
+        _FOOTPRINT_SCALAR_PAYLOADS,
+        _UNMODELLED_FOOTPRINT_HEADS,
+        _UNSUPPORTED_FOOTPRINT_FIELDS,
+    )
+
+    assert _UNMODELLED_FOOTPRINT_HEADS < _FOOTPRINT_METADATA_HEADS
+    # Named refusals and the allowlist must be disjoint, or a named message would be unreachable.
+    assert not set(_UNSUPPORTED_FOOTPRINT_FIELDS) & _FOOTPRINT_METADATA_HEADS
+    # Every counted head has a payload grammar, so nothing is counted without being read.
+    assert _UNMODELLED_FOOTPRINT_HEADS <= set(_FOOTPRINT_SCALAR_PAYLOADS)
+    assert len(set(_UNSUPPORTED_FOOTPRINT_FIELDS)) == len(_UNSUPPORTED_FOOTPRINT_FIELDS)

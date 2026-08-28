@@ -111,7 +111,7 @@ _ROOT_ROUTING_HEADS = frozenset({"arc", "footprint", "segment", "via", "zone"})
 # KiCad's own model, transitively through nested groups, without any member's own s-expression
 # saying so.  Lock is a hard authorization gate here, not a hint, and a member read as unlocked
 # would authorize a move KiCad forbids.  This is the one asymmetric direction in the construct, and
-# it is exactly the direction that must fail closed.  See `_check_root_group`.
+# it is exactly the direction that must fail closed.  See `_check_group`.
 _ROOT_GROUP_HEAD = "group"
 # The child heads `PCB_IO_KICAD_SEXPR::format( const PCB_GROUP* )` can emit, after the quoted group
 # name: the group's own uuid, an optional `locked` flag, an optional design-block `lib_id`, and the
@@ -411,6 +411,16 @@ _STACKUP_SCALAR_PAYLOADS: dict[str, tuple[int, int, str, str | None]] = {
     # Written through `FormatBool`, so exactly one bare `yes` or `no`.
     "dielectric_constraints": (1, 1, _FLAG, None),
 }
+_FOOTPRINT_SCALAR_PAYLOADS: dict[str, tuple[int, int, str, str | None]] = {
+    # `parseBoardUnits` then `NeedRIGHT`: exactly one bare decimal in millimetres, no trailing
+    # token.  The ratio is a fraction rather than a percent, and both spellings share KiCad's arm.
+    "sheetfile": (1, 1, _TEXT, None),
+    "sheetname": (1, 1, _TEXT, None),
+    "solder_mask_margin": (1, 1, _NUMBER, None),
+    "solder_paste_margin": (1, 1, _NUMBER, None),
+    "solder_paste_margin_ratio": (1, 1, _NUMBER, None),
+    "solder_paste_ratio": (1, 1, _NUMBER, None),
+}
 _STACKUP_LAYER_PAYLOADS: dict[str, tuple[int, int, str, str | None]] = {
     "color": (1, 1, _TEXT, None),
     "epsilon_r": (1, 1, _NUMBER, None),
@@ -425,6 +435,12 @@ _FOOTPRINT_METADATA_HEADS = frozenset(
     {
         "at",
         "attr",
+        # A footprint-local group, parsed by KiCad's *same* `parseGROUP` as a root one
+        # (`pcb_io_kicad_sexpr_parser.cpp:6283` dispatches to `:7704`) and written from
+        # `aFootprint->Groups()` (`pcb_io_kicad_sexpr.cpp:1611`).  It goes through the identical
+        # validator and the identical counter as a root group -- including the lock refusal, which
+        # is the one condition carrying a safety consequence.  See D-228 and ADR-0090.
+        "group",
         # Library documentation strings KiCad copies into every placed footprint: a human
         # description and search tags. They carry no geometry, no layer, and no constraint, so
         # refusing them refused essentially every real board -- they appeared 2,518 times each
@@ -447,10 +463,95 @@ _FOOTPRINT_METADATA_HEADS = frozenset(
         # outright for it. See docs/research/kicad-aperture-pads-and-net-ties-v1.md.
         "placed",
         "property",
+        # Schematic provenance KiCad has written as first-class tokens since the 8.0 dev cycle
+        # (before that, `(property "Sheetfile" …)`, which the parser still upgrades).  `sheetfile`
+        # has six read sites in KiCad and not one is geometric; `sheetname` has twelve, of which
+        # the only ones that can reach copper are the custom-DRC-rule predicates
+        # `memberOfSheet()`/`hasComponentClass()` -- a selector for a clearance, never a value, and
+        # a `.kicad_dru` surface this adapter does not read at all.  See D-228 and R-179.
+        "sheetfile",
+        "sheetname",
+        # The footprint-wide solder-mask and solder-paste defaults for its pads.  They move stencil
+        # apertures and mask openings and **no copper**: `FOOTPRINT::TransformPadsToPolySet` adds
+        # mask expansion only under `case F_Mask: case B_Mask:` and paste only under
+        # `case F_Paste: case B_Paste:`, and every copper layer falls through `default: break;`
+        # with no adjustment (`footprint.cpp:5027-5045`).  That is the same argument D-227 already
+        # accepted for the board-level pair one level up.
+        "solder_mask_margin",
+        "solder_paste_margin",
+        "solder_paste_margin_ratio",
+        # KiCad's own `// legacy token` for the ratio: the 8.0 footprint writer emitted this
+        # spelling and the 9.0 writer emits `solder_paste_margin_ratio`, while both still parse
+        # into one arm (`pcb_io_kicad_sexpr_parser.cpp:5909-5910`).  A reader that knows only the
+        # new spelling silently mis-reads every 8.0-written board, so both are carried.
+        "solder_paste_ratio",
         "tags",
         "tstamp",
         "uuid",
+        # Accepted only in its *attaching* modes; `_require_attaching_footprint_zone_connection`
+        # refuses `0` and anything outside the written domain at the field's own locator.
+        "zone_connect",
     }
+)
+# Footprint children this adapter admits without modelling, and the exact set
+# `unmodelled_footprint_field_count` reports.  `group` is deliberately absent: it is counted by
+# `unmodelled_group_count`, which already means exactly this for a root group, and splitting one
+# construct across two counters would make neither answer "how many groupings did I lose".
+# `zone_connect` is absent too -- it is *validated to be inert for the claim Board IR publishes*
+# rather than merely discarded, which is a different disclosure and is carried by ADR-0091's
+# existing reasoning.
+_UNMODELLED_FOOTPRINT_HEADS = frozenset(
+    {
+        "sheetfile",
+        "sheetname",
+        "solder_mask_margin",
+        "solder_paste_margin",
+        "solder_paste_margin_ratio",
+        "solder_paste_ratio",
+    }
+)
+# Every remaining head KiCad's own `parseFOOTPRINT_unchecked` accepts that Board IR does not model,
+# so that a footprint refusal **names the field it refused** instead of saying that *some* field was
+# unsupported.  That field-less sentence is the defect issue #188 tracks, and it is precisely why
+# B-129's masker could not decompose this wall: the diagnostic named the container and no field.
+#
+# The table is the union of the top-level `case T_…` arms of `parseFOOTPRINT_unchecked` on the
+# KiCad `9.0` and `10.0` release branches, minus the heads above, minus the layer-routed
+# `fp_*`/`property`/`point` branch, minus `zone`, which has its own sentence.  Adding a head here
+# **changes a message and never a verdict** -- every one already refused through the allowlist --
+# which is why this table needs no direction-of-error argument of its own.  A head absent from it
+# still refuses, unnamed, and no board byte is ever interpolated into a message: the interpolated
+# token is a literal from this tuple, selected by lookup.
+#
+# `clearance` is the one entry that is *not* merely unmodelled.  It is a **replacement, not a
+# maximum**: `DRC_ENGINE::EvalRules` resolves it through `GetClearanceOverrides` at `:1146`, before
+# custom-rule iteration at `:1922`, so it beats netclass *and* rules and can lower effective
+# clearance to the board minimum.  It sizes the void `ZONE_FILLER::buildCopperItemClearances`
+# leaves around every pad of the footprint (`zone_filler.cpp:2195-2209`) and seeds the router's
+# worst-case radius (`pns_kicad_iface.cpp:2361`).  Ignoring a non-zero one is the forbidden
+# direction.  B-132 measured `clearance_zero: 0` on the cohort, so the narrowed acceptance that
+# would admit only the provably inert zero was declined on evidence -- it clears no board.
+_UNSUPPORTED_FOOTPRINT_FIELDS = (
+    "autoplace_cost180",
+    "autoplace_cost90",
+    "barcode",
+    "clearance",
+    "component_classes",
+    "dimension",
+    "embedded_files",
+    "generator",
+    "generator_version",
+    "image",
+    "jumper_pad_groups",
+    "private_layers",
+    "stackup",
+    "table",
+    "tedit",
+    "thermal_gap",
+    "thermal_width",
+    "units",
+    "variant",
+    "version",
 )
 # The non-copper technical layers a KiCad *aperture* pad may occupy. KiCad defines an aperture pad
 # as one with no copper layer assigned: a solder-paste stencil opening or mask opening that is not
@@ -737,11 +838,13 @@ class _Converter:
         self.source_revision = f"sha256:{hashlib.sha256(payload).hexdigest()}"
         # Largest single roundrect radius rounding, in nanometres, measured rather than asserted.
         self.max_roundrect_rounding_nm = 0
-        # Root ``(group ...)`` expressions accepted as editor organisation and not modelled.
+        # ``(group ...)`` expressions accepted as editor organisation and not modelled, at board
+        # root **and inside a footprint** -- KiCad parses and writes both through the same code, so
+        # one number answers "how many groupings did I lose" and two would answer neither.
         # Measured in the preflight and reported rather than dropped in silence.
-        self.root_group_count = 0
+        self.group_count = 0
         # ``connect``-token pads converted as ``PadKind.SMD`` (ADR-0096).  Counted for the same
-        # reason ``root_group_count`` is: the conversion discards a distinction the source made,
+        # reason ``group_count`` is: the conversion discards a distinction the source made,
         # and a count is the only way to say so without a diagnostic that would refuse the board.
         self.edge_connector_pad_count = 0
         self.unmodelled_pad_property_count = 0
@@ -753,6 +856,10 @@ class _Converter:
         # two paste clearances.  Counted as expressions, so a document writing one twice is
         # refused by `child()` before this ever runs and cannot inflate the number.
         self.unmodelled_setup_field_count = 0
+        # `footprint` children D-228 admits without modelling: the two schematic provenance strings
+        # and the four stencil/mask defaults.  Counted as expressions per footprint, so the number
+        # is a cardinality over the whole board rather than a per-footprint flag.
+        self.unmodelled_footprint_field_count = 0
         # `(layer …)` entries inside an accepted stackup, dielectric entries included.  It is a
         # separate number from the one above because it answers a separate question: the field
         # count says a stack was dropped, this says how big it was, and a caller comparing it
@@ -972,8 +1079,12 @@ class _Converter:
                 object_kind="property",
             )
 
-    def _check_root_group(self, expression: SExpr, locator: str) -> None:
-        """Accept one *unlocked* root ``(group ...)`` as editor organisation, on a closed shape.
+    def _check_group(self, expression: SExpr, locator: str) -> None:
+        """Accept one *unlocked* ``(group ...)`` as editor organisation, on a closed shape.
+
+        Serves a group at board root **and one inside a footprint**, because KiCad dispatches both
+        to the same ``parseGROUP`` and writes both through the same formatter -- there is no
+        separate footprint-group grammar to write a second validator against (D-228).
 
         The acceptance argument is about what a group *is*, and it is conditional, so each
         condition is checked and refuses rather than being assumed:
@@ -1050,7 +1161,7 @@ class _Converter:
             if head in _ROOT_METADATA_HEADS or head in _ROOT_ROUTING_HEADS:
                 continue
             if head == _ROOT_GROUP_HEAD:
-                self._check_root_group(item, root_locator)
+                self._check_group(item, root_locator)
                 groups += 1
                 continue
             if head == _ROOT_PROPERTY_HEAD:
@@ -1088,7 +1199,7 @@ class _Converter:
                 ),
                 root_locator,
             )
-        self.root_group_count = groups
+        self.group_count = groups
         self.root_board_property_count = board_properties
 
         general = self._one(self.root, "general", "kicad_pcb", required=False)
@@ -1130,10 +1241,39 @@ class _Converter:
                 allowed=frozenset({"locked"}),
                 locator=locator,
             )
+            # Named-field refusals run *before* the allowlist, exactly as the pad path does, so a
+            # refusal says which field it refused. Widening this table changes a message and never
+            # a verdict: every head in it already refused through the allowlist below.
+            for unsupported_head in _UNSUPPORTED_FOOTPRINT_FIELDS:
+                if children(footprint, unsupported_head):
+                    self.fail(
+                        "unsupported.construct",
+                        f"footprint field {unsupported_head!r} is unsupported",
+                        f"{locator}.unsupported",
+                        object_kind="footprint",
+                    )
+            self._validate_leaf_payloads(
+                footprint,
+                locator,
+                _FOOTPRINT_SCALAR_PAYLOADS,
+                message="unsupported footprint field value",
+            )
+            self._require_attaching_footprint_zone_connection(footprint, f"{locator}.zone_connect")
+            for unmodelled_head in _UNMODELLED_FOOTPRINT_HEADS:
+                self.unmodelled_footprint_field_count += len(children(footprint, unmodelled_head))
+
             for item in footprint.items[1:]:
                 if not isinstance(item, SExpr) or item.head is None:
                     continue
                 head = item.head
+                if head == "group":
+                    # The same validator, the same closed child grammar, the same lock refusal and
+                    # the same counter a root group gets. `BOARD_ITEM::IsLocked()` consults
+                    # `GetParentGroup()` at query time, so a locked group locks its members
+                    # transitively whatever the load-time pass ordering happens to do.
+                    self._check_group(item, f"{locator}.group")
+                    self.group_count += 1
+                    continue
                 if head == "zone":
                     self.fail(
                         "unsupported.construct",
@@ -1311,6 +1451,7 @@ class _Converter:
         parent: SExpr,
         locator: str,
         grammars: dict[str, tuple[int, int, str, str | None]],
+        message: str = "unsupported setup field value",
     ) -> None:
         """Close the payload of every accepted leaf: no children, exact arity, checked tokens.
 
@@ -1346,7 +1487,7 @@ class _Converter:
                     if token != trailing_flag or is_quoted_atom(token):
                         self.fail(
                             "unsupported.construct",
-                            "unsupported setup field value",
+                            message,
                             field_locator,
                         )
                     continue
@@ -1357,19 +1498,19 @@ class _Converter:
                 ):
                     self.fail(
                         "unsupported.construct",
-                        "unsupported setup field value",
+                        message,
                         field_locator,
                     )
                 if kind is _FLAG and (is_quoted_atom(token) or token not in _PAYLOAD_FLAGS):
                     self.fail(
                         "unsupported.construct",
-                        "unsupported setup field value",
+                        message,
                         field_locator,
                     )
                 if kind is _TEXT and len(token) > 512:
                     self.fail(
                         "unsupported.construct",
-                        "unsupported setup field value",
+                        message,
                         field_locator,
                     )
 
@@ -1866,6 +2007,64 @@ class _Converter:
                 "pad zone_connect 0 detaches the pad from its pour and is unsupported",
                 locator,
                 object_kind="pad",
+            )
+
+    def _require_attaching_footprint_zone_connection(self, footprint: SExpr, locator: str) -> None:
+        """Accept a footprint `zone_connect` default only in the modes that *attach*.
+
+        This is ADR-0091's pad rule, one level up and widened in scope: `PAD::
+        GetZoneConnectionOverrides` consults the pad's own value first and falls back to the parent
+        footprint's (`pad.cpp:2139-2151`), so the footprint default governs exactly those pads that
+        omit their own. The value domain, the writer's suppression of `INHERITED`, and the absence
+        of any range check on read (`(ZONE_CONNECTION) parseInt(…)`, `parser:5931`) are all
+        identical to the pad form.
+
+        The direction of error is identical too, and only one value breaks it. The finished fill is
+        intersected with the zone's own extents (`zone_filler.cpp:3147`), so poured copper stays a
+        subset of the zone boundary for *every* value and the obstacle direction cannot break here.
+        What breaks is connectivity: `1`, `2` and `3` all attach -- `DRC_ENGINE::EvalZoneConnection`
+        collapses `3` to thermal on a plated through-hole pad and to solid on any other -- so
+        discarding one never turns `Zone.pad_connection` into a claim of attachment where there is
+        none. `0` detaches, and discarding it would leave Board IR publishing attachment for every
+        non-overriding pad of a footprint whose designer deliberately isolated them all. That is the
+        one direction this project forbids, so it fails closed.
+
+        **One thing does not transfer from the pad, and it is recorded rather than smoothed over.**
+        The pad override is consumed at `drc_engine.cpp:1211`, *before* custom-rule iteration, so a
+        rule cannot detach a pad the file attached. The footprint override is consumed at `:2089`,
+        *after* it, so a custom rule can override this default -- including detaching pads the
+        footprint declared `2`. That does not make accepting the attaching modes unsound, because a
+        rule can detach any pad whether or not the footprint writes this token, so the exposure is
+        the existing unread-`.kicad_dru` one (R-179) and is not widened by reading this field. It
+        does mean the pad note's load-bearing sentence must not be restated for footprints.
+        """
+
+        values = self._values(
+            footprint,
+            "zone_connect",
+            locator,
+            minimum=1,
+            maximum=1,
+            required=False,
+        )
+        if not values:
+            return
+        value = values[0]
+        if is_quoted_atom(value) or (
+            value != _DETACHING_PAD_ZONE_CONNECTION and value not in _ATTACHING_PAD_ZONE_CONNECTIONS
+        ):
+            self.fail(
+                "unsupported.construct",
+                "footprint zone connection mode is unsupported",
+                locator,
+                object_kind="footprint",
+            )
+        if value == _DETACHING_PAD_ZONE_CONNECTION:
+            self.fail(
+                "unsupported.construct",
+                "footprint zone_connect 0 detaches its pads from their pour and is unsupported",
+                locator,
+                object_kind="footprint",
             )
 
     def _require_valid_thermal_bridge_angle(self, pad: SExpr, locator: str) -> bool:
@@ -4222,7 +4421,7 @@ class _Converter:
         return ConversionResult(
             snapshot=make_snapshot(content),
             max_roundrect_rounding_nm=self.max_roundrect_rounding_nm,
-            unmodelled_group_count=self.root_group_count,
+            unmodelled_group_count=self.group_count,
             edge_connector_pad_count=self.edge_connector_pad_count,
             unmodelled_board_property_count=self.root_board_property_count,
             unmodelled_pad_property_count=self.unmodelled_pad_property_count,
@@ -4230,6 +4429,7 @@ class _Converter:
                 self.unmodelled_thermal_bridge_angle_pad_count
             ),
             unmodelled_setup_field_count=self.unmodelled_setup_field_count,
+            unmodelled_footprint_field_count=self.unmodelled_footprint_field_count,
             unmodelled_stackup_layer_count=self.unmodelled_stackup_layer_count,
         )
 

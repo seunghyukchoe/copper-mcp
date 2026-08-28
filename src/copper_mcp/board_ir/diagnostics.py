@@ -52,8 +52,13 @@ class ConversionResult:
     quantity the SimpleRouteJson importer reports as ``max_outward_rounding_nm``: a caller that
     needs bit-exact pad geometry can read it and decline, instead of being told nothing.
 
-    ``unmodelled_group_count`` counts the root ``(group ...)`` expressions the KiCad adapter
-    accepted and did not model.  An *unlocked* group is editor organisation with no geometry, no
+    ``unmodelled_group_count`` counts the ``(group ...)`` expressions the KiCad adapter accepted
+    and did not model, at board root **and inside a footprint**.  D-228 widened it to the second
+    case rather than adding a counter beside it: KiCad dispatches a footprint's group to the *same*
+    ``parseGROUP`` and writes it through the same formatter, so the two are one construct, and a
+    caller asking "how many groupings did I lose" wants one number.  Two would answer neither.  The
+    widening is deployer-visible and carries a migration note.
+    An *unlocked* group is editor organisation with no geometry, no
     layer and no net, so it is read past rather than refused -- but Board IR has no field for
     "these objects belong together", so a caller that moves one member breaks a grouping nothing
     told it about.  It is a count for the same reason the rounding above is: a diagnostic would
@@ -121,6 +126,21 @@ class ConversionResult:
     typed disclosure of that.  It counts expressions and only the five heads this decision
     admits, never the setup heads accepted before it.  See D-227 and R-178.
 
+    ``unmodelled_footprint_field_count`` counts the ``(footprint …)`` children D-228 admits without
+    modelling: ``sheetfile``, ``sheetname``, ``solder_mask_margin``, ``solder_paste_margin`` and
+    both spellings of the paste ratio.  None constrains copper geometry or electrical clearance --
+    the two provenance strings have no geometric read site in KiCad at all, and the four margins
+    move solder-mask and solder-paste apertures only, because ``FOOTPRINT::TransformPadsToPolySet``
+    adds them under the mask and paste layer arms and lets every copper layer fall through
+    ``default:`` with no adjustment.  What a snapshot alone therefore cannot reproduce is a
+    footprint's schematic origin and its per-footprint stencil defaults, and this count is the typed
+    disclosure of that.  It counts expressions across every footprint on the board, and only the
+    heads this decision admits.  ``group`` is deliberately *not* counted here: a footprint-local
+    group is the same construct as a root one and is counted by ``unmodelled_group_count``.
+    ``zone_connect`` is not counted either -- it is validated to be inert for the attachment claim
+    Board IR publishes rather than merely discarded, which ADR-0091's reasoning already carries.
+    See D-228 and R-179.
+
     ``unmodelled_stackup_layer_count`` counts the ``(layer …)`` entries inside an accepted
     ``(setup (stackup …))``, dielectric entries included.  It is separate from the field count
     above because it answers a separate question: that count says a stack was dropped, this one
@@ -152,6 +172,7 @@ class ConversionResult:
     unmodelled_thermal_bridge_angle_pad_count: int = 0
     unmodelled_setup_field_count: int = 0
     unmodelled_stackup_layer_count: int = 0
+    unmodelled_footprint_field_count: int = 0
 
     def __post_init__(self) -> None:
         if self.snapshot is not None and not isinstance(self.snapshot, BoardIRSnapshot):
@@ -210,6 +231,12 @@ class ConversionResult:
             or self.unmodelled_stackup_layer_count < 0
         ):
             raise ValueError("conversion stackup layer count must be a non-negative integer")
+        if (
+            isinstance(self.unmodelled_footprint_field_count, bool)
+            or not isinstance(self.unmodelled_footprint_field_count, int)
+            or self.unmodelled_footprint_field_count < 0
+        ):
+            raise ValueError("conversion footprint field count must be a non-negative integer")
         has_error = any(item.severity is Severity.ERROR for item in self.diagnostics)
         if has_error and self.snapshot is not None:
             raise ValueError("conversion errors cannot accompany a snapshot")
@@ -231,3 +258,5 @@ class ConversionResult:
             raise ValueError("a failed conversion cannot report a setup field count")
         if self.snapshot is None and self.unmodelled_stackup_layer_count:
             raise ValueError("a failed conversion cannot report a stackup layer count")
+        if self.snapshot is None and self.unmodelled_footprint_field_count:
+            raise ValueError("a failed conversion cannot report a footprint field count")

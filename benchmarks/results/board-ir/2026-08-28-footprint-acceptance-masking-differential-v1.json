@@ -1,0 +1,86 @@
+{
+  "aggregates": {
+    "overall": {
+      "gate_stack_depth": {
+        "0": 4,
+        "1": 2,
+        "2": 5,
+        "3": 2
+      },
+      "terminal": {
+        "unmaskable": 13
+      },
+      "terminal_blocker": {
+        "copper_layer_kind": 1,
+        "courtyard_topology": 2,
+        "disjoint_outline_topology": 1,
+        "footprint_graphic_layer": 1,
+        "graphic_layer_arity": 1,
+        "other": 6,
+        "root_semantic_construct": 1
+      }
+    },
+    "private": {
+      "gate_stack_depth": {
+        "0": 3
+      },
+      "terminal": {
+        "unmaskable": 3
+      },
+      "terminal_blocker": {
+        "courtyard_topology": 2,
+        "disjoint_outline_topology": 1
+      }
+    },
+    "public": {
+      "gate_stack_depth": {
+        "0": 1,
+        "1": 2,
+        "2": 5,
+        "3": 2
+      },
+      "terminal": {
+        "unmaskable": 10
+      },
+      "terminal_blocker": {
+        "copper_layer_kind": 1,
+        "footprint_graphic_layer": 1,
+        "graphic_layer_arity": 1,
+        "other": 6,
+        "root_semantic_construct": 1
+      }
+    }
+  },
+  "cohort_count": 13,
+  "cohort_fingerprint": "sha256:bfec8210d6d4eb746ffdbfb3b70309ce",
+  "commit": "039edfbddd703f8282665d40580d81c3f2a42ca9",
+  "committed_board_bytes": 0,
+  "configuration": {
+    "mask_classes": [
+      "edge_cuts_curves",
+      "copper_text",
+      "root_dimensions"
+    ],
+    "max_manifest_bytes": 65536,
+    "max_mask_passes": 16,
+    "max_source_bytes": 67108864,
+    "operation": "read_only_in_memory_counterfactual"
+  },
+  "dirty": false,
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "not_claimed": [
+    "no product support for any masked construct",
+    "no converted board, route, DRC, fabrication, or hardware result",
+    "no board write, apply authority, editor mutation, or committed private input"
+  ],
+  "private_count": 3,
+  "public_count": 10,
+  "recorded_at_utc": "2026-08-28T00:46:13+00:00",
+  "run_id": "sha256:6028e746952f4a13dbe95f7435bb77a46ef1c4bf53b832704bcdd0800e155d26",
+  "runner_digest": "sha256:fb0f53a397ea7e9f6290c01153c8fa8698496472ba86c8f69a95303e9be506fe",
+  "schema": "copper-mcp/fixed-point-masking-census/v1",
+  "source_hashes_unchanged": true
+}
