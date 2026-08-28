@@ -6,6 +6,19 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-08-28
+
+Upgrading from 0.10.0: see the
+[0.11.0 migration note](docs/migrations/copper-mcp-0.11.0.md). No schema version moves —
+`BOARD_IR_SCHEMA_VERSION` stays `0.4.0`, `schemas/board-ir/0.4.0.schema.json` is byte-unchanged,
+and no persisted snapshot needs re-conversion. What moves is caller-visible in three places: the
+`mcp` dependency range widens from `<2.1.0` to `<2.2.0`, so a deployment held back at 2.0.x may
+now resolve onto 2.1.x, where a refused request keeps its reason for the first time; Board IR
+accepts eleven more `setup` and `footprint` heads as typed non-claims — plus a footprint-local
+group and an attaching `zone_connect` — so boards that refused in 0.10.0 now convert; and
+`inspect_board_ir`'s `unmodelled_counts` map grows from six entries to nine while
+`unmodelled_group_count` widens to span footprint-local groups.
+
 ### Changed
 
 - Board IR converts KiCad boards whose footprints declare schematic provenance, per-footprint
@@ -3798,7 +3811,8 @@ reproducible only by the version that recorded it.
   lifetimes, timeouts, strict contract parsing, and before/after DRC-context revision checks.
 - The development dependency floor excludes pytest versions affected by `PYSEC-2026-1845`.
 
-[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.7.0...v0.8.0

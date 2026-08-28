@@ -9,8 +9,8 @@ authors:
 abstract: >-
   A local-first, open-source platform for deterministic PCB automation,
   Model Context Protocol tools, and constrained AI policy integration.
-version: 0.10.0
-date-released: 2026-08-27
+version: 0.11.0
+date-released: 2026-08-28
 license: Apache-2.0
 repository-code: https://github.com/seunghyukchoe/copper-mcp
 url: https://github.com/seunghyukchoe/copper-mcp

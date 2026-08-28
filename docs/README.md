@@ -108,6 +108,11 @@ contract.
   snapshot is re-converted; what moves is the new read-only `verify_external_route_candidate` tool,
   four preview response versions carrying a closed eight-value withheld-apply-token vocabulary, and
   the verified-fill island ceiling widening from 4,096 to a measured 500,000 vertices.
+- [CopperMCP 0.11.0 migration](migrations/copper-mcp-0.11.0.md) — no schema version moves and no
+  snapshot is re-converted; what moves is the `mcp` range widening to `<2.2.0` so a deployment may
+  land on 2.1 where refusals now keep their reason, eleven more `setup` and `footprint` heads
+  accepted as typed non-claims so previously refused boards convert, and an `unmodelled_counts`
+  map that grows from six entries to nine with one existing count widened in meaning.
 - [Public media assets](assets/README.md) — project media, with provenance; not routing or
   benchmark evidence.
 
