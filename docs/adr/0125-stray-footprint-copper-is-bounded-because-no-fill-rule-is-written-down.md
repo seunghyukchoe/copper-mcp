@@ -4,7 +4,7 @@
 - Date: 2026-08-28
 - Owners: `@seunghyukchoe`
 - Related: [Issue #188](https://github.com/seunghyukchoe/copper-mcp/issues/188),
-  [D-230](../ledgers/decision-ledger.md), [R-180](../ledgers/risk-register.md),
+  [D-230](../ledgers/decision-ledger.md), [R-181](../ledgers/risk-register.md),
   [SEC-167](../ledgers/security-ledger.md),
   [B-136](../ledgers/benchmark-ledger.md) and B-137,
   [ADR-0092](0092-net-tie-copper-as-netless-obstacle.md) (the special case this generalizes),
@@ -123,7 +123,7 @@ whose identity is not a track's, and it is recorded rather than discovered.
 `footprint_copper_graphic_envelope_count` means that many obstacles are *looser* than the copper
 they stand for. An over-approximated obstacle cannot permit an illegal route, but it can make a
 routable board report unroutable, and the count is how a caller finds out that this is possible.
-R-180 records the residual.
+R-181 records the residual.
 
 **What is not disturbed.** The placement legalizer's four verdicts — `pad_overlap`,
 `outline_containment`, `keepout_respect`, `courtyard_overlap` — read `pads`, `outline` and

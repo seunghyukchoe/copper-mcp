@@ -47,7 +47,7 @@ subset.
 the real copper.* The consequence is one-directional. An over-approximated obstacle can never let
 the router propose a track through copper that is really there, but it can make a routable board
 report unroutable, because a concave shape's open channels are closed by its bounding box. If a
-route fails on a board with a non-zero count, that count is the first thing to check. R-180 records
+route fails on a board with a non-zero count, that count is the first thing to check. R-181 records
 the residual and B-136 the measured magnitude: on the two boards surveyed, every envelope covered
 under 5% of the board's `Edge.Cuts` bounding box, and so did each board's whole envelope union.
 

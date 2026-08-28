@@ -21,7 +21,7 @@ All notable changes are documented here. The format follows
   copper converts and routes but cannot be written back**, the contract net-tie copper has had
   since `ADR-0092`. This is measured, not asserted: `B-136` is the closed graphic census over the
   two public boards `B-133` found blocked here, and `B-137` is the before/after
-  ([migration note](docs/migrations/footprint-copper-graphics.md), `ADR-0125`, `D-230`, `R-180`,
+  ([migration note](docs/migrations/footprint-copper-graphics.md), `ADR-0125`, `D-230`, `R-181`,
   `SEC-167`, [issue #188](https://github.com/seunghyukchoe/copper-mcp/issues/188)).
 - A footprint graphic on a copper layer that Board IR does not model now **names its own primitive
   kind**. `fp_line`, `fp_arc`, `fp_rect`, `fp_circle`, `fp_curve` and `point` each get their own
@@ -36,7 +36,7 @@ All notable changes are documented here. The format follows
   than the copper they stand for, which cannot permit an illegal route but can make a routable
   board report unroutable. Copper-graphic vertices are now charged against the caller's
   `max_total_vertices` budget, exactly as reduced custom-pad primitive vertices already were
-  (`R-180`, `SEC-167`).
+  (`R-181`, `SEC-167`).
 
 ## [0.11.0] - 2026-08-28
 

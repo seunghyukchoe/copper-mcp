@@ -160,7 +160,7 @@ class ConversionResult:
     for, which matters because an over-approximated obstacle can make a routable board report
     unroutable.  Net-tie copper never contributes: it takes the pre-existing ADR-0092 path and is
     counted nowhere.  Neither does a polygon on a documentation layer, which is read past as
-    silkscreen always was.  See D-230, ADR-0125 and R-180.
+    silkscreen always was.  See D-230, ADR-0125 and R-181.
 
     **Adding another measured field is one line here and one line in**
     ``board_ir_service._MEASURED_COUNT_FIELDS``, **and the test will tell you.**  Every measured
