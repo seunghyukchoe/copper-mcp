@@ -224,7 +224,7 @@ contains a bounded machine-readable diagnostic and no snapshot.
 |---|---|
 | Board metadata | Exact KiCad PCB format version `20260206`, optional `generator`, ordered copper declarations `0/F.Cu`, contiguous even-numbered inner layers, then `B.Cu`, and a narrow setup-metadata allowlist with KiCad-default front/back via tenting. |
 | Nets | Quote-aware named item-level net references and legacy numeric root declarations; quoted numeric text remains a name while bare signed numeric tokens retain legacy net-code meaning. |
-| Outline | Exactly one contour on `Edge.Cuts`, drawn either as one unfilled `gr_rect` or as `gr_line` segments that chain, by exact endpoint coincidence, into one closed simple loop. See [ADR-0076](../adr/0076-segment-assembled-edge-cuts-outline.md). |
+| Outline | Exactly one contour on `Edge.Cuts`, drawn either as one unfilled `gr_rect` or as `gr_line` segments and `gr_arc` arcs that chain, by exact endpoint coincidence, into one closed simple loop. A segment contributes its drawn endpoints; an arc contributes an **inscribed** polyline whose every vertex is an exact integer point inside the region the arc and its chord bound, so the modelled board is never larger than the drawn one. An arc is admitted only when it spans at most a half turn and bulges *away* from the ring's interior — an arc cutting into the board is refused, because a polyline through that region would hand back the material the cut removed. How far inside the drawn boundary the modelled one runs is published as `ConversionResult.outline_inward_deviation_nm`, bounded by 5,000 nm and zero for any rectangle- or segment-drawn outline. See [ADR-0076](../adr/0076-segment-assembled-edge-cuts-outline.md) and [ADR-0124](../adr/0124-an-outline-arc-is-inscribed-and-a-cut-is-refused.md). |
 | Footprints/pads | Footprints on `F.Cu` or `B.Cu` with rotations in 90-degree increments, exact origin/side/lock/pad ownership, and optional unfilled `fp_rect`, `fp_poly`, or closed complete `fp_line` courtyard centerlines on **either** courtyard layer — every edge horizontal, vertical, or an exact 45-degree chamfer, with `fp_line` cycles closed within their own layer — plus unfilled `fp_circle` outlines whose radius is an exact integer nanometre; all four KiCad pad kinds, `smd`, `thru_hole`, `np_thru_hole` and `connect` — the last being the edge-connector pad, which converts as `PadKind.SMD` and is counted in `ConversionResult.edge_connector_pad_count` per [ADR-0096](../adr/0096-edge-connector-pads-convert-as-smd.md); circle, rect, oval, and roundrect shapes; round or oval drills; copper layer names, `*.Cu`, and `F&B.Cu`; a pad `zone_connect` override of `1`, `2` or `3` — the three that attach the pad to a same-net pour — accepted as a proven no-op and modelled as nothing, per [ADR-0091](../adr/0091-attaching-pad-zone-connect-overrides.md); a pad `(property <token>)` fabrication annotation restricted to the seven `PAD_PROP` tokens that change no copper, counted in `ConversionResult.unmodelled_pad_property_count` per [ADR-0099](../adr/0099-pad-fabrication-properties-and-named-pad-refusals.md); and one exact bare decimal `thermal_bridge_angle`, accepted as validated KiCad fill metadata and counted in `ConversionResult.unmodelled_thermal_bridge_angle_pad_count` without a `Pad` or schema change (D-205). |
 | Routed copper | Straight `segment` items, exact start/mid/end `arc` items, and through vias spanning the declared copper stack. Copper carrying no routable net converts as an obstacle with `net_id` `None` rather than refusing the board, per [ADR-0078](../adr/0078-netless-copper-as-obstacle.md); it is an obstacle only and contributes nothing to connectivity. |
 | Net-tie copper | A footprint declaring `net_tie_pad_groups` may draw its deliberate short as an `fp_poly` on `F.Cu`/`B.Cu`. That polygon converts to netless obstacle copper under the same `net_id` `None` contract, so the short is modelled as something to route around and never as a connection. Every other primitive a net-tie footprint could draw the short with — `fp_line`, `fp_arc`, `fp_rect`, `fp_circle` — is refused by name. See [ADR-0092](../adr/0092-net-tie-copper-as-netless-obstacle.md). |
@@ -244,7 +244,8 @@ net names.
 
 The converter performs a version-specific semantic preflight. Root and footprint graphics on any
 copper layer are rejected. Footprint graphics on `Edge.Cuts` are also rejected, and the only accepted
-root `Edge.Cuts` primitives are one unfilled rectangle and straight `gr_line` segments.
+root `Edge.Cuts` primitives are one unfilled rectangle, straight `gr_line` segments, and convex
+minor `gr_arc` arcs.
 Non-routing documentation graphics may be ignored. Supported unfilled orthogonal courtyard centerlines are the exception: they become
 canonical board-frame rings. For the supported front/back footprint subset, KiCad's authored board-frame child
 coordinates are imported as written; the adapter does not apply a second mirror when a footprint
@@ -256,10 +257,13 @@ not cached fill geometry, fill freshness, or connectivity proof.
 The adapter fails closed on any unsupported construct required to represent the board faithfully,
 including:
 
-- `Edge.Cuts` arcs, circles, polygons and curves; more than one outline contour, including a
-  rectangle drawn alongside a segment loop; and any segment set that is not exactly one closed
-  simple loop — an open contour, a near-miss gap KiCad's own chaining tolerance would close, a
-  branching spur, a duplicate or zero-length segment, a self-intersection, or two disjoint loops.
+- `Edge.Cuts` circles, polygons and Bézier curves, each refused by its own name; an outline arc
+  that cuts *into* the board, and an outline arc spanning more than a half turn, likewise each by
+  name — see [ADR-0124](../adr/0124-an-outline-arc-is-inscribed-and-a-cut-is-refused.md) for the
+  geometry and for the exit condition on the concave case. Also: more than one outline contour,
+  including a rectangle drawn alongside a chained loop; and any edge set that is not exactly one
+  closed simple loop — an open contour, a near-miss gap KiCad's own chaining tolerance would close,
+  a branching spur, a duplicate or zero-length edge, a self-intersection, or two disjoint loops.
   The outline is routing room, so it is never repaired into something larger than what was drawn;
 - `Edge.Cuts` outline holes;
 - root or footprint-local text/graphics on copper, and any footprint-local `Edge.Cuts` primitive.
