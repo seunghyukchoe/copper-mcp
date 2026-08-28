@@ -153,6 +153,36 @@ def _preview_placement_source(
             apply_token_withheld_reason=withheld_without_candidate,
         )
 
+    snapshot = conversion.snapshot
+    # Snapshot CAS stops immediately after conversion and before placement-view construction or
+    # legalizer work.  This keeps stale requests bounded even when a board is expensive to
+    # evaluate.
+    #
+    # **Nothing about the board may be refused between here and the conversion above.**  Refusal
+    # ordering is caller-observable contract: a caller holding a stale snapshot digest has a wrong
+    # world-view, and the first thing it must learn is *that*, not some property of a board it was
+    # not looking at.  Told `unsupported_geometry` instead, it would conclude the board it thinks
+    # it has cannot be placed -- a false statement about a board that may place fine.  The rule is
+    # not local to this function: `live_layered_route_preview` states it in prose ("a stale
+    # converted snapshot is rejected before routing") and orders its own board-property refusal,
+    # `has_exactly_two_signal_layers`, *after* its snapshot CAS for the same reason.
+    if (
+        intent.expect_snapshot_digest is not None
+        and intent.expect_snapshot_digest != snapshot.snapshot_digest
+    ):
+        return PlacementResult(
+            status="refused",
+            board_revision=board_revision,
+            board_path=relative_path,
+            request=intent,
+            snapshot_digest=snapshot.snapshot_digest,
+            diagnostic=PlacementDiagnostic(
+                code=PlacementFailureCode.STALE_REVISION,
+                message="Board IR snapshot revision is stale",
+            ),
+            apply_token_withheld_reason=withheld_without_candidate,
+        )
+
     if conversion.outline_inward_deviation_nm:
         # The board outline was inscribed rather than drawn: an ``Edge.Cuts`` arc has no equal
         # polygon, so the modelled boundary runs up to this many nanometres *inside* the drawn one
@@ -168,27 +198,8 @@ def _preview_placement_source(
         # decides inside-or-out by it.  Reporting a shrunken answer for either is a false claim
         # and not a conservative one, so the whole request is refused by name rather than three
         # verdicts being quietly degraded.  See ADR-0124 for the exit condition.
-        return PlacementResult(
-            status="refused",
-            board_revision=board_revision,
-            board_path=relative_path,
-            request=intent,
-            snapshot_digest=conversion.snapshot.snapshot_digest,
-            diagnostic=PlacementDiagnostic(
-                code=PlacementFailureCode.UNSUPPORTED_GEOMETRY,
-                message=("placement needs an exact board outline and this board's is approximated"),
-            ),
-            apply_token_withheld_reason=withheld_without_candidate,
-        )
-
-    snapshot = conversion.snapshot
-    # Snapshot CAS stops immediately after conversion and before placement-view construction or
-    # legalizer work.  This keeps stale requests bounded even when a board is expensive to
-    # evaluate.
-    if (
-        intent.expect_snapshot_digest is not None
-        and intent.expect_snapshot_digest != snapshot.snapshot_digest
-    ):
+        #
+        # This sits *after* the snapshot CAS above, deliberately: see the note there.
         return PlacementResult(
             status="refused",
             board_revision=board_revision,
@@ -196,8 +207,8 @@ def _preview_placement_source(
             request=intent,
             snapshot_digest=snapshot.snapshot_digest,
             diagnostic=PlacementDiagnostic(
-                code=PlacementFailureCode.STALE_REVISION,
-                message="Board IR snapshot revision is stale",
+                code=PlacementFailureCode.UNSUPPORTED_GEOMETRY,
+                message=("placement needs an exact board outline and this board's is approximated"),
             ),
             apply_token_withheld_reason=withheld_without_candidate,
         )

@@ -52,6 +52,13 @@ approximated is now refused with `unsupported_geometry` and the message *"placem
 board outline and this board's is approximated"*. The response still carries a `snapshot_digest`,
 because the board itself converted — this is a refusal about one surface, not about the board.
 
+**The refusal is ordered after the snapshot compare-and-swap.** If you bind a request with
+`expect_snapshot_digest` and that digest is stale, you get `stale_revision` — not
+`unsupported_geometry` — even on an arc-outline board. A stale digest means your world-view is
+wrong, and that is the fact you need first; a geometry verdict about a board you were not
+looking at would be misleading. This matches `live_layered_route_preview`, which orders its own
+board-property refusal after its snapshot CAS for the same reason.
+
 The reason is a false-claim risk and not caution. `PlacementLegality.outline_containment` is
 three-valued and publishes in **both** directions: `proven_inside` is sound against an
 under-approximated boundary, and `violated` is not — copper sitting in the sliver between the

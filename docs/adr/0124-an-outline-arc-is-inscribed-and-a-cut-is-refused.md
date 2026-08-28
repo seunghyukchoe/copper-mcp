@@ -152,6 +152,17 @@ inside the fabricated board and would be reported as crossing its edge. Edge rul
 measure against the same boundary and fail the same way. The request is refused whole rather than
 three verdicts being quietly degraded, because a degraded verdict is a claim and a refusal is not.
 
+**Where that refusal sits is part of the contract, not an implementation detail.** It is ordered
+*after* the snapshot compare-and-swap, never before it. A caller holding a stale snapshot digest
+has a wrong world-view, and the first thing it must learn is *that* — told
+`unsupported_geometry` instead, it would conclude the board it thinks it holds cannot be placed,
+which is a false statement about a board it was not looking at. The rule is not invented here:
+`live_layered_route_preview` states it in prose ("a stale converted snapshot is rejected before
+routing") and orders its own board-property refusal, `has_exactly_two_signal_layers`, after its
+own snapshot CAS. The general form is that a **compare-and-swap precondition outranks every
+refusal about the board's content**, because the CAS answers "are we even talking about the same
+board" and nothing downstream means anything until it does.
+
 Routing does not read the number and does not need to: less room is never a false claim about
 where copper may go.
 

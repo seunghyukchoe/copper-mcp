@@ -179,6 +179,16 @@
    "killing_tests": [
     "tests/test_outline_arc.py::test_a_near_collinear_arc_degrades_to_a_coarser_polyline_rather_than_raising"
    ]
+  },
+  {
+   "id": "OA18-let-the-outline-refusal-preempt-the-snapshot-cas",
+   "file": "src/copper_mcp/placement_preview.py",
+   "anchor": "    if (\n        intent.expect_snapshot_digest is not None\n        and intent.expect_snapshot_digest != snapshot.snapshot_digest\n    ):",
+   "replacement": "    if (\n        intent.expect_snapshot_digest is not None\n        and not conversion.outline_inward_deviation_nm\n        and intent.expect_snapshot_digest != snapshot.snapshot_digest\n    ):",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_placement_preview.py::ServiceTests::test_a_stale_snapshot_digest_wins_over_the_approximated_outline_refusal"
+   ]
   }
  ]
 }
