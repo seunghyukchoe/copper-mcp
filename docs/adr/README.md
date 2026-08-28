@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0125**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0126**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -201,8 +201,9 @@ never silently widens it.
 | [0122](0122-the-stackup-is-read-per-field-because-three-of-its-fields-are-not-about-z.md) | The stackup is read per field, because three of its fields are not about Z | Accepted |
 | [0123](0123-a-container-refusal-that-names-no-field-is-the-defect.md) | A container refusal that names no field is the defect, not the refusal | Accepted |
 | [0124](0124-an-outline-arc-is-inscribed-and-a-cut-is-refused.md) | An outline arc is inscribed, and an arc that cuts into the board is refused | Accepted |
+| [0125](0125-stray-footprint-copper-is-bounded-because-no-fill-rule-is-written-down.md) | Stray footprint copper is bounded by a box because no fill rule is written down | Accepted |
 
-One hundred and twenty-four numbers allocated, one hundred and eighteen records, no duplicates — and
+One hundred and twenty-five numbers allocated, one hundred and twenty records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
 its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
 the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
@@ -348,3 +349,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0122: The stackup is read per field, because three of its fields are not about Z](0122-the-stackup-is-read-per-field-because-three-of-its-fields-are-not-about-z.md)
 - [ADR-0123: A container refusal that names no field is the defect, not the refusal](0123-a-container-refusal-that-names-no-field-is-the-defect.md)
 - [ADR-0124: An outline arc is inscribed, and an arc that cuts into the board is refused](0124-an-outline-arc-is-inscribed-and-a-cut-is-refused.md)
+- [ADR-0125: Stray footprint copper is bounded by a box because no fill rule is written down](0125-stray-footprint-copper-is-bounded-because-no-fill-rule-is-written-down.md)

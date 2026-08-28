@@ -169,6 +169,17 @@ class ConversionResult:
     See R-180 for what a caller loses by round-tripping a snapshot through JSON, which this
     number does not survive.
 
+    ``footprint_copper_graphic_envelope_count`` counts the stray copper ``fp_poly`` expressions
+    D-230 converts as a conservative bounding envelope rather than as exact copper.  Unlike every
+    count above it this one does **not** disclose an erasure: the geometry is modelled, and the
+    emitted ``Segment`` is a proven superset of the drawn shape, so it is the typed disclosure of
+    an *approximation* -- the footing ``max_roundrect_rounding_nm`` is already on.  What a caller
+    learns from a non-zero value is that this many obstacles are looser than the copper they stand
+    for, which matters because an over-approximated obstacle can make a routable board report
+    unroutable.  Net-tie copper never contributes: it takes the pre-existing ADR-0092 path and is
+    counted nowhere.  Neither does a polygon on a documentation layer, which is read past as
+    silkscreen always was.  See D-230, ADR-0125 and R-181.
+
     **Adding another measured field is one line here and one line in**
     ``board_ir_service._MEASURED_COUNT_FIELDS``, **and the test will tell you.**  Every measured
     field on this dataclass is published to MCP clients through ``BoardIrSummary``'s single
@@ -192,6 +203,7 @@ class ConversionResult:
     unmodelled_stackup_layer_count: int = 0
     unmodelled_footprint_field_count: int = 0
     outline_inward_deviation_nm: int = 0
+    footprint_copper_graphic_envelope_count: int = 0
 
     def __post_init__(self) -> None:
         if self.snapshot is not None and not isinstance(self.snapshot, BoardIRSnapshot):
@@ -289,3 +301,13 @@ class ConversionResult:
             raise ValueError("a failed conversion cannot report a footprint field count")
         if self.snapshot is None and self.outline_inward_deviation_nm:
             raise ValueError("a failed conversion cannot report an outline deviation")
+        if (
+            isinstance(self.footprint_copper_graphic_envelope_count, bool)
+            or not isinstance(self.footprint_copper_graphic_envelope_count, int)
+            or self.footprint_copper_graphic_envelope_count < 0
+        ):
+            raise ValueError(
+                "conversion copper-graphic envelope count must be a non-negative integer"
+            )
+        if self.snapshot is None and self.footprint_copper_graphic_envelope_count:
+            raise ValueError("a failed conversion cannot report a copper-graphic envelope count")

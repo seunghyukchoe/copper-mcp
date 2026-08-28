@@ -99,12 +99,13 @@
     {
       "id": "CPG10-custom-vertices-not-reserved-from-board-ir-budget",
       "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "        remaining_vertices = limits.max_total_vertices - converter.custom_pad_primitive_vertex_count",
-      "replacement": "        remaining_vertices = limits.max_total_vertices",
+      "anchor": "            - converter.custom_pad_primitive_vertex_count\n",
+      "replacement": "",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_kicad_board_ir.py::test_custom_pad_polygons_respect_aggregate_vertex_budget"
-      ]
+      ],
+      "note": "Re-anchored, not removed, when D-230 added a second reduced-geometry charge to the same subtraction: the claim this mutant proves is unchanged, only the line it sits on moved."
     },
     {
       "id": "CPG11-custom-aperture-geometry-validation-skipped",
