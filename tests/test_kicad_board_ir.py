@@ -3486,26 +3486,393 @@ def test_net_tie_copper_converts_as_a_netless_obstacle_segment() -> None:
         _require_native_geometry_identities(snapshot)
 
 
-@pytest.mark.parametrize("layer", [b"F.Cu", b"B.Cu", b"*.Cu"])
-def test_a_footprint_graphic_on_copper_is_still_refused_and_never_ignored(layer: bytes) -> None:
-    """The control on the direction of error: copper is an obstacle, so it may not be dropped.
+@pytest.mark.parametrize("layer", [b"F.Cu", b"B.Cu"])
+def test_stray_copper_polygon_is_bounded_and_never_dropped(layer: bytes) -> None:
+    """The direction of error, now answered by modelling rather than by refusing.
 
-    Without a net-tie declaration the same polygon is simply copper the adapter does not model.
-    A conservative envelope would be admissible - over-approximating an obstacle is always safe -
-    but no board surveyed carries one, so the refusal stands rather than modelling an unobserved
-    case. What must never happen is the third option: converting the board as though the copper
-    were not there.
+    Without a net-tie declaration the same polygon is simply copper the board draws and the
+    adapter used to refuse. B-136 measured 56 of these on two real boards -- every one filled,
+    explicitly stroked and on one declared copper layer -- so the case the old refusal called
+    unobserved is observed, and D-230 bounds it. What must never happen is still the third
+    option: converting the board as though the copper were not there.
+
+    The generalization agrees with the special case on the special case. This fixture is the
+    *same* rectangle the net-tie test uses, and the bounding-box envelope lands on exactly the
+    segment `_net_tie_copper_segments` derives for it -- so the wider rule did not perturb the
+    narrower one it now sits beside.
     """
 
     result = parse_kicad_bytes(
         _with_footprint_graphic(layer), constraint_profile(assign_signal=True)
     )
 
+    assert result.diagnostics == ()
+    assert result.snapshot is not None
+    assert result.footprint_copper_graphic_envelope_count == 1
+    content = result.snapshot.content
+    bounded = [segment for segment in content.segments if ":derived:" in segment.id]
+    assert len(bounded) == 1
+    envelope = bounded[0]
+    assert envelope.net_id is None
+    assert envelope.layer_id == f"layer:{layer.decode()}"
+    assert envelope.start == PointNM(10_000_000, 7_400_000)
+    assert envelope.end == PointNM(10_000_000, 10_000_000)
+    assert envelope.width_nm == 1_300_000
+    # Write-back stays refused: an `fp_poly` is not a KiCad track, so the identity is derived and
+    # every source-preserving patch path rejects the snapshot (ADR-0026).
+    with pytest.raises(KiCadPlacementPatchError):
+        _require_native_geometry_identities(result.snapshot)
+
+
+def _copper_polygon(
+    *,
+    layer: bytes = b"F.Cu",
+    fill: bytes = b"      (fill yes)\n",
+    stroke: bytes = b"      (stroke (width 0) (type solid))\n",
+    points: bytes = b"(xy 0 -0.65) (xy 2.6 -0.65) (xy 2.6 0.65) (xy 0 0.65)",
+) -> bytes:
+    """One footprint polygon with each part of the accepted grammar independently variable."""
+
+    return (
+        b"    (fp_poly\n"
+        b"      (pts " + points + b")\n" + stroke + fill + b'      (layer "' + layer + b'")\n'
+        b'      (uuid "10000000-0000-0000-0000-0000000000a1")\n'
+        b"    )\n"
+    )
+
+
+def _with_copper_polygon(**kwargs: bytes) -> bytes:
+    return _insert_before(
+        SUBSET_BOARD.read_bytes(), b'    (pad "1" smd roundrect', _copper_polygon(**kwargs)
+    )
+
+
+def _refusal(source: bytes) -> tuple[str, str, str]:
+    result = parse_kicad_bytes(source, constraint_profile(assign_signal=True))
     assert result.snapshot is None
+    assert result.footprint_copper_graphic_envelope_count == 0
     diagnostic = result.diagnostics[0]
-    assert diagnostic.code == "unsupported.construct"
-    assert diagnostic.message == "footprint graphic on a copper layer is unmodelled copper"
-    assert diagnostic.object_kind == "graphic"
+    return diagnostic.code, diagnostic.message, diagnostic.object_kind or ""
+
+
+@pytest.mark.parametrize("layer", [b"*.Cu", b"F&B.Cu", b"In7.Cu"])
+def test_a_copper_polygon_naming_more_than_one_layer_refuses_by_name(layer: bytes) -> None:
+    """A `Segment` names exactly one layer, and two of these names more than one.
+
+    `*.Cu` and `F&B.Cu` pass `_is_routing_layer` and are wildcards; `In7.Cu` is a real spelling
+    this board does not declare. None appears in `layer_by_name`, so one lookup refuses all three
+    -- and it refuses rather than picking a layer, because picking one would drop the copper on
+    every other layer, which is the direction the obstacle rule forbids. B-136 measured
+    `multi_copper` at 0 of 56.
+    """
+
+    assert _refusal(_with_copper_polygon(layer=layer)) == (
+        "unknown.layer",
+        "footprint copper polygon must name one declared copper layer",
+        "graphic",
+    )
+
+
+def test_an_unfilled_copper_polygon_refuses_by_name() -> None:
+    """Unobserved, so refused -- the rule that already governs the courtyard `fp_arc`.
+
+    The same envelope would contain an unfilled polygon's copper, which is exactly why the
+    refusal has to be justified by the measurement rather than by the geometry: B-136 measured
+    `fill_no` and `fill_absent` at 0 of 56, so accepting either would model a form no surveyed
+    board writes.
+    """
+
+    assert _refusal(_with_copper_polygon(fill=b"      (fill no)\n")) == (
+        "unsupported.construct",
+        "footprint copper polygon must be filled",
+        "graphic",
+    )
+    assert _refusal(_with_copper_polygon(fill=b"")) == (
+        "unsupported.construct",
+        "footprint copper polygon must be filled",
+        "graphic",
+    )
+
+
+def test_a_copper_polygon_without_a_stroke_refuses_rather_than_defaulting_to_zero() -> None:
+    """An omitted field is not an explicitly zero one, and here that difference is copper.
+
+    Reading a missing `stroke` as zero would let any non-zero writer default put real copper
+    outside the modelled envelope, which understates an obstacle -- the one direction the
+    invariant forbids. `_net_tie_copper_segments` records the same argument one class up.
+    """
+
+    assert _refusal(_with_copper_polygon(stroke=b"")) == (
+        "unsupported.construct",
+        "footprint copper polygon must declare its outline stroke",
+        "graphic",
+    )
+
+
+def test_a_copper_polygon_with_a_curved_side_refuses() -> None:
+    """The one malformation that would make the whole conversion unsound.
+
+    KiCad 9 writes `(arc ...)` inside a `pts` list for a curved polygon side, and a curved side
+    bulges *outside* the hull of the listed vertices -- so a vertex-derived envelope would not
+    contain it. This is the guard that keeps the containment proof's step 1 true.
+    """
+
+    curved = b"(xy 0 -0.65) (arc (start 2.6 -0.65) (mid 3.4 0) (end 2.6 0.65)) (xy 0 0.65)"
+    code, message, _ = _refusal(_with_copper_polygon(points=curved))
+    assert code == "unsupported.construct"
+    assert "unsupported" in message
+
+
+@pytest.mark.parametrize(
+    "points",
+    [
+        b"(xy 0 0) (xy 1 0)",
+        b"(xy 0 0) (xy 1 0) (xy 0 0)",
+        b"(xy 0 0) (xy 1 0) (xy 1 0) (xy 0 0)",
+    ],
+)
+def test_a_copper_polygon_without_three_distinct_vertices_refuses(points: bytes) -> None:
+    """Fewer than three distinct vertices bounds no region, so there is nothing to model."""
+
+    assert _refusal(_with_copper_polygon(points=points)) == (
+        "unsupported.construct",
+        "footprint copper polygon must carry three distinct vertices",
+        "graphic",
+    )
+
+
+def test_a_collinear_zero_stroke_copper_polygon_refuses_rather_than_being_dropped() -> None:
+    """Three distinct but collinear vertices with no stroke draw copper of no area at all.
+
+    There is no positive-width segment to emit. The outcome is a named refusal and never a
+    silent drop, because a drop is the one thing this whole path exists to prevent.
+    """
+
+    assert _refusal(_with_copper_polygon(points=b"(xy 0 0) (xy 1 0) (xy 2 0)")) == (
+        "unsupported.construct",
+        "footprint copper polygon encloses no area to bound",
+        "graphic",
+    )
+
+
+_UNMODELLED_COPPER_PRIMITIVES = [
+    (b"fp_line", b"    (start 0 0)\n    (end 1 1)\n", "footprint copper line is unmodelled copper"),
+    (
+        b"fp_arc",
+        b"    (start 0 0)\n    (mid 0.5 0.2)\n    (end 1 0)\n",
+        "footprint copper arc is unmodelled copper",
+    ),
+    (
+        b"fp_rect",
+        b"    (start 0 0)\n    (end 1 1)\n",
+        "footprint copper rectangle is unmodelled copper",
+    ),
+    (
+        b"fp_circle",
+        b"    (center 0 0)\n    (end 1 0)\n",
+        "footprint copper circle is unmodelled copper",
+    ),
+]
+
+
+@pytest.mark.parametrize(("head", "geometry", "message"), _UNMODELLED_COPPER_PRIMITIVES)
+def test_each_unmodelled_copper_primitive_refuses_by_its_own_name(
+    head: bytes, geometry: bytes, message: str
+) -> None:
+    """ADR-0123's rule one structural level down: a refusal that names no construct is the defect.
+
+    Every one of these was measured at **0 occurrences on copper** by B-136, on boards carrying
+    32,532 `fp_line`, 243 `fp_rect`, 50 `fp_circle` and 23 `fp_arc` on layers that are not copper.
+    So none of them is modelled, and naming them is all this change is entitled to do. The
+    sentence is a value selected from a closed table by an equality test on the head, never built
+    from it, so the diagnostic names the construct without echoing a byte of the board.
+    """
+
+    primitive = (
+        b"    (" + head + b"\n" + geometry + b'      (layer "F.Cu")\n'
+        b"      (stroke (width 0.1) (type solid))\n"
+        b'      (uuid "10000000-0000-0000-0000-0000000000b1")\n'
+        b"    )\n"
+    )
+    source = _insert_before(SUBSET_BOARD.read_bytes(), b'    (pad "1" smd roundrect', primitive)
+
+    assert _refusal(source) == ("unsupported.construct", message, "graphic")
+
+
+def test_footprint_copper_text_refuses_with_its_own_sentence_not_the_root_one() -> None:
+    """ADR-0095 still applies, and the sentence must still say *whose* copper text it is.
+
+    A shared sentence would stop a diagnostic reader distinguishing a footprint's copper text
+    from the board's, and would silently re-bucket the frozen B-129 masking instrument, whose
+    vocabulary matches on message together with locator.
+    """
+
+    text = (
+        b'    (fp_text user "X"\n    (at 0 0 0)\n      (layer "F.Cu")\n'
+        b'      (uuid "10000000-0000-0000-0000-0000000000b2")\n'
+        b"      (effects (font (size 1.27 1.27)))\n"
+        b"    )\n"
+    )
+    source = _insert_before(SUBSET_BOARD.read_bytes(), b'    (pad "1" smd roundrect', text)
+
+    code, message, kind = _refusal(source)
+    assert code == "unsupported.construct"
+    assert message == (
+        "footprint copper text has no envelope derivable from the board and is unsupported"
+    )
+    assert kind == "text"
+    # Distinct from the root sentence, which the masking census matches on by message.
+    assert message != "copper text has no envelope derivable from the board and is unsupported"
+
+
+def test_net_tie_copper_never_reaches_the_stray_copper_path() -> None:
+    """The regression B-137 predicted against, made into a test.
+
+    The own frozen 18-save corpus carries six copper polygons and every one of them is net-tie
+    copper on the pre-existing ADR-0092 path. If the stray-copper path captured them, that
+    corpus's envelope count would read six instead of zero, and the tie's own conversion would be
+    running twice.
+    """
+
+    result = parse_kicad_bytes(
+        _with_footprint_graphic(b"F.Cu", net_tie=True), constraint_profile(assign_signal=True)
+    )
+
+    assert result.diagnostics == ()
+    assert result.snapshot is not None
+    assert result.footprint_copper_graphic_envelope_count == 0
+    derived = [s for s in result.snapshot.content.segments if ":derived:" in s.id]
+    assert len(derived) == 1
+
+
+def test_copper_polygon_vertices_are_charged_against_the_vertex_budget() -> None:
+    """A polygon reduced to an envelope must still cost what its source geometry costs.
+
+    Its vertices vanish before Board IR validation counts serialized rings, so a caller's
+    `max_total_vertices` would not cover them unless they are charged -- the same hole
+    `_charge_custom_pad_vertices` was written to close for a reduced custom pad. The fixture's
+    four-vertex polygon is the *only* thing between the two limits below.
+    """
+
+    source = _with_copper_polygon()
+
+    accepted = parse_kicad_bytes(
+        source, constraint_profile(assign_signal=True), ParseLimits(max_total_vertices=64)
+    )
+    assert accepted.snapshot is not None
+    assert accepted.footprint_copper_graphic_envelope_count == 1
+
+    refused = parse_kicad_bytes(
+        source, constraint_profile(assign_signal=True), ParseLimits(max_total_vertices=12)
+    )
+    assert refused.snapshot is None
+    assert refused.diagnostics[0].code == "budget.exceeded.total_vertices"
+    # The board *without* the polygon converts under that same ceiling, so what the refusal
+    # measures is the charge and not the rest of the board's geometry.
+    unpolygoned = parse_kicad_bytes(
+        SUBSET_BOARD.read_bytes(),
+        constraint_profile(assign_signal=True),
+        ParseLimits(max_total_vertices=12),
+    )
+    assert unpolygoned.snapshot is not None
+
+
+def test_a_board_with_no_stray_copper_reports_a_zero_envelope_count() -> None:
+    """The counter is a disclosure, so its zero has to mean "none" rather than "not measured"."""
+
+    result = parse_kicad_bytes(SUBSET_BOARD.read_bytes(), constraint_profile(assign_signal=True))
+
+    assert result.snapshot is not None
+    assert result.footprint_copper_graphic_envelope_count == 0
+
+
+def _mm(micrometres: int) -> bytes:
+    return f"{micrometres / 1000:.3f}".encode()
+
+
+def _mm_nm(nanometres: int) -> bytes:
+    """Format an exact nanometre value as millimetres.
+
+    Six decimals, not three: a micrometre-precision stroke is always an *even* number of
+    nanometres, and half of an even number is the same whether the division floors or ceils. A
+    model that floored the stroke half width -- understating the obstacle by a nanometre, which is
+    the one direction forbidden -- would survive a property test that could only generate even
+    widths.
+    """
+
+    return f"{nanometres / 1_000_000:.6f}".encode()
+
+
+@settings(max_examples=60, deadline=None)
+@given(
+    vertices=st.lists(
+        st.tuples(
+            st.integers(min_value=-4000, max_value=4000),
+            st.integers(min_value=-4000, max_value=4000),
+        ),
+        min_size=3,
+        max_size=12,
+        unique=True,
+    ),
+    stroke_nm=st.integers(min_value=0, max_value=500_000),
+)
+def test_the_copper_envelope_contains_every_point_the_polygon_can_draw(
+    vertices: list[tuple[int, int]], stroke_nm: int
+) -> None:
+    """The property the whole conversion rests on: the model is a superset, not an approximation.
+
+    The drawn copper is the filled region -- which lies in the convex hull of the vertices under
+    *any* fill rule -- together with the outline stroke, which KiCad centres on the path and so
+    extends at most half its width outside. This asserts containment for the hull rather than for
+    the vertices alone: every convex combination of the vertices, pushed out by the full stroke
+    half width in both axes, must land inside the segment's modelled extent. Testing only the
+    vertices would pass for a model that clipped the interior, and testing only axis-aligned
+    fixtures would pass for a model that broke under rotation, so the footprint this runs inside
+    is turned a quarter turn.
+    """
+
+    points = b" ".join(b"(xy " + _mm(x) + b" " + _mm(y) + b")" for x, y in vertices)
+    stroke = b"      (stroke (width " + _mm_nm(stroke_nm) + b") (type solid))\n"
+    result = parse_kicad_bytes(
+        _with_copper_polygon(points=points, stroke=stroke),
+        constraint_profile(assign_signal=True),
+    )
+    if result.snapshot is None:
+        # A degenerate ring refuses by name; there is nothing to bound and nothing to assert.
+        assert result.diagnostics[0].code in {"unsupported.construct", "unknown.layer"}
+        return
+
+    bounded = [s for s in result.snapshot.content.segments if ":derived:" in s.id]
+    assert len(bounded) == 1
+    segment = bounded[0]
+    half = (segment.width_nm + 1) // 2
+    # Exactly the extent every consumer derives: `routing.astar._segment_extent`,
+    # `routing.layered_board_adapter._segment_bounds`, and the axis-aligned branch of
+    # `_swept_square_envelope` all compute this same rectangle.
+    assert segment.start.x == segment.end.x or segment.start.y == segment.end.y, (
+        "a diagonal envelope would be refused outright by the layered router"
+    )
+    low_x = min(segment.start.x, segment.end.x) - half
+    high_x = max(segment.start.x, segment.end.x) + half
+    low_y = min(segment.start.y, segment.end.y) - half
+    high_y = max(segment.start.y, segment.end.y) + half
+
+    # The footprint sits at (10, 10) turned a quarter turn: (x, y) -> (y, -x) in stored
+    # coordinates, which is KiCad's own convention and the one `_transform` implements.
+    board = [(10_000_000 + y * 1000, 10_000_000 - x * 1000) for x, y in vertices]
+    stroke_half = (stroke_nm + 1) // 2
+    for index, (bx, by) in enumerate(board):
+        for other in board[index:]:
+            for weight in (0, 1, 2, 3, 4):
+                # A point on the segment between two vertices; every convex combination of the
+                # vertex set is covered by sweeping every pair, which is enough because the hull
+                # of the swept set is the hull of the vertices.
+                px = bx + (other[0] - bx) * weight // 4
+                py = by + (other[1] - by) * weight // 4
+                for dx in (-stroke_half, 0, stroke_half):
+                    for dy in (-stroke_half, 0, stroke_half):
+                        assert low_x <= px + dx <= high_x
+                        assert low_y <= py + dy <= high_y
 
 
 def test_a_footprint_graphic_on_edge_cuts_is_named_as_an_outline_not_as_copper() -> None:

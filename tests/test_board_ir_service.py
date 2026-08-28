@@ -305,6 +305,7 @@ def test_a_supported_board_publishes_its_conversion_counts(tmp_path: Path) -> No
         "unmodelled_setup_field_count": 0,
         "unmodelled_stackup_layer_count": 0,
         "unmodelled_footprint_field_count": 0,
+        "footprint_copper_graphic_envelope_count": 0,
     }
 
 

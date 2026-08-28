@@ -1,0 +1,213 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "CG01-collapse-every-copper-primitive-into-one-sentence",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        message, kind = _UNMODELLED_FOOTPRINT_COPPER_HEADS.get(\n            head, _UNNAMED_FOOTPRINT_COPPER_GRAPHIC\n        )",
+      "replacement": "        message, kind = _UNNAMED_FOOTPRINT_COPPER_GRAPHIC",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_each_unmodelled_copper_primitive_refuses_by_its_own_name",
+        "tests/test_kicad_board_ir.py::test_footprint_copper_text_refuses_with_its_own_sentence_not_the_root_one"
+      ]
+    },
+    {
+      "id": "CG02-floor-the-stroke-half-width",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        return layer, tuple(local_points), (width_nm + 1) // 2",
+      "replacement": "        return layer, tuple(local_points), width_nm // 2",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_the_copper_envelope_contains_every_point_the_polygon_can_draw"
+      ]
+    },
+    {
+      "id": "CG03-drop-the-stroke-inflation-entirely",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            x_min = min(point.x for point in board_points) - half_width_nm",
+      "replacement": "            x_min = min(point.x for point in board_points)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_the_copper_envelope_contains_every_point_the_polygon_can_draw"
+      ]
+    },
+    {
+      "id": "CG04-accept-a-curved-polygon-side",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        self._reject_unknown_children(points_expression, frozenset({\"xy\"}), f\"{locator}.pts\")\n        self._validate_direct_atoms(\n            points_expression,\n            positional_atoms=0,\n            allowed=frozenset(),\n            locator=f\"{locator}.pts\",\n        )\n        point_expressions = children(points_expression, \"xy\")\n        local_points: list[PointNM] = []",
+      "replacement": "        self._validate_direct_atoms(\n            points_expression,\n            positional_atoms=0,\n            allowed=frozenset(),\n            locator=f\"{locator}.pts\",\n        )\n        point_expressions = children(points_expression, \"xy\")\n        local_points: list[PointNM] = []",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_copper_polygon_with_a_curved_side_refuses"
+      ]
+    },
+    {
+      "id": "CG05-bound-an-unfilled-polygon-too",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        fill = self._values(item, \"fill\", locator, minimum=1, maximum=1, required=False)\n        if fill != (\"yes\",) or is_quoted_atom(fill[0]):",
+      "replacement": "        fill = self._values(item, \"fill\", locator, minimum=1, maximum=1, required=False)\n        if fill == (\"this-token-cannot-appear\",):",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_an_unfilled_copper_polygon_refuses_by_name"
+      ]
+    },
+    {
+      "id": "CG06-pin-a-multi-layer-wildcard-to-the-first-copper-layer",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        layer = self.layer_by_name.get(layer_name)\n        if layer is None:\n            self.fail(\n                \"unknown.layer\",\n                \"footprint copper polygon must name one declared copper layer\",",
+      "replacement": "        layer = self.layer_by_name.get(layer_name, self.layers[0])\n        if layer is None:\n            self.fail(\n                \"unknown.layer\",\n                \"footprint copper polygon must name one declared copper layer\",",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_copper_polygon_naming_more_than_one_layer_refuses_by_name"
+      ]
+    },
+    {
+      "id": "CG07-send-net-tie-copper-down-the-stray-copper-path",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            if tie_group is not None:",
+      "replacement": "            if False:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_net_tie_copper_never_reaches_the_stray_copper_path"
+      ]
+    },
+    {
+      "id": "CG08-do-not-charge-copper-graphic-vertices",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            self._charge_graphic_envelope_vertices(len(local_points), locator)",
+      "replacement": "            self._charge_graphic_envelope_vertices(0, locator)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_copper_polygon_vertices_are_charged_against_the_vertex_budget"
+      ]
+    },
+    {
+      "id": "CG09-crash-on-a-zero-area-polygon-instead-of-refusing",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            if min(x_max - x_min, y_max - y_min) <= 0:",
+      "replacement": "            if False:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_collinear_zero_stroke_copper_polygon_refuses_rather_than_being_dropped"
+      ]
+    },
+    {
+      "id": "CG10-take-the-short-axis-as-the-segment-axis",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            if x_max - x_min >= y_max - y_min:\n                half_span = (y_max - y_min + 1) // 2",
+      "replacement": "            if x_max - x_min < y_max - y_min:\n                half_span = (y_max - y_min + 1) // 2",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_stray_copper_polygon_is_bounded_and_never_dropped"
+      ]
+    },
+    {
+      "id": "CG11-reuse-the-graphics-own-identity-for-the-segment",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                    id=self._derived_identity(\"segment\", locator),\n                    net_id=None,\n                    layer_id=layer.id,\n                    start=start,\n                    end=end,\n                    width_nm=2 * half_span,",
+      "replacement": "                    id=self._identity(\"segment\", item, locator),\n                    net_id=None,\n                    layer_id=layer.id,\n                    start=start,\n                    end=end,\n                    width_nm=2 * half_span,",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_stray_copper_polygon_is_bounded_and_never_dropped"
+      ]
+    },
+    {
+      "id": "CG12-disclose-the-approximation-to-nobody",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        self.footprint_copper_graphic_envelope_count += len(segments)",
+      "replacement": "        self.footprint_copper_graphic_envelope_count += 0",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_stray_copper_polygon_is_bounded_and_never_dropped"
+      ]
+    },
+    {
+      "id": "CG13-bound-a-ring-with-fewer-than-three-distinct-vertices",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        if len(set(local_points)) < 3:",
+      "replacement": "        if False:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_copper_polygon_without_three_distinct_vertices_refuses"
+      ]
+    },
+    {
+      "id": "CG14-answer-a-missing-stroke-with-a-field-less-sentence",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "        stroke = self._one(item, \"stroke\", locator, required=False)\n        if stroke is None:",
+      "replacement": "        stroke = self._one(item, \"stroke\", locator, required=True)\n        if stroke is None:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_copper_polygon_without_a_stroke_refuses_rather_than_defaulting_to_zero"
+      ]
+    },
+    {
+      "id": "CG15-give-footprint-copper-text-the-root-sentence",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "_FOOTPRINT_COPPER_TEXT_REFUSAL: tuple[str, str] = (\n    \"footprint copper text has no envelope derivable from the board and is unsupported\",",
+      "replacement": "_FOOTPRINT_COPPER_TEXT_REFUSAL: tuple[str, str] = (\n    \"copper text has no envelope derivable from the board and is unsupported\",",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_footprint_copper_text_refuses_with_its_own_sentence_not_the_root_one",
+        "tests/test_refusal_message_golden.py::test_the_tabled_refusal_messages_match_their_committed_golden_set"
+      ]
+    },
+    {
+      "id": "CG16-refuse-every-copper-polygon-again",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "                if layer != \"Edge.Cuts\" and head == \"fp_poly\":",
+      "replacement": "                if False:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_stray_copper_polygon_is_bounded_and_never_dropped"
+      ]
+    },
+    {
+      "id": "CG17-drop-the-b133-successor-partition-guard",
+      "file": "scripts/benchmark_public_copper_graphic_census.py",
+      "anchor": "    for name, expected in PREDECLARED_B133_SUCCESSOR_PARTITION.items():\n        if partition[name] != expected:\n            raise _fixed_error(\"B-133 successor partition drifted\")",
+      "replacement": "    pass",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_public_copper_graphic_census.py::test_the_b133_successor_partition_is_required_before_anything_is_aggregated"
+      ]
+    },
+    {
+      "id": "CG18-reconcile-the-raw-counter-instead-of-the-published-projection",
+      "file": "scripts/benchmark_public_copper_graphic_census.py",
+      "anchor": "        if sum(raw.values()) != sum(projected.values()):\n            raise _fixed_error(f\"{name} buckets do not partition their population\")",
+      "replacement": "        if False:\n            raise _fixed_error(f\"{name} buckets do not partition their population\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_public_copper_graphic_census.py::test_a_bucket_that_never_reaches_the_artifact_fails_the_run"
+      ],
+      "note": "This mutant survived its first mapping and was killed by writing the test it lacked, not by relabelling it. The first mapping named the payload-gap test, which the *other* reconciliation loop already fails -- so the check under mutation was never reached. The fp_poly child grammar is the one partition whose total is its own projection, so it is the only place this check is load-bearing."
+    },
+    {
+      "id": "CG19-file-an-unbounded-polygon-into-a-ratio-bucket",
+      "file": "scripts/benchmark_public_copper_graphic_census.py",
+      "anchor": "                unbounded += 1\n                continue\n            bounded += 1",
+      "replacement": "                area_ratio[\"lt_0_05\"] += 1\n                envelope_ratio[\"lt_0_05\"] += 1\n                unbounded += 1\n                continue\n            bounded += 1",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_public_copper_graphic_census.py::test_a_curved_polygon_side_is_partitioned_out_rather_than_read_as_vertices",
+        "tests/test_benchmark_public_copper_graphic_census.py::test_every_partition_is_reconciled_against_the_population_it_partitions"
+      ]
+    },
+    {
+      "id": "CG20-treat-a-wildcard-copper-name-as-one-declared-layer",
+      "file": "scripts/benchmark_public_copper_graphic_census.py",
+      "anchor": "    if name in {\"*.Cu\", \"F&B.Cu\"}:\n        return \"multi_copper\"",
+      "replacement": "    if name in set():\n        return \"multi_copper\"",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_public_copper_graphic_census.py::test_the_layer_partition_separates_the_wildcards_from_one_declared_copper_layer"
+      ]
+    }
+  ]
+}

@@ -1,17 +1,18 @@
 {
+  "counts": {
+    "distinct_messages": 33,
+    "entries": 35,
+    "tables": 7
+  },
+  "not_a_contract": "These messages are not a contract and this file does not make them one. No consumer may match on a refusal message: ADR-0095 and ADR-0096 both say so, and the adapter's own comments record that a message is a value from a closed table, selected by equality against the source token and never built from it -- which is a privacy property, not a stability promise. Updating this file is the correct fix for the test that reads it.",
   "schema": "refusal-message-golden/1",
   "source": "src/copper_mcp/adapters/kicad_board_ir.py",
-  "why": "Three refusal messages left the source in 0.8.0. The migration note was complete and the change was right; nothing would have noticed if it had not been. This file makes a member leaving, arriving or being reworded show up in the diff, where review sees it. Its only job is review.",
-  "not_a_contract": "These messages are not a contract and this file does not make them one. No consumer may match on a refusal message: ADR-0095 and ADR-0096 both say so, and the adapter's own comments record that a message is a value from a closed table, selected by equality against the source token and never built from it -- which is a privacy property, not a stability promise. Updating this file is the correct fix for the test that reads it.",
-  "update": "When a table changes, run the extraction in tests/test_refusal_message_golden.py (`_messages_by_table`) and write the result here, in the same pull request as the message change. Never loosen the test instead.",
-  "counts": {
-    "tables": 7,
-    "entries": 35,
-    "distinct_messages": 33
-  },
   "tables": {
     "_COPPER_TEXT_REFUSAL": {
       "<shared>": "copper text has no envelope derivable from the board and is unsupported [text]"
+    },
+    "_FOOTPRINT_COPPER_TEXT_REFUSAL": {
+      "<shared>": "footprint copper text has no envelope derivable from the board and is unsupported [text]"
     },
     "_REFUSED_PAD_PROPERTY": {
       "pad_prop_castellated": "pad fabrication property 'pad_prop_castellated' removes board area the outline still claims and is unsupported"
@@ -19,6 +20,17 @@
     "_UNMODELLED_COPPER_GRAPHIC_HEADS": {
       "gr_text": "copper text has no envelope derivable from the board and is unsupported [text]",
       "gr_text_box": "copper text has no envelope derivable from the board and is unsupported [text]"
+    },
+    "_UNMODELLED_FOOTPRINT_COPPER_HEADS": {
+      "fp_arc": "footprint copper arc is unmodelled copper [graphic]",
+      "fp_circle": "footprint copper circle is unmodelled copper [graphic]",
+      "fp_curve": "footprint copper curve is unmodelled copper [graphic]",
+      "fp_line": "footprint copper line is unmodelled copper [graphic]",
+      "fp_rect": "footprint copper rectangle is unmodelled copper [graphic]",
+      "fp_text": "footprint copper text has no envelope derivable from the board and is unsupported [text]",
+      "fp_text_box": "footprint copper text has no envelope derivable from the board and is unsupported [text]",
+      "point": "footprint copper point is unmodelled copper [graphic]",
+      "property": "footprint copper text has no envelope derivable from the board and is unsupported [text]"
     },
     "_UNMODELLED_PAD_SHAPES": {
       "trapezoid": "trapezoid pad shapes are unsupported in Board IR adapter v0.2"
@@ -29,6 +41,9 @@
     },
     "_UNNAMED_COPPER_GRAPHIC": {
       "<fallback>": "root graphic on copper is unsupported [graphic]"
+    },
+    "_UNNAMED_FOOTPRINT_COPPER_GRAPHIC": {
+      "<fallback>": "footprint graphic on a copper layer is unmodelled copper [graphic]"
     },
     "_UNSUPPORTED_PAD_FIELDS": {
       "back_post_machining": "pad field 'back_post_machining' is unsupported",
@@ -55,5 +70,7 @@
       "thermal_width": "pad field 'thermal_width' is unsupported",
       "zone_layer_connections": "pad field 'zone_layer_connections' is unsupported"
     }
-  }
+  },
+  "update": "When a table changes, run the extraction in tests/test_refusal_message_golden.py (`_messages_by_table`) and write the result here, in the same pull request as the message change. Never loosen the test instead.",
+  "why": "Three refusal messages left the source in 0.8.0. The migration note was complete and the change was right; nothing would have noticed if it had not been. This file makes a member leaving, arriving or being reworded show up in the diff, where review sees it. Its only job is review."
 }

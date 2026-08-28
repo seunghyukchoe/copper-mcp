@@ -262,6 +262,58 @@ _UNMODELLED_COPPER_GRAPHIC_HEADS: dict[str, tuple[str, str]] = {
     "gr_text": _COPPER_TEXT_REFUSAL,
     "gr_text_box": _COPPER_TEXT_REFUSAL,
 }
+# The same table one structural level down, for a *footprint* graphic on a copper layer that
+# `_footprint_copper_obstacle_segments` does not bound.  Separate sentences from the root table on
+# purpose: a reader of a diagnostic must be able to tell a footprint's copper from the board's, and
+# a shared sentence would also silently re-bucket the frozen B-129 masking instrument, whose
+# vocabulary matches on message *and* locator.
+#
+# Every entry names the primitive kind and says which of three different unmet conditions it is
+# waiting on, because they ask for different fixes and one sentence for all of them is the defect
+# ADR-0123 names:
+#
+# - `fp_line` and `fp_arc` are stroked open primitives, and Board IR *already has their exact
+#   model*: a stroked line is geometrically a `Segment` and a stroked minor arc is an `Arc`, with
+#   ADR-0072's envelope covering the second.  What is missing is not geometry, it is an observation
+#   -- B-136 finds 32,532 `fp_line` and 23 `fp_arc` on these boards and **not one on copper**.
+# - `fp_rect` and `fp_circle` are closed primitives whose filled forms are a rectangle and a disc.
+#   The rectangle has the net-tie polygon's exact midline model (ADR-0092); the disc has no Board
+#   IR obstacle type at all, since a `Segment` needs two distinct endpoints and a `CourtyardCircle`
+#   is a placement keep-out on an evidence surface that must not borrow an obstacle's direction of
+#   error (ADR-0075, ADR-0080).
+# - `fp_curve` is a cubic Bezier.  Its convex hull *is* derivable -- a Bezier lies inside the hull
+#   of its four control points -- so unlike copper text this one is not undecidable, and the
+#   sentence says "unmodelled" rather than "underivable" to keep those two apart.
+# - `fp_text`, `fp_text_box` and a footprint `property` are text, and text is ADR-0095: there is no
+#   envelope derivable from the document, five exit conditions are recorded there, and none is met.
+#   This is the one entry whose refusal is a *conclusion* rather than a backlog item.
+# - `point` carries `at`/`size`/`layer` and is routed here by layer rather than by head, so it is
+#   named for the same reason the others are.
+_FOOTPRINT_COPPER_TEXT_REFUSAL: tuple[str, str] = (
+    "footprint copper text has no envelope derivable from the board and is unsupported",
+    "text",
+)
+_UNNAMED_FOOTPRINT_COPPER_GRAPHIC: tuple[str, str] = (
+    "footprint graphic on a copper layer is unmodelled copper",
+    "graphic",
+)
+_UNMODELLED_FOOTPRINT_COPPER_HEADS: dict[str, tuple[str, str]] = {
+    "fp_arc": ("footprint copper arc is unmodelled copper", "graphic"),
+    "fp_circle": ("footprint copper circle is unmodelled copper", "graphic"),
+    "fp_curve": ("footprint copper curve is unmodelled copper", "graphic"),
+    "fp_line": ("footprint copper line is unmodelled copper", "graphic"),
+    "fp_rect": ("footprint copper rectangle is unmodelled copper", "graphic"),
+    "fp_text": _FOOTPRINT_COPPER_TEXT_REFUSAL,
+    "fp_text_box": _FOOTPRINT_COPPER_TEXT_REFUSAL,
+    "point": ("footprint copper point is unmodelled copper", "graphic"),
+    "property": _FOOTPRINT_COPPER_TEXT_REFUSAL,
+}
+# The closed child grammar of an `fp_poly`, from `PCB_IO_KICAD_SEXPR_PARSER::parseFOOTPRINT`'s
+# `T_fp_poly` arm on the KiCad 9.0 and 10.0 release branches.  `tstamp` is the pre-KiCad-8 spelling
+# of `uuid` and still parses.
+_FOOTPRINT_POLYGON_CHILDREN = frozenset(
+    {"fill", "layer", "locked", "pts", "stroke", "tstamp", "uuid"}
+)
 _SETUP_METADATA_HEADS = frozenset(
     {
         "allow_soldermask_bridges_in_footprints",
@@ -869,6 +921,18 @@ class _Converter:
         # Board IR validation counts serialized rings.  Retain only their count so caller-provided
         # vertex budgets still cover the complete accepted source geometry.
         self.custom_pad_primitive_vertex_count = 0
+        # Stray copper-graphic vertices, charged for exactly the reason above: they are reduced to
+        # a bounding envelope and therefore disappear before Board IR validation counts serialized
+        # rings, so a caller's vertex budget would otherwise not cover them.  A separate number
+        # from the pad one because the two answer different questions and merging them would let a
+        # board with no custom pads report custom-pad vertices.
+        self.graphic_envelope_vertex_count = 0
+        # Stray copper `fp_poly` expressions D-230 converts as a conservative bounding envelope
+        # rather than as exact copper.  The obstacle is a superset of the drawn shape, so this is
+        # the typed disclosure of an *approximation* rather than of an erasure -- the same footing
+        # `max_roundrect_rounding_nm` is on.  Net-tie copper never contributes: it takes the
+        # pre-existing ADR-0092 path and is counted nowhere.
+        self.footprint_copper_graphic_envelope_count = 0
         # Root ``(property ...)`` expressions accepted as board metadata and not modelled, on the
         # same measured-and-reported footing as the group count above.
         self.root_board_property_count = 0
@@ -1314,7 +1378,16 @@ class _Converter:
                             # -- in `_footprints_and_pads` rather than being refused here as a
                             # stray drawing. See `_net_tie_copper_segments` and ADR-0092.
                             continue
-                        self._refuse_footprint_routing_graphic(footprint, layer, locator)
+                        if layer != "Edge.Cuts" and head == "fp_poly":
+                            # Stray filled copper: bounded here rather than refused, and
+                            # *validated* here rather than at conversion time so the diagnostic
+                            # keeps its position in this walk. The reader is the same one
+                            # `_footprint_copper_obstacle_segments` uses, so there is one
+                            # grammar with two callers rather than two grammars. Anything the
+                            # reader cannot bound refuses inside it, by name. See D-230.
+                            self._read_footprint_copper_polygon(item, layer, f"{locator}.graphic")
+                            continue
+                        self._refuse_footprint_routing_graphic(footprint, layer, locator, head)
                     continue
                 if head not in _FOOTPRINT_METADATA_HEADS:
                     self.fail(
@@ -1325,13 +1398,13 @@ class _Converter:
                     )
 
     def _refuse_footprint_routing_graphic(
-        self, footprint: SExpr, layer: str, locator: str
+        self, footprint: SExpr, layer: str, locator: str, head: str
     ) -> Never:
         """Refuse a footprint graphic on a routing layer, naming what it actually is.
 
-        All three cases refuse, and that is the point: a graphic on a copper layer *is copper*, so
+        Every case here refuses, and that is the point: a graphic on a copper layer *is copper*, so
         it is an obstacle, and the one outcome forbidden here is dropping it. What differs is the
-        reason, and the three reasons ask for different fixes:
+        reason, and the reasons ask for different fixes:
 
         - **A net-tie primitive that is not a filled polygon.** `net_tie_pad_groups` declares that
           "nets attached to pads within a single pad-group are allowed to short" (KiCad
@@ -1345,10 +1418,23 @@ class _Converter:
           direction of error from copper: the outline is routing *room* and may only be
           under-approximated (ADR-0076), so it is a separate question from an obstacle and is
           named separately rather than sharing copper's message.
-        - **Any other copper layer.** Copper the adapter does not model. Refused, never ignored: a
-          conservative envelope would be admissible here (ADR-0072's direction), but no real board
-          surveyed carries one, so inventing the envelope would be modelling a case that has not
-          been observed.
+        - **Any other copper layer.** A filled `fp_poly` no longer reaches this method either: D-230
+          bounds it as a netless obstacle in `_footprint_copper_obstacle_segments`. What is left is
+          the remainder, and it refuses **naming its own primitive kind** rather than through one
+          sentence for all of them -- ADR-0123's rule applied one structural level down, and the
+          reason it is worth applying here is that the kinds ask for genuinely different fixes. A
+          stroked `fp_line` or `fp_arc` is geometrically a track and an *exact* `Segment`/`Arc`
+          model exists for it; a filled `fp_circle` is a disc that no Board IR obstacle type
+          represents; footprint text on copper is ADR-0095's refusal, where the five exit
+          conditions are still unmet. B-136 measured every one of these at **zero occurrences on
+          copper** across the two boards that reach this method, while finding 32,532 `fp_line`,
+          1,064 `property`, 243 `fp_rect`, 184 `fp_text`, 50 `fp_circle` and 23 `fp_arc` on layers
+          that are *not* copper -- so modelling any of them would be modelling a case that has not
+          been observed, and naming them is all this change is entitled to do.
+
+        The sentence is always a **value from a closed table**, selected by an equality test against
+        the source token and never built from it, so a refusal names the construct without echoing
+        one byte of the board. Same rule as `_UNMODELLED_COPPER_GRAPHIC_HEADS` at the root.
         """
 
         if layer == "Edge.Cuts":
@@ -1365,11 +1451,14 @@ class _Converter:
                 f"{locator}.graphic",
                 object_kind="footprint",
             )
+        message, kind = _UNMODELLED_FOOTPRINT_COPPER_HEADS.get(
+            head, _UNNAMED_FOOTPRINT_COPPER_GRAPHIC
+        )
         self.fail(
             "unsupported.construct",
-            "footprint graphic on a copper layer is unmodelled copper",
+            message,
             f"{locator}.graphic",
-            object_kind="graphic",
+            object_kind=kind,
         )
 
     def _validate_neutral_via_treatment(self, expression: SExpr, locator: str) -> None:
@@ -2910,6 +2999,24 @@ class _Converter:
                 object_kind="pad",
             )
 
+    def _charge_graphic_envelope_vertices(self, count: int, locator: str) -> None:
+        """Charge stray copper-graphic vertices against the budget custom-pad primitives charge.
+
+        Called from the conversion pass only, never from the preflight, even though both run the
+        same reader: the budget covers *accepted* source geometry, and charging twice per polygon
+        would halve the ceiling for a reason that is an implementation detail rather than a fact
+        about the board.
+        """
+
+        self.graphic_envelope_vertex_count += count
+        if self.graphic_envelope_vertex_count > self.limits.max_total_vertices:
+            self.fail(
+                ParseBudget.TOTAL_VERTICES.value,
+                "total vertex budget exceeded",
+                locator,
+                object_kind="graphic",
+            )
+
     def _primitive_point(self, expression: SExpr, head: str, locator: str) -> tuple[int, int]:
         values = self._values(expression, head, locator, minimum=2, maximum=2)
         self._charge_custom_pad_vertices(1, locator)
@@ -3162,6 +3269,7 @@ class _Converter:
         footprints: list[Footprint] = []
         pads: list[Pad] = []
         tie_segments: list[Segment] = []
+        copper_segments: list[Segment] = []
         for footprint_index, footprint in enumerate(children(self.root, "footprint")):
             footprint_locator = f"kicad_pcb.footprint[{footprint_index}]"
             tie_group = self._net_tie_pad_group(footprint, footprint_locator)
@@ -3426,6 +3534,28 @@ class _Converter:
                         ),
                     )
                 )
+            elif not children(footprint, "net_tie_pad_groups"):
+                # Stray copper: this footprint declares no net tie, so a filled `fp_poly` of its
+                # own on a copper layer is drawing the adapter must bound rather than drop (D-230).
+                #
+                # The predicate is `net_tie_pad_groups` and **not** `tie_group is None`, and the
+                # difference is deliberate even though the two agree today. `_net_tie_pad_group`
+                # currently returns `None` only when the head is absent and refuses every other
+                # shape, so `else` would be equivalent -- but that is a property of one function's
+                # current contract, and if it ever gained a `None` return for a declaration it
+                # could not resolve, `else` would hand that footprint's copper to this path while
+                # the net-tie path had already declined it. Writing the same test the preflight
+                # branch writes keeps the two halves agreeing about which polygons each owns
+                # without either depending on the other's internals.
+                copper_segments.extend(
+                    self._footprint_copper_obstacle_segments(
+                        footprint,
+                        footprint_locator,
+                        origin=origin,
+                        turn=turn,
+                        footprint_locked=footprint_locked,
+                    )
+                )
             (
                 courtyards,
                 courtyard_circles,
@@ -3452,7 +3582,7 @@ class _Converter:
                     far_side_courtyard_circles=far_side_courtyard_circles,
                 )
             )
-        return tuple(footprints), tuple(pads), tuple(tie_segments)
+        return tuple(footprints), tuple(pads), tuple(tie_segments) + tuple(copper_segments)
 
     def _net_tie_copper_segments(
         self,
@@ -3646,6 +3776,281 @@ class _Converter:
                 footprint_locator,
                 object_kind="footprint",
             )
+        return tuple(segments)
+
+    def _read_footprint_copper_polygon(
+        self, item: SExpr, layer_name: str, locator: str
+    ) -> tuple[Layer, tuple[PointNM, ...], int]:
+        """Validate one stray copper `fp_poly` and return its layer, ring and stroke half width.
+
+        One grammar with two callers. `_semantic_preflight` calls it and discards the result, so a
+        polygon this reader cannot bound refuses **in the preflight walk**, keeping its position
+        among that walk's other diagnostics; `_footprint_copper_obstacle_segments` calls it again
+        and builds the obstacle. Splitting the rules across the two would be two grammars that
+        agreed until someone edited one.
+
+        Every refusal names what it refused, and each is the conservative direction rather than a
+        taste:
+
+        - **One declared copper layer.** `*.Cu` and `F&B.Cu` pass `_is_routing_layer` and name more
+          than one layer, while a Board IR `Segment` names exactly one. Neither appears in
+          `layer_by_name`, which lists only the layers the document declares, so the same lookup
+          refuses the wildcards and an undeclared name together. B-136 measured `multi_copper` at
+          **0 of 56**.
+        - **Filled.** An unfilled polygon's copper is the stroked outline only, and while the same
+          envelope would contain it, accepting it would be modelling a form B-136 measured at
+          **0 of 56** -- the rule this adapter applies to the courtyard `fp_arc` and to every
+          net-tie primitive that is not a polygon.
+        - **An explicit stroke.** Required, never defaulted, for the reason
+          `_net_tie_copper_segments` records one class up: an omitted field is not an explicitly
+          zero one, and reading a
+          missing `stroke` as zero would let any non-zero writer default put real copper outside
+          the modelled envelope. That is the one direction the obstacle invariant forbids. B-136
+          measured `stroke_absent` at **0 of 56** and every occurrence carrying an explicit
+          *non-zero* width, which is why this reader returns a half width instead of demanding
+          `(width 0)` as the net-tie path does.
+        - **Straight sides only.** KiCad 9 writes `(arc …)` inside a `pts` list for a curved
+          polygon side. A curved side bulges *outside* the hull of the listed vertices, so a
+          vertex-derived envelope would not contain it -- the one failure mode that would make this
+          whole conversion unsound. `_reject_unknown_children` refuses it by name. B-136 measured
+          `pts_with_curved_child` at **0 of 56**.
+        - **Three distinct vertices.** Fewer bounds no region. The repeated closing vertex KiCad
+          writes is dropped first, exactly as the net-tie reader drops it.
+
+        What it deliberately does **not** check is that the ring is simple, or that its vertices are
+        distinct from one another beyond the count. It cannot: B-136 measured **26 of 56
+        self-intersecting** and **0 of 56 with an all-distinct vertex ring**, so a `Ring` would
+        reject every one of these polygons outright and a self-intersecting outline's filled area
+        is not determined by the document at all -- it depends on a fill rule the source never
+        names. The envelope this reader feeds is correct under *every* fill rule, which is the
+        property that makes those two measurements a reason to bound rather than a reason to refuse.
+        """
+
+        self._reject_unknown_children(item, _FOOTPRINT_POLYGON_CHILDREN, locator)
+        self._validate_direct_atoms(
+            item, positional_atoms=0, allowed=frozenset({"locked"}), locator=locator
+        )
+        layer = self.layer_by_name.get(layer_name)
+        if layer is None:
+            self.fail(
+                "unknown.layer",
+                "footprint copper polygon must name one declared copper layer",
+                locator,
+                object_kind="graphic",
+            )
+        # `required=False` and then a named refusal, rather than letting `_values` raise
+        # `syntax.missing_field`: an absent `fill` is a real form a hand-edited board can carry,
+        # and answering it with a field-less sentence is precisely the defect ADR-0123 names.
+        fill = self._values(item, "fill", locator, minimum=1, maximum=1, required=False)
+        if fill != ("yes",) or is_quoted_atom(fill[0]):
+            self.fail(
+                "unsupported.construct",
+                "footprint copper polygon must be filled",
+                locator,
+                object_kind="graphic",
+            )
+        stroke = self._one(item, "stroke", locator, required=False)
+        if stroke is None:
+            self.fail(
+                "unsupported.construct",
+                "footprint copper polygon must declare its outline stroke",
+                locator,
+                object_kind="graphic",
+            )
+        self._reject_unknown_children(stroke, frozenset({"type", "width"}), f"{locator}.stroke")
+        stroke_width = self._values(stroke, "width", f"{locator}.stroke", minimum=1, maximum=1)
+        width_nm = self._mm(stroke_width[0], f"{locator}.stroke.width")
+        if width_nm < 0:
+            self.fail(
+                "unsupported.construct",
+                "footprint copper polygon stroke width must not be negative",
+                f"{locator}.stroke.width",
+                object_kind="graphic",
+            )
+        points_expression = self._one(item, "pts", locator)
+        assert points_expression is not None
+        self._reject_unknown_children(points_expression, frozenset({"xy"}), f"{locator}.pts")
+        self._validate_direct_atoms(
+            points_expression,
+            positional_atoms=0,
+            allowed=frozenset(),
+            locator=f"{locator}.pts",
+        )
+        point_expressions = children(points_expression, "xy")
+        local_points: list[PointNM] = []
+        for index, point in enumerate(point_expressions):
+            values = atoms(point)
+            if len(values) != 2:
+                self.fail(
+                    "syntax.invalid",
+                    "footprint copper polygon point is malformed",
+                    f"{locator}.point[{index}]",
+                )
+            local_points.append(
+                PointNM(
+                    self._mm(values[0], f"{locator}.point[{index}].x"),
+                    self._mm(values[1], f"{locator}.point[{index}].y"),
+                )
+            )
+        if len(local_points) >= 2 and local_points[0] == local_points[-1]:
+            local_points.pop()
+        if len(set(local_points)) < 3:
+            self.fail(
+                "unsupported.construct",
+                "footprint copper polygon must carry three distinct vertices",
+                locator,
+                object_kind="graphic",
+            )
+        # `(width_nm + 1) // 2` and never `width_nm // 2`: KiCad centres a stroke on its path, so
+        # half the width lies outside the outline, and a floored half would leave up to a
+        # nanometre of real copper outside the envelope on an odd width.
+        return layer, tuple(local_points), (width_nm + 1) // 2
+
+    def _footprint_copper_obstacle_segments(
+        self,
+        footprint: SExpr,
+        footprint_locator: str,
+        *,
+        origin: PointNM,
+        turn: int,
+        footprint_locked: bool,
+    ) -> tuple[Segment, ...]:
+        """Bound a footprint's stray copper polygons as netless obstacle segments.
+
+        A filled `fp_poly` on a copper layer *is copper*, so the one outcome forbidden here is
+        dropping it. It asks the same three questions net-tie copper does, and the
+        direction-of-error rules answer them separately (ADR-0078, ADR-0092, and D-230 here):
+
+        - **Obstacle: over-approximate.** The copper is real for every net, so it becomes a
+          full-width `Segment` across the polygon's board-coordinate bounding box, inflated by the
+          stroke half width. The containment argument is below and is a proof, not an estimate.
+        - **Connectivity: no claim.** `net_id` is `None`, the contract net-0 copper has under
+          ADR-0078: nothing is claimed to connect through this copper, which is the required
+          direction for a connectivity claim that could not be test-bound.
+        - **Identity: derived.** An `fp_poly` is not a KiCad track, so its `uuid` names no
+          `Segment`. The identity is revision-derived on purpose, and both source-preserving patch
+          paths -- `kicad_route_patch` and `kicad_placement_patch` -- refuse a snapshot containing
+          one. A board carrying stray copper therefore converts and routes but **cannot be written
+          back**, which is the same contract net-tie copper has (ADR-0026) and is stated here
+          rather than discovered later.
+
+        **Why the bounding box and not the polygon.** Not for convenience. B-136 measured **0 of
+        56** of these polygons with an all-distinct vertex ring and **26 of 56 self-intersecting**,
+        so a Board IR `Ring` -- which rejects a repeated vertex -- cannot represent a single one of
+        them, and a self-intersecting outline's filled area is not determined by the source: it
+        depends on a fill rule the document never names. The bounding box is the model that is
+        correct under *every* fill rule, and that is a stronger property than a tighter model that
+        had to guess one. `_net_tie_copper_segments` already relies on the same reasoning for its
+        rectangles, where "the four distinct corners admit reorderings whose even-odd fill is a
+        subset of the rectangle"; this is that argument with the rectangle replaced by the box,
+        which needs no rectangle test at all. The cost was measured rather than assumed: every one
+        of the 56 envelopes covers under 5% of its board's `Edge.Cuts` bounding box, and so does
+        each board's whole envelope union.
+
+        **Containment, in full.** Write `P` for the polygon's transformed vertices, `B` for their
+        axis-aligned bounding box, `W` for the stroke width and `h = (W + 1) // 2 >= W / 2`.
+
+        1. The filled region lies in `conv(P)` under **any** fill rule: the outline is a closed
+           polyline through `P`, so it lies in the convex hull of `P`, and the region a closed
+           curve encloses lies inside any convex set containing the curve.
+        2. The stroke lies in the outline path dilated by `W / 2`. KiCad centres a stroke on its
+           path: `STROKE_PARAMS::GetWidth()` is the full width and
+           `PCB_SHAPE::TransformShapeToPolygon` inflates a polygon shape by half of it
+           (`SHAPE_POLY_SET::Inflate( GetWidth() / 2 )`)
+           before adding it to the layer, so no drawn copper is further than `W / 2` outside the
+           outline. Steps 1 and 2 give: all copper lies within `h` of `conv(P)`.
+        3. `conv(P) ⊆ B`, so all copper lies in `E = [x0 - h, x1 + h] x [y0 - h, y1 + h]`, where
+           `B = [x0, x1] x [y0, y1]`.
+        4. `E` lies inside the emitted segment's modelled extent. Take the long axis of `E` as the
+           segment axis -- say `X1 - X0 >= Y1 - Y0` -- and emit endpoints `(X0, m)`, `(X1, m)` with
+           `m = (Y0 + Y1) // 2` and width `2 * wh`, `wh = (Y1 - Y0 + 1) // 2`. Every consumer
+           models an orthogonal segment as its endpoint bounding box grown by `(width + 1) // 2`,
+           which is exactly `wh`, on all four sides: `routing.astar._segment_extent`,
+           `routing.layered_board_adapter._segment_bounds` and the axis-aligned branch of
+           `_swept_square_envelope` all compute that same rectangle. So the modelled extent is
+           `[X0 - wh, X1 + wh] x [m - wh, m + wh]`. It contains `E`'s x-range because `wh >= 0`,
+           and it contains `E`'s y-range because `m <= (Y0 + Y1) / 2` and `wh >= (Y1 - Y0) / 2`
+           give `m - wh <= Y0`, while `m >= (Y0 + Y1 - 1) / 2` gives `m + wh >= Y1 - 1/2` and both
+           sides are integers.
+
+        The envelope is therefore a **superset** of the real copper, so the model can only refuse a
+        route, never permit one through the polygon.
+
+        **The emitted segment is always axis-aligned**, whatever the footprint's rotation, because
+        the box is taken in board coordinates after `_transform` and non-quarter-turn rotations
+        refuse earlier in `_quarter_turn`. That is load-bearing rather than incidental:
+        `layered_board_adapter._segment_bounds` returns `None` for a diagonal foreign segment and
+        the layered router answers `diagonal foreign segments are not modeled`, so an envelope that
+        could come out diagonal would have traded one refusal for another.
+
+        **No parity surface reads these.** The placement legalizer's four verdicts -- `pad_overlap`,
+        `outline_containment`, `keepout_respect`, `courtyard_overlap` -- read `pads`, `outline` and
+        `keepouts`, and never `segments` or `arcs`. An over-approximated obstacle therefore cannot
+        turn a `proven_clear` into a `violated`, which is the ADR-0075/ADR-0080 rule this change has
+        to satisfy and the reason a `Segment` is admissible here where a synthetic `Keepout` --
+        which `keepout_respect` *does* read -- would not be, quite apart from `Ring` rejecting all
+        56 outright.
+        """
+
+        segments: list[Segment] = []
+        copper_index = 0
+        for item in footprint.items[1:]:
+            if not isinstance(item, SExpr) or item.head != "fp_poly":
+                continue
+            probe_locator = f"{footprint_locator}.copper_graphic[{copper_index}]"
+            layer_values = self._values(
+                item, "layer", probe_locator, minimum=1, maximum=1, required=False
+            )
+            if not layer_values:
+                continue
+            layer_name = layer_values[0]
+            if not self._is_routing_layer(layer_name) or layer_name == "Edge.Cuts":
+                continue
+            locator = probe_locator
+            copper_index += 1
+            layer, local_points, half_width_nm = self._read_footprint_copper_polygon(
+                item, layer_name, locator
+            )
+            self._charge_graphic_envelope_vertices(len(local_points), locator)
+            board_points = tuple(
+                self._transform(point, origin, turn, locator) for point in local_points
+            )
+            x_min = min(point.x for point in board_points) - half_width_nm
+            x_max = max(point.x for point in board_points) + half_width_nm
+            y_min = min(point.y for point in board_points) - half_width_nm
+            y_max = max(point.y for point in board_points) + half_width_nm
+            if min(x_max - x_min, y_max - y_min) <= 0:
+                # Collinear vertices with a zero stroke draw copper of no area at all. There is no
+                # positive-width segment to emit and nothing to bound, so it refuses rather than
+                # being silently dropped -- the only outcome this whole path forbids.
+                self.fail(
+                    "unsupported.construct",
+                    "footprint copper polygon encloses no area to bound",
+                    locator,
+                    object_kind="graphic",
+                )
+            if x_max - x_min >= y_max - y_min:
+                half_span = (y_max - y_min + 1) // 2
+                midline = (y_min + y_max) // 2
+                start = PointNM(x_min, midline)
+                end = PointNM(x_max, midline)
+            else:
+                half_span = (x_max - x_min + 1) // 2
+                midline = (x_min + x_max) // 2
+                start = PointNM(midline, y_min)
+                end = PointNM(midline, y_max)
+            segments.append(
+                Segment(
+                    id=self._derived_identity("segment", locator),
+                    net_id=None,
+                    layer_id=layer.id,
+                    start=start,
+                    end=end,
+                    width_nm=2 * half_span,
+                    locked=footprint_locked or self._locked(item),
+                )
+            )
+        self.footprint_copper_graphic_envelope_count += len(segments)
         return tuple(segments)
 
     def _segments(self) -> tuple[Segment, ...]:
@@ -4375,7 +4780,7 @@ class _Converter:
         nets = self._nets()
         constraints = self._constraints(nets)
         zones, keepouts = self._zones_and_keepouts()
-        footprints, pads, tie_segments = self._footprints_and_pads()
+        footprints, pads, footprint_segments = self._footprints_and_pads()
         source_info = SourceInfo(
             format="kicad_pcb",
             revision=self.source_revision,
@@ -4384,10 +4789,10 @@ class _Converter:
         )
         outline = self._outline()
         vias = self._vias()
-        # Net-tie copper joins the segment collection here rather than in `_segments`, which
-        # reads only root `segment` expressions; canonicalization orders by ID, so placement
-        # in this tuple carries no meaning.
-        segments = self._segments() + tie_segments
+        # Net-tie copper and bounded stray copper both join the segment collection here rather
+        # than in `_segments`, which reads only root `segment` expressions; canonicalization
+        # orders by ID, so placement in this tuple carries no meaning.
+        segments = self._segments() + footprint_segments
         arcs = self._arcs()
         # Every identity is now assigned, so reuse is measurable rather than guessed.  Re-running
         # the whole conversion with the measured set is what keeps the fallback symmetric: all the
@@ -4431,6 +4836,7 @@ class _Converter:
             unmodelled_setup_field_count=self.unmodelled_setup_field_count,
             unmodelled_footprint_field_count=self.unmodelled_footprint_field_count,
             unmodelled_stackup_layer_count=self.unmodelled_stackup_layer_count,
+            footprint_copper_graphic_envelope_count=(self.footprint_copper_graphic_envelope_count),
         )
 
 
@@ -4447,7 +4853,11 @@ def parse_kicad_bytes(
         converter = _Converter(source, root, profile, limits)
         conversion = converter.convert()
         assert conversion.snapshot is not None
-        remaining_vertices = limits.max_total_vertices - converter.custom_pad_primitive_vertex_count
+        remaining_vertices = (
+            limits.max_total_vertices
+            - converter.custom_pad_primitive_vertex_count
+            - converter.graphic_envelope_vertex_count
+        )
         if remaining_vertices < 1:
             raise BoardIRValidationError(
                 ParseBudget.TOTAL_VERTICES.value, "total vertex budget exceeded"

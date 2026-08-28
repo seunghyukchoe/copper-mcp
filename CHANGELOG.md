@@ -6,6 +6,38 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Board IR converts a footprint's **stray copper polygons** instead of refusing the board. A filled
+  `fp_poly` on one declared copper layer, in a footprint that declares no net tie, becomes a
+  netless `Segment` whose modelled extent is the polygon's board-coordinate vertex bounding box
+  inflated by the stroke half width -- a **proven superset** of the drawn copper, so the model can
+  refuse a route and never permit one through the polygon. The bounding box is not a shortcut: the
+  census found **0 of 56** of these polygons with an all-distinct vertex ring, so a `Ring` cannot
+  represent one of them, and **26 of 56** self-intersecting, whose filled area even-odd and
+  non-zero winding disagree about while the document names neither -- so there is no exact region
+  to model until a fill rule is chosen, and a box is correct under every rule. Connectivity claims
+  nothing (`net_id` stays `None`) and the identity is revision-derived, so **a board with stray
+  copper converts and routes but cannot be written back**, the contract net-tie copper has had
+  since `ADR-0092`. This is measured, not asserted: `B-136` is the closed graphic census over the
+  two public boards `B-133` found blocked here, and `B-137` is the before/after
+  ([migration note](docs/migrations/footprint-copper-graphics.md), `ADR-0125`, `D-230`, `R-180`,
+  `SEC-167`, [issue #188](https://github.com/seunghyukchoe/copper-mcp/issues/188)).
+- A footprint graphic on a copper layer that Board IR does not model now **names its own primitive
+  kind**. `fp_line`, `fp_arc`, `fp_rect`, `fp_circle`, `fp_curve` and `point` each get their own
+  sentence, and `fp_text`, `fp_text_box` and a footprint `property` get `ADR-0095`'s copper-text
+  refusal in a footprint-scoped spelling distinct from the root one. No verdict changes -- every
+  one already refused -- but the messages now say which of three different unmet conditions each is
+  waiting on. `footprint graphic on a copper layer is unmodelled copper` survives only as the
+  fallback for a head outside the table (`ADR-0123`'s rule one structural level down, issue #188).
+- `inspect_board_ir`'s `unmodelled_counts` map grows to ten entries with
+  `footprint_copper_graphic_envelope_count`. Unlike every other entry it discloses an
+  **approximation** rather than an erasure: a non-zero value means that many obstacles are looser
+  than the copper they stand for, which cannot permit an illegal route but can make a routable
+  board report unroutable. Copper-graphic vertices are now charged against the caller's
+  `max_total_vertices` budget, exactly as reduced custom-pad primitive vertices already were
+  (`R-180`, `SEC-167`).
+
 ## [0.11.0] - 2026-08-28
 
 Upgrading from 0.10.0: see the

@@ -106,6 +106,29 @@ def _messages_by_table() -> dict[str, dict[str, str]]:
         "_COPPER_TEXT_REFUSAL": {
             "<shared>": f"{module._COPPER_TEXT_REFUSAL[0]} [{module._COPPER_TEXT_REFUSAL[1]}]"
         },
+        # The same shape one structural level down, for a *footprint* graphic on
+        # copper. Pinned separately from the root table because the sentences are
+        # deliberately different: a diagnostic reader must be able to tell whose
+        # copper a refusal is about, and a frozen masking instrument matches on
+        # message together with locator.
+        "_UNMODELLED_FOOTPRINT_COPPER_HEADS": {
+            head: f"{message} [{kind}]"
+            for head, (message, kind) in module._UNMODELLED_FOOTPRINT_COPPER_HEADS.items()
+        },
+        "_UNNAMED_FOOTPRINT_COPPER_GRAPHIC": {
+            "<fallback>": f"{module._UNNAMED_FOOTPRINT_COPPER_GRAPHIC[0]} "
+            f"[{module._UNNAMED_FOOTPRINT_COPPER_GRAPHIC[1]}]"
+        },
+        # Named separately from the dict that holds it, for the same reason
+        # `_COPPER_TEXT_REFUSAL` is: repointing `fp_text_box` or a footprint
+        # `property` away from this constant would split ADR-0095's refusal
+        # without changing the dict's value-set size.
+        "_FOOTPRINT_COPPER_TEXT_REFUSAL": {
+            "<shared>": (
+                f"{module._FOOTPRINT_COPPER_TEXT_REFUSAL[0]} "
+                f"[{module._FOOTPRINT_COPPER_TEXT_REFUSAL[1]}]"
+            )
+        },
         # token -> the sentence, which says *why* rather than *that*.
         "_UNMODELLED_PAD_SHAPES": dict(module._UNMODELLED_PAD_SHAPES),
         # A token table whose sentence is built at the use site. The formatter is
