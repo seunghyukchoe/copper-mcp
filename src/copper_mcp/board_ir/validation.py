@@ -188,6 +188,28 @@ def _validate_ring(
                 )
 
 
+def validate_ring_topology(ring: Ring, *, locator: str, limits: ParseLimits | None = None) -> None:
+    """Check one ring's vertex budget and simplicity, outside a whole-content validation.
+
+    ``validate_content`` runs this over every ring a snapshot carries, at the end.  An adapter
+    that has to *reason* about a ring while it is still building one needs the same check earlier
+    and on its own: the KiCad outline reader reads the interior side out of a chord ring's
+    orientation, and a ring that crosses itself has no consistent interior to read.  Exposing the
+    check rather than duplicating it is what keeps the two answers the same answer.
+
+    The intersection budget is charged fresh here rather than shared with a later
+    ``validate_content`` call, so a ring checked twice is charged twice.  That is the conservative
+    direction — it can only refuse earlier, never admit something a single pass would refuse.
+    """
+
+    _validate_ring(
+        ring,
+        locator=locator,
+        limits=limits or ParseLimits(),
+        intersection_budget=[0],
+    )
+
+
 def validate_content(content: BoardIRContent, limits: ParseLimits | None = None) -> None:
     """Validate budgets, references, identities, and exact polygon topology."""
 

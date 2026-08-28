@@ -1,0 +1,95 @@
+{
+ "aggregates": {
+  "arc_child_head_occurrences": {
+   "end": 97,
+   "layer": 97,
+   "mid": 97,
+   "start": 97,
+   "stroke": 97,
+   "uuid": 97
+  },
+  "arc_child_shape_occurrences": {
+   "end:2atoms/0children": 97,
+   "layer:1atoms/0children": 97,
+   "mid:2atoms/0children": 97,
+   "start:2atoms/0children": 97,
+   "stroke:0atoms/2children": 97,
+   "uuid:1atoms/0children": 97
+  },
+  "arc_circumcentre_on_closing_boards": {
+   "rational": 51
+  },
+  "arc_direction_on_closing_boards": {
+   "concave": 13,
+   "convex": 38
+  },
+  "arc_positional_atom_occurrences": 0,
+  "arc_span_on_closing_boards": {
+   "minor": 51
+  },
+  "arc_stroke_type_occurrences": {
+   "default": 36,
+   "solid": 61
+  },
+  "board_topology": {
+   "one_closed_loop": 7,
+   "unpaired_endpoints": 3
+  },
+  "footprint_edge_cuts_head_occurrences": {
+   "fp_arc": 3,
+   "fp_line": 6
+  },
+  "root_edge_cuts_head_board_presence": {
+   "footprint:fp_arc": 1,
+   "footprint:fp_line": 1,
+   "gr_arc": 9,
+   "gr_line": 10
+  },
+  "root_edge_cuts_head_occurrences": {
+   "gr_arc": 97,
+   "gr_line": 123
+  },
+  "unpaired_endpoint_separation_buckets": {
+   "at_least_1000000nm": 1,
+   "under_1000nm": 2
+  }
+ },
+ "cohort": {
+  "cohort_fingerprint": "sha256:bfec8210d6d4eb746ffdbfb3b70309ce",
+  "digests_reverified_before_use": true,
+  "entries": 13,
+  "predeclared_cohort_fingerprint": "sha256:bfec8210d6d4eb746ffdbfb3b70309ce",
+  "private_entries": 3,
+  "public_entries": 10,
+  "source_schema": "copper-mcp/fixed-point-masking-census/v1"
+ },
+ "commit": "966f949051d67c19520a95c9dc8badfc6079cd6b",
+ "committed_board_bytes": 0,
+ "configuration": {
+  "arithmetic": "exact integers and rationals; no floating point in any verdict",
+  "chaining": "exact integer endpoint coincidence; zero epsilon",
+  "operation": "read_only_edge_cuts_curve_and_topology_census"
+ },
+ "dirty": false,
+ "environment": {
+  "platform": "macOS-26.5.2-arm64-arm-64bit",
+  "python": "3.12.13"
+ },
+ "not_claimed": [
+  "no conversion result",
+  "no support for any measured construct",
+  "not a sample of any population: ten boards selected for licence clarity",
+  "no claim about footprint-local Edge.Cuts graphics beyond their count",
+  "no board write, apply authority, routing, DRC or fabrication result"
+ ],
+ "privacy": {
+  "aggregate_only": true,
+  "board_bytes_committed": 0,
+  "board_digests_committed": 0,
+  "board_paths_committed": 0,
+  "coordinates_committed": 0
+ },
+ "recorded_at_utc": "2026-08-28T06:57:04.456089+00:00",
+ "run_id": "sha256:cca94b618cf090e4a47f118faaa997b2fc41745a56a0190d2c0d5a7665e0a9a3",
+ "schema": "copper-mcp/public-edge-cuts-curve-census/v1"
+}

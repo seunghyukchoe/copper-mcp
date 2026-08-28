@@ -63,6 +63,7 @@ _MEASURED_COUNT_FIELDS = (
     "unmodelled_setup_field_count",
     "unmodelled_stackup_layer_count",
     "unmodelled_footprint_field_count",
+    "outline_inward_deviation_nm",
 )
 _OBJECT_COLLECTIONS = (
     "outline",

@@ -21,6 +21,12 @@ from copper_mcp.adapters.sexpr import (
 from copper_mcp.board_ir.canonical import make_content, make_snapshot
 from copper_mcp.board_ir.diagnostics import ConversionResult, Diagnostic, Severity
 from copper_mcp.board_ir.limits import ParseBudget, ParseLimits
+from copper_mcp.board_ir.outline_arc import (
+    OutlineArcError,
+    arc_is_minor,
+    chord_side,
+    inscribe_outline_arc,
+)
 from copper_mcp.board_ir.types import (
     JSON_SAFE_INTEGER,
     Arc,
@@ -51,8 +57,13 @@ from copper_mcp.board_ir.types import (
     ZonePadConnection,
     mm_to_nm,
     normalize_rotation_udeg,
+    signed_double_area,
 )
-from copper_mcp.board_ir.validation import BoardIRValidationError, validate_content
+from copper_mcp.board_ir.validation import (
+    BoardIRValidationError,
+    validate_content,
+    validate_ring_topology,
+)
 
 _PLAIN_DECIMAL = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _UNSIGNED_INTEGER = re.compile(r"^(?:0|[1-9][0-9]*)$")
@@ -203,15 +214,47 @@ _PAD_KIND_BY_TOKEN: dict[str, PadKind] = {
     "np_thru_hole": PadKind.NPTH,
 }
 # The only root graphics that may sit on ``Edge.Cuts``: one unfilled rectangle, or straight
-# segments that chain into exactly one closed simple loop.  Both carry the board outline as an
-# exact integer polygon whose vertices are drawn points, so neither can model more room than the
-# board has.  See docs/research/edge-cuts-outline-assembly-v1.md and ADR-0080.
-_EDGE_CUTS_OUTLINE_HEADS = frozenset({"gr_line", "gr_rect"})
-# Curved outline primitives, refused separately so the diagnostic names the curve rather than
-# reporting the same message as an unsupported layer.  An outline curve needs an *inscribed*
-# approximation, which is not ADR-0072's conservative arc envelope run backwards.
-_EDGE_CUTS_CURVE_HEADS = frozenset({"gr_arc", "gr_bezier", "gr_circle", "gr_curve"})
+# segments and circular arcs that chain into exactly one closed simple loop.  A rectangle and a
+# segment carry the outline as an exact integer polygon whose vertices are drawn points.  An arc
+# does not, and cannot: its circle has a rational centre and an irrational radius, so no polygon
+# is equal to it.  It is admitted as an *inscribed* polyline instead — every vertex an exact
+# integer point inside the region the chord and the arc bound — which is the only direction of
+# error the outline permits, and the direction is decided per arc against the ring's own interior.
+# See ADR-0124, docs/research/edge-cuts-outline-arcs-v1.md, ADR-0076 and ADR-0080.
+_EDGE_CUTS_OUTLINE_HEADS = frozenset({"gr_arc", "gr_line", "gr_rect"})
+# Outline primitives that stay refused, each with its own sentence, because "unsupported curve"
+# told an operator which *category* was refused and never which construct or why.  Every message
+# is a constant selected by an equality test against the source token, so a refusal names the
+# construct without echoing one byte of the board.
+#
+# None of these four appears on any board in the measured cohort (B-134: all 97 ``Edge.Cuts``
+# curve primitives across ten public boards are ``gr_arc``), so each is refused on its own
+# unresolved argument rather than on cost:
+#
+#   * ``gr_circle`` is a *closed* shape.  It is not an edge that chains with anything, it is a
+#     whole contour, so admitting one is a topology decision — how it composes with the other
+#     shapes, and whether a second closed shape is a hole or a second board — and not an
+#     approximation decision.  ADR-0076 left multiple contours refused and this does not reopen it.
+#   * ``gr_curve`` and ``gr_bezier`` are cubic Béziers, whose convexity is **not global**: a single
+#     curve may have an inflection, so one arc's one-line convex/concave verdict does not exist for
+#     it.  Each monotone span would need its own direction, which is a different construction.
+#   * ``gr_poly`` already *is* a polygon, so it needs no approximation at all — but it is a closed
+#     shape like ``gr_circle``, and it carries a ``fill`` whose meaning for an outline this project
+#     has never decided.  It is refused as topology, not as geometry.
+_EDGE_CUTS_REFUSED_OUTLINE_HEADS: dict[str, str] = {
+    "gr_bezier": "Edge.Cuts outline Bezier curves are unsupported",
+    "gr_circle": "Edge.Cuts outline circles are unsupported",
+    "gr_curve": "Edge.Cuts outline Bezier curves are unsupported",
+    "gr_poly": "Edge.Cuts outline polygons are unsupported",
+}
 _EDGE_CUTS_LINE_FIELDS = frozenset({"end", "layer", "locked", "start", "stroke", "tstamp", "uuid"})
+# An arc is a segment plus the one point that says which way it bends.  The closed set is the
+# segment's own, plus ``mid``, and it is exactly what the cohort writes: ``start``, ``mid``,
+# ``end``, ``stroke``, ``layer`` and ``uuid`` on all 97 arcs, with no positional atom on any of
+# them (B-134).  ``width`` is absent deliberately — KiCad 10 writes the stroke and not the legacy
+# scalar, and the outline ignores stroke width anyway because KiCad builds its own outline from
+# shape centrelines.
+_EDGE_CUTS_ARC_FIELDS = _EDGE_CUTS_LINE_FIELDS | {"mid"}
 # Root graphics on a copper layer, mapped to the refusal each earns.  Every one of them is real
 # copper and therefore an obstacle, and an obstacle may only be over-approximated -- so all of
 # them refuse.  What this table changes is only *what the refusal says*, under exactly the rule
@@ -808,6 +851,23 @@ class _ConversionError(ValueError):
     object_id: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _OutlineEdge:
+    """One ``Edge.Cuts`` shape read as an edge of the outline cycle.
+
+    ``mid`` is the arc's third drawn point and ``None`` for a straight segment.  Holding both in
+    one type is what lets the cycle be assembled once, from endpoints, before anything asks which
+    way an edge bends -- the topology of an outline cannot depend on the bend, and reading the two
+    heads into two collections is what previously made it look as though it did.
+    """
+
+    start: PointNM
+    end: PointNM
+    mid: PointNM | None
+    locator: str
+    expression: SExpr
+
+
 def net_id_for_name(name: str) -> str:
     """Return the stable Board IR identity used for a KiCad named net."""
 
@@ -865,6 +925,11 @@ class _Converter:
         # count says a stack was dropped, this says how big it was, and a caller comparing it
         # against `len(copper_layers)` can see the physical entries it never received.
         self.unmodelled_stackup_layer_count = 0
+        # How far inside the drawn boundary the modelled one runs, in nanometres.  Zero for a
+        # board whose outline is drawn entirely with segments or as a rectangle, because every
+        # vertex of those is a drawn point.  Non-zero only when an arc was inscribed, and then it
+        # is an upper bound rather than the achieved figure.  See D-229 and ADR-0124.
+        self.outline_inward_deviation_nm = 0
         # Custom-pad primitive vertices are reduced to an envelope and therefore disappear before
         # Board IR validation counts serialized rings.  Retain only their count so caller-provided
         # vertex budgets still cover the complete accepted source geometry.
@@ -1173,10 +1238,8 @@ class _Converter:
                 if layer == "Edge.Cuts" and head not in _EDGE_CUTS_OUTLINE_HEADS:
                     self.fail(
                         "unsupported.construct",
-                        (
-                            "Edge.Cuts outline arcs, circles and curves are unsupported"
-                            if head in _EDGE_CUTS_CURVE_HEADS
-                            else "Edge.Cuts graphic is not a supported outline primitive"
+                        _EDGE_CUTS_REFUSED_OUTLINE_HEADS.get(
+                            head, "Edge.Cuts graphic is not a supported outline primitive"
                         ),
                         "kicad_pcb.graphic",
                         object_kind="outline",
@@ -4132,40 +4195,68 @@ class _Converter:
             )
         return tuple(zones), tuple(keepouts)
 
-    def _edge_cuts_line_segments(self) -> list[tuple[PointNM, PointNM, str, SExpr]]:
-        """Read every root ``gr_line`` drawn on ``Edge.Cuts`` as an exact integer segment."""
+    def _edge_cuts_edges(self) -> list[_OutlineEdge]:
+        """Read every root ``gr_line`` and ``gr_arc`` drawn on ``Edge.Cuts`` as one typed edge.
 
-        segments: list[tuple[PointNM, PointNM, str, SExpr]] = []
-        for index, expression in enumerate(children(self.root, "gr_line")):
-            locator = f"kicad_pcb.gr_line[{index}]"
-            layer_values = self._values(
-                expression,
-                "layer",
-                locator,
-                minimum=1,
-                maximum=1,
-                required=False,
-            )
-            if layer_values != ("Edge.Cuts",):
-                continue
-            self._reject_unknown_children(expression, _EDGE_CUTS_LINE_FIELDS, locator)
-            self._validate_direct_atoms(
-                expression,
-                positional_atoms=0,
-                allowed=frozenset({"locked"}),
-                locator=locator,
-            )
-            start = self._point(expression, "start", locator)
-            end = self._point(expression, "end", locator)
-            if start == end:
-                self.fail(
-                    "geometry.invalid",
-                    "Edge.Cuts outline carries a zero-length segment",
+        The two heads are read together because the outline is a *cycle of edges*, and reading
+        them apart is what made the arc look like a different kind of object rather than the same
+        object with one more control point.  Each head keeps its own closed payload grammar, so an
+        arc carrying a field a segment may not carry is still refused by name.
+        """
+
+        edges: list[_OutlineEdge] = []
+        heads = (("gr_line", _EDGE_CUTS_LINE_FIELDS), ("gr_arc", _EDGE_CUTS_ARC_FIELDS))
+        for head, allowed in heads:
+            for index, expression in enumerate(children(self.root, head)):
+                locator = f"kicad_pcb.{head}[{index}]"
+                layer_values = self._values(
+                    expression,
+                    "layer",
                     locator,
-                    object_kind="outline",
+                    minimum=1,
+                    maximum=1,
+                    required=False,
                 )
-            segments.append((start, end, locator, expression))
-        return segments
+                if layer_values != ("Edge.Cuts",):
+                    continue
+                self._reject_unknown_children(expression, allowed, locator)
+                self._validate_direct_atoms(
+                    expression,
+                    positional_atoms=0,
+                    allowed=frozenset({"locked"}),
+                    locator=locator,
+                )
+                start = self._point(expression, "start", locator)
+                end = self._point(expression, "end", locator)
+                mid = self._point(expression, "mid", locator) if head == "gr_arc" else None
+                if start == end or (mid is not None and (mid == start or mid == end)):
+                    # KiCad's own outline checker reports "segment has null or very small length"
+                    # for exactly this, and a zero-length edge has no direction to chain along.
+                    self.fail(
+                        "geometry.invalid",
+                        "Edge.Cuts outline carries a zero-length segment",
+                        locator,
+                        object_kind="outline",
+                    )
+                if mid is not None and chord_side(start, end, mid) == 0:
+                    # Three collinear points name no circle.  KiCad writes this for a "null arc"
+                    # and there is no curve here to approximate in either direction.
+                    self.fail(
+                        "geometry.invalid",
+                        "Edge.Cuts outline arc is degenerate",
+                        locator,
+                        object_kind="outline",
+                    )
+                edges.append(
+                    _OutlineEdge(
+                        start=start,
+                        end=end,
+                        mid=mid,
+                        locator=locator,
+                        expression=expression,
+                    )
+                )
+        return edges
 
     def _assembled_contour_identity(self, members: list[SExpr], locator: str) -> str:
         """Name a contour assembled from many segments by its members' own native identities.
@@ -4205,8 +4296,8 @@ class _Converter:
         material = "\0".join(["contour", "assembled", *sorted(values)]).encode()
         return f"contour:assembled:{hashlib.sha256(material).hexdigest()[:32]}"
 
-    def _edge_cuts_segment_ring(self, segments: list[tuple[PointNM, PointNM, str, SExpr]]) -> Ring:
-        """Assemble unordered ``Edge.Cuts`` segments into exactly one closed simple ring.
+    def _edge_cuts_edge_ring(self, edges: list[_OutlineEdge]) -> tuple[Ring, int]:
+        """Assemble unordered ``Edge.Cuts`` edges into one closed ring, and bound its shrinkage.
 
         The board outline is routing *room*, not an obstacle, so the direction of error here is
         the opposite of the one an obstacle envelope takes: the modelled contour must be
@@ -4218,12 +4309,26 @@ class _Converter:
         Endpoints must coincide exactly.  KiCad chains its own outline with a non-zero epsilon
         (``ConvertOutlineToPolygon``'s ``aChainingEpsilon``) and will close a sub-tolerance gap
         for you; closing a gap adds area no drawn segment encloses, so a near-miss is refused
-        here instead.  Duplicate segments, a vertex of degree other than two, a second disjoint
-        loop, and anything past the ring budget are refusals for the same reason: each has more
-        than one plausible repair and every repair invents board.
+        here instead.  That refusal is not hypothetical: two of the ten public boards in B-134's
+        cohort miss by **17 nm** and **19 nm**, and one misses by 69.6 mm.  Duplicate edges, a
+        vertex of degree other than two, a second disjoint loop, and anything past the ring budget
+        are refusals for the same reason: each has more than one plausible repair and every repair
+        invents board.
+
+        **An arc is chained by its endpoints and only then judged.**  The cycle is built from the
+        chords, because the chord and the arc share their endpoints and topology cannot depend on
+        the bend.  The chord ring's own orientation is then what says which side of each chord the
+        board is on, which is the only way to know whether an arc bulges out of the board (safe to
+        inscribe) or bites into it (not).  That ring is therefore checked for self-intersection
+        *before* it is trusted for the verdict: a non-simple chord ring has no consistent interior,
+        and reading a direction out of one could classify a concave arc as convex — which is
+        precisely the over-approximation this whole path exists to prevent.
+
+        Returns the ring and an upper bound, in nanometres, on how far inside the drawn boundary
+        the modelled one runs.  Zero for a board drawn entirely with segments.
         """
 
-        if len(segments) > self.limits.max_vertices_per_ring:
+        if len(edges) > self.limits.max_vertices_per_ring:
             self.fail(
                 # The outline ring is bounded by the same per-ring vertex budget every other
                 # ring uses, so it refuses under that budget's own code rather than a bare one.
@@ -4236,18 +4341,21 @@ class _Converter:
             )
         adjacency: dict[PointNM, list[tuple[int, PointNM]]] = {}
         seen: set[tuple[PointNM, PointNM]] = set()
-        for index, (start, end, locator, _expression) in enumerate(segments):
-            key = (start, end) if start < end else (end, start)
+        for index, edge in enumerate(edges):
+            key = (edge.start, edge.end) if edge.start < edge.end else (edge.end, edge.start)
             if key in seen:
+                # Two shapes on the same pair of endpoints is how a circle drawn as two arcs, or a
+                # lens, reaches here.  Both are a second contour's worth of ambiguity rather than
+                # one ring, and the chord cycle they produce repeats an edge, so they stay refused.
                 self.fail(
                     "geometry.invalid",
                     "Edge.Cuts outline has a duplicate segment",
-                    locator,
+                    edge.locator,
                     object_kind="outline",
                 )
             seen.add(key)
-            adjacency.setdefault(start, []).append((index, end))
-            adjacency.setdefault(end, []).append((index, start))
+            adjacency.setdefault(edge.start, []).append((index, edge.end))
+            adjacency.setdefault(edge.end, []).append((index, edge.start))
         for links in adjacency.values():
             if len(links) != 2:
                 self.fail(
@@ -4258,29 +4366,94 @@ class _Converter:
                 )
 
         origin = min(adjacency)
-        points: list[PointNM] = [origin]
+        ordered: list[tuple[int, PointNM, PointNM]] = []
         current, previous_edge = origin, -1
         while True:
             choices = sorted(
                 (edge, other) for edge, other in adjacency[current] if edge != previous_edge
             )
-            previous_edge, current = choices[0]
+            next_edge, following = choices[0]
+            ordered.append((next_edge, current, following))
+            previous_edge, current = next_edge, following
             if current == origin:
                 break
-            points.append(current)
-        if len(points) != len(segments):
+        if len(ordered) != len(edges):
             self.fail(
                 "unsupported.topology",
                 "multiple disjoint Edge.Cuts loops are unsupported",
                 "kicad_pcb",
                 object_kind="outline",
             )
-        # Two segments cannot close a loop without repeating an edge, which the duplicate check
-        # above already refuses, so ``Ring`` sees at least three points here.  Its own contract -
-        # three distinct vertices, no repeated closing point, non-zero area - is what rejects a
+        # Two edges cannot close a loop without repeating one, which the duplicate check above
+        # already refuses, so ``Ring`` sees at least three points here.  Its own contract - three
+        # distinct vertices, no repeated closing point, non-zero area - is what rejects a
         # degenerate all-collinear cycle, and ``validate_content`` is what rejects a ring that
         # crosses itself away from a shared vertex.
-        return Ring(tuple(points))
+        chords = Ring(tuple(tail for _index, tail, _head in ordered))
+        if not any(edges[index].mid is not None for index, _tail, _head in ordered):
+            return chords, 0
+        self._require_simple_ring(chords, "kicad_pcb.edge_cuts")
+        # Positive doubled area means the cycle runs counter-clockwise in this coordinate frame,
+        # and the interior of a counter-clockwise ring is on the left of travel.  ``chord_side``
+        # returns +1 for a point on that same left, so an arc whose ``mid`` matches the interior's
+        # sign is bending *into* the board.
+        interior_side = 1 if signed_double_area(chords.points) > 0 else -1
+        points: list[PointNM] = []
+        deviation = 0
+        for index, tail, head in ordered:
+            points.append(tail)
+            edge = edges[index]
+            if edge.mid is None:
+                continue
+            if not arc_is_minor(edge.start, edge.mid, edge.end):
+                # A major arc's chord is a poor stand-in for its own edge, and worse, the chord
+                # ring whose orientation decides the verdict above is no longer a small
+                # perturbation of the true region when one edge doubles back past the centre.
+                # Refused by name rather than approximated on an argument that stops holding.
+                # Zero of the 51 arcs on the seven closing boards in B-134's cohort are major.
+                self.fail(
+                    "unsupported.construct",
+                    "Edge.Cuts outline major arcs are unsupported",
+                    edge.locator,
+                    object_kind="outline",
+                )
+            if chord_side(tail, head, edge.mid) == interior_side:
+                # A concave cut.  Its safe polyline runs *outside* the circle, in a region that is
+                # not convex, so it needs an exact per-edge distance test rather than the two
+                # per-vertex ones this path is built on.  Refused by name: an inscribed chord here
+                # would hand back material the cut removed, which is the one error the outline
+                # may never make.  See ADR-0124 for the exit condition.
+                self.fail(
+                    "unsupported.construct",
+                    "Edge.Cuts outline arcs cutting into the board are unsupported",
+                    edge.locator,
+                    object_kind="outline",
+                )
+            try:
+                inscription = inscribe_outline_arc(
+                    tail,
+                    edge.mid,
+                    head,
+                    max_points=max(0, self.limits.max_vertices_per_ring - len(points) - 1),
+                )
+            except OutlineArcError:
+                self.fail(
+                    "geometry.invalid",
+                    "Edge.Cuts outline arc is degenerate",
+                    edge.locator,
+                    object_kind="outline",
+                )
+            points.extend(inscription.points)
+            deviation = max(deviation, inscription.inward_deviation_nm)
+        return Ring(tuple(points)), deviation
+
+    def _require_simple_ring(self, ring: Ring, locator: str) -> None:
+        """Refuse a ring that crosses itself, in the adapter's own typed vocabulary."""
+
+        try:
+            validate_ring_topology(ring, locator=locator, limits=self.limits)
+        except BoardIRValidationError as error:
+            self.fail(error.code, error.message, locator, object_kind="outline")
 
     def _outline(self) -> tuple[OutlineContour, ...]:
         contours: list[OutlineContour] = []
@@ -4322,18 +4495,20 @@ class _Converter:
                     ),
                 )
             )
-        segments = self._edge_cuts_line_segments()
-        if segments:
+        edges = self._edge_cuts_edges()
+        if edges:
+            ring, deviation = self._edge_cuts_edge_ring(edges)
+            self.outline_inward_deviation_nm = deviation
             contours.append(
                 OutlineContour(
                     id=self._assembled_contour_identity(
-                        [expression for _start, _end, _locator, expression in segments],
+                        [edge.expression for edge in edges],
                         "kicad_pcb.edge_cuts",
                     ),
-                    outer=self._edge_cuts_segment_ring(segments),
+                    outer=ring,
                 )
             )
-        for head in ("gr_arc", "gr_circle", "gr_poly", "gr_curve"):
+        for head in _EDGE_CUTS_REFUSED_OUTLINE_HEADS:
             for index, expression in enumerate(children(self.root, head)):
                 locator = f"kicad_pcb.{head}[{index}]"
                 layer_values = self._values(
@@ -4345,9 +4520,13 @@ class _Converter:
                     required=False,
                 )
                 if layer_values == ("Edge.Cuts",):
+                    # Unreachable through ``convert``: ``_semantic_preflight`` refuses these four
+                    # heads before any geometry is read, and with the same sentence.  Kept because
+                    # ``_outline`` is the method that owns the outline's closed shape set, and a
+                    # future caller reaching it directly must not find an open container here.
                     self.fail(
                         "unsupported.construct",
-                        "Edge.Cuts outline arcs, circles, polygons and curves are unsupported",
+                        _EDGE_CUTS_REFUSED_OUTLINE_HEADS[head],
                         locator,
                         object_kind="outline",
                     )
@@ -4431,6 +4610,7 @@ class _Converter:
             unmodelled_setup_field_count=self.unmodelled_setup_field_count,
             unmodelled_footprint_field_count=self.unmodelled_footprint_field_count,
             unmodelled_stackup_layer_count=self.unmodelled_stackup_layer_count,
+            outline_inward_deviation_nm=self.outline_inward_deviation_nm,
         )
 
 

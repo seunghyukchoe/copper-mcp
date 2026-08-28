@@ -50,6 +50,10 @@ EXPECTED = {
     "placement-overlap.kicad_pcb": ("refused", "illegal_placement"),
     "placement-keepout.kicad_pcb": ("refused", "illegal_placement"),
     "placement-outside-outline.kicad_pcb": ("refused", "illegal_placement"),
+    # An outline drawn with an ``Edge.Cuts`` arc converts, and placement still declines it: the
+    # legality contract publishes ``outline_containment`` in both directions and only one of them
+    # survives an inscribed boundary.  See D-229 and ADR-0124.
+    "placement-arc-outline.kicad_pcb": ("refused", "unsupported_geometry"),
 }
 
 
@@ -131,6 +135,98 @@ class ServiceTests(unittest.TestCase):
                     self.assertIsNone(document["candidate"])
                     assert document["diagnostic"] is not None
                     self.assertEqual(document["diagnostic"]["code"], code)
+
+    def test_an_approximated_outline_is_refused_before_any_legality_is_claimed(self) -> None:
+        """The board converts; placement declines it, and says which fact made it decline.
+
+        The refusal is not "this board is unsupported" -- the conversion succeeded and every other
+        surface can use it.  It is narrower and it is about *this* surface: placement legality
+        reports ``outline_containment`` as ``violated`` when an under-approximating pad core
+        crosses the boundary, and that inference needs the boundary itself to be exact.  An
+        inscribed arc puts the modelled boundary inside the drawn one, so copper sitting in the
+        sliver between them is inside the fabricated board and would be reported as crossing its
+        edge -- a false claim, not a conservative one.  The edge and region rules measure against
+        the same boundary and fail the same way, so the request is refused whole rather than three
+        verdicts being quietly degraded.
+        """
+
+        document = _preview("placement-arc-outline.kicad_pcb")
+
+        self.assertEqual(document["status"], "refused")
+        assert document["diagnostic"] is not None
+        self.assertEqual(document["diagnostic"]["code"], "unsupported_geometry")
+        self.assertIn("approximated", document["diagnostic"]["message"])
+        # It is a refusal *about the outline*, not a conversion failure: the snapshot exists and
+        # is named, which is what tells a caller the board itself was understood.
+        self.assertRegex(document["snapshot_digest"], r"^sha256:[0-9a-f]{64}$")
+        self.assertIsNone(document["candidate"])
+
+    def test_a_stale_snapshot_digest_wins_over_the_approximated_outline_refusal(self) -> None:
+        """Refusal *ordering* is caller-observable contract, and the CAS has to win.
+
+        A caller holding a stale snapshot digest has a wrong world-view, and the first thing it
+        must learn is *that*. Told `unsupported_geometry` instead, it would conclude the board it
+        thinks it holds cannot be placed -- a false statement about a board it was not looking at,
+        and one it cannot recover from without re-fetching anyway.
+
+        This is not a rule invented here: `live_layered_route_preview` states it in prose ("a
+        stale converted snapshot is rejected before routing") and orders its own board-property
+        refusal, `has_exactly_two_signal_layers`, after its snapshot CAS. The approximated-outline
+        gate is the same shape of refusal and takes the same position.
+        """
+
+        baseline = _preview("placement-arc-outline.kicad_pcb")
+        board_revision = baseline["board_revision"]
+        snapshot_digest = baseline["snapshot_digest"]
+        assert snapshot_digest is not None
+
+        stale = _preview(
+            "placement-arc-outline.kicad_pcb",
+            expect_board_revision=board_revision,
+            expect_snapshot_digest="sha256:" + "1" * 64,
+        )
+
+        self.assertEqual(stale["status"], "refused")
+        assert stale["diagnostic"] is not None
+        self.assertEqual(stale["diagnostic"]["code"], "stale_revision")
+        self.assertEqual(stale["snapshot_digest"], snapshot_digest)
+
+    def test_a_fresh_snapshot_digest_still_reaches_the_approximated_outline_refusal(self) -> None:
+        """The other direction: the CAS must not swallow the geometry refusal it precedes.
+
+        Without this, moving the outline gate below the CAS could be 'satisfied' by a gate that
+        never fires -- so the same board, bound to its own true digest, must still be refused for
+        the reason that is actually true of it.
+        """
+
+        baseline = _preview("placement-arc-outline.kicad_pcb")
+        board_revision = baseline["board_revision"]
+        snapshot_digest = baseline["snapshot_digest"]
+        assert snapshot_digest is not None
+
+        bound = _preview(
+            "placement-arc-outline.kicad_pcb",
+            expect_board_revision=board_revision,
+            expect_snapshot_digest=snapshot_digest,
+        )
+
+        self.assertEqual(bound["status"], "refused")
+        assert bound["diagnostic"] is not None
+        self.assertEqual(bound["diagnostic"]["code"], "unsupported_geometry")
+        self.assertIn("approximated", bound["diagnostic"]["message"])
+
+    def test_an_exact_outline_still_reaches_a_placement_verdict(self) -> None:
+        """The other direction: the new gate must not close over boards that were always exact.
+
+        Every outline drawn as a rectangle or as straight segments reports no deviation at all, so
+        it passes this check untouched.  Without this test the refusal above could be satisfied by
+        a gate that refuses everything.
+        """
+
+        document = _preview("placement-legal.kicad_pcb")
+
+        self.assertEqual(document["status"], "previewed")
+        self.assertIsNotNone(document["candidate"])
 
     def test_a_response_echoes_the_validated_request_and_binds_to_the_board(self) -> None:
         document = _preview("placement-legal.kicad_pcb")
@@ -533,6 +629,37 @@ class LivePlacementTests(unittest.TestCase):
         result = preview_live_placement(request, _live_settings(), client_factory=factory).to_dict()
         self.assertEqual(result["diagnostic"]["code"], "stale_revision")
         self.assertIsNotNone(result["snapshot_digest"])
+        self.assertIsNone(result["candidate"])
+
+    def test_live_stale_snapshot_wins_over_the_approximated_outline_refusal(self) -> None:
+        """The live path had the right answer for the wrong reason, and now has it by construction.
+
+        `preview_live_placement` delegates to the file-backed path and *then* re-checks the
+        snapshot CAS against whatever came back. While the outline gate sat before the inner CAS,
+        this case still ended in `stale_revision` -- but only because that gate happened to
+        populate `snapshot_digest`, which is what lets the outer re-check fire at all. A refusal
+        returning no digest would have skipped the outer CAS and handed the caller the wrong fact.
+        Pinned here so the ordering cannot regress into that accident again.
+        """
+
+        request, (factory, _, _board) = self._live("placement-arc-outline.kicad_pcb")
+        request["expect_snapshot_digest"] = "sha256:" + "1" * 64
+
+        result = preview_live_placement(request, _live_settings(), client_factory=factory).to_dict()
+
+        self.assertEqual(result["diagnostic"]["code"], "stale_revision")
+        self.assertIsNotNone(result["snapshot_digest"])
+        self.assertIsNone(result["candidate"])
+
+    def test_live_fresh_snapshot_still_reaches_the_approximated_outline_refusal(self) -> None:
+        """The other direction on the live path, so the CAS cannot swallow the geometry refusal."""
+
+        request, (factory, _, _board) = self._live("placement-arc-outline.kicad_pcb")
+
+        result = preview_live_placement(request, _live_settings(), client_factory=factory).to_dict()
+
+        self.assertEqual(result["diagnostic"]["code"], "unsupported_geometry")
+        self.assertIn("approximated", result["diagnostic"]["message"])
         self.assertIsNone(result["candidate"])
 
     def test_unknown_action_field_is_rejected_before_ipc(self) -> None:

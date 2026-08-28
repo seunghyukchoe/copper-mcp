@@ -106,6 +106,11 @@ def _messages_by_table() -> dict[str, dict[str, str]]:
         "_COPPER_TEXT_REFUSAL": {
             "<shared>": f"{module._COPPER_TEXT_REFUSAL[0]} [{module._COPPER_TEXT_REFUSAL[1]}]"
         },
+        # head -> the sentence for an `Edge.Cuts` outline primitive that stays refused.  Four
+        # entries, three sentences: `gr_curve` and `gr_bezier` are the same construct under two
+        # spellings and deliberately share a sentence, which is a fact about the format rather
+        # than a duplication to tidy away.
+        "_EDGE_CUTS_REFUSED_OUTLINE_HEADS": dict(module._EDGE_CUTS_REFUSED_OUTLINE_HEADS),
         # token -> the sentence, which says *why* rather than *that*.
         "_UNMODELLED_PAD_SHAPES": dict(module._UNMODELLED_PAD_SHAPES),
         # A token table whose sentence is built at the use site. The formatter is

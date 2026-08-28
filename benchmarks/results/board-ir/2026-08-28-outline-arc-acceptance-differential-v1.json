@@ -1,0 +1,211 @@
+{
+ "cohort": {
+  "cohort_fingerprint": "sha256:bfec8210d6d4eb746ffdbfb3b70309ce",
+  "digests_reverified_before_use": true,
+  "entries": 13,
+  "predeclared_cohort_fingerprint": "sha256:bfec8210d6d4eb746ffdbfb3b70309ce",
+  "private_entries": 3,
+  "public_entries": 10,
+  "source_schema": "copper-mcp/fixed-point-masking-census/v1"
+ },
+ "commit": "966f949051d67c19520a95c9dc8badfc6079cd6b",
+ "configuration": {
+  "instrument": "the same conversion call at two source commits; no mask, no substitution",
+  "operation": "read_only_conversion_differential"
+ },
+ "dirty": false,
+ "environment": {
+  "platform": "macOS-26.5.2-arm64-arm-64bit",
+  "python": "3.12.13"
+ },
+ "metrics": {
+  "boards": [
+   {
+    "converted": false,
+    "first_refusal": {
+     "code": "unsupported.construct",
+     "message": "copper text has no envelope derivable from the board and is unsupported",
+     "object_kind": "text"
+    },
+    "identity": "cohort-00",
+    "outline_inward_deviation_nm": 0,
+    "outline_ring_vertices": 0,
+    "visibility": "public"
+   },
+   {
+    "converted": false,
+    "first_refusal": {
+     "code": "unsupported.construct",
+     "message": "copper text has no envelope derivable from the board and is unsupported",
+     "object_kind": "text"
+    },
+    "identity": "cohort-01",
+    "outline_inward_deviation_nm": 0,
+    "outline_ring_vertices": 0,
+    "visibility": "public"
+   },
+   {
+    "converted": false,
+    "first_refusal": {
+     "code": "unsupported.construct",
+     "message": "root expression contains an unsupported semantic construct",
+     "object_kind": null
+    },
+    "identity": "cohort-02",
+    "outline_inward_deviation_nm": 0,
+    "outline_ring_vertices": 0,
+    "visibility": "public"
+   },
+   {
+    "converted": false,
+    "first_refusal": {
+     "code": "unsupported.construct",
+     "message": "copper text has no envelope derivable from the board and is unsupported",
+     "object_kind": "text"
+    },
+    "identity": "cohort-03",
+    "outline_inward_deviation_nm": 0,
+    "outline_ring_vertices": 0,
+    "visibility": "public"
+   },
+   {
+    "converted": false,
+    "first_refusal": {
+     "code": "unsupported.construct",
+     "message": "copper text has no envelope derivable from the board and is unsupported",
+     "object_kind": "text"
+    },
+    "identity": "cohort-04",
+    "outline_inward_deviation_nm": 0,
+    "outline_ring_vertices": 0,
+    "visibility": "public"
+   },
+   {
+    "converted": false,
+    "first_refusal": {
+     "code": "unsupported.construct",
+     "message": "graphic without one explicit layer is unsupported",
+     "object_kind": null
+    },
+    "identity": "cohort-05",
+    "outline_inward_deviation_nm": 0,
+    "outline_ring_vertices": 0,
+    "visibility": "public"
+   },
+   {
+    "converted": false,
+    "first_refusal": {
+     "code": "unsupported.construct",
+     "message": "root dimension objects are unsupported",
+     "object_kind": null
+    },
+    "identity": "cohort-06",
+    "outline_inward_deviation_nm": 0,
+    "outline_ring_vertices": 0,
+    "visibility": "public"
+   },
+   {
+    "converted": false,
+    "first_refusal": {
+     "code": "unsupported.construct",
+     "message": "copper text has no envelope derivable from the board and is unsupported",
+     "object_kind": "text"
+    },
+    "identity": "cohort-07",
+    "outline_inward_deviation_nm": 0,
+    "outline_ring_vertices": 0,
+    "visibility": "public"
+   },
+   {
+    "converted": false,
+    "first_refusal": {
+     "code": "unsupported.construct",
+     "message": "copper layer kind is unsupported",
+     "object_kind": "layer"
+    },
+    "identity": "cohort-08",
+    "outline_inward_deviation_nm": 0,
+    "outline_ring_vertices": 0,
+    "visibility": "public"
+   },
+   {
+    "converted": false,
+    "first_refusal": {
+     "code": "unsupported.construct",
+     "message": "copper text has no envelope derivable from the board and is unsupported",
+     "object_kind": "text"
+    },
+    "identity": "cohort-09",
+    "outline_inward_deviation_nm": 0,
+    "outline_ring_vertices": 0,
+    "visibility": "public"
+   },
+   {
+    "converted": false,
+    "first_refusal": {
+     "code": "unsupported.topology",
+     "message": "multiple disjoint Edge.Cuts loops are unsupported",
+     "object_kind": "outline"
+    },
+    "identity": "cohort-10",
+    "outline_inward_deviation_nm": 0,
+    "outline_ring_vertices": 0,
+    "visibility": "private"
+   },
+   {
+    "converted": false,
+    "first_refusal": {
+     "code": "unsupported.topology",
+     "message": "courtyard edges must be non-zero and axis-aligned or 45-degree chamfers",
+     "object_kind": "footprint"
+    },
+    "identity": "cohort-11",
+    "outline_inward_deviation_nm": 0,
+    "outline_ring_vertices": 0,
+    "visibility": "private"
+   },
+   {
+    "converted": false,
+    "first_refusal": {
+     "code": "unsupported.topology",
+     "message": "courtyard edges must be non-zero and axis-aligned or 45-degree chamfers",
+     "object_kind": "footprint"
+    },
+    "identity": "cohort-12",
+    "outline_inward_deviation_nm": 0,
+    "outline_ring_vertices": 0,
+    "visibility": "private"
+   }
+  ],
+  "boards_still_refusing_at_the_edge_cuts_curve_gate": 0,
+  "committed_board_bytes": 0,
+  "first_refusal_histogram": {
+   "copper layer kind is unsupported": 1,
+   "copper text has no envelope derivable from the board and is unsupported": 6,
+   "courtyard edges must be non-zero and axis-aligned or 45-degree chamfers": 2,
+   "graphic without one explicit layer is unsupported": 1,
+   "multiple disjoint Edge.Cuts loops are unsupported": 1,
+   "root dimension objects are unsupported": 1,
+   "root expression contains an unsupported semantic construct": 1
+  },
+  "private_converted": 0,
+  "public_converted": 0
+ },
+ "not_claimed": [
+  "no board converts; this is not a first third-party conversion",
+  "no routing, DRC, placement, apply or fabrication result",
+  "not a sample of any population"
+ ],
+ "predeclaration": {
+  "base_commit": "bdd6589c85ebf9bc80d7bfcdebbb3e624eda1770",
+  "predicted_curve_gate_cleared_boards": 8,
+  "predicted_first_conversion": false,
+  "predicted_own_corpus_converted": 15,
+  "predicted_public_converted": 0,
+  "recorded_before_the_adapter_was_touched": true,
+  "sha256": "29c3336173a47e5b0674151487c88de48188540ed0fb1bcb2bc6913aec6ff2f8"
+ },
+ "recorded_at_utc": "2026-08-28T06:57:48.514209+00:00",
+ "run_id": "sha256:c1ccf1f9a9fc165031867312f56e72dc918acdf5d800f9757e669829623c0848",
+ "schema": "copper-mcp/outline-arc-acceptance-differential/v1"
+}
