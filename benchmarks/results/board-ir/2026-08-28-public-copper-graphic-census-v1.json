@@ -1,0 +1,353 @@
+{
+  "aggregates": {
+    "boards": 2,
+    "carriers": {
+      "footprints_with_copper_graphics": 4,
+      "padless_carriers": 4
+    },
+    "copper_layer_heads": {
+      "fp_arc": 0,
+      "fp_circle": 0,
+      "fp_curve": 0,
+      "fp_line": 0,
+      "fp_poly": 56,
+      "fp_rect": 0,
+      "fp_text": 0,
+      "fp_text_box": 0,
+      "other": 0,
+      "point": 0,
+      "property": 0
+    },
+    "copper_payload": {
+      "fill": {
+        "fill_absent": 0,
+        "fill_invalid": 0,
+        "fill_no": 0,
+        "fill_yes": 56
+      },
+      "net_tie": {
+        "in_net_tie_footprint": 0,
+        "outside_net_tie_footprint": 56
+      },
+      "pts": {
+        "pts_absent": 0,
+        "pts_invalid": 0,
+        "pts_with_curved_child": 0,
+        "pts_xy_only": 56
+      },
+      "stroke": {
+        "stroke_absent": 0,
+        "stroke_invalid": 0,
+        "stroke_positive": 56,
+        "stroke_zero": 0
+      }
+    },
+    "copper_polygon_children": {
+      "occurrences": {
+        "fill": 56,
+        "layer": 56,
+        "locked": 0,
+        "other": 0,
+        "pts": 56,
+        "stroke": 56,
+        "tstamp": 0,
+        "uuid": 56
+      },
+      "shape_occurrences": {
+        "fill:empty": 0,
+        "fill:many_atoms": 0,
+        "fill:many_children": 0,
+        "fill:mixed": 0,
+        "fill:one_atom": 56,
+        "fill:one_child": 0,
+        "layer:empty": 0,
+        "layer:many_atoms": 0,
+        "layer:many_children": 0,
+        "layer:mixed": 0,
+        "layer:one_atom": 56,
+        "layer:one_child": 0,
+        "locked:empty": 0,
+        "locked:many_atoms": 0,
+        "locked:many_children": 0,
+        "locked:mixed": 0,
+        "locked:one_atom": 0,
+        "locked:one_child": 0,
+        "other:empty": 0,
+        "other:many_atoms": 0,
+        "other:many_children": 0,
+        "other:mixed": 0,
+        "other:one_atom": 0,
+        "other:one_child": 0,
+        "pts:empty": 0,
+        "pts:many_atoms": 0,
+        "pts:many_children": 56,
+        "pts:mixed": 0,
+        "pts:one_atom": 0,
+        "pts:one_child": 0,
+        "stroke:empty": 0,
+        "stroke:many_atoms": 0,
+        "stroke:many_children": 56,
+        "stroke:mixed": 0,
+        "stroke:one_atom": 0,
+        "stroke:one_child": 0,
+        "tstamp:empty": 0,
+        "tstamp:many_atoms": 0,
+        "tstamp:many_children": 0,
+        "tstamp:mixed": 0,
+        "tstamp:one_atom": 0,
+        "tstamp:one_child": 0,
+        "uuid:empty": 0,
+        "uuid:many_atoms": 0,
+        "uuid:many_children": 0,
+        "uuid:mixed": 0,
+        "uuid:one_atom": 56,
+        "uuid:one_child": 0
+      }
+    },
+    "copper_polygon_geometry": {
+      "convexity": {
+        "concave": 54,
+        "convex": 2,
+        "degenerate": 0
+      },
+      "simplicity": {
+        "not_checked": 2,
+        "self_intersecting": 26,
+        "simple": 28
+      },
+      "simplicity_vertex_cap": 400,
+      "vertex_count": {
+        "v_17_to_64": 14,
+        "v_5_to_16": 2,
+        "v_65_to_256": 34,
+        "v_gt_256": 6,
+        "v_lt_5": 0
+      },
+      "vertex_distinctness": {
+        "all_distinct": 0,
+        "closing_vertex_only": 30,
+        "interior_repeat": 26
+      }
+    },
+    "envelope_cost": {
+      "area_over_bounding_box": {
+        "ge_0_90": 2,
+        "lt_0_05": 0,
+        "lt_0_25": 0,
+        "lt_0_50": 26,
+        "lt_0_75": 28,
+        "lt_0_90": 0
+      },
+      "board_envelope_union_over_board_bounding_box": {
+        "ge_0_90": 0,
+        "lt_0_05": 2,
+        "lt_0_25": 0,
+        "lt_0_50": 0,
+        "lt_0_75": 0,
+        "lt_0_90": 0
+      },
+      "bounded_polygons": 56,
+      "envelope_over_board_bounding_box": {
+        "ge_0_90": 0,
+        "lt_0_05": 56,
+        "lt_0_25": 0,
+        "lt_0_50": 0,
+        "lt_0_75": 0,
+        "lt_0_90": 0
+      },
+      "unbounded_polygons": 0
+    },
+    "footprint_count": 102,
+    "layer_classes": {
+      "absent_or_malformed": 0,
+      "courtyard": 118,
+      "edge_cuts": 0,
+      "multi_copper": 0,
+      "non_routing": 34034,
+      "single_copper": 56
+    },
+    "layer_routed_heads": {
+      "board_presence": {
+        "fp_arc": 2,
+        "fp_circle": 2,
+        "fp_curve": 0,
+        "fp_line": 2,
+        "fp_poly": 2,
+        "fp_rect": 2,
+        "fp_text": 2,
+        "fp_text_box": 0,
+        "other": 0,
+        "point": 0,
+        "property": 2
+      },
+      "occurrences": {
+        "fp_arc": 23,
+        "fp_circle": 50,
+        "fp_curve": 0,
+        "fp_line": 32532,
+        "fp_poly": 112,
+        "fp_rect": 243,
+        "fp_text": 184,
+        "fp_text_box": 0,
+        "other": 0,
+        "point": 0,
+        "property": 1064
+      }
+    }
+  },
+  "claim_scope": {
+    "board_ir_schema_change": false,
+    "conversion_success": false,
+    "copper_graphic_acceptance": false,
+    "measurement_only": true,
+    "production_behavior_change": false
+  },
+  "closed_vocabularies": {
+    "convexity": [
+      "convex",
+      "concave",
+      "degenerate"
+    ],
+    "distinctness": [
+      "all_distinct",
+      "closing_vertex_only",
+      "interior_repeat"
+    ],
+    "fill": [
+      "fill_yes",
+      "fill_no",
+      "fill_absent",
+      "fill_invalid"
+    ],
+    "graphic_head": [
+      "fp_arc",
+      "fp_circle",
+      "fp_curve",
+      "fp_line",
+      "fp_poly",
+      "fp_rect",
+      "fp_text",
+      "fp_text_box",
+      "point",
+      "property",
+      "other"
+    ],
+    "layer_class": [
+      "single_copper",
+      "multi_copper",
+      "edge_cuts",
+      "courtyard",
+      "non_routing",
+      "absent_or_malformed"
+    ],
+    "net_tie": [
+      "in_net_tie_footprint",
+      "outside_net_tie_footprint"
+    ],
+    "poly_child": [
+      "fill",
+      "layer",
+      "locked",
+      "pts",
+      "stroke",
+      "tstamp",
+      "uuid",
+      "other"
+    ],
+    "pts": [
+      "pts_xy_only",
+      "pts_with_curved_child",
+      "pts_absent",
+      "pts_invalid"
+    ],
+    "ratio": [
+      "lt_0_05",
+      "lt_0_25",
+      "lt_0_50",
+      "lt_0_75",
+      "lt_0_90",
+      "ge_0_90"
+    ],
+    "shape": [
+      "empty",
+      "one_atom",
+      "many_atoms",
+      "one_child",
+      "many_children",
+      "mixed"
+    ],
+    "simplicity": [
+      "simple",
+      "self_intersecting",
+      "not_checked"
+    ],
+    "stroke": [
+      "stroke_zero",
+      "stroke_positive",
+      "stroke_absent",
+      "stroke_invalid"
+    ],
+    "successor": [
+      "copper_graphic",
+      "footprint_zone",
+      "edge_cuts_graphic",
+      "other"
+    ],
+    "vertex_count": [
+      "v_lt_5",
+      "v_5_to_16",
+      "v_17_to_64",
+      "v_65_to_256",
+      "v_gt_256"
+    ]
+  },
+  "commit": "c51f437568ab009bdb7f9a1beb52494418bbc3a0",
+  "committed_board_bytes": 0,
+  "configuration": {
+    "max_manifest_bytes": 65536,
+    "max_source_bytes": 67108864,
+    "operation": "read_only_closed_copper_graphic_census"
+  },
+  "dirty": false,
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "not_claimed": [
+    "no footprint copper-graphic product support",
+    "no claim about the three boards refusing at footprint-local zones",
+    "no converted board, route, DRC, fabrication, or hardware result",
+    "no board write, apply authority, editor mutation, or committed source input"
+  ],
+  "privacy": {
+    "aggregate_only": true,
+    "atom_values_committed": 0,
+    "board_bytes_committed": 0,
+    "board_digests_committed": 0,
+    "board_identities_committed": 0,
+    "board_paths_committed": 0,
+    "coordinates_committed": 0,
+    "ratios_committed": 0
+  },
+  "recorded_at_utc": "2026-08-28T08:00:54+00:00",
+  "run_id": "sha256:a2fb92619075bb536d2439747846e51b22ebe7dcbeb3414fbc9127a98cab51c5",
+  "runner_digest": "sha256:d25ff294e2bc804b5bc144f4e16f15e3eb471a2ae634cee5e5c7f61fd942d8cf",
+  "schema": "copper-mcp/public-copper-graphic-census/v1",
+  "source_census": {
+    "b133_successor_partition": {
+      "copper_graphic": 2,
+      "edge_cuts_graphic": 1,
+      "footprint_zone": 3,
+      "other": 4
+    },
+    "b133_successor_partition_matches": true,
+    "captured_entries": 13,
+    "cohort_fingerprint": "sha256:bfec8210d6d4eb746ffdbfb3b70309ce",
+    "copper_graphic_terminal_entries": 2,
+    "public_entries": 10,
+    "selection_rule": "fixed_point_terminal_footprint_copper_graphic",
+    "sibling_schema": "copper-mcp/public-setup-field-census/v1",
+    "source_schema": "copper-mcp/fixed-point-masking-census/v1"
+  },
+  "source_hashes_unchanged": true
+}
