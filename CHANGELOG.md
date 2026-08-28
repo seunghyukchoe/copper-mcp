@@ -6,19 +6,6 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.11.0] - 2026-08-28
-
-Upgrading from 0.10.0: see the
-[0.11.0 migration note](docs/migrations/copper-mcp-0.11.0.md). No schema version moves —
-`BOARD_IR_SCHEMA_VERSION` stays `0.4.0`, `schemas/board-ir/0.4.0.schema.json` is byte-unchanged,
-and no persisted snapshot needs re-conversion. What moves is caller-visible in three places: the
-`mcp` dependency range widens from `<2.1.0` to `<2.2.0`, so a deployment held back at 2.0.x may
-now resolve onto 2.1.x, where a refused request keeps its reason for the first time; Board IR
-accepts eleven more `setup` and `footprint` heads as typed non-claims — plus a footprint-local
-group and an attaching `zone_connect` — so boards that refused in 0.10.0 now convert; and
-`inspect_board_ir`'s `unmodelled_counts` map grows from six entries to nine while
-`unmodelled_group_count` widens to span footprint-local groups.
-
 ### Changed
 
 - Board IR converts boards whose outline is drawn with `Edge.Cuts` **arcs** -- which is what a
@@ -55,6 +42,22 @@ group and an attaching `zone_connect` — so boards that refused in 0.10.0 now c
   eight that refused at this gate now refuse behind it, six at `ADR-0095`'s copper-text wall.
   That was predicted in writing before the adapter was touched and measured after (`B-134`,
   `B-135`). The frozen own 18-save corpus stays 15/18 with the new number 0 on all 15.
+
+## [0.11.0] - 2026-08-28
+
+Upgrading from 0.10.0: see the
+[0.11.0 migration note](docs/migrations/copper-mcp-0.11.0.md). No schema version moves —
+`BOARD_IR_SCHEMA_VERSION` stays `0.4.0`, `schemas/board-ir/0.4.0.schema.json` is byte-unchanged,
+and no persisted snapshot needs re-conversion. What moves is caller-visible in three places: the
+`mcp` dependency range widens from `<2.1.0` to `<2.2.0`, so a deployment held back at 2.0.x may
+now resolve onto 2.1.x, where a refused request keeps its reason for the first time; Board IR
+accepts eleven more `setup` and `footprint` heads as typed non-claims — plus a footprint-local
+group and an attaching `zone_connect` — so boards that refused in 0.10.0 now convert; and
+`inspect_board_ir`'s `unmodelled_counts` map grows from six entries to nine while
+`unmodelled_group_count` widens to span footprint-local groups.
+
+### Changed
+
 - Board IR converts KiCad boards whose footprints declare schematic provenance, per-footprint
   solder-mask or solder-paste defaults, an attaching zone-connection default, or a footprint-local
   group. `sheetfile`, `sheetname`, `solder_mask_margin`, `solder_paste_margin` and both spellings
