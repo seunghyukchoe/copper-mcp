@@ -310,7 +310,7 @@ Only operators carrying the upstream workflows or running `make check` are affec
 
 - **`.github/ci-budget-calibration.json` is re-recorded at this boundary**, per its own `update`
   rule, because the suite grew again — from roughly 3,200 tests at the v0.10.0 boundary to
-  roughly 3,550 across the refusal-contract, setup-semantics and footprint-semantics arc. **No
+  3,583 collected across the refusal-contract, setup-semantics and footprint-semantics arc. **No
   budget is raised**: CI remains 120 minutes, release verification 120, release publication 10,
   and all three still clear the half rule with the worst measured leg at 2,374 s. Re-record from
   `success` conclusions only.
