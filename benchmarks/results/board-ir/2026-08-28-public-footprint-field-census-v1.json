@@ -67,9 +67,12 @@
       "zone": 10
     },
     "payload_predicate_occurrences": {
+      "clearance_invalid": 0,
+      "clearance_nonzero": 1,
       "clearance_zero": 0,
       "zone_connect_attaching": 4,
-      "zone_connect_detaching": 0
+      "zone_connect_detaching": 0,
+      "zone_connect_invalid": 0
     },
     "refused_field_classes": {
       "board_presence": {
@@ -355,9 +358,12 @@
       "zone"
     ],
     "payload_predicate": [
+      "clearance_invalid",
+      "clearance_nonzero",
       "clearance_zero",
       "zone_connect_attaching",
-      "zone_connect_detaching"
+      "zone_connect_detaching",
+      "zone_connect_invalid"
     ],
     "refused_footprint": [
       "autoplace_cost180",
@@ -399,7 +405,7 @@
       "mixed"
     ]
   },
-  "commit": "497839e656dbfafa9ac3afb85c7d7e23d83db3e8",
+  "commit": "71e9a2a2146f6306fb06095016a1a7ca6fee4ae4",
   "committed_board_bytes": 0,
   "configuration": {
     "max_manifest_bytes": 65536,
@@ -425,9 +431,9 @@
     "board_identities_committed": 0,
     "board_paths_committed": 0
   },
-  "recorded_at_utc": "2026-08-27T22:04:50+00:00",
-  "run_id": "sha256:899fe3c70dfe4be5ddf0aea40f472f0339a17ac6c080e99976086a554dd4ebff",
-  "runner_digest": "sha256:45501d159ab44cbba1a68ea01838c4c48aebfd741e74dc3350cb3ddfc6637eb2",
+  "recorded_at_utc": "2026-08-28T00:42:59+00:00",
+  "run_id": "sha256:d545e4c0ea664b184837636738798539f92bfe122fcd22681e6860834a9a8366",
+  "runner_digest": "sha256:9e861922c4763f72b028f78f10ac5b4322c6bca32c847c56bdf61d058ac803eb",
   "schema": "copper-mcp/public-footprint-field-census/v1",
   "source_census": {
     "captured_entries": 13,
