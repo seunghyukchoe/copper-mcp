@@ -411,18 +411,20 @@ def test_route_bundle_identity_matches_its_committed_golden_value(tmp_path: Path
 # the artifact bytes — and therefore this digest — change on every release.  Re-pin it in the
 # release commit that bumps the version; that is not a contract change, and it is why the byte
 # length is pinned separately — it tracks the *width* of the version string, not the release.
-# 0.10.0 is the first bump to move it: every release from 0.2.0 to 0.9.0 wrote a five-character
-# version and held the length at 7,715, and ``"0.10.0"`` is six characters, so it is now 7,716.
-# That the move is exactly the one added character was verified rather than assumed: substituting
-# ``0.9.0`` back into the rendered bytes reproduces the previous golden
-# ``sha256:1a5232edc34359f3274b67a89d94834fadeaf404bbd5752a53c12e9f25c35dce`` at 7,715 bytes
+# 0.10.0 was the first bump to move the *length*: every release from 0.2.0 to 0.9.0 wrote a
+# five-character version and held it at 7,715, and ``"0.10.0"`` is six characters, so it became
+# 7,716.  ``"0.11.0"`` is six characters too, so at this cut the length **does not move** and only
+# the digest does -- which is exactly the separation the two constants exist for.
+# That the digest move is nothing but the version literal was verified rather than assumed:
+# substituting ``0.10.0`` back into the rendered bytes reproduces the previous golden
+# ``sha256:7a6b0757cd9219733af285fe5d366bb13b2a405dfe45e13c7b6f171cf17830fa`` at 7,716 bytes
 # exactly, and the version literal occurs exactly once in the artifact.
-# Pinned at CopperMCP 0.10.0.
+# Pinned at CopperMCP 0.11.0.
 CIRCUIT_INTENT_SNAPSHOT_DIGEST = (
     "sha256:06383cabd428aa52585b1e0f0c82dea6e6f434e55d154f6d2ee87e3879f49795"
 )
 SCHEMATIC_ARTIFACT_DIGEST = (
-    "sha256:7a6b0757cd9219733af285fe5d366bb13b2a405dfe45e13c7b6f171cf17830fa"
+    "sha256:8dded9b21f4fc87db382acebf60fe7663c2dee20161cbeb6ce5b9f6bf8c363a4"
 )
 SCHEMATIC_ARTIFACT_BYTES = 7_716
 

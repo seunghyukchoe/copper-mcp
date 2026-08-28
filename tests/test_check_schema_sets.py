@@ -75,13 +75,13 @@ def test_a_release_tag_this_checker_has_never_heard_of_fails_the_run(
     monkeypatch.setattr(
         check_schema_sets,
         "_repository_release_tags",
-        lambda: {*repository_tags, "v0.11.0"},
+        lambda: {*repository_tags, "v0.12.0"},
     )
 
     with pytest.raises(SystemExit) as caught:
         check_schema_sets.main()
 
-    assert "RELEASE_TAGS omits v0.11.0" in str(caught.value)
+    assert "RELEASE_TAGS omits v0.12.0" in str(caught.value)
 
 
 def test_the_listed_tags_are_the_repository_tags_plus_at_most_the_current_pending_tag() -> None:
@@ -96,26 +96,26 @@ def test_the_listed_tags_are_the_repository_tags_plus_at_most_the_current_pendin
 def test_only_the_final_current_version_tag_may_be_pending(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    repository_tags = set(check_schema_sets.RELEASE_TAGS) - {"v0.9.0", "v0.10.0"}
+    repository_tags = set(check_schema_sets.RELEASE_TAGS) - {"v0.10.0", "v0.11.0"}
     monkeypatch.setattr(check_schema_sets, "_repository_release_tags", lambda: repository_tags)
 
     with pytest.raises(SystemExit) as caught:
         check_schema_sets.main()
 
-    assert "listed historical release tag(s) are missing: v0.9.0, v0.10.0" in str(caught.value)
+    assert "listed historical release tag(s) are missing: v0.10.0, v0.11.0" in str(caught.value)
 
 
 def test_pending_final_tag_must_match_the_project_version(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    repository_tags = set(check_schema_sets.RELEASE_TAGS) - {"v0.10.0"}
+    repository_tags = set(check_schema_sets.RELEASE_TAGS) - {"v0.11.0"}
     monkeypatch.setattr(check_schema_sets, "_repository_release_tags", lambda: repository_tags)
-    monkeypatch.setattr(check_schema_sets, "_current_project_tag", lambda: "v0.11.0")
+    monkeypatch.setattr(check_schema_sets, "_current_project_tag", lambda: "v0.12.0")
 
     with pytest.raises(SystemExit) as caught:
         check_schema_sets.main()
 
-    assert "pending final tag v0.10.0 does not match project version tag v0.11.0" in str(
+    assert "pending final tag v0.11.0 does not match project version tag v0.12.0" in str(
         caught.value
     )
 
