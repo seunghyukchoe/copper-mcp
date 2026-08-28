@@ -487,7 +487,8 @@ def main() -> int:
             )
         commit, dirty = _git_state(root)
         runner_bytes = runner.read_bytes()
-        board_bytes = args.board.read_bytes()
+        board = args.board.resolve()
+        board_bytes = board.read_bytes()
 
         client, version = _require_live_session()
         surfaces = _copper_mcp_surfaces(settings)
@@ -514,7 +515,7 @@ def main() -> int:
                 "kicad_api_token_configured": bool(os.environ.get("KICAD_API_TOKEN")),
             },
             "committed_board": {
-                "path": str(args.board.relative_to(root)),
+                "path": str(board.relative_to(root)),
                 "digest": "sha256:" + hashlib.sha256(board_bytes).hexdigest(),
                 "bytes": len(board_bytes),
             },
