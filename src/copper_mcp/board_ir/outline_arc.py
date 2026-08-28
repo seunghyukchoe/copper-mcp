@@ -45,7 +45,7 @@ from fractions import Fraction
 from itertools import pairwise
 from math import isqrt
 
-from copper_mcp.board_ir.types import PointNM
+from copper_mcp.board_ir.types import JSON_SAFE_INTEGER, PointNM
 
 __all__ = [
     "ArcInscription",
@@ -254,7 +254,10 @@ def inscribe_outline_arc(
     )
     scaled_start = _scaled(start, denominator)
     radius_squared = _distance_squared(scaled_start, centre)
-    radius = math.sqrt(radius_squared) / denominator
+    # ``isqrt`` rather than ``math.sqrt``: the scaled radius of a circle through three
+    # near-collinear points can exceed the float range, and an exact integer root cannot
+    # overflow.  Only the *count* of sub-chords is derived from the float below.
+    radius = isqrt(radius_squared) / denominator
     float_centre = (float(centre_x), float(centre_y))
     start_angle, direction, sweep = _sweep(start, mid, end, float_centre)
 
@@ -273,10 +276,9 @@ def inscribe_outline_arc(
     seen = {start, end}
     for index in range(1, steps):
         angle = start_angle + direction * sweep * index / steps
-        candidate = PointNM(
-            round(float_centre[0] + radius * math.cos(angle)),
-            round(float_centre[1] + radius * math.sin(angle)),
-        )
+        candidate = _candidate(float_centre, radius, angle)
+        if candidate is None:
+            continue
         verified = _pull_inside(candidate, centre, denominator, radius_squared)
         if verified is None:
             continue
@@ -306,6 +308,29 @@ def inscribe_outline_arc(
         points=tuple(points),
         inward_deviation_nm=max(0, -((-scaled.numerator) // scaled.denominator)),
     )
+
+
+def _candidate(centre: tuple[float, float], radius: float, angle: float) -> PointNM | None:
+    """Round one sampled point on the circle to the lattice, or decline to place it at all.
+
+    Three *near-collinear* integer points are a legal document and describe a circle whose centre
+    and radius are astronomically larger than the board.  Sampling it in floating point then
+    subtracts two enormous nearly-equal magnitudes, and catastrophic cancellation puts the result
+    anywhere — including outside the supported integer range, where ``PointNM`` would raise a bare
+    ``ValueError`` from inside a geometry routine.
+
+    So the sample is *offered*, never assumed: a coordinate that is not finite or not
+    representable declines, and the vertex is dropped exactly as one failing the exact predicates
+    is.  Dropping coarsens the polyline and is always safe; the reported deviation grows to match.
+    """
+
+    x = centre[0] + radius * math.cos(angle)
+    y = centre[1] + radius * math.sin(angle)
+    if not (math.isfinite(x) and math.isfinite(y)):
+        return None
+    if max(abs(x), abs(y)) > JSON_SAFE_INTEGER:
+        return None
+    return PointNM(round(x), round(y))
 
 
 def _pull_inside(

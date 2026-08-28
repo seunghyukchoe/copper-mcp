@@ -163,7 +163,7 @@ def _preview_placement_source(
         # core crossing the boundary -- and only the first survives a boundary that is itself
         # under-approximated: copper sitting in the sliver between the inscribed polygon and the
         # true arc is inside the fabricated board and would be reported as crossing its edge.
-        # The rule rules also measure *against* the boundary: an edge rule's residual is a
+        # The placement rules measure *against* the boundary too: an edge rule's residual is a
         # distance from the board's own bounding box, and a region rule keyed to this contour
         # decides inside-or-out by it.  Reporting a shrunken answer for either is a false claim
         # and not a conservative one, so the whole request is refused by name rather than three

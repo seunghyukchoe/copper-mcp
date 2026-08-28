@@ -169,6 +169,16 @@
     "tests/test_board_ir_service.py::test_a_supported_board_publishes_its_conversion_counts",
     "tests/test_board_ir_service.py::test_every_measured_conversion_field_appears_in_the_summary_map"
    ]
+  },
+  {
+   "id": "OA17-trust-a-float-sample-on-a-near-collinear-arc",
+   "file": "src/copper_mcp/board_ir/outline_arc.py",
+   "anchor": "    if max(abs(x), abs(y)) > JSON_SAFE_INTEGER:\n        return None",
+   "replacement": "    if False:\n        return None",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_outline_arc.py::test_a_near_collinear_arc_degrades_to_a_coarser_polyline_rather_than_raising"
+   ]
   }
  ]
 }

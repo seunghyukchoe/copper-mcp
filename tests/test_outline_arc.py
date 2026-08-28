@@ -30,6 +30,10 @@ QUARTER_START = PointNM(2_000_000, 0)
 QUARTER_MID = PointNM(1_414_214, 1_414_214)
 QUARTER_END = PointNM(0, 2_000_000)
 
+#: The widest integer nanometre coordinate Board IR admits, and therefore the widest a
+#: hostile board can place an outline point at.
+_JSON_SAFE = 2**53 - 1
+
 
 def _radius_squared(point: PointNM, centre: tuple[Fraction, Fraction]) -> Fraction:
     return (point.x - centre[0]) ** 2 + (point.y - centre[1]) ** 2
@@ -124,6 +128,41 @@ def test_refusing_every_interior_vertex_degrades_to_the_chord_and_says_so() -> N
     assert chord_only.inward_deviation_nm > subdivided.inward_deviation_nm
     # 2 mm radius through a quarter turn has a sagitta of r(1 - cos(45 deg)) = 585,786 nm.
     assert 585_000 <= chord_only.inward_deviation_nm <= 586_500
+
+
+@pytest.mark.parametrize(
+    ("start", "mid", "end"),
+    [
+        # Two in-range points a whole coordinate range apart, with the control point one
+        # nanometre off their line: a legal document describing a circle whose centre and radius
+        # are astronomically larger than any board.
+        (PointNM(-_JSON_SAFE, 0), PointNM(0, 1), PointNM(_JSON_SAFE, 0)),
+        (PointNM(-_JSON_SAFE, -_JSON_SAFE), PointNM(0, 1), PointNM(_JSON_SAFE, _JSON_SAFE - 1)),
+        (PointNM(0, 0), PointNM(_JSON_SAFE // 2, 1), PointNM(_JSON_SAFE, 0)),
+    ],
+)
+def test_a_near_collinear_arc_degrades_to_a_coarser_polyline_rather_than_raising(
+    start: PointNM, mid: PointNM, end: PointNM
+) -> None:
+    """The hostile input this module has, and the failure mode it is required to take.
+
+    Three *near-collinear* integer points are a well-formed document, and they describe a circle
+    whose centre and radius dwarf the board.  Sampling it in floating point then subtracts two
+    enormous nearly-equal magnitudes, and catastrophic cancellation can put a candidate anywhere —
+    including outside the supported integer range, where constructing the point would raise a bare
+    ``ValueError`` from inside a geometry routine and surface as an unclassified refusal.
+
+    The requirement is not that the sample be accurate. It is that an inaccurate one is **dropped**:
+    the result must still be a valid inscription, still contained, and coarser rather than wrong.
+    """
+
+    inscription = inscribe_outline_arc(start, mid, end, max_points=64)
+
+    _assert_inside_chord_and_arc_region(start, mid, end, inscription)
+    assert all(
+        abs(point.x) <= _JSON_SAFE and abs(point.y) <= _JSON_SAFE for point in inscription.points
+    )
+    assert inscription.inward_deviation_nm >= 0
 
 
 def test_three_collinear_points_are_refused_rather_than_approximated() -> None:
