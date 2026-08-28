@@ -151,6 +151,24 @@ class ConversionResult:
     else in the document represents, so a non-neutral value refuses the board rather than
     contributing to a number.  See D-227, ADR-0122 and R-178.
 
+    ``outline_inward_deviation_nm`` is an upper bound, in nanometres, on how far inside the drawn
+    board boundary the modelled one runs.  It is zero for every outline drawn as a rectangle or as
+    straight segments, because each of those vertices *is* a drawn point, and non-zero only when
+    an ``Edge.Cuts`` arc was admitted: no polygon equals a circular arc, so the arc is inscribed
+    and the board is modelled slightly smaller than it is (D-229, ADR-0124).  It is the same shape
+    of quantity as ``max_roundrect_rounding_nm`` above and it is here for the same reason — a
+    diagnostic would refuse the board this field exists to admit — but it differs from every count
+    beside it in what a caller must *do* with it.  The counts disclose something Board IR could not
+    hold; this one qualifies something Board IR *does* hold, so a caller that publishes a
+    two-directional claim about the outline has to read it and decline.  ``placement_preview`` is
+    that caller and it refuses on a non-zero value: the placement legality contract's
+    ``outline_containment`` says ``violated`` when copper crosses the boundary, and a boundary
+    drawn inside the true one would report a crossing that the fabricated board does not have.
+    Routing does not have to read it, because an under-approximated outline is the *safe*
+    direction for routing room -- less room is never a false claim about where copper may go.
+    See R-180 for what a caller loses by round-tripping a snapshot through JSON, which this
+    number does not survive.
+
     ``footprint_copper_graphic_envelope_count`` counts the stray copper ``fp_poly`` expressions
     D-230 converts as a conservative bounding envelope rather than as exact copper.  Unlike every
     count above it this one does **not** disclose an erasure: the geometry is modelled, and the
@@ -184,6 +202,7 @@ class ConversionResult:
     unmodelled_setup_field_count: int = 0
     unmodelled_stackup_layer_count: int = 0
     unmodelled_footprint_field_count: int = 0
+    outline_inward_deviation_nm: int = 0
     footprint_copper_graphic_envelope_count: int = 0
 
     def __post_init__(self) -> None:
@@ -249,6 +268,14 @@ class ConversionResult:
             or self.unmodelled_footprint_field_count < 0
         ):
             raise ValueError("conversion footprint field count must be a non-negative integer")
+        if (
+            isinstance(self.outline_inward_deviation_nm, bool)
+            or not isinstance(self.outline_inward_deviation_nm, int)
+            or self.outline_inward_deviation_nm < 0
+        ):
+            raise ValueError(
+                "conversion outline deviation must be a non-negative integer nanometre count"
+            )
         has_error = any(item.severity is Severity.ERROR for item in self.diagnostics)
         if has_error and self.snapshot is not None:
             raise ValueError("conversion errors cannot accompany a snapshot")
@@ -272,6 +299,8 @@ class ConversionResult:
             raise ValueError("a failed conversion cannot report a stackup layer count")
         if self.snapshot is None and self.unmodelled_footprint_field_count:
             raise ValueError("a failed conversion cannot report a footprint field count")
+        if self.snapshot is None and self.outline_inward_deviation_nm:
+            raise ValueError("a failed conversion cannot report an outline deviation")
         if (
             isinstance(self.footprint_copper_graphic_envelope_count, bool)
             or not isinstance(self.footprint_copper_graphic_envelope_count, int)

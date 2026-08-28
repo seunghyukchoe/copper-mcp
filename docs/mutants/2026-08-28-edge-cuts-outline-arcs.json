@@ -1,0 +1,194 @@
+{
+ "harness": "mutation-harness/1",
+ "pytest_args": [
+  "-q",
+  "--no-cov"
+ ],
+ "mutants": [
+  {
+   "id": "OA01-inscribe-a-concave-arc-instead-of-refusing-it",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "            if chord_side(tail, head, edge.mid) == interior_side:",
+   "replacement": "            if False:",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_an_arc_cutting_into_the_board_is_refused_and_says_so"
+   ]
+  },
+  {
+   "id": "OA02-read-the-interior-side-backwards",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "        interior_side = 1 if signed_double_area(chords.points) > 0 else -1",
+   "replacement": "        interior_side = -1 if signed_double_area(chords.points) > 0 else 1",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_an_arc_cutting_into_the_board_is_refused_and_says_so",
+    "tests/test_kicad_board_ir.py::test_an_arc_bulging_out_of_the_board_is_inscribed_inside_the_true_boundary"
+   ]
+  },
+  {
+   "id": "OA03-skip-the-chord-ring-simplicity-check",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "        self._require_simple_ring(chords, \"kicad_pcb.edge_cuts\")",
+   "replacement": "        pass",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_a_self_crossing_chord_ring_is_refused_before_its_orientation_is_read"
+   ]
+  },
+  {
+   "id": "OA04-accept-a-major-arc",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "            if not arc_is_minor(edge.start, edge.mid, edge.end):",
+   "replacement": "            if False:",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_a_major_arc_is_refused_even_though_it_bulges_outward"
+   ]
+  },
+  {
+   "id": "OA05-invert-the-half-turn-test",
+   "file": "src/copper_mcp/board_ir/outline_arc.py",
+   "anchor": "    return ax * bx + ay * by <= 0",
+   "replacement": "    return ax * bx + ay * by >= 0",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_outline_arc.py::test_the_half_turn_test_is_one_integer_dot_product"
+   ]
+  },
+  {
+   "id": "OA06-measure-the-deviation-at-the-vertices-instead-of-along-the-chords",
+   "file": "src/copper_mcp/board_ir/outline_arc.py",
+   "anchor": "        closest = _segment_distance_squared(\n            _scaled(first, denominator), _scaled(second, denominator), centre\n        )",
+   "replacement": "        closest = Fraction(_distance_squared(_scaled(first, denominator), centre))",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_outline_arc.py::test_the_reported_deviation_is_an_upper_bound_and_not_an_estimate"
+   ]
+  },
+  {
+   "id": "OA07-let-a-vertex-escape-the-closed-disc",
+   "file": "src/copper_mcp/board_ir/outline_arc.py",
+   "anchor": "        verified = _pull_inside(candidate, centre, denominator, radius_squared)",
+   "replacement": "        verified = PointNM(candidate.x + 1, candidate.y + 1)",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_outline_arc.py::test_every_inscribed_vertex_lies_in_the_chord_and_arc_region",
+    "tests/test_kicad_board_ir.py::test_an_arc_bulging_out_of_the_board_is_inscribed_inside_the_true_boundary"
+   ]
+  },
+  {
+   "id": "OA08-open-the-outline-arc-payload-grammar",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "_EDGE_CUTS_ARC_FIELDS = _EDGE_CUTS_LINE_FIELDS | {\"mid\"}",
+   "replacement": "_EDGE_CUTS_ARC_FIELDS = _EDGE_CUTS_LINE_FIELDS | {\"mid\", \"angle\", \"width\"}",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_the_outline_arc_payload_is_a_closed_grammar"
+   ]
+  },
+  {
+   "id": "OA09-let-every-refused-outline-head-share-one-sentence",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "                        _EDGE_CUTS_REFUSED_OUTLINE_HEADS.get(\n                            head, \"Edge.Cuts graphic is not a supported outline primitive\"\n                        ),",
+   "replacement": "                        \"Edge.Cuts graphic is not a supported outline primitive\",",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_each_refused_outline_head_is_refused_by_its_own_name"
+   ]
+  },
+  {
+   "id": "OA10-never-publish-the-outline-deviation",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "            self.outline_inward_deviation_nm = deviation",
+   "replacement": "            self.outline_inward_deviation_nm = 0",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_an_inscribed_outline_reports_how_far_inside_the_drawn_boundary_it_runs",
+    "tests/test_placement_preview.py::ServiceTests::test_an_approximated_outline_is_refused_before_any_legality_is_claimed"
+   ]
+  },
+  {
+   "id": "OA11-report-a-deviation-on-an-exact-outline",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "            return chords, 0",
+   "replacement": "            return chords, 1",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_a_segment_only_outline_reports_no_deviation_at_all",
+    "tests/test_placement_preview.py::ServiceTests::test_an_exact_outline_still_reaches_a_placement_verdict"
+   ]
+  },
+  {
+   "id": "OA12-let-placement-claim-legality-on-an-approximated-outline",
+   "file": "src/copper_mcp/placement_preview.py",
+   "anchor": "    if conversion.outline_inward_deviation_nm:",
+   "replacement": "    if False:",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_placement_preview.py::ServiceTests::test_an_approximated_outline_is_refused_before_any_legality_is_claimed"
+   ]
+  },
+  {
+   "id": "OA13-chain-outline-endpoints-that-do-not-meet",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "        for links in adjacency.values():\n            if len(links) != 2:\n                self.fail(\n                    \"geometry.invalid\",\n                    \"Edge.Cuts outline must be one closed non-branching loop\",",
+   "replacement": "        for links in adjacency.values():\n            if len(links) > 2:\n                self.fail(\n                    \"geometry.invalid\",\n                    \"Edge.Cuts outline must be one closed non-branching loop\",",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_an_arc_endpoint_that_misses_by_seventeen_nanometres_is_refused"
+   ]
+  },
+  {
+   "id": "OA14-accept-two-shapes-on-one-pair-of-endpoints",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "            if key in seen:\n                # Two shapes on the same pair of endpoints",
+   "replacement": "            if False:\n                # Two shapes on the same pair of endpoints",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_two_arcs_sharing_both_endpoints_are_refused_as_a_duplicate_edge"
+   ]
+  },
+  {
+   "id": "OA15-approximate-a-degenerate-arc-instead-of-refusing-it",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "                if mid is not None and chord_side(start, end, mid) == 0:",
+   "replacement": "                if False:",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_a_degenerate_arc_is_named_rather_than_reported_as_a_broken_loop"
+   ]
+  },
+  {
+   "id": "OA16-hide-the-new-disclosure-from-every-mcp-client",
+   "file": "src/copper_mcp/board_ir_service.py",
+   "anchor": "    \"unmodelled_footprint_field_count\",\n    \"outline_inward_deviation_nm\",",
+   "replacement": "    \"unmodelled_footprint_field_count\",",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_board_ir_service.py::test_a_supported_board_publishes_its_conversion_counts",
+    "tests/test_board_ir_service.py::test_every_measured_conversion_field_appears_in_the_summary_map"
+   ]
+  },
+  {
+   "id": "OA17-trust-a-float-sample-on-a-near-collinear-arc",
+   "file": "src/copper_mcp/board_ir/outline_arc.py",
+   "anchor": "    if max(abs(x), abs(y)) > JSON_SAFE_INTEGER:\n        return None",
+   "replacement": "    if False:\n        return None",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_outline_arc.py::test_a_near_collinear_arc_degrades_to_a_coarser_polyline_rather_than_raising"
+   ]
+  },
+  {
+   "id": "OA18-let-the-outline-refusal-preempt-the-snapshot-cas",
+   "file": "src/copper_mcp/placement_preview.py",
+   "anchor": "    if (\n        intent.expect_snapshot_digest is not None\n        and intent.expect_snapshot_digest != snapshot.snapshot_digest\n    ):",
+   "replacement": "    if (\n        intent.expect_snapshot_digest is not None\n        and not conversion.outline_inward_deviation_nm\n        and intent.expect_snapshot_digest != snapshot.snapshot_digest\n    ):",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_placement_preview.py::ServiceTests::test_a_stale_snapshot_digest_wins_over_the_approximated_outline_refusal"
+   ]
+  }
+ ]
+}

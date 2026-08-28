@@ -51,6 +51,7 @@ from copper_mcp.board_ir import (
     ZonePadConnection,
     encode_snapshot,
 )
+from copper_mcp.board_ir.outline_arc import DEFAULT_MAX_SAGITTA_NM
 from copper_mcp.placement.geometry import pad_bounds, pad_core
 
 TEST_ROOT = Path(__file__).parent
@@ -3100,36 +3101,351 @@ def test_malformed_segment_outlines_are_refused_with_a_typed_code(
     assert expected_message in result.diagnostics[0].message
 
 
-def test_edge_cuts_arc_outline_stays_refused_with_an_honest_diagnostic() -> None:
-    """Arcs are deliberately out of scope for this slice, and the refusal has to say so.
+# ---------------------------------------------------------------------------
+# Edge.Cuts outline arcs (issue #188, ADR-0124)
+# ---------------------------------------------------------------------------
+#
+# Every arc below replaces the ``40 0`` -> ``40 30`` edge of the standard rectangle, so the other
+# three sides stay straight and the only thing under test is the arc.
+#
+# **The circle these tests check against is computed by hand, not by the code under test.**  For
+# ``(start 40 0) (mid 41 15) (end 40 30)`` the centre sits on ``y = 15`` by symmetry, and
+# ``(x + 72)`` falls out of ``(x - 40)^2 + 15^2 = (x - 41)^2``; the radius is then 113 mm, which
+# all three drawn points satisfy exactly:
+#
+#     (40 + 72)^2 + (0 - 15)^2  =  112^2 + 15^2  =  12769 * 10^12
+#     (41 + 72)^2 + (15 - 15)^2 =  113^2         =  12769 * 10^12
+#     (40 + 72)^2 + (30 - 15)^2 =  112^2 + 15^2  =  12769 * 10^12
+#
+# Both of those centres lie far outside the board, so the *whole* true region -- rectangle plus
+# the bulge -- is exactly ``{x >= 0, 0 <= y <= 30 mm} ∩ disc``, and containment is one exact
+# integer predicate with no polygon approximation of the arc anywhere in the test.
+BULGE_CENTRE = PointNM(-72_000_000, 15_000_000)
+BULGE_RADIUS_SQUARED = 12_769 * 10**12
 
-    ADR-0072's sagitta bound over-approximates an arc, which is right for an obstacle and
-    exactly backwards for an outline: an outline arc needs an *inscribed* approximation, and
-    whether a chord is inscribed depends on which side of the ring the arc bulges toward.
-    Rather than guess, the adapter refuses - and names arcs, so a caller can tell this apart
-    from an unsupported layer or a malformed loop.
-    """
 
-    arc = (
+def _outline_arc(start: str, mid: str, end: str, *, extra_fields: bytes = b"") -> bytes:
+    return (
         b"  (gr_arc\n"
-        b"    (start 40 0)\n"
-        b"    (mid 41 15)\n"
-        b"    (end 40 30)\n"
-        b"    (stroke (width 0.1) (type default))\n"
-        b'    (layer "Edge.Cuts")\n'
-        b'    (uuid "30000000-0000-0000-0000-000000000001")\n'
-        b"  )\n"
+        + f"    (start {start})\n    (mid {mid})\n    (end {end})\n".encode()
+        + b"    (stroke (width 0.1) (type default))\n"
+        + b'    (layer "Edge.Cuts")\n'
+        + b'    (uuid "30000000-0000-0000-0000-000000000001")\n'
+        + extra_fields
+        + b"  )\n"
     )
-    source = _segment_outline_source(
+
+
+def _three_sides_plus(arc: bytes) -> bytes:
+    """The rectangle with its east edge replaced by one arc graphic."""
+
+    return _segment_outline_source(
         (RECTANGLE_EDGES[0], RECTANGLE_EDGES[2], RECTANGLE_EDGES[3]), extra=arc
     )
 
-    result = parse_kicad_bytes(source, constraint_profile())
+
+def test_an_arc_bulging_out_of_the_board_is_inscribed_inside_the_true_boundary() -> None:
+    """The direction of error, checked against a circle this test computes for itself.
+
+    An outline may only ever be **under**-approximated: a modelled boundary larger than the drawn
+    one hands a caller area the fabricated board does not have.  A convex arc -- one bulging away
+    from the interior -- makes that achievable, because the region between its chord and itself is
+    ``disc ∩ half-plane``, an intersection of two convex sets, so a polyline whose vertices are all
+    inside it never leaves it.
+
+    Every modelled vertex is checked against the hand-derived disc above rather than against any
+    polygon the adapter produced, so this is a containment proof and not a round trip.  Convexity
+    is also what makes checking vertices sufficient: the true region here is convex, so an edge
+    between two contained vertices is contained too.
+    """
+
+    snapshot = parse_success(
+        _three_sides_plus(_outline_arc("40 0", "41 15", "40 30")), constraint_profile()
+    )
+
+    modelled = snapshot.content.outline[0].outer.points
+    assert len(modelled) > 4, "an inscribed arc must contribute vertices of its own"
+    for point in modelled:
+        assert point.x >= 0
+        assert 0 <= point.y <= 30_000_000
+        offset_x = point.x - BULGE_CENTRE.x
+        offset_y = point.y - BULGE_CENTRE.y
+        assert offset_x * offset_x + offset_y * offset_y <= BULGE_RADIUS_SQUARED
+    # ... and it is not merely the chord: the bulge is modelled, so the area exceeds the plain
+    # rectangle's while staying inside the rectangle widened to the arc's own extreme.
+    assert _double_area(modelled) > _double_area(TRUE_RECTANGLE)
+    assert _double_area(modelled) < _double_area(
+        (
+            PointNM(0, 0),
+            PointNM(41_000_000, 0),
+            PointNM(41_000_000, 30_000_000),
+            PointNM(0, 30_000_000),
+        )
+    )
+
+
+def test_an_inscribed_outline_reports_how_far_inside_the_drawn_boundary_it_runs() -> None:
+    """The shrinkage is measured and published, because a caller has to be able to decline it.
+
+    A conversion that quietly modelled a smaller board would be a silent claim.  The number is an
+    upper bound taken with the radius rounded up and the polyline's closest approach rounded down,
+    so it can overstate and never understate, and it is bounded by the sagitta this project
+    borrowed from KiCad's own outline polygonisation error.
+    """
+
+    result = parse_kicad_bytes(
+        _three_sides_plus(_outline_arc("40 0", "41 15", "40 30")), constraint_profile()
+    )
+
+    assert result.snapshot is not None
+    assert 0 < result.outline_inward_deviation_nm <= DEFAULT_MAX_SAGITTA_NM
+
+
+def test_a_segment_only_outline_reports_no_deviation_at_all() -> None:
+    """The other direction of the same field: an exact outline must say it is exact.
+
+    Every vertex of a segment-drawn ring *is* a drawn point, so there is nothing to disclose, and
+    a non-zero value here would refuse the placement surface for boards that have always been
+    exact.  This is the test that keeps the new number from becoming a blanket.
+    """
+
+    result = parse_kicad_bytes(_segment_outline_source(RECTANGLE_EDGES), constraint_profile())
+
+    assert result.snapshot is not None
+    assert result.outline_inward_deviation_nm == 0
+
+
+def test_an_arc_cutting_into_the_board_is_refused_and_says_so() -> None:
+    """The forbidden direction, and the reason it is a refusal rather than a chord.
+
+    A concave arc bites material out of the board.  Its chord -- and every polyline through the
+    chord-and-arc region -- lies on the material side of the cut, so inscribing it would hand back
+    exactly the material the cut removed: an over-approximation, the one error an outline may not
+    make.  The safe construction runs *outside* the circle instead, in a region that is not convex,
+    which is a different proof obligation and a different slice.
+    """
+
+    result = parse_kicad_bytes(
+        _three_sides_plus(_outline_arc("40 0", "39 15", "40 30")), constraint_profile()
+    )
 
     assert result.snapshot is None
     assert result.diagnostics[0].code == "unsupported.construct"
-    assert "arc" in result.diagnostics[0].message
+    assert result.diagnostics[0].message == (
+        "Edge.Cuts outline arcs cutting into the board are unsupported"
+    )
     assert result.diagnostics[0].object_kind == "outline"
+
+
+def test_a_major_arc_is_refused_even_though_it_bulges_outward() -> None:
+    """Convex is necessary and not sufficient: the verdict's own premise has to hold.
+
+    Whether an arc is convex is read out of the chord ring's orientation, and that reading is only
+    trustworthy while each arc is a local perturbation of its chord.  A major arc doubles back past
+    the centre and is not.  ``(start 40 0) (mid 60 15) (end 40 30)`` bulges *away* from the board,
+    so it would pass the convexity test -- and it is refused first, by span, which is what this
+    test pins.
+    """
+
+    result = parse_kicad_bytes(
+        _three_sides_plus(_outline_arc("40 0", "60 15", "40 30")), constraint_profile()
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].message == "Edge.Cuts outline major arcs are unsupported"
+
+
+def test_an_arc_whose_three_points_are_collinear_is_refused() -> None:
+    """Three points on a line name no circle, so there is no curve to approximate either way."""
+
+    result = parse_kicad_bytes(
+        _three_sides_plus(_outline_arc("40 0", "40 15", "40 30")), constraint_profile()
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "geometry.invalid"
+    assert result.diagnostics[0].message == "Edge.Cuts outline arc is degenerate"
+
+
+def test_a_degenerate_arc_is_named_rather_than_reported_as_a_broken_loop() -> None:
+    """The refusal has to name the *cause*, and only reading the arc early can do that.
+
+    A degenerate arc is caught twice — once when the edge is read and once when its circle is
+    computed — so removing the early check leaves the board refused either way.  What changes is
+    *what the operator is told*.  Here a complete rectangle carries one extra collinear arc off to
+    the side: read early, that arc is named degenerate at its own locator; read late, the board is
+    first refused for the loop the stray arc's dangling endpoints broke, which sends the operator
+    looking for a gap that does not exist.
+
+    Refusing on the symptom instead of the defect is the failure ADR-0123 spent a whole slice on
+    one level up, so it is pinned here rather than left to the fact that *something* refuses.
+    """
+
+    result = parse_kicad_bytes(
+        _segment_outline_source(RECTANGLE_EDGES, extra=_outline_arc("50 0", "50 5", "50 10")),
+        constraint_profile(),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "geometry.invalid"
+    assert result.diagnostics[0].message == "Edge.Cuts outline arc is degenerate"
+    assert result.diagnostics[0].source_locator == "kicad_pcb.gr_arc[0]"
+
+
+def test_an_arc_endpoint_that_misses_by_seventeen_nanometres_is_refused() -> None:
+    """The chaining epsilon stays zero, and this is the gap that made it worth re-stating.
+
+    KiCad closes a sub-tolerance gap for you.  Closing one adds area that no drawn shape encloses,
+    so this adapter refuses instead — and the refusal is not hypothetical: two of the ten public
+    boards in B-134's cohort leave endpoints unpaired by **17 nm** and **19 nm**.  Supporting arcs
+    does not soften that rule; it only means an arc's endpoints are held to it too.
+    """
+
+    result = parse_kicad_bytes(
+        _segment_outline_source(
+            (RECTANGLE_EDGES[0], RECTANGLE_EDGES[2], ("0 30", "0 0")),
+            extra=_outline_arc("40 0.000017", "41 15", "40 30"),
+        ),
+        constraint_profile(),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "geometry.invalid"
+    assert result.diagnostics[0].message == (
+        "Edge.Cuts outline must be one closed non-branching loop"
+    )
+
+
+def test_two_arcs_sharing_both_endpoints_are_refused_as_a_duplicate_edge() -> None:
+    """A circle drawn as two arcs is a second contour's worth of ambiguity, not one ring.
+
+    The two shapes chain into a two-edge cycle whose chord polygon has no area and no orientation,
+    which is exactly the reading the convex/concave verdict depends on.  It stays refused.
+    """
+
+    result = parse_kicad_bytes(
+        _segment_outline_source(
+            (RECTANGLE_EDGES[0], RECTANGLE_EDGES[2], RECTANGLE_EDGES[3]),
+            extra=_outline_arc("40 0", "41 15", "40 30")
+            + _outline_arc("40 0", "39 15", "40 30").replace(b"-000000000001", b"-000000000002"),
+        ),
+        constraint_profile(),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "geometry.invalid"
+    assert result.diagnostics[0].message == "Edge.Cuts outline has a duplicate segment"
+
+
+@pytest.mark.parametrize(
+    ("head", "expected"),
+    [
+        (b"gr_circle", "Edge.Cuts outline circles are unsupported"),
+        (b"gr_curve", "Edge.Cuts outline Bezier curves are unsupported"),
+        (b"gr_bezier", "Edge.Cuts outline Bezier curves are unsupported"),
+        (b"gr_poly", "Edge.Cuts outline polygons are unsupported"),
+    ],
+)
+def test_each_refused_outline_head_is_refused_by_its_own_name(head: bytes, expected: str) -> None:
+    """One sentence per construct, because "unsupported curve" named a category and not a reason.
+
+    None of these four appears on any board in B-134's ten-board cohort, so each is refused on its
+    own unresolved argument rather than on cost: a circle and a polygon are *closed shapes* and
+    therefore a topology question, and a Bezier has no global convexity to read a direction from.
+    """
+
+    shape = (
+        b"  (" + head + b"\n"
+        b"    (center 20 15)\n"
+        b"    (start 20 15)\n"
+        b"    (mid 21 15)\n"
+        b"    (end 25 15)\n"
+        b"    (pts (xy 0 0) (xy 1 0) (xy 1 1))\n"
+        b"    (stroke (width 0.1) (type default))\n"
+        b"    (fill no)\n"
+        b'    (layer "Edge.Cuts")\n'
+        b'    (uuid "30000000-0000-0000-0000-000000000009")\n'
+        b"  )\n"
+    )
+
+    result = parse_kicad_bytes(
+        _segment_outline_source(RECTANGLE_EDGES, extra=shape), constraint_profile()
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].message == expected
+    assert result.diagnostics[0].object_kind == "outline"
+
+
+@pytest.mark.parametrize(
+    ("extra", "expected"),
+    [
+        (b"    (width 0.2)\n", "expression contains an unsupported semantic field"),
+        (b"    (angle 90)\n", "expression contains an unsupported semantic field"),
+        (b"    hidden\n", "expression contains unsupported positional semantics"),
+    ],
+)
+def test_the_outline_arc_payload_is_a_closed_grammar(extra: bytes, expected: str) -> None:
+    """An accepted head is not an open container, and this is the lesson #225/#226 paid for.
+
+    The measured cohort writes exactly ``start``, ``mid``, ``end``, ``stroke``, ``layer`` and
+    ``uuid`` on all 97 of its arcs, with no positional atom on any of them.  Anything else is
+    refused rather than read past, so a field that could carry meaning cannot arrive unnoticed.
+    """
+
+    result = parse_kicad_bytes(
+        _three_sides_plus(_outline_arc("40 0", "41 15", "40 30", extra_fields=extra)),
+        constraint_profile(),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "unsupported.construct"
+    assert result.diagnostics[0].message == expected
+
+
+def test_a_self_crossing_chord_ring_is_refused_before_its_orientation_is_read() -> None:
+    """The check whose absence would produce a *wrong answer* rather than a missing one.
+
+    Whether an arc bulges out of the board or bites into it is read from the chord ring's
+    orientation.  A ring that crosses itself has no consistent interior, so reading a direction out
+    of one could classify a concave arc as convex — and then inscribe it, handing back material the
+    cut removed.  That is the single over-approximation this whole path exists to prevent, so the
+    chord ring is validated *before* the verdict is taken rather than at the end with everything
+    else.
+
+    The refusal must therefore arrive with the outline's own locator and the self-intersection
+    code, not as a late whole-content validation failure: the locator is what says the check ran in
+    time.
+    """
+
+    result = parse_kicad_bytes(
+        _segment_outline_source(
+            (("0 0", "40 30"), ("40 30", "40 0"), ("40 0", "0 20")),
+            extra=_outline_arc("0 20", "-1 10", "0 0"),
+        ),
+        constraint_profile(),
+    )
+
+    assert result.snapshot is None
+    assert result.diagnostics[0].code == "geometry.self_intersection"
+    assert result.diagnostics[0].source_locator == "kicad_pcb.edge_cuts"
+    assert result.diagnostics[0].object_kind == "outline"
+
+
+def test_an_outline_arc_keeps_the_assembled_contour_identity_rule() -> None:
+    """An arc is a member of the assembled contour like any segment, and names it like one.
+
+    ADR-0087 hashes the *sorted set* of member uuids, so admitting a new member head must not
+    quietly change what the identity is derived from — it must simply have one more member.
+    """
+
+    snapshot = parse_success(
+        _three_sides_plus(_outline_arc("40 0", "41 15", "40 30")), constraint_profile()
+    )
+
+    assert snapshot.content.outline[0].id.startswith("contour:assembled:")
 
 
 def test_mixed_rectangle_and_segment_outlines_are_refused() -> None:

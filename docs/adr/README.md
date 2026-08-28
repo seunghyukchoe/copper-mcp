@@ -200,9 +200,10 @@ never silently widens it.
 | [0121](0121-a-refusal-is-an-answer-and-a-crash-is-not.md) | A refusal is an answer and a crash is not | Accepted |
 | [0122](0122-the-stackup-is-read-per-field-because-three-of-its-fields-are-not-about-z.md) | The stackup is read per field, because three of its fields are not about Z | Accepted |
 | [0123](0123-a-container-refusal-that-names-no-field-is-the-defect.md) | A container refusal that names no field is the defect, not the refusal | Accepted |
+| [0124](0124-an-outline-arc-is-inscribed-and-a-cut-is-refused.md) | An outline arc is inscribed, and an arc that cuts into the board is refused | Accepted |
 | [0125](0125-stray-footprint-copper-is-bounded-because-no-fill-rule-is-written-down.md) | Stray footprint copper is bounded by a box because no fill rule is written down | Accepted |
 
-One hundred and twenty-six numbers allocated, one hundred and nineteen records, no duplicates — and
+One hundred and twenty-five numbers allocated, one hundred and twenty records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
 its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
 the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
@@ -216,7 +217,7 @@ and 0086 are unused; see **Known gaps** above. 0107 was allocated over the live 
 The ADRs are chronological, not thematic. To follow one arc, read it in this order:
 
 - **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070, 0076, 0077,
-  0078, 0079, 0080, 0087, 0090, 0091, 0092, 0094, 0095, 0096, 0097, 0099, 0100.
+  0078, 0079, 0080, 0087, 0090, 0091, 0092, 0094, 0095, 0096, 0097, 0099, 0100, 0124.
 - **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
   0066, 0068, 0070, 0072, 0073, 0075, 0081, 0089, 0093, 0101, 0103, 0104, 0106, 0108.
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060, 0075, 0109.
@@ -347,4 +348,5 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0121: A refusal is an answer and a crash is not](0121-a-refusal-is-an-answer-and-a-crash-is-not.md)
 - [ADR-0122: The stackup is read per field, because three of its fields are not about Z](0122-the-stackup-is-read-per-field-because-three-of-its-fields-are-not-about-z.md)
 - [ADR-0123: A container refusal that names no field is the defect, not the refusal](0123-a-container-refusal-that-names-no-field-is-the-defect.md)
+- [ADR-0124: An outline arc is inscribed, and an arc that cuts into the board is refused](0124-an-outline-arc-is-inscribed-and-a-cut-is-refused.md)
 - [ADR-0125: Stray footprint copper is bounded by a box because no fill rule is written down](0125-stray-footprint-copper-is-bounded-because-no-fill-rule-is-written-down.md)

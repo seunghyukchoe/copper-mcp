@@ -8,6 +8,40 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Board IR converts boards whose outline is drawn with `Edge.Cuts` **arcs** -- which is what a
+  rounded corner is, and what eight of ten licence-clean public boards stopped on. A root
+  `gr_arc` is now an outline edge chained with `gr_line` segments into the same single closed
+  loop, modelled as an **inscribed** polyline: every vertex is an exact integer nanometre point
+  inside the region the arc and its chord bound, so the modelled board is never larger than the
+  drawn one. That region is `disc ∩ half-plane` -- convex -- which is what lets containment be
+  decided per vertex by two exact integer predicates instead of a segment-versus-circle test.
+  Subdivision is sized by KiCad's own 5,000 nm `maxError`, applied strictly inward rather than
+  two-sided ([migration note](docs/migrations/edge-cuts-outline-arcs.md), `ADR-0124`, `D-229`,
+  `R-180`, `SEC-166`, `B-134`, `B-135`,
+  [issue #188](https://github.com/seunghyukchoe/copper-mcp/issues/188)).
+- An arc that cuts **into** the board still refuses, and now says so. Its safe polyline runs
+  *outside* the circle in a region that is not convex, so it needs an exact per-edge distance
+  test rather than two per-vertex ones -- a different proof obligation, measured at zero
+  conversions on the public cohort and refused by name with the exit condition recorded.
+  Major arcs, `gr_circle`, `gr_curve`/`gr_bezier` and `gr_poly` on `Edge.Cuts` each refuse with
+  their own sentence too, replacing the shared `Edge.Cuts outline arcs, circles and curves are
+  unsupported`. A caller matching on that text must update (`ADR-0124`, issue #188).
+- `inspect_board_ir`'s `unmodelled_counts` map gains
+  `outline_inward_deviation_nm`: an upper bound, in nanometres, on how far inside the drawn
+  boundary the modelled one runs. It is **0** for every rectangle- or segment-drawn outline, so
+  no board that converted before reports anything new. It is a *distance* and not a count, the
+  same shape as `max_roundrect_rounding_nm` (`D-229`, `R-180`).
+- `preview_placement` and `preview_live_placement` refuse a board whose outline is approximated,
+  with `unsupported_geometry` and a message naming the reason. `PlacementLegality`'s
+  `outline_containment` publishes in both directions and only `proven_inside` survives an
+  under-approximated boundary; edge and region rules measure against the same boundary and have
+  no `inconclusive` value to degrade into, so the request is refused rather than three verdicts
+  quietly weakened. Routing is unaffected -- less room is never a false claim about where copper
+  may go (`ADR-0124`, `D-229`).
+- **This converts no public board.** The ten-board cohort was 0/10 before and is 0/10 after; the
+  eight that refused at this gate now refuse behind it, six at `ADR-0095`'s copper-text wall.
+  That was predicted in writing before the adapter was touched and measured after (`B-134`,
+  `B-135`). The frozen own 18-save corpus stays 15/18 with the new number 0 on all 15.
 - Board IR converts a footprint's **stray copper polygons** instead of refusing the board. A filled
   `fp_poly` on one declared copper layer, in a footprint that declares no net tie, becomes a
   netless `Segment` whose modelled extent is the polygon's board-coordinate vertex bounding box
@@ -30,8 +64,9 @@ All notable changes are documented here. The format follows
   one already refused -- but the messages now say which of three different unmet conditions each is
   waiting on. `footprint graphic on a copper layer is unmodelled copper` survives only as the
   fallback for a head outside the table (`ADR-0123`'s rule one structural level down, issue #188).
-- `inspect_board_ir`'s `unmodelled_counts` map grows to ten entries with
-  `footprint_copper_graphic_envelope_count`. Unlike every other entry it discloses an
+- `inspect_board_ir`'s `unmodelled_counts` map gains
+  `footprint_copper_graphic_envelope_count`, taking it from nine entries to **eleven**
+  together with the outline entry above. Unlike every other entry it discloses an
   **approximation** rather than an erasure: a non-zero value means that many obstacles are looser
   than the copper they stand for, which cannot permit an illegal route but can make a routable
   board report unroutable. Copper-graphic vertices are now charged against the caller's

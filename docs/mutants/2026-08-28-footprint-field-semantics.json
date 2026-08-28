@@ -101,13 +101,13 @@
     {
       "id": "FF10-publish-the-count-to-nobody",
       "file": "src/copper_mcp/board_ir_service.py",
-      "anchor": "    \"unmodelled_footprint_field_count\",\n    \"footprint_copper_graphic_envelope_count\",\n)",
-      "replacement": "    \"footprint_copper_graphic_envelope_count\",\n)",
+      "anchor": "    \"unmodelled_stackup_layer_count\",\n    \"unmodelled_footprint_field_count\",",
+      "replacement": "    \"unmodelled_stackup_layer_count\",",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_board_ir_service.py::test_a_supported_board_publishes_its_conversion_counts"
       ],
-      "note": "Re-anchored, not removed, when D-230 added the tenth measured count below this one: the mutant still deletes exactly the footprint-field entry this spec's claim is about, and leaves the newer entry in place so it tests one thing."
+      "note": "Re-anchored twice, never deleted. #228 moved it off the entry that used to follow the footprint-field one, and #230 added an entry there too; this branch's own re-anchor was stale the moment both landed. The anchor kept is #228's, which binds the two lines *above* the deleted entry and so survives any further addition below. The mutant still deletes exactly the footprint-field entry this spec's claim is about."
     },
     {
       "id": "FF11-census-selects-on-the-other-bucket-alone",
