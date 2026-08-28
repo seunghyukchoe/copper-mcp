@@ -28,6 +28,15 @@ anchored no-follow publish is the same already-tested code.
 terminal and requires that exact partition before it aggregates anything, so a drifted adapter or a
 re-derived corpus fails the run instead of silently re-aggregating over a different population.
 
+**Envelopes are unioned in board coordinates, and the first version of this file did not do that.**
+`pts` coordinates are footprint-local, and the union originally ran over boxes appended in each
+carrier's own frame, so two polygons drawn at the same local coordinates in different footprints
+were counted as one region of board area they do not share.  Every envelope is now placed through
+its carrier's ``(at x y [angle])`` before it joins the union.  For a quarter turn that placement is
+exact; for any other angle the rotated box's corners are bounded outward, which over-approximates
+-- the safe direction for a figure this census publishes as a cost *bound*.  Carrier rotations are
+counted in their own total partition so a reader can tell which of the two applied.
+
 Aggregate counts from predeclared vocabularies only.  No board identity, path, digest, coordinate,
 vertex, dimension, ratio or file name is ever committed: every ratio reaches the artifact as a
 membership count in a predeclared bucket.
@@ -39,6 +48,7 @@ import argparse
 import hashlib
 import hmac
 import json
+import math
 import platform
 import re
 from collections import Counter
@@ -193,6 +203,7 @@ class BoardObservation:
     area_ratio: Mapping[str, int]
     envelope_ratio: Mapping[str, int]
     union_ratio_bucket: str
+    carrier_rotations: Mapping[str, int]
     bounded_polygons: int
     unbounded_polygons: int
     carrier_footprints: int
@@ -436,6 +447,88 @@ def _distinctness(points: Sequence[tuple[int, int]]) -> tuple[str, tuple[tuple[i
     return ("closing_vertex_only" if closing else "all_distinct"), body
 
 
+# Carrier placement, as a **total partition** of the footprints that carry a copper polygon.  A
+# census that unions envelopes across footprints has to say which frame it unioned them in, and
+# whether the transform it applied was exact.
+CARRIER_ROTATION_BUCKETS: Final = ("quarter_turn", "other_angle", "absent_or_malformed")
+
+
+def _placement(footprint: SExpr) -> tuple[str, int, int, int | None]:
+    """Return the footprint's placement bucket, board-frame origin, and quarter-turn index.
+
+    KiCad writes a footprint's placement as ``(at x y [angle])``.  The angle is in **degrees** and
+    is counter-clockwise *on screen*, while stored board coordinates have y increasing downward --
+    so a positive angle is clockwise in the raw stored values:
+
+        x' = x cos t + y sin t          y' = -x sin t + y cos t
+
+    A quarter turn is therefore ``(x, y) -> (y, -x)`` and not the ``(-y, x)`` a y-up reading would
+    give; the two disagree by a mirror.  This mirrors ``_Converter._transform``'s table rather than
+    importing it, for the same reason this file mirrors the adapter's decimal grammar: an adapter
+    edit must not silently re-frame a recorded measurement.
+
+    The fourth value is the quarter-turn index 0-3 when the angle is a multiple of 90 degrees, and
+    ``None`` otherwise -- the caller needs to know whether an exact integer transform is available
+    before it decides how to round.
+    """
+
+    field = _sole_child(footprint, "at")
+    if field is None:
+        return "absent_or_malformed", 0, 0, None
+    atoms = _bare_atoms(field)
+    if atoms is None or len(atoms) not in {2, 3}:
+        return "absent_or_malformed", 0, 0, None
+    x = _nanometres(atoms[0])
+    y = _nanometres(atoms[1])
+    if x is None or y is None:
+        return "absent_or_malformed", 0, 0, None
+    if len(atoms) == 2:
+        return "quarter_turn", x, y, 0
+    if len(atoms[2]) > _MAX_TOKEN or not _DECIMAL.fullmatch(atoms[2]):
+        return "absent_or_malformed", x, y, None
+    angle = Fraction(atoms[2])
+    if angle.denominator == 1 and angle % 90 == 0:
+        return "quarter_turn", x, y, int(angle // 90) % 4
+    return "other_angle", x, y, None
+
+
+def _place_box(
+    box: tuple[int, int, int, int],
+    origin_x: int,
+    origin_y: int,
+    turn: int | None,
+    angle: str | None,
+) -> tuple[int, int, int, int]:
+    """Return a footprint-local envelope box placed into board coordinates.
+
+    **This is an upper bound, not an equality, and only when ``turn`` is ``None``.**  For a quarter
+    turn the rotated box is still axis-aligned, so the result is exact.  For any other angle the
+    four corners are rotated and the axis-aligned box of *those* is taken, with the bounds rounded
+    outward -- which contains the rotated box and therefore contains the copper.  The census claims
+    a cost **bound**, so over-approximating here is the safe direction; an exact answer would need
+    the rotated rectangle itself, which no axis-aligned union can represent.
+    """
+
+    x0, y0, x1, y1 = box
+    corners = ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
+    if turn is not None:
+        rotated = [((x, y), (y, -x), (-x, -y), (-y, x))[turn] for x, y in corners]
+        xs = [origin_x + px for px, _ in rotated]
+        ys = [origin_y + py for _, py in rotated]
+        return min(xs), min(ys), max(xs), max(ys)
+    radians = math.radians(float(Fraction(angle))) if angle is not None else 0.0
+    cos_t, sin_t = math.cos(radians), math.sin(radians)
+    placed = [(x * cos_t + y * sin_t, -x * sin_t + y * cos_t) for x, y in corners]
+    float_xs = [origin_x + px for px, _ in placed]
+    float_ys = [origin_y + py for _, py in placed]
+    return (
+        math.floor(min(float_xs)),
+        math.floor(min(float_ys)),
+        math.ceil(max(float_xs)),
+        math.ceil(max(float_ys)),
+    )
+
+
 def _board_bounding_area(root: SExpr) -> int:
     """Return the area of the board's `Edge.Cuts` straight-segment bounding box, or 0."""
 
@@ -522,6 +615,7 @@ def _observe(root: SExpr) -> BoardObservation:
     area_ratio: Counter[str] = Counter()
     envelope_ratio: Counter[str] = Counter()
     boxes: list[tuple[int, int, int, int]] = []
+    carrier_rotations: Counter[str] = Counter()
     bounded = 0
     unbounded = 0
     carriers = 0
@@ -535,6 +629,13 @@ def _observe(root: SExpr) -> BoardObservation:
         in_net_tie = bool(_children(footprint, "net_tie_pad_groups"))
         has_pads = bool(_children(footprint, "pad"))
         carries_copper_graphic = False
+        # `pts` coordinates are footprint-**local**. Envelopes from different carriers cannot be
+        # unioned until each is placed, or two polygons whose local frames overlap would be
+        # counted as one region of board area they do not share.
+        rotation_bucket, origin_x, origin_y, turn = _placement(footprint)
+        at_field = _sole_child(footprint, "at")
+        at_atoms = _bare_atoms(at_field) if at_field is not None else None
+        angle_token = at_atoms[2] if at_atoms is not None and len(at_atoms) == 3 else None
         for item in footprint.items[1:]:
             if not isinstance(item, SExpr) or item.head is None or is_quoted_atom(item.head):
                 continue
@@ -587,7 +688,8 @@ def _observe(root: SExpr) -> BoardObservation:
                 _ratio_bucket(Fraction(shape_area, box_area) if box_area else Fraction(0))
             ] += 1
             half = _stroke_half_width_nm(item)
-            box = (min(xs) - half, min(ys) - half, max(xs) + half, max(ys) + half)
+            local_box = (min(xs) - half, min(ys) - half, max(xs) + half, max(ys) + half)
+            box = _place_box(local_box, origin_x, origin_y, turn, angle_token)
             boxes.append(box)
             envelope_area = (box[2] - box[0]) * (box[3] - box[1])
             envelope_ratio[
@@ -600,6 +702,7 @@ def _observe(root: SExpr) -> BoardObservation:
         if carries_copper_graphic:
             carriers += 1
             padless += 0 if has_pads else 1
+            carrier_rotations[rotation_bucket] += 1
 
     union = _union_area(boxes)
     union_bucket = (
@@ -624,6 +727,7 @@ def _observe(root: SExpr) -> BoardObservation:
         area_ratio=dict(area_ratio),
         envelope_ratio=dict(envelope_ratio),
         union_ratio_bucket=union_bucket,
+        carrier_rotations=dict(carrier_rotations),
         bounded_polygons=bounded,
         unbounded_polygons=unbounded,
         carrier_footprints=carriers,
@@ -883,6 +987,9 @@ def measure(
     distinctness = _merge_mapping(observations, "distinctness")
     area_ratio = _merge_mapping(observations, "area_ratio")
     envelope_ratio = _merge_mapping(observations, "envelope_ratio")
+    rotation_counts = _closed_counts(
+        _merge_mapping(observations, "carrier_rotations"), CARRIER_ROTATION_BUCKETS
+    )
     union_buckets: Counter[str] = Counter(
         observation.union_ratio_bucket for observation in observations
     )
@@ -934,6 +1041,11 @@ def measure(
         ("area_over_bbox", area_counts, bounded_total),
         ("envelope_over_board", envelope_counts, bounded_total),
         ("board_envelope_union", union_counts, len(observations)),
+        (
+            "carrier_rotation",
+            rotation_counts,
+            sum(observation.carrier_footprints for observation in observations),
+        ),
     ):
         if sum(partition.values()) != total:
             raise _fixed_error(f"{name} buckets do not partition their population")
@@ -991,6 +1103,7 @@ def measure(
             "distinctness": list(DISTINCTNESS_BUCKETS),
             "ratio": list(RATIO_BUCKETS),
             "successor": list(SUCCESSOR_KEYS),
+            "carrier_rotation": list(CARRIER_ROTATION_BUCKETS),
             "shape": list(setup_census.SHAPE_BUCKETS),
         },
         "aggregates": {
@@ -1037,6 +1150,7 @@ def measure(
                 "footprints_with_copper_graphics": sum(
                     observation.carrier_footprints for observation in observations
                 ),
+                "rotations": rotation_counts,
                 "padless_carriers": sum(
                     observation.padless_carrier_footprints for observation in observations
                 ),

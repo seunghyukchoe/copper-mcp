@@ -20,6 +20,18 @@
   [ADR-0105](0105-a-schema-version-moves-with-its-accepted-set.md) (invoked and found not to
   apply)
 
+## Amendment before acceptance — 2026-08-29
+
+Review of [#230](https://github.com/seunghyukchoe/copper-mcp/pull/230) found that B-136's
+envelope-**union** figure was computed in footprint-local coordinates, so the sentences below that
+cite *"each board's whole envelope union is also under 5%"* are withdrawn; B-136 carries the dated
+amendment and the instrument is fixed. **The decision is unchanged**, because it never rested on
+that number: it rests on `all_distinct: 0` and the 26 self-intersecting rings, both of which are
+properties of a single polygon and invariant under any rigid motion of its carrier. The
+per-polygon envelope figures are areas — invariant under translation and quarter turns — and are
+qualified rather than withdrawn. The production adapter does not share the defect; it transforms
+every vertex before bounding.
+
 ## Context
 
 [B-133](../ledgers/benchmark-ledger.md) left six boards on three refusals that already name their

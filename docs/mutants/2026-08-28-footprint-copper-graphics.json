@@ -208,6 +208,31 @@
       "killing_tests": [
         "tests/test_benchmark_public_copper_graphic_census.py::test_the_layer_partition_separates_the_wildcards_from_one_declared_copper_layer"
       ]
+    },
+    {
+      "id": "CG21-bound-the-polygon-in-its-footprints-own-frame",
+      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+      "anchor": "            self._charge_graphic_envelope_vertices(len(local_points), locator)\n            board_points = tuple(\n                self._transform(point, origin, turn, locator) for point in local_points\n            )",
+      "replacement": "            self._charge_graphic_envelope_vertices(len(local_points), locator)\n            board_points = tuple(local_points)",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_kicad_board_ir.py::test_a_rotated_carriers_envelope_lands_where_the_board_puts_it",
+        "tests/test_kicad_board_ir.py::test_stray_copper_polygon_is_bounded_and_never_dropped",
+        "tests/test_kicad_board_ir.py::test_the_copper_envelope_contains_every_point_the_polygon_can_draw"
+      ],
+      "note": "The production twin of the frame defect Codex found in the census on #230. An obstacle bounded in footprint-local coordinates sits at the wrong board position, which is both a missed collision and a phantom one -- a failure the direction-of-error argument does not cover, because it is not about the shape's size."
+    },
+    {
+      "id": "CG22-union-the-envelopes-in-mixed-local-frames",
+      "file": "scripts/benchmark_public_copper_graphic_census.py",
+      "anchor": "            box = _place_box(local_box, origin_x, origin_y, turn, angle_token)",
+      "replacement": "            box = local_box",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_public_copper_graphic_census.py::test_envelopes_from_two_carriers_are_unioned_in_board_coordinates",
+        "tests/test_benchmark_public_copper_graphic_census.py::test_the_carrier_rotation_partition_is_total_and_published"
+      ],
+      "note": "The defect itself, as reported by Codex on #230: envelopes appended in each footprint's local frame, so polygons on different carriers falsely overlap and the published union under-reports board area covered."
     }
   ]
 }

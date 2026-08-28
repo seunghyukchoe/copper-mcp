@@ -4093,6 +4093,39 @@ def test_copper_polygon_vertices_are_charged_against_the_vertex_budget() -> None
     assert unpolygoned.snapshot is not None
 
 
+def test_a_rotated_carriers_envelope_lands_where_the_board_puts_it() -> None:
+    """The obstacle goes where the board says, not at the footprint's own origin.
+
+    `pts` coordinates are footprint-local, so an envelope derived from them without applying the
+    carrier's `(at x y angle)` would place real copper at the wrong board position -- an obstacle
+    in the wrong place is both a missed collision and a phantom one, and the direction-of-error
+    argument says nothing about a shape that is not where it claims to be. The Codex review of
+    #230 found exactly this omission in the *census* instrument; this pins the production path
+    against it.
+
+    The subset fixture's footprint sits at (10, 10) turned a quarter turn, and KiCad's convention
+    for stored coordinates is `(x, y) -> (y, -x)`. The local rectangle spans x 0..2.6 and
+    y -0.65..0.65, so it lands at x 9.35..10.65 and y 7.4..10 -- nowhere near the origin, and
+    mirrored to the opposite side from what a y-up reading would give.
+    """
+
+    snapshot = parse_success(_with_copper_polygon(), constraint_profile(assign_signal=True))
+    envelope = next(s for s in snapshot.content.segments if ":derived:" in s.id)
+
+    half = (envelope.width_nm + 1) // 2
+    low_x = min(envelope.start.x, envelope.end.x) - half
+    high_x = max(envelope.start.x, envelope.end.x) + half
+    low_y = min(envelope.start.y, envelope.end.y) - half
+    high_y = max(envelope.start.y, envelope.end.y) + half
+
+    # The placed polygon spans x 9.35..10.65 and y 7.4..10, and the modelled extent contains it
+    # (the square caps grow the endpoint box by the half width on all four sides).
+    assert low_x <= 9_350_000 and high_x >= 10_650_000
+    assert low_y <= 7_400_000 and high_y >= 10_000_000
+    # Untransformed it would have bounded the footprint's own origin, which is 10 mm away.
+    assert low_x > 5_000_000 and low_y > 5_000_000
+
+
 def test_a_board_with_no_stray_copper_reports_a_zero_envelope_count() -> None:
     """The counter is a disclosure, so its zero has to mean "none" rather than "not measured"."""
 

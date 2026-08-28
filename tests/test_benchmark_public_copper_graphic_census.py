@@ -30,16 +30,35 @@ def _footprint(body: str) -> str:
     return f'(footprint "L:R" (layer "F.Cu") (uuid "u") (at 0 0) {body})'
 
 
-def _board(marker: str, *, body: str = _COPPER_POLY) -> bytes:
+def _big_poly(layer: str = "F.Cu") -> str:
+    """A 4 mm square copper polygon -- large enough that a union error crosses a ratio bucket."""
+
+    return (
+        "(fp_poly (pts (xy 0 0) (xy 4 0) (xy 4 4) (xy 0 4) (xy 0 0)) "
+        f'(stroke (width 0) (type solid)) (fill yes) (layer "{layer}") (uuid "p"))'
+    )
+
+
+def _carrier(uuid: str, at: str, body: str) -> str:
+    return f'(footprint "L:R" (layer "F.Cu") (uuid "{uuid}") (at {at}) {body})'
+
+
+def _board(marker: str, *, body: str = _COPPER_POLY, footprints: str | None = None) -> bytes:
     layers = '(layers (0 "F.Cu" signal) (2 "B.Cu" signal))'
     outline = '(gr_line (start 0 0) (end 10 0) (layer "Edge.Cuts")) '
     outline += '(gr_line (start 10 10) (end 0 10) (layer "Edge.Cuts"))'
     return (
-        f"(kicad_pcb (version 20240108) {layers} {outline} {_footprint(body)} (marker {marker}))"
+        f"(kicad_pcb (version 20240108) {layers} {outline} "
+        f"{footprints if footprints is not None else _footprint(body)} (marker {marker}))"
     ).encode()
 
 
-def _entries(corpus: Path, *, bodies: dict[int, str] | None = None) -> tuple[list[dict], str]:
+def _entries(
+    corpus: Path,
+    *,
+    bodies: dict[int, str] | None = None,
+    footprints: dict[int, str] | None = None,
+) -> tuple[list[dict], str]:
     """Thirteen entries whose markers drive the stub converter's terminal for each board."""
 
     overrides = bodies or {}
@@ -55,7 +74,11 @@ def _entries(corpus: Path, *, bodies: dict[int, str] | None = None) -> tuple[lis
     for index in range(13):
         relative = f"board-{index:02d}.kicad_pcb"
         marker = f"{markers.get(index, 'other')}-{index:02d}"
-        source = _board(marker, body=overrides.get(index, _COPPER_POLY))
+        source = _board(
+            marker,
+            body=overrides.get(index, _COPPER_POLY),
+            footprints=(footprints or {}).get(index),
+        )
         (corpus / relative).write_bytes(source)
         entries.append(
             {
@@ -73,11 +96,14 @@ def _entries(corpus: Path, *, bodies: dict[int, str] | None = None) -> tuple[lis
 
 
 def _manifest(
-    tmp_path: Path, *, bodies: dict[int, str] | None = None
+    tmp_path: Path,
+    *,
+    bodies: dict[int, str] | None = None,
+    footprints: dict[int, str] | None = None,
 ) -> tuple[Path, Path, str, str]:
     corpus = tmp_path / "corpus"
     corpus.mkdir()
-    entries, fingerprint = _entries(corpus, bodies=bodies)
+    entries, fingerprint = _entries(corpus, bodies=bodies, footprints=footprints)
     path = tmp_path / "manifest.json"
     path.write_text(
         json.dumps({"schema": masking.SCHEMA, "entries": entries, "fingerprint": fingerprint}),
@@ -334,6 +360,150 @@ def test_no_ratio_coordinate_or_board_byte_reaches_the_artifact(tmp_path: Path) 
         "coordinates_committed": 0,
         "ratios_committed": 0,
     }
+
+
+# --- Frame of reference (Codex P1 on #230) ----------------------------------------------------
+#
+# `pts` coordinates are footprint-LOCAL. The first version of this instrument unioned every
+# envelope box without ever applying its carrier's `(at x y [angle])`, so two polygons drawn at
+# the same local coordinates in different footprints were counted as one region of board area they
+# do not share, and the published cost figure was computed in a frame no board is drawn in.
+
+
+def _two_carriers(at_a: str, at_b: str) -> str:
+    return _carrier("a", at_a, _big_poly()) + " " + _carrier("b", at_b, _big_poly())
+
+
+def _union_bucket(result: dict[str, Any]) -> str:
+    buckets = result["aggregates"]["envelope_cost"]["board_envelope_union_over_board_bounding_box"]
+    live = [name for name, count in buckets.items() if count]
+    assert len(live) == 1, buckets
+    return live[0]
+
+
+def test_envelopes_from_two_carriers_are_unioned_in_board_coordinates(tmp_path: Path) -> None:
+    """Two carriers whose *local* frames coincide but whose *board* frames do not.
+
+    Both footprints draw the same 4 mm square at the same local coordinates. Placed, they cover
+    two disjoint 16 mm^2 regions of a 100 mm^2 board -- about 32%. Unioned in local coordinates
+    they collapse onto each other and read about 16%, which is a different ratio bucket. The
+    assertion is on the *published* figure rather than on the helper, so a transform applied
+    anywhere other than before the union still fails.
+    """
+
+    placed = {0: _two_carriers("0 0", "5 5"), 1: _two_carriers("0 0", "5 5")}
+    corpus, manifest, fingerprint, commitment = _manifest(tmp_path, footprints=placed)
+
+    result = _measure(corpus, manifest, fingerprint, commitment)
+
+    assert _union_bucket(result) == "lt_0_50"
+    # Both carriers are counted, and the union is not one box.
+    assert result["aggregates"]["carriers"]["footprints_with_copper_graphics"] == 4
+
+
+def test_two_carriers_at_one_place_do_share_their_area(tmp_path: Path) -> None:
+    """The control: when the board really does put them on top of each other, the union merges.
+
+    Without this, the test above would pass for an instrument that simply double-counted every
+    envelope instead of unioning them.
+    """
+
+    stacked = {0: _two_carriers("0 0", "0 0"), 1: _two_carriers("0 0", "0 0")}
+    corpus, manifest, fingerprint, commitment = _manifest(tmp_path, footprints=stacked)
+
+    result = _measure(corpus, manifest, fingerprint, commitment)
+
+    assert _union_bucket(result) == "lt_0_25"
+
+
+def test_a_quarter_turn_places_the_envelope_by_kicads_own_convention() -> None:
+    """`(x, y) -> (y, -x)`, not the `(-y, x)` a y-up reading gives -- the two differ by a mirror.
+
+    KiCad's `(at x y angle)` angle is counter-clockwise *on screen* while stored board coordinates
+    have y increasing downward, so a positive angle is clockwise in the stored values. Getting this
+    backwards mirrors every rotated carrier's envelope to the wrong side of its origin, which no
+    area-only assertion would catch.
+    """
+
+    box = (1_000, 2_000, 3_000, 5_000)
+
+    assert census._place_box(box, 0, 0, 0, "0") == box
+    assert census._place_box(box, 0, 0, 1, "90") == (2_000, -3_000, 5_000, -1_000)
+    assert census._place_box(box, 0, 0, 2, "180") == (-3_000, -5_000, -1_000, -2_000)
+    assert census._place_box(box, 0, 0, 3, "270") == (-5_000, 1_000, -2_000, 3_000)
+    # The origin translates the placed box and nothing else.
+    assert census._place_box(box, 100, 200, 1, "90") == (2_100, -2_800, 5_100, -800)
+
+
+def test_a_non_quarter_angle_is_bounded_outward_rather_than_approximated() -> None:
+    """The census claims a cost *bound*, so a rotated box is answered by a box that contains it."""
+
+    box = (0, 0, 4_000, 2_000)
+    placed = census._place_box(box, 0, 0, None, "30")
+
+    import math
+
+    radians = math.radians(30.0)
+    cos_t, sin_t = math.cos(radians), math.sin(radians)
+    for x, y in ((0, 0), (4_000, 0), (4_000, 2_000), (0, 2_000)):
+        rx, ry = x * cos_t + y * sin_t, -x * sin_t + y * cos_t
+        assert placed[0] <= rx <= placed[2]
+        assert placed[1] <= ry <= placed[3]
+    # And it is an over-approximation of the rotated rectangle, not a claim of equality.
+    assert (placed[2] - placed[0]) * (placed[3] - placed[1]) > 4_000 * 2_000
+
+
+def test_the_carrier_rotation_partition_is_total_and_published(tmp_path: Path) -> None:
+    """A census that places envelopes has to say whether the transform it applied was exact."""
+
+    mixed = {
+        0: _carrier("a", "0 0 90", _big_poly()) + " " + _carrier("b", "5 5 30", _big_poly()),
+        1: _carrier("a", "0 0 90", _big_poly()) + " " + _carrier("b", "5 5 30", _big_poly()),
+    }
+    corpus, manifest, fingerprint, commitment = _manifest(tmp_path, footprints=mixed)
+
+    result = _measure(corpus, manifest, fingerprint, commitment)
+    rotations = result["aggregates"]["carriers"]["rotations"]
+
+    assert rotations == {"quarter_turn": 2, "other_angle": 2, "absent_or_malformed": 0}
+    assert (
+        sum(rotations.values())
+        == result["aggregates"]["carriers"]["footprints_with_copper_graphics"]
+    )
+
+
+def test_the_per_primitive_aggregates_do_not_depend_on_the_frame(tmp_path: Path) -> None:
+    """Counts and grammar predicates are per-primitive, so placing a carrier must not move them.
+
+    This is the check that lets B-136's head, layer, payload and geometry numbers be carried across
+    the frame fix rather than re-argued: they are computed from the polygon alone.
+    """
+
+    at_origin = {0: _carrier("a", "0 0", _big_poly()), 1: _carrier("a", "0 0", _big_poly())}
+    moved = {0: _carrier("a", "7 3 90", _big_poly()), 1: _carrier("a", "7 3 90", _big_poly())}
+
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    corpus_a, manifest_a, fp_a, commit_a = _manifest(tmp_path / "a", footprints=at_origin)
+    corpus_b, manifest_b, fp_b, commit_b = _manifest(tmp_path / "b", footprints=moved)
+    first = _measure(corpus_a, manifest_a, fp_a, commit_a)["aggregates"]
+    second = _measure(corpus_b, manifest_b, fp_b, commit_b)["aggregates"]
+
+    for key in (
+        "layer_routed_heads",
+        "layer_classes",
+        "copper_layer_heads",
+        "copper_payload",
+        "copper_polygon_children",
+        "copper_polygon_geometry",
+    ):
+        assert first[key] == second[key], key
+    # The envelope cost is exactly what may move, and the shape ratio moves with the frame only
+    # because a quarter turn swaps the box's sides -- its *area* does not.
+    assert (
+        first["envelope_cost"]["area_over_bounding_box"]
+        == (second["envelope_cost"]["area_over_bounding_box"])
+    )
 
 
 def test_the_census_refuses_to_run_with_any_write_authority(tmp_path: Path) -> None:
