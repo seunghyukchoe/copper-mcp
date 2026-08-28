@@ -605,6 +605,7 @@ def test_the_committed_release_ledger_publishes_every_version_it_authorizes() ->
         "0.8.0",
         "0.9.0",
         "0.10.0",
+        "0.11.0",
     }
 
     assert set(rows.ready) == expected_ready
