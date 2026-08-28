@@ -1,237 +1,237 @@
 {
-  "harness": "mutation-harness/1",
-  "pytest_args": [
-    "-q",
-    "--no-cov"
-  ],
-  "mutants": [
-    {
-      "id": "FF01-accept-every-footprint-child",
-      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "                if head not in _FOOTPRINT_METADATA_HEADS:",
-      "replacement": "                if False:",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_kicad_board_ir.py::test_an_unknown_footprint_field_is_still_refused_without_naming_it"
-      ]
-    },
-    {
-      "id": "FF02-drop-the-named-field-refusals",
-      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "            for unsupported_head in _UNSUPPORTED_FOOTPRINT_FIELDS:",
-      "replacement": "            for unsupported_head in ():",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_kicad_board_ir.py::test_a_footprint_clearance_refuses_and_names_the_field",
-        "tests/test_kicad_board_ir.py::test_every_remaining_footprint_head_refuses_by_name"
-      ]
-    },
-    {
-      "id": "FF03-skip-the-accepted-leaf-payload-grammar",
-      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "            self._validate_leaf_payloads(\n                footprint,\n                locator,\n                _FOOTPRINT_SCALAR_PAYLOADS,\n                message=\"unsupported footprint field value\",\n            )",
-      "replacement": "            pass",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_kicad_board_ir.py::test_an_accepted_footprint_leaf_has_a_closed_payload_grammar"
-      ]
-    },
-    {
-      "id": "FF04-skip-the-footprint-zone-connection-check",
-      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "            self._require_attaching_footprint_zone_connection(footprint, f\"{locator}.zone_connect\")",
-      "replacement": "            pass",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_kicad_board_ir.py::test_a_detaching_footprint_zone_connect_refuses_at_its_own_field",
-        "tests/test_kicad_board_ir.py::test_a_footprint_zone_connect_outside_the_written_domain_refuses"
-      ]
-    },
-    {
-      "id": "FF05-read-past-a-detaching-footprint-zone-connect",
-      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "        if value == _DETACHING_PAD_ZONE_CONNECTION:\n            self.fail(\n                \"unsupported.construct\",\n                \"footprint zone_connect 0 detaches its pads from their pour and is unsupported\",",
-      "replacement": "        if False:\n            self.fail(\n                \"unsupported.construct\",\n                \"footprint zone_connect 0 detaches its pads from their pour and is unsupported\",",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_kicad_board_ir.py::test_a_detaching_footprint_zone_connect_refuses_at_its_own_field"
-      ]
-    },
-    {
-      "id": "FF06-accept-a-footprint-zone-connect-outside-the-domain",
-      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "        if is_quoted_atom(value) or (\n            value != _DETACHING_PAD_ZONE_CONNECTION and value not in _ATTACHING_PAD_ZONE_CONNECTIONS\n        ):\n            self.fail(\n                \"unsupported.construct\",\n                \"footprint zone connection mode is unsupported\",",
-      "replacement": "        if False:\n            self.fail(\n                \"unsupported.construct\",\n                \"footprint zone connection mode is unsupported\",",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_kicad_board_ir.py::test_a_footprint_zone_connect_outside_the_written_domain_refuses"
-      ]
-    },
-    {
-      "id": "FF07-skip-the-footprint-local-group-validator",
-      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "                    self._check_group(item, f\"{locator}.group\")",
-      "replacement": "                    pass",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_kicad_board_ir.py::test_a_locked_footprint_local_group_refuses",
-        "tests/test_kicad_board_ir.py::test_a_footprint_local_group_has_the_root_groups_closed_grammar"
-      ]
-    },
-    {
-      "id": "FF08-stop-counting-footprint-local-groups",
-      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "                    self.group_count += 1",
-      "replacement": "                    self.group_count += 0",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_kicad_board_ir.py::test_a_footprint_local_group_converts_and_counts_with_the_root_groups"
-      ]
-    },
-    {
-      "id": "FF09-stop-counting-the-admitted-footprint-fields",
-      "file": "src/copper_mcp/adapters/kicad_board_ir.py",
-      "anchor": "                self.unmodelled_footprint_field_count += len(children(footprint, unmodelled_head))",
-      "replacement": "                self.unmodelled_footprint_field_count += 0",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_kicad_board_ir.py::test_footprint_fields_with_no_copper_effect_convert_and_are_counted"
-      ]
-    },
-    {
-      "id": "FF10-publish-the-count-to-nobody",
-      "file": "src/copper_mcp/board_ir_service.py",
-      "anchor": "    \"unmodelled_footprint_field_count\",\n)",
-      "replacement": ")",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_board_ir_service.py::test_a_supported_board_publishes_its_conversion_counts"
-      ]
-    },
-    {
-      "id": "FF11-census-selects-on-the-other-bucket-alone",
-      "file": "scripts/benchmark_public_footprint_field_census.py",
-      "anchor": "        if at_wall:\n            selected.append(snapshot)",
-      "replacement": "        if True:\n            selected.append(snapshot)",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_benchmark_public_footprint_field_census.py::test_selection_requires_the_footprint_wall_and_not_merely_the_other_bucket",
-        "tests/test_benchmark_public_footprint_field_census.py::test_a_wall_diagnostic_at_a_non_footprint_locator_is_not_selected"
-      ]
-    },
-    {
-      "id": "FF12-census-drops-the-b130-continuity-check",
-      "file": "scripts/benchmark_public_footprint_field_census.py",
-      "anchor": "    if not same_cohort_as_setup_census:\n        raise _fixed_error(\"footprint terminals are not the setup census's six boards\")",
-      "replacement": "    pass",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_benchmark_public_footprint_field_census.py::test_measure_requires_the_setup_censuss_own_six_boards"
-      ]
-    },
-    {
-      "id": "FF13-census-drops-the-walk-depth-agreement",
-      "file": "scripts/benchmark_public_footprint_field_census.py",
-      "anchor": "        if walk_depth != depth:\n            raise _fixed_error(\"terminal walk disagrees with the fixed-point classifier\")",
-      "replacement": "        pass",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_benchmark_public_footprint_field_census.py::test_a_walk_that_disagrees_with_the_classifier_is_refused"
-      ]
-    },
-    {
-      "id": "FF14-census-calls-a-detaching-zone-connect-attaching",
-      "file": "scripts/benchmark_public_footprint_field_census.py",
-      "anchor": "    if atom == _DETACHING_ZONE_CONNECTION:\n        return (\"zone_connect_detaching\",)",
-      "replacement": "    if atom == _DETACHING_ZONE_CONNECTION:\n        return (\"zone_connect_attaching\",)",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_benchmark_public_footprint_field_census.py::test_payload_predicates_are_closed_in_both_directions",
-        "tests/test_benchmark_public_footprint_field_census.py::test_a_detaching_zone_connect_is_counted_apart_from_an_attaching_one"
-      ]
-    },
-    {
-      "id": "FF15-census-buckets-by-table-not-branch-order",
-      "file": "scripts/benchmark_public_footprint_field_census.py",
-      "anchor": "    if head.startswith(LAYER_ROUTED_PREFIX) or head in LAYER_ROUTED_EXACT_HEADS:\n        return \"layer_routed\"\n    if head in ACCEPTED_FOOTPRINT_HEADS:\n        return \"accepted\"",
-      "replacement": "    if head in ACCEPTED_FOOTPRINT_HEADS:\n        return \"accepted\"\n    if head.startswith(LAYER_ROUTED_PREFIX) or head in LAYER_ROUTED_EXACT_HEADS:\n        return \"layer_routed\"",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_benchmark_public_footprint_field_census.py::test_head_classification_follows_the_adapters_branch_order_not_its_tables"
-      ]
-    },
-    {
-      "id": "FF16-census-drift-guard-demands-equality",
-      "file": "scripts/benchmark_public_footprint_field_census.py",
-      "anchor": "    if not ACCEPTED_FOOTPRINT_HEADS <= kicad_board_ir._FOOTPRINT_METADATA_HEADS:",
-      "replacement": "    if ACCEPTED_FOOTPRINT_HEADS != kicad_board_ir._FOOTPRINT_METADATA_HEADS:",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_benchmark_public_footprint_field_census.py::test_a_widened_adapter_vocabulary_still_runs_the_census"
-      ]
-    },
-    {
-      "id": "FF17-census-loses-the-other-bucket",
-      "file": "scripts/benchmark_public_footprint_field_census.py",
-      "anchor": "def _bucket(head: str, vocabulary: frozenset[str]) -> str:\n    return head if head in vocabulary else OTHER",
-      "replacement": "def _bucket(head: str, vocabulary: frozenset[str]) -> str:\n    return head",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_benchmark_public_footprint_field_census.py::test_an_unknown_refused_head_lands_in_other_without_echoing_it"
-      ]
-    },
-    {
-      "id": "FF18-census-drops-a-malformed-clearance-silently",
-      "file": "scripts/benchmark_public_footprint_field_census.py",
-      "anchor": "        if len(atom) > _MAX_PAYLOAD_TOKEN or not _PAYLOAD_DECIMAL.fullmatch(atom):\n            return (invalid,)",
-      "replacement": "        if len(atom) > _MAX_PAYLOAD_TOKEN or not _PAYLOAD_DECIMAL.fullmatch(atom):\n            return ()",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_benchmark_public_footprint_field_census.py::test_payload_predicates_are_closed_in_both_directions",
-        "tests/test_benchmark_public_footprint_field_census.py::test_a_malformed_copper_interacting_payload_is_counted_not_absent"
-      ]
-    },
-    {
-      "id": "FF19-census-calls-a-malformed-payload-well-formed",
-      "file": "scripts/benchmark_public_footprint_field_census.py",
-      "anchor": "    atom = _sole_bare_atom(node)\n    if atom is None:\n        # Wrong arity, a quoted atom, or a nested child expression.\n        return (invalid,)",
-      "replacement": "    atom = _sole_bare_atom(node)\n    if atom is None:\n        return ()",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_benchmark_public_footprint_field_census.py::test_payload_predicates_are_closed_in_both_directions",
-        "tests/test_benchmark_public_footprint_field_census.py::test_a_malformed_copper_interacting_payload_is_counted_not_absent"
-      ]
-    },
-    {
-      "id": "FF20-census-drops-an-out-of-domain-zone-connect",
-      "file": "scripts/benchmark_public_footprint_field_census.py",
-      "anchor": "    if atom == _DETACHING_ZONE_CONNECTION:\n        return (\"zone_connect_detaching\",)\n    return (invalid,)",
-      "replacement": "    if atom == _DETACHING_ZONE_CONNECTION:\n        return (\"zone_connect_detaching\",)\n    return ()",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_benchmark_public_footprint_field_census.py::test_payload_predicates_are_closed_in_both_directions",
-        "tests/test_benchmark_public_footprint_field_census.py::test_a_malformed_copper_interacting_payload_is_counted_not_absent"
-      ]
-    },
-    {
-      "id": "FF21-census-uses-float-first-so-nan-reads-as-nonzero",
-      "file": "scripts/benchmark_public_footprint_field_census.py",
-      "anchor": "        if len(atom) > _MAX_PAYLOAD_TOKEN or not _PAYLOAD_DECIMAL.fullmatch(atom):",
-      "replacement": "        if len(atom) > _MAX_PAYLOAD_TOKEN or not _PAYLOAD_DECIMAL.fullmatch(atom.replace(\"nan\", \"1\")):",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_benchmark_public_footprint_field_census.py::test_payload_predicates_are_closed_in_both_directions"
-      ]
-    },
-    {
-      "id": "FF22-census-stops-reconciling-the-partition",
-      "file": "scripts/benchmark_public_footprint_field_census.py",
-      "anchor": "        if partitioned != int(refused_occurrences.get(head, 0)):\n            raise _fixed_error(\"payload predicates do not partition their head's occurrences\")",
-      "replacement": "        pass",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_benchmark_public_footprint_field_census.py::test_a_partition_that_stops_covering_its_head_fails_the_run"
-      ]
-    }
-  ]
+ "harness": "mutation-harness/1",
+ "pytest_args": [
+  "-q",
+  "--no-cov"
+ ],
+ "mutants": [
+  {
+   "id": "FF01-accept-every-footprint-child",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "                if head not in _FOOTPRINT_METADATA_HEADS:",
+   "replacement": "                if False:",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_an_unknown_footprint_field_is_still_refused_without_naming_it"
+   ]
+  },
+  {
+   "id": "FF02-drop-the-named-field-refusals",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "            for unsupported_head in _UNSUPPORTED_FOOTPRINT_FIELDS:",
+   "replacement": "            for unsupported_head in ():",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_a_footprint_clearance_refuses_and_names_the_field",
+    "tests/test_kicad_board_ir.py::test_every_remaining_footprint_head_refuses_by_name"
+   ]
+  },
+  {
+   "id": "FF03-skip-the-accepted-leaf-payload-grammar",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "            self._validate_leaf_payloads(\n                footprint,\n                locator,\n                _FOOTPRINT_SCALAR_PAYLOADS,\n                message=\"unsupported footprint field value\",\n            )",
+   "replacement": "            pass",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_an_accepted_footprint_leaf_has_a_closed_payload_grammar"
+   ]
+  },
+  {
+   "id": "FF04-skip-the-footprint-zone-connection-check",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "            self._require_attaching_footprint_zone_connection(footprint, f\"{locator}.zone_connect\")",
+   "replacement": "            pass",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_a_detaching_footprint_zone_connect_refuses_at_its_own_field",
+    "tests/test_kicad_board_ir.py::test_a_footprint_zone_connect_outside_the_written_domain_refuses"
+   ]
+  },
+  {
+   "id": "FF05-read-past-a-detaching-footprint-zone-connect",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "        if value == _DETACHING_PAD_ZONE_CONNECTION:\n            self.fail(\n                \"unsupported.construct\",\n                \"footprint zone_connect 0 detaches its pads from their pour and is unsupported\",",
+   "replacement": "        if False:\n            self.fail(\n                \"unsupported.construct\",\n                \"footprint zone_connect 0 detaches its pads from their pour and is unsupported\",",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_a_detaching_footprint_zone_connect_refuses_at_its_own_field"
+   ]
+  },
+  {
+   "id": "FF06-accept-a-footprint-zone-connect-outside-the-domain",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "        if is_quoted_atom(value) or (\n            value != _DETACHING_PAD_ZONE_CONNECTION and value not in _ATTACHING_PAD_ZONE_CONNECTIONS\n        ):\n            self.fail(\n                \"unsupported.construct\",\n                \"footprint zone connection mode is unsupported\",",
+   "replacement": "        if False:\n            self.fail(\n                \"unsupported.construct\",\n                \"footprint zone connection mode is unsupported\",",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_a_footprint_zone_connect_outside_the_written_domain_refuses"
+   ]
+  },
+  {
+   "id": "FF07-skip-the-footprint-local-group-validator",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "                    self._check_group(item, f\"{locator}.group\")",
+   "replacement": "                    pass",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_a_locked_footprint_local_group_refuses",
+    "tests/test_kicad_board_ir.py::test_a_footprint_local_group_has_the_root_groups_closed_grammar"
+   ]
+  },
+  {
+   "id": "FF08-stop-counting-footprint-local-groups",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "                    self.group_count += 1",
+   "replacement": "                    self.group_count += 0",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_a_footprint_local_group_converts_and_counts_with_the_root_groups"
+   ]
+  },
+  {
+   "id": "FF09-stop-counting-the-admitted-footprint-fields",
+   "file": "src/copper_mcp/adapters/kicad_board_ir.py",
+   "anchor": "                self.unmodelled_footprint_field_count += len(children(footprint, unmodelled_head))",
+   "replacement": "                self.unmodelled_footprint_field_count += 0",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_kicad_board_ir.py::test_footprint_fields_with_no_copper_effect_convert_and_are_counted"
+   ]
+  },
+  {
+   "id": "FF10-publish-the-count-to-nobody",
+   "file": "src/copper_mcp/board_ir_service.py",
+   "anchor": "    \"unmodelled_stackup_layer_count\",\n    \"unmodelled_footprint_field_count\",",
+   "replacement": "    \"unmodelled_stackup_layer_count\",",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_board_ir_service.py::test_a_supported_board_publishes_its_conversion_counts"
+   ]
+  },
+  {
+   "id": "FF11-census-selects-on-the-other-bucket-alone",
+   "file": "scripts/benchmark_public_footprint_field_census.py",
+   "anchor": "        if at_wall:\n            selected.append(snapshot)",
+   "replacement": "        if True:\n            selected.append(snapshot)",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_benchmark_public_footprint_field_census.py::test_selection_requires_the_footprint_wall_and_not_merely_the_other_bucket",
+    "tests/test_benchmark_public_footprint_field_census.py::test_a_wall_diagnostic_at_a_non_footprint_locator_is_not_selected"
+   ]
+  },
+  {
+   "id": "FF12-census-drops-the-b130-continuity-check",
+   "file": "scripts/benchmark_public_footprint_field_census.py",
+   "anchor": "    if not same_cohort_as_setup_census:\n        raise _fixed_error(\"footprint terminals are not the setup census's six boards\")",
+   "replacement": "    pass",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_benchmark_public_footprint_field_census.py::test_measure_requires_the_setup_censuss_own_six_boards"
+   ]
+  },
+  {
+   "id": "FF13-census-drops-the-walk-depth-agreement",
+   "file": "scripts/benchmark_public_footprint_field_census.py",
+   "anchor": "        if walk_depth != depth:\n            raise _fixed_error(\"terminal walk disagrees with the fixed-point classifier\")",
+   "replacement": "        pass",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_benchmark_public_footprint_field_census.py::test_a_walk_that_disagrees_with_the_classifier_is_refused"
+   ]
+  },
+  {
+   "id": "FF14-census-calls-a-detaching-zone-connect-attaching",
+   "file": "scripts/benchmark_public_footprint_field_census.py",
+   "anchor": "    if atom == _DETACHING_ZONE_CONNECTION:\n        return (\"zone_connect_detaching\",)",
+   "replacement": "    if atom == _DETACHING_ZONE_CONNECTION:\n        return (\"zone_connect_attaching\",)",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_benchmark_public_footprint_field_census.py::test_payload_predicates_are_closed_in_both_directions",
+    "tests/test_benchmark_public_footprint_field_census.py::test_a_detaching_zone_connect_is_counted_apart_from_an_attaching_one"
+   ]
+  },
+  {
+   "id": "FF15-census-buckets-by-table-not-branch-order",
+   "file": "scripts/benchmark_public_footprint_field_census.py",
+   "anchor": "    if head.startswith(LAYER_ROUTED_PREFIX) or head in LAYER_ROUTED_EXACT_HEADS:\n        return \"layer_routed\"\n    if head in ACCEPTED_FOOTPRINT_HEADS:\n        return \"accepted\"",
+   "replacement": "    if head in ACCEPTED_FOOTPRINT_HEADS:\n        return \"accepted\"\n    if head.startswith(LAYER_ROUTED_PREFIX) or head in LAYER_ROUTED_EXACT_HEADS:\n        return \"layer_routed\"",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_benchmark_public_footprint_field_census.py::test_head_classification_follows_the_adapters_branch_order_not_its_tables"
+   ]
+  },
+  {
+   "id": "FF16-census-drift-guard-demands-equality",
+   "file": "scripts/benchmark_public_footprint_field_census.py",
+   "anchor": "    if not ACCEPTED_FOOTPRINT_HEADS <= kicad_board_ir._FOOTPRINT_METADATA_HEADS:",
+   "replacement": "    if ACCEPTED_FOOTPRINT_HEADS != kicad_board_ir._FOOTPRINT_METADATA_HEADS:",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_benchmark_public_footprint_field_census.py::test_a_widened_adapter_vocabulary_still_runs_the_census"
+   ]
+  },
+  {
+   "id": "FF17-census-loses-the-other-bucket",
+   "file": "scripts/benchmark_public_footprint_field_census.py",
+   "anchor": "def _bucket(head: str, vocabulary: frozenset[str]) -> str:\n    return head if head in vocabulary else OTHER",
+   "replacement": "def _bucket(head: str, vocabulary: frozenset[str]) -> str:\n    return head",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_benchmark_public_footprint_field_census.py::test_an_unknown_refused_head_lands_in_other_without_echoing_it"
+   ]
+  },
+  {
+   "id": "FF18-census-drops-a-malformed-clearance-silently",
+   "file": "scripts/benchmark_public_footprint_field_census.py",
+   "anchor": "        if len(atom) > _MAX_PAYLOAD_TOKEN or not _PAYLOAD_DECIMAL.fullmatch(atom):\n            return (invalid,)",
+   "replacement": "        if len(atom) > _MAX_PAYLOAD_TOKEN or not _PAYLOAD_DECIMAL.fullmatch(atom):\n            return ()",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_benchmark_public_footprint_field_census.py::test_payload_predicates_are_closed_in_both_directions",
+    "tests/test_benchmark_public_footprint_field_census.py::test_a_malformed_copper_interacting_payload_is_counted_not_absent"
+   ]
+  },
+  {
+   "id": "FF19-census-calls-a-malformed-payload-well-formed",
+   "file": "scripts/benchmark_public_footprint_field_census.py",
+   "anchor": "    atom = _sole_bare_atom(node)\n    if atom is None:\n        # Wrong arity, a quoted atom, or a nested child expression.\n        return (invalid,)",
+   "replacement": "    atom = _sole_bare_atom(node)\n    if atom is None:\n        return ()",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_benchmark_public_footprint_field_census.py::test_payload_predicates_are_closed_in_both_directions",
+    "tests/test_benchmark_public_footprint_field_census.py::test_a_malformed_copper_interacting_payload_is_counted_not_absent"
+   ]
+  },
+  {
+   "id": "FF20-census-drops-an-out-of-domain-zone-connect",
+   "file": "scripts/benchmark_public_footprint_field_census.py",
+   "anchor": "    if atom == _DETACHING_ZONE_CONNECTION:\n        return (\"zone_connect_detaching\",)\n    return (invalid,)",
+   "replacement": "    if atom == _DETACHING_ZONE_CONNECTION:\n        return (\"zone_connect_detaching\",)\n    return ()",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_benchmark_public_footprint_field_census.py::test_payload_predicates_are_closed_in_both_directions",
+    "tests/test_benchmark_public_footprint_field_census.py::test_a_malformed_copper_interacting_payload_is_counted_not_absent"
+   ]
+  },
+  {
+   "id": "FF21-census-uses-float-first-so-nan-reads-as-nonzero",
+   "file": "scripts/benchmark_public_footprint_field_census.py",
+   "anchor": "        if len(atom) > _MAX_PAYLOAD_TOKEN or not _PAYLOAD_DECIMAL.fullmatch(atom):",
+   "replacement": "        if len(atom) > _MAX_PAYLOAD_TOKEN or not _PAYLOAD_DECIMAL.fullmatch(atom.replace(\"nan\", \"1\")):",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_benchmark_public_footprint_field_census.py::test_payload_predicates_are_closed_in_both_directions"
+   ]
+  },
+  {
+   "id": "FF22-census-stops-reconciling-the-partition",
+   "file": "scripts/benchmark_public_footprint_field_census.py",
+   "anchor": "        if partitioned != int(refused_occurrences.get(head, 0)):\n            raise _fixed_error(\"payload predicates do not partition their head's occurrences\")",
+   "replacement": "        pass",
+   "expectation": "killed",
+   "killing_tests": [
+    "tests/test_benchmark_public_footprint_field_census.py::test_a_partition_that_stops_covering_its_head_fails_the_run"
+   ]
+  }
+ ]
 }

@@ -162,8 +162,8 @@
   {
    "id": "OA16-hide-the-new-disclosure-from-every-mcp-client",
    "file": "src/copper_mcp/board_ir_service.py",
-   "anchor": "    \"outline_inward_deviation_nm\",\n)",
-   "replacement": ")",
+   "anchor": "    \"unmodelled_footprint_field_count\",\n    \"outline_inward_deviation_nm\",",
+   "replacement": "    \"unmodelled_footprint_field_count\",",
    "expectation": "killed",
    "killing_tests": [
     "tests/test_board_ir_service.py::test_a_supported_board_publishes_its_conversion_counts",
