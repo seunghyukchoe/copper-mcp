@@ -50,6 +50,10 @@ EXPECTED = {
     "placement-overlap.kicad_pcb": ("refused", "illegal_placement"),
     "placement-keepout.kicad_pcb": ("refused", "illegal_placement"),
     "placement-outside-outline.kicad_pcb": ("refused", "illegal_placement"),
+    # An outline drawn with an ``Edge.Cuts`` arc converts, and placement still declines it: the
+    # legality contract publishes ``outline_containment`` in both directions and only one of them
+    # survives an inscribed boundary.  See D-229 and ADR-0124.
+    "placement-arc-outline.kicad_pcb": ("refused", "unsupported_geometry"),
 }
 
 
@@ -131,6 +135,44 @@ class ServiceTests(unittest.TestCase):
                     self.assertIsNone(document["candidate"])
                     assert document["diagnostic"] is not None
                     self.assertEqual(document["diagnostic"]["code"], code)
+
+    def test_an_approximated_outline_is_refused_before_any_legality_is_claimed(self) -> None:
+        """The board converts; placement declines it, and says which fact made it decline.
+
+        The refusal is not "this board is unsupported" -- the conversion succeeded and every other
+        surface can use it.  It is narrower and it is about *this* surface: placement legality
+        reports ``outline_containment`` as ``violated`` when an under-approximating pad core
+        crosses the boundary, and that inference needs the boundary itself to be exact.  An
+        inscribed arc puts the modelled boundary inside the drawn one, so copper sitting in the
+        sliver between them is inside the fabricated board and would be reported as crossing its
+        edge -- a false claim, not a conservative one.  The edge and region rules measure against
+        the same boundary and fail the same way, so the request is refused whole rather than three
+        verdicts being quietly degraded.
+        """
+
+        document = _preview("placement-arc-outline.kicad_pcb")
+
+        self.assertEqual(document["status"], "refused")
+        assert document["diagnostic"] is not None
+        self.assertEqual(document["diagnostic"]["code"], "unsupported_geometry")
+        self.assertIn("approximated", document["diagnostic"]["message"])
+        # It is a refusal *about the outline*, not a conversion failure: the snapshot exists and
+        # is named, which is what tells a caller the board itself was understood.
+        self.assertRegex(document["snapshot_digest"], r"^sha256:[0-9a-f]{64}$")
+        self.assertIsNone(document["candidate"])
+
+    def test_an_exact_outline_still_reaches_a_placement_verdict(self) -> None:
+        """The other direction: the new gate must not close over boards that were always exact.
+
+        Every outline drawn as a rectangle or as straight segments reports no deviation at all, so
+        it passes this check untouched.  Without this test the refusal above could be satisfied by
+        a gate that refuses everything.
+        """
+
+        document = _preview("placement-legal.kicad_pcb")
+
+        self.assertEqual(document["status"], "previewed")
+        self.assertIsNotNone(document["candidate"])
 
     def test_a_response_echoes_the_validated_request_and_binds_to_the_board(self) -> None:
         document = _preview("placement-legal.kicad_pcb")

@@ -153,6 +153,34 @@ def _preview_placement_source(
             apply_token_withheld_reason=withheld_without_candidate,
         )
 
+    if conversion.outline_inward_deviation_nm:
+        # The board outline was inscribed rather than drawn: an ``Edge.Cuts`` arc has no equal
+        # polygon, so the modelled boundary runs up to this many nanometres *inside* the drawn one
+        # (D-229, ADR-0124).  Every other consumer of the outline is safe with that, because less
+        # room is never a false claim about where copper may go.  Placement is not.  Its legality
+        # contract publishes ``outline_containment`` in **both** directions -- ``proven_inside``
+        # from an over-approximating pad box, and ``violated`` from an under-approximating pad
+        # core crossing the boundary -- and only the first survives a boundary that is itself
+        # under-approximated: copper sitting in the sliver between the inscribed polygon and the
+        # true arc is inside the fabricated board and would be reported as crossing its edge.
+        # The rule rules also measure *against* the boundary: an edge rule's residual is a
+        # distance from the board's own bounding box, and a region rule keyed to this contour
+        # decides inside-or-out by it.  Reporting a shrunken answer for either is a false claim
+        # and not a conservative one, so the whole request is refused by name rather than three
+        # verdicts being quietly degraded.  See ADR-0124 for the exit condition.
+        return PlacementResult(
+            status="refused",
+            board_revision=board_revision,
+            board_path=relative_path,
+            request=intent,
+            snapshot_digest=conversion.snapshot.snapshot_digest,
+            diagnostic=PlacementDiagnostic(
+                code=PlacementFailureCode.UNSUPPORTED_GEOMETRY,
+                message=("placement needs an exact board outline and this board's is approximated"),
+            ),
+            apply_token_withheld_reason=withheld_without_candidate,
+        )
+
     snapshot = conversion.snapshot
     # Snapshot CAS stops immediately after conversion and before placement-view construction or
     # legalizer work.  This keeps stale requests bounded even when a board is expensive to

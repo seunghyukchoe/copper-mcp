@@ -5,13 +5,19 @@
   "not_a_contract": "These messages are not a contract and this file does not make them one. No consumer may match on a refusal message: ADR-0095 and ADR-0096 both say so, and the adapter's own comments record that a message is a value from a closed table, selected by equality against the source token and never built from it -- which is a privacy property, not a stability promise. Updating this file is the correct fix for the test that reads it.",
   "update": "When a table changes, run the extraction in tests/test_refusal_message_golden.py (`_messages_by_table`) and write the result here, in the same pull request as the message change. Never loosen the test instead.",
   "counts": {
-    "tables": 7,
+    "tables": 8,
     "entries": 35,
-    "distinct_messages": 33
+    "distinct_messages": 32
   },
   "tables": {
     "_COPPER_TEXT_REFUSAL": {
       "<shared>": "copper text has no envelope derivable from the board and is unsupported [text]"
+    },
+    "_EDGE_CUTS_REFUSED_OUTLINE_HEADS": {
+      "gr_bezier": "Edge.Cuts outline Bezier curves are unsupported",
+      "gr_circle": "Edge.Cuts outline circles are unsupported",
+      "gr_curve": "Edge.Cuts outline Bezier curves are unsupported",
+      "gr_poly": "Edge.Cuts outline polygons are unsupported"
     },
     "_REFUSED_PAD_PROPERTY": {
       "pad_prop_castellated": "pad fabrication property 'pad_prop_castellated' removes board area the outline still claims and is unsupported"
