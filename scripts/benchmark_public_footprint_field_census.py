@@ -34,6 +34,7 @@ import hashlib
 import hmac
 import json
 import platform
+import re
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -236,13 +237,48 @@ CLASS_KEYS: Final = (
 #   `DRC_ENGINE::EvalZoneConnection` collapses `3` to `1` on a plated through-hole pad and to `2`
 #   otherwise.  `-1` (`INHERITED`) is the one value KiCad's writer suppresses.  This is exactly the
 #   partition ADR-0091 already draws one level down, on a pad.
+#
+# **Each head's buckets are a TOTAL partition of its occurrences, and that is the point.**  Widened
+# in review of #226: the first version emitted `clearance_zero` or *nothing*, so a malformed payload
+# -- `(clearance garbage)`, `(clearance nan)`, `(clearance "0")`, `(clearance)`, `(clearance 0 0)`,
+# a nested child -- produced no predicate at all and was **indistinguishable in the artifact from a
+# well-formed non-zero clearance**.  That is precisely the failure this project refuses elsewhere:
+# an absence is evidence only if the observation could have reported a presence, and that
+# observation could not.  Every occurrence of a partitioned head now lands in exactly one bucket,
+# and `measure` cross-checks each partition's sum against that head's occurrence count, so a future
+# edit that reintroduces a silent gap fails the run instead of publishing a quiet zero.
 PAYLOAD_PREDICATES: Final = (
+    "clearance_invalid",
+    "clearance_nonzero",
     "clearance_zero",
     "zone_connect_attaching",
     "zone_connect_detaching",
+    "zone_connect_invalid",
 )
+# `head -> (its buckets, its catch-all)`.  The catch-all is last and is what makes the partition
+# total; `measure` asserts the sum.
+PARTITIONED_PAYLOAD_HEADS: Final[dict[str, tuple[str, ...]]] = {
+    "clearance": ("clearance_zero", "clearance_nonzero", "clearance_invalid"),
+    "zone_connect": (
+        "zone_connect_attaching",
+        "zone_connect_detaching",
+        "zone_connect_invalid",
+    ),
+}
 _ATTACHING_ZONE_CONNECTIONS: Final = frozenset({"1", "2", "3"})
 _DETACHING_ZONE_CONNECTION: Final = "0"
+# The decimal language a `clearance` payload must be written in to count as well-formed.  It
+# deliberately **mirrors rather than imports** the adapter's `_PAYLOAD_DECIMAL`: the census's
+# vocabularies are frozen so the artifact stays replayable, and importing the adapter's grammar
+# would let an adapter edit silently re-bucket a recorded measurement -- the same reason
+# `ACCEPTED_FOOTPRINT_HEADS` is a frozen copy rather than a live mirror.
+#
+# It rejects `nan`, `inf` and `Infinity` **by construction**, which is deliberate and not
+# incidental: `float("nan") == 0.0` is `False`, so a `float()`-first implementation would have
+# silently filed `(clearance nan)` as an ordinary non-zero clearance.  A NaN is neither the inert
+# zero nor a well-formed value, and it is counted as neither.
+_PAYLOAD_DECIMAL: Final = re.compile(r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$")
+_MAX_PAYLOAD_TOKEN = 64
 HEAD_CLASS_BUCKETS: Final = ("accepted", "layer_routed", OTHER, "refused", "zone")
 SHAPE_BUCKETS: Final = setup_census.SHAPE_BUCKETS
 
@@ -313,26 +349,40 @@ def _sole_bare_atom(node: SExpr) -> str | None:
 
 
 def _payload_predicates(head: str, node: SExpr) -> tuple[str, ...]:
-    """Classify a copper-interacting payload into closed predicate buckets.
+    """Classify a copper-interacting payload into a total partition of closed predicate buckets.
 
     Predicates, never disclosures: the caller increments counters and no value is stored or
     published.
+
+    **Total by construction.** A partitioned head always yields exactly one bucket, so the
+    artifact can never be silent about an occurrence it counted. Anything not recognised as
+    well-formed -- wrong arity, a quoted atom, a nested child, a non-decimal token, `nan`, `inf`,
+    or a `zone_connect` outside the four written modes -- lands in that head's `_invalid` bucket
+    and is *counted there*, rather than vanishing into an absence a reader would misread as
+    "well-formed and not the interesting value".
     """
+
+    partition = PARTITIONED_PAYLOAD_HEADS.get(head)
+    if partition is None:
+        return ()
+    invalid = partition[-1]
 
     atom = _sole_bare_atom(node)
     if atom is None:
-        return ()
+        # Wrong arity, a quoted atom, or a nested child expression.
+        return (invalid,)
     if head == "clearance":
-        try:
-            return ("clearance_zero",) if float(atom) == 0.0 else ()
-        except ValueError:
-            return ()
-    if head == "zone_connect":
-        if atom in _ATTACHING_ZONE_CONNECTIONS:
-            return ("zone_connect_attaching",)
-        if atom == _DETACHING_ZONE_CONNECTION:
-            return ("zone_connect_detaching",)
-    return ()
+        if len(atom) > _MAX_PAYLOAD_TOKEN or not _PAYLOAD_DECIMAL.fullmatch(atom):
+            return (invalid,)
+        # Safe now: the token is a finite decimal literal, so `float` cannot raise and cannot
+        # return a NaN. `-0.0 == 0.0` holds, which is correct -- KiCad's `if( override_val )`
+        # guard treats a negative zero as inert too.
+        return ("clearance_zero",) if float(atom) == 0.0 else ("clearance_nonzero",)
+    if atom in _ATTACHING_ZONE_CONNECTIONS:
+        return ("zone_connect_attaching",)
+    if atom == _DETACHING_ZONE_CONNECTION:
+        return ("zone_connect_detaching",)
+    return (invalid,)
 
 
 def _footprints(source: bytes, settings: Settings) -> tuple[SExpr, ...]:
@@ -637,6 +687,15 @@ def measure(
     group_occurrences = _merge_mapping(observations, "group_field_occurrences")
     group_presence = _merge_presence(observations, "group_field_presence")
     group_shapes = _merge_mapping(observations, "group_field_shapes")
+
+    # Each partitioned head's buckets must account for every occurrence of that head. This is what
+    # makes "the bucket is 0" readable as evidence rather than as silence, and it is checked rather
+    # than trusted: the review of #226 found a version where a malformed payload produced no bucket
+    # at all, which no aggregate could have revealed.
+    for head, buckets in PARTITIONED_PAYLOAD_HEADS.items():
+        partitioned = sum(int(neutral_payloads.get(bucket, 0)) for bucket in buckets)
+        if partitioned != int(refused_occurrences.get(head, 0)):
+            raise _fixed_error("payload predicates do not partition their head's occurrences")
 
     _verify_sources_unchanged(corpus, snapshots, settings)
 

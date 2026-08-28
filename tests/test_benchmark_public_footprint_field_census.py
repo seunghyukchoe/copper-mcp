@@ -24,8 +24,10 @@ def _footprint(body: str) -> str:
     return f'(footprint "L:R" (layer "F.Cu") (uuid "u") (at 0 0) {body})'
 
 
-def _board(marker: str, *, body: str = '(sheetfile "a.kicad_sch")') -> bytes:
-    return f"(kicad_pcb (version 20240108) {_footprint(body)} (marker {marker}))".encode()
+def _board(marker: str, *, body: str = '(sheetfile "a.kicad_sch")', root_extra: str = "") -> bytes:
+    return (
+        f"(kicad_pcb (version 20240108) {root_extra} {_footprint(body)} (marker {marker}))"
+    ).encode()
 
 
 def _entries(
@@ -233,20 +235,50 @@ def test_every_declared_refused_head_is_reported_even_at_zero(tmp_path: Path) ->
 @pytest.mark.parametrize(
     ("payload", "expected"),
     [
+        # Well formed, and the inert value.
         ("(clearance 0)", ("clearance_zero",)),
         ("(clearance 0.0)", ("clearance_zero",)),
-        ("(clearance 0.2)", ()),
-        ('(clearance "0")', ()),
-        ("(clearance)", ()),
-        ("(clearance 0 0)", ()),
+        ("(clearance -0.0)", ("clearance_zero",)),
+        ("(clearance +0)", ("clearance_zero",)),
+        # Well formed, and the value that must be refused.
+        ("(clearance 0.2)", ("clearance_nonzero",)),
+        ("(clearance -0.2)", ("clearance_nonzero",)),
+        ("(clearance 1e3)", ("clearance_nonzero",)),
+        # Malformed -- every one of these was silently *absent* before #226's review, and so was
+        # indistinguishable in the artifact from a well-formed non-zero clearance.
+        ("(clearance garbage)", ("clearance_invalid",)),
+        ("(clearance nan)", ("clearance_invalid",)),
+        ("(clearance NaN)", ("clearance_invalid",)),
+        ("(clearance inf)", ("clearance_invalid",)),
+        ("(clearance -inf)", ("clearance_invalid",)),
+        ("(clearance Infinity)", ("clearance_invalid",)),
+        ('(clearance "0")', ("clearance_invalid",)),
+        ('(clearance "0.2")', ("clearance_invalid",)),
+        ("(clearance)", ("clearance_invalid",)),
+        ("(clearance 0 0)", ("clearance_invalid",)),
+        ("(clearance 0.2 locked)", ("clearance_invalid",)),
+        ("(clearance (zone_connect 0))", ("clearance_invalid",)),
+        ("(clearance 0x10)", ("clearance_invalid",)),
+        ("(clearance .)", ("clearance_invalid",)),
+        # Well formed zone connections.
         ("(zone_connect 0)", ("zone_connect_detaching",)),
         ("(zone_connect 1)", ("zone_connect_attaching",)),
         ("(zone_connect 2)", ("zone_connect_attaching",)),
         ("(zone_connect 3)", ("zone_connect_attaching",)),
-        ("(zone_connect -1)", ()),
-        ("(zone_connect 4)", ()),
-        ('(zone_connect "2")', ()),
+        # Outside the written domain, or malformed -- also silently absent before the review.
+        ("(zone_connect -1)", ("zone_connect_invalid",)),
+        ("(zone_connect 4)", ("zone_connect_invalid",)),
+        ("(zone_connect 2.0)", ("zone_connect_invalid",)),
+        ("(zone_connect nan)", ("zone_connect_invalid",)),
+        ("(zone_connect garbage)", ("zone_connect_invalid",)),
+        ('(zone_connect "2")', ("zone_connect_invalid",)),
+        ("(zone_connect)", ("zone_connect_invalid",)),
+        ("(zone_connect 1 2)", ("zone_connect_invalid",)),
+        ("(zone_connect (members 1))", ("zone_connect_invalid",)),
+        # A head with no partition emits nothing at all, which is a different thing from
+        # `_invalid` and must stay different.
         ("(sheetfile 0)", ()),
+        ('(sheetname "x")', ()),
     ],
 )
 def test_payload_predicates_are_closed_in_both_directions(
@@ -256,6 +288,10 @@ def test_payload_predicates_are_closed_in_both_directions(
 
     The two heads sit in the same class and their safe value sets are disjoint, so a single
     "is it zero" predicate would have called the one dangerous `zone_connect` value safe.
+
+    Every malformation class is asserted to produce a **named** bucket rather than nothing. The
+    first version of this function returned `()` for all of them, which the artifact could not
+    distinguish from a well-formed value that simply was not the interesting one.
     """
 
     limits = masking.parse_limits_for(Settings(workspace=tmp_path))
@@ -263,6 +299,12 @@ def test_payload_predicates_are_closed_in_both_directions(
     head = node.head
     assert head is not None
     assert census._payload_predicates(head, node) == expected
+    # Whatever a partitioned head emits, it is exactly one declared bucket -- never zero, and
+    # never a name outside the closed vocabulary.
+    if head in census.PARTITIONED_PAYLOAD_HEADS:
+        assert len(expected) == 1
+        assert expected[0] in census.PARTITIONED_PAYLOAD_HEADS[head]
+    assert set(expected) <= set(census.PAYLOAD_PREDICATES)
 
 
 def test_a_detaching_zone_connect_is_counted_apart_from_an_attaching_one(tmp_path: Path) -> None:
@@ -274,9 +316,12 @@ def test_a_detaching_zone_connect_is_counted_apart_from_an_attaching_one(tmp_pat
 
     predicates = result["aggregates"]["payload_predicate_occurrences"]
     assert predicates == {
+        "clearance_invalid": 0,
+        "clearance_nonzero": 0,
         "clearance_zero": 0,
         "zone_connect_attaching": 0,
         "zone_connect_detaching": 1,
+        "zone_connect_invalid": 0,
     }
 
 
@@ -512,3 +557,162 @@ def test_cli_parser_refuses_a_fingerprint_override() -> None:
                 "sha256:0",
             ]
         )
+
+
+def test_a_walk_that_disagrees_with_the_classifier_is_refused(tmp_path: Path) -> None:
+    """The two loops must agree, or the diagnostic being read is not the terminal being classified.
+
+    `_classify_source_detail` is the unmodified B-129 instrument and returns a closed blocker class
+    with no diagnostic text; the walk re-derives the terminal from the same module's primitives so
+    the wall can be identified by name. Composing two loops is only sound while they land in the
+    same place, so the depths are compared rather than assumed — and a non-deterministic converter
+    is what proves the comparison is live.
+    """
+
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    curve = '(gr_circle (center 0 0) (end 1 0) (layer "Edge.Cuts") (width 0.1))'
+    entries: list[dict[str, str]] = []
+    for index in range(13):
+        relative = f"board-{index:02d}.kicad_pcb"
+        source = _board(f"wall-{index:02d}", root_extra=curve)
+        (corpus / relative).write_bytes(source)
+        entries.append(
+            {
+                "id": f"opaque-{index:02d}",
+                "visibility": "public" if index < 10 else "private",
+                "path": relative,
+                "sha256": "sha256:" + hashlib.sha256(source).hexdigest(),
+            }
+        )
+    material = "".join(
+        f"{entry['id']}:{entry['visibility']}:{entry['path']}:{entry['sha256']}\n"
+        for entry in entries
+    ).encode()
+    fingerprint = "sha256:" + hashlib.sha256(material).hexdigest()[:32]
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps({"schema": masking.SCHEMA, "entries": entries, "fingerprint": fingerprint}),
+        encoding="utf-8",
+    )
+
+    served: set[bytes] = set()
+
+    def _curve_once_then_the_wall(source: bytes, _settings: Settings) -> SimpleNamespace:
+        """Maskable on a source's first sighting, terminal afterwards.
+
+        The classifier sees the curve, masks it and terminates one pass deeper; the walk, running
+        second, is served the wall immediately and terminates at depth 0.
+        """
+
+        if source not in served:
+            served.add(source)
+            return _diagnostic(
+                "unsupported.construct",
+                masking.EDGE_CURVE_MESSAGE,
+                "kicad_pcb.graphic",
+            )
+        return _diagnostic(
+            census.FOOTPRINT_WALL_CODE,
+            census.FOOTPRINT_WALL_MESSAGE,
+            _WALL_LOCATOR,
+        )
+
+    with pytest.raises(ValueError, match="walk disagrees with the fixed-point classifier"):
+        _measure(
+            corpus,
+            manifest,
+            fingerprint,
+            census.PREDECLARED_FOOTPRINT_SELECTION_COMMITMENT,
+            setup_census.PREDECLARED_SETUP_SELECTION_COMMITMENT,
+            converter=_curve_once_then_the_wall,
+        )
+
+
+def test_the_declared_predicate_vocabulary_is_exactly_the_partitions(tmp_path: Path) -> None:
+    """No bucket may exist outside a partition, and no partition may name an undeclared bucket."""
+
+    declared = set(census.PAYLOAD_PREDICATES)
+    partitioned = {
+        bucket for buckets in census.PARTITIONED_PAYLOAD_HEADS.values() for bucket in buckets
+    }
+
+    assert declared == partitioned
+    assert len(census.PAYLOAD_PREDICATES) == len(declared)
+    # Every partitioned head is a head the refused vocabulary can actually report, or its buckets
+    # could never be reconciled against an occurrence count.
+    assert set(census.PARTITIONED_PAYLOAD_HEADS) <= census.REFUSED_FOOTPRINT_HEADS
+
+
+@pytest.mark.parametrize(
+    ("body", "bucket"),
+    [
+        ("(clearance garbage)", "clearance_invalid"),
+        ("(clearance nan)", "clearance_invalid"),
+        ('(clearance "0")', "clearance_invalid"),
+        ("(clearance 0.2)", "clearance_nonzero"),
+        ("(clearance 0)", "clearance_zero"),
+        ("(zone_connect garbage)", "zone_connect_invalid"),
+        ("(zone_connect -1)", "zone_connect_invalid"),
+    ],
+)
+def test_a_malformed_copper_interacting_payload_is_counted_not_absent(
+    body: str, bucket: str, tmp_path: Path
+) -> None:
+    """The artifact must be able to say "malformed", or its zeros are not evidence.
+
+    Before #226's review a malformed `clearance` produced no predicate at all, so
+    `clearance_zero: 0` was consistent with a board carrying `(clearance garbage)` *and* with one
+    carrying a well-formed non-zero value. The reader could not tell, and neither could the
+    instrument.
+    """
+
+    corpus, manifest, fingerprint, commitment, setup_commitment = _manifest(
+        tmp_path, body_override=body
+    )
+    result = _measure(corpus, manifest, fingerprint, commitment, setup_commitment)
+
+    predicates = result["aggregates"]["payload_predicate_occurrences"]
+    assert set(predicates) == set(census.PAYLOAD_PREDICATES)
+    assert predicates[bucket] == 1
+    assert sum(predicates.values()) == 1
+
+
+def test_every_partition_reconciles_against_its_heads_occurrence_count(tmp_path: Path) -> None:
+    """The invariant that makes a zero readable: buckets must account for every occurrence."""
+
+    corpus, manifest, fingerprint, commitment, setup_commitment = _manifest(
+        tmp_path, body_override="(clearance garbage) (zone_connect 2)"
+    )
+    result = _measure(corpus, manifest, fingerprint, commitment, setup_commitment)
+
+    aggregates = result["aggregates"]
+    occurrences = aggregates["refused_fields"]["occurrences"]
+    predicates = aggregates["payload_predicate_occurrences"]
+
+    for head, buckets in census.PARTITIONED_PAYLOAD_HEADS.items():
+        assert sum(predicates[bucket] for bucket in buckets) == occurrences[head]
+    assert occurrences["clearance"] == 1
+    assert occurrences["zone_connect"] == 1
+
+
+def test_a_partition_that_stops_covering_its_head_fails_the_run(tmp_path: Path) -> None:
+    """An absence is evidence only if the observation could report a presence.
+
+    The guard is exercised rather than asserted beside: a classifier that silently drops a payload
+    is exactly the defect #226's review found, so the run must fail rather than publish a zero.
+    """
+
+    corpus, manifest, fingerprint, commitment, setup_commitment = _manifest(
+        tmp_path, body_override="(clearance garbage)"
+    )
+
+    classify = census._payload_predicates
+
+    def _silently_drops_the_malformed(head: str, node: Any) -> tuple[str, ...]:
+        original = classify(head, node)
+        return () if original == ("clearance_invalid",) else original
+
+    with patch.object(census, "_payload_predicates", _silently_drops_the_malformed):
+        with pytest.raises(ValueError, match="do not partition their head's occurrences"):
+            _measure(corpus, manifest, fingerprint, commitment, setup_commitment)
