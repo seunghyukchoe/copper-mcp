@@ -481,10 +481,11 @@ def test_every_committed_job_that_runs_the_suite_declares_a_budget() -> None:
 def test_the_calibration_file_records_the_hosted_runs_it_claims_to() -> None:
     """The release boundary pins the newest successful CI pair and last release run.
 
-    Re-pinned at the v0.10.0 boundary. The CI sample is the two newest successful
-    post-merge `main` pushes -- the masking-census tip and the DFM-signoff merge --
-    all three matrix legs from each because one job-level budget bounds them. The
-    release sample moves to v0.9.0, the latest completed tag-triggered workflow.
+    Re-pinned at the v0.11.0 boundary. The CI sample is the two newest successful
+    post-merge `main` pushes -- the footprint-semantics tip and the killpg-EPERM
+    merge -- all three matrix legs from each because one job-level budget bounds
+    them. The release sample moves to v0.10.0, the latest completed tag-triggered
+    workflow, whose 2374s is now the longest duration recorded in the file.
 
     This assertion is why the calibration file cannot drift silently: re-recording
     it is a reviewed edit that must move these numbers too.
@@ -494,16 +495,16 @@ def test_the_calibration_file_records_the_hosted_runs_it_claims_to() -> None:
     by_job = {(entry["workflow"], entry["job"]): entry for entry in document["jobs"]}
 
     verify = by_job[(".github/workflows/release.yml", "verify")]
-    assert [observation["seconds"] for observation in verify["observations"]] == [2183]
-    assert verify["observations"][0]["run_id"] == 31935636809
+    assert [observation["seconds"] for observation in verify["observations"]] == [2374]
+    assert verify["observations"][0]["run_id"] == 33068157489
 
     ci = by_job[(".github/workflows/ci.yml", "test")]
     assert len(ci["observations"]) == 6
     assert {observation["run_id"] for observation in ci["observations"]} == {
-        32684372444,
-        32692946327,
+        33118743926,
+        33133130626,
     }
-    assert max(observation["seconds"] for observation in ci["observations"]) == 2311
+    assert max(observation["seconds"] for observation in ci["observations"]) == 2332
 
     # Every committed observation is a completed successful run, which is the only
     # kind the checker will calibrate from.
