@@ -53,7 +53,7 @@
   },
   "cohort_count": 13,
   "cohort_fingerprint": "sha256:bfec8210d6d4eb746ffdbfb3b70309ce",
-  "commit": "45521b8b2fd58255b5a5bd2b6e50da598ef6ae58",
+  "commit": "039edfbddd703f8282665d40580d81c3f2a42ca9",
   "committed_board_bytes": 0,
   "configuration": {
     "mask_classes": [
@@ -78,8 +78,8 @@
   ],
   "private_count": 3,
   "public_count": 10,
-  "recorded_at_utc": "2026-08-27T22:32:58+00:00",
-  "run_id": "sha256:2832dda702c5074ca11e210310c65140a7b35fbc9dba5a255e69cff4d2802889",
+  "recorded_at_utc": "2026-08-28T00:46:13+00:00",
+  "run_id": "sha256:6028e746952f4a13dbe95f7435bb77a46ef1c4bf53b832704bcdd0800e155d26",
   "runner_digest": "sha256:fb0f53a397ea7e9f6290c01153c8fa8698496472ba86c8f69a95303e9be506fe",
   "schema": "copper-mcp/fixed-point-masking-census/v1",
   "source_hashes_unchanged": true

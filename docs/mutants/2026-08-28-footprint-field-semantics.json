@@ -142,8 +142,8 @@
     {
       "id": "FF14-census-calls-a-detaching-zone-connect-attaching",
       "file": "scripts/benchmark_public_footprint_field_census.py",
-      "anchor": "        if atom == _DETACHING_ZONE_CONNECTION:\n            return (\"zone_connect_detaching\",)",
-      "replacement": "        if atom == _DETACHING_ZONE_CONNECTION:\n            return (\"zone_connect_attaching\",)",
+      "anchor": "    if atom == _DETACHING_ZONE_CONNECTION:\n        return (\"zone_connect_detaching\",)",
+      "replacement": "    if atom == _DETACHING_ZONE_CONNECTION:\n        return (\"zone_connect_attaching\",)",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_benchmark_public_footprint_field_census.py::test_payload_predicates_are_closed_in_both_directions",
@@ -178,6 +178,59 @@
       "expectation": "killed",
       "killing_tests": [
         "tests/test_benchmark_public_footprint_field_census.py::test_an_unknown_refused_head_lands_in_other_without_echoing_it"
+      ]
+    },
+    {
+      "id": "FF18-census-drops-a-malformed-clearance-silently",
+      "file": "scripts/benchmark_public_footprint_field_census.py",
+      "anchor": "        if len(atom) > _MAX_PAYLOAD_TOKEN or not _PAYLOAD_DECIMAL.fullmatch(atom):\n            return (invalid,)",
+      "replacement": "        if len(atom) > _MAX_PAYLOAD_TOKEN or not _PAYLOAD_DECIMAL.fullmatch(atom):\n            return ()",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_public_footprint_field_census.py::test_payload_predicates_are_closed_in_both_directions",
+        "tests/test_benchmark_public_footprint_field_census.py::test_a_malformed_copper_interacting_payload_is_counted_not_absent"
+      ]
+    },
+    {
+      "id": "FF19-census-calls-a-malformed-payload-well-formed",
+      "file": "scripts/benchmark_public_footprint_field_census.py",
+      "anchor": "    atom = _sole_bare_atom(node)\n    if atom is None:\n        # Wrong arity, a quoted atom, or a nested child expression.\n        return (invalid,)",
+      "replacement": "    atom = _sole_bare_atom(node)\n    if atom is None:\n        return ()",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_public_footprint_field_census.py::test_payload_predicates_are_closed_in_both_directions",
+        "tests/test_benchmark_public_footprint_field_census.py::test_a_malformed_copper_interacting_payload_is_counted_not_absent"
+      ]
+    },
+    {
+      "id": "FF20-census-drops-an-out-of-domain-zone-connect",
+      "file": "scripts/benchmark_public_footprint_field_census.py",
+      "anchor": "    if atom == _DETACHING_ZONE_CONNECTION:\n        return (\"zone_connect_detaching\",)\n    return (invalid,)",
+      "replacement": "    if atom == _DETACHING_ZONE_CONNECTION:\n        return (\"zone_connect_detaching\",)\n    return ()",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_public_footprint_field_census.py::test_payload_predicates_are_closed_in_both_directions",
+        "tests/test_benchmark_public_footprint_field_census.py::test_a_malformed_copper_interacting_payload_is_counted_not_absent"
+      ]
+    },
+    {
+      "id": "FF21-census-uses-float-first-so-nan-reads-as-nonzero",
+      "file": "scripts/benchmark_public_footprint_field_census.py",
+      "anchor": "        if len(atom) > _MAX_PAYLOAD_TOKEN or not _PAYLOAD_DECIMAL.fullmatch(atom):",
+      "replacement": "        if len(atom) > _MAX_PAYLOAD_TOKEN or not _PAYLOAD_DECIMAL.fullmatch(atom.replace(\"nan\", \"1\")):",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_public_footprint_field_census.py::test_payload_predicates_are_closed_in_both_directions"
+      ]
+    },
+    {
+      "id": "FF22-census-stops-reconciling-the-partition",
+      "file": "scripts/benchmark_public_footprint_field_census.py",
+      "anchor": "        if partitioned != int(refused_occurrences.get(head, 0)):\n            raise _fixed_error(\"payload predicates do not partition their head's occurrences\")",
+      "replacement": "        pass",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_public_footprint_field_census.py::test_a_partition_that_stops_covering_its_head_fails_the_run"
       ]
     }
   ]
