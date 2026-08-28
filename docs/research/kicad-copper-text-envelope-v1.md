@@ -323,10 +323,29 @@ Until then, the honest model of copper lettering is a refusal that says so.
 The KiCad 9/10 IPC surface changes what a future **live-session** adapter might be able to prove:
 with board context available, KiCad can expand text and expose `GetTextAsShapes`. That is a
 plausible evidence path for obtaining the outlines from the same editor session that will later
-plot the board. It is not evidence that the current offline adapter may consume. CopperMCP does
-not yet bind the IPC session, project text variables, selected font, and font-build identity to a
-source revision, nor does it have a tested contract for carrying those inputs into its conservative
-envelope. The existing refusal therefore remains unchanged.
+plot the board. It is not evidence that the current offline adapter may consume.
+
+> **Amendment — 2026-08-29: the sentence above was measured, and half of it is wrong.** `B-139`
+> ran `GetTextAsShapes` against a real KiCad 10.0.5 session. The call exists and works — the real
+> symbol is `kipy.kicad.KiCad.get_text_as_shapes`, a method on the *client* rather than on `Board`,
+> sending `kiapi.common.commands.GetTextAsShapes` — and it is deterministic across three
+> consecutive calls in one session. **But it does not expand text.** The command carries a bare
+> `Text` proto with **no document or project reference**, and KiCad renders the literal string:
+> `${MYVAR}` (8 characters) plots 6.7990 mm against eight literal `A`s at 6.8467 mm, and
+> `${CURRENT_DATE}` (15 characters) plots 13.1324 mm where a resolved 10-character date would plot
+> near 8.5610 mm. So the clause "with board context available, KiCad can expand text" does not
+> describe this call, and **condition 1 below is untouched by it** — the API neither resolves a
+> text variable nor refuses one. Of the five conditions it moves exactly one, partially: condition
+> 3's glyph extents become a *read* value over a live session rather than a sampled constant.
+> Conditions 2 and 4 are measured to be inherited rather than solved — a missing face still
+> substitutes silently (`NoSuchFaceXYZ` plots 11.5 % wider than `Helvetica`), and the response
+> carries no font, font-build or KiCad-build identity with which a mismatch could be made to
+> refuse. The paragraph is left standing rather than rewritten, because what it got wrong is the
+> useful part of the record. See `B-139` and `D-231`.
+
+CopperMCP does not yet bind the IPC session, project text variables, selected font, and font-build
+identity to a source revision, nor does it have a tested contract for carrying those inputs into
+its conservative envelope. The existing refusal therefore remains unchanged.
 
 In particular, none of ADR-0095's five exit conditions is currently satisfied. Project text
 variables are not included in the source revision and path- or clock-derived variables do not

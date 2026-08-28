@@ -264,8 +264,19 @@ worse than none, because it will be ignored.
   report, not an increase in capacity.
 - **Renders are whole-board even for a windowed scene**, and are advisory, never geometric
   authority.
-- **No successful real-editor IPC oracle run has been recorded.** The live surfaces are exercised
-  through a fake official-client seam; the workstation IPC server is disabled.
+- **One real-editor IPC observation now exists, and three of the four live surfaces refused it.**
+  `B-138` records a read-only observation of a running KiCad 10.0.5 (`kipy` 0.7.1) with the
+  CopperTone board open, taken through CopperMCP's own transport after the operator enabled the
+  workstation IPC server. It is one session, one board, one build, one host — not an apply and not
+  `#68`. The transport's behaviour against a real editor is now measured rather than assumed:
+  `inspect_live_board` **refuses by default** with `KicadIpcVersionError` because the connected
+  KiCad (10.0.5) is newer than the installed binding's API (10.0.1); `inspect_live_editor_context`
+  refuses identically and passes no `allow_future_api` override at all; and the
+  `probe_live_kicad_ipc` oracle returns `skipped`/`kicad_plugin_environment_absent` because it
+  requires the KiCad-launched plugin environment. An observation is obtainable only through the
+  documented non-MCP development flag, which stamps the result `future_api_unverified`. The unit
+  tests still exercise these surfaces through a fake official-client seam. See also `SEC-168` for
+  what enabling the server exposes, and disable it when a live session is not needed.
 - **`R-033`**: the committed CopperTone board still carries mounting-hole keepout octagons
   inscribed at 2.85 mm, so edges sit 0.2169 mm inside the requirement. The generator is fixed;
   regenerating the board invalidates every recorded measurement, so it needs its own slice.
