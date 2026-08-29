@@ -761,8 +761,8 @@ def test_a_self_digest_valid_rewritten_root_stops_before_import_or_routing(
 
 
 def test_internal_per_board_authority_refuses_a_same_count_candidate_membership_mutation() -> None:
-    # Bypass only the pinned-root loader to unit-test its secondary per-board defence: changing the
-    # candidate commitment while preserving routed counts must still fail the live projection.
+    # Bypass only the pinned-root loader to unit-test its secondary per-board defence directly:
+    # changing the candidate commitment while preserving routed counts must still fail authority.
     document = json.loads(census.REFERENCE_ARTIFACT.read_text(encoding="utf-8"))
     boards = document["metrics"]["configurations"]["fixed"]["boards"]
     board = next(item for item in boards if item["outcomes"].get("routed") == 1)
@@ -776,11 +776,52 @@ def test_internal_per_board_authority_refuses_a_same_count_candidate_membership_
     authority = census._reference_authority_by_board(document)
     _manifest, samples = reference.load_corpus()
     selected = tuple(item for item in samples if Path(item[0]).stem == board["board"])
+    problem = import_simple_route_json(Path(selected[0][0]).stem, selected[0][1])
+    submitted = census._solo_reference(problem, AStarRouter())
 
     assert board["outcomes"]["routed"] == routed_count
     assert len(selected) == 1
     with pytest.raises(census.NegotiatedCensusError, match="committed B-088 authority"):
-        census._preflight_primary_admission(selected, authority)
+        census._assert_reference_authority(problem, submitted, authority.get(problem.name))
+
+
+def test_a_coordinator_refusal_without_an_unmet_conjunct_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _manifest, samples = reference.load_corpus()
+    name, payload = next(item for item in samples if item[0].startswith("ts18"))
+    problem = import_simple_route_json(Path(name).stem, payload)
+    router = AStarRouter()
+    submitted = census.PRIMARY.select(census._solo_reference(problem, router))
+    false_refusal = coordinator._invalid_result(
+        census.COORDINATOR_DIAGNOSTICS["selected_layer_pad_count_between_2_and_32"],
+        board_revision=problem.snapshot.snapshot_digest,
+    )
+    monkeypatch.setattr(census, "negotiate_routes", lambda *_args, **_kwargs: false_refusal)
+
+    with pytest.raises(census.NegotiatedCensusError, match="does not match"):
+        census.census_board(problem, submitted, router)
+
+
+def test_a_coordinator_refusal_with_the_wrong_diagnostic_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _manifest, samples = reference.load_corpus()
+    name, payload = next(item for item in samples if item[0].startswith("ts18"))
+    problem = import_simple_route_json(Path(name).stem, payload)
+    router = AStarRouter()
+    submitted = census.PRIMARY.select(census._solo_reference(problem, router))
+    false_refusal = {name: True for name, _stage, _text in census.ADMISSION_CONJUNCTS}
+    false_refusal["selected_layer_pad_count_between_2_and_32"] = False
+    wrong_diagnostic = coordinator._invalid_result(
+        "synthetic wrong admission diagnostic",
+        board_revision=problem.snapshot.snapshot_digest,
+    )
+    monkeypatch.setattr(census, "_admission", lambda *_args, **_kwargs: false_refusal)
+    monkeypatch.setattr(census, "negotiate_routes", lambda *_args, **_kwargs: wrong_diagnostic)
+
+    with pytest.raises(census.NegotiatedCensusError, match="does not match"):
+        census.census_board(problem, submitted, router)
 
 
 def test_an_admission_predicate_that_disagrees_with_the_coordinator_is_refused(

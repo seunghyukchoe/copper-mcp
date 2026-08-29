@@ -1,0 +1,29 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "NMC01-two-pin-target-ignores-violating-net-membership",
+      "file": "scripts/benchmark_negotiated_corpus_census.py",
+      "anchor": "                    if candidate.patch.net_id in violating_net_ids and candidate.pad_count == 2\n",
+      "replacement": "                    if candidate.pad_count == 2\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_corpus_census.py::test_the_recorder_counts_only_two_pin_candidates_named_by_the_gate"
+      ]
+    },
+    {
+      "id": "NMC02-two-pin-target-ignores-candidate-arity",
+      "file": "scripts/benchmark_negotiated_corpus_census.py",
+      "anchor": "                    if candidate.patch.net_id in violating_net_ids and candidate.pad_count == 2\n",
+      "replacement": "                    if candidate.patch.net_id in violating_net_ids\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_corpus_census.py::test_the_recorder_counts_only_two_pin_candidates_named_by_the_gate"
+      ]
+    }
+  ]
+}

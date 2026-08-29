@@ -108,7 +108,9 @@ violating candidate tuple must also contain a two-pad target, because multi-pin 
 above. Conflating those counts would make the new admission capability look like repair evidence it
 is not. B-140 reports them as 16 and 0 respectively. The next machine slice must define a bounded
 multi-pin repair target, window provenance and complete-topology reconstruction before the local
-transaction can soundly act on the population this slice now admits.
+transaction can soundly act on the population this slice now admits. Two committed mutants delete
+the violating-net-membership and exact-two-pad conjuncts independently; the mixed target fixture
+kills both under the reproducible mutation harness.
 
 No KiCad DRC, electrical, SI/PI/EMC, thermal, DFM, fabrication or hardware conclusion follows from
 this decision.

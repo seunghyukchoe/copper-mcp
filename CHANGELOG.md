@@ -23,7 +23,9 @@ All notable changes are documented here. The format follows
   transaction, so repair is never enabled and negotiated completion remains zero. The next safe
   capability boundary is therefore a bounded multi-pin repair target, provenance and topology
   contract, not tuning or a repair-effectiveness claim (`ADR-0126`, `D-233`, `R-184`, `SEC-169`,
-  `B-140`, issue #90).
+  `B-140`, issue #90). Reproducible mutation runs re-anchor the seven historical census guards at
+  7/7 killed and independently kill deletion of either the violating-net or two-pin target conjunct
+  at 2/2.
 - Board IR converts boards whose outline is drawn with `Edge.Cuts` **arcs** -- which is what a
   rounded corner is, and what eight of ten licence-clean public boards stopped on. A root
   `gr_arc` is now an outline edge chained with `gr_line` segments into the same single closed
