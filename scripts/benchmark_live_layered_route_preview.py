@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import platform
 import shutil
 import subprocess
@@ -24,7 +23,7 @@ from typing import Any
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.board_ir import NetClass
 from copper_mcp.config import Settings
-from copper_mcp.kicad_ipc import KicadIpcConnectionError
+from copper_mcp.kicad_ipc import KicadIpcConnectionError, inspect_live_board
 from copper_mcp.layered_route_preview import preview_layered_route
 from copper_mcp.live_layered_route_preview import preview_live_layered_route
 from copper_mcp.mcp_contracts import LayeredRoutePreviewToolResponse
@@ -32,6 +31,7 @@ from copper_mcp.mcp_contracts import LayeredRoutePreviewToolResponse
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "route-candidate" / "blocked-pad.kicad_pcb"
 SCRIPT_PATH = Path("scripts/benchmark_live_layered_route_preview.py")
+OBSERVED_EDITOR_IDENTITY = "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
 
 
 class _Version:
@@ -53,15 +53,27 @@ class _Board:
         return self._source
 
 
+class _FakeKipyClient:
+    """Mirror the learned editor-instance identity exposed by ``kipy``."""
+
+    def __init__(self, instance_identity: str) -> None:
+        self._kicad_token = instance_identity
+
+
 class _KiCad:
     def __init__(
-        self, source: bytes, closed: list[bool], *, mutate_on_confirm: bool = False
+        self,
+        source: bytes,
+        *,
+        instance_identity: str = OBSERVED_EDITOR_IDENTITY,
+        mutate_on_confirm: bool = False,
     ) -> None:
         self._board = _Board(
             source.decode("utf-8"),
             mutate_on_confirm=mutate_on_confirm,
         )
-        self._closed = closed
+        self._client = _FakeKipyClient(instance_identity)
+        self.close_calls = 0
 
     def get_version(self) -> _Version:
         return _Version()
@@ -76,7 +88,7 @@ class _KiCad:
         return self._board
 
     def close(self) -> None:
-        self._closed.append(True)
+        self.close_calls += 1
 
 
 def _git_commit() -> str:
@@ -150,8 +162,27 @@ def _run(repetitions: int) -> dict[str, Any]:
         raise RuntimeError("fixture does not have exactly two selected-net pads")
     board_revision = _digest(source)
     snapshot_digest = conversion.snapshot.snapshot_digest
-    session_token = os.environ.setdefault("KICAD_API_TOKEN", "copper-mcp-benchmark-session")
-    session_revision = _digest(session_token.encode("utf-8"))
+    # The benchmark drives deterministic fakes but still crosses the operator-gated production
+    # capture boundary. The session revision is intentionally obtained from the same public live
+    # observation a client must use: the PBKDF2 salt is process-local, and the editor identity is
+    # learned from the connection rather than from CopperMCP's environment.
+    settings = Settings(
+        workspace=ROOT / "tests" / "fixtures" / "route-candidate",
+        allow_live_ipc=True,
+    )
+    handshake_clients: list[_KiCad] = []
+
+    def handshake_factory(**_: object) -> _KiCad:
+        client = _KiCad(source)
+        handshake_clients.append(client)
+        return client
+
+    session_revision = inspect_live_board(
+        settings,
+        client_factory=handshake_factory,
+    ).session_revision
+    if session_revision is None:
+        raise RuntimeError("live observation did not publish a session revision")
     request = _request(
         same_net[0].id,
         same_net[1].id,
@@ -159,18 +190,13 @@ def _run(repetitions: int) -> dict[str, Any]:
         snapshot_digest,
         session_revision,
     )
-    closed: list[bool] = []
+    clients: list[_KiCad] = []
 
     def factory(**_: object) -> _KiCad:
-        return _KiCad(source, closed)
+        client = _KiCad(source)
+        clients.append(client)
+        return client
 
-    # The benchmark drives a deterministic fake client, but it still goes through the real
-    # capture path, which is operator-gated. Enable it explicitly here rather than depending
-    # on the ambient environment.
-    settings = Settings(
-        workspace=ROOT / "tests" / "fixtures" / "route-candidate",
-        allow_live_ipc=True,
-    )
     live_responses = [
         LayeredRoutePreviewToolResponse.model_validate(
             preview_live_layered_route(request, settings, client_factory=factory)
@@ -201,7 +227,10 @@ def _run(repetitions: int) -> dict[str, Any]:
         raise RuntimeError("live stale-board CAS was not refused")
 
     stale_session = dict(request)
-    stale_session["expect_session_revision"] = "sha256:" + "1" * 64
+    # Preserve the closed opaque wire type so this probes the CAS rather than input validation.
+    stale_session["expect_session_revision"] = session_revision[:-1] + (
+        "0" if session_revision[-1] != "0" else "1"
+    )
     stale_session_response = LayeredRoutePreviewToolResponse.model_validate(
         preview_live_layered_route(stale_session, settings, client_factory=factory)
     ).root
@@ -222,10 +251,12 @@ def _run(repetitions: int) -> dict[str, Any]:
     ):
         raise RuntimeError("live stale-snapshot CAS was not refused")
 
-    race_closed: list[bool] = []
+    race_clients: list[_KiCad] = []
 
     def changing_factory(**_: object) -> _KiCad:
-        return _KiCad(source, race_closed, mutate_on_confirm=True)
+        client = _KiCad(source, mutate_on_confirm=True)
+        race_clients.append(client)
+        return client
 
     try:
         preview_live_layered_route(request, settings, client_factory=changing_factory)
@@ -247,7 +278,14 @@ def _run(repetitions: int) -> dict[str, Any]:
         "stale_session_refused": True,
         "stale_snapshot_refused": True,
         "capture_race_refused": capture_race_refused,
-        "ipc_clients_closed": len(closed) == repetitions + 3 and len(race_closed) == 1,
+        "ipc_clients_closed": (
+            len(handshake_clients) == 1
+            and len(clients) == repetitions + 3
+            and len(race_clients) == 1
+            and all(
+                client.close_calls == 1 for client in (*handshake_clients, *clients, *race_clients)
+            )
+        ),
         "source_unchanged": FIXTURE.read_bytes() == source,
         "kicad_invoked": False,
         "drc_performed": False,

@@ -73,6 +73,15 @@ All notable changes are documented here. The format follows
   `max_total_vertices` budget, exactly as reduced custom-pad primitive vertices already were
   (`R-181`, `SEC-167`).
 
+### Fixed
+
+- The B-015 live editor-context and B-026 live layered-route benchmark runners execute against the
+  current closed contracts again. The editor-context replay no longer sends the retired snapshot
+  field, while the layered replay now obtains its opaque session revision from a same-process live
+  observation of the fake editor instance instead of constructing the retired `sha256:` form from
+  ambient configuration. Both runners keep explicit live-IPC opt-in, verify fake-client closure,
+  and publish no editor identity, token, board text, geometry, or new production capability claim.
+
 ## [0.11.0] - 2026-08-28
 
 Upgrading from 0.10.0: see the
