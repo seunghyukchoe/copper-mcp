@@ -72,6 +72,15 @@ All notable changes are documented here. The format follows
   board report unroutable. Copper-graphic vertices are now charged against the caller's
   `max_total_vertices` budget, exactly as reduced custom-pad primitive vertices already were
   (`R-181`, `SEC-167`).
+- A closed, read-only root-`zone` field census instrument now fixes the next measurement behind
+  B-137's two zone-container refusals. It replays B-129's classifier, requires B-137's exact
+  successor partition and B-136's predecessor selection commitment, and aggregates only closed
+  KiCad 9/10 root/fill head and payload-shape buckets while treating polygon payloads as opaque.
+  The new selection commitment is deliberately unassigned until the exact digest-bound cohort is
+  restored, so both the measurement API and CLI refuse instead of publishing a synthetic result.
+  No artifact or benchmark row is added, and this does not accept a zone field or change any
+  production, schema, MCP, CLI, routing, DRC, apply, or board-write behavior (`D-232`, `R-183`,
+  [issue #231](https://github.com/seunghyukchoe/copper-mcp/issues/231)).
 
 ### Fixed
 
